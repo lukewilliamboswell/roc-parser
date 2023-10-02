@@ -21,6 +21,7 @@ main =
         Err _ -> Stderr.line "Failed while parsing input"
 
 # Parse a number followed by a newline
+singleNumber : Parser (List U8) Nat
 singleNumber =
     const (\n -> n)
     |> keep (digits)
@@ -31,6 +32,7 @@ expect
     actual == Ok 1000
 
 # Parse a series of numbers followed by a newline
+multipleNumbers : Parser (List U8) (List Nat)
 multipleNumbers =
     const (\ns -> ns)
     |> keep (many singleNumber)
