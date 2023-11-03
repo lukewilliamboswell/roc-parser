@@ -181,25 +181,25 @@ digit =
     buildPrimitiveParser \input ->
         first = List.first input
         if first == Ok '0' then
-            Ok { val: 0, input: List.dropFirst input }
+            Ok { val: 0, input: List.dropFirst input 1 }
         else if first == Ok '1' then
-            Ok { val: 1, input: List.dropFirst input }
+            Ok { val: 1, input: List.dropFirst input 1 }
         else if first == Ok '2' then
-            Ok { val: 2, input: List.dropFirst input }
+            Ok { val: 2, input: List.dropFirst input 1 }
         else if first == Ok '3' then
-            Ok { val: 3, input: List.dropFirst input }
+            Ok { val: 3, input: List.dropFirst input 1 }
         else if first == Ok '4' then
-            Ok { val: 4, input: List.dropFirst input }
+            Ok { val: 4, input: List.dropFirst input 1 }
         else if first == Ok '5' then
-            Ok { val: 5, input: List.dropFirst input }
+            Ok { val: 5, input: List.dropFirst input 1 }
         else if first == Ok '6' then
-            Ok { val: 6, input: List.dropFirst input }
+            Ok { val: 6, input: List.dropFirst input 1 }
         else if first == Ok '7' then
-            Ok { val: 7, input: List.dropFirst input }
+            Ok { val: 7, input: List.dropFirst input 1 }
         else if first == Ok '8' then
-            Ok { val: 8, input: List.dropFirst input }
+            Ok { val: 8, input: List.dropFirst input 1 }
         else if first == Ok '9' then
-            Ok { val: 9, input: List.dropFirst input }
+            Ok { val: 9, input: List.dropFirst input 1 }
         else
             Err (ParsingFailure "Not a digit")
 
@@ -209,11 +209,11 @@ digits =
     oneOrMore digit
     |> map \ds -> List.walk ds 0 (\sum, d -> sum * 10 + d)
 
-    # oneOrMore digit
-    # |> map \digitsList ->
-    #     digitsList
-    #     |> List.map Num.intCast
-    #     |> List.walk 0 \sum, digitVal -> 10 * sum + digitVal
+# oneOrMore digit
+# |> map \digitsList ->
+#     digitsList
+#     |> List.map Num.intCast
+#     |> List.walk 0 \sum, digitVal -> 10 * sum + digitVal
 
 ## Try a bunch of different parsers.
 ##
