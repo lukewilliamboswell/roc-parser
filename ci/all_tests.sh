@@ -4,7 +4,6 @@
 set -euxo pipefail
 
 roc='./roc_nightly/roc'
-roc='roc'
 
 examples_dir='./examples/'
 
