@@ -1,3 +1,52 @@
+## # Parser
+##
+## This package implements a basic [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator)
+## for Roc which is useful for transforming input into a more useful structure.
+##
+## ## Example
+## For example, say we wanted to parse the following string from `in` to `out`:
+## ```
+## in = "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"
+## out =
+##     {
+##         id: 1,
+##         requirements: [
+##             [Blue 3, Red 4],
+##             [Red 1, Green 2, Blue 6],
+##             [Green 2],
+##         ]
+##     }
+## ```
+## We could do this using the following:
+## ```
+## Requirement : [ Green Nat, Red Nat, Blue Nat ]
+## RequirementSet : List Requirement
+## Game : { id: Nat, requirements: List RequirementSet }
+##
+## parseGame : Str -> Result Game [ParsingError]
+## parseGame = \s ->
+##     green = const Green |> keep digits |> skip (string " green")
+##     red = const Red |> keep digits |> skip (string " red")
+##     blue = const Blue |> keep digits |> skip (string " blue")
+##
+##     requirementSet : Parser _ RequirementSet
+##     requirementSet = (oneOf [green, red, blue]) |> sepBy (string ", ")
+##
+##     requirements : Parser _ (List RequirementSet)
+##     requirements = requirementSet |> sepBy (string "; ")
+##
+##     game : Parser _ Game
+##     game =
+##         const (\id -> \r -> { id, requirements: r })
+##         |> skip (string "Game ")
+##         |> keep digits
+##         |> skip (string ": ")
+##         |> keep requirements
+##
+##     when parseStr game s is
+##         Ok g -> Ok g
+##         Err (ParsingFailure _) | Err (ParsingIncomplete _) -> Err ParsingError
+## ```
 interface Core
     exposes [
         Parser,
@@ -26,45 +75,41 @@ interface Core
         skip,
         chompUntil,
         chompWhile,
-        # skip,
-        # number,
-        # string,
-        # whitespace,
     ]
     imports []
 
 ## Opaque type for a parser that will try to parse an `a` from an `input`.
 ##
-## As a simple example, you might consider a parser that tries to parse a `U32` from a `Str`.
-## Such a process might succeed or fail, depending on the current value of `input`.
-##
-## As such, a parser can be considered a recipe
-## for a function of the type `input -> Result {val: a, input: input} [ParsingFailure Str]`.
+## As such, a parser can be considered a recipe for a function of the type
+## ```
+## input -> Result {val: a, input: input} [ParsingFailure Str]
+## ```
 ##
 ## How a parser is _actually_ implemented internally is not important
 ## and this might change between versions;
 ## for instance to improve efficiency or error messages on parsing failures.
 Parser input a := input -> ParseResult input a
 
+## ```
+## ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
+## ```
 ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
 
+## Write a custom parser without using provided combintors.
 buildPrimitiveParser : (input -> ParseResult input a) -> Parser input a
-buildPrimitiveParser = \fun ->
-    @Parser fun
+buildPrimitiveParser = \fun -> @Parser fun
 
-# -- Generic parsers:
 ## Most general way of running a parser.
 ##
-## Can be tought of turning the recipe of a parser into its actual parsing function
+## Can be thought of as turning the recipe of a parser into its actual parsing function
 ## and running this function on the given input.
 ##
-## Many (but not all!) parsers consume part of `input` when they succeed.
-## This allows you to string parsers together that run one after the other:
-## The part of the input that the first parser did not consume, is used by the next parser.
+## Moat parsers consume part of `input` when they succeed. This allows you to string parsers
+## together that run one after the other. The part of the input that the first
+## parser did not consume, is used by the next parser.
 ## This is why a parser returns on success both the resulting value and the leftover part of the input.
 ##
-## Of course, this is mostly useful when creating your own internal parsing building blocks.
-## `run` or `Parser.Str.runStr` etc. are more useful in daily usage.
+## This is mostly useful when creating your own internal parsing building blocks.
 parsePartial : Parser input a, input -> ParseResult input a
 parsePartial = \@Parser parser, input ->
     parser input
@@ -72,9 +117,9 @@ parsePartial = \@Parser parser, input ->
 ## Runs a parser on the given input, expecting it to fully consume the input
 ##
 ## The `input -> Bool` parameter is used to check whether parsing has 'completed',
-## (in other words: Whether all of the input has been consumed.)
+## i.e. how to determine if all of the input has been consumed.
 ##
-## For most (but not all!) input types, a parsing run that leaves some unparsed input behind
+## For most input types, a parsing run that leaves some unparsed input behind
 ## should be considered an error.
 parse : Parser input a, input, (input -> Bool) -> Result a [ParsingFailure Str, ParsingIncomplete input]
 parse = \parser, input, isParsingCompleted ->
@@ -91,15 +136,23 @@ parse = \parser, input, isParsingCompleted ->
 ## Parser that can never succeed, regardless of the given input.
 ## It will always fail with the given error message.
 ##
-## This is mostly useful as 'base case' if all other parsers
+## This is mostly useful as a 'base case' if all other parsers
 ## in a `oneOf` or `alt` have failed, to provide some more descriptive error message.
 fail : Str -> Parser * *
 fail = \msg ->
     buildPrimitiveParser \_input -> Err (ParsingFailure msg)
 
-## Parser that will always produce the given `val`, without looking at the actual input.
-## This is useful as basic building block, especially in combination with
+## Parser that will always produce the given `a`, without looking at the actual input.
+## This is useful as a basic building block, especially in combination with
 ## `map` and `apply`.
+## ```
+## parseU32 : Parser (List U8) U32
+## parseU32 =
+##     const Num.toU32
+##     |> keep digits
+##
+## expect parseStr parseU32 "123" == Ok 123u32
+## ```
 const : a -> Parser * a
 const = \val ->
     buildPrimitiveParser \input ->
@@ -124,22 +177,22 @@ alt = \first, second ->
 ## than there are variants of `map`, `map2`, `map3` etc. for.
 ##
 ## For instance, the following two are the same:
+## ```
+## const (\x, y, z -> Triple x y z)
+## |> map3 String.digits String.digits String.digits
 ##
-## >>> const (\x, y, z -> Triple x y z)
-## >>> |> map3 Parser.Str.nat Parser.Str.nat Parser.Str.nat
-##
-## >>> const (\x -> \y -> \z -> Triple x y z)
-## >>> |> apply Parser.Str.nat
-## >>> |> apply Parser.Str.nat
-## >>> |> apply Parser.Str.nat
-##
-## (And indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.)
+## const (\x -> \y -> \z -> Triple x y z)
+## |> apply String.digits
+## |> apply String.digits
+## |> apply String.digits
+## ```
+## Indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.
 ##
 ## # Currying
 ## Be aware that when using `apply`, you need to explicitly 'curry' the parameters to the construction function.
 ## This means that instead of writing `\x, y, z -> ...`
 ## you'll need to write `\x -> \y -> \z -> ...`.
-## This is because the parameters to the function will be applied one-by-one as parsing continues.
+## This is because the parameters of the function will be applied one by one as parsing continues.
 apply : Parser input (a -> b), Parser input a -> Parser input b
 apply = \funParser, valParser ->
     combined = \input ->
@@ -169,7 +222,18 @@ andThen = \firstParser, buildNextParser ->
 
     buildPrimitiveParser fun
 
-## Try a list of parsers in turn, until one of them succeeds
+## Try a list of parsers in turn, until one of them succeeds.
+## ```
+## color : Parser (List U8) [Red, Green, Blue]
+## color =
+##     oneOf [
+##         string "red" |> map \_ -> Red,
+##         string "green" |> map \_ -> Green,
+##         string "blue" |> map \_ -> Blue,
+##     ]
+##
+## expect parseStr color "green" == Ok Green
+## ```
 oneOf : List (Parser input a) -> Parser input a
 oneOf = \parsers ->
     List.walkBackwards parsers (fail "oneOf: The list of parsers was empty") (\laterParser, earlierParser -> alt earlierParser laterParser)
@@ -272,7 +336,9 @@ oneOrMore = \parser ->
 ##
 ## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
 ##
-## >>> betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
+## ```
+## betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
+## ```
 between : Parser input a, Parser input open, Parser input close -> Parser input a
 between = \parser, open, close ->
     const (\_ -> \val -> \_ -> val)
@@ -291,6 +357,13 @@ sepBy1 = \parser, separator ->
     |> apply parser
     |> apply (many parserFollowedBySep)
 
+## ```
+## parseNumbers : Parser (List U8) (List Nat)
+## parseNumbers =
+##     digits |> sepBy (codeunit ',')
+##
+## expect parseStr parseNumbers "1,2,3" == Ok [1,2,3]
+## ```
 sepBy : Parser input a, Parser input sep -> Parser input (List a)
 sepBy = \parser, separator ->
     alt (sepBy1 parser separator) (const [])
@@ -319,7 +392,16 @@ skip = \funParser, skipParser ->
                 when parsePartial skipParser rest is
                     Err msg2 -> Err msg2
                     Ok { val: _, input: rest2 } -> Ok { val: funVal, input: rest2 }
-
+## ```
+## ignoreText : Parser (List U8) Nat
+## ignoreText =
+##     const (\d -> d)
+##     |> skip (chompUntil ':')
+##     |> skip (codeunit ':')
+##     |> keep digits
+##
+## expect parseStr ignoreText "ignore preceding text:123" == Ok 123
+## ```
 chompUntil : a -> Parser (List a) (List a) where a implements Eq
 chompUntil = \char ->
     buildPrimitiveParser \input ->
@@ -342,6 +424,15 @@ expect
 
 # Chomp zero or more characters if they pass the test. This is useful for chomping
 # whitespace or variable names. Note: a chompWhile parser always succeeds!
+## ```
+## ignoreNumbers : Parser (List U8) Str
+## ignoreNumbers =
+##     const (\str -> str)
+##     |> skip (chompWhile \b -> b >= '0' && b <= '9')
+##     |> keep (string "TEXT")
+##
+## expect parseStr ignoreNumbers "0123456789876543210TEXT" == Ok "TEXT"
+## ```
 chompWhile : (a -> Bool) -> Parser (List a) (List a) where a implements Eq
 chompWhile = \check ->
     buildPrimitiveParser \input ->
@@ -359,16 +450,6 @@ chompWhile = \check ->
                 val: List.sublist input { start: 0, len: index },
                 input: List.dropFirst input index,
             }
-
-#         {chomped, buffer} = chompWhileHelp check {chomped : List.withCapacity 10, buffer : input}
-#         Ok {val : chomped, input: buffer }
-
-# chompWhileHelp : (U8 -> Bool), {chomped : List U8, buffer : List U8} -> {chomped : List U8, buffer : List U8}
-# chompWhileHelp = \check, {chomped, buffer} ->
-#     when buffer is
-#         [first, ..] if check first ->
-#             chompWhileHelp check {chomped : List.append chomped first, buffer : List.dropFirst buffer}
-#         _ -> {chomped, buffer}
 
 expect
     input = [97u8, 's', '\n', 'd', 'f']
