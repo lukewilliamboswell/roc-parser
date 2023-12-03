@@ -224,14 +224,14 @@ andThen = \firstParser, buildNextParser ->
 
 ## Try a list of parsers in turn, until one of them succeeds.
 ## ```
-## color : Parser (List U8) [Red, Green, Blue]
-## color =
+## color : Parser Utf8 [Red, Green, Blue]
+## color = 
 ##     oneOf [
-##         string "red" |> map \_ -> Red,
-##         string "green" |> map \_ -> Green,
-##         string "blue" |> map \_ -> Blue,
+##         const Red |> skip (string "red"), 
+##         const Green |> skip (string "green"),
+##         const Blue |> skip (string "blue"),
 ##     ]
-##
+## 
 ## expect parseStr color "green" == Ok Green
 ## ```
 oneOf : List (Parser input a) -> Parser input a
