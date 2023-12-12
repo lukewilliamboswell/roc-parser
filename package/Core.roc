@@ -225,13 +225,13 @@ andThen = \firstParser, buildNextParser ->
 ## Try a list of parsers in turn, until one of them succeeds.
 ## ```
 ## color : Parser Utf8 [Red, Green, Blue]
-## color = 
+## color =
 ##     oneOf [
-##         const Red |> skip (string "red"), 
+##         const Red |> skip (string "red"),
 ##         const Green |> skip (string "green"),
 ##         const Blue |> skip (string "blue"),
 ##     ]
-## 
+##
 ## expect parseStr color "green" == Ok Green
 ## ```
 oneOf : List (Parser input a) -> Parser input a
@@ -315,7 +315,7 @@ manyImpl = \parser, vals, input ->
 ## A parser which runs the element parser *zero* or more times on the input,
 ## returning a list containing all the parsed elements.
 ##
-## Also see `oneOrMore`.
+## Also see [Core.oneOrMore].
 many : Parser input a -> Parser input (List a)
 many = \parser ->
     buildPrimitiveParser \input ->
@@ -324,7 +324,7 @@ many = \parser ->
 ## A parser which runs the element parser *one* or more times on the input,
 ## returning a list containing all the parsed elements.
 ##
-## Also see `many`.
+## Also see [Core.many].
 oneOrMore : Parser input a -> Parser input (List a)
 oneOrMore = \parser ->
     const (\val -> \vals -> List.prepend vals val)
@@ -392,6 +392,12 @@ skip = \funParser, skipParser ->
                 when parsePartial skipParser rest is
                     Err msg2 -> Err msg2
                     Ok { val: _, input: rest2 } -> Ok { val: funVal, input: rest2 }
+
+## Match zero or more codeunits until the it reaches the given codeunit.
+## The given codeunit is not included in the match.
+##
+## This can be used with [Core.skip] to ignore text.
+##
 ## ```
 ## ignoreText : Parser (List U8) Nat
 ## ignoreText =
@@ -402,6 +408,22 @@ skip = \funParser, skipParser ->
 ##
 ## expect parseStr ignoreText "ignore preceding text:123" == Ok 123
 ## ```
+##
+## This can be used with [Core.keep] to capture a list of `U8` codeunits.
+##
+## ```
+## captureText : Parser (List U8) (List U8)
+## captureText =
+##     const (\codeunits -> codeunits)
+##     |> keep (chompUntil ':')
+##     |> skip (codeunit ':')
+##
+## expect parseStr captureText "Roc:" == Ok ['R', 'o', 'c']
+## ```
+##
+## Use [String.strFromUtf8] to turn the results into a `Str`.
+##
+## Also see [Core.chompWhile].
 chompUntil : a -> Parser (List a) (List a) where a implements Eq
 chompUntil = \char ->
     buildPrimitiveParser \input ->
@@ -422,8 +444,13 @@ expect
         Ok _ -> Bool.false
         Err (ParsingFailure _) -> Bool.true
 
-# Chomp zero or more characters if they pass the test. This is useful for chomping
-# whitespace or variable names. Note: a chompWhile parser always succeeds!
+## Match zero or more codeunits until the check returns false.
+## The codeunit that returned false is not included in the match.
+## Note: a chompWhile parser always succeeds!
+##
+## This can be used with [Core.skip] to ignore text.
+## This is useful for chomping whitespace or variable names.
+##
 ## ```
 ## ignoreNumbers : Parser (List U8) Str
 ## ignoreNumbers =
@@ -433,6 +460,22 @@ expect
 ##
 ## expect parseStr ignoreNumbers "0123456789876543210TEXT" == Ok "TEXT"
 ## ```
+##
+## This can be used with [Core.keep] to capture a list of `U8` codeunits.
+##
+## ```
+## captureNumbers : Parser (List U8) (List U8)
+## captureNumbers =
+##     const (\codeunits -> codeunits)
+##     |> keep (chompWhile \b -> b >= '0' && b <= '9')
+##     |> skip (string "TEXT")
+##
+## expect parseStr captureNumbers "123TEXT" == Ok ['1', '2', '3']
+## ```
+##
+## Use [String.strFromUtf8] to turn the results into a `Str`.
+##
+## Also see [Core.chompUntil].
 chompWhile : (a -> Bool) -> Parser (List a) (List a) where a implements Eq
 chompWhile = \check ->
     buildPrimitiveParser \input ->
