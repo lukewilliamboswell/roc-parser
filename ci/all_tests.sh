@@ -16,16 +16,16 @@ if [ -z "${ROC}" ]; then
   exit 1
 fi
 
-EXAMPLES_DIR='./examples/'
-PACKAGE_DIR='./platform/'
+EXAMPLES_DIR='./examples'
+PACKAGE_DIR='./platform'
 
 # roc check
-for ROC_FILE in $EXAMPLES_DIR*.roc; do
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     $ROC check $ROC_FILE
 done
 
 # roc build
-for ROC_FILE in $EXAMPLES_DIR*.roc; do
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     $ROC build $ROC_FILE --linker=legacy
 done
 
