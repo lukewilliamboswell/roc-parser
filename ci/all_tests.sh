@@ -37,4 +37,4 @@ done
 # done
 
 # test building docs website
-$roc docs $PACKAGE_DIR/main.roc
+$ROC docs $PACKAGE_DIR/main.roc
