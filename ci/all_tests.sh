@@ -17,7 +17,7 @@ if [ -z "${ROC}" ]; then
 fi
 
 EXAMPLES_DIR='./examples'
-PACKAGE_DIR='./platform'
+PACKAGE_DIR='./package'
 
 # roc check
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
