@@ -163,7 +163,7 @@ anyCodeunit : Parser Utf8 U8
 anyCodeunit = codeunitSatisfies (\_ -> Bool.true)
 
 expect parseStr anyCodeunit "a" == Ok 'a'
-expect parseStr anyCodeunit "$" == Ok '$'
+expect parseStr anyCodeunit "\$" == Ok 36
 
 ## Matches any [Utf8] and consumes all the input without fail.
 ## ```
@@ -321,7 +321,7 @@ atSign = const AtSign |> skip (codeunit '@')
 
 expect parseStr atSign "@" == Ok AtSign
 expect parseStrPartial atSign "@" |> Result.map .val == Ok AtSign
-expect parseStrPartial atSign "$" |> Result.isErr
+expect parseStrPartial atSign "\$" |> Result.isErr
 
 Requirement : [ Green Nat, Red Nat, Blue Nat ]
 RequirementSet : List Requirement
