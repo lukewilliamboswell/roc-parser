@@ -3,26 +3,38 @@
 # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
 set -euxo pipefail
 
-roc='./roc_nightly/roc'
+# https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
+set -euxo pipefail
 
-examples_dir='./examples/'
+if [ -z "${ROC}" ]; then
+  echo "ERROR: The ROC environment variable is not set.
+    Set it to something like:
+        /home/username/Downloads/roc_nightly-linux_x86_64-2023-10-30-cb00cfb/roc
+        or
+        /home/username/gitrepos/roc/target/build/release/roc" >&2
+
+  exit 1
+fi
+
+EXAMPLES_DIR='./examples'
+PACKAGE_DIR='./package'
 
 # roc check
-for roc_file in $examples_dir*.roc; do
-    $roc check $roc_file
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
+    $ROC check $ROC_FILE
 done
 
 # roc build
-for roc_file in $examples_dir*.roc; do
-    $roc build $roc_file --linker=legacy
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
+    $ROC build $ROC_FILE --linker=legacy
 done
 
 # check output
-# for roc_file in $examples_dir*.roc; do
-#     roc_file_only="$(basename "$roc_file")"
+# for ROC_FILE in $EXAMPLES_DIR*.roc; do
+#     ROC_FILE_only="$(basename "$ROC_FILE")"
 #     no_ext_name=${roc_file_only%.*}
 #     expect ci/expect_scripts/$no_ext_name.exp
 # done
 
 # test building docs website
-$roc docs package/main.roc
+$ROC docs $PACKAGE_DIR/main.roc
