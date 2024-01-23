@@ -168,7 +168,7 @@ alt = \first, second ->
                 when parsePartial second input is
                     Ok { val: val, input: rest } -> Ok { val: val, input: rest }
                     Err (ParsingFailure secondErr) ->
-                        Err (ParsingFailure ("\(firstErr) or \(secondErr)"))
+                        Err (ParsingFailure ("$(firstErr) or $(secondErr)"))
 
 ## Runs a parser building a function, then a parser building a value,
 ## and finally returns the result of calling the function with the value.
@@ -278,7 +278,7 @@ map3 = \parserA, parserB, parserC, transform ->
 ##     |> map \val ->
 ##         when Str.toU64 val is
 ##             Ok num -> Ok num
-##             Err _ -> Err "\(val) is not a Nat."
+##             Err _ -> Err "$(val) is not a Nat."
 ##     |> flatten
 ## ```
 flatten : Parser input (Result a Str) -> Parser input a

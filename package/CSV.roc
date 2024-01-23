@@ -60,8 +60,8 @@ parseCSV = \csvParser, csvData ->
         when parseCSVRecord csvParser recordFieldsList is
             Err (ParsingFailure problem) ->
                 indexStr = Num.toStr (index + 1)
-                recordStr = recordFieldsList |> List.map strFromUtf8 |> List.map (\val -> "\"\(val)\"") |> Str.joinWith ", "
-                problemStr = "\(problem)\nWhile parsing record no. \(indexStr): `\(recordStr)`"
+                recordStr = recordFieldsList |> List.map strFromUtf8 |> List.map (\val -> "\"$(val)\"") |> Str.joinWith ", "
+                problemStr = "$(problem)\nWhile parsing record no. $(indexStr): `$(recordStr)`"
 
                 Break (Err (ParsingFailure problemStr))
 
@@ -107,13 +107,13 @@ field = \fieldParser ->
                     Err (ParsingFailure reason) ->
                         fieldStr = rawStr |> strFromUtf8
 
-                        Err (ParsingFailure "Field `\(fieldStr)` could not be parsed. \(reason)")
+                        Err (ParsingFailure "Field `$(fieldStr)` could not be parsed. $(reason)")
 
                     Err (ParsingIncomplete reason) ->
                         reasonStr = strFromUtf8 reason
                         fieldsStr = fieldsList |> List.map strFromUtf8 |> Str.joinWith ", "
 
-                        Err (ParsingFailure "The field parser was unable to read the whole field: `\(reasonStr)` while parsing the first field of leftover \(fieldsStr))")
+                        Err (ParsingFailure "The field parser was unable to read the whole field: `$(reasonStr)` while parsing the first field of leftover $(fieldsStr))")
 
 ## Parser for a field containing a UTF8-encoded string
 string : Parser CSVField Str
@@ -126,7 +126,7 @@ u64 =
     |> map \val ->
         when Str.toU64 val is
             Ok num -> Ok num
-            Err _ -> Err "\(val) is not a Nat."
+            Err _ -> Err "$(val) is not a Nat."
     |> flatten
 
 ## Parse a 64-bit float from a CSV field
@@ -136,7 +136,7 @@ f64 =
     |> map \val ->
         when Str.toF64 val is
             Ok num -> Ok num
-            Err _ -> Err "\(val) is not a F64."
+            Err _ -> Err "$(val) is not a F64."
     |> flatten
 
 ## Attempts to parse a Str into the internal `CSV` datastructure (A list of lists of bytestring-fields).

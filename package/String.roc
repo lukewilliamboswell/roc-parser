@@ -106,7 +106,7 @@ codeunitSatisfies = \check ->
                     otherChar = strFromCodeunit startCodeunit
                     inputStr = strFromUtf8 input
 
-                    Err (ParsingFailure "expected a codeunit satisfying a condition but found `\(otherChar)`.\n While reading: `\(inputStr)`")
+                    Err (ParsingFailure "expected a codeunit satisfying a condition but found `$(otherChar)`.\n While reading: `$(inputStr)`")
 
 ## ```
 ## atSign : Parser Utf8 [AtSign]
@@ -120,11 +120,11 @@ codeunit = \expectedCodeUnit ->
     buildPrimitiveParser \input ->
         when input is 
             [] -> 
-                Err (ParsingFailure "expected char `\(strFromCodeunit expectedCodeUnit)` but input was empty.")
+                Err (ParsingFailure "expected char `$(strFromCodeunit expectedCodeUnit)` but input was empty.")
             [first, .. as rest] if first == expectedCodeUnit -> 
                 Ok { val: expectedCodeUnit, input: rest }
             [first, .. as rest] -> 
-                Err (ParsingFailure "expected char `\(strFromCodeunit expectedCodeUnit)` but found `\(strFromCodeunit first)`.\n While reading: `\(strFromUtf8 input)`")
+                Err (ParsingFailure "expected char `$(strFromCodeunit expectedCodeUnit)` but found `$(strFromCodeunit first)`.\n While reading: `$(strFromUtf8 input)`")
 
 ## Parse an extact sequence of utf8
 utf8 : List U8 -> Parser Utf8 (List U8)
@@ -141,7 +141,7 @@ utf8 = \expectedString ->
             otherString = strFromUtf8 start
             inputString = strFromUtf8 input
 
-            Err (ParsingFailure "expected string `\(errorString)` but found `\(otherString)`.\nWhile reading: \(inputString)")
+            Err (ParsingFailure "expected string `$(errorString)` but found `$(otherString)`.\nWhile reading: $(inputString)")
 
 ## Parse the given [Str]
 ## ```

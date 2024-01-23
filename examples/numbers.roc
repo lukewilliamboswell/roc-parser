@@ -17,7 +17,7 @@ main =
     result = parseStr (many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 
     when result |> Result.map largest is
-        Ok count -> Stdout.line "The lagest sum is \(Num.toStr count)"
+        Ok count -> Stdout.line "The lagest sum is $(Num.toStr count)"
         Err _ -> Stderr.line "Failed while parsing input"
 
 # Parse a number followed by a newline

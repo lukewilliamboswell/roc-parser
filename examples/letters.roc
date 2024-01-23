@@ -17,7 +17,7 @@ main =
     result = parseStr (many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
 
     when result |> Result.map countLetterAs is
-        Ok count -> Stdout.line "I counted \(Num.toStr count) letter A's!"
+        Ok count -> Stdout.line "I counted $(Num.toStr count) letter A's!"
         Err _ -> Stderr.line "Failed while parsing input"
 
 Letter : [A, B, C, Other]

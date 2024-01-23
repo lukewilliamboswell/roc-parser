@@ -220,7 +220,7 @@ expect
         Vary: Accept-Encoding,Cookie\r
         Age: 7\r
         \r
-        \(body)
+        $(body)
         """
     actual =
         parseStr response responseText
