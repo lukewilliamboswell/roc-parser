@@ -22,7 +22,7 @@ Locally generate docs using `roc docs package/main.roc`
 
 ## Contributing
 
-If you see anything that could be improved please create an Issue or submit a PR.
+If you see anything that could be improved please create an Issue or Pull Request.
 
 ## Tests
 
@@ -30,4 +30,4 @@ Run tests locally with `roc test package/main.roc`
 
 ## Packaging
 
-Bundle package into a URL for distribution using `roc build --bundle .tar.br package/main.roc` 
+Bundle package into a URL for distribution using `roc build --bundle .tar.br package/main.roc`
