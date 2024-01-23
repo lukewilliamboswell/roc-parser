@@ -29,6 +29,7 @@ jobs:
       - name: simplify nightly folder name
         run: mv roc_nightly* roc_nightly
 
+      # Check roc cli available
       - run: ./roc_nightly/roc version
 
       # Run all tests 

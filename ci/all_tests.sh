@@ -16,25 +16,18 @@ if [ -z "${ROC}" ]; then
   exit 1
 fi
 
-EXAMPLES_DIR='./examples/'
-PACKAGE_DIR='./platform/'
+EXAMPLES_DIR='./examples'
+PACKAGE_DIR='./package'
 
 # roc check
-for ROC_FILE in $EXAMPLES_DIR*.roc; do
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     $ROC check $ROC_FILE
 done
 
 # roc build
-for ROC_FILE in $EXAMPLES_DIR*.roc; do
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     $ROC build $ROC_FILE --linker=legacy
 done
 
-# check output
-# for ROC_FILE in $EXAMPLES_DIR*.roc; do
-#     ROC_FILE_only="$(basename "$ROC_FILE")"
-#     no_ext_name=${roc_file_only%.*}
-#     expect ci/expect_scripts/$no_ext_name.exp
-# done
-
 # test building docs website
-$roc docs $PACKAGE_DIR/main.roc
+$ROC docs $PACKAGE_DIR/main.roc
