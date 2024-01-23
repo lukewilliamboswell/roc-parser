@@ -16,6 +16,7 @@ interface String
         digit,
         digits,
         strFromUtf8,
+        strFromAscii,
     ]
     imports [
         Core.{ Parser, ParseResult, const, map, skip, sepBy, keep, oneOrMore, parse, parsePartial, buildPrimitiveParser, chompUntil, chompWhile },
@@ -251,6 +252,12 @@ strToRaw = \str ->
 strFromCodeunit : U8 -> Str
 strFromCodeunit = \cu ->
     strFromUtf8 [cu]
+
+strFromAscii : U8 -> Str
+strFromAscii = \asciiNum ->
+    when Str.fromUtf8 [asciiNum] is
+        Ok answer -> answer
+        Err _ -> crash "The number $(Num.toStr asciiNum) is not a valid ASCII constant!"
 
 # -------------------- example snippets used in docs --------------------
 
