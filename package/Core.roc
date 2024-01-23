@@ -265,25 +265,31 @@ map3 = \parserA, parserB, parserC, transform ->
     |> apply parserB
     |> apply parserC
 
-# ^ And this could be repeated for as high as we want, of course.
-# Removes a layer of 'result' from running the parser.
-#
-# This allows for instance to map functions that return a result over the parser,
-# where errors are turned into `ParsingFailure` s.
+## Removes a layer of `Result` from running the parser.
+##
+## Use this to map functions that return a result over the parser,
+## where errors are turned into `ParsingFailure`s.
+##
+## ```
+## # Parse a number from a List U8
+## u64 : Parser Utf8 U64
+## u64 =
+##     string
+##     |> map \val ->
+##         when Str.toU64 val is
+##             Ok num -> Ok num
+##             Err _ -> Err "\(val) is not a Nat."
+##     |> flatten
+## ```
 flatten : Parser input (Result a Str) -> Parser input a
 flatten = \parser ->
     buildPrimitiveParser \input ->
         result = parsePartial parser input
 
         when result is
-            Err problem ->
-                Err problem
-
-            Ok { val: Ok val, input: inputRest } ->
-                Ok { val: val, input: inputRest }
-
-            Ok { val: Err problem, input: _inputRest } ->
-                Err (ParsingFailure problem)
+            Err problem -> Err problem
+            Ok { val: Ok val, input: inputRest } -> Ok { val: val, input: inputRest }
+            Ok { val: Err problem, input: _inputRest } -> Err (ParsingFailure problem)
 
 ## Runs a parser lazily
 ##

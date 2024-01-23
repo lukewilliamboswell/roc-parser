@@ -13,7 +13,7 @@ app "example"
 
 main =
 
-    result : Result (List (List Nat)) [ParsingFailure Str, ParsingIncomplete Str]
+    result : Result (List (List U64)) [ParsingFailure Str, ParsingIncomplete Str]
     result = parseStr (many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 
     when result |> Result.map largest is
@@ -21,7 +21,7 @@ main =
         Err _ -> Stderr.line "Failed while parsing input"
 
 # Parse a number followed by a newline
-singleNumber : Parser (List U8) Nat
+singleNumber : Parser (List U8) U64
 singleNumber =
     const (\n -> n)
     |> keep (digits)
@@ -32,7 +32,7 @@ expect
     actual == Ok 1000
 
 # Parse a series of numbers followed by a newline
-multipleNumbers : Parser (List U8) (List Nat)
+multipleNumbers : Parser (List U8) (List U64)
 multipleNumbers =
     const (\ns -> ns)
     |> keep (many singleNumber)
@@ -43,7 +43,7 @@ expect
     actual == Ok [1000, 2000, 3000]
 
 # Sum up the lists and return the largest sum
-largest : List (List Nat) -> Nat
+largest : List (List U64) -> U64
 largest = \numbers ->
     numbers
     |> List.map List.sum

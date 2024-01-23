@@ -12,7 +12,6 @@ interface String
         anyString,
         anyThing,
         anyCodeunit,
-        scalar,
         oneOf,
         digit,
         digits,
@@ -193,14 +192,14 @@ anyString = buildPrimitiveParser \fieldUtf8ing ->
 ## expect parseStr digit "0" == Ok 0
 ## expect parseStr digit "not a digit" |> Result.isErr
 ## ```
-digit : Parser Utf8 Nat
+digit : Parser Utf8 U64
 digit =
     buildPrimitiveParser \input ->
         when input is 
             [] -> 
                 Err (ParsingFailure "Expected a digit from 0-9 but input was empty.")
             [first, .. as rest] if first >= '0' && first <= '9' -> 
-                Ok { val: Num.toNat (first - '0'), input: rest }
+                Ok { val: Num.toU64 (first - '0'), input: rest }
             _ -> 
                 Err (ParsingFailure "Not a digit")
 
@@ -209,7 +208,7 @@ digit =
 ## expect parseStr digits "0123" == Ok 123
 ## expect parseStr digits "not a digit" |> Result.isErr
 ## ```
-digits : Parser Utf8 Nat
+digits : Parser Utf8 U64
 digits =
     oneOrMore digit
     |> map \ds -> List.walk ds 0 (\sum, d -> sum * 10 + d)
@@ -239,13 +238,6 @@ oneOf = \parsers ->
                 Err problem ->
                     Continue (Err problem)
 
-scalar : U32 -> Parser Utf8 U32
-scalar = \expectedScalar ->
-    expectedScalar
-    |> strFromScalar
-    |> string
-    |> map \_ -> expectedScalar
-
 strFromUtf8 : Utf8 -> Str
 strFromUtf8 = \rawStr ->
     rawStr
@@ -255,11 +247,6 @@ strFromUtf8 = \rawStr ->
 strToRaw : Str -> Utf8
 strToRaw = \str ->
     str |> Str.toUtf8
-
-strFromScalar : U32 -> Str
-strFromScalar = \scalarVal ->
-    Str.appendScalar "" (Num.intCast scalarVal)
-    |> Result.withDefault "Unexpected problem while turning a U32 (that was probably originally a scalar constant) into a Str. This should never happen!"
 
 strFromCodeunit : U8 -> Str
 strFromCodeunit = \cu ->
@@ -284,7 +271,7 @@ color =
 
 expect parseStr color "green" == Ok Green
 
-parseNumbers : Parser Utf8 (List Nat)
+parseNumbers : Parser Utf8 (List U64)
 parseNumbers = 
     digits |> sepBy (codeunit ',')
 
@@ -293,7 +280,7 @@ expect parseStr parseNumbers "1,2,3" == Ok [1,2,3]
 expect parseStr (string "Foo") "Foo" == Ok "Foo"
 expect parseStr (string "Foo") "Bar" |> Result.isErr
 
-ignoreText : Parser Utf8 Nat
+ignoreText : Parser Utf8 U64
 ignoreText = 
     const (\d -> d)
     |> skip (chompUntil ':')
@@ -323,9 +310,9 @@ expect parseStr atSign "@" == Ok AtSign
 expect parseStrPartial atSign "@" |> Result.map .val == Ok AtSign
 expect parseStrPartial atSign "\$" |> Result.isErr
 
-Requirement : [ Green Nat, Red Nat, Blue Nat ]
+Requirement : [ Green U64, Red U64, Blue U64 ]
 RequirementSet : List Requirement
-Game : { id: Nat, requirements: List RequirementSet }
+Game : { id: U64, requirements: List RequirementSet }
 
 parseGame : Str -> Result Game [ParsingError]
 parseGame = \s ->
