@@ -1,6 +1,6 @@
 app "example"
     packages {
-        pf: "https://github.com/roc-lang/basic-cli/releases/download/0.7.1/Icc3xJoIixF3hCcfXrDwLCu4wQHtNdPyoJkEbkgIElA.tar.br",
+        pf: "https://github.com/roc-lang/basic-cli/releases/download/0.8.1/x8URkvfyi9I0QhmVG98roKBUs_AZRkLFwFJVJ3942YA.tar.br",
         parser: "../package/main.roc",
     }
     imports [
@@ -16,7 +16,7 @@ app "example"
 MovieInfo := { title : Str, releaseYear : U64, actors : List Str }
 
 input : Str
-input = 
+input =
     """
     Airplane!,1980,\"Robert Hays,Julie Hagerty\"
     Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
