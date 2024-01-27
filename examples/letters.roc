@@ -1,7 +1,7 @@
 app "example"
     packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.7.1/Icc3xJoIixF3hCcfXrDwLCu4wQHtNdPyoJkEbkgIElA.tar.br",
-        parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.5/KB-TITJ4DfunB88sFBWjCtCGV7LRRDdTH5JUXp4gIb8.tar.br",
+        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.8.1/x8URkvfyi9I0QhmVG98roKBUs_AZRkLFwFJVJ3942YA.tar.br",
+        parser: "../package/main.roc",
     }
     imports [
         cli.Stdout,
@@ -26,7 +26,7 @@ Letter : [A, B, C, Other]
 isA = \l -> l == A
 
 # Count the number of Letter A's
-countLetterAs : List Letter -> Nat
+countLetterAs : List Letter -> U64
 countLetterAs = \letters ->
     letters
     |> List.keepIf isA

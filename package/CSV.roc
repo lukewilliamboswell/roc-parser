@@ -126,7 +126,7 @@ u64 =
     |> map \val ->
         when Str.toU64 val is
             Ok num -> Ok num
-            Err _ -> Err "$(val) is not a Nat."
+            Err _ -> Err "$(val) is not a U64."
     |> flatten
 
 ## Parse a 64-bit float from a CSV field
@@ -163,7 +163,7 @@ escapedCsvField : Parser Utf8 CSVField
 escapedCsvField = between escapedContents dquote dquote
 
 escapedContents : Parser Utf8 (List U8)
-escapedContents = 
+escapedContents =
     oneOf [
         twodquotes |> map (\_ -> '"'),
         comma,
@@ -172,7 +172,6 @@ escapedContents =
         textdata,
     ]
     |> many
-
 
 twodquotes : Parser Utf8 Str
 twodquotes = String.string "\"\""

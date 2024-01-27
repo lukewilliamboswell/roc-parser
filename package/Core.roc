@@ -19,9 +19,9 @@
 ## ```
 ## We could do this using the following:
 ## ```
-## Requirement : [ Green Nat, Red Nat, Blue Nat ]
+## Requirement : [ Green U64, Red U64, Blue U64 ]
 ## RequirementSet : List Requirement
-## Game : { id: Nat, requirements: List RequirementSet }
+## Game : { id: U64, requirements: List RequirementSet }
 ##
 ## parseGame : Str -> Result Game [ParsingError]
 ## parseGame = \s ->
@@ -278,7 +278,7 @@ map3 = \parserA, parserB, parserC, transform ->
 ##     |> map \val ->
 ##         when Str.toU64 val is
 ##             Ok num -> Ok num
-##             Err _ -> Err "$(val) is not a Nat."
+##             Err _ -> Err "$(val) is not a U64."
 ##     |> flatten
 ## ```
 flatten : Parser input (Result a Str) -> Parser input a
@@ -364,7 +364,7 @@ sepBy1 = \parser, separator ->
     |> apply (many parserFollowedBySep)
 
 ## ```
-## parseNumbers : Parser (List U8) (List Nat)
+## parseNumbers : Parser (List U8) (List U64)
 ## parseNumbers =
 ##     digits |> sepBy (codeunit ',')
 ##
@@ -405,7 +405,7 @@ skip = \funParser, skipParser ->
 ## This can be used with [Core.skip] to ignore text.
 ##
 ## ```
-## ignoreText : Parser (List U8) Nat
+## ignoreText : Parser (List U8) U64
 ## ignoreText =
 ##     const (\d -> d)
 ##     |> skip (chompUntil ':')
@@ -485,7 +485,6 @@ expect
 chompWhile : (a -> Bool) -> Parser (List a) (List a) where a implements Eq
 chompWhile = \check ->
     buildPrimitiveParser \input ->
-        index : Nat
         index = List.walkUntil input 0 \i, elem ->
             if check elem then
                 Continue (i + 1)
