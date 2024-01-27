@@ -26,7 +26,7 @@ Letter : [A, B, C, Other]
 isA = \l -> l == A
 
 # Count the number of Letter A's
-countLetterAs : List Letter -> Nat
+countLetterAs : List Letter -> U64
 countLetterAs = \letters ->
     letters
     |> List.keepIf isA
