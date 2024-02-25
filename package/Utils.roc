@@ -1,5 +1,8 @@
 interface Utils
-    exposes [sortedMergeDiff]
+    exposes [
+        sortedMergeDiff,
+        isWhitespace,
+    ]
     imports []
 
 # TODO
@@ -157,3 +160,23 @@ expect isNonZeroDigit == [('1', '9')]
 
 isNonFiveDigit = sortedMergeDiff isDigit [('5', '5')]
 expect isNonFiveDigit == [('0', '4'), ('6', '9')]
+
+isWhitespace : U8 -> Bool
+isWhitespace = \byte ->
+
+    space = ' '
+    tab = '\t'
+    lf = '\n'
+    cr = '\r'
+
+    byte == space 
+    || byte == tab 
+    || byte == lf 
+    || byte == cr
+
+expect isWhitespace ' '
+expect isWhitespace '\t'
+expect isWhitespace '\n'
+expect isWhitespace '\r'
+expect !(isWhitespace 'a')
+expect !(isWhitespace '0')

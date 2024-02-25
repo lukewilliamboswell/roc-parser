@@ -3,16 +3,24 @@ interface XML
         Document,
     ]
     imports [
-        Core.{ Parser, oneOrMore, many, map, map2, maybe, keep, skip, const },
+        Core.{ Parser, oneOrMore, map, chompWhile, maybe, keep, skip, const },
         String.{ Utf8, oneOf, string, codeunit, codeunitSatisfies, parseStr, strFromUtf8, anyString },
+        Utils, 
     ]
+
+
+Document : List Element
+
+Element : [Child { name : Str, attributes : List Attribute, content : List Element }, Null]
+
+Attribute : { name : Str, attValue : Str }
 
 eq = \value -> \a -> a == value
 and = \left, right -> \a -> (left a && right a)
 range = \(start, end) -> and (\a -> a >= start) (\a -> a <= end)
 
 neq = \value -> \a -> a != value
-or = \left, right -> \a -> (left a || right a)
+# or = \left, right -> \a -> (left a || right a)
 
 withDefault : Parser input (Result a [Nothing]), a -> Parser input a
 withDefault = \parser, def ->
@@ -22,34 +30,48 @@ withDefault = \parser, def ->
 # https://www.w3.org/TR/xml/
 # WIP
 
-Document : List Element
+attributeList : Parser Utf8 (List Attribute)
+attributeList = 
+    oneOrMore (
+        const (\a -> a) 
+        |> skip (chompWhile Utils.isWhitespace) 
+        |> keep attribute
+    )
 
-Element : [Child { name : Str, attributes : List Attribute, content : List Element }, Null]
-
-attributeList = (const (\a -> a) |> skip (many s) |> keep attribute) |> oneOrMore
-
-emptyElemTag : Parser (List U8) { name : Str, attributes : List Attribute, content : List Element }
+emptyElemTag : Parser Utf8 { name : Str, attributes : List Attribute, content : List Element }
 emptyElemTag =
     const (\a -> \b -> { name: a, attributes: b, content: [] })
     |> skip (codeunit '<')
     |> keep name
+    |> skip (chompWhile Utils.isWhitespace)
     |> keep attributeList
-    |> skip (many s)
+    |> skip (chompWhile Utils.isWhitespace)
     |> skip (string "/>")
+
+expect 
+    parseStr emptyElemTag "<a  foo=\"bar\" baz='qux'   />"
+    == Ok { 
+        name: "a", 
+        attributes: [
+            { name: "foo", attValue: "bar" }, 
+            { name: "baz", attValue: "qux" },
+        ], 
+        content: [] 
+    }
 
 sTag =
     const (\a -> \b -> { name: a, attributes: b })
     |> skip (codeunit '<')
     |> keep name
     |> keep attributeList
-    |> skip (many s)
+    |> skip (chompWhile Utils.isWhitespace)
     |> skip (codeunit '>')
 
 eTag =
     const (\a -> { name: a })
     |> skip (string "</")
     |> keep name
-    |> skip (many s)
+    |> skip (chompWhile Utils.isWhitespace)
     |> skip (codeunit '>')
 
 isDigit = [('0', '9')] |> List.map range
@@ -94,33 +116,41 @@ name =
     |> keep (nameStartChar)
     |> keep (nameChar |> oneOrMore |> maybe |> withDefault [])
 
-isS = [' ', '\t', '\r', '\n'] |> List.map eq
-
-s : Parser Utf8 U8
-s = isS |> List.map codeunitSatisfies |> oneOf
-
+attValue : Parser Utf8 Str
 attValue =
     [
+        # Double Quotes
         const (\x -> x)
         |> skip (codeunit '"')
-        |> keep (neq '<' |> and (neq '&') |> and (neq '"') |> codeunitSatisfies)
+        |> keep (neq '<' |> and (neq '&') |> and (neq '"') |> codeunitSatisfies |> oneOrMore)
         |> skip (codeunit '"'),
+
+        # Single Quotes
         const (\x -> x)
         |> skip (codeunit '\'')
-        |> keep (neq '<' |> and (neq '&') |> and (neq '\'') |> codeunitSatisfies)
+        |> keep (neq '<' |> and (neq '&') |> and (neq '\'') |> codeunitSatisfies |> oneOrMore)
         |> skip (codeunit '\''),
     ]
     |> oneOf
-    |> oneOrMore
     |> map strFromUtf8
 
-Attribute : { name : Str, attValue : Str }
+expect parseStr attValue "\"http://www.w3.org\"" == Ok "http://www.w3.org"
+expect parseStr attValue "'Foo \"Bar\" Baz'" == Ok "Foo \"Bar\" Baz"
+
+# TODO we should be able to include character entities
+# expect 
+#     a = parseStr attValue "\"Foo &quot;Bar&quot; Baz\"" 
+#     a == Ok "Foo &quot;Bar&quot; Baz"
+
 attribute : Parser (List U8) Attribute
 attribute =
     const (\a -> \b -> { name: a, attValue: b })
     |> keep name
     |> skip (codeunit '=')
     |> keep attValue
+
+expect parseStr attribute "foo=\'bar\'" == Ok { name: "foo", attValue: "bar" }
+expect parseStr attribute "href=\"http://www.w3.org\"" == Ok { name: "href", attValue: "http://www.w3.org" }
 
 entityRef : Parser (List U8) Str
 entityRef =
