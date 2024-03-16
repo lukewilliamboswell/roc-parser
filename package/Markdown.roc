@@ -4,9 +4,10 @@ interface Markdown
         heading,
         link,
         image,
+        code,
     ]
     imports [
-        Core.{ Parser, const, skip, keep, oneOf, chompWhile, map },
+        Core.{ Parser, ParseResult, buildPrimitiveParser, const, skip, keep, oneOf, chompWhile, map },
         String.{ Utf8, codeunit, parseStr, parseStrPartial, string, strFromUtf8 },
     ]
 
@@ -14,15 +15,10 @@ Level : [One, Two, Three, Four, Five, Six]
 
 ## Content values
 Markdown : [
-    ## Heading One "Foo Bar"
     Heading Level Str,
-
-    ## Link "roc" "https://roc-lang.org"
-    Link Str Str,
-
-    ## Image "alt text" "/images/logo.png"
-    Image Str Str,
-
+    Link { alt : Str, href : Str },
+    Image { alt : Str, href : Str },
+    Code { ext : Str, pre : Str },
 ]
 
 endOfLine = oneOf [string "\n", string "\r\n"]
@@ -105,18 +101,18 @@ expect
 ## ```
 link : Parser Utf8 Markdown
 link =
-    const (\label -> \href -> Link label href)
+    const (\alt -> \href -> Link { alt, href })
     |> skip (string "[")
     |> keep (chompWhile (\b -> b != ']') |> map strFromUtf8)
     |> skip (string "](")
     |> keep (chompWhile (\b -> b != ')') |> map strFromUtf8)
     |> skip (codeunit ')')
 
-expect parseStr link "[roc](https://roc-lang.org)" == Ok (Link "roc" "https://roc-lang.org")
+expect parseStr link "[roc](https://roc-lang.org)" == Ok (Link { alt: "roc", href: "https://roc-lang.org" })
 
 expect
     a = parseStrPartial link "[roc](https://roc-lang.org)\nApples"
-    a == Ok { val: Link "roc" "https://roc-lang.org", input: "\nApples" }
+    a == Ok { val: Link { alt: "roc", href: "https://roc-lang.org" }, input: "\nApples" }
 
 ## Images
 ##
@@ -125,16 +121,81 @@ expect
 ## ```
 image : Parser Utf8 Markdown
 image =
-    const (\alt -> \href -> Image alt href)
+    const (\alt -> \href -> Image { alt, href })
     |> skip (string "![")
     |> keep (chompWhile (\b -> b != ']') |> map strFromUtf8)
     |> skip (string "](")
     |> keep (chompWhile (\b -> b != ')') |> map strFromUtf8)
     |> skip (codeunit ')')
 
-expect parseStr image "![alt text](/images/logo.png)" == Ok (Image "alt text" "/images/logo.png")
+expect parseStr image "![alt text](/images/logo.png)" == Ok (Image { alt: "alt text", href: "/images/logo.png" })
 
 expect
     a = parseStrPartial image "![alt text](/images/logo.png)\nApples"
-    a == Ok { val: Image "alt text" "/images/logo.png", input: "\nApples" }
+    a == Ok { val: Image { alt: "alt text", href: "/images/logo.png" }, input: "\nApples" }
 
+## Parse code blocks using triple backticks
+## supports block extension e.g. ```roc
+##
+## ```
+## expect
+##     text =
+##         """
+##         ```roc
+##         # some code
+##         foo = bar
+##         ```
+##         """
+##
+##     a = parseStr code text
+##     a == Ok (Code { ext: "roc", pre: "# some code\nfoo = bar\n" })
+## ```
+code : Parser Utf8 Markdown
+code =
+
+    const (\ext -> \pre -> Code { ext, pre })
+    |> keep
+        (
+            oneOf [
+                # parse backticks with ext e.g. ```roc
+                const \i -> i
+                |> skip (string "```")
+                |> keep (chompWhile notEndOfLine |> map strFromUtf8)
+                |> skip (endOfLine),
+
+                # parse just backticks e.g. ```
+                const "" |> skip (string "```"),
+            ]
+        )
+    |> keep (chompUntilCodeBlockEnd)
+
+expect
+    text =
+        """
+        ```roc
+        # some code
+        foo = bar
+        ```
+        """
+
+    a = parseStr code text
+    a == Ok (Code { ext: "roc", pre: "# some code\nfoo = bar\n" })
+
+chompUntilCodeBlockEnd : Parser Utf8 Str
+chompUntilCodeBlockEnd =
+    buildPrimitiveParser \input -> chompToCodeBlockEndHelp { val: List.withCapacity 1000, input }
+    |> map strFromUtf8
+
+chompToCodeBlockEndHelp : { val : Utf8, input : Utf8 } -> ParseResult Utf8 Utf8
+chompToCodeBlockEndHelp = \{ val, input } ->
+    when input is
+        [] -> Err (ParsingFailure "expected ```, ran out of input")
+        ['`', '`', '`', .. as rest] -> Ok { val, input: rest }
+        [first, .. as rest] -> chompToCodeBlockEndHelp { val: List.append val first, input: rest }
+
+expect
+    val = "" |> Str.toUtf8
+    input = "some code\n```" |> Str.toUtf8
+    expected = "some code\n" |> Str.toUtf8
+    a = chompToCodeBlockEndHelp { val, input }
+    a == Ok { val: expected, input: [] }
