@@ -3,21 +3,25 @@ interface Markdown
     ]
     imports [
         Core.{ Parser, const, skip, keep, oneOf, chompWhile, map },
-        String.{ Utf8, parseStr, parseStrPartial, string, strFromUtf8 },
+        String.{ Utf8, codeunit, parseStr, parseStrPartial, string, strFromUtf8 },
     ]
 
 Level : [One, Two, Three, Four, Five, Six]
 
 ## Content values
 Markdown : [
+    ## Heading One "Foo Bar"
     Heading Level Str,
+
+    ## Link "roc" "https://roc-lang.org"
+    Link Str Str,
+
 ]
 
 endOfLine = oneOf [string "\n", string "\r\n"]
 notEndOfLine = \b -> b != '\n' && b != '\r'
 
 ## Headings
-## [reference](https://www.markdownguide.org/basic-syntax/#headings)
 ##
 ## ```
 ## expect parseStr heading "# Foo Bar" == Ok (Heading One "Foo Bar")
@@ -86,3 +90,23 @@ expect
 expect
     a = parseStrPartial twoLineHeadingLevelTwo "Foo Bar\n-----\nApples"
     a == Ok { val: Heading Two "Foo Bar", input: "\nApples" }
+
+## Links
+##
+## ```
+## expect parseStr link "[roc](https://roc-lang.org)" == Ok (Link "roc" "https://roc-lang.org")
+## ```
+link : Parser Utf8 Markdown
+link =
+    const (\label -> \href -> Link label href)
+    |> skip (codeunit '[')
+    |> keep (chompWhile (\b -> b != ']') |> map strFromUtf8)
+    |> skip (string "](")
+    |> keep (chompWhile (\b -> b != ')') |> map strFromUtf8)
+    |> skip (codeunit ')')
+
+expect parseStr link "[roc](https://roc-lang.org)" == Ok (Link "roc" "https://roc-lang.org")
+
+expect
+    a = parseStrPartial link "[roc](https://roc-lang.org)\nApples"
+    a == Ok { val: Link "roc" "https://roc-lang.org", input: "\nApples" }
