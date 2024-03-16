@@ -1,13 +1,14 @@
 interface Markdown
     exposes [
         Markdown,
+        all,
         heading,
         link,
         image,
         code,
     ]
     imports [
-        Core.{ Parser, ParseResult, buildPrimitiveParser, const, skip, keep, oneOf, chompWhile, map },
+        Core.{ Parser, ParseResult, buildPrimitiveParser, const, skip, keep, oneOf, sepBy, chompWhile, map },
         String.{ Utf8, codeunit, parseStr, parseStrPartial, string, strFromUtf8 },
     ]
 
@@ -19,7 +20,34 @@ Markdown : [
     Link { alt : Str, href : Str },
     Image { alt : Str, href : Str },
     Code { ext : Str, pre : Str },
+    TODO Str,
 ]
+
+all : Parser Utf8 (List Markdown)
+all =
+    [
+        heading,
+        link,
+        image,
+        code,
+        todo,
+    ]
+    |> oneOf
+    |> sepBy (endOfLine)
+
+## temporyary parser for anything that is not yet supported
+## just parse into a TODO tag for now
+todo : Parser Utf8 Markdown
+todo =
+    const TODO |> keep (chompWhile (notEndOfLine) |> map strFromUtf8)
+
+expect
+    a = parseStr todo "Foo Bar"
+    a == Ok (TODO "Foo Bar")
+
+expect
+    a = parseStr all "Foo Bar\n\nBaz"
+    a == Ok [TODO "Foo Bar", TODO "", TODO "Baz"]
 
 endOfLine = oneOf [string "\n", string "\r\n"]
 notEndOfLine = \b -> b != '\n' && b != '\r'
