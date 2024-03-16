@@ -1,5 +1,9 @@
 interface Markdown
     exposes [
+        Markdown,
+        heading,
+        link,
+        image,
     ]
     imports [
         Core.{ Parser, const, skip, keep, oneOf, chompWhile, map },
@@ -15,6 +19,9 @@ Markdown : [
 
     ## Link "roc" "https://roc-lang.org"
     Link Str Str,
+
+    ## Image "alt text" "/images/logo.png"
+    Image Str Str,
 
 ]
 
@@ -99,7 +106,7 @@ expect
 link : Parser Utf8 Markdown
 link =
     const (\label -> \href -> Link label href)
-    |> skip (codeunit '[')
+    |> skip (string "[")
     |> keep (chompWhile (\b -> b != ']') |> map strFromUtf8)
     |> skip (string "](")
     |> keep (chompWhile (\b -> b != ')') |> map strFromUtf8)
@@ -110,3 +117,24 @@ expect parseStr link "[roc](https://roc-lang.org)" == Ok (Link "roc" "https://ro
 expect
     a = parseStrPartial link "[roc](https://roc-lang.org)\nApples"
     a == Ok { val: Link "roc" "https://roc-lang.org", input: "\nApples" }
+
+## Images
+##
+## ```
+## expect parseStr image "![alt text](/images/logo.png)" == Ok (Image "alt text" "/images/logo.png")
+## ```
+image : Parser Utf8 Markdown
+image =
+    const (\alt -> \href -> Image alt href)
+    |> skip (string "![")
+    |> keep (chompWhile (\b -> b != ']') |> map strFromUtf8)
+    |> skip (string "](")
+    |> keep (chompWhile (\b -> b != ')') |> map strFromUtf8)
+    |> skip (codeunit ')')
+
+expect parseStr image "![alt text](/images/logo.png)" == Ok (Image "alt text" "/images/logo.png")
+
+expect
+    a = parseStrPartial image "![alt text](/images/logo.png)\nApples"
+    a == Ok { val: Image "alt text" "/images/logo.png", input: "\nApples" }
+
