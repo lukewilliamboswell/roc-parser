@@ -4,5 +4,6 @@ package "parser"
         String,
         CSV,
         HTTP,
+        Markdown,
     ]
     packages {}
