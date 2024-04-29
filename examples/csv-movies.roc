@@ -1,17 +1,17 @@
 app "example"
     packages {
-        pf: "https://github.com/roc-lang/basic-cli/releases/download/0.8.1/x8URkvfyi9I0QhmVG98roKBUs_AZRkLFwFJVJ3942YA.tar.br",
+        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
         parser: "../package/main.roc",
     }
     imports [
-        pf.Stdout,
-        pf.Stderr,
-        pf.Task.{ Task },
+        cli.Task,
+        cli.Stdout,
+        cli.Stderr,
         parser.Core.{ Parser, map, keep },
         parser.String.{ strFromUtf8 },
         parser.CSV.{ CSV },
     ]
-    provides [main] to pf
+    provides [main] to cli
 
 MovieInfo := { title : Str, releaseYear : U64, actors : List Str }
 
@@ -22,7 +22,6 @@ input =
     Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
     """
 
-main : Task {} *
 main =
     when CSV.parseStr movieInfoParser input is
         Ok movies ->

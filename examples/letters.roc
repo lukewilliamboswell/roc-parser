@@ -1,9 +1,10 @@
 app "example"
     packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.8.1/x8URkvfyi9I0QhmVG98roKBUs_AZRkLFwFJVJ3942YA.tar.br",
+        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
         parser: "../package/main.roc",
     }
     imports [
+        cli.Task,
         cli.Stdout,
         cli.Stderr,
         parser.Core.{ Parser, buildPrimitiveParser, many },
