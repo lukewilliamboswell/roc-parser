@@ -1,17 +1,13 @@
-app "example"
-    packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
-        parser: "../package/main.roc",
-    }
-    imports [
-        cli.Task,
-        cli.Stdout,
-        cli.Stderr,
-        parser.Core.{ Parser, map, keep },
-        parser.String.{ strFromUtf8 },
-        parser.CSV.{ CSV },
-    ]
-    provides [main] to cli
+app [main] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
+    parser: "../package/main.roc",
+}
+
+import parser.Core as P
+import parser.CSV
+import parser.String
+import cli.Stdout
+import cli.Stderr
 
 MovieInfo := { title : Str, releaseYear : U64, actors : List Str }
 
@@ -39,7 +35,7 @@ main =
                     Stderr.line "Parsing failure: $(failure)\n"
 
                 ParsingIncomplete leftover ->
-                    leftoverStr = leftover |> List.map strFromUtf8 |> List.map (\val -> "\"$(val)\"") |> Str.joinWith ", "
+                    leftoverStr = leftover |> List.map String.strFromUtf8 |> List.map (\val -> "\"$(val)\"") |> Str.joinWith ", "
 
                     Stderr.line "Parsing incomplete. Following leftover fields while parsing a record: $(leftoverStr)\n"
 
@@ -48,13 +44,13 @@ main =
 
 movieInfoParser =
     CSV.record (\title -> \releaseYear -> \actors -> @MovieInfo { title, releaseYear, actors })
-    |> keep (CSV.field CSV.string)
-    |> keep (CSV.field CSV.u64)
-    |> keep (CSV.field actorsParser)
+    |> P.keep (CSV.field CSV.string)
+    |> P.keep (CSV.field CSV.u64)
+    |> P.keep (CSV.field actorsParser)
 
 actorsParser =
     CSV.string
-    |> map \val -> Str.split val ","
+    |> P.map \val -> Str.split val ","
 
 movieInfoExplanation = \@MovieInfo { title, releaseYear, actors } ->
     enumeratedActors = enumerate actors
