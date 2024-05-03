@@ -1,45 +1,43 @@
-interface String
-    exposes [
-        Utf8,
-        parseStr,
-        parseStrPartial,
-        parseUtf8,
-        parseUtf8Partial,
-        string,
-        utf8,
-        codeunit,
-        codeunitSatisfies,
-        anyString,
-        anyThing,
-        anyCodeunit,
-        oneOf,
-        digit,
-        digits,
-        strFromUtf8,
-        strFromAscii,
-    ]
-    imports [
-        Core.{ Parser, ParseResult, const, map, skip, sepBy, keep, oneOrMore, parse, parsePartial, buildPrimitiveParser, chompUntil, chompWhile },
-    ]
+module [
+    Utf8,
+    parseStr,
+    parseStrPartial,
+    parseUtf8,
+    parseUtf8Partial,
+    string,
+    utf8,
+    codeunit,
+    codeunitSatisfies,
+    anyString,
+    anyThing,
+    anyCodeunit,
+    oneOf,
+    digit,
+    digits,
+    strFromUtf8,
+    strFromAscii,
+]
+
+import Core
 
 ## ```
 ## Utf8 : List U8
 ## ```
 Utf8 : List U8
 
-## Parse a [Str] using a [Parser]
+## Parse a [Str] using a [Core.Parser]
 ## ```
-## color : Parser Utf8 [Red, Green, Blue]
+## color : Core.Parser Utf8 [Red, Green, Blue]
 ## color =
 ##     oneOf [
-##         const Red |> skip (string "red"),
-##         const Green |> skip (string "green"),
-##         const Blue |> skip (string "blue"),
+##         Core.const Red |> Core.skip (string "red"),
+##         Core.const Green |> Core.skip (string "green"),
+##         Core.const Blue |> Core.skip (string "blue"),
 ##     ]
 ##
 ## expect parseStr color "green" == Ok Green
 ## ```
-parseStr : Parser Utf8 a, Str -> Result a [ParsingFailure Str, ParsingIncomplete Str]
+parseStr : Core.Parser Utf8 a, Str -> Result a [ParsingFailure Str, ParsingIncomplete Str]
 parseStr = \parser, input ->
     parser
     |> parseUtf8 (strToRaw input)
@@ -55,14 +53,14 @@ parseStr = \parser, input ->
 ##
 ##
 ## ```
-## atSign : Parser Utf8 [AtSign]
-## atSign = const AtSign |> skip (codeunit '@')
+## atSign : Core.Parser Utf8 [AtSign]
+## atSign = Core.const AtSign |> Core.skip (codeunit '@')
 ##
 ## expect parseStr atSign "@" == Ok AtSign
 ## expect parseStrPartial atSign "@" |> Result.map .val == Ok AtSign
 ## expect parseStrPartial atSign "$" |> Result.isErr
 ## ```
-parseStrPartial : Parser Utf8 a, Str -> ParseResult Str a
+parseStrPartial : Core.Parser Utf8 a, Str -> Core.ParseResult Str a
 parseStrPartial = \parser, input ->
     parser
     |> parseUtf8Partial (strToRaw input)
@@ -74,14 +72,14 @@ parseStrPartial = \parser, input ->
 ## - If the parser succeeds, returns `Ok a`
 ## - If the parser fails, returns `Err (ParsingFailure Str)`
 ## - If the parser succeeds but does not consume the full string, returns `Err (ParsingIncomplete (List U8))`
-parseUtf8 : Parser Utf8 a, Utf8 -> Result a [ParsingFailure Str, ParsingIncomplete Utf8]
+parseUtf8 : Core.Parser Utf8 a, Utf8 -> Result a [ParsingFailure Str, ParsingIncomplete Utf8]
 parseUtf8 = \parser, input ->
-    parse parser input (\leftover -> List.len leftover == 0)
+    Core.parse parser input (\leftover -> List.len leftover == 0)
 
 ## Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.
-parseUtf8Partial : Parser Utf8 a, Utf8 -> ParseResult Utf8 a
+parseUtf8Partial : Core.Parser Utf8 a, Utf8 -> Core.ParseResult Utf8 a
 parseUtf8Partial = \parser, input ->
-    parsePartial parser input
+    Core.parsePartial parser input
 
 ## ```
 ## isDigit : U8 -> Bool
@@ -90,9 +88,9 @@ parseUtf8Partial = \parser, input ->
 ## expect parseStr (codeunitSatisfies isDigit) "0" == Ok '0'
 ## expect parseStr (codeunitSatisfies isDigit) "*" |> Result.isErr
 ## ```
-codeunitSatisfies : (U8 -> Bool) -> Parser Utf8 U8
+codeunitSatisfies : (U8 -> Bool) -> Core.Parser Utf8 U8
 codeunitSatisfies = \check ->
-    buildPrimitiveParser \input ->
+    Core.buildPrimitiveParser \input ->
         { before: start, others: inputRest } = List.split input 1
 
         when List.get start 0 is
@@ -109,29 +107,31 @@ codeunitSatisfies = \check ->
                     Err (ParsingFailure "expected a codeunit satisfying a condition but found `$(otherChar)`.\n While reading: `$(inputStr)`")
 
 ## ```
-## atSign : Parser Utf8 [AtSign]
-## atSign = const AtSign |> skip (codeunit '@')
+## atSign : Core.Parser Utf8 [AtSign]
+## atSign = Core.const AtSign |> Core.skip (codeunit '@')
 ##
 ## expect parseStr atSign "@" == Ok AtSign
 ## expect parseStrPartial atSign "$" |> Result.isErr
 ## ```
-codeunit : U8 -> Parser Utf8 U8
+codeunit : U8 -> Core.Parser Utf8 U8
 codeunit = \expectedCodeUnit ->
-    buildPrimitiveParser \input ->
+    Core.buildPrimitiveParser \input ->
         when input is
             [] ->
                 Err (ParsingFailure "expected char `$(strFromCodeunit expectedCodeUnit)` but input was empty.")
+
             [first, .. as rest] if first == expectedCodeUnit ->
                 Ok { val: expectedCodeUnit, input: rest }
+
             [first, .. as rest] ->
                 Err (ParsingFailure "expected char `$(strFromCodeunit expectedCodeUnit)` but found `$(strFromCodeunit first)`.\n While reading: `$(strFromUtf8 input)`")
 
 ## Parse an extact sequence of utf8
-utf8 : List U8 -> Parser Utf8 (List U8)
+utf8 : List U8 -> Core.Parser Utf8 (List U8)
 utf8 = \expectedString ->
     # Implemented manually instead of a sequence of codeunits
     # because of efficiency and better error messages
-    buildPrimitiveParser \input ->
+    Core.buildPrimitiveParser \input ->
         { before: start, others: inputRest } = List.split input (List.len expectedString)
 
         if start == expectedString then
@@ -148,18 +148,18 @@ utf8 = \expectedString ->
 ## expect parseStr (string "Foo") "Foo" == Ok "Foo"
 ## expect parseStr (string "Foo") "Bar" |> Result.isErr
 ## ```
-string : Str -> Parser Utf8 Str
+string : Str -> Core.Parser Utf8 Str
 string = \expectedString ->
     strToRaw expectedString
     |> utf8
-    |> map \_val -> expectedString
+    |> Core.map \_val -> expectedString
 
 ## Matches any [U8] codeunit
 ## ```
 ## expect parseStr anyCodeunit "a" == Ok 'a'
 ## expect parseStr anyCodeunit "$" == Ok '$'
 ## ```
-anyCodeunit : Parser Utf8 U8
+anyCodeunit : Core.Parser Utf8 U8
 anyCodeunit = codeunitSatisfies (\_ -> Bool.true)
 
 expect parseStr anyCodeunit "a" == Ok 'a'
@@ -169,19 +169,19 @@ expect parseStr anyCodeunit "\$" == Ok 36
 ## ```
 ## expect
 ##     bytes = Str.toUtf8 "consumes all the input"
-##     parse anyThing bytes List.isEmpty == Ok bytes
+##     Core.parse anyThing bytes List.isEmpty == Ok bytes
 ## ```
-anyThing : Parser Utf8 Utf8
-anyThing = buildPrimitiveParser \input -> Ok { val: input, input: [] }
+anyThing : Core.Parser Utf8 Utf8
+anyThing = Core.buildPrimitiveParser \input -> Ok { val: input, input: [] }
 
 expect
     bytes = Str.toUtf8 "consumes all the input"
-    parse anyThing bytes List.isEmpty == Ok bytes
+    Core.parse anyThing bytes List.isEmpty == Ok bytes
 
 # Matches any string
 # as long as it is valid UTF8.
-anyString : Parser Utf8 Str
-anyString = buildPrimitiveParser \fieldUtf8ing ->
+anyString : Core.Parser Utf8 Str
+anyString = Core.buildPrimitiveParser \fieldUtf8ing ->
     when Str.fromUtf8 fieldUtf8ing is
         Ok stringVal ->
             Ok { val: stringVal, input: [] }
@@ -193,14 +193,16 @@ anyString = buildPrimitiveParser \fieldUtf8ing ->
 ## expect parseStr digit "0" == Ok 0
 ## expect parseStr digit "not a digit" |> Result.isErr
 ## ```
-digit : Parser Utf8 U64
+digit : Core.Parser Utf8 U64
 digit =
-    buildPrimitiveParser \input ->
+    Core.buildPrimitiveParser \input ->
         when input is
             [] ->
                 Err (ParsingFailure "Expected a digit from 0-9 but input was empty.")
+
             [first, .. as rest] if first >= '0' && first <= '9' ->
                 Ok { val: Num.toU64 (first - '0'), input: rest }
+
             _ ->
                 Err (ParsingFailure "Not a digit")
 
@@ -209,28 +211,28 @@ digit =
 ## expect parseStr digits "0123" == Ok 123
 ## expect parseStr digits "not a digit" |> Result.isErr
 ## ```
-digits : Parser Utf8 U64
+digits : Core.Parser Utf8 U64
 digits =
-    oneOrMore digit
-    |> map \ds -> List.walk ds 0 (\sum, d -> sum * 10 + d)
+    Core.oneOrMore digit
+    |> Core.map \ds -> List.walk ds 0 (\sum, d -> sum * 10 + d)
 
 ## Try a bunch of different parsers.
 ##
 ## The first parser which is tried is the one at the front of the list,
 ## and the next one is tried until one succeeds or the end of the list was reached.
 ## ```
-## boolParser : Parser Utf8 Bool
+## boolParser : Core.Parser Utf8 Bool
 ## boolParser =
 ##     oneOf [string "true", string "false"]
-##     |> map (\x -> if x == "true" then Bool.true else Bool.false)
+##     |> Core.map (\x -> if x == "true" then Bool.true else Bool.false)
 ##
 ## expect parseStr boolParser "true" == Ok Bool.true
 ## expect parseStr boolParser "false" == Ok Bool.false
 ## expect parseStr boolParser "not a bool" |> Result.isErr
 ## ```
-oneOf : List (Parser Utf8 a) -> Parser Utf8 a
+oneOf : List (Core.Parser Utf8 a) -> Core.Parser Utf8 a
 oneOf = \parsers ->
-    buildPrimitiveParser \input ->
+    Core.buildPrimitiveParser \input ->
         List.walkUntil parsers (Err (ParsingFailure "(no possibilities)")) \_, parser ->
             when parseUtf8Partial parser input is
                 Ok val ->
@@ -261,46 +263,46 @@ strFromAscii = \asciiNum ->
 
 # -------------------- example snippets used in docs --------------------
 
-parseU32 : Parser Utf8 U32
+parseU32 : Core.Parser Utf8 U32
 parseU32 =
-    const Num.toU32
-    |> keep digits
+    Core.const Num.toU32
+    |> Core.keep digits
 
 expect parseStr parseU32 "123" == Ok 123u32
 
-color : Parser Utf8 [Red, Green, Blue]
+color : Core.Parser Utf8 [Red, Green, Blue]
 color =
     oneOf [
-        const Red |> skip (string "red"),
-        const Green |> skip (string "green"),
-        const Blue |> skip (string "blue"),
+        Core.const Red |> Core.skip (string "red"),
+        Core.const Green |> Core.skip (string "green"),
+        Core.const Blue |> Core.skip (string "blue"),
     ]
 
 expect parseStr color "green" == Ok Green
 
-parseNumbers : Parser Utf8 (List U64)
+parseNumbers : Core.Parser Utf8 (List U64)
 parseNumbers =
-    digits |> sepBy (codeunit ',')
+    digits |> Core.sepBy (codeunit ',')
 
-expect parseStr parseNumbers "1,2,3" == Ok [1,2,3]
+expect parseStr parseNumbers "1,2,3" == Ok [1, 2, 3]
 
 expect parseStr (string "Foo") "Foo" == Ok "Foo"
 expect parseStr (string "Foo") "Bar" |> Result.isErr
 
-ignoreText : Parser Utf8 U64
+ignoreText : Core.Parser Utf8 U64
 ignoreText =
-    const (\d -> d)
-    |> skip (chompUntil ':')
-    |> skip (codeunit ':')
-    |> keep digits
+    Core.const (\d -> d)
+    |> Core.skip (Core.chompUntil ':')
+    |> Core.skip (codeunit ':')
+    |> Core.keep digits
 
 expect parseStr ignoreText "ignore preceding text:123" == Ok 123
 
-ignoreNumbers : Parser Utf8 Str
+ignoreNumbers : Core.Parser Utf8 Str
 ignoreNumbers =
-    const (\str -> str)
-    |> skip (chompWhile \b -> b >= '0' && b <= '9')
-    |> keep (string "TEXT")
+    Core.const (\str -> str)
+    |> Core.skip (Core.chompWhile \b -> b >= '0' && b <= '9')
+    |> Core.keep (string "TEXT")
 
 expect parseStr ignoreNumbers "0123456789876543210TEXT" == Ok "TEXT"
 
@@ -310,48 +312,50 @@ isDigit = \b -> b >= '0' && b <= '9'
 expect parseStr (codeunitSatisfies isDigit) "0" == Ok '0'
 expect parseStr (codeunitSatisfies isDigit) "*" |> Result.isErr
 
-atSign : Parser Utf8 [AtSign]
-atSign = const AtSign |> skip (codeunit '@')
+atSign : Core.Parser Utf8 [AtSign]
+atSign = Core.const AtSign |> Core.skip (codeunit '@')
 
 expect parseStr atSign "@" == Ok AtSign
 expect parseStrPartial atSign "@" |> Result.map .val == Ok AtSign
 expect parseStrPartial atSign "\$" |> Result.isErr
 
-Requirement : [ Green U64, Red U64, Blue U64 ]
+Requirement : [Green U64, Red U64, Blue U64]
 RequirementSet : List Requirement
-Game : { id: U64, requirements: List RequirementSet }
+Game : { id : U64, requirements : List RequirementSet }
 
 parseGame : Str -> Result Game [ParsingError]
 parseGame = \s ->
-    green = const Green |> keep digits |> skip (string " green")
-    red = const Red |> keep digits |> skip (string " red")
-    blue = const Blue |> keep digits |> skip (string " blue")
+    green = Core.const Green |> Core.keep digits |> Core.skip (string " green")
+    red = Core.const Red |> Core.keep digits |> Core.skip (string " red")
+    blue = Core.const Blue |> Core.keep digits |> Core.skip (string " blue")
 
-    requirementSet : Parser _ RequirementSet
-    requirementSet = (oneOf [green, red, blue]) |> sepBy (string ", ")
+    requirementSet : Core.Parser _ RequirementSet
+    requirementSet = (oneOf [green, red, blue]) |> Core.sepBy (string ", ")
 
-    requirements : Parser _ (List RequirementSet)
-    requirements = requirementSet |> sepBy (string "; ")
+    requirements : Core.Parser _ (List RequirementSet)
+    requirements = requirementSet |> Core.sepBy (string "; ")
 
-    game : Parser _ Game
+    game : Core.Parser _ Game
     game =
-        const (\id -> \r -> { id, requirements: r })
-        |> skip (string "Game ")
-        |> keep digits
-        |> skip (string ": ")
-        |> keep requirements
+        Core.const (\id -> \r -> { id, requirements: r })
+        |> Core.skip (string "Game ")
+        |> Core.keep digits
+        |> Core.skip (string ": ")
+        |> Core.keep requirements
 
     when parseStr game s is
         Ok g -> Ok g
         Err (ParsingFailure _) | Err (ParsingIncomplete _) -> Err ParsingError
 
-expect parseGame "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green" == Ok {
+expect
+    parseGame "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"
+    == Ok {
         id: 1,
         requirements: [
             [Blue 3, Red 4],
             [Red 1, Green 2, Blue 6],
             [Green 2],
-        ]
+        ],
     }
 
 expect parseStr digit "0" == Ok 0
@@ -360,10 +364,10 @@ expect parseStr digit "not a digit" |> Result.isErr
 expect parseStr digits "0123" == Ok 123
 expect parseStr digits "not a digit" |> Result.isErr
 
-boolParser : Parser Utf8 Bool
+boolParser : Core.Parser Utf8 Bool
 boolParser =
     oneOf [string "true", string "false"]
-    |> map (\x -> if x == "true" then Bool.true else Bool.false)
+    |> Core.map (\x -> if x == "true" then Bool.true else Bool.false)
 
 expect parseStr boolParser "true" == Ok Bool.true
 expect parseStr boolParser "false" == Ok Bool.false

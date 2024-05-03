@@ -1,14 +1,12 @@
-interface HTTP
-    exposes [
-        Request,
-        Response,
-        request,
-        response,
-    ]
-    imports [
-        Core.{ Parser, ParseResult, map, keep, skip, const, oneOrMore, many },
-        String.{ Utf8, oneOf, string, codeunit, parseStr, codeunitSatisfies, strFromUtf8, digits, anyThing },
-    ]
+module [
+    Request,
+    Response,
+    request,
+    response,
+]
+
+import Core
+import String
 
 # https://www.ietf.org/rfc/rfc2616.txt
 Method : [Options, Get, Post, Put, Delete, Head, Trace, Connect, Patch]
@@ -31,89 +29,89 @@ Response : {
     body : List U8,
 }
 
-method : Parser Utf8 Method
+method : Core.Parser String.Utf8 Method
 method =
-    oneOf [
-        string "OPTIONS" |> map \_ -> Options,
-        string "GET" |> map \_ -> Get,
-        string "POST" |> map \_ -> Post,
-        string "PUT" |> map \_ -> Put,
-        string "DELETE" |> map \_ -> Delete,
-        string "HEAD" |> map \_ -> Head,
-        string "TRACE" |> map \_ -> Trace,
-        string "CONNECT" |> map \_ -> Connect,
-        string "PATCH" |> map \_ -> Patch,
+    String.oneOf [
+        String.string "OPTIONS" |> Core.map \_ -> Options,
+        String.string "GET" |> Core.map \_ -> Get,
+        String.string "POST" |> Core.map \_ -> Post,
+        String.string "PUT" |> Core.map \_ -> Put,
+        String.string "DELETE" |> Core.map \_ -> Delete,
+        String.string "HEAD" |> Core.map \_ -> Head,
+        String.string "TRACE" |> Core.map \_ -> Trace,
+        String.string "CONNECT" |> Core.map \_ -> Connect,
+        String.string "PATCH" |> Core.map \_ -> Patch,
     ]
 
-expect parseStr method "GET" == Ok Get
-expect parseStr method "DELETE" == Ok Delete
+expect String.parseStr method "GET" == Ok Get
+expect String.parseStr method "DELETE" == Ok Delete
 
 # TODO: do we want more structure in the URI, or is Str actually what programs want anyway?
 # This is not a full URL!
 #        Request-URI    = "*" | absoluteURI | abs_path | authority
 RequestUri : Str
 
-requestUri : Parser Utf8 RequestUri
+requestUri : Core.Parser String.Utf8 RequestUri
 requestUri =
-    codeunitSatisfies \c -> c != ' '
-    |> oneOrMore
-    |> map strFromUtf8
+    String.codeunitSatisfies \c -> c != ' '
+    |> Core.oneOrMore
+    |> Core.map String.strFromUtf8
 
-sp = codeunit ' '
-crlf = string "\r\n"
+sp = String.codeunit ' '
+crlf = String.string "\r\n"
 
-httpVersion : Parser Utf8 HttpVersion
+httpVersion : Core.Parser String.Utf8 HttpVersion
 httpVersion =
-    const (\major -> \minor -> { major, minor })
-    |> skip (string "HTTP/")
-    |> keep (digits |> map Num.toU8)
-    |> skip (codeunit '.')
-    |> keep (digits |> map Num.toU8)
+    Core.const (\major -> \minor -> { major, minor })
+    |> Core.skip (String.string "HTTP/")
+    |> Core.keep (String.digits |> Core.map Num.toU8)
+    |> Core.skip (String.codeunit '.')
+    |> Core.keep (String.digits |> Core.map Num.toU8)
 
 expect
-    actual = parseStr httpVersion "HTTP/1.1"
+    actual = String.parseStr httpVersion "HTTP/1.1"
     expected = Ok { major: 1, minor: 1 }
     actual == expected
 
 Header : [Header Str Str]
 
-stringWithoutColon : Parser Utf8 Str
+stringWithoutColon : Core.Parser String.Utf8 Str
 stringWithoutColon =
-    codeunitSatisfies \c -> c != ':'
-    |> oneOrMore
-    |> map strFromUtf8
+    String.codeunitSatisfies \c -> c != ':'
+    |> Core.oneOrMore
+    |> Core.map String.strFromUtf8
 
-stringWithoutCr : Parser Utf8 Str
+stringWithoutCr : Core.Parser String.Utf8 Str
 stringWithoutCr =
-    codeunitSatisfies \c -> c != '\r'
-    |> oneOrMore
-    |> map strFromUtf8
+    String.codeunitSatisfies \c -> c != '\r'
+    |> Core.oneOrMore
+    |> Core.map String.strFromUtf8
 
-header : Parser Utf8 Header
+header : Core.Parser String.Utf8 Header
 header =
-    const (\k -> \v -> Header k v)
-    |> keep stringWithoutColon
-    |> skip (string ": ")
-    |> keep stringWithoutCr
-    |> skip crlf
+    Core.const (\k -> \v -> Header k v)
+    |> Core.keep stringWithoutColon
+    |> Core.skip (String.string ": ")
+    |> Core.keep stringWithoutCr
+    |> Core.skip crlf
 
 expect
-    actual = parseStr header "Accept-Encoding: gzip, deflate\r\n"
+    actual = String.parseStr header "Accept-Encoding: gzip, deflate\r\n"
     expected = Ok (Header "Accept-Encoding" "gzip, deflate")
     actual == expected
 
-request : Parser Utf8 Request
+request : Core.Parser String.Utf8 Request
 request =
-    const (\m -> \u -> \hv -> \hs -> \b -> { method: m, uri: u, httpVersion: hv, headers: hs, body: b })
-    |> keep method
-    |> skip sp
-    |> keep requestUri
-    |> skip sp
-    |> keep httpVersion
-    |> skip crlf
-    |> keep (many header)
-    |> skip crlf
-    |> keep anyThing
+    Core.const (\m -> \u -> \hv -> \hs -> \b -> { method: m, uri: u, httpVersion: hv, headers: hs, body: b })
+    |> Core.keep method
+    |> Core.skip sp
+    |> Core.keep requestUri
+    |> Core.skip sp
+    |> Core.keep httpVersion
+    |> Core.skip crlf
+    |> Core.keep (Core.many header)
+    |> Core.skip crlf
+    |> Core.keep String.anyThing
 
 expect
     requestText =
@@ -125,7 +123,7 @@ expect
         Hello, world!
         """
     actual =
-        parseStr request requestText
+        String.parseStr request requestText
 
     expected : Result Request [ParsingFailure Str, ParsingIncomplete Str]
     expected = Ok {
@@ -148,14 +146,14 @@ expect
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r
         Accept-Language: en-us,en;q=0.5\r
         Accept-Encoding: gzip,deflate\r
-        Connection: keep-alive\r
+        Connection: Core.keep-alive\r
         Origin: https://foo.example\r
         Access-Control-Request-Method: POST\r
         Access-Control-Request-Headers: X-PINGOTHER, Content-Type\r
         \r\n
         """
     actual =
-        parseStr request requestText
+        String.parseStr request requestText
     expected = Ok {
         method: Options,
         uri: "/resources/post-here/",
@@ -165,7 +163,7 @@ expect
             Header "Accept" "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             Header "Accept-Language" "en-us,en;q=0.5",
             Header "Accept-Encoding" "gzip,deflate",
-            Header "Connection" "keep-alive",
+            Header "Connection" "Core.keep-alive",
             Header "Origin" "https://foo.example",
             Header "Access-Control-Request-Method" "POST",
             Header "Access-Control-Request-Headers" "X-PINGOTHER, Content-Type",
@@ -174,18 +172,18 @@ expect
     }
     actual == expected
 
-response : Parser Utf8 Response
+response : Core.Parser String.Utf8 Response
 response =
-    const (\hv -> \sc -> \s -> \hs -> \b -> { httpVersion: hv, statusCode: sc, status: s, headers: hs, body: b })
-    |> keep httpVersion
-    |> skip sp
-    |> keep (digits |> map Num.toU16)
-    |> skip sp
-    |> keep stringWithoutCr
-    |> skip crlf
-    |> keep (many header)
-    |> skip crlf
-    |> keep anyThing
+    Core.const (\hv -> \sc -> \s -> \hs -> \b -> { httpVersion: hv, statusCode: sc, status: s, headers: hs, body: b })
+    |> Core.keep httpVersion
+    |> Core.skip sp
+    |> Core.keep (String.digits |> Core.map Num.toU16)
+    |> Core.skip sp
+    |> Core.keep stringWithoutCr
+    |> Core.skip crlf
+    |> Core.keep (Core.many header)
+    |> Core.skip crlf
+    |> Core.keep String.anyThing
 
 expect
     body =
@@ -207,7 +205,7 @@ expect
         HTTP/1.1 200 OK\r
         Content-Type: text/html; charset=utf-8\r
         Content-Length: 55743\r
-        Connection: keep-alive\r
+        Connection: Core.keep-alive\r
         Cache-Control: s-maxage=300, public, max-age=0\r
         Content-Language: en-US\r
         Date: Thu, 06 Dec 2018 17:37:18 GMT\r
@@ -223,7 +221,7 @@ expect
         $(body)
         """
     actual =
-        parseStr response responseText
+        String.parseStr response responseText
     expected =
         Ok {
             httpVersion: { major: 1, minor: 1 },
@@ -232,7 +230,7 @@ expect
             headers: [
                 Header "Content-Type" "text/html; charset=utf-8",
                 Header "Content-Length" "55743",
-                Header "Connection" "keep-alive",
+                Header "Connection" "Core.keep-alive",
                 Header "Cache-Control" "s-maxage=300, public, max-age=0",
                 Header "Content-Language" "en-US",
                 Header "Date" "Thu, 06 Dec 2018 17:37:18 GMT",
