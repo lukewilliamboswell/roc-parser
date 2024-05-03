@@ -1,21 +1,18 @@
-app "example"
-    packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
-        parser: "../package/main.roc",
-    }
-    imports [
-        cli.Task,
-        cli.Stdout,
-        cli.Stderr,
-        parser.Core.{ Parser, buildPrimitiveParser, many },
-        parser.String.{ parseStr },
-    ]
-    provides [main] to cli
+app [main] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
+    parser: "../package/main.roc",
+}
+
+import cli.Task
+import cli.Stdout
+import cli.Stderr
+import parser.Core
+import parser.String
 
 main =
 
     result : Result (List Letter) [ParsingFailure Str, ParsingIncomplete Str]
-    result = parseStr (many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
+    result = String.parseStr (Core.many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
 
     when result |> Result.map countLetterAs is
         Ok count -> Stdout.line "I counted $(Num.toStr count) letter A's!"
@@ -35,9 +32,8 @@ countLetterAs = \letters ->
     |> List.sum
 
 # Build a custom parser to convert utf8 input into Letter tags
-letterParser : Parser (List U8) Letter
-letterParser =
-    input <- buildPrimitiveParser
+letterParser : Core.Parser (List U8) Letter
+letterParser = Core.buildPrimitiveParser \input ->
 
     valResult =
         when input is
@@ -54,12 +50,12 @@ letterParser =
 expect
     input = "B"
     parser = letterParser
-    result = parseStr parser input
+    result = String.parseStr parser input
     result == Ok B
 
 # Test we can parse a number of different letters
 expect
     input = "BCXA"
-    parser = many letterParser
-    result = parseStr parser input
+    parser = Core.many letterParser
+    result = String.parseStr parser input
     result == Ok [B, C, Other, A]
