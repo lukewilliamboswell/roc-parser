@@ -1,46 +1,43 @@
-app "example"
-    packages {
-        cli: "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
-        parser: "../package/main.roc",
-    }
-    imports [
-        cli.Task,
-        cli.Stdout,
-        cli.Stderr,
-        parser.Core.{ Parser, many, const, skip, keep },
-        parser.String.{ parseStr, digits, string },
-    ]
-    provides [main] to cli
+app [main] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.10.0/vNe6s9hWzoTZtFmNkvEICPErI9ptji_ySjicO6CkucY.tar.br",
+    parser: "../package/main.roc",
+}
+
+import cli.Task
+import cli.Stdout
+import cli.Stderr
+import parser.Core
+import parser.String
 
 main =
 
     result : Result (List (List U64)) [ParsingFailure Str, ParsingIncomplete Str]
-    result = parseStr (many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
+    result = String.parseStr (Core.many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 
     when result |> Result.map largest is
         Ok count -> Stdout.line "The lagest sum is $(Num.toStr count)"
         Err _ -> Stderr.line "Failed while parsing input"
 
 # Parse a number followed by a newline
-singleNumber : Parser (List U8) U64
+singleNumber : Core.Parser (List U8) U64
 singleNumber =
-    const (\n -> n)
-    |> keep (digits)
-    |> skip (string "\n")
+    Core.const (\n -> n)
+    |> Core.keep (String.digits)
+    |> Core.skip (String.string "\n")
 
 expect
-    actual = parseStr singleNumber "1000\n"
+    actual = String.parseStr singleNumber "1000\n"
     actual == Ok 1000
 
 # Parse a series of numbers followed by a newline
-multipleNumbers : Parser (List U8) (List U64)
+multipleNumbers : Core.Parser (List U8) (List U64)
 multipleNumbers =
-    const (\ns -> ns)
-    |> keep (many singleNumber)
-    |> skip (string "\n")
+    Core.const (\ns -> ns)
+    |> Core.keep (Core.many singleNumber)
+    |> Core.skip (String.string "\n")
 
 expect
-    actual = parseStr multipleNumbers "1000\n2000\n3000\n\n"
+    actual = String.parseStr multipleNumbers "1000\n2000\n3000\n\n"
     actual == Ok [1000, 2000, 3000]
 
 # Sum up the lists and return the largest sum
