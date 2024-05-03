@@ -47,36 +47,34 @@
 ##         Ok g -> Ok g
 ##         Err (ParsingFailure _) | Err (ParsingIncomplete _) -> Err ParsingError
 ## ```
-interface Core
-    exposes [
-        Parser,
-        ParseResult,
-        parse,
-        parsePartial,
-        fail,
-        const,
-        alt,
-        apply,
-        oneOf,
-        map,
-        map2,
-        map3,
-        lazy,
-        maybe,
-        oneOrMore,
-        many,
-        between,
-        sepBy,
-        sepBy1,
-        ignore,
-        buildPrimitiveParser,
-        flatten,
-        keep,
-        skip,
-        chompUntil,
-        chompWhile,
-    ]
-    imports []
+module [
+    Parser,
+    ParseResult,
+    parse,
+    parsePartial,
+    fail,
+    const,
+    alt,
+    apply,
+    oneOf,
+    map,
+    map2,
+    map3,
+    lazy,
+    maybe,
+    oneOrMore,
+    many,
+    between,
+    sepBy,
+    sepBy1,
+    ignore,
+    buildPrimitiveParser,
+    flatten,
+    keep,
+    skip,
+    chompUntil,
+    chompWhile,
+]
 
 ## Opaque type for a parser that will try to parse an `a` from an `input`.
 ##
