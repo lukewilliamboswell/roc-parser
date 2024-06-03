@@ -4,4 +4,5 @@ package [
     CSV,
     HTTP,
     Markdown,
+    Xml,
 ] {}
