@@ -14,6 +14,13 @@ color =
 expect parseStr color "green" == Ok Green
 ```
 
+Also includes modules to parse the following formats (with various levels of maturity);
+- Utf-8 Strings
+- CSV
+- XML
+- Markdown
+- HTTP
+
 ## Documentation 
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
