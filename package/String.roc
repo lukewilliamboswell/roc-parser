@@ -123,7 +123,7 @@ codeunit = \expectedCodeUnit ->
             [first, .. as rest] if first == expectedCodeUnit ->
                 Ok { val: expectedCodeUnit, input: rest }
 
-            [first, .. as rest] ->
+            [first, ..] ->
                 Err (ParsingFailure "expected char `$(strFromCodeunit expectedCodeUnit)` but found `$(strFromCodeunit first)`.\n While reading: `$(strFromUtf8 input)`")
 
 ## Parse an extact sequence of utf8
