@@ -102,7 +102,7 @@ buildPrimitiveParser = \fun -> @Parser fun
 ## Can be thought of as turning the recipe of a parser into its actual parsing function
 ## and running this function on the given input.
 ##
-## Moat parsers consume part of `input` when they succeed. This allows you to string parsers
+## Most parsers consume part of `input` when they succeed. This allows you to string parsers
 ## together that run one after the other. The part of the input that the first
 ## parser did not consume, is used by the next parser.
 ## This is why a parser returns on success both the resulting value and the leftover part of the input.
