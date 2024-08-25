@@ -194,7 +194,7 @@ alt = \first, second ->
 apply : Parser input (a -> b), Parser input a -> Parser input b
 apply = \funParser, valParser ->
     combined = \input ->
-        { val: funVal, input: rest } <- Result.try (parsePartial funParser input)
+        { val: funVal, input: rest } = parsePartial? funParser input
         parsePartial valParser rest
         |> Result.map \{ val: val, input: rest2 } ->
             { val: funVal val, input: rest2 }
@@ -213,7 +213,7 @@ apply = \funParser, valParser ->
 andThen : Parser input a, (a -> Parser input b) -> Parser input b
 andThen = \firstParser, buildNextParser ->
     fun = \input ->
-        { val: firstVal, input: rest } <- Result.try (parsePartial firstParser input)
+        { val: firstVal, input: rest } = parsePartial? firstParser input
         nextParser = buildNextParser firstVal
 
         parsePartial nextParser rest
