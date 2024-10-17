@@ -5,35 +5,35 @@ app [main] {
 
 import cli.Stdout
 import cli.Stderr
-import parser.Core
+import parser.Parser
 import parser.String
 
 main =
 
     result : Result (List (List U64)) [ParsingFailure Str, ParsingIncomplete Str]
-    result = String.parseStr (Core.many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
+    result = String.parseStr (Parser.many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 
     when result |> Result.map largest is
         Ok count -> Stdout.line "The lagest sum is $(Num.toStr count)"
         Err _ -> Stderr.line "Failed while parsing input"
 
 # Parse a number followed by a newline
-singleNumber : Core.Parser (List U8) U64
+singleNumber : Parser.Parser (List U8) U64
 singleNumber =
-    Core.const (\n -> n)
-    |> Core.keep (String.digits)
-    |> Core.skip (String.string "\n")
+    Parser.const (\n -> n)
+    |> Parser.keep (String.digits)
+    |> Parser.skip (String.string "\n")
 
 expect
     actual = String.parseStr singleNumber "1000\n"
     actual == Ok 1000
 
 # Parse a series of numbers followed by a newline
-multipleNumbers : Core.Parser (List U8) (List U64)
+multipleNumbers : Parser.Parser (List U8) (List U64)
 multipleNumbers =
-    Core.const (\ns -> ns)
-    |> Core.keep (Core.many singleNumber)
-    |> Core.skip (String.string "\n")
+    Parser.const (\ns -> ns)
+    |> Parser.keep (Parser.many singleNumber)
+    |> Parser.skip (String.string "\n")
 
 expect
     actual = String.parseStr multipleNumbers "1000\n2000\n3000\n\n"

@@ -7,7 +7,7 @@ module [
     code,
 ]
 
-import Core
+import Parser exposing [Parser]
 import String
 
 Level : [One, Two, Three, Four, Five, Six]
@@ -21,7 +21,7 @@ Markdown : [
     TODO Str,
 ]
 
-all : Core.Parser String.Utf8 (List Markdown)
+all : Parser String.Utf8 (List Markdown)
 all =
     [
         heading,
@@ -30,14 +30,14 @@ all =
         code,
         todo,
     ]
-    |> Core.oneOf
-    |> Core.sepBy (endOfLine)
+    |> Parser.oneOf
+    |> Parser.sepBy (endOfLine)
 
 ## temporyary parser for anything that is not yet supported
 ## just parse into a TODO tag for now
-todo : Core.Parser String.Utf8 Markdown
+todo : Parser String.Utf8 Markdown
 todo =
-    Core.const TODO |> Core.keep (Core.chompWhile (notEndOfLine) |> Core.map String.strFromUtf8)
+    Parser.const TODO |> Parser.keep (Parser.chompWhile (notEndOfLine) |> Parser.map String.strFromUtf8)
 
 expect
     a = String.parseStr todo "Foo Bar"
@@ -47,7 +47,7 @@ expect
     a = String.parseStr all "Foo Bar\n\nBaz"
     a == Ok [TODO "Foo Bar", TODO "", TODO "Baz"]
 
-endOfLine = Core.oneOf [String.string "\n", String.string "\r\n"]
+endOfLine = Parser.oneOf [String.string "\n", String.string "\r\n"]
 notEndOfLine = \b -> b != '\n' && b != '\r'
 
 ## Headings
@@ -56,9 +56,9 @@ notEndOfLine = \b -> b != '\n' && b != '\r'
 ## expect String.parseStr heading "# Foo Bar" == Ok (Heading One "Foo Bar")
 ## expect String.parseStr heading "Foo Bar\n---" == Ok (Heading Two "Foo Bar")
 ## ```
-heading : Core.Parser String.Utf8 Markdown
+heading : Parser String.Utf8 Markdown
 heading =
-    Core.oneOf [
+    Parser.oneOf [
         inlineHeading,
         twoLineHeadingLevelOne,
         twoLineHeadingLevelTwo,
@@ -68,19 +68,19 @@ expect String.parseStr heading "# Foo Bar" == Ok (Heading One "Foo Bar")
 expect String.parseStr heading "Foo Bar\n---" == Ok (Heading Two "Foo Bar")
 
 inlineHeading =
-    Core.const (\level -> \str -> Heading level str)
-    |> Core.keep
+    Parser.const (\level -> \str -> Heading level str)
+    |> Parser.keep
         (
-            Core.oneOf [
-                Core.const One |> Core.skip (String.string "# "),
-                Core.const Two |> Core.skip (String.string "## "),
-                Core.const Three |> Core.skip (String.string "### "),
-                Core.const Four |> Core.skip (String.string "#### "),
-                Core.const Five |> Core.skip (String.string "##### "),
-                Core.const Six |> Core.skip (String.string "###### "),
+            Parser.oneOf [
+                Parser.const One |> Parser.skip (String.string "# "),
+                Parser.const Two |> Parser.skip (String.string "## "),
+                Parser.const Three |> Parser.skip (String.string "### "),
+                Parser.const Four |> Parser.skip (String.string "#### "),
+                Parser.const Five |> Parser.skip (String.string "##### "),
+                Parser.const Six |> Parser.skip (String.string "###### "),
             ]
         )
-    |> Core.keep (Core.chompWhile (notEndOfLine) |> Core.map String.strFromUtf8)
+    |> Parser.keep (Parser.chompWhile (notEndOfLine) |> Parser.map String.strFromUtf8)
 
 expect
     a = String.parseStr inlineHeading "# Foo Bar"
@@ -91,11 +91,11 @@ expect
     a == Ok { val: Heading Three "Foo Bar", input: "\nBaz" }
 
 twoLineHeadingLevelOne =
-    Core.const (\str -> Heading One str)
-    |> Core.keep (Core.chompWhile (notEndOfLine) |> Core.map String.strFromUtf8)
-    |> Core.skip (endOfLine)
-    |> Core.skip (String.string "==")
-    |> Core.skip (Core.chompWhile (\b -> notEndOfLine b && b == '='))
+    Parser.const (\str -> Heading One str)
+    |> Parser.keep (Parser.chompWhile (notEndOfLine) |> Parser.map String.strFromUtf8)
+    |> Parser.skip (endOfLine)
+    |> Parser.skip (String.string "==")
+    |> Parser.skip (Parser.chompWhile (\b -> notEndOfLine b && b == '='))
 
 expect
     a = String.parseStr twoLineHeadingLevelOne "Foo Bar\n=="
@@ -106,11 +106,11 @@ expect
     a == Ok { val: Heading One "Foo Bar", input: "\n" }
 
 twoLineHeadingLevelTwo =
-    Core.const (\str -> Heading Two str)
-    |> Core.keep (Core.chompWhile (notEndOfLine) |> Core.map String.strFromUtf8)
-    |> Core.skip (endOfLine)
-    |> Core.skip (String.string "--")
-    |> Core.skip (Core.chompWhile (\b -> notEndOfLine b && b == '-'))
+    Parser.const (\str -> Heading Two str)
+    |> Parser.keep (Parser.chompWhile (notEndOfLine) |> Parser.map String.strFromUtf8)
+    |> Parser.skip (endOfLine)
+    |> Parser.skip (String.string "--")
+    |> Parser.skip (Parser.chompWhile (\b -> notEndOfLine b && b == '-'))
 
 expect
     a = String.parseStr twoLineHeadingLevelTwo "Foo Bar\n---"
@@ -125,14 +125,14 @@ expect
 ## ```
 ## expect String.parseStr link "[roc](https://roc-lang.org)" == Ok (Link "roc" "https://roc-lang.org")
 ## ```
-link : Core.Parser String.Utf8 Markdown
+link : Parser String.Utf8 Markdown
 link =
-    Core.const (\alt -> \href -> Link { alt, href })
-    |> Core.skip (String.string "[")
-    |> Core.keep (Core.chompWhile (\b -> b != ']') |> Core.map String.strFromUtf8)
-    |> Core.skip (String.string "](")
-    |> Core.keep (Core.chompWhile (\b -> b != ')') |> Core.map String.strFromUtf8)
-    |> Core.skip (String.codeunit ')')
+    Parser.const (\alt -> \href -> Link { alt, href })
+    |> Parser.skip (String.string "[")
+    |> Parser.keep (Parser.chompWhile (\b -> b != ']') |> Parser.map String.strFromUtf8)
+    |> Parser.skip (String.string "](")
+    |> Parser.keep (Parser.chompWhile (\b -> b != ')') |> Parser.map String.strFromUtf8)
+    |> Parser.skip (String.codeunit ')')
 
 expect String.parseStr link "[roc](https://roc-lang.org)" == Ok (Link { alt: "roc", href: "https://roc-lang.org" })
 
@@ -145,14 +145,14 @@ expect
 ## ```
 ## expect String.parseStr image "![alt text](/images/logo.png)" == Ok (Image "alt text" "/images/logo.png")
 ## ```
-image : Core.Parser String.Utf8 Markdown
+image : Parser String.Utf8 Markdown
 image =
-    Core.const (\alt -> \href -> Image { alt, href })
-    |> Core.skip (String.string "![")
-    |> Core.keep (Core.chompWhile (\b -> b != ']') |> Core.map String.strFromUtf8)
-    |> Core.skip (String.string "](")
-    |> Core.keep (Core.chompWhile (\b -> b != ')') |> Core.map String.strFromUtf8)
-    |> Core.skip (String.codeunit ')')
+    Parser.const (\alt -> \href -> Image { alt, href })
+    |> Parser.skip (String.string "![")
+    |> Parser.keep (Parser.chompWhile (\b -> b != ']') |> Parser.map String.strFromUtf8)
+    |> Parser.skip (String.string "](")
+    |> Parser.keep (Parser.chompWhile (\b -> b != ')') |> Parser.map String.strFromUtf8)
+    |> Parser.skip (String.codeunit ')')
 
 expect String.parseStr image "![alt text](/images/logo.png)" == Ok (Image { alt: "alt text", href: "/images/logo.png" })
 
@@ -176,24 +176,24 @@ expect
 ##     a = String.parseStr code text
 ##     a == Ok (Code { ext: "roc", pre: "# some code\nfoo = bar\n" })
 ## ```
-code : Core.Parser String.Utf8 Markdown
+code : Parser String.Utf8 Markdown
 code =
 
-    Core.const (\ext -> \pre -> Code { ext, pre })
-    |> Core.keep
+    Parser.const (\ext -> \pre -> Code { ext, pre })
+    |> Parser.keep
         (
-            Core.oneOf [
+            Parser.oneOf [
                 # parse backticks with ext e.g. ```roc
-                Core.const \i -> i
-                |> Core.skip (String.string "```")
-                |> Core.keep (Core.chompWhile notEndOfLine |> Core.map String.strFromUtf8)
-                |> Core.skip (endOfLine),
+                Parser.const \i -> i
+                |> Parser.skip (String.string "```")
+                |> Parser.keep (Parser.chompWhile notEndOfLine |> Parser.map String.strFromUtf8)
+                |> Parser.skip (endOfLine),
 
                 # parse just backticks e.g. ```
-                Core.const "" |> Core.skip (String.string "```"),
+                Parser.const "" |> Parser.skip (String.string "```"),
             ]
         )
-    |> Core.keep (chompUntilCodeBlockEnd)
+    |> Parser.keep (chompUntilCodeBlockEnd)
 
 expect
     text =
@@ -207,12 +207,12 @@ expect
     a = String.parseStr code text
     a == Ok (Code { ext: "roc", pre: "# some code\nfoo = bar\n" })
 
-chompUntilCodeBlockEnd : Core.Parser String.Utf8 Str
+chompUntilCodeBlockEnd : Parser String.Utf8 Str
 chompUntilCodeBlockEnd =
-    Core.buildPrimitiveParser \input -> chompToCodeBlockEndHelp { val: List.withCapacity 1000, input }
-    |> Core.map String.strFromUtf8
+    Parser.buildPrimitiveParser \input -> chompToCodeBlockEndHelp { val: List.withCapacity 1000, input }
+    |> Parser.map String.strFromUtf8
 
-chompToCodeBlockEndHelp : { val : String.Utf8, input : String.Utf8 } -> Core.ParseResult String.Utf8 String.Utf8
+chompToCodeBlockEndHelp : { val : String.Utf8, input : String.Utf8 } -> Parser.ParseResult String.Utf8 String.Utf8
 chompToCodeBlockEndHelp = \{ val, input } ->
     when input is
         [] -> Err (ParsingFailure "expected ```, ran out of input")

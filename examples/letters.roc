@@ -5,13 +5,13 @@ app [main] {
 
 import cli.Stdout
 import cli.Stderr
-import parser.Core
+import parser.Parser
 import parser.String
 
 main =
 
     result : Result (List Letter) [ParsingFailure Str, ParsingIncomplete Str]
-    result = String.parseStr (Core.many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
+    result = String.parseStr (Parser.many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
 
     when result |> Result.map countLetterAs is
         Ok count -> Stdout.line "I counted $(Num.toStr count) letter A's!"
@@ -31,8 +31,8 @@ countLetterAs = \letters ->
     |> List.sum
 
 # Build a custom parser to convert utf8 input into Letter tags
-letterParser : Core.Parser (List U8) Letter
-letterParser = Core.buildPrimitiveParser \input ->
+letterParser : Parser.Parser (List U8) Letter
+letterParser = Parser.buildPrimitiveParser \input ->
 
     valResult =
         when input is
@@ -55,6 +55,6 @@ expect
 # Test we can parse a number of different letters
 expect
     input = "BCXA"
-    parser = Core.many letterParser
+    parser = Parser.many letterParser
     result = String.parseStr parser input
     result == Ok [B, C, Other, A]

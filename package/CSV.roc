@@ -12,7 +12,7 @@ module [
     f64,
 ]
 
-import Core
+import Parser exposing [Parser]
 import String
 
 ## This is a CSV parser which follows RFC4180
@@ -26,8 +26,8 @@ CSV : List CSVRecord
 CSVRecord : List CSVField
 CSVField : String.Utf8
 
-## Attempts to Core.parse an `a` from a `Str` that is encoded in CSV format.
-parseStr : Core.Parser CSVRecord a, Str -> Result (List a) [ParsingFailure Str, SyntaxError Str, ParsingIncomplete CSVRecord]
+## Attempts to Parser.parse an `a` from a `Str` that is encoded in CSV format.
+parseStr : Parser CSVRecord a, Str -> Result (List a) [ParsingFailure Str, SyntaxError Str, ParsingIncomplete CSVRecord]
 parseStr = \csvParser, input ->
     when parseStrToCSV input is
         Err (ParsingIncomplete rest) ->
@@ -49,8 +49,8 @@ parseStr = \csvParser, input ->
                 Ok vals ->
                     Ok vals
 
-## Attempts to Core.parse an `a` from a `CSV` datastructure (a list of lists of bytestring-fields).
-parseCSV : Core.Parser CSVRecord a, CSV -> Result (List a) [ParsingFailure Str, ParsingIncomplete CSVRecord]
+## Attempts to Parser.parse an `a` from a `CSV` datastructure (a list of lists of bytestring-fields).
+parseCSV : Parser CSVRecord a, CSV -> Result (List a) [ParsingFailure Str, ParsingIncomplete CSVRecord]
 parseCSV = \csvParser, csvData ->
     csvData
     |> List.mapWithIndex (\recordFieldsList, index -> { record: recordFieldsList, index: index })
@@ -71,12 +71,12 @@ parseCSV = \csvParser, csvData ->
                 |> Result.map (\vals -> List.append vals val)
                 |> Continue
 
-## Attempts to Core.parse an `a` from a `CSVRecord` datastructure (a list of bytestring-fields)
+## Attempts to Parser.parse an `a` from a `CSVRecord` datastructure (a list of bytestring-fields)
 ##
 ## This parser succeeds when all fields of the CSVRecord are consumed by the parser.
-parseCSVRecord : Core.Parser CSVRecord a, CSVRecord -> Result a [ParsingFailure Str, ParsingIncomplete CSVRecord]
+parseCSVRecord : Parser CSVRecord a, CSVRecord -> Result a [ParsingFailure Str, ParsingIncomplete CSVRecord]
 parseCSVRecord = \csvParser, recordFieldsList ->
-    Core.parse csvParser recordFieldsList (\leftover -> leftover == [])
+    Parser.parse csvParser recordFieldsList (\leftover -> leftover == [])
 
 ## Wrapper function to combine a set of fields into your desired `a`
 ##
@@ -86,13 +86,13 @@ parseCSVRecord = \csvParser, recordFieldsList ->
 ## |> field string
 ## |> field u64
 ## ```
-record : a -> Core.Parser CSVRecord a
-record = Core.const
+record : a -> Parser CSVRecord a
+record = Parser.const
 
 ## Turns a parser for a `List U8` into a parser that parses part of a `CSVRecord`.
-field : Core.Parser String.Utf8 a -> Core.Parser CSVRecord a
+field : Parser String.Utf8 a -> Parser CSVRecord a
 field = \fieldParser ->
-    Core.buildPrimitiveParser \fieldsList ->
+    Parser.buildPrimitiveParser \fieldsList ->
         when List.get fieldsList 0 is
             Err OutOfBounds ->
                 Err (ParsingFailure "expected another CSV field but there are no more fields in this record")
@@ -113,73 +113,73 @@ field = \fieldParser ->
 
                         Err (ParsingFailure "The field parser was unable to read the whole field: `$(reasonStr)` while parsing the first field of leftover $(fieldsStr))")
 
-## Core.Parser for a field containing a UTF8-encoded string
-string : Core.Parser CSVField Str
+## Parser for a field containing a UTF8-encoded string
+string : Parser CSVField Str
 string = String.anyString
 
 ## Parse a number from a CSV field
-u64 : Core.Parser CSVField U64
+u64 : Parser CSVField U64
 u64 =
     string
-    |> Core.map \val ->
+    |> Parser.map \val ->
         when Str.toU64 val is
             Ok num -> Ok num
             Err _ -> Err "$(val) is not a U64."
-    |> Core.flatten
+    |> Parser.flatten
 
 ## Parse a 64-bit float from a CSV field
-f64 : Core.Parser CSVField F64
+f64 : Parser CSVField F64
 f64 =
     string
-    |> Core.map \val ->
+    |> Parser.map \val ->
         when Str.toF64 val is
             Ok num -> Ok num
             Err _ -> Err "$(val) is not a F64."
-    |> Core.flatten
+    |> Parser.flatten
 
-## Attempts to Core.parse a Str into the internal `CSV` datastructure (A list of lists of bytestring-fields).
+## Attempts to Parser.parse a Str into the internal `CSV` datastructure (A list of lists of bytestring-fields).
 parseStrToCSV : Str -> Result CSV [ParsingFailure Str, ParsingIncomplete String.Utf8]
 parseStrToCSV = \input ->
-    Core.parse file (Str.toUtf8 input) (\leftover -> leftover == [])
+    Parser.parse file (Str.toUtf8 input) (\leftover -> leftover == [])
 
-## Attempts to Core.parse a Str into the internal `CSVRecord` datastructure (A list of bytestring-fields).
+## Attempts to Parser.parse a Str into the internal `CSVRecord` datastructure (A list of bytestring-fields).
 parseStrToCSVRecord : Str -> Result CSVRecord [ParsingFailure Str, ParsingIncomplete String.Utf8]
 parseStrToCSVRecord = \input ->
-    Core.parse csvRecord (Str.toUtf8 input) (\leftover -> leftover == [])
+    Parser.parse csvRecord (Str.toUtf8 input) (\leftover -> leftover == [])
 
 # The following are parsers to turn strings into CSV structures
-file : Core.Parser String.Utf8 CSV
-file = Core.sepBy csvRecord endOfLine
+file : Parser String.Utf8 CSV
+file = Parser.sepBy csvRecord endOfLine
 
-csvRecord : Core.Parser String.Utf8 CSVRecord
-csvRecord = Core.sepBy1 csvField comma
+csvRecord : Parser String.Utf8 CSVRecord
+csvRecord = Parser.sepBy1 csvField comma
 
-csvField : Core.Parser String.Utf8 CSVField
-csvField = Core.alt escapedCsvField nonescapedCsvField
+csvField : Parser String.Utf8 CSVField
+csvField = Parser.alt escapedCsvField nonescapedCsvField
 
-escapedCsvField : Core.Parser String.Utf8 CSVField
-escapedCsvField = Core.between escapedContents dquote dquote
+escapedCsvField : Parser String.Utf8 CSVField
+escapedCsvField = Parser.between escapedContents dquote dquote
 
-escapedContents : Core.Parser String.Utf8 (List U8)
+escapedContents : Parser String.Utf8 (List U8)
 escapedContents =
     String.oneOf [
-        twodquotes |> Core.map (\_ -> '"'),
+        twodquotes |> Parser.map (\_ -> '"'),
         comma,
         cr,
         lf,
         textdata,
     ]
-    |> Core.many
+    |> Parser.many
 
-twodquotes : Core.Parser String.Utf8 Str
+twodquotes : Parser String.Utf8 Str
 twodquotes = String.string "\"\""
 
-nonescapedCsvField : Core.Parser String.Utf8 CSVField
-nonescapedCsvField = Core.many textdata
+nonescapedCsvField : Parser String.Utf8 CSVField
+nonescapedCsvField = Parser.many textdata
 
 comma = String.codeunit ','
 dquote = String.codeunit '"'
-endOfLine = Core.alt (Core.ignore crlf) (Core.ignore lf)
+endOfLine = Parser.alt (Parser.ignore crlf) (Parser.ignore lf)
 cr = String.codeunit '\r'
 lf = String.codeunit '\n'
 crlf = String.string "\r\n"

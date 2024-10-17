@@ -5,7 +5,7 @@ module [
     response,
 ]
 
-import Core
+import Parser exposing [Parser]
 import String
 
 # https://www.ietf.org/rfc/rfc2616.txt
@@ -29,18 +29,18 @@ Response : {
     body : List U8,
 }
 
-method : Core.Parser String.Utf8 Method
+method : Parser String.Utf8 Method
 method =
     String.oneOf [
-        String.string "OPTIONS" |> Core.map \_ -> Options,
-        String.string "GET" |> Core.map \_ -> Get,
-        String.string "POST" |> Core.map \_ -> Post,
-        String.string "PUT" |> Core.map \_ -> Put,
-        String.string "DELETE" |> Core.map \_ -> Delete,
-        String.string "HEAD" |> Core.map \_ -> Head,
-        String.string "TRACE" |> Core.map \_ -> Trace,
-        String.string "CONNECT" |> Core.map \_ -> Connect,
-        String.string "PATCH" |> Core.map \_ -> Patch,
+        String.string "OPTIONS" |> Parser.map \_ -> Options,
+        String.string "GET" |> Parser.map \_ -> Get,
+        String.string "POST" |> Parser.map \_ -> Post,
+        String.string "PUT" |> Parser.map \_ -> Put,
+        String.string "DELETE" |> Parser.map \_ -> Delete,
+        String.string "HEAD" |> Parser.map \_ -> Head,
+        String.string "TRACE" |> Parser.map \_ -> Trace,
+        String.string "CONNECT" |> Parser.map \_ -> Connect,
+        String.string "PATCH" |> Parser.map \_ -> Patch,
     ]
 
 expect String.parseStr method "GET" == Ok Get
@@ -51,22 +51,22 @@ expect String.parseStr method "DELETE" == Ok Delete
 #        Request-URI    = "*" | absoluteURI | abs_path | authority
 RequestUri : Str
 
-requestUri : Core.Parser String.Utf8 RequestUri
+requestUri : Parser String.Utf8 RequestUri
 requestUri =
     String.codeunitSatisfies \c -> c != ' '
-    |> Core.oneOrMore
-    |> Core.map String.strFromUtf8
+    |> Parser.oneOrMore
+    |> Parser.map String.strFromUtf8
 
 sp = String.codeunit ' '
 crlf = String.string "\r\n"
 
-httpVersion : Core.Parser String.Utf8 HttpVersion
+httpVersion : Parser String.Utf8 HttpVersion
 httpVersion =
-    Core.const (\major -> \minor -> { major, minor })
-    |> Core.skip (String.string "HTTP/")
-    |> Core.keep (String.digits |> Core.map Num.toU8)
-    |> Core.skip (String.codeunit '.')
-    |> Core.keep (String.digits |> Core.map Num.toU8)
+    Parser.const (\major -> \minor -> { major, minor })
+    |> Parser.skip (String.string "HTTP/")
+    |> Parser.keep (String.digits |> Parser.map Num.toU8)
+    |> Parser.skip (String.codeunit '.')
+    |> Parser.keep (String.digits |> Parser.map Num.toU8)
 
 expect
     actual = String.parseStr httpVersion "HTTP/1.1"
@@ -75,43 +75,43 @@ expect
 
 Header : [Header Str Str]
 
-stringWithoutColon : Core.Parser String.Utf8 Str
+stringWithoutColon : Parser String.Utf8 Str
 stringWithoutColon =
     String.codeunitSatisfies \c -> c != ':'
-    |> Core.oneOrMore
-    |> Core.map String.strFromUtf8
+    |> Parser.oneOrMore
+    |> Parser.map String.strFromUtf8
 
-stringWithoutCr : Core.Parser String.Utf8 Str
+stringWithoutCr : Parser String.Utf8 Str
 stringWithoutCr =
     String.codeunitSatisfies \c -> c != '\r'
-    |> Core.oneOrMore
-    |> Core.map String.strFromUtf8
+    |> Parser.oneOrMore
+    |> Parser.map String.strFromUtf8
 
-header : Core.Parser String.Utf8 Header
+header : Parser String.Utf8 Header
 header =
-    Core.const (\k -> \v -> Header k v)
-    |> Core.keep stringWithoutColon
-    |> Core.skip (String.string ": ")
-    |> Core.keep stringWithoutCr
-    |> Core.skip crlf
+    Parser.const (\k -> \v -> Header k v)
+    |> Parser.keep stringWithoutColon
+    |> Parser.skip (String.string ": ")
+    |> Parser.keep stringWithoutCr
+    |> Parser.skip crlf
 
 expect
     actual = String.parseStr header "Accept-Encoding: gzip, deflate\r\n"
     expected = Ok (Header "Accept-Encoding" "gzip, deflate")
     actual == expected
 
-request : Core.Parser String.Utf8 Request
+request : Parser String.Utf8 Request
 request =
-    Core.const (\m -> \u -> \hv -> \hs -> \b -> { method: m, uri: u, httpVersion: hv, headers: hs, body: b })
-    |> Core.keep method
-    |> Core.skip sp
-    |> Core.keep requestUri
-    |> Core.skip sp
-    |> Core.keep httpVersion
-    |> Core.skip crlf
-    |> Core.keep (Core.many header)
-    |> Core.skip crlf
-    |> Core.keep String.anyThing
+    Parser.const (\m -> \u -> \hv -> \hs -> \b -> { method: m, uri: u, httpVersion: hv, headers: hs, body: b })
+    |> Parser.keep method
+    |> Parser.skip sp
+    |> Parser.keep requestUri
+    |> Parser.skip sp
+    |> Parser.keep httpVersion
+    |> Parser.skip crlf
+    |> Parser.keep (Parser.many header)
+    |> Parser.skip crlf
+    |> Parser.keep String.anyThing
 
 expect
     requestText =
@@ -146,7 +146,7 @@ expect
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r
         Accept-Language: en-us,en;q=0.5\r
         Accept-Encoding: gzip,deflate\r
-        Connection: Core.keep-alive\r
+        Connection: Parser.keep-alive\r
         Origin: https://foo.example\r
         Access-Control-Request-Method: POST\r
         Access-Control-Request-Headers: X-PINGOTHER, Content-Type\r
@@ -163,7 +163,7 @@ expect
             Header "Accept" "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             Header "Accept-Language" "en-us,en;q=0.5",
             Header "Accept-Encoding" "gzip,deflate",
-            Header "Connection" "Core.keep-alive",
+            Header "Connection" "Parser.keep-alive",
             Header "Origin" "https://foo.example",
             Header "Access-Control-Request-Method" "POST",
             Header "Access-Control-Request-Headers" "X-PINGOTHER, Content-Type",
@@ -172,18 +172,18 @@ expect
     }
     actual == expected
 
-response : Core.Parser String.Utf8 Response
+response : Parser String.Utf8 Response
 response =
-    Core.const (\hv -> \sc -> \s -> \hs -> \b -> { httpVersion: hv, statusCode: sc, status: s, headers: hs, body: b })
-    |> Core.keep httpVersion
-    |> Core.skip sp
-    |> Core.keep (String.digits |> Core.map Num.toU16)
-    |> Core.skip sp
-    |> Core.keep stringWithoutCr
-    |> Core.skip crlf
-    |> Core.keep (Core.many header)
-    |> Core.skip crlf
-    |> Core.keep String.anyThing
+    Parser.const (\hv -> \sc -> \s -> \hs -> \b -> { httpVersion: hv, statusCode: sc, status: s, headers: hs, body: b })
+    |> Parser.keep httpVersion
+    |> Parser.skip sp
+    |> Parser.keep (String.digits |> Parser.map Num.toU16)
+    |> Parser.skip sp
+    |> Parser.keep stringWithoutCr
+    |> Parser.skip crlf
+    |> Parser.keep (Parser.many header)
+    |> Parser.skip crlf
+    |> Parser.keep String.anyThing
 
 expect
     body =
@@ -205,7 +205,7 @@ expect
         HTTP/1.1 200 OK\r
         Content-Type: text/html; charset=utf-8\r
         Content-Length: 55743\r
-        Connection: Core.keep-alive\r
+        Connection: Parser.keep-alive\r
         Cache-Control: s-maxage=300, public, max-age=0\r
         Content-Language: en-US\r
         Date: Thu, 06 Dec 2018 17:37:18 GMT\r
@@ -230,7 +230,7 @@ expect
             headers: [
                 Header "Content-Type" "text/html; charset=utf-8",
                 Header "Content-Length" "55743",
-                Header "Connection" "Core.keep-alive",
+                Header "Connection" "Parser.keep-alive",
                 Header "Cache-Control" "s-maxage=300, public, max-age=0",
                 Header "Content-Language" "en-US",
                 Header "Date" "Thu, 06 Dec 2018 17:37:18 GMT",
@@ -246,4 +246,3 @@ expect
             body: Str.toUtf8 body,
         }
     actual == expected
-
