@@ -1,5 +1,5 @@
 package [
-    Core,
+    Parser,
     String,
     CSV,
     HTTP,

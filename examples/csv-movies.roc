@@ -3,7 +3,7 @@ app [main] {
     parser: "../package/main.roc",
 }
 
-import parser.Core as P
+import parser.Parser as P
 import parser.CSV
 import parser.String
 import cli.Stdout

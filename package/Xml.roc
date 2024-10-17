@@ -11,7 +11,7 @@ module [
     xmlParser,
 ]
 
-import Core exposing [Parser, const, map, skip, keep, oneOrMore, oneOf, many, between, alt, chompWhile, flatten, lazy, chompUntil]
+import Parser exposing [Parser, const, map, skip, keep, oneOrMore, oneOf, many, between, alt, chompWhile, flatten, lazy, chompUntil]
 import String exposing [parseStr, string, Utf8, digits, codeunitSatisfies]
 
 Xml : {

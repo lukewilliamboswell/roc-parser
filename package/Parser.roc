@@ -319,7 +319,7 @@ manyImpl = \parser, vals, input ->
 ## A parser which runs the element parser *zero* or more times on the input,
 ## returning a list containing all the parsed elements.
 ##
-## Also see [Core.oneOrMore].
+## Also see [Parser.oneOrMore].
 many : Parser input a -> Parser input (List a)
 many = \parser ->
     buildPrimitiveParser \input ->
@@ -328,7 +328,7 @@ many = \parser ->
 ## A parser which runs the element parser *one* or more times on the input,
 ## returning a list containing all the parsed elements.
 ##
-## Also see [Core.many].
+## Also see [Parser.many].
 oneOrMore : Parser input a -> Parser input (List a)
 oneOrMore = \parser ->
     const (\val -> \vals -> List.prepend vals val)
@@ -400,7 +400,7 @@ skip = \funParser, skipParser ->
 ## Match zero or more codeunits until the it reaches the given codeunit.
 ## The given codeunit is not included in the match.
 ##
-## This can be used with [Core.skip] to ignore text.
+## This can be used with [Parser.skip] to ignore text.
 ##
 ## ```
 ## ignoreText : Parser (List U8) U64
@@ -413,7 +413,7 @@ skip = \funParser, skipParser ->
 ## expect parseStr ignoreText "ignore preceding text:123" == Ok 123
 ## ```
 ##
-## This can be used with [Core.keep] to capture a list of `U8` codeunits.
+## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 ##
 ## ```
 ## captureText : Parser (List U8) (List U8)
@@ -427,7 +427,7 @@ skip = \funParser, skipParser ->
 ##
 ## Use [String.strFromUtf8] to turn the results into a `Str`.
 ##
-## Also see [Core.chompWhile].
+## Also see [Parser.chompWhile].
 chompUntil : a -> Parser (List a) (List a) where a implements Eq
 chompUntil = \char ->
     buildPrimitiveParser \input ->
@@ -452,7 +452,7 @@ expect
 ## The codeunit that returned false is not included in the match.
 ## Note: a chompWhile parser always succeeds!
 ##
-## This can be used with [Core.skip] to ignore text.
+## This can be used with [Parser.skip] to ignore text.
 ## This is useful for chomping whitespace or variable names.
 ##
 ## ```
@@ -465,7 +465,7 @@ expect
 ## expect parseStr ignoreNumbers "0123456789876543210TEXT" == Ok "TEXT"
 ## ```
 ##
-## This can be used with [Core.keep] to capture a list of `U8` codeunits.
+## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 ##
 ## ```
 ## captureNumbers : Parser (List U8) (List U8)
@@ -479,7 +479,7 @@ expect
 ##
 ## Use [String.strFromUtf8] to turn the results into a `Str`.
 ##
-## Also see [Core.chompUntil].
+## Also see [Parser.chompUntil].
 chompWhile : (a -> Bool) -> Parser (List a) (List a) where a implements Eq
 chompWhile = \check ->
     buildPrimitiveParser \input ->
