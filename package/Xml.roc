@@ -86,6 +86,7 @@ xmlParser =
         )
     |> keep pProlog
     |> keep pElement
+    |> skip (many pWhitespace)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-prolog
 pProlog : Parser Utf8 [Given XmlDeclaration, Missing]
@@ -583,3 +584,28 @@ testXml =
         <element arg=\"value\" />
     </root>
     """
+
+trailingWhitespaceXml =
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <root><Example></Example></root>
+
+    """
+
+expect
+    # ignore trailing newline
+    result : Result Xml _
+    result = parseStr xmlParser trailingWhitespaceXml
+
+    expected : Xml
+    expected = {
+        xmlDeclaration: Given {
+            version: v1Dot0,
+            encoding: Given (OtherEncoding "UTF-8"),
+        },
+        root: Element "root" [] [
+            Element "Example" [] [],
+        ],
+    }
+
+    result == Ok expected
