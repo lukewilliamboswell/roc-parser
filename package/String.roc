@@ -91,7 +91,7 @@ parseUtf8Partial = \parser, input ->
 codeunitSatisfies : (U8 -> Bool) -> Parser Utf8 U8
 codeunitSatisfies = \check ->
     Parser.buildPrimitiveParser \input ->
-        { before: start, others: inputRest } = List.split input 1
+        { before: start, others: inputRest } = List.splitAt input 1
 
         when List.get start 0 is
             Err OutOfBounds ->
@@ -132,7 +132,7 @@ utf8 = \expectedString ->
     # Implemented manually instead of a sequence of codeunits
     # because of efficiency and better error messages
     Parser.buildPrimitiveParser \input ->
-        { before: start, others: inputRest } = List.split input (List.len expectedString)
+        { before: start, others: inputRest } = List.splitAt input (List.len expectedString)
 
         if start == expectedString then
             Ok { val: expectedString, input: inputRest }

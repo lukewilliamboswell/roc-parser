@@ -1,5 +1,5 @@
 app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.15.0/SlwdbJ-3GR7uBWQo6zlmYWNYOxnvo8r6YABXD-45UOw.tar.br",
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
     parser: "../package/main.roc",
 }
 
@@ -50,7 +50,7 @@ movieInfoParser =
 
 actorsParser =
     CSV.string
-    |> P.map \val -> Str.split val ","
+    |> P.map \val -> Str.splitOn val ","
 
 movieInfoExplanation = \@MovieInfo { title, releaseYear, actors } ->
     enumeratedActors = enumerate actors
@@ -60,7 +60,7 @@ movieInfoExplanation = \@MovieInfo { title, releaseYear, actors } ->
 
 enumerate : List Str -> Str
 enumerate = \elements ->
-    { before: inits, others: last } = List.split elements (List.len elements - 1)
+    { before: inits, others: last } = List.splitAt elements (List.len elements - 1)
 
     last
     |> List.prepend (inits |> Str.joinWith ", ")

@@ -21,11 +21,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1726560853,
-        "narHash": "sha256-X6rJYSESBVr3hBoH0WbKE5KvhPU5bloyZ2L4K60/fPQ=",
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "c1dfcf08411b08f6b8615f7d8971a2bfa81d5e8a",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
         "type": "github"
       },
       "original": {
@@ -102,11 +102,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1729014666,
-        "narHash": "sha256-8nzl/uQWbmtYGYReQNHhyu2A3kMRRoQcixWoQr7exZ8=",
+        "lastModified": 1732181197,
+        "narHash": "sha256-Exr9Lvqbnh/X20FuF5q/tf8QUcaDxvuJzw4sXSp6ydo=",
         "owner": "roc-lang",
         "repo": "roc",
-        "rev": "573d4337e7c864439ac775849c83a03e8517e892",
+        "rev": "6a3db1e59ad087125c2ff630dfeadb2ffe0b78d8",
         "type": "github"
       },
       "original": {

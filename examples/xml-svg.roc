@@ -1,5 +1,5 @@
 app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.15.0/SlwdbJ-3GR7uBWQo6zlmYWNYOxnvo8r6YABXD-45UOw.tar.br",
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
     html: "https://github.com/Hasnep/roc-html/releases/download/v0.6.0/IOyNfA4U_bCVBihrs95US9Tf5PGAWh3qvrBN4DRbK5c.tar.br",
     parser: "../package/main.roc",
 }
@@ -35,8 +35,8 @@ main =
 
     svgConvertedToHtml =
         String.parseStr Xml.xmlParser svgInput
-            |> Result.map \xml -> htmlToRocDSL (svgToHtml xml.root) "" 0
-            |> Task.fromResult!
+        |> Result.map \xml -> htmlToRocDSL (svgToHtml xml.root) "" 0
+        |> Task.fromResult!
 
     if svgConvertedToHtml == expectedHtml then
         Stdout.line! "Successfully converted SVG into HTML DSL"
