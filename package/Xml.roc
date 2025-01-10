@@ -8,14 +8,14 @@ module [
     XmlVersion,
     Node,
     Attribute,
-    xmlParser,
+    xml_parser,
 ]
 
-import Parser exposing [Parser, const, map, skip, keep, oneOrMore, oneOf, many, between, alt, chompWhile, flatten, lazy, chompUntil]
-import String exposing [parseStr, string, Utf8, digits, codeunitSatisfies]
+import Parser exposing [Parser, const, map, skip, keep, one_or_more, one_of, many, between, alt, chomp_while, flatten, lazy, chomp_until]
+import String exposing [parse_str, string, Utf8, digits, codeunit_satisfies]
 
 Xml : {
-    xmlDeclaration : [Given XmlDeclaration, Missing],
+    xml_declaration : [Given XmlDeclaration, Missing],
     root : Node,
 }
 
@@ -25,14 +25,16 @@ XmlDeclaration : {
 }
 
 XmlVersion := {
-    afterDot : U8,
+    after_dot : U8,
 }
     implements [Eq]
 
-v1Dot0 : XmlVersion
-v1Dot0 = @XmlVersion {
-    afterDot: 0,
-}
+v1_dot0 : XmlVersion
+v1_dot0 = @XmlVersion(
+    {
+        after_dot: 0,
+    },
+)
 
 XmlEncoding : [
     Utf8Encoding,
@@ -48,207 +50,233 @@ Attribute : { name : Str, value : Str }
 
 expect
     # xml to be parsed
-    result = parseStr xmlParser testXml
+    result = parse_str(xml_parser, test_xml)
 
     result
-    == Ok {
-        xmlDeclaration: Given {
-            version: v1Dot0,
-            encoding: Given Utf8Encoding,
-        },
-        root: Element "root" [] [
-            Text "\n    ",
-            Element
-                "element"
-                [{ name: "arg", value: "value" }]
+    == Ok(
+        {
+            xml_declaration: Given(
+                {
+                    version: v1_dot0,
+                    encoding: Given(Utf8Encoding),
+                },
+            ),
+            root: Element(
+                "root",
                 [],
-            Text "\n",
-        ],
-    }
+                [
+                    Text("\n    "),
+                    Element(
+                        "element",
+                        [{ name: "arg", value: "value" }],
+                        [],
+                    ),
+                    Text("\n"),
+                ],
+            ),
+        },
+    )
 
 expect
     # XML with empty prolog to be parsed
-    result = parseStr xmlParser "<element />"
+    result = parse_str(xml_parser, "<element />")
 
     result
-    == Ok {
-        xmlDeclaration: Missing,
-        root: Element "element" [] [],
-    }
+    == Ok(
+        {
+            xml_declaration: Missing,
+            root: Element("element", [], []),
+        },
+    )
 
-xmlParser : Parser Utf8 Xml
-xmlParser =
-    const
-        (\xmlDeclaration -> \root -> {
-                xmlDeclaration,
+xml_parser : Parser Utf8 Xml
+xml_parser =
+    const(
+        \xml_declaration ->
+            \root -> {
+                xml_declaration,
                 root,
-            }
-        )
-    |> keep pProlog
-    |> keep pElement
-    |> skip (many pWhitespace)
+            },
+    )
+    |> keep(p_prolog)
+    |> keep(p_element)
+    |> skip(many(p_whitespace))
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-prolog
-pProlog : Parser Utf8 [Given XmlDeclaration, Missing]
-pProlog =
-    const (\xmlDeclaration -> \_misc -> xmlDeclaration)
-    |> keep (pXmlDeclaration |> map Given |> maybeWithDefault Missing)
-    |> keep pManyMisc
+p_prolog : Parser Utf8 [Given XmlDeclaration, Missing]
+p_prolog =
+    const(\xml_declaration -> \_misc -> xml_declaration)
+    |> keep((p_xml_declaration |> map(Given) |> maybe_with_default(Missing)))
+    |> keep(p_many_misc)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-XMLDecl
-pXmlDeclaration : Parser Utf8 XmlDeclaration
-pXmlDeclaration =
+p_xml_declaration : Parser Utf8 XmlDeclaration
+p_xml_declaration =
     (
-        const
-            (\version -> \encoding -> {
+        const(
+            \version ->
+                \encoding -> {
                     version,
                     encoding,
-                })
+                },
+        )
     )
-    |> skip (string "<?xml")
-    |> skip (oneOrMore pWhitespace)
-    |> keep pVersion
-    |> keep
+    |> skip(string("<?xml"))
+    |> skip(one_or_more(p_whitespace))
+    |> keep(p_version)
+    |> keep(
         (
             (
-                const (\encoding -> encoding)
-                |> skip (oneOrMore pWhitespace)
-                |> keep pEncodingDeclaration
-                |> map Given
+                const(\encoding -> encoding)
+                |> skip(one_or_more(p_whitespace))
+                |> keep(p_encoding_declaration)
+                |> map(Given)
             )
-            |> maybeWithDefault Missing
-        )
-    |> skip (many pWhitespace)
-    |> skip (string "?>")
+            |> maybe_with_default(Missing)
+        ),
+    )
+    |> skip(many(p_whitespace))
+    |> skip(string("?>"))
 
 expect
     # XML declaration to be parsed
     result =
-        parseStr
-            pXmlDeclaration
+        parse_str(
+            p_xml_declaration,
             """
             <?xml version="1.0" encoding="utf-8"?>
-            """
+            """,
+        )
 
     result
-    == Ok {
-        version: v1Dot0,
-        encoding: Given Utf8Encoding,
-    }
+    == Ok(
+        {
+            version: v1_dot0,
+            encoding: Given(Utf8Encoding),
+        },
+    )
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionInfo
-pVersion : Parser Utf8 XmlVersion
-pVersion =
-    betweenQuotes pVersionNumber
-    |> pAttribute "version"
+p_version : Parser Utf8 XmlVersion
+p_version =
+    between_quotes(p_version_number)
+    |> p_attribute("version")
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionNum
-pVersionNumber : Parser Utf8 XmlVersion
-pVersionNumber =
-    const
-        (\afterDot ->
-            @XmlVersion {
-                afterDot: afterDot |> Num.toU8,
-            }
-        )
-    |> skip (string "1.")
-    |> keep digits
+p_version_number : Parser Utf8 XmlVersion
+p_version_number =
+    const(
+        \after_dot ->
+            @XmlVersion(
+                {
+                    after_dot: after_dot |> Num.to_u8,
+                },
+            ),
+    )
+    |> skip(string("1."))
+    |> keep(digits)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-EncodingDecl
-pEncodingDeclaration : Parser Utf8 XmlEncoding
-pEncodingDeclaration =
-    betweenQuotes pEncodingName
-    |> pAttribute "encoding"
+p_encoding_declaration : Parser Utf8 XmlEncoding
+p_encoding_declaration =
+    between_quotes(p_encoding_name)
+    |> p_attribute("encoding")
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-EncName
-pEncodingName : Parser Utf8 XmlEncoding
-pEncodingName =
-    const
-        (\firstChar -> \rest ->
-                combineToStr firstChar rest
-                |> Result.map
-                    (\encodingName ->
+p_encoding_name : Parser Utf8 XmlEncoding
+p_encoding_name =
+    const(
+        \first_char ->
+            \rest ->
+                combine_to_str(first_char, rest)
+                |> Result.map(
+                    \encoding_name ->
 
-                        when encodingName is
+                        when encoding_name is
                             "utf-8" -> Utf8Encoding
-                            other -> OtherEncoding other
-                    )
-        )
-    |> keep (codeunitSatisfies isAlphabetical)
-    |> keep
-        (
-            chompWhile \c -> isAlphabetical c
-                || isDigit c
+                            other -> OtherEncoding(other),
+                ),
+    )
+    |> keep(codeunit_satisfies(is_alphabetical))
+    |> keep(
+        chomp_while(
+            \c ->
+                is_alphabetical(c)
+                || is_digit(c)
                 || (c == '-')
                 || (c == '.')
-                || (c == '_')
-        )
+                || (c == '_'),
+        ),
+    )
     |> flatten
 
 expect
     # encoding name to be parsed
-    result = parseStr pEncodingName "utf-8"
+    result = parse_str(p_encoding_name, "utf-8")
 
-    result == Ok Utf8Encoding
+    result == Ok(Utf8Encoding)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-element
-pElement : Parser Utf8 Node
-pElement =
-    const (\name -> \arguments -> \contents -> Element name arguments contents)
-    |> skip (string "<")
-    |> keep pName
-    |> keep
+p_element : Parser Utf8 Node
+p_element =
+    const(\name -> \arguments -> \contents -> Element(name, arguments, contents))
+    |> skip(string("<"))
+    |> keep(p_name)
+    |> keep(
+        many(
+            (
+                const(\attribute -> attribute)
+                |> skip(many(p_whitespace))
+                |> keep(p_element_attribute)
+            ),
+        ),
+    )
+    |> skip(many(p_whitespace))
+    |> keep(
         (
-            many
-                (
-                    const (\attribute -> attribute)
-                    |> skip (many pWhitespace)
-                    |> keep pElementAttribute
-                )
-        )
-    |> skip (many pWhitespace)
-    |> keep
-        (
-            emptyTag =
-                string "/>" |> map (\_ -> [])
-            tagWithContent =
-                const (\contents -> contents)
-                |> skip (string ">")
-                |> keep (lazy \_ -> pElementContents)
-                |> skip pEndTag
+            empty_tag =
+                string("/>") |> map(\_ -> [])
+            tag_with_content =
+                const(\contents -> contents)
+                |> skip(string(">"))
+                |> keep(lazy(\_ -> p_element_contents))
+                |> skip(p_end_tag)
             # Due to https://github.com/lukewilliamboswell/roc-parser/issues/13 we cannot use `oneOf`, since we are using oneOf in `pElementContents`.
-            alt
-                tagWithContent
-                emptyTag
-        )
+            alt(
+                tag_with_content,
+                empty_tag,
+            )
+        ),
+    )
 
 expect
     # empty element tag without arguments to be parsed
-    result = parseStr pElement "<element />"
+    result = parse_str(p_element, "<element />")
 
-    result == Ok (Element "element" [] [])
+    result == Ok(Element("element", [], []))
 
 expect
     # empty element tag without arguments and without whitespace to be parsed
-    result = parseStr pElement "<element/>"
+    result = parse_str(p_element, "<element/>")
 
-    result == Ok (Element "element" [] [])
+    result == Ok(Element("element", [], []))
 
 expect
     # empty element tag with argument to be parsed
-    result = parseStr
-        pElement
+    result = parse_str(
+        p_element,
         """
         <element arg="value"/>
-        """
+        """,
+    )
 
-    result == Ok (Element "element" [{ name: "arg", value: "value" }] [])
+    result == Ok(Element("element", [{ name: "arg", value: "value" }], []))
 
 expect
     # empty element without arguments to be parsed
-    result = parseStr pElement "<element></element>"
+    result = parse_str(p_element, "<element></element>")
 
-    result == Ok (Element "element" [] [])
+    result == Ok(Element("element", [], []))
 
 # TODO: reject mismatched tags for better debugging
 # expect
@@ -261,323 +289,342 @@ expect
 
 expect
     # element with multiple arguments and text content to be parsed
-    result = parseStr
-        pElement
+    result = parse_str(
+        p_element,
         """
         <element firstArg="one" secondArg="two">text content</element>
-        """
+        """,
+    )
 
     result
-    == Ok
-        (
-            Element
-                "element"
-                [
-                    { name: "firstArg", value: "one" },
-                    { name: "secondArg", value: "two" },
-                ]
-                [Text "text content"]
-        )
+    == Ok(
+        Element(
+            "element",
+            [
+                { name: "firstArg", value: "one" },
+                { name: "secondArg", value: "two" },
+            ],
+            [Text("text content")],
+        ),
+    )
 
 expect
     # content with CDATA sections to be parsed
-    result = parseStr
-        pElement
-        "<element><![CDATA[<literal />]]></element>"
+    result = parse_str(
+        p_element,
+        "<element><![CDATA[<literal />]]></element>",
+    )
 
     result
-    == Ok
-        (
-            Element
-                "element"
-                []
-                [Text "<literal />"]
-        )
+    == Ok(
+        Element(
+            "element",
+            [],
+            [Text("<literal />")],
+        ),
+    )
 
 expect
     # CDATA section with partial CDATA section end tag to be parsed
-    result = parseStr
-        pElement
-        "<element><![CDATA[this is ]] not ]> the end]]></element>"
+    result = parse_str(
+        p_element,
+        "<element><![CDATA[this is ]] not ]> the end]]></element>",
+    )
 
     result
-    == Ok
-        (
-            Element
-                "element"
-                []
-                [Text "this is ]] not ]> the end"]
-        )
+    == Ok(
+        Element(
+            "element",
+            [],
+            [Text("this is ]] not ]> the end")],
+        ),
+    )
 
 expect
     # nested elements to be parsed
-    result = parseStr
-        pElement
-        "<parent><child /></parent>"
+    result = parse_str(
+        p_element,
+        "<parent><child /></parent>",
+    )
 
-    result == Ok (Element "parent" [] [Element "child" [] []])
+    result == Ok(Element("parent", [], [Element("child", [], [])]))
 
 expect
     # nested element with arguments to be parsed
-    result = parseStr
-        pElement
+    result = parse_str(
+        p_element,
         """
         <parent argParent="outer"><child argChild="inner" /></parent>
-        """
+        """,
+    )
 
     result
-    == Ok
-        (
-            Element
-                "parent"
-                [
-                    { name: "argParent", value: "outer" },
-                ]
-                [
-                    Element
-                        "child"
-                        [
-                            { name: "argChild", value: "inner" },
-                        ]
-                        [],
-                ]
-        )
+    == Ok(
+        Element(
+            "parent",
+            [
+                { name: "argParent", value: "outer" },
+            ],
+            [
+                Element(
+                    "child",
+                    [
+                        { name: "argChild", value: "inner" },
+                    ],
+                    [],
+                ),
+            ],
+        ),
+    )
 
 expect
     # nested elements with whitespace to be parsed
-    result = parseStr
-        pElement
+    result = parse_str(
+        p_element,
         """
         <parent>
             <child />
         </parent>
-        """
+        """,
+    )
 
     result
-    == Ok
-        (
-            Element
-                "parent"
-                []
-                [
-                    Text "\n    ",
-                    Element "child" [] [],
-                    Text "\n",
-                ]
-        )
+    == Ok(
+        Element(
+            "parent",
+            [],
+            [
+                Text("\n    "),
+                Element("child", [], []),
+                Text("\n"),
+            ],
+        ),
+    )
 
 expect
     # element with diverse children to be parsed
-    result = parseStr
-        pElement
+    result = parse_str(
+        p_element,
         """
         <feed xmlns="http://www.w3.org/2005/Atom">
             <title>Atom Feed</title>
             <link rel="self" type="application/atom+xml" href="http://example.org" />
             <updated>2024-02-23T20:38:24Z</updated>
         </feed>
-        """
+        """,
+    )
 
     result
-    == Ok
-        (
-            Element
-                "feed"
-                [{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }]
-                [
-                    Text "\n    ",
-                    Element "title" [] [Text "Atom Feed"],
-                    Text "\n    ",
-                    Element
-                        "link"
-                        [
-                            { name: "rel", value: "self" },
-                            { name: "type", value: "application/atom+xml" },
-                            { name: "href", value: "http://example.org" },
-                        ]
-                        [],
-                    Text "\n    ",
-                    Element
-                        "updated"
-                        []
-                        [
-                            Text "2024-02-23T20:38:24Z",
-                        ],
-                    Text "\n",
-                ]
-        )
+    == Ok(
+        Element(
+            "feed",
+            [{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
+            [
+                Text("\n    "),
+                Element("title", [], [Text("Atom Feed")]),
+                Text("\n    "),
+                Element(
+                    "link",
+                    [
+                        { name: "rel", value: "self" },
+                        { name: "type", value: "application/atom+xml" },
+                        { name: "href", value: "http://example.org" },
+                    ],
+                    [],
+                ),
+                Text("\n    "),
+                Element(
+                    "updated",
+                    [],
+                    [
+                        Text("2024-02-23T20:38:24Z"),
+                    ],
+                ),
+                Text("\n"),
+            ],
+        ),
+    )
 
-pElementAttribute : Parser Utf8 Attribute
-pElementAttribute =
-    const
-        (\name -> \value -> {
+p_element_attribute : Parser Utf8 Attribute
+p_element_attribute =
+    const(
+        \name ->
+            \value -> {
                 name,
                 value,
-            }
-        )
-    |> keep pName
-    |> skip pEqual
-    |> keep
-        (
-            oneOf [
-                pAttributeValue '"' |> between (string "\"") (string "\""),
-                pAttributeValue '\'' |> between (string "'") (string "'"),
-            ]
-        )
+            },
+    )
+    |> keep(p_name)
+    |> skip(p_equal)
+    |> keep(
+        one_of(
+            [
+                p_attribute_value('"') |> between(string("\""), string("\"")),
+                p_attribute_value('\'') |> between(string("'"), string("'")),
+            ],
+        ),
+    )
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-AttValue
-pAttributeValue : U8 -> Parser Utf8 Str
-pAttributeValue = \quote ->
-    chompWhile \c -> c != quote
-    |> map (\chomped -> strFromUtf8 chomped)
+p_attribute_value : U8 -> Parser Utf8 Str
+p_attribute_value = \quote ->
+    chomp_while(\c -> c != quote)
+    |> map(\chomped -> str_from_utf8(chomped))
     |> flatten
 # TODO: Implement reference values
 
-pElementContents : Parser Utf8 (List Node)
-pElementContents =
-    many
-        (
-            oneOf [
-                pCharacterData,
-                pElement,
-                pCdataSection,
-            ]
-        )
+p_element_contents : Parser Utf8 (List Node)
+p_element_contents =
+    many(
+        one_of(
+            [
+                p_character_data,
+                p_element,
+                p_cdata_section,
+            ],
+        ),
+    )
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-ETag
-pEndTag : Parser Utf8 Str
-pEndTag =
-    const (\name -> name)
-    |> skip (string "</")
-    |> keep pName
-    |> skip (many pWhitespace)
-    |> skip (string ">")
+p_end_tag : Parser Utf8 Str
+p_end_tag =
+    const(\name -> name)
+    |> skip(string("</"))
+    |> keep(p_name)
+    |> skip(many(p_whitespace))
+    |> skip(string(">"))
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CharData
-pCharacterData : Parser Utf8 Node
-pCharacterData =
-    const (\first -> \chars -> combineToStr first chars)
-    |> keep (codeunitSatisfies isCharacterData)
-    |> keep (chompWhile isCharacterData)
+p_character_data : Parser Utf8 Node
+p_character_data =
+    const(\first -> \chars -> combine_to_str(first, chars))
+    |> keep(codeunit_satisfies(is_character_data))
+    |> keep(chomp_while(is_character_data))
     |> flatten
-    |> map (Text)
+    |> map(Text)
 # TODO: Reject CDATA section close delimiter
 
-isCharacterData : U8 -> Bool
-isCharacterData = \c ->
+is_character_data : U8 -> Bool
+is_character_data = \c ->
     (c != '<')
     && (c != '&')
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CDSect
-pCdataSection : Parser Utf8 Node
-pCdataSection =
+p_cdata_section : Parser Utf8 Node
+p_cdata_section =
     (
-        const (\text -> text)
-        |> skip (string "<![CDATA[")
-        |> keep pCdataSectionContent
+        const(\text -> text)
+        |> skip(string("<![CDATA["))
+        |> keep(p_cdata_section_content)
     )
-    |> map Text
+    |> map(Text)
 
-pCdataSectionContent : Parser Utf8 Str
-pCdataSectionContent =
-    const (\first -> \rest -> Str.concat first rest)
-    |> keep (chompUntil ']' |> map strFromUtf8 |> flatten)
-    |> skip (string "]")
-    |> keep
-        (
-            oneOf [
-                string "]>" |> map \_ -> "",
-                lazy \_ -> pCdataSectionContent |> map \rest -> Str.concat "]" rest,
-            ]
-        )
+p_cdata_section_content : Parser Utf8 Str
+p_cdata_section_content =
+    const(\first -> \rest -> Str.concat(first, rest))
+    |> keep((chomp_until(']') |> map(str_from_utf8) |> flatten))
+    |> skip(string("]"))
+    |> keep(
+        one_of(
+            [
+                string("]>") |> map(\_ -> ""),
+                lazy(\_ -> p_cdata_section_content |> map(\rest -> Str.concat("]", rest))),
+            ],
+        ),
+    )
 
-pName : Parser Utf8 Str
-pName =
-    const
-        (\firstChar -> \rest ->
-                combineToStr firstChar rest
-        )
-    |> keep (codeunitSatisfies isNameStartChar)
-    |> keep (chompWhile isNameChar)
+p_name : Parser Utf8 Str
+p_name =
+    const(
+        \first_char ->
+            \rest ->
+                combine_to_str(first_char, rest),
+    )
+    |> keep(codeunit_satisfies(is_name_start_char))
+    |> keep(chomp_while(is_name_char))
     |> flatten
 
-isNameStartChar : U8 -> Bool
-isNameStartChar = \c ->
-    isAlphabetical c
+is_name_start_char : U8 -> Bool
+is_name_start_char = \c ->
+    is_alphabetical(c)
     || (c == ':')
     || (c == '_')
 # TODO: Implement missing character groups
 
-isNameChar : U8 -> Bool
-isNameChar = \c ->
-    isNameStartChar c
+is_name_char : U8 -> Bool
+is_name_char = \c ->
+    is_name_start_char(c)
     || (c == '-')
     || (c == '.')
 
-combineToStr : U8, List U8 -> Result Str Str
-combineToStr = \first, rest ->
+combine_to_str : U8, List U8 -> Result Str Str
+combine_to_str = \first, rest ->
     rest
-    |> List.prepend first
-    |> strFromUtf8
+    |> List.prepend(first)
+    |> str_from_utf8
 
-strFromUtf8 : List U8 -> Result Str Str
-strFromUtf8 = \chars ->
-    Str.fromUtf8 chars
-    |> Result.mapErr (\_ -> "Error decoding UTF8")
+str_from_utf8 : List U8 -> Result Str Str
+str_from_utf8 = \chars ->
+    Str.from_utf8(chars)
+    |> Result.map_err(\_ -> "Error decoding UTF8")
 
 XmlMisc : List [Comment, ProcessingInstruction]
 
-pManyMisc : Parser Utf8 XmlMisc
-pManyMisc =
+p_many_misc : Parser Utf8 XmlMisc
+p_many_misc =
     # TODO: Implement comment and processing instructions
-    many pWhitespace
-    |> map (\_ -> [])
+    many(p_whitespace)
+    |> map(\_ -> [])
 
-pAttribute : Parser Utf8 output, Str -> Parser Utf8 output
-pAttribute = \parser, attributeName ->
-    const (\result -> result)
-    |> skip (string attributeName)
-    |> skip pEqual
-    |> keep parser
+p_attribute : Parser Utf8 output, Str -> Parser Utf8 output
+p_attribute = \parser, attribute_name ->
+    const(\result -> result)
+    |> skip(string(attribute_name))
+    |> skip(p_equal)
+    |> keep(parser)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-Eq
-pEqual : Parser Utf8 Str
-pEqual =
-    many pWhitespace
-    |> skip (string "=")
-    |> skip (many pWhitespace)
-    |> map (\strings -> strings |> Str.joinWith "")
+p_equal : Parser Utf8 Str
+p_equal =
+    many(p_whitespace)
+    |> skip(string("="))
+    |> skip(many(p_whitespace))
+    |> map(\strings -> strings |> Str.join_with(""))
 
-betweenQuotes : Parser Utf8 a -> Parser Utf8 a
-betweenQuotes = \parser ->
-    oneOf [
-        parser |> between (string "\"") (string "\""),
-        parser |> between (string "'") (string "'"),
-    ]
+between_quotes : Parser Utf8 a -> Parser Utf8 a
+between_quotes = \parser ->
+    one_of(
+        [
+            parser |> between(string("\""), string("\"")),
+            parser |> between(string("'"), string("'")),
+        ],
+    )
 
-maybeWithDefault : Parser input output, output -> Parser input output
-maybeWithDefault = \parser, default ->
-    alt parser (const default)
+maybe_with_default : Parser input output, output -> Parser input output
+maybe_with_default = \parser, default ->
+    alt(parser, const(default))
 
-pWhitespace : Parser Utf8 Str
-pWhitespace =
-    oneOf [
-        string "\u(20)",
-        string "\u(9)",
-        string "\u(D)",
-        string "\u(A)",
-    ]
+p_whitespace : Parser Utf8 Str
+p_whitespace =
+    one_of(
+        [
+            string("\u(20)"),
+            string("\u(9)"),
+            string("\u(D)"),
+            string("\u(A)"),
+        ],
+    )
 
-isAlphabetical : U8 -> Bool
-isAlphabetical = \c ->
+is_alphabetical : U8 -> Bool
+is_alphabetical = \c ->
     (c >= 'A' && c <= 'Z')
     || (c >= 'a' && c <= 'z')
 
-isDigit : U8 -> Bool
-isDigit = \c ->
+is_digit : U8 -> Bool
+is_digit = \c ->
     c >= '0' && c <= '9'
 
-testXml =
+test_xml =
     """
     <?xml version=\"1.0\" encoding=\"utf-8\"?>
     <root>
@@ -585,7 +632,7 @@ testXml =
     </root>
     """
 
-trailingWhitespaceXml =
+trailing_whitespace_xml =
     """
     <?xml version="1.0" encoding="UTF-8"?>
     <root><Example></Example></root>
@@ -595,17 +642,23 @@ trailingWhitespaceXml =
 expect
     # ignore trailing newline
     result : Result Xml _
-    result = parseStr xmlParser trailingWhitespaceXml
+    result = parse_str(xml_parser, trailing_whitespace_xml)
 
     expected : Xml
     expected = {
-        xmlDeclaration: Given {
-            version: v1Dot0,
-            encoding: Given (OtherEncoding "UTF-8"),
-        },
-        root: Element "root" [] [
-            Element "Example" [] [],
-        ],
+        xml_declaration: Given(
+            {
+                version: v1_dot0,
+                encoding: Given(OtherEncoding("UTF-8")),
+            },
+        ),
+        root: Element(
+            "root",
+            [],
+            [
+                Element("Example", [], []),
+            ],
+        ),
     }
 
-    result == Ok expected
+    result == Ok(expected)

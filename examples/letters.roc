@@ -1,5 +1,5 @@
-app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
+app [main!] {
+    cli: platform "../../basic-cli/platform/main.roc",
     parser: "../package/main.roc",
 }
 
@@ -8,53 +8,55 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main =
+main! = \_args ->
 
     result : Result (List Letter) [ParsingFailure Str, ParsingIncomplete Str]
-    result = String.parseStr (Parser.many letterParser) "AAAiBByAABBwBtCCCiAyArBBx"
+    result = String.parse_str(Parser.many(letter_parser), "AAAiBByAABBwBtCCCiAyArBBx")
 
-    when result |> Result.map countLetterAs is
-        Ok count -> Stdout.line "I counted $(Num.toStr count) letter A's!"
-        Err _ -> Stderr.line "Failed while parsing input"
+    when result |> Result.map(count_letter_as) is
+        Ok(count) -> Stdout.line!("I counted $(Num.to_str(count)) letter A's!")
+        Err(_) -> Stderr.line!("Failed while parsing input")
 
 Letter : [A, B, C, Other]
 
 # Helper to check if a letter is an A tag
-isA = \l -> l == A
+is_a = \l -> l == A
 
 # Count the number of Letter A's
-countLetterAs : List Letter -> U64
-countLetterAs = \letters ->
+count_letter_as : List Letter -> U64
+count_letter_as = \letters ->
     letters
-    |> List.keepIf isA
-    |> List.map \_ -> 1
+    |> List.keep_if(is_a)
+    |> List.map(\_ -> 1)
     |> List.sum
 
 # Build a custom parser to convert utf8 input into Letter tags
-letterParser : Parser.Parser (List U8) Letter
-letterParser = Parser.buildPrimitiveParser \input ->
+letter_parser : Parser.Parser (List U8) Letter
+letter_parser = Parser.build_primitive_parser(
+    \input ->
 
-    valResult =
-        when input is
-            [] -> Err (ParsingFailure "Nothing to parse")
-            ['A', ..] -> Ok A
-            ['B', ..] -> Ok B
-            ['C', ..] -> Ok C
-            _ -> Ok Other
+        val_result =
+            when input is
+                [] -> Err(ParsingFailure("Nothing to parse"))
+                ['A', ..] -> Ok(A)
+                ['B', ..] -> Ok(B)
+                ['C', ..] -> Ok(C)
+                _ -> Ok(Other)
 
-    valResult
-    |> Result.map \val -> { val, input: List.dropFirst input 1 }
+        val_result
+        |> Result.map(\val -> { val, input: List.drop_first(input, 1) }),
+)
 
 # Test we can parse a single B letter
 expect
     input = "B"
-    parser = letterParser
-    result = String.parseStr parser input
-    result == Ok B
+    parser = letter_parser
+    result = String.parse_str(parser, input)
+    result == Ok(B)
 
 # Test we can parse a number of different letters
 expect
     input = "BCXA"
-    parser = Parser.many letterParser
-    result = String.parseStr parser input
-    result == Ok [B, C, Other, A]
+    parser = Parser.many(letter_parser)
+    result = String.parse_str(parser, input)
+    result == Ok([B, C, Other, A])
