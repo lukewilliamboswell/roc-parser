@@ -125,8 +125,8 @@ expect
 
 ## Links
 ##
-## ```
-## expect String.parseStr(link, "[roc](https://roc-lang.org)") == Ok(Link("roc", "https://roc-lang.org"))
+## ```roc
+## expect String.parse_str(link, "[roc](https://roc-lang.org)") == Ok(Link("roc", "https://roc-lang.org"))
 ## ```
 link : Parser String.Utf8 Markdown
 link =
@@ -145,8 +145,8 @@ expect
 
 ## Images
 ##
-## ```
-## expect String.parseStr(image, "![alt text](/images/logo.png)") == Ok(Image("alt text", "/images/logo.png"))
+## ```roc
+## expect String.parse_str(image, "![alt text](/images/logo.png)") == Ok(Image("alt text", "/images/logo.png"))
 ## ```
 image : Parser String.Utf8 Markdown
 image =
@@ -166,7 +166,7 @@ expect
 ## Parse code blocks using triple backticks
 ## supports block extension e.g. ```roc
 ##
-## ```
+## ```roc
 ## expect
 ##     text =
 ##         """
@@ -176,7 +176,7 @@ expect
 ##         ```
 ##         """
 ##
-##     a = String.parseStr(code, text)
+##     a = String.parse_str(code, text)
 ##     a == Ok(Code({ ext: "roc", pre: "# some code\nfoo = bar\n" }))
 ## ```
 code : Parser String.Utf8 Markdown

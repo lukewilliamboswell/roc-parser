@@ -83,8 +83,8 @@ parse_csv_record = \csv_parser, record_fields_list ->
 
 ## Wrapper function to combine a set of fields into your desired `a`
 ##
-## ```
-## record(\firstName -> \lastName -> \age -> User {firstName, lastName, age})
+## ```roc
+## record(\first_name -> \last_name -> \age -> User({ first_name, last_name, age }))
 ## |> field(string)
 ## |> field(string)
 ## |> field(u64)

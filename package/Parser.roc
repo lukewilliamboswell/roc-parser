@@ -5,7 +5,7 @@
 ##
 ## ## Example
 ## For example, say we wanted to parse the following string from `in` to `out`:
-## ```
+## ```roc
 ## in = "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"
 ## out =
 ##     {
@@ -18,34 +18,34 @@
 ##     }
 ## ```
 ## We could do this using the following:
-## ```
-## Requirement : [ Green U64, Red U64, Blue U64 ]
+## ```roc
+## Requirement : [Green U64, Red U64, Blue U64]
 ## RequirementSet : List Requirement
-## Game : { id: U64, requirements: List RequirementSet }
+## Game : { id : U64, requirements : List RequirementSet }
 ##
-## parseGame : Str -> Result Game [ParsingError]
-## parseGame = \s ->
+## parse_game : Str -> Result Game [ParsingError]
+## parse_game = \s ->
 ##     green = const(Green) |> keep(digits) |> skip(string(" green"))
-##     red = const Red |> keep(digits) |> skip (string " red")
-##     blue = const Blue |> keep(digits) |> skip (string " blue")
+##     red = const(Red) |> keep(digits) |> skip(string(" red"))
+##     blue = const(Blue) |> keep(digits) |> skip(string(" blue"))
 ##
-##     requirementSet : Parser _ RequirementSet
-##     requirementSet = (oneOf [green, red, blue]) |> sepBy (string ", ")
+##     requirement_set : Parser _ RequirementSet
+##     requirement_set = one_of([green, red, blue]) |> sep_by(string(", "))
 ##
 ##     requirements : Parser _ (List RequirementSet)
-##     requirements = requirementSet |> sepBy (string "; ")
+##     requirements = requirement_set |> sep_by(string("; "))
 ##
 ##     game : Parser _ Game
 ##     game =
-##         const (\id -> \r -> { id, requirements: r })
-##         |> skip (string "Game ")
+##         const(\id -> \r -> { id, requirements: r })
+##         |> skip(string("Game "))
 ##         |> keep(digits)
-##         |> skip (string ": ")
-##         |> keep requirements
+##         |> skip(string(": "))
+##         |> keep(requirements)
 ##
-##     when parseStr game s is
-##         Ok g -> Ok g
-##         Err (ParsingFailure _) | Err (ParsingIncomplete _) -> Err ParsingError
+##     when parse_str(game, s) is
+##         Ok(g) -> Ok(g)
+##         Err(ParsingFailure(_)) | Err(ParsingIncomplete(_)) -> Err(ParsingError)
 ## ```
 module [
     Parser,
@@ -79,7 +79,7 @@ module [
 ## Opaque type for a parser that will try to parse an `a` from an `input`.
 ##
 ## As such, a parser can be considered a recipe for a function of the type
-## ```
+## ```roc
 ## input -> Result {val: a, input: input} [ParsingFailure Str]
 ## ```
 ##
@@ -88,7 +88,7 @@ module [
 ## for instance to improve efficiency or error messages on parsing failures.
 Parser input a := input -> ParseResult input a
 
-## ```
+## ```roc
 ## ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
 ## ```
 ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
@@ -143,13 +143,13 @@ fail = \msg ->
 ## Parser that will always produce the given `a`, without looking at the actual input.
 ## This is useful as a basic building block, especially in combination with
 ## `map` and `apply`.
-## ```
-## parseU32 : Parser (List U8) U32
-## parseU32 =
-##     const Num.toU32
+## ```roc
+## parse_u32 : Parser (List U8) U32
+## parse_u32 =
+##     const(Num.to_u32)
 ##     |> keep(digits)
 ##
-## expect parseStr parseU32 "123" == Ok 123u32
+## expect parse_str(parse_u32, "123") == Ok(123u32)
 ## ```
 const : a -> Parser * a
 const = \val ->
@@ -179,14 +179,14 @@ alt = \first, second ->
 ## than there are variants of `map`, `map2`, `map3` etc. for.
 ##
 ## For instance, the following two are the same:
-## ```
-## const (\x, y, z -> Triple x y z)
-## |> map3 String.digits String.digits String.digits
+## ```roc
+## const(\x, y, z -> Triple(x, y, z))
+## |> map3(String.digits, String.digits, String.digits)
 ##
-## const (\x -> \y -> \z -> Triple x y z)
-## |> apply String.digits
-## |> apply String.digits
-## |> apply String.digits
+## const(\x -> \y -> \z -> Triple(x, y, z))
+## |> apply(String.digits)
+## |> apply(String.digits)
+## |> apply(String.digits)
 ## ```
 ## Indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.
 ##
@@ -227,16 +227,18 @@ and_then = \first_parser, build_next_parser ->
     build_primitive_parser(fun)
 
 ## Try a list of parsers in turn, until one of them succeeds.
-## ```
+## ```roc
 ## color : Parser Utf8 [Red, Green, Blue]
 ## color =
-##     oneOf [
-##         const Red |> skip (string "red"),
-##         const Green |> skip (string "green"),
-##         const Blue |> skip (string "blue"),
-##     ]
+##     one_of(
+##         [
+##             const(Red) |> skip(string("red")),
+##             const(Green) |> skip(string("green")),
+##             const(Blue) |> skip(string("blue")),
+##         ],
+##     )
 ##
-## expect parseStr color "green" == Ok Green
+## expect parse_str(color, "green") == Ok(Green)
 ## ```
 one_of : List (Parser input a) -> Parser input a
 one_of = \parsers ->
@@ -274,15 +276,17 @@ map3 = \parser_a, parser_b, parser_c, transform ->
 ## Use this to map functions that return a result over the parser,
 ## where errors are turned into `ParsingFailure`s.
 ##
-## ```
+## ```roc
 ## # Parse a number from a List U8
 ## u64 : Parser Utf8 U64
 ## u64 =
 ##     string
-##     |> map \val ->
-##         when Str.toU64 val is
-##             Ok num -> Ok num
-##             Err _ -> Err "$(val) is not a U64."
+##     |> map(
+##         \val ->
+##             when Str.to_u64(val) is
+##                 Ok(num) -> Ok(num)
+##                 Err(_) -> Err("$(val) is not a U64."),
+##     )
 ##     |> flatten
 ## ```
 flatten : Parser input (Result a Str) -> Parser input a
@@ -348,8 +352,8 @@ one_or_more = \parser ->
 ##
 ## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
 ##
-## ```
-## betweenBraces  = \parser -> parser |> between (scalar '[') (scalar ']')
+## ```roc
+## between_braces = \parser -> parser |> between(scalar('['), scalar(']'))
 ## ```
 between : Parser input a, Parser input open, Parser input close -> Parser input a
 between = \parser, open, close ->
@@ -369,12 +373,12 @@ sep_by1 = \parser, separator ->
     |> apply(parser)
     |> apply(many(parser_followed_by_sep))
 
-## ```
-## parseNumbers : Parser (List U8) (List U64)
-## parseNumbers =
-##     digits |> sepBy (codeunit ',')
+## ```roc
+## parse_numbers : Parser (List U8) (List U64)
+## parse_numbers =
+##     digits |> sep_by(codeunit(','))
 ##
-## expect parseStr parseNumbers "1,2,3" == Ok [1,2,3]
+## expect parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 ## ```
 sep_by : Parser input a, Parser input sep -> Parser input (List a)
 sep_by = \parser, separator ->
@@ -414,27 +418,27 @@ skip = \fun_parser, skip_parser ->
 ##
 ## This can be used with [Parser.skip] to ignore text.
 ##
-## ```
-## ignoreText : Parser (List U8) U64
-## ignoreText =
+## ```roc
+## ignore_text : Parser (List U8) U64
+## ignore_text =
 ##     const(\d -> d)
 ##     |> skip(chomp_until(':'))
 ##     |> skip(codeunit(':'))
 ##     |> keep(digits)
 ##
-## expect parseStr ignoreText "ignore preceding text:123" == Ok 123
+## expect parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
 ## ```
 ##
 ## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 ##
-## ```
-## captureText : Parser (List U8) (List U8)
-## captureText =
-##     const (\codeunits -> codeunits)
-##     |> keep (chomp_until ':')
-##     |> skip (codeunit ':')
+## ```roc
+## capture_text : Parser (List U8) (List U8)
+## capture_text =
+##     const(\codeunits -> codeunits)
+##     |> keep(chomp_until(':'))
+##     |> skip(codeunit(':'))
 ##
-## expect parseStr captureText "Roc:" == Ok ['R', 'o', 'c']
+## expect parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
 ## ```
 ##
 ## Use [String.str_from_utf8] to turn the results into a `Str`.
@@ -470,25 +474,25 @@ expect
 ## This is useful for chomping whitespace or variable names.
 ##
 ## ```
-## ignoreNumbers : Parser (List U8) Str
-## ignoreNumbers =
-##     const (\str -> str)
-##     |> skip (chompWhile \b -> b >= '0' && b <= '9')
-##     |> keep (string "TEXT")
+## ignore_numbers : Parser (List U8) Str
+## ignore_numbers =
+##     const(\str -> str)
+##     |> skip(chomp_while(\b -> b >= '0' && b <= '9'))
+##     |> keep(string("TEXT"))
 ##
-## expect parseStr ignoreNumbers "0123456789876543210TEXT" == Ok "TEXT"
+## expect parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
 ## ```
 ##
 ## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 ##
 ## ```
-## captureNumbers : Parser (List U8) (List U8)
-## captureNumbers =
-##     const (\codeunits -> codeunits)
-##     |> keep (chompWhile \b -> b >= '0' && b <= '9')
-##     |> skip (string "TEXT")
+## capture_numbers : Parser (List U8) (List U8)
+## capture_numbers =
+##     const(\codeunits -> codeunits)
+##     |> keep(chomp_while(\b -> b >= '0' && b <= '9'))
+##     |> skip(string("TEXT"))
 ##
-## expect parseStr captureNumbers "123TEXT" == Ok ['1', '2', '3']
+## expect parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
 ## ```
 ##
 ## Use [String.str_from_utf8] to turn the results into a `Str`.

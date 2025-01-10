@@ -26,16 +26,18 @@ import Parser exposing [Parser]
 Utf8 : List U8
 
 ## Parse a [Str] using a [Parser]
-## ```
+## ```roc
 ## color : Parser Utf8 [Red, Green, Blue]
 ## color =
-##     oneOf [
-##         Parser.const Red |> Parser.skip (string "red"),
-##         Parser.const Green |> Parser.skip (string "green"),
-##         Parser.const Blue |> Parser.skip (string "blue"),
-##     ]
+##     one_of(
+##         [
+##             Parser.const(Red) |> Parser.skip(string("red")),
+##             Parser.const(Green) |> Parser.skip(string("green")),
+##             Parser.const(Blue) |> Parser.skip(string("blue")),
+##         ],
+##     )
 ##
-## expect parseStr color "green" == Ok Green
+## expect parse_str(color, "green") == Ok(Green)
 ## ```
 parse_str : Parser Utf8 a, Str -> Result a [ParsingFailure Str, ParsingIncomplete Str]
 parse_str = \parser, input ->
@@ -53,14 +55,13 @@ parse_str = \parser, input ->
 ## - If the parser succeeds, returns the resulting value as well as the leftover input.
 ## - If the parser fails, returns `Err (ParsingFailure msg)`
 ##
+## ```roc
+## at_sign : Parser Utf8 [AtSign]
+## at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
 ##
-## ```
-## atSign : Parser Utf8 [AtSign]
-## atSign = Parser.const AtSign |> Parser.skip (codeunit '@')
-##
-## expect parseStr atSign "@" == Ok AtSign
-## expect parseStrPartial atSign "@" |> Result.map .val == Ok AtSign
-## expect parseStrPartial atSign "$" |> Result.isErr
+## expect parse_str(at_sign, "@") == Ok(AtSign)
+## expect parse_str_partial(at_sign, "@") |> Result.map(.val) == Ok(AtSign)
+## expect parse_str_partial(at_sign, "$") |> Result.is_err
 ## ```
 parse_str_partial : Parser Utf8 a, Str -> Parser.ParseResult Str a
 parse_str_partial = \parser, input ->
@@ -76,6 +77,7 @@ parse_str_partial = \parser, input ->
 ## - If the parser succeeds, returns `Ok a`
 ## - If the parser fails, returns `Err (ParsingFailure Str)`
 ## - If the parser succeeds but does not consume the full string, returns `Err (ParsingIncomplete (List U8))`
+##
 parse_utf8 : Parser Utf8 a, Utf8 -> Result a [ParsingFailure Str, ParsingIncomplete Utf8]
 parse_utf8 = \parser, input ->
     Parser.parse(parser, input, \leftover -> List.len(leftover) == 0)
@@ -85,12 +87,12 @@ parse_utf8_partial : Parser Utf8 a, Utf8 -> Parser.ParseResult Utf8 a
 parse_utf8_partial = \parser, input ->
     Parser.parse_partial(parser, input)
 
-## ```
-## isDigit : U8 -> Bool
-## isDigit = \b -> b >= '0' && b <= '9'
+## ```roc
+## is_digit : U8 -> Bool
+## is_digit = \b -> b >= '0' && b <= '9'
 ##
-## expect parseStr (codeunitSatisfies isDigit) "0" == Ok '0'
-## expect parseStr (codeunitSatisfies isDigit) "*" |> Result.isErr
+## expect parse_str(codeunit_satisfies(is_digit), "0") == Ok('0')
+## expect parse_str(codeunit_satisfies(is_digit), "*") |> Result.is_err
 ## ```
 codeunit_satisfies : (U8 -> Bool) -> Parser Utf8 U8
 codeunit_satisfies = \check ->
@@ -112,12 +114,12 @@ codeunit_satisfies = \check ->
                         Err(ParsingFailure("expected a codeunit satisfying a condition but found `$(other_char)`.\n While reading: `$(input_str)`")),
     )
 
-## ```
-## atSign : Parser Utf8 [AtSign]
-## atSign = Parser.const AtSign |> Parser.skip (codeunit '@')
+## ```roc
+## at_sign : Parser Utf8 [AtSign]
+## at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
 ##
-## expect parseStr atSign "@" == Ok AtSign
-## expect parseStrPartial atSign "$" |> Result.isErr
+## expect parse_str(at_sign, "@") == Ok(AtSign)
+## expect Result.is_err(parse_str_partial(at_sign, "$"))
 ## ```
 codeunit : U8 -> Parser Utf8 U8
 codeunit = \expected_code_unit ->
@@ -154,9 +156,9 @@ utf8 = \expected_string ->
     )
 
 ## Parse the given [Str]
-## ```
-## expect parseStr (string "Foo") "Foo" == Ok "Foo"
-## expect parseStr (string "Foo") "Bar" |> Result.isErr
+## ```roc
+## expect parse_str(string("Foo"), "Foo") == Ok("Foo")
+## expect Result.is_err(parse_str(string("Foo"), "Bar"))
 ## ```
 string : Str -> Parser Utf8 Str
 string = \expected_string ->
@@ -165,9 +167,9 @@ string = \expected_string ->
     |> Parser.map(\_val -> expected_string)
 
 ## Matches any [U8] codeunit
-## ```
-## expect parseStr anyCodeunit "a" == Ok 'a'
-## expect parseStr anyCodeunit "$" == Ok '$'
+## ```roc
+## expect parse_str(any_codeunit, "a") == Ok('a')
+## expect parse_str(any_codeunit, "$") == Ok('$')
 ## ```
 any_codeunit : Parser Utf8 U8
 any_codeunit = codeunit_satisfies(\_ -> Bool.true)
@@ -176,10 +178,10 @@ expect parse_str(any_codeunit, "a") == Ok('a')
 expect parse_str(any_codeunit, "\$") == Ok(36)
 
 ## Matches any [Utf8] and consumes all the input without fail.
-## ```
+## ```roc
 ## expect
-##     bytes = Str.toUtf8 "consumes all the input"
-##     Parser.parse anyThing bytes List.isEmpty == Ok bytes
+##     bytes = Str.to_utf8("consumes all the input")
+##     Parser.parse(any_thing, bytes, List.is_empty) == Ok(bytes)
 ## ```
 any_thing : Parser Utf8 Utf8
 any_thing = Parser.build_primitive_parser(\input -> Ok({ val: input, input: [] }))
@@ -201,9 +203,9 @@ any_string = Parser.build_primitive_parser(
                 Err(ParsingFailure("Expected a string field, but its contents cannot be parsed as UTF8.")),
 )
 
-## ```
-## expect parseStr digit "0" == Ok 0
-## expect parseStr digit "not a digit" |> Result.isErr
+## ```roc
+## expect parse_str(digit, "0") == Ok(0)
+## expect Result.is_err(parse_str(digit, "not a digit"))
 ## ```
 digit : Parser Utf8 U64
 digit =
@@ -221,9 +223,9 @@ digit =
     )
 
 ## Parse a sequence of digits into a [U64], accepting leading zeroes
-## ```
-## expect parseStr digits "0123" == Ok 123
-## expect parseStr digits "not a digit" |> Result.isErr
+## ```roc
+## expect parse_str(digits, "0123") == Ok(123)
+## expect Result.is_err(parse_str(digits, "not a digit"))
 ## ```
 digits : Parser Utf8 U64
 digits =
@@ -234,15 +236,15 @@ digits =
 ##
 ## The first parser which is tried is the one at the front of the list,
 ## and the next one is tried until one succeeds or the end of the list was reached.
-## ```
-## boolParser : Parser Utf8 Bool
-## boolParser =
-##     oneOf [string "true", string "false"]
-##     |> Parser.map (\x -> if x == "true" then Bool.true else Bool.false)
+## ```roc
+## bool_parser : Parser Utf8 Bool
+## bool_parser =
+##     one_of([string("true"), string("false")])
+##     |> Parser.map(\x -> if x == "true" then Bool.true else Bool.false)
 ##
-## expect parseStr boolParser "true" == Ok Bool.true
-## expect parseStr boolParser "false" == Ok Bool.false
-## expect parseStr boolParser "not a bool" |> Result.isErr
+## expect parse_str(bool_parser, "true") == Ok(Bool.true)
+## expect parse_str(bool_parser, "false") == Ok(Bool.false)
+## expect Result.is_err(parse_str(bool_parser, "not a bool"))
 ## ```
 one_of : List (Parser Utf8 a) -> Parser Utf8 a
 one_of = \parsers ->
