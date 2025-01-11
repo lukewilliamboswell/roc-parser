@@ -14,7 +14,7 @@ main! = \_args ->
     result = String.parse_str(Parser.many(multiple_numbers), "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n")
 
     when result |> Result.map(largest) is
-        Ok(count) -> Stdout.line!("The lagest sum is $(Num.to_str(count))")
+        Ok(count) -> Stdout.line!("The lagest sum is ${Num.to_str(count)}")
         Err(_) -> Stderr.line!("Failed while parsing input")
 
 # Parse a number followed by a newline

@@ -111,7 +111,7 @@ codeunit_satisfies = \check ->
                         other_char = str_from_codeunit(start_codeunit)
                         input_str = str_from_utf8(input)
 
-                        Err(ParsingFailure("expected a codeunit satisfying a condition but found `$(other_char)`.\n While reading: `$(input_str)`")),
+                        Err(ParsingFailure("expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`")),
     )
 
 ## ```roc
@@ -127,13 +127,13 @@ codeunit = \expected_code_unit ->
         \input ->
             when input is
                 [] ->
-                    Err(ParsingFailure("expected char `$(str_from_codeunit(expected_code_unit))` but input was empty."))
+                    Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but input was empty."))
 
                 [first, .. as rest] if first == expected_code_unit ->
                     Ok({ val: expected_code_unit, input: rest })
 
                 [first, ..] ->
-                    Err(ParsingFailure("expected char `$(str_from_codeunit(expected_code_unit))` but found `$(str_from_codeunit(first))`.\n While reading: `$(str_from_utf8(input))`")),
+                    Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${str_from_utf8(input)}`")),
     )
 
 ## Parse an extact sequence of utf8
@@ -152,7 +152,7 @@ utf8 = \expected_string ->
                 other_string = str_from_utf8(start)
                 input_string = str_from_utf8(input)
 
-                Err(ParsingFailure("expected string `$(error_string)` but found `$(other_string)`.\nWhile reading: $(input_string)")),
+                Err(ParsingFailure("expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}")),
     )
 
 ## Parse the given [Str]
@@ -281,7 +281,7 @@ str_from_ascii : U8 -> Str
 str_from_ascii = \ascii_num ->
     when Str.from_utf8([ascii_num]) is
         Ok(answer) -> answer
-        Err(_) -> crash("The number $(Num.to_str(ascii_num)) is not a valid ASCII constant!")
+        Err(_) -> crash("The number ${Num.to_str(ascii_num)} is not a valid ASCII constant!")
 
 # -------------------- example snippets used in docs --------------------
 

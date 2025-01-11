@@ -14,7 +14,7 @@ main! = \_args ->
     result = String.parse_str(Parser.many(letter_parser), "AAAiBByAABBwBtCCCiAyArBBx")
 
     when result |> Result.map(count_letter_as) is
-        Ok(count) -> Stdout.line!("I counted $(Num.to_str(count)) letter A's!")
+        Ok(count) -> Stdout.line!("I counted ${Num.to_str(count)} letter A's!")
         Err(_) -> Stderr.line!("Failed while parsing input")
 
 Letter : [A, B, C, Other]

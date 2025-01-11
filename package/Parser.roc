@@ -169,7 +169,7 @@ alt = \first, second ->
                     when parse_partial(second, input) is
                         Ok({ val: val, input: rest }) -> Ok({ val: val, input: rest })
                         Err(ParsingFailure(second_err)) ->
-                            Err(ParsingFailure("$(first_err) or $(second_err)")),
+                            Err(ParsingFailure("${first_err} or ${second_err}")),
     )
 
 ## Runs a parser building a function, then a parser building a value,
@@ -285,7 +285,7 @@ map3 = \parser_a, parser_b, parser_c, transform ->
 ##         \val ->
 ##             when Str.to_u64(val) is
 ##                 Ok(num) -> Ok(num)
-##                 Err(_) -> Err("$(val) is not a U64."),
+##                 Err(_) -> Err("${val} is not a U64."),
 ##     )
 ##     |> flatten
 ## ```

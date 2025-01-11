@@ -63,20 +63,20 @@ xml_to_html_attribute = \{ name, value } -> (Attribute.attribute(name))(value)
 html_to_roc_dsl : Html.Node, Str, U8 -> Str
 html_to_roc_dsl = \html, buf, depth ->
 
-    map_child = \child -> html_to_roc_dsl(child, "    $(depth_to_ident(depth))", (depth + 1))
-    map_attr = \Attribute(name, value) -> "    $(depth_to_ident(depth))$(name) \"$(value)\""
+    map_child = \child -> html_to_roc_dsl(child, "    ${depth_to_ident(depth)}", (depth + 1))
+    map_attr = \Attribute(name, value) -> "    ${depth_to_ident(depth)}${name} \"${value}\""
 
     when html is
         Element(name, _, attrs, children) ->
             formatted_attrs =
-                if List.is_empty(attrs) then "[]" else "[\n$(List.map(attrs, map_attr) |> Str.join_with(",\n"))\n$(depth_to_ident(depth))]"
+                if List.is_empty(attrs) then "[]" else "[\n${List.map(attrs, map_attr) |> Str.join_with(",\n")}\n${depth_to_ident(depth)}]"
 
             formatted_children =
-                if List.is_empty(children) then "[]" else "[\n$(List.map(children, map_child) |> Str.join_with(",\n"))\n$(depth_to_ident(depth))]"
+                if List.is_empty(children) then "[]" else "[\n${List.map(children, map_child) |> Str.join_with(",\n")}\n${depth_to_ident(depth)}]"
 
-            "$(buf)$(name) $(formatted_attrs) $(formatted_children)"
+            "${buf}${name} ${formatted_attrs} ${formatted_children}"
 
-        Text(text) -> "$(buf)text \"$(text)\""
+        Text(text) -> "${buf}text \"${text}\""
         UnescapedHtml(_raw) -> crash("UnescapedHtml not supported")
 
 expect

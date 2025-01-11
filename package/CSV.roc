@@ -60,8 +60,8 @@ parse_csv = \csv_parser, csv_data ->
             when parse_csv_record(csv_parser, record_fields_list) is
                 Err(ParsingFailure(problem)) ->
                     index_str = Num.to_str((index + 1))
-                    record_str = record_fields_list |> List.map(String.str_from_utf8) |> List.map(\val -> "\"$(val)\"") |> Str.join_with(", ")
-                    problem_str = "$(problem)\nWhile parsing record no. $(index_str): `$(record_str)`"
+                    record_str = record_fields_list |> List.map(String.str_from_utf8) |> List.map(\val -> "\"${val}\"") |> Str.join_with(", ")
+                    problem_str = "${problem}\nWhile parsing record no. ${index_str}: `${record_str}`"
 
                     Break(Err(ParsingFailure(problem_str)))
 
@@ -109,13 +109,13 @@ field = \field_parser ->
                         Err(ParsingFailure(reason)) ->
                             field_str = raw_str |> String.str_from_utf8
 
-                            Err(ParsingFailure("Field `$(field_str)` could not be parsed. $(reason)"))
+                            Err(ParsingFailure("Field `${field_str}` could not be parsed. ${reason}"))
 
                         Err(ParsingIncomplete(reason)) ->
                             reason_str = String.str_from_utf8(reason)
                             fields_str = fields_list |> List.map(String.str_from_utf8) |> Str.join_with(", ")
 
-                            Err(ParsingFailure("The field parser was unable to read the whole field: `$(reason_str)` while parsing the first field of leftover $(fields_str))")),
+                            Err(ParsingFailure("The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})")),
     )
 
 ## Parser for a field containing a UTF8-encoded string
@@ -130,7 +130,7 @@ u64 =
         \val ->
             when Str.to_u64(val) is
                 Ok(num) -> Ok(num)
-                Err(_) -> Err("$(val) is not a U64."),
+                Err(_) -> Err("${val} is not a U64."),
     )
     |> Parser.flatten
 
@@ -142,7 +142,7 @@ f64 =
         \val ->
             when Str.to_f64(val) is
                 Ok(num) -> Ok(num)
-                Err(_) -> Err("$(val) is not a F64."),
+                Err(_) -> Err("${val} is not a F64."),
     )
     |> Parser.flatten
 

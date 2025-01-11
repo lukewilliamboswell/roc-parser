@@ -27,20 +27,20 @@ main! = \_args ->
                 |> Str.join_with("\n")
             n_movies = List.len(movies) |> Num.to_str
 
-            Stdout.line!("$(n_movies) movies were found:\n\n$(movies_string)\n\nParse success!\n")
+            Stdout.line!("${n_movies} movies were found:\n\n${movies_string}\n\nParse success!\n")
 
         Err(problem) ->
             when problem is
                 ParsingFailure(failure) ->
-                    Stderr.line!("Parsing failure: $(failure)\n")
+                    Stderr.line!("Parsing failure: ${failure}\n")
 
                 ParsingIncomplete(leftover) ->
-                    leftover_str = leftover |> List.map(String.str_from_utf8) |> List.map(\val -> "\"$(val)\"") |> Str.join_with(", ")
+                    leftover_str = leftover |> List.map(String.str_from_utf8) |> List.map(\val -> "\"${val}\"") |> Str.join_with(", ")
 
-                    Stderr.line!("Parsing incomplete. Following leftover fields while parsing a record: $(leftover_str)\n")
+                    Stderr.line!("Parsing incomplete. Following leftover fields while parsing a record: ${leftover_str}\n")
 
                 SyntaxError(error) ->
-                    Stderr.line!("Parsing failure. Syntax error in the CSV: $(error)")
+                    Stderr.line!("Parsing failure. Syntax error in the CSV: ${error}")
 
 movie_info_parser =
     CSV.record(\title -> \release_year -> \actors -> @MovieInfo({ title, release_year, actors }))
@@ -56,7 +56,7 @@ movie_info_explanation = \@MovieInfo({ title, release_year, actors }) ->
     enumerated_actors = enumerate(actors)
     release_year_str = Num.to_str(release_year)
 
-    "The movie '$(title)' was released in $(release_year_str) and stars $(enumerated_actors)"
+    "The movie '${title}' was released in ${release_year_str} and stars ${enumerated_actors}"
 
 enumerate : List Str -> Str
 enumerate = \elements ->

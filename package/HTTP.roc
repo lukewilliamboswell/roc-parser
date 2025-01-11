@@ -224,7 +224,7 @@ expect
         Vary: Accept-Encoding,Cookie\r
         Age: 7\r
         \r
-        $(body)
+        ${body}
         """
     actual =
         String.parse_str(response, response_text)
