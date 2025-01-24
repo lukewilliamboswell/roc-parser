@@ -53,8 +53,8 @@ not_end_of_line = |b| b != '\n' and b != '\r'
 ## Headings
 ##
 ## ```
-## expect String.parseStr(heading, "# Foo Bar") == Ok(Heading One "Foo Bar")
-## expect String.parseStr(heading, "Foo Bar\n---") == Ok(Heading Two "Foo Bar")
+## expect String.parse_str(heading, "# Foo Bar") == Ok(Heading One "Foo Bar")
+## expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading Two "Foo Bar")
 ## ```
 heading : Parser String.Utf8 Markdown
 heading =

@@ -209,11 +209,11 @@ apply = |fun_parser, val_parser|
 
 # Internal utility function. Not exposed to users, since usage is discouraged!
 #
-# Runs `firstParser` and (only) if it succeeds,
+# Runs `first_parser` and (only) if it succeeds,
 # runs the function `buildNextParser` on its result value.
 # This function returns a new parser, which is finally run.
 #
-# `andThen` is usually more flexible than necessary, and less efficient
+# `and_then` is usually more flexible than necessary, and less efficient
 # than using `const` with `map` and/or `apply`.
 # Consider using those functions first.
 and_then : Parser input a, (a -> Parser input b) -> Parser input b
