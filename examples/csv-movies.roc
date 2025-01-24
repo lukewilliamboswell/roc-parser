@@ -21,7 +21,6 @@ input =
 main! = |_args|
     when CSV.parse_str(movie_info_parser, input) is
         Ok(movies) ->
-
             movies_string =
                 movies
                 |> List.map(movie_info_explanation)

@@ -24,7 +24,7 @@
 ## Game : { id : U64, requirements : List RequirementSet }
 ##
 ## parse_game : Str -> Result Game [ParsingError]
-## parse_game = \s ->
+## parse_game = |s|
 ##     green = const(Green) |> keep(digits) |> skip(string(" green"))
 ##     red = const(Red) |> keep(digits) |> skip(string(" red"))
 ##     blue = const(Blue) |> keep(digits) |> skip(string(" blue"))
@@ -37,7 +37,7 @@
 ##
 ##     game : Parser _ Game
 ##     game =
-##         const(\id -> \r -> { id, requirements: r })
+##         const(|id| |r| { id, requirements: r })
 ##         |> skip(string("Game "))
 ##         |> keep(digits)
 ##         |> skip(string(": "))
@@ -180,10 +180,10 @@ alt = |first, second|
 ##
 ## For instance, the following two are the same:
 ## ```roc
-## const(\x, y, z -> Triple(x, y, z))
+## const(|x| |y| |z| Triple(x, y, z))
 ## |> map3(String.digits, String.digits, String.digits)
 ##
-## const(\x -> \y -> \z -> Triple(x, y, z))
+## const(|x| |y| |z| Triple(x, y, z))
 ## |> apply(String.digits)
 ## |> apply(String.digits)
 ## |> apply(String.digits)
@@ -192,8 +192,8 @@ alt = |first, second|
 ##
 ## # Currying
 ## Be aware that when using `apply`, you need to explicitly 'curry' the parameters to the construction function.
-## This means that instead of writing `\x, y, z -> ...`
-## you'll need to write `\x -> \y -> \z -> ...`.
+## This means that instead of writing `|x, y, z| ...`
+## you'll need to write `|x| |y| |z| ...`.
 ## This is because the parameters of the function will be applied one by one as parsing continues.
 apply : Parser input (a -> b), Parser input a -> Parser input b
 apply = |fun_parser, val_parser|
@@ -282,7 +282,7 @@ map3 = |parser_a, parser_b, parser_c, transform|
 ## u64 =
 ##     string
 ##     |> map(
-##         \val ->
+##         |val|
 ##             when Str.to_u64(val) is
 ##                 Ok(num) -> Ok(num)
 ##                 Err(_) -> Err("${val} is not a U64."),
@@ -353,7 +353,7 @@ one_or_more = |parser|
 ## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
 ##
 ## ```roc
-## between_braces = \parser -> parser |> between(scalar('['), scalar(']'))
+## between_braces = |parser| parser |> between(scalar('['), scalar(']'))
 ## ```
 between : Parser input a, Parser input open, Parser input close -> Parser input a
 between = |parser, open, close|
@@ -421,7 +421,7 @@ skip = |fun_parser, skip_parser|
 ## ```roc
 ## ignore_text : Parser (List U8) U64
 ## ignore_text =
-##     const(\d -> d)
+##     const(|d| d)
 ##     |> skip(chomp_until(':'))
 ##     |> skip(codeunit(':'))
 ##     |> keep(digits)
@@ -434,7 +434,7 @@ skip = |fun_parser, skip_parser|
 ## ```roc
 ## capture_text : Parser (List U8) (List U8)
 ## capture_text =
-##     const(\codeunits -> codeunits)
+##     const(|codeunits| codeunits)
 ##     |> keep(chomp_until(':'))
 ##     |> skip(codeunit(':'))
 ##
@@ -476,8 +476,8 @@ expect
 ## ```
 ## ignore_numbers : Parser (List U8) Str
 ## ignore_numbers =
-##     const(\str -> str)
-##     |> skip(chomp_while(\b -> b >= '0' && b <= '9'))
+##     const(|str| str)
+##     |> skip(chomp_while(|b| b >= '0' && b <= '9'))
 ##     |> keep(string("TEXT"))
 ##
 ## expect parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
@@ -488,8 +488,8 @@ expect
 ## ```
 ## capture_numbers : Parser (List U8) (List U8)
 ## capture_numbers =
-##     const(\codeunits -> codeunits)
-##     |> keep(chomp_while(\b -> b >= '0' && b <= '9'))
+##     const(|codeunits| codeunits)
+##     |> keep(chomp_while(|b| b >= '0' && b <= '9'))
 ##     |> skip(string("TEXT"))
 ##
 ## expect parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])

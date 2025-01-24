@@ -89,7 +89,7 @@ parse_utf8_partial = |parser, input|
 
 ## ```roc
 ## is_digit : U8 -> Bool
-## is_digit = \b -> b >= '0' && b <= '9'
+## is_digit = |b| b >= '0' && b <= '9'
 ##
 ## expect parse_str(codeunit_satisfies(is_digit), "0") == Ok('0')
 ## expect parse_str(codeunit_satisfies(is_digit), "*") |> Result.is_err
@@ -240,7 +240,7 @@ digits =
 ## bool_parser : Parser Utf8 Bool
 ## bool_parser =
 ##     one_of([string("true"), string("false")])
-##     |> Parser.map(\x -> if x == "true" then Bool.true else Bool.false)
+##     |> Parser.map(|x| if x == "true" then Bool.true else Bool.false)
 ##
 ## expect parse_str(bool_parser, "true") == Ok(Bool.true)
 ## expect parse_str(bool_parser, "false") == Ok(Bool.false)

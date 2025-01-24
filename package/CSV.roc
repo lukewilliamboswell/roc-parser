@@ -84,13 +84,14 @@ parse_csv_record = |csv_parser, record_fields_list|
 ## Wrapper function to combine a set of fields into your desired `a`
 ##
 ## ```roc
-## record(\first_name -> \last_name -> \age -> User({ first_name, last_name, age }))
+## record(|first_name| |last_name| |age| User({ first_name, last_name, age }))
 ## |> field(string)
 ## |> field(string)
 ## |> field(u64)
 ## ```
 record : a -> Parser CSVRecord a
-record = \f -> Parser.const f
+record = |f|
+    Parser.const(f)
 
 ## Turns a parser for a `List U8` into a parser that parses part of a `CSVRecord`.
 field : Parser String.Utf8 a -> Parser CSVRecord a
