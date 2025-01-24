@@ -8,33 +8,33 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main! = \_args ->
+main! = |_args|
 
     result : Result (List Letter) [ParsingFailure Str, ParsingIncomplete Str]
     result = String.parse_str(Parser.many(letter_parser), "AAAiBByAABBwBtCCCiAyArBBx")
 
-    when result |> Result.map(count_letter_as) is
+    when result |> Result.map_ok(count_letter_as) is
         Ok(count) -> Stdout.line!("I counted ${Num.to_str(count)} letter A's!")
         Err(_) -> Stderr.line!("Failed while parsing input")
 
 Letter : [A, B, C, Other]
 
 # Helper to check if a letter is an A tag
-is_a = \l -> l == A
+is_a = |l|
+    l == A
 
 # Count the number of Letter A's
 count_letter_as : List Letter -> U64
-count_letter_as = \letters ->
+count_letter_as = |letters|
     letters
     |> List.keep_if(is_a)
-    |> List.map(\_ -> 1)
+    |> List.map(|_| 1)
     |> List.sum
 
 # Build a custom parser to convert utf8 input into Letter tags
 letter_parser : Parser.Parser (List U8) Letter
 letter_parser = Parser.build_primitive_parser(
-    \input ->
-
+    |input|
         val_result =
             when input is
                 [] -> Err(ParsingFailure("Nothing to parse"))
@@ -44,7 +44,7 @@ letter_parser = Parser.build_primitive_parser(
                 _ -> Ok(Other)
 
         val_result
-        |> Result.map(\val -> { val, input: List.drop_first(input, 1) }),
+        |> Result.map_ok(|val| { val, input: List.drop_first(input, 1) }),
 )
 
 # Test we can parse a single B letter

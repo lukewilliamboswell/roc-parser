@@ -33,15 +33,15 @@ method : Parser String.Utf8 Method
 method =
     String.one_of(
         [
-            String.string("OPTIONS") |> Parser.map(\_ -> Options),
-            String.string("GET") |> Parser.map(\_ -> Get),
-            String.string("POST") |> Parser.map(\_ -> Post),
-            String.string("PUT") |> Parser.map(\_ -> Put),
-            String.string("DELETE") |> Parser.map(\_ -> Delete),
-            String.string("HEAD") |> Parser.map(\_ -> Head),
-            String.string("TRACE") |> Parser.map(\_ -> Trace),
-            String.string("CONNECT") |> Parser.map(\_ -> Connect),
-            String.string("PATCH") |> Parser.map(\_ -> Patch),
+            String.string("OPTIONS") |> Parser.map(|_| Options),
+            String.string("GET") |> Parser.map(|_| Get),
+            String.string("POST") |> Parser.map(|_| Post),
+            String.string("PUT") |> Parser.map(|_| Put),
+            String.string("DELETE") |> Parser.map(|_| Delete),
+            String.string("HEAD") |> Parser.map(|_| Head),
+            String.string("TRACE") |> Parser.map(|_| Trace),
+            String.string("CONNECT") |> Parser.map(|_| Connect),
+            String.string("PATCH") |> Parser.map(|_| Patch),
         ],
     )
 
@@ -55,7 +55,7 @@ RequestUri : Str
 
 request_uri : Parser String.Utf8 RequestUri
 request_uri =
-    String.codeunit_satisfies(\c -> c != ' ')
+    String.codeunit_satisfies(|c| c != ' ')
     |> Parser.one_or_more
     |> Parser.map(String.str_from_utf8)
 
@@ -64,7 +64,7 @@ crlf = String.string("\r\n")
 
 http_version : Parser String.Utf8 HttpVersion
 http_version =
-    Parser.const(\major -> \minor -> { major, minor })
+    Parser.const(|major| |minor| { major, minor })
     |> Parser.skip(String.string("HTTP/"))
     |> Parser.keep((String.digits |> Parser.map(Num.to_u8)))
     |> Parser.skip(String.codeunit('.'))
@@ -79,19 +79,19 @@ Header : [Header Str Str]
 
 string_without_colon : Parser String.Utf8 Str
 string_without_colon =
-    String.codeunit_satisfies(\c -> c != ':')
+    String.codeunit_satisfies(|c| c != ':')
     |> Parser.one_or_more
     |> Parser.map(String.str_from_utf8)
 
 string_without_cr : Parser String.Utf8 Str
 string_without_cr =
-    String.codeunit_satisfies(\c -> c != '\r')
+    String.codeunit_satisfies(|c| c != '\r')
     |> Parser.one_or_more
     |> Parser.map(String.str_from_utf8)
 
 header : Parser String.Utf8 Header
 header =
-    Parser.const(\k -> \v -> Header(k, v))
+    Parser.const(|k| |v| Header(k, v))
     |> Parser.keep(string_without_colon)
     |> Parser.skip(String.string(": "))
     |> Parser.keep(string_without_cr)
@@ -104,7 +104,7 @@ expect
 
 request : Parser String.Utf8 Request
 request =
-    Parser.const(\m -> \u -> \hv -> \hs -> \b -> { method: m, uri: u, http_version: hv, headers: hs, body: b })
+    Parser.const(|m| |u| |hv| |hs| |b| { method: m, uri: u, http_version: hv, headers: hs, body: b })
     |> Parser.keep(method)
     |> Parser.skip(sp)
     |> Parser.keep(request_uri)
@@ -180,7 +180,7 @@ expect
 
 response : Parser String.Utf8 Response
 response =
-    Parser.const(\hv -> \sc -> \s -> \hs -> \b -> { http_version: hv, status_code: sc, status: s, headers: hs, body: b })
+    Parser.const(|hv| |sc| |s| |hs| |b| { http_version: hv, status_code: sc, status: s, headers: hs, body: b })
     |> Parser.keep(http_version)
     |> Parser.skip(sp)
     |> Parser.keep((String.digits |> Parser.map(Num.to_u16)))

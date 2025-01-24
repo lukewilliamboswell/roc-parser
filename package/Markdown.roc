@@ -48,7 +48,7 @@ expect
     a == Ok([TODO("Foo Bar"), TODO(""), TODO("Baz")])
 
 end_of_line = Parser.one_of([String.string("\n"), String.string("\r\n")])
-not_end_of_line = \b -> b != '\n' && b != '\r'
+not_end_of_line = |b| b != '\n' and b != '\r'
 
 ## Headings
 ##
@@ -70,7 +70,7 @@ expect String.parse_str(heading, "# Foo Bar") == Ok(Heading(One, "Foo Bar"))
 expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading(Two, "Foo Bar"))
 
 inline_heading =
-    Parser.const(\level -> \str -> Heading(level, str))
+    Parser.const(|level| |str| Heading(level, str))
     |> Parser.keep(
         Parser.one_of(
             [
@@ -94,11 +94,11 @@ expect
     a == Ok({ val: Heading(Three, "Foo Bar"), input: "\nBaz" })
 
 two_line_heading_level_one =
-    Parser.const(\str -> Heading(One, str))
+    Parser.const(|str| Heading(One, str))
     |> Parser.keep((Parser.chomp_while(not_end_of_line) |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(end_of_line)
     |> Parser.skip(String.string("=="))
-    |> Parser.skip(Parser.chomp_while(\b -> not_end_of_line(b) && b == '='))
+    |> Parser.skip(Parser.chomp_while(|b| not_end_of_line(b) and b == '='))
 
 expect
     a = String.parse_str(two_line_heading_level_one, "Foo Bar\n==")
@@ -109,11 +109,11 @@ expect
     a == Ok({ val: Heading(One, "Foo Bar"), input: "\n" })
 
 two_line_heading_level_two =
-    Parser.const(\str -> Heading(Two, str))
+    Parser.const(|str| Heading(Two, str))
     |> Parser.keep((Parser.chomp_while(not_end_of_line) |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(end_of_line)
     |> Parser.skip(String.string("--"))
-    |> Parser.skip(Parser.chomp_while(\b -> not_end_of_line(b) && b == '-'))
+    |> Parser.skip(Parser.chomp_while(|b| not_end_of_line(b) and b == '-'))
 
 expect
     a = String.parse_str(two_line_heading_level_two, "Foo Bar\n---")
@@ -130,11 +130,11 @@ expect
 ## ```
 link : Parser String.Utf8 Markdown
 link =
-    Parser.const(\alt -> \href -> Link({ alt, href }))
+    Parser.const(|alt| |href| Link({ alt, href }))
     |> Parser.skip(String.string("["))
-    |> Parser.keep((Parser.chomp_while(\b -> b != ']') |> Parser.map(String.str_from_utf8)))
+    |> Parser.keep((Parser.chomp_while(|b| b != ']') |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(String.string("]("))
-    |> Parser.keep((Parser.chomp_while(\b -> b != ')') |> Parser.map(String.str_from_utf8)))
+    |> Parser.keep((Parser.chomp_while(|b| b != ')') |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(String.codeunit(')'))
 
 expect String.parse_str(link, "[roc](https://roc-lang.org)") == Ok(Link({ alt: "roc", href: "https://roc-lang.org" }))
@@ -150,11 +150,11 @@ expect
 ## ```
 image : Parser String.Utf8 Markdown
 image =
-    Parser.const(\alt -> \href -> Image({ alt, href }))
+    Parser.const(|alt| |href| Image({ alt, href }))
     |> Parser.skip(String.string("!["))
-    |> Parser.keep((Parser.chomp_while(\b -> b != ']') |> Parser.map(String.str_from_utf8)))
+    |> Parser.keep((Parser.chomp_while(|b| b != ']') |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(String.string("]("))
-    |> Parser.keep((Parser.chomp_while(\b -> b != ')') |> Parser.map(String.str_from_utf8)))
+    |> Parser.keep((Parser.chomp_while(|b| b != ')') |> Parser.map(String.str_from_utf8)))
     |> Parser.skip(String.codeunit(')'))
 
 expect String.parse_str(image, "![alt text](/images/logo.png)") == Ok(Image({ alt: "alt text", href: "/images/logo.png" }))
@@ -182,12 +182,12 @@ expect
 code : Parser String.Utf8 Markdown
 code =
 
-    Parser.const(\ext -> \pre -> Code({ ext, pre }))
+    Parser.const(|ext| |pre| Code({ ext, pre }))
     |> Parser.keep(
         Parser.one_of(
             [
                 # parse backticks with ext e.g. ```roc
-                Parser.const(\i -> i)
+                Parser.const(|i| i)
                 |> Parser.skip(String.string("```"))
                 |> Parser.keep((Parser.chomp_while(not_end_of_line) |> Parser.map(String.str_from_utf8)))
                 |> Parser.skip(end_of_line),
@@ -213,11 +213,11 @@ expect
 
 chomp_until_code_block_end : Parser String.Utf8 Str
 chomp_until_code_block_end =
-    Parser.build_primitive_parser(\input -> chomp_to_code_block_end_help({ val: List.with_capacity(1000), input }))
+    Parser.build_primitive_parser(|input| chomp_to_code_block_end_help({ val: List.with_capacity(1000), input }))
     |> Parser.map(String.str_from_utf8)
 
 chomp_to_code_block_end_help : { val : String.Utf8, input : String.Utf8 } -> Parser.ParseResult String.Utf8 String.Utf8
-chomp_to_code_block_end_help = \{ val, input } ->
+chomp_to_code_block_end_help = |{ val, input }|
     when input is
         [] -> Err(ParsingFailure("expected ```, ran out of input"))
         ['`', '`', '`', .. as rest] -> Ok({ val, input: rest })

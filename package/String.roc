@@ -40,11 +40,11 @@ Utf8 : List U8
 ## expect parse_str(color, "green") == Ok(Green)
 ## ```
 parse_str : Parser Utf8 a, Str -> Result a [ParsingFailure Str, ParsingIncomplete Str]
-parse_str = \parser, input ->
+parse_str = |parser, input|
     parser
     |> parse_utf8(str_to_raw(input))
     |> Result.map_err(
-        \problem ->
+        |problem|
             when problem is
                 ParsingFailure(msg) -> ParsingFailure(msg)
                 ParsingIncomplete(leftover_raw) -> ParsingIncomplete(str_from_utf8(leftover_raw)),
@@ -60,15 +60,15 @@ parse_str = \parser, input ->
 ## at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
 ##
 ## expect parse_str(at_sign, "@") == Ok(AtSign)
-## expect parse_str_partial(at_sign, "@") |> Result.map(.val) == Ok(AtSign)
+## expect parse_str_partial(at_sign, "@") |> Result.map_ok(.val) == Ok(AtSign)
 ## expect parse_str_partial(at_sign, "$") |> Result.is_err
 ## ```
 parse_str_partial : Parser Utf8 a, Str -> Parser.ParseResult Str a
-parse_str_partial = \parser, input ->
+parse_str_partial = |parser, input|
     parser
     |> parse_utf8_partial(str_to_raw(input))
-    |> Result.map(
-        \{ val: val, input: rest_raw } ->
+    |> Result.map_ok(
+        |{ val: val, input: rest_raw }|
             { val: val, input: str_from_utf8(rest_raw) },
     )
 
@@ -79,12 +79,12 @@ parse_str_partial = \parser, input ->
 ## - If the parser succeeds but does not consume the full string, returns `Err (ParsingIncomplete (List U8))`
 ##
 parse_utf8 : Parser Utf8 a, Utf8 -> Result a [ParsingFailure Str, ParsingIncomplete Utf8]
-parse_utf8 = \parser, input ->
-    Parser.parse(parser, input, \leftover -> List.len(leftover) == 0)
+parse_utf8 = |parser, input|
+    Parser.parse(parser, input, |leftover| List.len(leftover) == 0)
 
 ## Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.
 parse_utf8_partial : Parser Utf8 a, Utf8 -> Parser.ParseResult Utf8 a
-parse_utf8_partial = \parser, input ->
+parse_utf8_partial = |parser, input|
     Parser.parse_partial(parser, input)
 
 ## ```roc
@@ -95,9 +95,9 @@ parse_utf8_partial = \parser, input ->
 ## expect parse_str(codeunit_satisfies(is_digit), "*") |> Result.is_err
 ## ```
 codeunit_satisfies : (U8 -> Bool) -> Parser Utf8 U8
-codeunit_satisfies = \check ->
+codeunit_satisfies = |check|
     Parser.build_primitive_parser(
-        \input ->
+        |input|
             { before: start, others: input_rest } = List.split_at(input, 1)
 
             when List.get(start, 0) is
@@ -122,9 +122,9 @@ codeunit_satisfies = \check ->
 ## expect Result.is_err(parse_str_partial(at_sign, "$"))
 ## ```
 codeunit : U8 -> Parser Utf8 U8
-codeunit = \expected_code_unit ->
+codeunit = |expected_code_unit|
     Parser.build_primitive_parser(
-        \input ->
+        |input|
             when input is
                 [] ->
                     Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but input was empty."))
@@ -138,11 +138,11 @@ codeunit = \expected_code_unit ->
 
 ## Parse an extact sequence of utf8
 utf8 : List U8 -> Parser Utf8 (List U8)
-utf8 = \expected_string ->
+utf8 = |expected_string|
     # Implemented manually instead of a sequence of codeunits
     # because of efficiency and better error messages
     Parser.build_primitive_parser(
-        \input ->
+        |input|
             { before: start, others: input_rest } = List.split_at(input, List.len(expected_string))
 
             if start == expected_string then
@@ -161,10 +161,10 @@ utf8 = \expected_string ->
 ## expect Result.is_err(parse_str(string("Foo"), "Bar"))
 ## ```
 string : Str -> Parser Utf8 Str
-string = \expected_string ->
+string = |expected_string|
     str_to_raw(expected_string)
     |> utf8
-    |> Parser.map(\_val -> expected_string)
+    |> Parser.map(|_val| expected_string)
 
 ## Matches any [U8] codeunit
 ## ```roc
@@ -172,7 +172,7 @@ string = \expected_string ->
 ## expect parse_str(any_codeunit, "$") == Ok('$')
 ## ```
 any_codeunit : Parser Utf8 U8
-any_codeunit = codeunit_satisfies(\_ -> Bool.true)
+any_codeunit = codeunit_satisfies(|_| Bool.true)
 
 expect parse_str(any_codeunit, "a") == Ok('a')
 expect parse_str(any_codeunit, "\$") == Ok(36)
@@ -184,7 +184,7 @@ expect parse_str(any_codeunit, "\$") == Ok(36)
 ##     Parser.parse(any_thing, bytes, List.is_empty) == Ok(bytes)
 ## ```
 any_thing : Parser Utf8 Utf8
-any_thing = Parser.build_primitive_parser(\input -> Ok({ val: input, input: [] }))
+any_thing = Parser.build_primitive_parser(|input| Ok({ val: input, input: [] }))
 
 expect
     bytes = Str.to_utf8("consumes all the input")
@@ -194,7 +194,7 @@ expect
 # as long as it is valid UTF8.
 any_string : Parser Utf8 Str
 any_string = Parser.build_primitive_parser(
-    \field_utf8ing ->
+    |field_utf8ing|
         when Str.from_utf8(field_utf8ing) is
             Ok(string_val) ->
                 Ok({ val: string_val, input: [] })
@@ -210,12 +210,12 @@ any_string = Parser.build_primitive_parser(
 digit : Parser Utf8 U64
 digit =
     Parser.build_primitive_parser(
-        \input ->
+        |input|
             when input is
                 [] ->
                     Err(ParsingFailure("Expected a digit from 0-9 but input was empty."))
 
-                [first, .. as rest] if first >= '0' && first <= '9' ->
+                [first, .. as rest] if first >= '0' and first <= '9' ->
                     Ok({ val: Num.to_u64((first - '0')), input: rest })
 
                 _ ->
@@ -230,7 +230,7 @@ digit =
 digits : Parser Utf8 U64
 digits =
     Parser.one_or_more(digit)
-    |> Parser.map(\ds -> List.walk(ds, 0, \sum, d -> sum * 10 + d))
+    |> Parser.map(|ds| List.walk(ds, 0, |sum, d| sum * 10 + d))
 
 ## Try a bunch of different parsers.
 ##
@@ -247,13 +247,13 @@ digits =
 ## expect Result.is_err(parse_str(bool_parser, "not a bool"))
 ## ```
 one_of : List (Parser Utf8 a) -> Parser Utf8 a
-one_of = \parsers ->
+one_of = |parsers|
     Parser.build_primitive_parser(
-        \input ->
+        |input|
             List.walk_until(
                 parsers,
                 Err(ParsingFailure("(no possibilities)")),
-                \_, parser ->
+                |_, parser|
                     when parse_utf8_partial(parser, input) is
                         Ok(val) ->
                             Break(Ok(val))
@@ -264,21 +264,21 @@ one_of = \parsers ->
     )
 
 str_from_utf8 : Utf8 -> Str
-str_from_utf8 = \raw_str ->
+str_from_utf8 = |raw_str|
     raw_str
     |> Str.from_utf8
     |> Result.with_default("Unexpected problem while turning a List U8 (that was originally a Str) back into a Str. This should never happen!")
 
 str_to_raw : Str -> Utf8
-str_to_raw = \str ->
+str_to_raw = |str|
     str |> Str.to_utf8
 
 str_from_codeunit : U8 -> Str
-str_from_codeunit = \cu ->
+str_from_codeunit = |cu|
     str_from_utf8([cu])
 
 str_from_ascii : U8 -> Str
-str_from_ascii = \ascii_num ->
+str_from_ascii = |ascii_num|
     when Str.from_utf8([ascii_num]) is
         Ok(answer) -> answer
         Err(_) -> crash("The number ${Num.to_str(ascii_num)} is not a valid ASCII constant!")
@@ -315,7 +315,7 @@ expect parse_str(string("Foo"), "Bar") |> Result.is_err
 
 ignore_text : Parser Utf8 U64
 ignore_text =
-    Parser.const(\d -> d)
+    Parser.const(|d| d)
     |> Parser.skip(Parser.chomp_until(':'))
     |> Parser.skip(codeunit(':'))
     |> Parser.keep(digits)
@@ -324,14 +324,14 @@ expect parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
 
 ignore_numbers : Parser Utf8 Str
 ignore_numbers =
-    Parser.const(\str -> str)
-    |> Parser.skip(Parser.chomp_while(\b -> b >= '0' && b <= '9'))
+    Parser.const(|str| str)
+    |> Parser.skip(Parser.chomp_while(|b| b >= '0' and b <= '9'))
     |> Parser.keep(string("TEXT"))
 
 expect parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
 
 is_digit : U8 -> Bool
-is_digit = \b -> b >= '0' && b <= '9'
+is_digit = |b| b >= '0' and b <= '9'
 
 expect parse_str(codeunit_satisfies(is_digit), "0") == Ok('0')
 expect parse_str(codeunit_satisfies(is_digit), "*") |> Result.is_err
@@ -340,7 +340,7 @@ at_sign : Parser Utf8 [AtSign]
 at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
 
 expect parse_str(at_sign, "@") == Ok(AtSign)
-expect parse_str_partial(at_sign, "@") |> Result.map(.val) == Ok(AtSign)
+expect parse_str_partial(at_sign, "@") |> Result.map_ok(.val) == Ok(AtSign)
 expect parse_str_partial(at_sign, "\$") |> Result.is_err
 
 Requirement : [Green U64, Red U64, Blue U64]
@@ -348,7 +348,7 @@ RequirementSet : List Requirement
 Game : { id : U64, requirements : List RequirementSet }
 
 parse_game : Str -> Result Game [ParsingError]
-parse_game = \s ->
+parse_game = |s|
     green = Parser.const(Green) |> Parser.keep(digits) |> Parser.skip(string(" green"))
     red = Parser.const(Red) |> Parser.keep(digits) |> Parser.skip(string(" red"))
     blue = Parser.const(Blue) |> Parser.keep(digits) |> Parser.skip(string(" blue"))
@@ -361,7 +361,7 @@ parse_game = \s ->
 
     game : Parser _ Game
     game =
-        Parser.const(\id -> \r -> { id, requirements: r })
+        Parser.const(|id| |r| { id, requirements: r })
         |> Parser.skip(string("Game "))
         |> Parser.keep(digits)
         |> Parser.skip(string(": "))
@@ -393,7 +393,7 @@ expect parse_str(digits, "not a digit") |> Result.is_err
 bool_parser : Parser Utf8 Bool
 bool_parser =
     one_of([string("true"), string("false")])
-    |> Parser.map(\x -> if x == "true" then Bool.true else Bool.false)
+    |> Parser.map(|x| if x == "true" then Bool.true else Bool.false)
 
 expect parse_str(bool_parser, "true") == Ok(Bool.true)
 expect parse_str(bool_parser, "false") == Ok(Bool.false)

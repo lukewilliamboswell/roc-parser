@@ -8,19 +8,19 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main! = \_args ->
+main! = |_args|
 
     result : Result (List (List U64)) [ParsingFailure Str, ParsingIncomplete Str]
     result = String.parse_str(Parser.many(multiple_numbers), "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n")
 
-    when result |> Result.map(largest) is
+    when result |> Result.map_ok(largest) is
         Ok(count) -> Stdout.line!("The lagest sum is ${Num.to_str(count)}")
         Err(_) -> Stderr.line!("Failed while parsing input")
 
 # Parse a number followed by a newline
 single_number : Parser.Parser (List U8) U64
 single_number =
-    Parser.const(\n -> n)
+    Parser.const(|n| n)
     |> Parser.keep(String.digits)
     |> Parser.skip(String.string("\n"))
 
@@ -31,7 +31,7 @@ expect
 # Parse a series of numbers followed by a newline
 multiple_numbers : Parser.Parser (List U8) (List U64)
 multiple_numbers =
-    Parser.const(\ns -> ns)
+    Parser.const(|ns| ns)
     |> Parser.keep(Parser.many(single_number))
     |> Parser.skip(String.string("\n"))
 
@@ -41,7 +41,7 @@ expect
 
 # Sum up the lists and return the largest sum
 largest : List (List U64) -> U64
-largest = \numbers ->
+largest = |numbers|
     numbers
     |> List.map(List.sum)
     |> List.sort_desc

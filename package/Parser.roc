@@ -95,7 +95,7 @@ ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
 
 ## Write a custom parser without using provided combintors.
 build_primitive_parser : (input -> ParseResult input a) -> Parser input a
-build_primitive_parser = \fun -> @Parser(fun)
+build_primitive_parser = |fun| @Parser(fun)
 
 ## Most general way of running a parser.
 ##
@@ -109,7 +109,7 @@ build_primitive_parser = \fun -> @Parser(fun)
 ##
 ## This is mostly useful when creating your own internal parsing building blocks.
 parse_partial : Parser input a, input -> ParseResult input a
-parse_partial = \@Parser(parser), input ->
+parse_partial = |@Parser(parser), input|
     parser(input)
 
 ## Runs a parser on the given input, expecting it to fully consume the input
@@ -120,7 +120,7 @@ parse_partial = \@Parser(parser), input ->
 ## For most input types, a parsing run that leaves some unparsed input behind
 ## should be considered an error.
 parse : Parser input a, input, (input -> Bool) -> Result a [ParsingFailure Str, ParsingIncomplete input]
-parse = \parser, input, is_parsing_completed ->
+parse = |parser, input, is_parsing_completed|
     when parse_partial(parser, input) is
         Ok({ val: val, input: leftover }) ->
             if is_parsing_completed(leftover) then
@@ -137,8 +137,8 @@ parse = \parser, input, is_parsing_completed ->
 ## This is mostly useful as a 'base case' if all other parsers
 ## in a `oneOf` or `alt` have failed, to provide some more descriptive error message.
 fail : Str -> Parser * *
-fail = \msg ->
-    build_primitive_parser(\_input -> Err(ParsingFailure(msg)))
+fail = |msg|
+    build_primitive_parser(|_input| Err(ParsingFailure(msg)))
 
 ## Parser that will always produce the given `a`, without looking at the actual input.
 ## This is useful as a basic building block, especially in combination with
@@ -152,17 +152,17 @@ fail = \msg ->
 ## expect parse_str(parse_u32, "123") == Ok(123u32)
 ## ```
 const : a -> Parser * a
-const = \val ->
+const = |val|
     build_primitive_parser(
-        \input ->
+        |input|
             Ok({ val: val, input: input }),
     )
 
 ## Try the `first` parser and (only) if it fails, try the `second` parser as fallback.
 alt : Parser input a, Parser input a -> Parser input a
-alt = \first, second ->
+alt = |first, second|
     build_primitive_parser(
-        \input ->
+        |input|
             when parse_partial(first, input) is
                 Ok({ val: val, input: rest }) -> Ok({ val: val, input: rest })
                 Err(ParsingFailure(first_err)) ->
@@ -196,12 +196,12 @@ alt = \first, second ->
 ## you'll need to write `\x -> \y -> \z -> ...`.
 ## This is because the parameters of the function will be applied one by one as parsing continues.
 apply : Parser input (a -> b), Parser input a -> Parser input b
-apply = \fun_parser, val_parser ->
-    combined = \input ->
+apply = |fun_parser, val_parser|
+    combined = |input|
         { val: fun_val, input: rest } = parse_partial(fun_parser, input)?
         parse_partial(val_parser, rest)
-        |> Result.map(
-            \{ val: val, input: rest2 } ->
+        |> Result.map_ok(
+            |{ val: val, input: rest2 }|
                 { val: fun_val(val), input: rest2 },
         )
 
@@ -217,8 +217,8 @@ apply = \fun_parser, val_parser ->
 # than using `const` with `map` and/or `apply`.
 # Consider using those functions first.
 and_then : Parser input a, (a -> Parser input b) -> Parser input b
-and_then = \first_parser, build_next_parser ->
-    fun = \input ->
+and_then = |first_parser, build_next_parser|
+    fun = |input|
         { val: first_val, input: rest } = parse_partial(first_parser, input)?
         next_parser = build_next_parser(first_val)
 
@@ -241,21 +241,21 @@ and_then = \first_parser, build_next_parser ->
 ## expect parse_str(color, "green") == Ok(Green)
 ## ```
 one_of : List (Parser input a) -> Parser input a
-one_of = \parsers ->
-    List.walk_backwards(parsers, fail("oneOf: The list of parsers was empty"), \later_parser, earlier_parser -> alt(earlier_parser, later_parser))
+one_of = |parsers|
+    List.walk_backwards(parsers, fail("oneOf: The list of parsers was empty"), |later_parser, earlier_parser| alt(earlier_parser, later_parser))
 
 ## Transforms the result of parsing into something else,
 ## using the given transformation function.
 map : Parser input a, (a -> b) -> Parser input b
-map = \simple_parser, transform ->
+map = |simple_parser, transform|
     const(transform)
     |> apply(simple_parser)
 
 ## Transforms the result of parsing into something else,
 ## using the given two-parameter transformation function.
 map2 : Parser input a, Parser input b, (a, b -> c) -> Parser input c
-map2 = \parser_a, parser_b, transform ->
-    const(\a -> \b -> transform(a, b))
+map2 = |parser_a, parser_b, transform|
+    const(|a| |b| transform(a, b))
     |> apply(parser_a)
     |> apply(parser_b)
 
@@ -265,8 +265,8 @@ map2 = \parser_a, parser_b, transform ->
 ## If you need transformations with more inputs,
 ## take a look at `apply`.
 map3 : Parser input a, Parser input b, Parser input c, (a, b, c -> d) -> Parser input d
-map3 = \parser_a, parser_b, parser_c, transform ->
-    const(\a -> \b -> \c -> transform(a, b, c))
+map3 = |parser_a, parser_b, parser_c, transform|
+    const(|a| |b| |c| transform(a, b, c))
     |> apply(parser_a)
     |> apply(parser_b)
     |> apply(parser_c)
@@ -290,9 +290,9 @@ map3 = \parser_a, parser_b, parser_c, transform ->
 ##     |> flatten
 ## ```
 flatten : Parser input (Result a Str) -> Parser input a
-flatten = \parser ->
+flatten = |parser|
     build_primitive_parser(
-        \input ->
+        |input|
             result = parse_partial(parser, input)
 
             when result is
@@ -309,16 +309,16 @@ flatten = \parser ->
 ## (Resulting in a compiler error.)
 ##
 lazy : ({} -> Parser input a) -> Parser input a
-lazy = \thunk ->
+lazy = |thunk|
     const({})
     |> and_then(thunk)
 
 maybe : Parser input a -> Parser input (Result a [Nothing])
-maybe = \parser ->
-    alt((parser |> map(\val -> Ok(val))), const(Err(Nothing)))
+maybe = |parser|
+    alt((parser |> map(|val| Ok(val))), const(Err(Nothing)))
 
 many_impl : Parser input a, List a, input -> ParseResult input (List a)
-many_impl = \parser, vals, input ->
+many_impl = |parser, vals, input|
     result = parse_partial(parser, input)
 
     when result is
@@ -331,9 +331,9 @@ many_impl = \parser, vals, input ->
 ## A parser which runs the element parser *zero* or more times on the input,
 ## returning a list containing all the parsed elements.
 many : Parser input a -> Parser input (List a)
-many = \parser ->
+many = |parser|
     build_primitive_parser(
-        \input ->
+        |input|
             many_impl(parser, [], input),
     )
 
@@ -342,8 +342,8 @@ many = \parser ->
 ##
 ## Also see [Parser.many].
 one_or_more : Parser input a -> Parser input (List a)
-one_or_more = \parser ->
-    const(\val -> \vals -> List.prepend(vals, val))
+one_or_more = |parser|
+    const(|val| |vals| List.prepend(vals, val))
     |> apply(parser)
     |> apply(many(parser))
 
@@ -356,20 +356,20 @@ one_or_more = \parser ->
 ## between_braces = \parser -> parser |> between(scalar('['), scalar(']'))
 ## ```
 between : Parser input a, Parser input open, Parser input close -> Parser input a
-between = \parser, open, close ->
-    const(\_ -> \val -> \_ -> val)
+between = |parser, open, close|
+    const(|_| |val| |_| val)
     |> apply(open)
     |> apply(parser)
     |> apply(close)
 
 sep_by1 : Parser input a, Parser input sep -> Parser input (List a)
-sep_by1 = \parser, separator ->
+sep_by1 = |parser, separator|
     parser_followed_by_sep =
-        const(\_ -> \val -> val)
+        const(|_| |val| val)
         |> apply(separator)
         |> apply(parser)
 
-    const(\val -> \vals -> List.prepend(vals, val))
+    const(|val| |vals| List.prepend(vals, val))
     |> apply(parser)
     |> apply(many(parser_followed_by_sep))
 
@@ -381,17 +381,17 @@ sep_by1 = \parser, separator ->
 ## expect parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 ## ```
 sep_by : Parser input a, Parser input sep -> Parser input (List a)
-sep_by = \parser, separator ->
+sep_by = |parser, separator|
     alt(sep_by1(parser, separator), const([]))
 
 ignore : Parser input a -> Parser input {}
-ignore = \parser ->
-    map(parser, \_ -> {})
+ignore = |parser|
+    map(parser, |_| {})
 
 keep : Parser input (a -> b), Parser input a -> Parser input b
-keep = \fun_parser, val_parser ->
+keep = |fun_parser, val_parser|
     build_primitive_parser(
-        \input ->
+        |input|
             when parse_partial(fun_parser, input) is
                 Err(msg) -> Err(msg)
                 Ok({ val: fun_val, input: rest }) ->
@@ -402,9 +402,9 @@ keep = \fun_parser, val_parser ->
     )
 
 skip : Parser input a, Parser input * -> Parser input a
-skip = \fun_parser, skip_parser ->
+skip = |fun_parser, skip_parser|
     build_primitive_parser(
-        \input ->
+        |input|
             when parse_partial(fun_parser, input) is
                 Err(msg) -> Err(msg)
                 Ok({ val: fun_val, input: rest }) ->
@@ -445,10 +445,10 @@ skip = \fun_parser, skip_parser ->
 ##
 ## Also see [Parser.chomp_while].
 chomp_until : a -> Parser (List a) (List a) where a implements Eq
-chomp_until = \char ->
+chomp_until = |char|
     build_primitive_parser(
-        \input ->
-            when List.find_first_index(input, \x -> Bool.is_eq(x, char)) is
+        |input|
+            when List.find_first_index(input, |x| Bool.is_eq(x, char)) is
                 Ok(index) ->
                     val = List.sublist(input, { start: 0, len: index })
                     Ok({ val, input: List.drop_first(input, index) })
@@ -499,13 +499,13 @@ expect
 ##
 ## Also see [Parser.chomp_until].
 chomp_while : (a -> Bool) -> Parser (List a) (List a) where a implements Eq
-chomp_while = \check ->
+chomp_while = |check|
     build_primitive_parser(
-        \input ->
+        |input|
             index = List.walk_until(
                 input,
                 0,
-                \i, elem ->
+                |i, elem|
                     if check(elem) then
                         Continue((i + 1))
                     else
@@ -525,6 +525,6 @@ chomp_while = \check ->
 
 expect
     input = [97u8, 's', '\n', 'd', 'f']
-    not_eol = \x -> Bool.is_not_eq(x, '\n')
+    not_eol = |x| Bool.is_not_eq(x, '\n')
     result = parse_partial(chomp_while(not_eol), input)
     result == Ok({ val: [97u8, 's'], input: ['\n', 'd', 'f'] })

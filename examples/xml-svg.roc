@@ -33,12 +33,12 @@ expected_html =
     ]
     """
 
-main! = \_args ->
+main! = |_args|
 
     svg_converted_to_html =
-        Result.map(
+        Result.map_ok(
             String.parse_str(Xml.xml_parser, svg_input),
-            \xml -> html_to_roc_dsl(svg_to_html(xml.root), "", 0),
+            |xml| html_to_roc_dsl(svg_to_html(xml.root), "", 0),
         )?
 
     if svg_converted_to_html == expected_html then
@@ -47,7 +47,7 @@ main! = \_args ->
         Stdout.line!("Did not match expected HTML DSL")
 
 svg_to_html : Xml.Node -> Html.Node
-svg_to_html = \xml ->
+svg_to_html = |xml|
     when xml is
         Element(name, attrs, children) ->
             (Html.element(name))(
@@ -58,13 +58,13 @@ svg_to_html = \xml ->
         Text(text) -> Html.text(text)
 
 xml_to_html_attribute : { name : Str, value : Str } -> Attribute.Attribute
-xml_to_html_attribute = \{ name, value } -> (Attribute.attribute(name))(value)
+xml_to_html_attribute = |{ name, value }| (Attribute.attribute(name))(value)
 
 html_to_roc_dsl : Html.Node, Str, U8 -> Str
-html_to_roc_dsl = \html, buf, depth ->
+html_to_roc_dsl = |html, buf, depth|
 
-    map_child = \child -> html_to_roc_dsl(child, "    ${depth_to_ident(depth)}", (depth + 1))
-    map_attr = \Attribute(name, value) -> "    ${depth_to_ident(depth)}${name} \"${value}\""
+    map_child = |child| html_to_roc_dsl(child, "    ${depth_to_ident(depth)}", (depth + 1))
+    map_attr = |Attribute(name, value)| "    ${depth_to_ident(depth)}${name} \"${value}\""
 
     when html is
         Element(name, _, attrs, children) ->
@@ -123,9 +123,9 @@ expect
     ]
     """
 
-depth_to_ident = \depth ->
+depth_to_ident = |depth|
     List.range({ start: At(0), end: Before(depth) })
-    |> List.map(\_ -> "    ")
+    |> List.map(|_| "    ")
     |> Str.join_with("")
 
 expect depth_to_ident(0) == ""

@@ -92,8 +92,8 @@ expect
 xml_parser : Parser Utf8 Xml
 xml_parser =
     const(
-        \xml_declaration ->
-            \root -> {
+        |xml_declaration|
+            |root| {
                 xml_declaration,
                 root,
             },
@@ -105,7 +105,7 @@ xml_parser =
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-prolog
 p_prolog : Parser Utf8 [Given XmlDeclaration, Missing]
 p_prolog =
-    const(\xml_declaration -> \_misc -> xml_declaration)
+    const(|xml_declaration| |_misc| xml_declaration)
     |> keep((p_xml_declaration |> map(Given) |> maybe_with_default(Missing)))
     |> keep(p_many_misc)
 
@@ -114,8 +114,8 @@ p_xml_declaration : Parser Utf8 XmlDeclaration
 p_xml_declaration =
     (
         const(
-            \version ->
-                \encoding -> {
+            |version|
+                |encoding| {
                     version,
                     encoding,
                 },
@@ -127,7 +127,7 @@ p_xml_declaration =
     |> keep(
         (
             (
-                const(\encoding -> encoding)
+                const(|encoding| encoding)
                 |> skip(one_or_more(p_whitespace))
                 |> keep(p_encoding_declaration)
                 |> map(Given)
@@ -166,7 +166,7 @@ p_version =
 p_version_number : Parser Utf8 XmlVersion
 p_version_number =
     const(
-        \after_dot ->
+        |after_dot|
             @XmlVersion(
                 {
                     after_dot: after_dot |> Num.to_u8,
@@ -186,11 +186,11 @@ p_encoding_declaration =
 p_encoding_name : Parser Utf8 XmlEncoding
 p_encoding_name =
     const(
-        \first_char ->
-            \rest ->
+        |first_char|
+            |rest|
                 combine_to_str(first_char, rest)
-                |> Result.map(
-                    \encoding_name ->
+                |> Result.map_ok(
+                    |encoding_name|
 
                         when encoding_name is
                             "utf-8" -> Utf8Encoding
@@ -200,12 +200,12 @@ p_encoding_name =
     |> keep(codeunit_satisfies(is_alphabetical))
     |> keep(
         chomp_while(
-            \c ->
+            |c|
                 is_alphabetical(c)
-                || is_digit(c)
-                || (c == '-')
-                || (c == '.')
-                || (c == '_'),
+                or is_digit(c)
+                or (c == '-')
+                or (c == '.')
+                or (c == '_'),
         ),
     )
     |> flatten
@@ -219,13 +219,13 @@ expect
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-element
 p_element : Parser Utf8 Node
 p_element =
-    const(\name -> \arguments -> \contents -> Element(name, arguments, contents))
+    const(|name| |arguments| |contents| Element(name, arguments, contents))
     |> skip(string("<"))
     |> keep(p_name)
     |> keep(
         many(
             (
-                const(\attribute -> attribute)
+                const(|attribute| attribute)
                 |> skip(many(p_whitespace))
                 |> keep(p_element_attribute)
             ),
@@ -235,11 +235,11 @@ p_element =
     |> keep(
         (
             empty_tag =
-                string("/>") |> map(\_ -> [])
+                string("/>") |> map(|_| [])
             tag_with_content =
-                const(\contents -> contents)
+                const(|contents| contents)
                 |> skip(string(">"))
-                |> keep(lazy(\_ -> p_element_contents))
+                |> keep(lazy(|_| p_element_contents))
                 |> skip(p_end_tag)
             # Due to https://github.com/lukewilliamboswell/roc-parser/issues/13 we cannot use `oneOf`, since we are using oneOf in `pElementContents`.
             alt(
@@ -448,8 +448,8 @@ expect
 p_element_attribute : Parser Utf8 Attribute
 p_element_attribute =
     const(
-        \name ->
-            \value -> {
+        |name|
+            |value| {
                 name,
                 value,
             },
@@ -467,9 +467,9 @@ p_element_attribute =
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-AttValue
 p_attribute_value : U8 -> Parser Utf8 Str
-p_attribute_value = \quote ->
-    chomp_while(\c -> c != quote)
-    |> map(\chomped -> str_from_utf8(chomped))
+p_attribute_value = |quote|
+    chomp_while(|c| c != quote)
+    |> map(|chomped| str_from_utf8(chomped))
     |> flatten
 # TODO: Implement reference values
 
@@ -488,7 +488,7 @@ p_element_contents =
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-ETag
 p_end_tag : Parser Utf8 Str
 p_end_tag =
-    const(\name -> name)
+    const(|name| name)
     |> skip(string("</"))
     |> keep(p_name)
     |> skip(many(p_whitespace))
@@ -497,7 +497,7 @@ p_end_tag =
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CharData
 p_character_data : Parser Utf8 Node
 p_character_data =
-    const(\first -> \chars -> combine_to_str(first, chars))
+    const(|first| |chars| combine_to_str(first, chars))
     |> keep(codeunit_satisfies(is_character_data))
     |> keep(chomp_while(is_character_data))
     |> flatten
@@ -505,15 +505,15 @@ p_character_data =
 # TODO: Reject CDATA section close delimiter
 
 is_character_data : U8 -> Bool
-is_character_data = \c ->
+is_character_data = |c|
     (c != '<')
-    && (c != '&')
+    and (c != '&')
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CDSect
 p_cdata_section : Parser Utf8 Node
 p_cdata_section =
     (
-        const(\text -> text)
+        const(|text| text)
         |> skip(string("<![CDATA["))
         |> keep(p_cdata_section_content)
     )
@@ -521,14 +521,14 @@ p_cdata_section =
 
 p_cdata_section_content : Parser Utf8 Str
 p_cdata_section_content =
-    const(\first -> \rest -> Str.concat(first, rest))
+    const(|first| |rest| Str.concat(first, rest))
     |> keep((chomp_until(']') |> map(str_from_utf8) |> flatten))
     |> skip(string("]"))
     |> keep(
         one_of(
             [
-                string("]>") |> map(\_ -> ""),
-                lazy(\_ -> p_cdata_section_content |> map(\rest -> Str.concat("]", rest))),
+                string("]>") |> map(|_| ""),
+                lazy(|_| p_cdata_section_content |> map(|rest| Str.concat("]", rest))),
             ],
         ),
     )
@@ -536,8 +536,8 @@ p_cdata_section_content =
 p_name : Parser Utf8 Str
 p_name =
     const(
-        \first_char ->
-            \rest ->
+        |first_char|
+            |rest|
                 combine_to_str(first_char, rest),
     )
     |> keep(codeunit_satisfies(is_name_start_char))
@@ -545,28 +545,28 @@ p_name =
     |> flatten
 
 is_name_start_char : U8 -> Bool
-is_name_start_char = \c ->
+is_name_start_char = |c|
     is_alphabetical(c)
-    || (c == ':')
-    || (c == '_')
+    or (c == ':')
+    or (c == '_')
 # TODO: Implement missing character groups
 
 is_name_char : U8 -> Bool
-is_name_char = \c ->
+is_name_char = |c|
     is_name_start_char(c)
-    || (c == '-')
-    || (c == '.')
+    or (c == '-')
+    or (c == '.')
 
 combine_to_str : U8, List U8 -> Result Str Str
-combine_to_str = \first, rest ->
+combine_to_str = |first, rest|
     rest
     |> List.prepend(first)
     |> str_from_utf8
 
 str_from_utf8 : List U8 -> Result Str Str
-str_from_utf8 = \chars ->
+str_from_utf8 = |chars|
     Str.from_utf8(chars)
-    |> Result.map_err(\_ -> "Error decoding UTF8")
+    |> Result.map_err(|_| "Error decoding UTF8")
 
 XmlMisc : List [Comment, ProcessingInstruction]
 
@@ -574,11 +574,11 @@ p_many_misc : Parser Utf8 XmlMisc
 p_many_misc =
     # TODO: Implement comment and processing instructions
     many(p_whitespace)
-    |> map(\_ -> [])
+    |> map(|_| [])
 
 p_attribute : Parser Utf8 output, Str -> Parser Utf8 output
-p_attribute = \parser, attribute_name ->
-    const(\result -> result)
+p_attribute = |parser, attribute_name|
+    const(|result| result)
     |> skip(string(attribute_name))
     |> skip(p_equal)
     |> keep(parser)
@@ -589,10 +589,10 @@ p_equal =
     many(p_whitespace)
     |> skip(string("="))
     |> skip(many(p_whitespace))
-    |> map(\strings -> strings |> Str.join_with(""))
+    |> map(|strings| strings |> Str.join_with(""))
 
 between_quotes : Parser Utf8 a -> Parser Utf8 a
-between_quotes = \parser ->
+between_quotes = |parser|
     one_of(
         [
             parser |> between(string("\""), string("\"")),
@@ -601,7 +601,7 @@ between_quotes = \parser ->
     )
 
 maybe_with_default : Parser input output, output -> Parser input output
-maybe_with_default = \parser, default ->
+maybe_with_default = |parser, default|
     alt(parser, const(default))
 
 p_whitespace : Parser Utf8 Str
@@ -616,13 +616,13 @@ p_whitespace =
     )
 
 is_alphabetical : U8 -> Bool
-is_alphabetical = \c ->
-    (c >= 'A' && c <= 'Z')
-    || (c >= 'a' && c <= 'z')
+is_alphabetical = |c|
+    (c >= 'A' and c <= 'Z')
+    or (c >= 'a' and c <= 'z')
 
 is_digit : U8 -> Bool
-is_digit = \c ->
-    c >= '0' && c <= '9'
+is_digit = |c|
+    c >= '0' and c <= '9'
 
 test_xml =
     """

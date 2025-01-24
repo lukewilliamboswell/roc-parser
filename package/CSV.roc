@@ -28,7 +28,7 @@ CSVField : String.Utf8
 
 ## Attempts to Parser.parse an `a` from a `Str` that is encoded in CSV format.
 parse_str : Parser CSVRecord a, Str -> Result (List a) [ParsingFailure Str, SyntaxError Str, ParsingIncomplete CSVRecord]
-parse_str = \csv_parser, input ->
+parse_str = |csv_parser, input|
     when parse_str_to_csv(input) is
         Err(ParsingIncomplete(rest)) ->
             rest_str = String.str_from_utf8(rest)
@@ -51,16 +51,16 @@ parse_str = \csv_parser, input ->
 
 ## Attempts to Parser.parse an `a` from a `CSV` datastructure (a list of lists of bytestring-fields).
 parse_csv : Parser CSVRecord a, CSV -> Result (List a) [ParsingFailure Str, ParsingIncomplete CSVRecord]
-parse_csv = \csv_parser, csv_data ->
+parse_csv = |csv_parser, csv_data|
     csv_data
-    |> List.map_with_index(\record_fields_list, index -> { record: record_fields_list, index: index })
+    |> List.map_with_index(|record_fields_list, index| { record: record_fields_list, index: index })
     |> List.walk_until(
         Ok([]),
-        \state, { record: record_fields_list, index: index } ->
+        |state, { record: record_fields_list, index: index }|
             when parse_csv_record(csv_parser, record_fields_list) is
                 Err(ParsingFailure(problem)) ->
                     index_str = Num.to_str((index + 1))
-                    record_str = record_fields_list |> List.map(String.str_from_utf8) |> List.map(\val -> "\"${val}\"") |> Str.join_with(", ")
+                    record_str = record_fields_list |> List.map(String.str_from_utf8) |> List.map(|val| "\"${val}\"") |> Str.join_with(", ")
                     problem_str = "${problem}\nWhile parsing record no. ${index_str}: `${record_str}`"
 
                     Break(Err(ParsingFailure(problem_str)))
@@ -70,7 +70,7 @@ parse_csv = \csv_parser, csv_data ->
 
                 Ok(val) ->
                     state
-                    |> Result.map(\vals -> List.append(vals, val))
+                    |> Result.map_ok(|vals| List.append(vals, val))
                     |> Continue,
     )
 
@@ -78,8 +78,8 @@ parse_csv = \csv_parser, csv_data ->
 ##
 ## This parser succeeds when all fields of the CSVRecord are consumed by the parser.
 parse_csv_record : Parser CSVRecord a, CSVRecord -> Result a [ParsingFailure Str, ParsingIncomplete CSVRecord]
-parse_csv_record = \csv_parser, record_fields_list ->
-    Parser.parse(csv_parser, record_fields_list, \leftover -> leftover == [])
+parse_csv_record = |csv_parser, record_fields_list|
+    Parser.parse(csv_parser, record_fields_list, |leftover| leftover == [])
 
 ## Wrapper function to combine a set of fields into your desired `a`
 ##
@@ -90,13 +90,13 @@ parse_csv_record = \csv_parser, record_fields_list ->
 ## |> field(u64)
 ## ```
 record : a -> Parser CSVRecord a
-record = Parser.const
+record = \f -> Parser.const f
 
 ## Turns a parser for a `List U8` into a parser that parses part of a `CSVRecord`.
 field : Parser String.Utf8 a -> Parser CSVRecord a
-field = \field_parser ->
+field = |field_parser|
     Parser.build_primitive_parser(
-        \fields_list ->
+        |fields_list|
             when List.get(fields_list, 0) is
                 Err(OutOfBounds) ->
                     Err(ParsingFailure("expected another CSV field but there are no more fields in this record"))
@@ -127,7 +127,7 @@ u64 : Parser CSVField U64
 u64 =
     string
     |> Parser.map(
-        \val ->
+        |val|
             when Str.to_u64(val) is
                 Ok(num) -> Ok(num)
                 Err(_) -> Err("${val} is not a U64."),
@@ -139,7 +139,7 @@ f64 : Parser CSVField F64
 f64 =
     string
     |> Parser.map(
-        \val ->
+        |val|
             when Str.to_f64(val) is
                 Ok(num) -> Ok(num)
                 Err(_) -> Err("${val} is not a F64."),
@@ -148,13 +148,13 @@ f64 =
 
 ## Attempts to Parser.parse a Str into the internal `CSV` datastructure (A list of lists of bytestring-fields).
 parse_str_to_csv : Str -> Result CSV [ParsingFailure Str, ParsingIncomplete String.Utf8]
-parse_str_to_csv = \input ->
-    Parser.parse(file, Str.to_utf8(input), \leftover -> leftover == [])
+parse_str_to_csv = |input|
+    Parser.parse(file, Str.to_utf8(input), |leftover| leftover == [])
 
 ## Attempts to Parser.parse a Str into the internal `CSVRecord` datastructure (A list of bytestring-fields).
 parse_str_to_csv_record : Str -> Result CSVRecord [ParsingFailure Str, ParsingIncomplete String.Utf8]
-parse_str_to_csv_record = \input ->
-    Parser.parse(csv_record, Str.to_utf8(input), \leftover -> leftover == [])
+parse_str_to_csv_record = |input|
+    Parser.parse(csv_record, Str.to_utf8(input), |leftover| leftover == [])
 
 # The following are parsers to turn strings into CSV structures
 file : Parser String.Utf8 CSV
@@ -173,7 +173,7 @@ escaped_contents : Parser String.Utf8 (List U8)
 escaped_contents =
     String.one_of(
         [
-            twodquotes |> Parser.map(\_ -> '"'),
+            twodquotes |> Parser.map(|_| '"'),
             comma,
             cr,
             lf,
@@ -194,4 +194,4 @@ end_of_line = Parser.alt(Parser.ignore(crlf), Parser.ignore(lf))
 cr = String.codeunit('\r')
 lf = String.codeunit('\n')
 crlf = String.string("\r\n")
-textdata = String.codeunit_satisfies(\x -> (x >= 32 && x <= 33) || (x >= 35 && x <= 43) || (x >= 45 && x <= 126)) # Any printable char except " (34) and , (44)
+textdata = String.codeunit_satisfies(|x| (x >= 32 and x <= 33) or (x >= 35 and x <= 43) or (x >= 45 and x <= 126)) # Any printable char except " (34) and , (44)
