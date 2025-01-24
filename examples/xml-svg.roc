@@ -1,7 +1,8 @@
 app [main!] {
     cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/bi5zubJ-_Hva9vxxPq4kNx4WHX6oFs8OP6Ad0tCYlrY.tar.br",
-    # TODO replace with release URL
-    html: "../../roc-html/src/main.roc",
+    # TODO replace with release URL after https://github.com/Hasnep/roc-html/pull/20 is merged
+    # and a new release is published
+    html: "https://github.com/lukewilliamboswell/roc-html/releases/download/testing0/cFRUcxD_hiFxkjG21muA4gIrPd9wePNkHY2FQoElXW4.tar.br",
     parser: "../package/main.roc",
 }
 
