@@ -1,0 +1,1082 @@
+# LLM Prompt for Documentation
+
+## Documentation
+
+### Parser
+
+#### Parser
+
+**Type Annotation**
+
+**Description**
+
+Opaque type for a parser that will try to parse an `a` from an `input`.
+
+As such, a parser can be considered a recipe for a function of the type
+```roc
+input -> Result {val: a, input: input} [ParsingFailure Str]
+```
+
+How a parser is _actually_ implemented internally is not important
+and this might change between versions;
+for instance to improve efficiency or error messages on parsing failures.
+
+#### ParseResult
+
+**Type Annotation**
+
+**Description**
+
+```roc
+ParseResult input a : Result { val : a, input : input } [ParsingFailure Str]
+```
+
+#### build_primitive_parser
+
+**Type Annotation**
+
+```roc
+(input -> ParseResult input a) -> Parser input a
+```
+
+**Description**
+
+Write a custom parser without using provided combintors.
+
+#### parse_partial
+
+**Type Annotation**
+
+```roc
+Parser input a, input -> ParseResult input a
+```
+
+**Description**
+
+Most general way of running a parser.
+
+Can be thought of as turning the recipe of a parser into its actual parsing function
+and running this function on the given input.
+
+Moat parsers consume part of `input` when they succeed. This allows you to string parsers
+together that run one after the other. The part of the input that the first
+parser did not consume, is used by the next parser.
+This is why a parser returns on success both the resulting value and the leftover part of the input.
+
+This is mostly useful when creating your own internal parsing building blocks.
+
+#### parse
+
+**Type Annotation**
+
+```roc
+
+    Parser input a, 
+    input, 
+    (input -> Bool)
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete input
+        ]
+```
+
+**Description**
+
+Runs a parser on the given input, expecting it to fully consume the input
+
+The `input -> Bool` parameter is used to check whether parsing has 'completed',
+i.e. how to determine if all of the input has been consumed.
+
+For most input types, a parsing run that leaves some unparsed input behind
+should be considered an error.
+
+#### fail
+
+**Type Annotation**
+
+```roc
+Str -> Parser * *
+```
+
+**Description**
+
+Parser that can never succeed, regardless of the given input.
+It will always fail with the given error message.
+
+This is mostly useful as a 'base case' if all other parsers
+in a `oneOf` or `alt` have failed, to provide some more descriptive error message.
+
+#### const
+
+**Type Annotation**
+
+```roc
+a -> Parser * a
+```
+
+**Description**
+
+Parser that will always produce the given `a`, without looking at the actual input.
+This is useful as a basic building block, especially in combination with
+`map` and `apply`.
+```roc
+parse_u32 : Parser (List U8) U32
+parse_u32 =
+    const(Num.to_u32)
+    |> keep(digits)
+
+expect parse_str(parse_u32, "123") == Ok(123u32)
+```
+
+#### alt
+
+**Type Annotation**
+
+```roc
+Parser input a, Parser input a -> Parser input a
+```
+
+**Description**
+
+Try the `first` parser and (only) if it fails, try the `second` parser as fallback.
+
+#### apply
+
+**Type Annotation**
+
+```roc
+Parser input (a -> b), Parser input a -> Parser input b
+```
+
+**Description**
+
+Runs a parser building a function, then a parser building a value,
+and finally returns the result of calling the function with the value.
+
+This is useful if you are building up a structure that requires more parameters
+than there are variants of `map`, `map2`, `map3` etc. for.
+
+For instance, the following two are the same:
+```roc
+const(\x, y, z -> Triple(x, y, z))
+|> map3(String.digits, String.digits, String.digits)
+
+const(\x -> \y -> \z -> Triple(x, y, z))
+|> apply(String.digits)
+|> apply(String.digits)
+|> apply(String.digits)
+```
+Indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.
+
+# Currying
+Be aware that when using `apply`, you need to explicitly 'curry' the parameters to the construction function.
+This means that instead of writing `\x, y, z -> ...`
+you'll need to write `\x -> \y -> \z -> ...`.
+This is because the parameters of the function will be applied one by one as parsing continues.
+
+#### one_of
+
+**Type Annotation**
+
+```roc
+List (Parser input a) -> Parser input a
+```
+
+**Description**
+
+Try a list of parsers in turn, until one of them succeeds.
+```roc
+color : Parser Utf8 [Red, Green, Blue]
+color =
+    one_of(
+        [
+            const(Red) |> skip(string("red")),
+            const(Green) |> skip(string("green")),
+            const(Blue) |> skip(string("blue")),
+        ],
+    )
+
+expect parse_str(color, "green") == Ok(Green)
+```
+
+#### map
+
+**Type Annotation**
+
+```roc
+Parser input a, (a -> b) -> Parser input b
+```
+
+**Description**
+
+Transforms the result of parsing into something else,
+using the given transformation function.
+
+#### map2
+
+**Type Annotation**
+
+```roc
+
+    Parser input a, 
+    Parser input b, 
+    (a, b -> c)
+    -> Parser input c
+```
+
+**Description**
+
+Transforms the result of parsing into something else,
+using the given two-parameter transformation function.
+
+#### map3
+
+**Type Annotation**
+
+```roc
+
+    Parser input a, 
+    Parser input b, 
+    Parser input c,     
+    (a, 
+    b, 
+    c
+    -> d)
+    -> Parser input d
+```
+
+**Description**
+
+Transforms the result of parsing into something else,
+using the given three-parameter transformation function.
+
+If you need transformations with more inputs,
+take a look at `apply`.
+
+#### flatten
+
+**Type Annotation**
+
+```roc
+Parser input (Result a Str) -> Parser input a
+```
+
+**Description**
+
+Removes a layer of `Result` from running the parser.
+
+Use this to map functions that return a result over the parser,
+where errors are turned into `ParsingFailure`s.
+
+```roc
+# Parse a number from a List U8
+u64 : Parser Utf8 U64
+u64 =
+    string
+    |> map(
+        \val ->
+            when Str.to_u64(val) is
+                Ok(num) -> Ok(num)
+                Err(_) -> Err("${val} is not a U64."),
+    )
+    |> flatten
+```
+
+#### lazy
+
+**Type Annotation**
+
+```roc
+({} -> Parser input a) -> Parser input a
+```
+
+**Description**
+
+Runs a parser lazily
+
+This is (only) useful when dealing with a recursive structure.
+For instance, consider a type `Comment : { message: String, responses: List Comment }`.
+Without `lazy`, you would ask the compiler to build an infinitely deep parser.
+(Resulting in a compiler error.)
+
+
+#### maybe
+
+**Type Annotation**
+
+```roc
+Parser input a -> Parser input (Result a [Nothing])
+```
+
+#### many
+
+**Type Annotation**
+
+```roc
+Parser input a -> Parser input (List a)
+```
+
+**Description**
+
+A parser which runs the element parser *zero* or more times on the input,
+returning a list containing all the parsed elements.
+
+#### one_or_more
+
+**Type Annotation**
+
+```roc
+Parser input a -> Parser input (List a)
+```
+
+**Description**
+
+A parser which runs the element parser *one* or more times on the input,
+returning a list containing all the parsed elements.
+
+Also see [Parser.many].
+
+#### between
+
+**Type Annotation**
+
+```roc
+
+    Parser input a, 
+    Parser input open, 
+    Parser input close
+    -> Parser input a
+```
+
+**Description**
+
+Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
+and only returns the result of your main parser.
+
+Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
+
+```roc
+between_braces = \parser -> parser |> between(scalar('['), scalar(']'))
+```
+
+#### sep_by1
+
+**Type Annotation**
+
+```roc
+Parser input a, Parser input sep -> Parser input (List a)
+```
+
+#### sep_by
+
+**Type Annotation**
+
+```roc
+Parser input a, Parser input sep -> Parser input (List a)
+```
+
+**Description**
+
+```roc
+parse_numbers : Parser (List U8) (List U64)
+parse_numbers =
+    digits |> sep_by(codeunit(','))
+
+expect parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
+```
+
+#### ignore
+
+**Type Annotation**
+
+```roc
+Parser input a -> Parser input {}
+```
+
+#### keep
+
+**Type Annotation**
+
+```roc
+Parser input (a -> b), Parser input a -> Parser input b
+```
+
+#### skip
+
+**Type Annotation**
+
+```roc
+Parser input a, Parser input * -> Parser input a
+```
+
+#### chomp_until
+
+**Type Annotation**
+
+```roc
+a -> Parser (List a) (List a)
+    where a implements Eq
+```
+
+**Description**
+
+Match zero or more codeunits until the it reaches the given codeunit.
+The given codeunit is not included in the match.
+
+This can be used with [Parser.skip] to ignore text.
+
+```roc
+ignore_text : Parser (List U8) U64
+ignore_text =
+    const(\d -> d)
+    |> skip(chomp_until(':'))
+    |> skip(codeunit(':'))
+    |> keep(digits)
+
+expect parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
+```
+
+This can be used with [Parser.keep] to capture a list of `U8` codeunits.
+
+```roc
+capture_text : Parser (List U8) (List U8)
+capture_text =
+    const(\codeunits -> codeunits)
+    |> keep(chomp_until(':'))
+    |> skip(codeunit(':'))
+
+expect parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
+```
+
+Use [String.str_from_utf8] to turn the results into a `Str`.
+
+Also see [Parser.chomp_while].
+
+#### chomp_while
+
+**Type Annotation**
+
+```roc
+(a -> Bool) -> Parser (List a) (List a)
+    where a implements Eq
+```
+
+**Description**
+
+Match zero or more codeunits until the check returns false.
+The codeunit that returned false is not included in the match.
+Note: a chompWhile parser always succeeds!
+
+This can be used with [Parser.skip] to ignore text.
+This is useful for chomping whitespace or variable names.
+
+```
+ignore_numbers : Parser (List U8) Str
+ignore_numbers =
+    const(\str -> str)
+    |> skip(chomp_while(\b -> b >= '0' && b <= '9'))
+    |> keep(string("TEXT"))
+
+expect parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
+```
+
+This can be used with [Parser.keep] to capture a list of `U8` codeunits.
+
+```
+capture_numbers : Parser (List U8) (List U8)
+capture_numbers =
+    const(\codeunits -> codeunits)
+    |> keep(chomp_while(\b -> b >= '0' && b <= '9'))
+    |> skip(string("TEXT"))
+
+expect parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
+```
+
+Use [String.str_from_utf8] to turn the results into a `Str`.
+
+Also see [Parser.chomp_until].
+
+### String
+
+#### Utf8
+
+**Type Annotation**
+
+**Description**
+
+```
+Utf8 : List U8
+```
+
+#### parse_str
+
+**Type Annotation**
+
+```roc
+
+    Parser Utf8 a, 
+    Str
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete Str
+        ]
+```
+
+**Description**
+
+Parse a [Str] using a [Parser]
+```roc
+color : Parser Utf8 [Red, Green, Blue]
+color =
+    one_of(
+        [
+            Parser.const(Red) |> Parser.skip(string("red")),
+            Parser.const(Green) |> Parser.skip(string("green")),
+            Parser.const(Blue) |> Parser.skip(string("blue")),
+        ],
+    )
+
+expect parse_str(color, "green") == Ok(Green)
+```
+
+#### parse_str_partial
+
+**Type Annotation**
+
+```roc
+Parser Utf8 a, Str -> Parser.ParseResult Str a
+```
+
+**Description**
+
+Runs a parser against the start of a string, allowing the parser to consume it only partially.
+
+- If the parser succeeds, returns the resulting value as well as the leftover input.
+- If the parser fails, returns `Err (ParsingFailure msg)`
+
+```roc
+at_sign : Parser Utf8 [AtSign]
+at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
+
+expect parse_str(at_sign, "@") == Ok(AtSign)
+expect parse_str_partial(at_sign, "@") |> Result.map_ok(.val) == Ok(AtSign)
+expect parse_str_partial(at_sign, "$") |> Result.is_err
+```
+
+#### parse_utf8
+
+**Type Annotation**
+
+```roc
+
+    Parser Utf8 a, 
+    Utf8
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete Utf8
+        ]
+```
+
+**Description**
+
+Runs a parser against a string, requiring the parser to consume it fully.
+
+- If the parser succeeds, returns `Ok a`
+- If the parser fails, returns `Err (ParsingFailure Str)`
+- If the parser succeeds but does not consume the full string, returns `Err (ParsingIncomplete (List U8))`
+
+
+#### parse_utf8_partial
+
+**Type Annotation**
+
+```roc
+Parser Utf8 a, Utf8 -> Parser.ParseResult Utf8 a
+```
+
+**Description**
+
+Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.
+
+#### codeunit_satisfies
+
+**Type Annotation**
+
+```roc
+(U8 -> Bool) -> Parser Utf8 U8
+```
+
+**Description**
+
+```roc
+is_digit : U8 -> Bool
+is_digit = \b -> b >= '0' && b <= '9'
+
+expect parse_str(codeunit_satisfies(is_digit), "0") == Ok('0')
+expect parse_str(codeunit_satisfies(is_digit), "*") |> Result.is_err
+```
+
+#### codeunit
+
+**Type Annotation**
+
+```roc
+U8 -> Parser Utf8 U8
+```
+
+**Description**
+
+```roc
+at_sign : Parser Utf8 [AtSign]
+at_sign = Parser.const(AtSign) |> Parser.skip(codeunit('@'))
+
+expect parse_str(at_sign, "@") == Ok(AtSign)
+expect Result.is_err(parse_str_partial(at_sign, "$"))
+```
+
+#### utf8
+
+**Type Annotation**
+
+```roc
+List U8 -> Parser Utf8 (List U8)
+```
+
+**Description**
+
+Parse an extact sequence of utf8
+
+#### string
+
+**Type Annotation**
+
+```roc
+Str -> Parser Utf8 Str
+```
+
+**Description**
+
+Parse the given [Str]
+```roc
+expect parse_str(string("Foo"), "Foo") == Ok("Foo")
+expect Result.is_err(parse_str(string("Foo"), "Bar"))
+```
+
+#### any_codeunit
+
+**Type Annotation**
+
+```roc
+Parser Utf8 U8
+```
+
+**Description**
+
+Matches any [U8] codeunit
+```roc
+expect parse_str(any_codeunit, "a") == Ok('a')
+expect parse_str(any_codeunit, "$") == Ok('$')
+```
+
+#### any_thing
+
+**Type Annotation**
+
+```roc
+Parser Utf8 Utf8
+```
+
+**Description**
+
+Matches any [Utf8] and consumes all the input without fail.
+```roc
+expect
+    bytes = Str.to_utf8("consumes all the input")
+    Parser.parse(any_thing, bytes, List.is_empty) == Ok(bytes)
+```
+
+#### any_string
+
+**Type Annotation**
+
+```roc
+Parser Utf8 Str
+```
+
+#### digit
+
+**Type Annotation**
+
+```roc
+Parser Utf8 U64
+```
+
+**Description**
+
+```roc
+expect parse_str(digit, "0") == Ok(0)
+expect Result.is_err(parse_str(digit, "not a digit"))
+```
+
+#### digits
+
+**Type Annotation**
+
+```roc
+Parser Utf8 U64
+```
+
+**Description**
+
+Parse a sequence of digits into a [U64], accepting leading zeroes
+```roc
+expect parse_str(digits, "0123") == Ok(123)
+expect Result.is_err(parse_str(digits, "not a digit"))
+```
+
+#### one_of
+
+**Type Annotation**
+
+```roc
+List (Parser Utf8 a) -> Parser Utf8 a
+```
+
+**Description**
+
+Try a bunch of different parsers.
+
+The first parser which is tried is the one at the front of the list,
+and the next one is tried until one succeeds or the end of the list was reached.
+```roc
+bool_parser : Parser Utf8 Bool
+bool_parser =
+    one_of([string("true"), string("false")])
+    |> Parser.map(\x -> if x == "true" then Bool.true else Bool.false)
+
+expect parse_str(bool_parser, "true") == Ok(Bool.true)
+expect parse_str(bool_parser, "false") == Ok(Bool.false)
+expect Result.is_err(parse_str(bool_parser, "not a bool"))
+```
+
+#### str_from_utf8
+
+**Type Annotation**
+
+```roc
+Utf8 -> Str
+```
+
+#### str_from_ascii
+
+**Type Annotation**
+
+```roc
+U8 -> Str
+```
+
+### CSV
+
+#### CSV
+
+**Type Annotation**
+
+**Description**
+
+This is a CSV parser which follows RFC4180
+
+For simplicity's sake, the following things are not yet supported:
+- CSV files with headings
+
+The following however *is* supported
+- A simple LF ("\n") instead of CRLF ("\r\n") to separate records.
+
+#### CSVRecord
+
+**Type Annotation**
+
+#### parse_str
+
+**Type Annotation**
+
+```roc
+
+    Parser CSVRecord a, 
+    Str
+    -> Result (List a) 
+        [
+            ParsingFailure Str,
+            SyntaxError Str,
+            ParsingIncomplete CSVRecord
+        ]
+```
+
+**Description**
+
+Attempts to Parser.parse an `a` from a `Str` that is encoded in CSV format.
+
+#### parse_csv
+
+**Type Annotation**
+
+```roc
+
+    Parser CSVRecord a, 
+    CSV
+    -> Result (List a) 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete CSVRecord
+        ]
+```
+
+**Description**
+
+Attempts to Parser.parse an `a` from a `CSV` datastructure (a list of lists of bytestring-fields).
+
+#### record
+
+**Type Annotation**
+
+```roc
+a -> Parser CSVRecord a
+```
+
+**Description**
+
+Wrapper function to combine a set of fields into your desired `a`
+
+```roc
+record(\first_name -> \last_name -> \age -> User({ first_name, last_name, age }))
+|> field(string)
+|> field(string)
+|> field(u64)
+```
+
+#### field
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 a -> Parser CSVRecord a
+```
+
+**Description**
+
+Turns a parser for a `List U8` into a parser that parses part of a `CSVRecord`.
+
+#### string
+
+**Type Annotation**
+
+```roc
+Parser CSVField Str
+```
+
+**Description**
+
+Parser for a field containing a UTF8-encoded string
+
+#### u64
+
+**Type Annotation**
+
+```roc
+Parser CSVField U64
+```
+
+**Description**
+
+Parse a number from a CSV field
+
+#### f64
+
+**Type Annotation**
+
+```roc
+Parser CSVField F64
+```
+
+**Description**
+
+Parse a 64-bit float from a CSV field
+
+#### parse_str_to_csv_record
+
+**Type Annotation**
+
+```roc
+
+    Str
+    -> Result CSVRecord 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete String.Utf8
+        ]
+```
+
+**Description**
+
+Attempts to Parser.parse a Str into the internal `CSVRecord` datastructure (A list of bytestring-fields).
+
+#### file
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 CSV
+```
+
+### HTTP
+
+#### Request
+
+**Type Annotation**
+
+#### Response
+
+**Type Annotation**
+
+#### request
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Request
+```
+
+#### response
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Response
+```
+
+### Markdown
+
+#### Markdown
+
+**Type Annotation**
+
+**Description**
+
+Content values
+
+#### all
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 (List Markdown)
+```
+
+#### heading
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Markdown
+```
+
+**Description**
+
+Headings
+
+```
+expect String.parse_str(heading, "# Foo Bar") == Ok(Heading One "Foo Bar")
+expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading Two "Foo Bar")
+```
+
+#### link
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Markdown
+```
+
+**Description**
+
+Links
+
+```roc
+expect String.parse_str(link, "[roc](https://roc-lang.org)") == Ok(Link("roc", "https://roc-lang.org"))
+```
+
+#### image
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Markdown
+```
+
+**Description**
+
+Images
+
+```roc
+expect String.parse_str(image, "![alt text](/images/logo.png)") == Ok(Image("alt text", "/images/logo.png"))
+```
+
+#### code
+
+**Type Annotation**
+
+```roc
+Parser String.Utf8 Markdown
+```
+
+**Description**
+
+Parse code blocks using triple backticks
+supports block extension e.g. ```roc
+
+```roc
+expect
+    text =
+        """
+        ```roc
+        # some code
+        foo = bar
+        ```
+        """
+
+    a = String.parse_str(code, text)
+    a == Ok(Code({ ext: "roc", pre: "# some code\nfoo = bar\n" }))
+```
+
+### Xml
+
+#### Xml
+
+**Type Annotation**
+
+#### XmlDeclaration
+
+**Type Annotation**
+
+#### XmlVersion
+
+**Type Annotation**
+
+#### Node
+
+**Type Annotation**
+
+#### Attribute
+
+**Type Annotation**
+
+#### xml_parser
+
+**Type Annotation**
+
+```roc
+Parser Utf8 Xml
+```
+
