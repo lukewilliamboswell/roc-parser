@@ -4,28 +4,30 @@ A simple [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator) pa
 
 ```roc
 color : Parser Utf8 [Red, Green, Blue]
-color = 
-    oneOf [
-        const Red |> skip (string "red"), 
-        const Green |> skip (string "green"),
-        const Blue |> skip (string "blue"),
-    ]
+color =
+    one_of(
+        [
+            const(Red) |> skip(string("red")),
+            const(Green) |> skip(string("green")),
+            const(Blue) |> skip(string("blue")),
+        ],
+    )
 
-expect parseStr color "green" == Ok Green
+expect parse_str(color, "green") == Ok(Green)
 ```
 
-Also includes modules to parse the following formats (with various levels of maturity);
+Includes modules to parse the following (with various levels of maturity);
 - Utf-8 Strings
 - CSV
 - XML
 - Markdown
 - HTTP
 
-## Documentation 
+## Documentation
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
 
-Locally generate docs using `roc docs package/main.roc` 
+Locally generate docs using `roc docs package/main.roc`
 
 ## Contributing
 

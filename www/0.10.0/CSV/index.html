@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>CSV - Documentation</title>
+    <!-- <meta name="description" content="TODO populate this based on the module's description"> -->
+    <meta name="viewport" content="width=device-width" />
+    <base href="/roc-parser/0.10.0/" />
+    <script type="text/javascript" src="search.js" defer></script>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="/favicon.svg" />
+    <!-- Safari ignores rel="icon" and only respects rel="mask-icon". It will render the SVG with
+    fill="#000" unless this `color` attribute here is hardcoded (not a CSS `var()`) to override it.
+  -->
+    <link rel="mask-icon" href="/favicon.svg" color="#7d59dd" />
+    <link rel="prefetch" href="Parser"/>
+    <link rel="prefetch" href="String"/>
+    <link rel="prefetch" href="CSV"/>
+    <link rel="prefetch" href="HTTP"/>
+    <link rel="prefetch" href="Markdown"/>
+    <link rel="prefetch" href="Xml"/>
+</head>
+
+<body>
+    <nav id="sidebar-nav">
+        <div class="pkg-and-logo">
+            <a class="logo" href="/" aria-labelledby="logo-link">
+                <svg viewBox="0 -6 51 58" fill="none" xmlns="http://www.w3.org/2000/svg" aria-labelledby="logo-link"
+                    role="img">
+                    <title id="logo-link">Return to Roc packages</title>
+                    <polygon role="presentation"
+                        points="0,0 23.8834,3.21052 37.2438,19.0101 45.9665,16.6324 50.5,22 45,22 44.0315,26.3689 26.4673,39.3424 27.4527,45.2132 17.655,53 23.6751,22.7086" />
+                </svg>
+            </a>
+            <h1 class="pkg-full-name" ><a href="/roc-parser/0.10.0/" >Documentation</a></h1>
+            <button class="menu-toggle" aria-label="Toggle sidebar">
+                <svg viewBox="0 0 72 72" id="emoji" xmlns="http://www.w3.org/2000/svg" fill="currentcolor">
+                    <g id="SVGRepo_iconCarrier">
+                        <g id="color"></g>
+                        <g id="hair"></g>
+                        <g id="skin"></g>
+                        <g id="skin-shadow"></g>
+                        <g id="line">
+                            <line x1="16" x2="56" y1="26" y2="26" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                            <line x1="16" x2="56" y1="36" y2="36" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                            <line x1="16" x2="56" y1="46" y2="46" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                        </g>
+                    </g>
+                </svg>
+            </button>
+        </div>
+        <div class="module-links-container">
+            <div class="module-links">
+                <div class="sidebar-entry" ><a class="sidebar-module-link" href="Parser" data-module-name="Parser" ><span >Parser</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="Parser#Parser" >Parser</a><a href="Parser#ParseResult" >ParseResult</a><a href="Parser#build_primitive_parser" >build_primitive_parser</a><a href="Parser#parse_partial" >parse_partial</a><a href="Parser#parse" >parse</a><a href="Parser#fail" >fail</a><a href="Parser#const" >const</a><a href="Parser#alt" >alt</a><a href="Parser#apply" >apply</a><a href="Parser#one_of" >one_of</a><a href="Parser#map" >map</a><a href="Parser#map2" >map2</a><a href="Parser#map3" >map3</a><a href="Parser#flatten" >flatten</a><a href="Parser#lazy" >lazy</a><a href="Parser#maybe" >maybe</a><a href="Parser#many" >many</a><a href="Parser#one_or_more" >one_or_more</a><a href="Parser#between" >between</a><a href="Parser#sep_by1" >sep_by1</a><a href="Parser#sep_by" >sep_by</a><a href="Parser#ignore" >ignore</a><a href="Parser#keep" >keep</a><a href="Parser#skip" >skip</a><a href="Parser#chomp_until" >chomp_until</a><a href="Parser#chomp_while" >chomp_while</a></div></div><div class="sidebar-entry" ><a class="sidebar-module-link" href="String" data-module-name="String" ><span >String</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="String#Utf8" >Utf8</a><a href="String#parse_str" >parse_str</a><a href="String#parse_str_partial" >parse_str_partial</a><a href="String#parse_utf8" >parse_utf8</a><a href="String#parse_utf8_partial" >parse_utf8_partial</a><a href="String#codeunit_satisfies" >codeunit_satisfies</a><a href="String#codeunit" >codeunit</a><a href="String#utf8" >utf8</a><a href="String#string" >string</a><a href="String#any_codeunit" >any_codeunit</a><a href="String#any_thing" >any_thing</a><a href="String#any_string" >any_string</a><a href="String#digit" >digit</a><a href="String#digits" >digits</a><a href="String#one_of" >one_of</a><a href="String#str_from_utf8" >str_from_utf8</a><a href="String#str_from_ascii" >str_from_ascii</a></div></div><div class="sidebar-entry" ><a class="sidebar-module-link" href="CSV" data-module-name="CSV" ><span >CSV</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="CSV#CSV" >CSV</a><a href="CSV#CSVRecord" >CSVRecord</a><a href="CSV#parse_str" >parse_str</a><a href="CSV#parse_csv" >parse_csv</a><a href="CSV#record" >record</a><a href="CSV#field" >field</a><a href="CSV#string" >string</a><a href="CSV#u64" >u64</a><a href="CSV#f64" >f64</a><a href="CSV#parse_str_to_csv_record" >parse_str_to_csv_record</a><a href="CSV#file" >file</a></div></div><div class="sidebar-entry" ><a class="sidebar-module-link" href="HTTP" data-module-name="HTTP" ><span >HTTP</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="HTTP#Request" >Request</a><a href="HTTP#Response" >Response</a><a href="HTTP#request" >request</a><a href="HTTP#response" >response</a></div></div><div class="sidebar-entry" ><a class="sidebar-module-link" href="Markdown" data-module-name="Markdown" ><span >Markdown</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="Markdown#Markdown" >Markdown</a><a href="Markdown#all" >all</a><a href="Markdown#heading" >heading</a><a href="Markdown#link" >link</a><a href="Markdown#image" >image</a><a href="Markdown#code" >code</a></div></div><div class="sidebar-entry" ><a class="sidebar-module-link" href="Xml" data-module-name="Xml" ><span >Xml</span><button class="entry-toggle" >▶</button></a><div class="sidebar-sub-entries" ><a href="Xml#Xml" >Xml</a><a href="Xml#XmlDeclaration" >XmlDeclaration</a><a href="Xml#XmlVersion" >XmlVersion</a><a href="Xml#Node" >Node</a><a href="Xml#Attribute" >Attribute</a><a href="Xml#xml_parser" >xml_parser</a></div></div>
+            </div>
+        </div>
+    </nav>
+    <main>
+        <form id="module-search-form">
+            <button class="menu-toggle" aria-label="Toggle sidebar">
+                <svg viewBox="0 0 72 72" id="emoji" xmlns="http://www.w3.org/2000/svg" fill="currentcolor">
+                    <g id="SVGRepo_iconCarrier">
+                        <g id="color"></g>
+                        <g id="hair"></g>
+                        <g id="skin"></g>
+                        <g id="skin-shadow"></g>
+                        <g id="line">
+                            <line x1="16" x2="56" y1="26" y2="26" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                            <line x1="16" x2="56" y1="36" y2="36" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                            <line x1="16" x2="56" y1="46" y2="46" fill="none" stroke="currentColor"
+                                stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2">
+                            </line>
+                        </g>
+                    </g>
+                </svg>
+            </button>
+            <input id="module-search" aria-labelledby="search-label" type="text"
+                placeholder="Search Documentation" role="combobox" aria-autocomplete="list"
+                aria-expanded="false" aria-controls="search-type-ahead" />
+            <label for="module-search" id="search-label">(press
+                <span id="search-shortcut-key" aria-hidden="true">s</span>)</label>
+            <!-- Magnifying Glass icon -->
+            <svg version="1.1" xmlns="http://www.w3.org/2000/svg" class="search-icon"
+                xmlns:xlink="http://www.w3.org/1999/xlink" width="24px" height="24px" viewBox="0 0 512 512"
+                xml:space="preserve">
+                <g>
+                    <path d="M449.803,62.197C408.443,20.807,353.85-0.037,299.646-0.006C245.428-0.037,190.85,20.807,149.49,62.197
+		C108.1,103.557,87.24,158.15,87.303,212.338c-0.047,37.859,10.359,75.766,30.547,109.359L15.021,424.525
+		c-20.016,20.016-20.016,52.453,0,72.469c20,20.016,52.453,20.016,72.453,0L190.318,394.15
+		c33.578,20.203,71.5,30.594,109.328,30.547c54.203,0.047,108.797-20.797,150.156-62.188
+		c41.375-41.359,62.234-95.938,62.188-150.172C512.053,158.15,491.178,103.557,449.803,62.197z M391.818,304.541
+		c-25.547,25.531-58.672,38.125-92.172,38.188c-33.5-0.063-66.609-12.656-92.188-38.188c-25.531-25.578-38.125-58.688-38.188-92.203
+		c0.063-33.484,12.656-66.609,38.188-92.172c25.578-25.531,58.688-38.125,92.188-38.188c33.5,0.063,66.625,12.656,92.188,38.188
+		c25.531,25.563,38.125,58.688,38.188,92.172C429.959,245.854,417.365,278.963,391.818,304.541z"></path>
+                </g>
+            </svg>
+            <ul id="search-type-ahead" role="listbox" aria-label="Search Results" class="hidden">
+                <li role="option" ><a href="Parser#Parser" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Parser</span></a></li><li role="option" ><a href="Parser#ParseResult" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >ParseResult</span></a></li><li role="option" ><a href="Parser#build_primitive_parser" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >build_primitive_parser</span><span class="type-ahead-signature" > : (input -> ParseResult input a) -> Parser input a</span></a></li><li role="option" ><a href="Parser#parse_partial" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_partial</span><span class="type-ahead-signature" > : Parser input a, input -> ParseResult input a</span></a></li><li role="option" ><a href="Parser#parse" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse</span><span class="type-ahead-signature" > : 
+    Parser input a, 
+    input, 
+    (input -> Bool)
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete input
+        ]</span></a></li><li role="option" ><a href="Parser#fail" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >fail</span><span class="type-ahead-signature" > : Str -> Parser * *</span></a></li><li role="option" ><a href="Parser#const" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >const</span><span class="type-ahead-signature" > : a -> Parser * a</span></a></li><li role="option" ><a href="Parser#alt" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >alt</span><span class="type-ahead-signature" > : Parser input a, Parser input a -> Parser input a</span></a></li><li role="option" ><a href="Parser#apply" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >apply</span><span class="type-ahead-signature" > : Parser input (a -> b), Parser input a -> Parser input b</span></a></li><li role="option" ><a href="Parser#one_of" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >one_of</span><span class="type-ahead-signature" > : List (Parser input a) -> Parser input a</span></a></li><li role="option" ><a href="Parser#map" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >map</span><span class="type-ahead-signature" > : Parser input a, (a -> b) -> Parser input b</span></a></li><li role="option" ><a href="Parser#map2" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >map2</span><span class="type-ahead-signature" > : 
+    Parser input a, 
+    Parser input b, 
+    (a, b -> c)
+    -> Parser input c</span></a></li><li role="option" ><a href="Parser#map3" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >map3</span><span class="type-ahead-signature" > : 
+    Parser input a, 
+    Parser input b, 
+    Parser input c,     
+    (a, 
+    b, 
+    c
+    -> d)
+    -> Parser input d</span></a></li><li role="option" ><a href="Parser#flatten" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >flatten</span><span class="type-ahead-signature" > : Parser input (Result a Str) -> Parser input a</span></a></li><li role="option" ><a href="Parser#lazy" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >lazy</span><span class="type-ahead-signature" > : ({} -> Parser input a) -> Parser input a</span></a></li><li role="option" ><a href="Parser#maybe" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >maybe</span><span class="type-ahead-signature" > : Parser input a -> Parser input (Result a [Nothing])</span></a></li><li role="option" ><a href="Parser#many" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >many</span><span class="type-ahead-signature" > : Parser input a -> Parser input (List a)</span></a></li><li role="option" ><a href="Parser#one_or_more" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >one_or_more</span><span class="type-ahead-signature" > : Parser input a -> Parser input (List a)</span></a></li><li role="option" ><a href="Parser#between" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >between</span><span class="type-ahead-signature" > : 
+    Parser input a, 
+    Parser input open, 
+    Parser input close
+    -> Parser input a</span></a></li><li role="option" ><a href="Parser#sep_by1" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >sep_by1</span><span class="type-ahead-signature" > : Parser input a, Parser input sep -> Parser input (List a)</span></a></li><li role="option" ><a href="Parser#sep_by" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >sep_by</span><span class="type-ahead-signature" > : Parser input a, Parser input sep -> Parser input (List a)</span></a></li><li role="option" ><a href="Parser#ignore" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >ignore</span><span class="type-ahead-signature" > : Parser input a -> Parser input {}</span></a></li><li role="option" ><a href="Parser#keep" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >keep</span><span class="type-ahead-signature" > : Parser input (a -> b), Parser input a -> Parser input b</span></a></li><li role="option" ><a href="Parser#skip" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >skip</span><span class="type-ahead-signature" > : Parser input a, Parser input * -> Parser input a</span></a></li><li role="option" ><a href="Parser#chomp_until" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >chomp_until</span><span class="type-ahead-signature" > : a -> Parser (List a) (List a)
+    where a implements Eq</span></a></li><li role="option" ><a href="Parser#chomp_while" class="type-ahead-link" ><span class="type-ahead-module-name" >Parser</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >chomp_while</span><span class="type-ahead-signature" > : (a -> Bool) -> Parser (List a) (List a)
+    where a implements Eq</span></a></li><li role="option" ><a href="String#Utf8" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Utf8</span></a></li><li role="option" ><a href="String#parse_str" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_str</span><span class="type-ahead-signature" > : 
+    Parser Utf8 a, 
+    Str
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete Str
+        ]</span></a></li><li role="option" ><a href="String#parse_str_partial" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_str_partial</span><span class="type-ahead-signature" > : Parser Utf8 a, Str -> Parser.ParseResult Str a</span></a></li><li role="option" ><a href="String#parse_utf8" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_utf8</span><span class="type-ahead-signature" > : 
+    Parser Utf8 a, 
+    Utf8
+    -> Result a 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete Utf8
+        ]</span></a></li><li role="option" ><a href="String#parse_utf8_partial" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_utf8_partial</span><span class="type-ahead-signature" > : Parser Utf8 a, Utf8 -> Parser.ParseResult Utf8 a</span></a></li><li role="option" ><a href="String#codeunit_satisfies" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >codeunit_satisfies</span><span class="type-ahead-signature" > : (U8 -> Bool) -> Parser Utf8 U8</span></a></li><li role="option" ><a href="String#codeunit" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >codeunit</span><span class="type-ahead-signature" > : U8 -> Parser Utf8 U8</span></a></li><li role="option" ><a href="String#utf8" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >utf8</span><span class="type-ahead-signature" > : List U8 -> Parser Utf8 (List U8)</span></a></li><li role="option" ><a href="String#string" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >string</span><span class="type-ahead-signature" > : Str -> Parser Utf8 Str</span></a></li><li role="option" ><a href="String#any_codeunit" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >any_codeunit</span><span class="type-ahead-signature" > : Parser Utf8 U8</span></a></li><li role="option" ><a href="String#any_thing" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >any_thing</span><span class="type-ahead-signature" > : Parser Utf8 Utf8</span></a></li><li role="option" ><a href="String#any_string" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >any_string</span><span class="type-ahead-signature" > : Parser Utf8 Str</span></a></li><li role="option" ><a href="String#digit" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >digit</span><span class="type-ahead-signature" > : Parser Utf8 U64</span></a></li><li role="option" ><a href="String#digits" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >digits</span><span class="type-ahead-signature" > : Parser Utf8 U64</span></a></li><li role="option" ><a href="String#one_of" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >one_of</span><span class="type-ahead-signature" > : List (Parser Utf8 a) -> Parser Utf8 a</span></a></li><li role="option" ><a href="String#str_from_utf8" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >str_from_utf8</span><span class="type-ahead-signature" > : Utf8 -> Str</span></a></li><li role="option" ><a href="String#str_from_ascii" class="type-ahead-link" ><span class="type-ahead-module-name" >String</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >str_from_ascii</span><span class="type-ahead-signature" > : U8 -> Str</span></a></li><li role="option" ><a href="CSV#CSV" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >CSV</span></a></li><li role="option" ><a href="CSV#CSVRecord" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >CSVRecord</span></a></li><li role="option" ><a href="CSV#parse_str" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_str</span><span class="type-ahead-signature" > : 
+    Parser CSVRecord a, 
+    Str
+    -> Result (List a) 
+        [
+            ParsingFailure Str,
+            SyntaxError Str,
+            ParsingIncomplete CSVRecord
+        ]</span></a></li><li role="option" ><a href="CSV#parse_csv" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_csv</span><span class="type-ahead-signature" > : 
+    Parser CSVRecord a, 
+    CSV
+    -> Result (List a) 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete CSVRecord
+        ]</span></a></li><li role="option" ><a href="CSV#record" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >record</span><span class="type-ahead-signature" > : a -> Parser CSVRecord a</span></a></li><li role="option" ><a href="CSV#field" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >field</span><span class="type-ahead-signature" > : Parser String.Utf8 a -> Parser CSVRecord a</span></a></li><li role="option" ><a href="CSV#string" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >string</span><span class="type-ahead-signature" > : Parser CSVField Str</span></a></li><li role="option" ><a href="CSV#u64" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >u64</span><span class="type-ahead-signature" > : Parser CSVField U64</span></a></li><li role="option" ><a href="CSV#f64" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >f64</span><span class="type-ahead-signature" > : Parser CSVField F64</span></a></li><li role="option" ><a href="CSV#parse_str_to_csv_record" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >parse_str_to_csv_record</span><span class="type-ahead-signature" > : 
+    Str
+    -> Result CSVRecord 
+        [
+            ParsingFailure Str,
+            ParsingIncomplete String.Utf8
+        ]</span></a></li><li role="option" ><a href="CSV#file" class="type-ahead-link" ><span class="type-ahead-module-name" >CSV</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >file</span><span class="type-ahead-signature" > : Parser String.Utf8 CSV</span></a></li><li role="option" ><a href="HTTP#Request" class="type-ahead-link" ><span class="type-ahead-module-name" >HTTP</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Request</span></a></li><li role="option" ><a href="HTTP#Response" class="type-ahead-link" ><span class="type-ahead-module-name" >HTTP</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Response</span></a></li><li role="option" ><a href="HTTP#request" class="type-ahead-link" ><span class="type-ahead-module-name" >HTTP</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >request</span><span class="type-ahead-signature" > : Parser String.Utf8 Request</span></a></li><li role="option" ><a href="HTTP#response" class="type-ahead-link" ><span class="type-ahead-module-name" >HTTP</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >response</span><span class="type-ahead-signature" > : Parser String.Utf8 Response</span></a></li><li role="option" ><a href="Markdown#Markdown" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Markdown</span></a></li><li role="option" ><a href="Markdown#all" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >all</span><span class="type-ahead-signature" > : Parser String.Utf8 (List Markdown)</span></a></li><li role="option" ><a href="Markdown#heading" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >heading</span><span class="type-ahead-signature" > : Parser String.Utf8 Markdown</span></a></li><li role="option" ><a href="Markdown#link" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >link</span><span class="type-ahead-signature" > : Parser String.Utf8 Markdown</span></a></li><li role="option" ><a href="Markdown#image" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >image</span><span class="type-ahead-signature" > : Parser String.Utf8 Markdown</span></a></li><li role="option" ><a href="Markdown#code" class="type-ahead-link" ><span class="type-ahead-module-name" >Markdown</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >code</span><span class="type-ahead-signature" > : Parser String.Utf8 Markdown</span></a></li><li role="option" ><a href="Xml#Xml" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Xml</span></a></li><li role="option" ><a href="Xml#XmlDeclaration" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >XmlDeclaration</span></a></li><li role="option" ><a href="Xml#XmlVersion" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >XmlVersion</span></a></li><li role="option" ><a href="Xml#Node" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Node</span></a></li><li role="option" ><a href="Xml#Attribute" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >Attribute</span></a></li><li role="option" ><a href="Xml#xml_parser" class="type-ahead-link" ><span class="type-ahead-module-name" >Xml</span><span class="type-ahead-module-dot" >.</span><span class="type-ahead-def-name" >xml_parser</span><span class="type-ahead-signature" > : Parser Utf8 Xml</span></a></li>
+            </ul>
+        </form>
+        <h2 class="module-name" ><a href="/" >CSV</a></h2><section><h3 id="CSV" class="entry-name" ><a href="CSV#CSV" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="upperident">CSV</span></code></h3><p>This is a CSV parser which follows RFC4180</p>
+<p>For simplicity's sake, the following things are not yet supported:</p>
+<ul>
+<li>CSV files with headings</li>
+</ul>
+<p>The following however <em>is</em> supported</p>
+<ul>
+<li>A simple LF (&quot;\n&quot;) instead of CRLF (&quot;\r\n&quot;) to separate records.</li>
+</ul>
+</section><section><h3 id="CSVRecord" class="entry-name" ><a href="CSV#CSVRecord" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="upperident">CSVRecord</span></code></h3></section><section><h3 id="parse_str" class="entry-name" ><a href="CSV#parse_str" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">parse</span><span class="lowerident">_</span><span class="lowerident">str</span><span class="kw"> :</span><span class="upperident"> 
+    Parser</span><span class="upperident"> CSVRecord</span><span class="lowerident"> a</span><span class="delimeter">,</span><span class="upperident"> 
+    Str</span><span class="kw">
+    -&gt;</span><span class="upperident"> Result</span><span class="delimeter"> (</span><span class="upperident">List</span><span class="lowerident"> a</span><span class="delimeter">)</span><span class="delimeter"> 
+        [</span><span class="upperident">
+            ParsingFailure</span><span class="upperident"> Str</span><span class="delimeter">,</span><span class="upperident">
+            SyntaxError</span><span class="upperident"> Str</span><span class="delimeter">,</span><span class="upperident">
+            ParsingIncomplete</span><span class="upperident"> CSVRecord</span><span class="delimeter">
+        ]</span></code></h3><p>Attempts to Parser.parse an <code>a</code> from a <code>Str</code> that is encoded in CSV format.</p>
+</section><section><h3 id="parse_csv" class="entry-name" ><a href="CSV#parse_csv" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">parse</span><span class="lowerident">_</span><span class="lowerident">csv</span><span class="kw"> :</span><span class="upperident"> 
+    Parser</span><span class="upperident"> CSVRecord</span><span class="lowerident"> a</span><span class="delimeter">,</span><span class="upperident"> 
+    CSV</span><span class="kw">
+    -&gt;</span><span class="upperident"> Result</span><span class="delimeter"> (</span><span class="upperident">List</span><span class="lowerident"> a</span><span class="delimeter">)</span><span class="delimeter"> 
+        [</span><span class="upperident">
+            ParsingFailure</span><span class="upperident"> Str</span><span class="delimeter">,</span><span class="upperident">
+            ParsingIncomplete</span><span class="upperident"> CSVRecord</span><span class="delimeter">
+        ]</span></code></h3><p>Attempts to Parser.parse an <code>a</code> from a <code>CSV</code> datastructure (a list of lists of bytestring-fields).</p>
+</section><section><h3 id="record" class="entry-name" ><a href="CSV#record" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">record</span><span class="kw"> :</span><span class="lowerident"> a</span><span class="kw"> -&gt;</span><span class="upperident"> Parser</span><span class="upperident"> CSVRecord</span><span class="lowerident"> a</span></code></h3><p>Wrapper function to combine a set of fields into your desired <code>a</code></p>
+<pre><samp><span class="lowerident">record</span><span class="delimeter">(</span><span class="kw">\</span><span class="lowerident">first</span><span class="lowerident">_</span><span class="lowerident">name</span><span class="kw"> -&gt;</span><span class="kw"> \</span><span class="lowerident">last</span><span class="lowerident">_</span><span class="lowerident">name</span><span class="kw"> -&gt;</span><span class="kw"> \</span><span class="lowerident">age</span><span class="kw"> -&gt;</span><span class="upperident"> User</span><span class="delimeter">(</span><span class="delimeter">{</span><span class="lowerident"> first</span><span class="lowerident">_</span><span class="lowerident">name</span><span class="delimeter">,</span><span class="lowerident"> last</span><span class="lowerident">_</span><span class="lowerident">name</span><span class="delimeter">,</span><span class="lowerident"> age</span><span class="delimeter"> }</span><span class="delimeter">)</span><span class="delimeter">)</span><span class="kw">
+|&gt;</span><span class="lowerident"> field</span><span class="delimeter">(</span><span class="lowerident">string</span><span class="delimeter">)</span><span class="kw">
+|&gt;</span><span class="lowerident"> field</span><span class="delimeter">(</span><span class="lowerident">string</span><span class="delimeter">)</span><span class="kw">
+|&gt;</span><span class="lowerident"> field</span><span class="delimeter">(</span><span class="lowerident">u64</span><span class="delimeter">)</span></samp></pre></code></pre>
+</section><section><h3 id="field" class="entry-name" ><a href="CSV#field" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">field</span><span class="kw"> :</span><span class="upperident"> Parser</span><span class="upperident"> String</span><span class="delimeter">.</span><span class="upperident">Utf8</span><span class="lowerident"> a</span><span class="kw"> -&gt;</span><span class="upperident"> Parser</span><span class="upperident"> CSVRecord</span><span class="lowerident"> a</span></code></h3><p>Turns a parser for a <code>List U8</code> into a parser that parses part of a <code>CSVRecord</code>.</p>
+</section><section><h3 id="string" class="entry-name" ><a href="CSV#string" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">string</span><span class="kw"> :</span><span class="upperident"> Parser</span><span class="upperident"> CSVField</span><span class="upperident"> Str</span></code></h3><p>Parser for a field containing a UTF8-encoded string</p>
+</section><section><h3 id="u64" class="entry-name" ><a href="CSV#u64" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">u64</span><span class="kw"> :</span><span class="upperident"> Parser</span><span class="upperident"> CSVField</span><span class="upperident"> U64</span></code></h3><p>Parse a number from a CSV field</p>
+</section><section><h3 id="f64" class="entry-name" ><a href="CSV#f64" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">f64</span><span class="kw"> :</span><span class="upperident"> Parser</span><span class="upperident"> CSVField</span><span class="upperident"> F64</span></code></h3><p>Parse a 64-bit float from a CSV field</p>
+</section><section><h3 id="parse_str_to_csv_record" class="entry-name" ><a href="CSV#parse_str_to_csv_record" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">parse</span><span class="lowerident">_</span><span class="lowerident">str</span><span class="lowerident">_</span><span class="lowerident">to</span><span class="lowerident">_</span><span class="lowerident">csv</span><span class="lowerident">_</span><span class="lowerident">record</span><span class="kw"> :</span><span class="upperident"> 
+    Str</span><span class="kw">
+    -&gt;</span><span class="upperident"> Result</span><span class="upperident"> CSVRecord</span><span class="delimeter"> 
+        [</span><span class="upperident">
+            ParsingFailure</span><span class="upperident"> Str</span><span class="delimeter">,</span><span class="upperident">
+            ParsingIncomplete</span><span class="upperident"> String</span><span class="delimeter">.</span><span class="upperident">Utf8</span><span class="delimeter">
+        ]</span></code></h3><p>Attempts to Parser.parse a Str into the internal <code>CSVRecord</code> datastructure (A list of bytestring-fields).</p>
+</section><section><h3 id="file" class="entry-name" ><a href="CSV#file" ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor"><!--!
+	Font Awesome Free 6.3.0 by @fontawesome - https://fontawesome.com License -
+	https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+	Copyright 2023 Fonticons, Inc. -->
+	<path
+		d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z" />
+</svg></a><code><span class="lowerident">file</span><span class="kw"> :</span><span class="upperident"> Parser</span><span class="upperident"> String</span><span class="delimeter">.</span><span class="upperident">Utf8</span><span class="upperident"> CSV</span></code></h3></section>
+        <footer>
+            <p>Made by people who like to make nice things.</p>
+        </footer>
+    </main>
+</body>
+
+</html>

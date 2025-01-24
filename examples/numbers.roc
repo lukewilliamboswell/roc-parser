@@ -1,5 +1,5 @@
-app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
+app [main!] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/bi5zubJ-_Hva9vxxPq4kNx4WHX6oFs8OP6Ad0tCYlrY.tar.br",
     parser: "../package/main.roc",
 }
 
@@ -8,44 +8,44 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main =
+main! = |_args|
 
     result : Result (List (List U64)) [ParsingFailure Str, ParsingIncomplete Str]
-    result = String.parseStr (Parser.many multipleNumbers) "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
+    result = String.parse_str(Parser.many(multiple_numbers), "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n")
 
-    when result |> Result.map largest is
-        Ok count -> Stdout.line "The lagest sum is $(Num.toStr count)"
-        Err _ -> Stderr.line "Failed while parsing input"
+    when result |> Result.map_ok(largest) is
+        Ok(count) -> Stdout.line!("The lagest sum is ${Num.to_str(count)}")
+        Err(_) -> Stderr.line!("Failed while parsing input")
 
 # Parse a number followed by a newline
-singleNumber : Parser.Parser (List U8) U64
-singleNumber =
-    Parser.const (\n -> n)
-    |> Parser.keep (String.digits)
-    |> Parser.skip (String.string "\n")
+single_number : Parser.Parser (List U8) U64
+single_number =
+    Parser.const(|n| n)
+    |> Parser.keep(String.digits)
+    |> Parser.skip(String.string("\n"))
 
 expect
-    actual = String.parseStr singleNumber "1000\n"
-    actual == Ok 1000
+    actual = String.parse_str(single_number, "1000\n")
+    actual == Ok(1000)
 
 # Parse a series of numbers followed by a newline
-multipleNumbers : Parser.Parser (List U8) (List U64)
-multipleNumbers =
-    Parser.const (\ns -> ns)
-    |> Parser.keep (Parser.many singleNumber)
-    |> Parser.skip (String.string "\n")
+multiple_numbers : Parser.Parser (List U8) (List U64)
+multiple_numbers =
+    Parser.const(|ns| ns)
+    |> Parser.keep(Parser.many(single_number))
+    |> Parser.skip(String.string("\n"))
 
 expect
-    actual = String.parseStr multipleNumbers "1000\n2000\n3000\n\n"
-    actual == Ok [1000, 2000, 3000]
+    actual = String.parse_str(multiple_numbers, "1000\n2000\n3000\n\n")
+    actual == Ok([1000, 2000, 3000])
 
 # Sum up the lists and return the largest sum
 largest : List (List U64) -> U64
-largest = \numbers ->
+largest = |numbers|
     numbers
-    |> List.map List.sum
-    |> List.sortDesc
+    |> List.map(List.sum)
+    |> List.sort_desc
     |> List.first
-    |> Result.withDefault 0
+    |> Result.with_default(0)
 
-expect largest [[1000, 2000, 3000], [4000], [5000, 6000]] == 11_000
+expect largest([[1000, 2000, 3000], [4000], [5000, 6000]]) == 11_000

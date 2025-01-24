@@ -1,5 +1,5 @@
-app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
+app [main!] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/bi5zubJ-_Hva9vxxPq4kNx4WHX6oFs8OP6Ad0tCYlrY.tar.br",
     parser: "../package/main.roc",
 }
 
@@ -9,7 +9,7 @@ import parser.String
 import cli.Stdout
 import cli.Stderr
 
-MovieInfo := { title : Str, releaseYear : U64, actors : List Str }
+MovieInfo := { title : Str, release_year : U64, actors : List Str }
 
 input : Str
 input =
@@ -18,50 +18,49 @@ input =
     Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
     """
 
-main =
-    when CSV.parseStr movieInfoParser input is
-        Ok movies ->
-            moviesString =
+main! = |_args|
+    when CSV.parse_str(movie_info_parser, input) is
+        Ok(movies) ->
+            movies_string =
                 movies
-                |> List.map movieInfoExplanation
-                |> Str.joinWith ("\n")
-            nMovies = List.len movies |> Num.toStr
+                |> List.map(movie_info_explanation)
+                |> Str.join_with("\n")
 
-            Stdout.line "$(nMovies) movies were found:\n\n$(moviesString)\n\nParse success!\n"
+            n_movies = List.len(movies) |> Num.to_str
 
-        Err problem ->
+            Stdout.line!("${n_movies} movies were found:\n\n${movies_string}\n\nParse success!\n")
+
+        Err(problem) ->
             when problem is
-                ParsingFailure failure ->
-                    Stderr.line "Parsing failure: $(failure)\n"
+                ParsingFailure(failure) ->
+                    Stderr.line!("Parsing failure: ${failure}\n")
 
-                ParsingIncomplete leftover ->
-                    leftoverStr = leftover |> List.map String.strFromUtf8 |> List.map (\val -> "\"$(val)\"") |> Str.joinWith ", "
+                ParsingIncomplete(leftover) ->
+                    leftover_str = leftover |> List.map(String.str_from_utf8) |> List.map(|val| "\"${val}\"") |> Str.join_with(", ")
 
-                    Stderr.line "Parsing incomplete. Following leftover fields while parsing a record: $(leftoverStr)\n"
+                    Stderr.line!("Parsing incomplete. Following leftover fields while parsing a record: ${leftover_str}\n")
 
-                SyntaxError error ->
-                    Stderr.line "Parsing failure. Syntax error in the CSV: $(error)"
+                SyntaxError(error) ->
+                    Stderr.line!("Parsing failure. Syntax error in the CSV: ${error}")
 
-movieInfoParser =
-    CSV.record (\title -> \releaseYear -> \actors -> @MovieInfo { title, releaseYear, actors })
-    |> P.keep (CSV.field CSV.string)
-    |> P.keep (CSV.field CSV.u64)
-    |> P.keep (CSV.field actorsParser)
+movie_info_parser =
+    CSV.record(|title| |release_year| |actors| @MovieInfo({ title, release_year, actors }))
+    |> P.keep(CSV.field(CSV.string))
+    |> P.keep(CSV.field(CSV.u64))
+    |> P.keep(CSV.field(actors_parser))
 
-actorsParser =
-    CSV.string
-    |> P.map \val -> Str.splitOn val ","
+actors_parser = CSV.string |> P.map(|val| Str.split_on(val, ","))
 
-movieInfoExplanation = \@MovieInfo { title, releaseYear, actors } ->
-    enumeratedActors = enumerate actors
-    releaseYearStr = Num.toStr releaseYear
+movie_info_explanation = |@MovieInfo({ title, release_year, actors })|
+    enumerated_actors = enumerate(actors)
+    release_year_str = Num.to_str(release_year)
 
-    "The movie '$(title)' was released in $(releaseYearStr) and stars $(enumeratedActors)"
+    "The movie '${title}' was released in ${release_year_str} and stars ${enumerated_actors}"
 
 enumerate : List Str -> Str
-enumerate = \elements ->
-    { before: inits, others: last } = List.splitAt elements (List.len elements - 1)
+enumerate = |elements|
+    { before: inits, others: last } = List.split_at(elements, (List.len(elements) - 1))
 
     last
-    |> List.prepend (inits |> Str.joinWith ", ")
-    |> Str.joinWith " and "
+    |> List.prepend((inits |> Str.join_with(", ")))
+    |> Str.join_with(" and ")
