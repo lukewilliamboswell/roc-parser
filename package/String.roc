@@ -252,7 +252,7 @@ String :: {}.{
 	## expect digits->parse_str("not a digit").is_err()
 	## ```
 	digits : Parser(Utf8, U64)
-	digits =
+	digits = 
 		Parser.one_or_more(digit)
 			.map(
 				|ds| {
