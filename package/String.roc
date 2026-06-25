@@ -49,7 +49,7 @@ String :: {}.{
 	## expect at_sign->parse_str_partial("@").map_ok(|r| { r.val }) == Ok(AtSign)
 	## expect at_sign->parse_str_partial("$").is_err()
 	## ```
-	parse_str_partial : Parser(Utf8, a), Str -> Parser.ParseResult(Str, a)
+	parse_str_partial : Parser(Utf8, a), Str -> Try({ val : a, input : Str }, [ParsingFailure(Str)])
 	parse_str_partial = |parser, input| {
 		parser
 			->parse_utf8_partial(str_to_raw(input))
@@ -77,7 +77,7 @@ String :: {}.{
 	}
 
 	## Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.
-	parse_utf8_partial : Parser(Utf8, a), Utf8 -> Parser.ParseResult(Utf8, a)
+	parse_utf8_partial : Parser(Utf8, a), Utf8 -> Try({ val : a, input : Utf8 }, [ParsingFailure(Str)])
 	parse_utf8_partial = |parser, input| {
 		parser.parse_partial(input)
 	}
