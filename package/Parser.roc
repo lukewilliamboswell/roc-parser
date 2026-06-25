@@ -602,7 +602,7 @@ and_then = |first_parser, build_next_parser| {
 	Parser.build_primitive_parser(fun)
 }
 
-many_impl : Parser(input, a), List(a), input -> ParseResult(input, List(a))
+many_impl : Parser(input, a), List(a), input -> Parser.ParseResult(input, List(a))
 many_impl = |parser, vals, input| {
 	result = Parser.parse_partial(parser, input)
 
