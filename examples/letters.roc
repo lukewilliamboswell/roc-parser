@@ -9,7 +9,6 @@ import parser.Parser
 import parser.String
 
 main! = |_args| {
-
     result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
     result = String.parse_str(letter_parser.many(), "AAAiBByAABBwBtCCCiAyArBBx")
 
@@ -17,7 +16,6 @@ main! = |_args| {
         Ok(count) => Stdout.line!("I counted ${count.to_str()} letter A's!")
         Err(_) => Stderr.line!("Failed while parsing input")
     }
-
     Ok({})
 }
 
@@ -35,7 +33,7 @@ count_letter_as = |letters|
     .sum()
 
 # Build a custom parser to convert utf8 input into Letter tags
-letter_parser : Parser.Parser(List(U8), Letter)
+letter_parser : Parser(List(U8), Letter)
 letter_parser = Parser.build_primitive_parser(
     |input| {
         val_result : Try(Letter, [ParsingFailure(Str)])
