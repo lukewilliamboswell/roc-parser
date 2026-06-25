@@ -320,7 +320,7 @@ String :: {}.{
 	}
 }
 
-str_to_raw : Str -> Utf8
+str_to_raw : Str -> String.Utf8
 str_to_raw = |str| {
 	str.to_utf8()
 }
@@ -346,13 +346,13 @@ expect {
 
 # -------------------- example snippets used in docs --------------------
 
-parse_u32 : Parser(Utf8, U32)
+parse_u32 : Parser(String.Utf8, U32)
 parse_u32 = 
 	Parser.const(U64.to_u32_wrap).keep(String.digits)
 
 expect String.parse_str(parse_u32, "123") == Ok(123.U32)
 
-color : Parser(Utf8, [Red, Green, Blue])
+color : Parser(String.Utf8, [Red, Green, Blue])
 color = 
 	String.one_of(
 		[
@@ -364,7 +364,7 @@ color =
 
 expect String.parse_str(color, "green") == Ok(Green)
 
-parse_numbers : Parser(Utf8, List(U64))
+parse_numbers : Parser(String.Utf8, List(U64))
 parse_numbers = (String.digits).sep_by(String.codeunit(','))
 
 expect String.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
@@ -372,7 +372,7 @@ expect String.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 expect String.parse_str(String.string("Foo"), "Foo") == Ok("Foo")
 expect String.parse_str(String.string("Foo"), "Bar").is_err()
 
-ignore_text : Parser(Utf8, U64)
+ignore_text : Parser(String.Utf8, U64)
 ignore_text = 
 	Parser.const(
 		|d| {
@@ -385,7 +385,7 @@ ignore_text =
 
 expect String.parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
 
-ignore_numbers : Parser(Utf8, Str)
+ignore_numbers : Parser(String.Utf8, Str)
 ignore_numbers = 
 	Parser.const(
 		|str| {
@@ -411,7 +411,7 @@ is_digit = |b| {
 expect String.parse_str(String.codeunit_satisfies(is_digit), "0") == Ok('0')
 expect String.parse_str(String.codeunit_satisfies(is_digit), "*").is_err()
 
-at_sign : Parser(Utf8, [AtSign])
+at_sign : Parser(String.Utf8, [AtSign])
 at_sign = Parser.const(AtSign).skip(String.codeunit('@'))
 
 expect String.parse_str(at_sign, "@") == Ok(AtSign)
@@ -480,7 +480,7 @@ expect String.parse_str(String.digit, "not a digit").is_err()
 expect String.parse_str(String.digits, "0123") == Ok(123)
 expect String.parse_str(String.digits, "not a digit").is_err()
 
-bool_parser : Parser(Utf8, Bool)
+bool_parser : Parser(String.Utf8, Bool)
 bool_parser = 
 	String.one_of([String.string("true"), String.string("false")])
 		.map(
