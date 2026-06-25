@@ -1,8 +1,10 @@
-package [
-    Parser,
-    String,
-    CSV,
-    HTTP,
-    Markdown,
-    Xml,
-] {}
+package
+	[
+		Parser,
+		String,
+		CSV,
+		HTTP,
+		Markdown,
+		Xml,
+	]
+	{}
