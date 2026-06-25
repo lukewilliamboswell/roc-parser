@@ -63,8 +63,13 @@
 # # for instance to improve efficiency or error messages on parsing failures.
 Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFailure(Str)]) }.{
 
+	# # ```roc
+	# # ParseResult(input, a) : Try({ val : a, input : input }, [ParsingFailure(Str)])
+	# # ```
+	ParseResult(input, a) : Try({ val : a, input : input }, [ParsingFailure(Str)])
+
 	# # Write a custom parser without using provided combintors.
-	build_primitive_parser : (input -> Try({ val : a, input : input }, [ParsingFailure(Str)])) -> Parser(input, a)
+	build_primitive_parser : (input -> ParseResult(input, a)) -> Parser(input, a)
 	build_primitive_parser = |fun| {
 		{ fun }
 	}
@@ -80,7 +85,7 @@ Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFai
 	# # This is why a parser returns on success both the resulting value and the leftover part of the input.
 	# #
 	# # This is mostly useful when creating your own internal parsing building blocks.
-	parse_partial : Parser(input, a), input -> Try({ val : a, input : input }, [ParsingFailure(Str)])
+	parse_partial : Parser(input, a), input -> ParseResult(input, a)
 	parse_partial = |{ fun }, input| {
 		fun(input)
 	}
@@ -597,7 +602,7 @@ and_then = |first_parser, build_next_parser| {
 	Parser.build_primitive_parser(fun)
 }
 
-many_impl : Parser(input, a), List(a), input -> Try({ val : List(a), input : input }, [ParsingFailure(Str)])
+many_impl : Parser(input, a), List(a), input -> ParseResult(input, List(a))
 many_impl = |parser, vals, input| {
 	result = Parser.parse_partial(parser, input)
 
