@@ -130,6 +130,9 @@ method =
 expect String.parse_str(method, "GET") == Ok(Get)
 expect String.parse_str(method, "DELETE") == Ok(Delete)
 
+# TODO: do we want more structure in the URI, or is Str actually what programs want anyway?
+# This is not a full URL!
+#        Request-URI    = "*" | absoluteURI | abs_path | authority
 RequestUri : Str
 
 request_uri : Parser(String.Utf8, RequestUri)
