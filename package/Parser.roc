@@ -280,7 +280,7 @@ Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFai
 	# # where errors are turned into `ParsingFailure`s.
 	# #
 	# # ```roc
-	# # # Parse a number from a List U8
+	# # # Parse a number from a List(U8)
 	# # u64 : Parser(Utf8, U64)
 	# # u64 =
 	# #     string
@@ -311,7 +311,7 @@ Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFai
 	# # Runs a parser lazily
 	# #
 	# # This is (only) useful when dealing with a recursive structure.
-	# # For instance, consider a type `Comment : { message: String, responses: List Comment }`.
+	# # For instance, consider a type `Comment : { message: String, responses: List(Comment) }`.
 	# # Without `lazy`, you would ask the compiler to build an infinitely deep parser.
 	# # (Resulting in a compiler error.)
 	# #
