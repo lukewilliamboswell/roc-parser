@@ -3,13 +3,13 @@
 A simple [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator) package for Roc.
 
 ```roc
-color : Parser Utf8 [Red, Green, Blue]
+color : Parser(Utf8, [Red, Green, Blue])
 color =
     one_of(
         [
-            const(Red) |> skip(string("red")),
-            const(Green) |> skip(string("green")),
-            const(Blue) |> skip(string("blue")),
+            const(Red).skip(string("red")),
+            const(Green).skip(string("green")),
+            const(Blue).skip(string("blue")),
         ],
     )
 
@@ -37,6 +37,5 @@ If you see anything that could be improved please create an Issue or Pull Reques
 
 Run tests locally with `roc test package/main.roc`
 
-## Packaging
-
+## Packaging (TODO: Update)
 Bundle package into a URL for distribution using `roc build --bundle .tar.br package/main.roc`
