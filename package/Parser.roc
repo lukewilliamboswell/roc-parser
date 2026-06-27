@@ -61,7 +61,7 @@
 # # How a parser is _actually_ implemented internally is not important
 # # and this might change between versions;
 # # for instance to improve efficiency or error messages on parsing failures.
-Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFailure(Str)]) }.{
+Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	# # ```roc
 	# # ParseResult(input, a) : Try({ val : a, input : input }, [ParsingFailure(Str)])
