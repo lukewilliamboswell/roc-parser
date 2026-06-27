@@ -224,7 +224,7 @@ Parser(input, a) :: { fun : input -> Try({ val : a, input : input }, [ParsingFai
 	one_of = |parsers| {
 		parsers.fold_rev(
 			fail("oneOf: The list of parsers was empty"),
-			|later_parser, earlier_parser| {
+			|earlier_parser, later_parser| {
 				alt(earlier_parser, later_parser)
 			},
 		)
@@ -622,10 +622,7 @@ expect {
 }
 
 expect {
-	match Parser.parse_partial(Parser.chomp_until('\n'), []) {
-		Ok(_) => Bool.False
-		Err(ParsingFailure(_)) => Bool.True
-	}
+	Parser.parse_partial(Parser.chomp_until('\n'), []).is_err()
 }
 
 expect {

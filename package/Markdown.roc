@@ -18,7 +18,7 @@ Markdown := [
 				heading,
 				link,
 				image,
-				# code,
+				code,
 				todo,
 			],
 		)
@@ -267,16 +267,16 @@ expect {
 }
 
 # TODO: fix the following expect
-# expect {
-# 	text = 
-# 		\\```roc
-# 		\\# some code
-# 		\\foo = bar
-# 		\\```
-#
-# 	a = String.parse_str(Markdown.code, text)
-# 	a == Ok(Code({ ext: "roc", pre: "# some code\nfoo = bar\n" }))
-# }
+expect {
+	text = 
+		\\```roc
+		\\# some code
+		\\foo = bar
+		\\```
+
+	a = String.parse_str(Markdown.code, text)
+	a == Ok(Code({ ext: "roc", pre: "# some code\nfoo = bar\n" }))
+}
 
 chomp_until_code_block_end : Parser(String.Utf8, Str)
 chomp_until_code_block_end = 
