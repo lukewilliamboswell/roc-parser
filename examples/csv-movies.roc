@@ -1,66 +1,81 @@
 app [main!] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/Hj-J_zxz7V9YurCSTFcFdu6cQJie4guzsPMUi5kBYUk.tar.br",
+    cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst",
     parser: "../package/main.roc",
 }
 
-import parser.Parser as P
+import parser.Parser
 import parser.CSV
 import parser.String
 import cli.Stdout
 import cli.Stderr
 
-MovieInfo := { title : Str, release_year : U64, actors : List Str }
-
 input : Str
 input =
-    """
-    Airplane!,1980,\"Robert Hays,Julie Hagerty\"
-    Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
-    """
+    \\Airplane!,1980,\"Robert Hays,Julie Hagerty\"
+    \\Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
 
-main! = |_args|
-    when CSV.parse_str(movie_info_parser, input) is
-        Ok(movies) ->
+main! = |_args| {
+    match CSV.parse_str(movie_info_parser, input) {
+        Ok(movies) => {
             movies_string =
                 movies
-                |> List.map(movie_info_explanation)
-                |> Str.join_with("\n")
+                .map(movie_info_explanation)
+                ->Str.join_with("\n")
 
-            n_movies = List.len(movies) |> Num.to_str
+            n_movies = movies.len().to_str()
 
             Stdout.line!("${n_movies} movies were found:\n\n${movies_string}\n\nParse success!\n")
+        }
 
-        Err(problem) ->
-            when problem is
-                ParsingFailure(failure) ->
+        Err(problem) => {
+            match problem {
+                ParsingFailure(failure) => {
                     Stderr.line!("Parsing failure: ${failure}\n")
+                }
 
-                ParsingIncomplete(leftover) ->
-                    leftover_str = leftover |> List.map(String.str_from_utf8) |> List.map(|val| "\"${val}\"") |> Str.join_with(", ")
+                ParsingIncomplete(leftover) => {
+                    leftover_str =
+                        leftover
+                        .map(String.str_from_utf8)
+                        .map(|val| "\"${val}\"")
+                        ->Str.join_with(", ")
 
                     Stderr.line!("Parsing incomplete. Following leftover fields while parsing a record: ${leftover_str}\n")
+                }
 
-                SyntaxError(error) ->
+                SyntaxError(error) => {
                     Stderr.line!("Parsing failure. Syntax error in the CSV: ${error}")
+                }
+            }
+        }
+    }
+
+    Ok({})
+}
 
 movie_info_parser =
-    CSV.record(|title| |release_year| |actors| @MovieInfo({ title, release_year, actors }))
-    |> P.keep(CSV.field(CSV.string))
-    |> P.keep(CSV.field(CSV.u64))
-    |> P.keep(CSV.field(actors_parser))
+    CSV.record(|title| |release_year| |actors| { { title, release_year, actors } })
+    .keep(CSV.field(CSV.string))
+    .keep(CSV.field(CSV.u64))
+    .keep(CSV.field(actors_parser))
 
-actors_parser = CSV.string |> P.map(|val| Str.split_on(val, ","))
+actors_parser = (CSV.string).map(|val| { val.split_on(",") })
 
-movie_info_explanation = |@MovieInfo({ title, release_year, actors })|
+movie_info_explanation = |{ title, release_year, actors }| {
     enumerated_actors = enumerate(actors)
-    release_year_str = Num.to_str(release_year)
+    release_year_str = release_year.to_str()
 
     "The movie '${title}' was released in ${release_year_str} and stars ${enumerated_actors}"
+}
 
-enumerate : List Str -> Str
-enumerate = |elements|
-    { before: inits, others: last } = List.split_at(elements, (List.len(elements) - 1))
-
-    last
-    |> List.prepend((inits |> Str.join_with(", ")))
-    |> Str.join_with(" and ")
+enumerate : List(Str) -> Str
+enumerate = |elements| {
+    match elements {
+        [] => ""
+        [actor] => actor
+        [.. as inits, last] => 
+            [last]
+            .prepend(inits->Str.join_with(", "))
+            ->Str.join_with(" and ")
+    }
+}
