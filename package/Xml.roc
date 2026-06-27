@@ -5,27 +5,24 @@
 import Parser
 import String
 
-# TODO: bring back into Xml once https://github.com/roc-lang/roc/issues/9796 is resolved
-import XmlNode
-import XmlVersion
-
 Xml :: {
-	xml_declaration : [
-		Given(
-			{
-				version : XmlVersion,
-				encoding : [Given([Utf8Encoding, OtherEncoding(Str)]), Missing],
-			},
-		),
-		Missing,
-	],
-	root : XmlNode,
+	xml_declaration : [Given(Xml.Declaration), Missing],
+	root : Xml.Node,
 }.{
 	Attribute : { name : Str, value : Str }
 
 	Declaration : {
-		version : XmlVersion,
+		version : Version,
 		encoding : [Given(Encoding), Missing],
+	}
+
+	Version :: {
+		after_dot : U8,
+	}.{
+		new : U8 -> Version
+		new = |after_dot| { { after_dot } }
+		is_eq : Version, Version -> Bool
+		is_eq = |v1, v2| v1.after_dot == v2.after_dot
 	}
 
 	Encoding : [
@@ -33,11 +30,16 @@ Xml :: {
 		OtherEncoding(Str),
 	]
 
+	Node := [
+		Element(Str, List({ name : Str, value : Str }), List(Node)),
+		Text(Str),
+	]
+
 	xml_parser : Parser(String.Utf8, Xml)
 	xml_parser = 
 		Parser.const(
 			|xml_declaration| |root| {
-				{ xml_declaration, root }
+				Xml.{ xml_declaration, root }
 			},
 		)
 			.keep(p_prolog)
@@ -45,9 +47,9 @@ Xml :: {
 			.skip(p_whitespace.many())
 }
 
-v1_dot0 : XmlVersion
+v1_dot0 : Xml.Version
 v1_dot0 = {
-	XmlVersion.new(0)
+	Xml.Version.new(0)
 }
 
 expect {
@@ -151,18 +153,18 @@ expect {
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionInfo
-p_version : Parser(String.Utf8, XmlVersion)
+p_version : Parser(String.Utf8, Xml.Version)
 p_version = 
 	p_version_number
 		->between_quotes()
 		->p_attribute("version")
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionNum
-p_version_number : Parser(String.Utf8, XmlVersion)
+p_version_number : Parser(String.Utf8, Xml.Version)
 p_version_number = 
 	Parser.const(
 		|after_dot| {
-			XmlVersion.new(U64.to_u8_wrap(after_dot)) # TODO: change to to_u8_try
+			Xml.Version.new(U64.to_u8_wrap(after_dot)) # TODO: change to to_u8_try
 		},
 	)
 		.skip(String.string("1."))
@@ -215,7 +217,7 @@ expect {
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-element
-p_element : Parser(String.Utf8, XmlNode)
+p_element : Parser(String.Utf8, Xml.Node)
 p_element = 
 	Parser.const(
 		|name| {
@@ -495,7 +497,7 @@ p_attribute_value = |quote| {
 		.flatten()
 }
 
-p_element_contents : Parser(String.Utf8, List(XmlNode))
+p_element_contents : Parser(String.Utf8, List(Xml.Node))
 p_element_contents = 
 	Parser.one_of(
 		[
@@ -520,7 +522,7 @@ p_end_tag =
 		.skip(String.string(">"))
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CharData
-p_character_data : Parser(String.Utf8, XmlNode)
+p_character_data : Parser(String.Utf8, Xml.Node)
 p_character_data = 
 	Parser.const(
 		|first| {
@@ -541,7 +543,7 @@ is_character_data = |c| {
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CDSect
-p_cdata_section : Parser(String.Utf8, XmlNode)
+p_cdata_section : Parser(String.Utf8, Xml.Node)
 p_cdata_section = 
 	Parser.const(
 		|text| {
