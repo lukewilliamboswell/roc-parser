@@ -3,17 +3,17 @@
 A simple [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator) package for Roc.
 
 ```roc
-color : Parser(Utf8, [Red, Green, Blue])
-color =
-    one_of(
-        [
-            const(Red).skip(string("red")),
-            const(Green).skip(string("green")),
-            const(Blue).skip(string("blue")),
-        ],
-    )
+color : Parser(String.Utf8, [Red, Green, Blue])
+color = 
+	String.one_of(
+		[
+			Parser.const(Red).skip(String.string("red")),
+			Parser.const(Green).skip(String.string("green")),
+			Parser.const(Blue).skip(String.string("blue")),
+		],
+	)
 
-expect parse_str(color, "green") == Ok(Green)
+expect String.parse_str(color, "green") == Ok(Green)
 ```
 
 Includes modules to parse the following (with various levels of maturity);
