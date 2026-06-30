@@ -118,6 +118,7 @@ jobs:
       release_tag: ${{ steps.prepare_release.outputs.release_tag }}
     permissions:
       contents: write
+      pull-requests: write
     defaults:
       run:
         shell: bash
@@ -146,12 +147,14 @@ jobs:
           BUNDLE_FILENAME: ${{ needs.build-bundle.outputs.bundle_filename }}
           RAW_RELEASE_VERSION: ${{ github.event.inputs.release_version }}
           REF_TYPE: ${{ github.ref_type }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$REF_TYPE" != "branch" ]; then
-            echo "Release workflow must be run from a branch so it can commit updated example URLs."
+            echo "Release workflow must be run from a branch."
             exit 1
           fi
 
+          SOURCE_COMMIT=$(git rev-parse HEAD)
           RELEASE_VERSION="${RAW_RELEASE_VERSION#v}"
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use x.y.z format, e.g. 0.11.0"
@@ -180,12 +183,38 @@ jobs:
           if git diff --cached --quiet; then
             echo "Release docs and example URLs are already current."
           else
+            RELEASE_ARTIFACTS_BRANCH="release-artifacts/${RELEASE_VERSION}"
             git commit -m "Prepare ${RELEASE_VERSION} release artifacts"
-            git push origin HEAD:${{ github.ref_name }}
+            git push --force-with-lease origin HEAD:"$RELEASE_ARTIFACTS_BRANCH"
+
+            PR_NUMBER=$(gh pr list \
+              --base "${{ github.ref_name }}" \
+              --head "$RELEASE_ARTIFACTS_BRANCH" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty')
+
+            if [ -z "$PR_NUMBER" ]; then
+              gh pr create \
+                --base "${{ github.ref_name }}" \
+                --head "$RELEASE_ARTIFACTS_BRANCH" \
+                --title "Prepare ${RELEASE_VERSION} release artifacts" \
+                --body "Generated docs and updated example package URLs for release ${RELEASE_VERSION}."
+            else
+              gh pr comment "$PR_NUMBER" \
+                --body "Updated generated docs and example package URLs for release ${RELEASE_VERSION}."
+            fi
           fi
 
-          echo "release_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "release_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload generated docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-docs
+          path: www
+          retention-days: 30
 
       - name: Create release
         env:
@@ -217,10 +246,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Checkout release commit
-        uses: actions/checkout@v4
+      - name: Download generated docs artifact
+        uses: actions/download-artifact@v4
         with:
-          ref: ${{ needs.create-release.outputs.release_commit }}
+          name: release-docs
+          path: ./www
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
