@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>String Docs</title>
+    <meta name="viewport" content="width=device-width">
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../search.js" defer></script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <symbol id="link-icon" viewBox="0 0 640 512">
+      <path d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z"/>
+    </symbol>
+  </defs>
+</svg>
+    <nav id="sidebar-nav">
+        <div class="pkg-and-logo">
+            <a class="logo" href="../"><svg viewBox="0 -6 51 58" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logo-link">
+    <title id="logo-link">Home</title>
+    <polygon role="presentation" points="0,0 23.8834,3.21052 37.2438,19.0101 45.9665,16.6324 50.5,22 45,22 44.0315,26.3689 26.4673,39.3424 27.4527,45.2132 17.655,53 23.6751,22.7086" />
+</svg></a>
+            <h1 class="pkg-full-name"><a href="../">package</a></h1>
+        </div>
+        <div class="module-links-container">
+            <ul class="module-links">
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="CSV" href="../CSV/"><button class="entry-toggle"></button><span>CSV</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str">parse_str</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_csv">parse_csv</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_csv_record">parse_csv_record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.record">record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.field">field</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.string">string</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.u64">u64</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.f64">f64</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str_to_csv">parse_str_to_csv</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str_to_csv_record">parse_str_to_csv_record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.file">file</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../CSV/#CSV.CSVRecord">CSVRecord</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../CSV/#CSV.CSVField">CSVField</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="HTTP" href="../HTTP/"><button class="entry-toggle"></button><span>HTTP</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../HTTP/#HTTP.request">request</a></li>
+                        <li><a class="sidebar-value" href="../HTTP/#HTTP.response">response</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Method">Method</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.HttpVersion">HttpVersion</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Header">Header</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Request">Request</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Response">Response</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="Markdown" href="../Markdown/"><button class="entry-toggle"></button><span>Markdown</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.all">all</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.heading">heading</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.link">link</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.image">image</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.code">code</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.Level">Level</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="Parser" href="../Parser/"><button class="entry-toggle"></button><span>Parser</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Parser/#Parser.build_primitive_parser">build_primitive_parser</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.parse_partial">parse_partial</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.parse">parse</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.fail">fail</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.const">const</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.alt">alt</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.apply">apply</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.one_of">one_of</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map">map</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map2">map2</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map3">map3</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.flatten">flatten</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.lazy">lazy</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.maybe">maybe</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.many">many</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.one_or_more">one_or_more</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.between">between</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.sep_by1">sep_by1</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.sep_by">sep_by</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.ignore">ignore</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.keep">keep</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.skip">skip</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.chomp_until">chomp_until</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.chomp_while">chomp_while</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Parser/#Parser.ParseResult">ParseResult</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link active" data-module-name="String" href="../String/"><button class="entry-toggle"></button><span>String</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../String/#String.parse_str">parse_str</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_str_partial">parse_str_partial</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_utf8">parse_utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_utf8_partial">parse_utf8_partial</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.codeunit_satisfies">codeunit_satisfies</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.codeunit">codeunit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.utf8">utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.string">string</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_codeunit">any_codeunit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_thing">any_thing</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_string">any_string</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.digit">digit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.digits">digits</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.one_of">one_of</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.str_from_utf8">str_from_utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.str_from_ascii">str_from_ascii</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../String/#String.Utf8">Utf8</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="Xml" href="../Xml/"><button class="entry-toggle"></button><span>Xml</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Xml/#Xml.xml_parser">xml_parser</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Attribute">Attribute</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Declaration">Declaration</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Version">Version</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Xml/#Xml.Version.new">new</a></li>
+                          <li><a class="sidebar-value" href="../Xml/#Xml.Version.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Encoding">Encoding</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Node">Node</a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    <main>
+        <form id="module-search-form">
+            <input type="search" id="module-search" placeholder="Search Documentation" autocomplete="off" />
+            <input type="search" id="module-search-nojs" placeholder="Enable JavaScript to search" autocomplete="off" disabled aria-label="Search requires JavaScript" />
+            <noscript><style>#module-search{display:none}#module-search-nojs{display:block}</style></noscript>
+            <button class="menu-toggle" type="button" aria-label="Toggle sidebar"><svg viewBox="0 6 18 12" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0 6h18v2H0V6zm0 5h18v2H0v-2zm0 5h18v2H0v-2z"/>
+</svg></button>
+            <ul id="search-type-ahead" class="hidden">
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">List</span>(<span class="type-var">a</span>), [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">SyntaxError</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_csv"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_csv</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">CSV</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">List</span>(<span class="type-var">a</span>), [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_csv_record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_csv_record</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">CSVRecord</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">record</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.field"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">field</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.string"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">string</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.u64"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">u64</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.f64"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">f64</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">F64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str_to_csv"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str_to_csv</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">CSV</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str_to_csv_record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str_to_csv_record</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">CSVRecord</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.file"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">file</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">CSV</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.CSVRecord"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">CSVRecord</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">CSVField</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.CSVField"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">CSVField</span> <span class="type-ahead-signature">: <span class="type">Utf8</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.request"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">request</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Request</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.response"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">response</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Response</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Method"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Method</span> <span class="type-ahead-signature">: [<span class="type">Options</span>, <span class="type">Get</span>, <span class="type">Post</span>, <span class="type">Put</span>, <span class="type">Delete</span>, <span class="type">Head</span>, <span class="type">Trace</span>, <span class="type">Connect</span>, <span class="type">Patch</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.HttpVersion"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">HttpVersion</span> <span class="type-ahead-signature">: { major : <span class="type">U8</span>, minor : <span class="type">U8</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Header"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Header</span> <span class="type-ahead-signature">: [<span class="type">Header</span>(<span class="type">Str</span>, <span class="type">Str</span>)]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Request"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Request</span> <span class="type-ahead-signature">: { method : <span class="type">Method</span>, uri : <span class="type">Str</span>, http_version : <span class="type">HttpVersion</span>, headers : <span class="type">List</span>(<span class="type">Header</span>), body : <span class="type">List</span>(<span class="type">U8</span>) }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Response"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Response</span> <span class="type-ahead-signature">: { http_version : <span class="type">HttpVersion</span>, status_code : <span class="type">U16</span>, status : <span class="type">Str</span>, headers : <span class="type">List</span>(<span class="type">Header</span>), body : <span class="type">List</span>(<span class="type">U8</span>) }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.all"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">all</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">List</span>(<span class="type">Markdown</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.heading"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">heading</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.link"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">link</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.image"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">image</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.code"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">code</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Level"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">Level</span> <span class="type-ahead-signature">: [<span class="type">One</span>, <span class="type">Two</span>, <span class="type">Three</span>, <span class="type">Four</span>, <span class="type">Five</span>, <span class="type">Six</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.build_primitive_parser"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">build_primitive_parser</span> <span class="type-ahead-signature">: (<span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">ParseResult</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.parse_partial"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">parse_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">ParseResult</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.parse"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">parse</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type-var">input</span>, (<span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type-var">input</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.fail"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">fail</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(_, _)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.const"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">const</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(_, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.alt"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">alt</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.apply"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">apply</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.one_of"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">one_of</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), (<span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map2"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map2</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>), (<span class="type-var">a</span>, <span class="type-var">b</span><span class="sig-arrow"> -&gt; </span><span class="type-var">c</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">c</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map3"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map3</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">c</span>), (<span class="type-var">a</span>, <span class="type-var">b</span>, <span class="type-var">c</span><span class="sig-arrow"> -&gt; </span><span class="type-var">d</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">d</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.flatten"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">flatten</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">Try</span>(<span class="type-var">a</span>, <span class="type">Str</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.lazy"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">lazy</span> <span class="type-ahead-signature">: ({  }<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.maybe"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">maybe</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">Nothing</span>]))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.many"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">many</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.one_or_more"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">one_or_more</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.between"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">between</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">open</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">close</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.sep_by1"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">sep_by1</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">sep</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.sep_by"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">sep_by</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">sep</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.ignore"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">ignore</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, {  })</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.keep"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">keep</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.skip"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">skip</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, _)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.chomp_until"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">chomp_until</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">List</span>(<span class="type-var">a</span>), <span class="type">List</span>(<span class="type-var">a</span>)) <span class="kw">where</span> { <span class="type-var">a</span>.is_eq : <span class="type-var">a</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.chomp_while"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">chomp_while</span> <span class="type-ahead-signature">: (<span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">List</span>(<span class="type-var">a</span>), <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.ParseResult"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">ParseResult</span> <span class="type-ahead-signature">: <span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type-var">input</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_str"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_str</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_str_partial"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_str_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type">Str</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_utf8</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_utf8_partial"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_utf8_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type">Utf8</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.codeunit_satisfies"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">codeunit_satisfies</span> <span class="type-ahead-signature">: (<span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.codeunit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">codeunit</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">utf8</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">U8</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">List</span>(<span class="type">U8</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.string"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">string</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_codeunit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_codeunit</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_thing"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_thing</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Utf8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_string"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_string</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.digit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">digit</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.digits"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">digits</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.one_of"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">one_of</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.str_from_utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">str_from_utf8</span> <span class="type-ahead-signature">: <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.str_from_ascii"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">str_from_ascii</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.Utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">Utf8</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.xml_parser"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">xml_parser</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Xml</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Attribute"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Attribute</span> <span class="type-ahead-signature">: { name : <span class="type">Str</span>, value : <span class="type">Str</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Declaration"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Declaration</span> <span class="type-ahead-signature">: { version : <span class="type">Version</span>, encoding : [<span class="type">Given</span>(<span class="type">Encoding</span>), <span class="type">Missing</span>] }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Version</span> <span class="type-ahead-signature"></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version.new"><span class="type-ahead-module-name">Xml.Version</span>.<span class="type-ahead-def-name">new</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Version</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version.is_eq"><span class="type-ahead-module-name">Xml.Version</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Version</span>, <span class="type">Version</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Encoding"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Encoding</span> <span class="type-ahead-signature">: [<span class="type">Utf8Encoding</span>, <span class="type">OtherEncoding</span>(<span class="type">Str</span>)]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Node"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Node</span> <span class="type-ahead-signature">:= [<span class="type">Element</span>(<span class="type">Str</span>, <span class="type">List</span>({ name : <span class="type">Str</span>, value : <span class="type">Str</span> }), <span class="type">List</span>(<span class="type">Node</span>)), <span class="type">Text</span>(<span class="type">Str</span>)]</span></a></li>
+            </ul>
+        </form>
+        <div class="main-content">
+        <h1 class="module-name">String</h1>
+        <article class="entry entry-value" id="String.parse_str">
+            <div class="entry-signature">
+                <a href="#String.parse_str" class="entry-anchor" aria-label="Permalink to parse_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.parse_str" class="entry-name-link"><strong>parse_str</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Try"><span class="type">Try</span></a>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">ParsingIncomplete</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)])</code>
+            </div>
+            <div class="entry-doc">
+                <p>Parse a <code>Str</code> using a <a href="../Parser/">Parser</a></p>
+                <pre><code>color : Parser(Utf8, [Red, Green, Blue])
+color = {
+    one_of(
+        [
+            Parser.const(Red).skip(string(&quot;red&quot;)),
+            Parser.const(Green).skip(string(&quot;green&quot;)),
+            Parser.const(Blue).skip(string(&quot;blue&quot;)),
+        ]
+    )
+}
+
+expect parse_str(color, &quot;green&quot;) == Ok(Green)</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.parse_str_partial">
+            <div class="entry-signature">
+                <a href="#String.parse_str_partial" class="entry-anchor" aria-label="Permalink to parse_str_partial"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.parse_str_partial" class="entry-name-link"><strong>parse_str_partial</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Try"><span class="type">Try</span></a>({ val : <span class="type-var">a</span>, input : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a> }, [<span class="type">ParsingFailure</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)])</code>
+            </div>
+            <div class="entry-doc">
+                <p>Runs a parser against the start of a string, allowing the parser to consume it only partially.</p>
+                <p>- If the parser succeeds, returns the resulting value as well as the leftover input.
+- If the parser fails, returns <code>Err (ParsingFailure msg)</code></p>
+                <pre><code>at_sign : Parser(Utf8, [AtSign])
+at_sign = Parser.const(AtSign).skip(codeunit(&#39;@&#39;))
+
+expect parse_str(at_sign, &quot;@&quot;) == Ok(AtSign)
+expect at_sign-&gt;parse_str_partial(&quot;@&quot;).map_ok(|r| { r.val }) == Ok(AtSign)
+expect at_sign-&gt;parse_str_partial(&quot;$&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.parse_utf8">
+            <div class="entry-signature">
+                <a href="#String.parse_utf8" class="entry-anchor" aria-label="Permalink to parse_utf8"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.parse_utf8" class="entry-name-link"><strong>parse_utf8</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Try"><span class="type">Try</span></a>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</code>
+            </div>
+            <div class="entry-doc">
+                <p>Runs a parser against a string, requiring the parser to consume it fully.</p>
+                <p>- If the parser succeeds, returns <code>Ok a</code>
+- If the parser fails, returns <code>Err (ParsingFailure Str)</code>
+- If the parser succeeds but does not consume the full string, returns <code>Err (ParsingIncomplete (List U8))</code></p>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.parse_utf8_partial">
+            <div class="entry-signature">
+                <a href="#String.parse_utf8_partial" class="entry-anchor" aria-label="Permalink to parse_utf8_partial"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.parse_utf8_partial" class="entry-name-link"><strong>parse_utf8_partial</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Try"><span class="type">Try</span></a>({ val : <span class="type-var">a</span>, input : <span class="type">Utf8</span> }, [<span class="type">ParsingFailure</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)])</code>
+            </div>
+            <div class="entry-doc">
+                <p>Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.</p>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.codeunit_satisfies">
+            <div class="entry-signature">
+                <a href="#String.codeunit_satisfies" class="entry-anchor" aria-label="Permalink to codeunit_satisfies"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.codeunit_satisfies" class="entry-name-link"><strong>codeunit_satisfies</strong></a> : (<a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a>)<span class="sig-arrow"> -&gt; </span><a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <pre><code>is_digit : U8 -&gt; Bool
+is_digit = |b| { b &gt;= &#39;0&#39; and b &lt;= &#39;9&#39; }
+
+expect codeunit_satisfies-&gt;parse_str(is_digit, &quot;0&quot;) == Ok(&#39;0&#39;)
+expect codeunit_satisfies-&gt;parse_str(is_digit, &quot;*&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.codeunit">
+            <div class="entry-signature">
+                <a href="#String.codeunit" class="entry-anchor" aria-label="Permalink to codeunit"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.codeunit" class="entry-name-link"><strong>codeunit</strong></a> : <a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a><span class="sig-arrow"> -&gt; </span><a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <pre><code>at_sign : Parser(Utf8, [AtSign])
+at_sign = Parser.const(AtSign).skip(codeunit(&#39;@&#39;))
+
+expect at_sign-&gt;parse_str(&quot;@&quot;) == Ok(AtSign)
+expect at_sign-&gt;parse_str_partial(&quot;$&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.utf8">
+            <div class="entry-signature">
+                <a href="#String.utf8" class="entry-anchor" aria-label="Permalink to utf8"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.utf8" class="entry-name-link"><strong>utf8</strong></a> : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>)<span class="sig-arrow"> -&gt; </span><a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>))</code>
+            </div>
+            <div class="entry-doc">
+                <p>Parse an exact sequence of utf8</p>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.string">
+            <div class="entry-signature">
+                <a href="#String.string" class="entry-anchor" aria-label="Permalink to string"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.string" class="entry-name-link"><strong>string</strong></a> : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a><span class="sig-arrow"> -&gt; </span><a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <p>Parse the given <code>Str</code></p>
+                <pre><code>expect string(&quot;Foo&quot;)-&gt;parse_str(&quot;Foo&quot;) == Ok(&quot;Foo&quot;)
+expect string(&quot;Foo&quot;)-&gt;parse_str(&quot;Bar&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.any_codeunit">
+            <div class="entry-signature">
+                <a href="#String.any_codeunit" class="entry-anchor" aria-label="Permalink to any_codeunit"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.any_codeunit" class="entry-name-link"><strong>any_codeunit</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <p>Matches any <code>U8</code> codeunit</p>
+                <pre><code>expect parse_str(any_codeunit, &quot;a&quot;) == Ok(&#39;a&#39;)
+expect parse_str(any_codeunit, &quot;$&quot;) == Ok(&#39;$&#39;)</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.any_thing">
+            <div class="entry-signature">
+                <a href="#String.any_thing" class="entry-anchor" aria-label="Permalink to any_thing"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.any_thing" class="entry-name-link"><strong>any_thing</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type">Utf8</span>)</code>
+            </div>
+            <div class="entry-doc">
+                <p>Matches any <code>Utf8</code> and consumes all the input without fail.</p>
+                <pre><code>expect {
+    bytes = &quot;consumes all the input&quot;.to_utf8()
+    any_thing.parse(bytes, List.is_empty) == Ok(bytes)
+}</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.any_string">
+            <div class="entry-signature">
+                <a href="#String.any_string" class="entry-anchor" aria-label="Permalink to any_string"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.any_string" class="entry-name-link"><strong>any_string</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)</code>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.digit">
+            <div class="entry-signature">
+                <a href="#String.digit" class="entry-anchor" aria-label="Permalink to digit"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.digit" class="entry-name-link"><strong>digit</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Num#U64"><span class="type">U64</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <pre><code>expect digit-&gt;parse_str(&quot;0&quot;) == Ok(0)
+expect digit-&gt;parse_str(&quot;not a digit&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.digits">
+            <div class="entry-signature">
+                <a href="#String.digits" class="entry-anchor" aria-label="Permalink to digits"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.digits" class="entry-name-link"><strong>digits</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <a href="https://roc-lang.org/builtins/main/Num#U64"><span class="type">U64</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <p>Parse a sequence of digits into a <code>U64</code>, accepting leading zeroes</p>
+                <pre><code>expect digits-&gt;parse_str(&quot;0123&quot;) == Ok(123)
+expect digits-&gt;parse_str(&quot;not a digit&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.one_of">
+            <div class="entry-signature">
+                <a href="#String.one_of" class="entry-anchor" aria-label="Permalink to one_of"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.one_of" class="entry-name-link"><strong>one_of</strong></a> : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<span class="type">Utf8</span>, <span class="type-var">a</span>)</code>
+            </div>
+            <div class="entry-doc">
+                <p>Try a bunch of different parsers.</p>
+                <p>The first parser which is tried is the one at the front of the list,
+and the next one is tried until one succeeds or the end of the list was reached.</p>
+                <pre><code>bool_parser : Parser(Utf8, Bool)
+bool_parser = {
+    one_of([string(&quot;true&quot;), string(&quot;false&quot;)])
+    .map(|x| { x == &quot;true&quot; })
+}
+
+expect bool_parser-&gt;parse_str(&quot;true&quot;) == Ok(Bool.True)
+expect bool_parser-&gt;parse_str(&quot;false&quot;) == Ok(Bool.False)
+expect bool_parser-&gt;parse_str(&quot;not a bool&quot;).is_err()</code></pre>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.str_from_utf8">
+            <div class="entry-signature">
+                <a href="#String.str_from_utf8" class="entry-anchor" aria-label="Permalink to str_from_utf8"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.str_from_utf8" class="entry-name-link"><strong>str_from_utf8</strong></a> : <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+            </div>
+        </article>
+        <article class="entry entry-value" id="String.str_from_ascii">
+            <div class="entry-signature">
+                <a href="#String.str_from_ascii" class="entry-anchor" aria-label="Permalink to str_from_ascii"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.str_from_ascii" class="entry-name-link"><strong>str_from_ascii</strong></a> : <a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+            </div>
+        </article>
+        <article class="entry entry-type" id="String.Utf8">
+            <div class="entry-signature">
+                <a href="#String.Utf8" class="entry-anchor" aria-label="Permalink to Utf8"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#String.Utf8" class="entry-name-link"><strong>Utf8</strong></a> : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/Num#U8"><span class="type">U8</span></a>)</code>
+            </div>
+            <div class="entry-doc">
+                <pre><code>Utf8 : List U8</code></pre>
+            </div>
+        </article>
+        </div>
+        <footer><p>Made by people who like to make nice things.</p></footer>
+    </main>
+</body>
+</html>
