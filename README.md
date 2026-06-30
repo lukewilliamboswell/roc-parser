@@ -45,4 +45,4 @@ CI skips `examples/markdown.roc` because the latest Roc nightly overflows the co
 
 Bundle the package for distribution using `scripts/bundle.sh --output-dir dist`.
 
-Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, creates the GitHub release, deploys generated docs to GitHub Pages, and opens a release-artifacts PR with updated example package URLs plus the generated `www/` docs.
+Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, then creates the GitHub release. Update example package URLs and generated `www/` docs in a follow-up PR.
