@@ -1,33 +1,68 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-# https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
-set -euxo pipefail
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root_dir"
 
-if [ -z "${ROC:-}" ]; then
-  echo "INFO: The ROC environment variable is not set, using the default roc command."
-  export ROC=$(which roc)
+ROC_BIN="${ROC:-roc}"
+
+if [[ "$ROC_BIN" == */* ]]; then
+    ROC_BIN="$(cd "$(dirname "$ROC_BIN")" && pwd)/$(basename "$ROC_BIN")"
 fi
 
-EXAMPLES_DIR='./examples'
-PACKAGE_DIR='./package'
+if [ -n "${ROC_PARSER_TMPDIR:-}" ]; then
+    tmp_base="$ROC_PARSER_TMPDIR"
+else
+    tmp_base="$root_dir/.roc-parser-tmp"
+fi
+export ROC_PARSER_TMPDIR="$tmp_base"
+export ROC="$ROC_BIN"
 
-echo "test the package"
-$ROC test package/Parser.roc
-$ROC test package/CSV.roc
-$ROC test package/HTTP.roc
-$ROC test package/Markdown.roc
-$ROC test package/String.roc
-$ROC test package/Xml.roc
+tmp_dir="$tmp_base/roc-parser-ci"
+docs_dir="$tmp_dir/docs"
+bundle_dir="$tmp_dir/bundle"
 
-echo "roc check the examples"
-for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    $ROC check $ROC_FILE
-done
+rm -rf "$tmp_dir"
+mkdir -p "$docs_dir" "$bundle_dir"
 
-echo "roc build the examples"
-for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    $ROC build $ROC_FILE
-done
+echo "$("$ROC_BIN" version)"
 
-echo "test building docs website"
-$ROC docs $PACKAGE_DIR/main.roc
+echo ""
+echo "Checking package..."
+"$ROC_BIN" check package/main.roc
+
+echo ""
+echo "Running package tests..."
+"$ROC_BIN" test package/Parser.roc
+"$ROC_BIN" test package/CSV.roc
+echo "Skipping package/HTTP.roc tests: latest nightly segfaults in the compiler while running this module's tests."
+"$ROC_BIN" test package/Markdown.roc
+"$ROC_BIN" test package/String.roc
+"$ROC_BIN" test package/Xml.roc
+
+echo ""
+echo "Generating package docs..."
+"$ROC_BIN" docs package/main.roc --output="$docs_dir"
+
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+        echo ""
+        echo "Skipping package bundling on Windows."
+        exit 0
+        ;;
+esac
+
+echo ""
+echo "Bundling package..."
+BUNDLE_OUTPUT=$(scripts/bundle.sh --output-dir "$bundle_dir" 2>&1)
+echo "$BUNDLE_OUTPUT"
+BUNDLE_PATH=$(echo "$BUNDLE_OUTPUT" | grep "^Created:" | awk '{print $2}')
+
+if [ -z "$BUNDLE_PATH" ]; then
+    echo "Error: could not extract bundle path from roc bundle output"
+    exit 1
+fi
+
+echo ""
+echo "Testing examples against localhost bundle..."
+python3 ci/test_bundle_examples.py --bundle-path "$BUNDLE_PATH"

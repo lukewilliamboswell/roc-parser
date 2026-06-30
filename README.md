@@ -27,7 +27,7 @@ Includes modules to parse the following (with various levels of maturity);
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
 
-Locally generate docs using `roc docs package/main.roc`
+Locally generate docs using `roc docs package/main.roc --output=www`.
 
 ## Contributing
 
@@ -35,7 +35,12 @@ If you see anything that could be improved please create an Issue or Pull Reques
 
 ## Tests
 
-Run tests locally with `roc test package/main.roc`
+Run the full CI check locally with `./ci/all_tests.sh`.
 
-## Packaging (TODO: Update)
-Bundle package into a URL for distribution using `roc build --bundle .tar.br package/main.roc`
+CI temporarily skips `package/HTTP.roc` tests because the latest Roc nightly segfaults in the compiler while running that module's tests.
+
+CI skips `examples/markdown.roc` because the latest Roc nightly overflows the compiler stack while checking it, and skips `examples/xml-svg.roc` because it depends on a migrated `roc-html` package release that is not available yet.
+
+## Packaging
+
+Bundle the package for distribution using `scripts/bundle.sh --output-dir dist`.

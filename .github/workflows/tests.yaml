@@ -1,6 +1,11 @@
-on: 
+name: Tests
+
+on:
   pull_request:
   workflow_dispatch:
+
+env:
+  ZIG_VERSION: "0.16.0"
 
 # this cancels workflows currently in progress if you start a new one
 concurrency:
@@ -8,35 +13,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   test-examples:
-    runs-on: [ubuntu-20.04]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
-    
-      - id: try_fetching_testing_release
-        continue-on-error: true
-        run: |
-          curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-TESTING.tar.gz
+      - uses: actions/checkout@v4
 
-      - name: There are no TESTING releases, checking regular releases instead
-        if: steps.try_fetching_testing_release.outcome == 'failure'
-        run: |
-          curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-latest.tar.gz
-      
-      - name: rename nightly tar
-        run: mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
 
-      - name: decompress the tar
-        run: tar -xzf roc_nightly.tar.gz
+      - name: Install Roc
+        uses: roc-lang/setup-roc@main
+        with:
+          version: nightly-new-compiler
 
-      - run: rm roc_nightly.tar.gz
+      - run: roc version
 
-      - name: simplify nightly folder name
-        run: mv roc_nightly* roc_nightly
-
-      # Check roc cli available
-      - run: ./roc_nightly/roc version
-
-      # Run all tests 
-      - run: ROC=./roc_nightly/roc ./ci/all_tests.sh
+      - run: ./ci/all_tests.sh

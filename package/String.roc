@@ -7,7 +7,7 @@ String :: {}.{
 	## ```
 	Utf8 : List(U8)
 
-	## Parse a [Str] using a [Parser]
+	## Parse a `Str` using a [Parser]
 	## ```roc
 	## color : Parser(Utf8, [Red, Green, Blue])
 	## color = {
@@ -161,7 +161,7 @@ String :: {}.{
 		)
 	}
 
-	## Parse the given [Str]
+	## Parse the given `Str`
 	## ```roc
 	## expect string("Foo")->parse_str("Foo") == Ok("Foo")
 	## expect string("Foo")->parse_str("Bar").is_err()
@@ -178,7 +178,7 @@ String :: {}.{
 			)
 	}
 
-	## Matches any [U8] codeunit
+	## Matches any `U8` codeunit
 	## ```roc
 	## expect parse_str(any_codeunit, "a") == Ok('a')
 	## expect parse_str(any_codeunit, "$") == Ok('$')
@@ -192,7 +192,7 @@ String :: {}.{
 	expect any_codeunit->parse_str("a") == Ok('a')
 	expect any_codeunit->parse_str("\$") == Ok(36)
 
-	## Matches any [Utf8] and consumes all the input without fail.
+	## Matches any `Utf8` and consumes all the input without fail.
 	## ```roc
 	## expect {
 	##     bytes = "consumes all the input".to_utf8()
@@ -246,7 +246,7 @@ String :: {}.{
 			},
 		)
 
-	## Parse a sequence of digits into a [U64], accepting leading zeroes
+	## Parse a sequence of digits into a `U64`, accepting leading zeroes
 	## ```roc
 	## expect digits->parse_str("0123") == Ok(123)
 	## expect digits->parse_str("not a digit").is_err()

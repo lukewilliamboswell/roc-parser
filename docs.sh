@@ -24,10 +24,4 @@ VERSION=$1
 validate_version "$VERSION"
 
 # Run roc docs with validated version
-roc docs --root-dir "/roc-parser/$VERSION/" package/main.roc
-
-# Create new version directory in www/
-mkdir www/$VERSION
-
-# Move generated docs to version directory
-mv generated-docs/* www/$VERSION
+roc docs package/main.roc --output="www/$VERSION"

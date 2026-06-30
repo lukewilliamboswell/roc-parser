@@ -5,3 +5,5 @@ examples/markdown
 examples/xml-svg
 
 generated-docs/
+dist/
+.roc-parser-tmp/

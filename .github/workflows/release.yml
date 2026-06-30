@@ -1,0 +1,182 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, e.g. v0.12.0"
+        required: true
+        type: string
+  pull_request:
+
+env:
+  ZIG_VERSION: "0.16.0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-bundle:
+    name: Build package bundle
+    runs-on: ubuntu-24.04
+    outputs:
+      bundle_filename: ${{ steps.bundle.outputs.bundle_filename }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@main
+        with:
+          version: nightly-new-compiler
+
+      - name: Run full CI checks
+        run: ./ci/all_tests.sh
+
+      - name: Bundle package
+        id: bundle
+        run: |
+          BUNDLE_OUTPUT=$(scripts/bundle.sh --output-dir dist 2>&1)
+          echo "$BUNDLE_OUTPUT"
+
+          BUNDLE_PATH=$(echo "$BUNDLE_OUTPUT" | grep "^Created:" | awk '{print $2}')
+          BUNDLE_FILENAME=$(basename "$BUNDLE_PATH")
+
+          if [ -z "$BUNDLE_FILENAME" ]; then
+            echo "Error: could not extract bundle filename from roc bundle output"
+            exit 1
+          fi
+
+          echo "bundle_filename=$BUNDLE_FILENAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-bundle
+          path: dist/${{ steps.bundle.outputs.bundle_filename }}
+          retention-days: 30
+
+  test-bundle:
+    name: Test package bundle (${{ matrix.os }})
+    needs: build-bundle
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15-intel
+          - windows-2025
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@main
+        with:
+          version: nightly-new-compiler
+
+      - name: Download package bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-bundle
+          path: dist
+
+      - name: Test examples against downloaded bundle
+        run: python3 ci/test_bundle_examples.py --bundle-path "dist/${{ needs.build-bundle.outputs.bundle_filename }}"
+
+  create-release:
+    name: Create GitHub release
+    needs:
+      - build-bundle
+      - test-bundle
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Download package bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package-bundle
+          path: dist
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@main
+        with:
+          version: nightly-new-compiler
+
+      - name: Update example package URLs
+        env:
+          BUNDLE_FILENAME: ${{ needs.build-bundle.outputs.bundle_filename }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" != "branch" ]; then
+            echo "Release workflow must be run from a branch so it can commit updated example URLs."
+            exit 1
+          fi
+
+          BUNDLE_URL="https://github.com/lukewilliamboswell/roc-parser/releases/download/${RELEASE_TAG}/${BUNDLE_FILENAME}"
+          set +e
+          python3 ci/update_example_parser_url.py "$BUNDLE_URL"
+          UPDATE_STATUS=$?
+          set -e
+
+          if [ "$UPDATE_STATUS" -eq 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add examples
+            git commit -m "Update examples for ${RELEASE_TAG}"
+            git push origin HEAD:${{ github.ref_name }}
+          elif [ "$UPDATE_STATUS" -eq 2 ]; then
+            echo "Example package URLs are already current."
+          else
+            exit "$UPDATE_STATUS"
+          fi
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUNDLE_FILE="dist/${{ needs.build-bundle.outputs.bundle_filename }}"
+          ROC_VERSION=$(roc version)
+          TARGET_COMMIT=$(git rev-parse HEAD)
+
+          gh release create "${{ github.event.inputs.release_tag }}" \
+            "$BUNDLE_FILE" \
+            --target "$TARGET_COMMIT" \
+            --title "${{ github.event.inputs.release_tag }}" \
+            --generate-notes \
+            --notes "Parser package bundle built with Roc $ROC_VERSION."
