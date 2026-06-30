@@ -3,17 +3,17 @@
 A simple [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator) package for Roc.
 
 ```roc
-color : Parser Utf8 [Red, Green, Blue]
-color =
-    one_of(
-        [
-            const(Red) |> skip(string("red")),
-            const(Green) |> skip(string("green")),
-            const(Blue) |> skip(string("blue")),
-        ],
-    )
+color : Parser(String.Utf8, [Red, Green, Blue])
+color = 
+	String.one_of(
+		[
+			Parser.const(Red).skip(String.string("red")),
+			Parser.const(Green).skip(String.string("green")),
+			Parser.const(Blue).skip(String.string("blue")),
+		],
+	)
 
-expect parse_str(color, "green") == Ok(Green)
+expect String.parse_str(color, "green") == Ok(Green)
 ```
 
 Includes modules to parse the following (with various levels of maturity);
@@ -27,7 +27,7 @@ Includes modules to parse the following (with various levels of maturity);
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
 
-Locally generate docs using `roc docs package/main.roc`
+Locally generate versioned docs using `./docs.sh 0.11.0`.
 
 ## Contributing
 
@@ -35,8 +35,14 @@ If you see anything that could be improved please create an Issue or Pull Reques
 
 ## Tests
 
-Run tests locally with `roc test package/main.roc`
+Run the full CI check locally with `./ci/all_tests.sh`.
+
+CI temporarily skips `package/HTTP.roc` tests because the latest Roc nightly segfaults in the compiler while running that module's tests.
+
+CI skips `examples/markdown.roc` because the latest Roc nightly overflows the compiler stack while checking it, and skips `examples/xml-svg.roc` because it depends on a migrated `roc-html` package release that is not available yet.
 
 ## Packaging
 
-Bundle package into a URL for distribution using `roc build --bundle .tar.br package/main.roc`
+Bundle the package for distribution using `scripts/bundle.sh --output-dir dist`.
+
+Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, updates example package URLs, regenerates versioned docs, updates the docs redirect, creates the GitHub release, and deploys the docs to GitHub Pages.

@@ -1,6 +1,6 @@
 app [main!] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/Hj-J_zxz7V9YurCSTFcFdu6cQJie4guzsPMUi5kBYUk.tar.br",
-    parser: "../package/main.roc",
+	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst",
+	parser: "../package/main.roc",
 }
 
 import cli.Stdout
@@ -8,45 +8,53 @@ import parser.String
 import parser.Markdown
 
 content : Str
-content =
-    """
-    # Title
+content = 
+	\\# Title
+	\\
+	\\This is some text
+	\\
+	\\[roc website](https://roc-lang.org)
+	\\
+	\\## Sub-title
+	\\
+	\\```roc
+	\\# some code
+	\\foo = bar
+	\\```
 
-    This is some text
+main! = |_args| {
+	parsed = 
+		String.parse_str(Markdown.all, content)
+			.map_ok(
+				|nodes| {
+					render_content(nodes, "")
+				},
+			)
+			?? "PARSING ERROR"
 
-    [roc website](https://roc-lang.org)
+	Stdout.line!(parsed)
+	Ok({})
+}
 
-    ## Sub-title
+render_content : List(Markdown.Markdown), Str -> Str
+render_content = |nodes, buf| {
+	match nodes {
+		[] =>
+			buf # base case
 
-    ```roc
-    # some code
-    foo = bar
-    ```
-    """
+		[Heading(level, str), .. as rest] =>
+			render_content(rest, buf.concat("HEADING: ${Str.inspect(level)} ${str}\n"))
 
-main! = |_args|
-    String.parse_str(Markdown.all, content)
-    |> Result.map_ok(|nodes| render_content(nodes, ""))
-    |> Result.with_default("PARSING ERROR")
-    |> Stdout.line!
+		[Link({ alt, href }), .. as rest] =>
+			render_content(rest, buf.concat("LINK: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
 
-render_content : List Markdown.Markdown, Str -> Str
-render_content = |nodes, buf|
-    when nodes is
-        [] ->
-            buf # base case
+		[Image({ alt, href }), .. as rest] =>
+			render_content(rest, buf.concat("IMAGE: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
 
-        [Heading(level, str), .. as rest] ->
-            render_content(rest, Str.concat(buf, "HEADING: ${Inspect.to_str(level)} ${str}\n"))
+		[Code({ ext, pre }), .. as rest] =>
+			render_content(rest, buf.concat("CODE: ext: ${Str.inspect(ext)}, pre: ${Str.inspect(pre)}\n"))
 
-        [Link({ alt, href }), .. as rest] ->
-            render_content(rest, Str.concat(buf, "LINK: ${Inspect.to_str({ alt, href })}\n"))
-
-        [Image({ alt, href }), .. as rest] ->
-            render_content(rest, Str.concat(buf, "IMAGE: ${Inspect.to_str({ alt, href })}\n"))
-
-        [Code({ ext, pre }), .. as rest] ->
-            render_content(rest, Str.concat(buf, "CODE: ${Inspect.to_str({ ext, pre })}\n"))
-
-        [TODO(line), .. as rest] ->
-            render_content(rest, Str.concat(buf, "TODO: ${line}\n"))
+		[TODO(line), .. as rest] =>
+			render_content(rest, buf.concat("TODO: ${line}\n"))
+		}
+}
