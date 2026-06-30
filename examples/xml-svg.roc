@@ -2,7 +2,7 @@ app [main!] {
 	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst",
 	# TODO: point to the migrated html library
 	html: "https://github.com/lukewilliamboswell/roc-html/...",
-	parser: "../package/main.roc",
+	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.11.0/HS5cXN8JrJKdxM2Y8azXzbHCxCx2qxocySTGr6sLGQTZ.tar.zst",
 }
 
 import cli.Stdout
