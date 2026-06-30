@@ -113,12 +113,8 @@ jobs:
       - test-bundle
     runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
-    outputs:
-      release_commit: ${{ steps.prepare_release.outputs.release_commit }}
-      release_tag: ${{ steps.prepare_release.outputs.release_tag }}
     permissions:
       contents: write
-      pull-requests: write
     defaults:
       run:
         shell: bash
@@ -141,80 +137,18 @@ jobs:
         with:
           version: nightly-new-compiler
 
-      - name: Prepare release docs and examples
-        id: prepare_release
+      - name: Validate release version
+        id: release_version
         env:
-          BUNDLE_FILENAME: ${{ needs.build-bundle.outputs.bundle_filename }}
           RAW_RELEASE_VERSION: ${{ github.event.inputs.release_version }}
-          REF_TYPE: ${{ github.ref_type }}
-          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$REF_TYPE" != "branch" ]; then
-            echo "Release workflow must be run from a branch."
-            exit 1
-          fi
-
-          SOURCE_COMMIT=$(git rev-parse HEAD)
           RELEASE_VERSION="${RAW_RELEASE_VERSION#v}"
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use x.y.z format, e.g. 0.11.0"
             exit 1
           fi
 
-          RELEASE_TAG="$RELEASE_VERSION"
-          BUNDLE_URL="https://github.com/lukewilliamboswell/roc-parser/releases/download/${RELEASE_TAG}/${BUNDLE_FILENAME}"
-          set +e
-          python3 ci/update_example_parser_url.py "$BUNDLE_URL"
-          UPDATE_STATUS=$?
-          set -e
-
-          if [ "$UPDATE_STATUS" -eq 2 ]; then
-            echo "Example package URLs are already current."
-          elif [ "$UPDATE_STATUS" -ne 0 ]; then
-            exit "$UPDATE_STATUS"
-          fi
-
-          DOCS_ROOT=www ./docs.sh "$RELEASE_VERSION"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add examples www
-
-          if git diff --cached --quiet; then
-            echo "Release docs and example URLs are already current."
-          else
-            RELEASE_ARTIFACTS_BRANCH="release-artifacts/${RELEASE_VERSION}"
-            git commit -m "Prepare ${RELEASE_VERSION} release artifacts"
-            git push --force-with-lease origin HEAD:"$RELEASE_ARTIFACTS_BRANCH"
-
-            PR_NUMBER=$(gh pr list \
-              --base "${{ github.ref_name }}" \
-              --head "$RELEASE_ARTIFACTS_BRANCH" \
-              --state open \
-              --json number \
-              --jq '.[0].number // empty')
-
-            if [ -z "$PR_NUMBER" ]; then
-              gh pr create \
-                --base "${{ github.ref_name }}" \
-                --head "$RELEASE_ARTIFACTS_BRANCH" \
-                --title "Prepare ${RELEASE_VERSION} release artifacts" \
-                --body "Generated docs and updated example package URLs for release ${RELEASE_VERSION}."
-            else
-              gh pr comment "$PR_NUMBER" \
-                --body "Updated generated docs and example package URLs for release ${RELEASE_VERSION}."
-            fi
-          fi
-
-          echo "release_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Upload generated docs artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-docs
-          path: www
-          retention-days: 30
+          echo "release_tag=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create release
         env:
@@ -222,44 +156,11 @@ jobs:
         run: |
           BUNDLE_FILE="dist/${{ needs.build-bundle.outputs.bundle_filename }}"
           ROC_VERSION=$(roc version)
-          TARGET_COMMIT="${{ steps.prepare_release.outputs.release_commit }}"
-          RELEASE_TAG="${{ steps.prepare_release.outputs.release_tag }}"
+          RELEASE_TAG="${{ steps.release_version.outputs.release_tag }}"
 
           gh release create "$RELEASE_TAG" \
             "$BUNDLE_FILE" \
-            --target "$TARGET_COMMIT" \
+            --target "${{ github.sha }}" \
             --title "$RELEASE_TAG" \
             --generate-notes \
             --notes "Parser package bundle built with Roc $ROC_VERSION."
-
-  deploy-docs:
-    name: Deploy docs
-    needs: create-release
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Download generated docs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: release-docs
-          path: ./www
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "./www"
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
