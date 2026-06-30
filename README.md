@@ -27,7 +27,7 @@ Includes modules to parse the following (with various levels of maturity);
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
 
-Locally generate docs using `roc docs package/main.roc --output=www`.
+Locally generate versioned docs using `./docs.sh 0.11.0`.
 
 ## Contributing
 
@@ -44,3 +44,5 @@ CI skips `examples/markdown.roc` because the latest Roc nightly overflows the co
 ## Packaging
 
 Bundle the package for distribution using `scripts/bundle.sh --output-dir dist`.
+
+Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, updates example package URLs, regenerates versioned docs, updates the docs redirect, creates the GitHub release, and deploys the docs to GitHub Pages.
