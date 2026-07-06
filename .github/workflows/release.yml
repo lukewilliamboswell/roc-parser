@@ -113,6 +113,8 @@ jobs:
       - test-bundle
     runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
+    outputs:
+      release_tag: ${{ steps.release_version.outputs.release_tag }}
     permissions:
       contents: write
     defaults:
@@ -142,6 +144,11 @@ jobs:
         env:
           RAW_RELEASE_VERSION: ${{ github.event.inputs.release_version }}
         run: |
+          if [[ "${GITHUB_REF_TYPE:-}" != "branch" ]]; then
+            echo "Release workflow must be run from a branch so generated docs can be committed."
+            exit 1
+          fi
+
           RELEASE_VERSION="${RAW_RELEASE_VERSION#v}"
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use x.y.z format, e.g. 0.11.0"
@@ -164,3 +171,65 @@ jobs:
             --title "$RELEASE_TAG" \
             --generate-notes \
             --notes "Parser package bundle built with Roc $ROC_VERSION."
+
+  publish-docs:
+    name: Publish release docs
+    needs:
+      - create-release
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@main
+        with:
+          version: nightly-new-compiler
+
+      - name: Generate versioned docs
+        run: ./docs.sh "${{ needs.create-release.outputs.release_tag }}"
+
+      - name: Commit generated docs
+        env:
+          RELEASE_TAG: ${{ needs.create-release.outputs.release_tag }}
+        run: |
+          if git diff --quiet -- www; then
+            echo "No docs changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add www
+          git commit -m "Update docs for $RELEASE_TAG"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload docs artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./www"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

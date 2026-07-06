@@ -39,10 +39,10 @@ Run the full CI check locally with `./ci/all_tests.sh`.
 
 CI temporarily skips `package/HTTP.roc` tests because the latest Roc nightly segfaults in the compiler while running that module's tests.
 
-CI skips `examples/markdown.roc` because the latest Roc nightly overflows the compiler stack while checking it, and skips `examples/xml-svg.roc` because it depends on a migrated `roc-html` package release that is not available yet.
+CI skips `examples/xml-svg.roc` because it depends on a migrated `roc-html` package release that is not available yet.
 
 ## Packaging
 
 Bundle the package for distribution using `scripts/bundle.sh --output-dir dist`.
 
-Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, then creates the GitHub release. Update example package URLs and generated `www/` docs in a follow-up PR.
+Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, creates the GitHub release, generates versioned docs, commits the generated `www/` update, and publishes the docs to GitHub Pages.
