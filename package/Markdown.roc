@@ -3,11 +3,13 @@ import String
 
 # # Content values
 Markdown := [
-	Heading(Level, Str),
+	Heading(Level, List(Inline)),
 	Paragraph(List(Inline)),
 	Blockquote(List(Markdown)),
 	UnorderedList(List(Markdown)),
+	OrderedList(List(Markdown)),
 	ListItem(List(Inline), List(Markdown)),
+	HorizontalRule,
 	Link({ alt : Str, href : Str }),
 	Image({ alt : Str, href : Str }),
 	Code({ ext : Str, pre : Str }),
@@ -26,11 +28,14 @@ Markdown := [
 	all : Parser(String.Utf8, List(Markdown))
 	all = parse_all
 
+	inlines : Parser(String.Utf8, List(Inline))
+	inlines = parse_inlines_parser
+
 	## Headings
 	##
 	## ```
-	## expect String.parse_str(heading, "# Foo Bar") == Ok(Heading(One, "Foo Bar"))
-	## expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading(Two, "Foo Bar"))
+	## expect String.parse_str(heading, "# Foo Bar") == Ok(Heading(One, [Text("Foo Bar")]))
+	## expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading(Two, [Text("Foo Bar")]))
 	## ```
 	heading : Parser(String.Utf8, Markdown)
 	heading =
@@ -191,7 +196,7 @@ parse_one_block = |lines, min_indent| {
 		[line, underline, .. as rest_after_heading] if can_be_setext_heading_text(line, min_indent) => {
 			match underline_level(underline, min_indent) {
 				Ok(level) =>
-					Ok({ val: Heading(level, String.str_from_utf8(strip_indent(line, min_indent))), input: rest_after_heading })
+					Ok({ val: Heading(level, parse_inlines(strip_indent(line, min_indent))), input: rest_after_heading })
 
 				Err(_) =>
 					parse_one_block_without_setext(lines, min_indent)
@@ -219,24 +224,23 @@ parse_one_block_without_setext = |lines, min_indent| {
 				Err(_) if is_code_fence_line(line, min_indent) =>
 					parse_code_block(lines, min_indent)
 
+				Err(_) if is_horizontal_rule_line(line, min_indent) =>
+					Ok({ val: HorizontalRule, input: rest })
+
 				Err(_) => {
 					match parse_image_line(content) {
 						Ok(block) =>
 							Ok({ val: block, input: rest })
 
 						Err(_) => {
-							match parse_link_line(content) {
-								Ok(block) =>
-									Ok({ val: block, input: rest })
-
-								Err(_) if is_blockquote_line(line, min_indent) =>
-									parse_blockquote(lines, min_indent)
-
-								Err(_) if is_list_item_line(line, min_indent) =>
-									parse_unordered_list(lines, min_indent)
-
-								Err(_) =>
-									parse_paragraph(lines, min_indent)
+							if is_blockquote_line(line, min_indent) {
+								parse_blockquote(lines, min_indent)
+							} else if is_unordered_list_item_line(line, min_indent) {
+								parse_unordered_list(lines, min_indent)
+							} else if is_ordered_list_item_line(line, min_indent) {
+								parse_ordered_list(lines, min_indent)
+							} else {
+								parse_paragraph(lines, min_indent)
 							}
 						}
 					}
@@ -342,23 +346,57 @@ collect_blockquote_lines = |lines, min_indent, acc| {
 
 parse_unordered_list : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
 parse_unordered_list = |lines, min_indent| {
-	parsed = parse_list_items(lines, min_indent, [])?
+	parsed = parse_list_items(lines, min_indent, [], unordered_list_item_content)?
 	Ok({ val: UnorderedList(parsed.val), input: parsed.input })
 }
 
-parse_list_items : List(Line), U64, List(Markdown) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
-parse_list_items = |lines, min_indent, items| {
-	match lines {
-		[line, .. as rest] if is_list_item_line(line, min_indent) => {
-			content = strip_indent(line, min_indent).drop_first(2)
-			children = parse_blocks_from_lines(rest, min_indent + 2)?
-			item = ListItem(parse_inlines(content), children.val)
+parse_ordered_list : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_ordered_list = |lines, min_indent| {
+	parsed = parse_list_items(lines, min_indent, [], ordered_list_item_content)?
+	Ok({ val: OrderedList(parsed.val), input: parsed.input })
+}
 
-			parse_list_items(children.input, min_indent, items.append(item))
+parse_list_items : List(Line), U64, List(Markdown), (Line, U64 -> Try(String.Utf8, [NotFound])) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
+parse_list_items = |lines, min_indent, items, list_item_content| {
+	match lines {
+		[line, .. as rest] => {
+			match list_item_content(line, min_indent) {
+				Ok(content) => {
+					content_indent = min_indent + 2
+					continuation = collect_list_item_continuation(rest, content_indent, [content])
+					children = parse_blocks_from_lines(continuation.input, content_indent)?
+					item = ListItem(parse_inlines(join_lines_with_spaces(continuation.val)), children.val)
+
+					parse_list_items(children.input, min_indent, items.append(item), list_item_content)
+				}
+
+				Err(_) =>
+					Ok({ val: items, input: lines })
+			}
 		}
 
 		_ =>
 			Ok({ val: items, input: lines })
+	}
+}
+
+collect_list_item_continuation : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
+collect_list_item_continuation = |lines, content_indent, acc| {
+	match lines {
+		[] =>
+			{ val: acc, input: [] }
+
+		[line, ..] if line_is_blank(line) =>
+			{ val: acc, input: lines }
+
+		[line, ..] if line_indent(line) < content_indent =>
+			{ val: acc, input: lines }
+
+		[line, ..] if is_block_start(line, content_indent) =>
+			{ val: acc, input: lines }
+
+		[line, .. as rest] =>
+			collect_list_item_continuation(rest, content_indent, acc.append(strip_indent(line, content_indent)))
 	}
 }
 
@@ -370,11 +408,12 @@ is_block_start = |line, min_indent| {
 		content = strip_indent(line, min_indent)
 
 		is_hash_heading_line(content)
+			or is_horizontal_rule_line(line, min_indent)
 			or is_code_fence_line(line, min_indent)
 			or parse_image_line(content).is_ok()
-			or parse_link_line(content).is_ok()
 			or is_blockquote_line(line, min_indent)
-			or is_list_item_line(line, min_indent)
+			or is_unordered_list_item_line(line, min_indent)
+			or is_ordered_list_item_line(line, min_indent)
 	}
 }
 
@@ -407,22 +446,22 @@ parse_hash_heading_line : String.Utf8 -> Try(Markdown, [NotFound])
 parse_hash_heading_line = |content| {
 	match content {
 		['#', ' ', .. as text] =>
-			Ok(Heading(One, String.str_from_utf8(text)))
+			Ok(Heading(One, parse_inlines(text)))
 
 		['#', '#', ' ', .. as text] =>
-			Ok(Heading(Two, String.str_from_utf8(text)))
+			Ok(Heading(Two, parse_inlines(text)))
 
 		['#', '#', '#', ' ', .. as text] =>
-			Ok(Heading(Three, String.str_from_utf8(text)))
+			Ok(Heading(Three, parse_inlines(text)))
 
 		['#', '#', '#', '#', ' ', .. as text] =>
-			Ok(Heading(Four, String.str_from_utf8(text)))
+			Ok(Heading(Four, parse_inlines(text)))
 
 		['#', '#', '#', '#', '#', ' ', .. as text] =>
-			Ok(Heading(Five, String.str_from_utf8(text)))
+			Ok(Heading(Five, parse_inlines(text)))
 
 		['#', '#', '#', '#', '#', '#', ' ', .. as text] =>
-			Ok(Heading(Six, String.str_from_utf8(text)))
+			Ok(Heading(Six, parse_inlines(text)))
 
 		_ =>
 			Err(NotFound)
@@ -495,10 +534,94 @@ strip_blockquote_marker = |line, min_indent| {
 	}
 }
 
-is_list_item_line : Line, U64 -> Bool
-is_list_item_line = |line, min_indent| {
-	line_indent(line) == min_indent and starts_with_bytes(strip_indent(line, min_indent), "- ".to_utf8())
+is_unordered_list_item_line : Line, U64 -> Bool
+is_unordered_list_item_line = |line, min_indent| {
+	unordered_list_item_content(line, min_indent).is_ok()
 }
+
+unordered_list_item_content : Line, U64 -> Try(String.Utf8, [NotFound])
+unordered_list_item_content = |line, min_indent| {
+	if line_indent(line) == min_indent and starts_with_bytes(strip_indent(line, min_indent), "- ".to_utf8()) {
+		Ok(strip_indent(line, min_indent).drop_first(2))
+	} else {
+		Err(NotFound)
+	}
+}
+
+is_ordered_list_item_line : Line, U64 -> Bool
+is_ordered_list_item_line = |line, min_indent| {
+	ordered_list_item_content(line, min_indent).is_ok()
+}
+
+ordered_list_item_content : Line, U64 -> Try(String.Utf8, [NotFound])
+ordered_list_item_content = |line, min_indent| {
+	if line_indent(line) == min_indent {
+		ordered_marker_content(strip_indent(line, min_indent))
+	} else {
+		Err(NotFound)
+	}
+}
+
+ordered_marker_content : String.Utf8 -> Try(String.Utf8, [NotFound])
+ordered_marker_content = |content| {
+	match content {
+		[first, .. as rest] if is_digit_byte(first) =>
+			ordered_marker_content_help(rest)
+
+		_ =>
+			Err(NotFound)
+	}
+}
+
+ordered_marker_content_help : String.Utf8 -> Try(String.Utf8, [NotFound])
+ordered_marker_content_help = |content| {
+	match content {
+		['.', ' ', .. as rest] =>
+			Ok(rest)
+
+		[first, .. as rest] if is_digit_byte(first) =>
+			ordered_marker_content_help(rest)
+
+		_ =>
+			Err(NotFound)
+	}
+}
+
+is_horizontal_rule_line : Line, U64 -> Bool
+is_horizontal_rule_line = |line, min_indent| {
+	if line_indent(line) != min_indent {
+		Bool.False
+	} else {
+		content = strip_indent(line, min_indent)
+
+		match content {
+			['-', '-', '-', .. as rest] if all_bytes_are(rest, '-') =>
+				Bool.True
+
+			['*', '*', '*', .. as rest] if all_bytes_are(rest, '*') =>
+				Bool.True
+
+			['_', '_', '_', .. as rest] if all_bytes_are(rest, '_') =>
+				Bool.True
+
+			_ =>
+				Bool.False
+		}
+	}
+}
+
+is_digit_byte : U8 -> Bool
+is_digit_byte = |byte| {
+	byte >= '0' and byte <= '9'
+}
+
+parse_inlines_parser : Parser(String.Utf8, List(Inline))
+parse_inlines_parser =
+	Parser.build_primitive_parser(
+		|input| {
+			Ok({ val: parse_inlines(input), input: [] })
+		},
+	)
 
 parse_inlines : String.Utf8 -> List(Inline)
 parse_inlines = |input| {
@@ -511,8 +634,14 @@ parse_inlines_help = |input, text, nodes| {
 		[] =>
 			flush_text(text, nodes)
 
+		['\\', escaped, .. as rest] if is_escapable_inline_byte(escaped) =>
+			parse_inlines_help(rest, text.append(escaped), nodes)
+
+		['\\', .. as rest] =>
+			parse_inlines_help(rest, text.append('\\'), nodes)
+
 		['*', '*', .. as rest] => {
-			match find_sequence(rest, "**".to_utf8()) {
+			match find_unescaped_sequence(rest, "**".to_utf8()) {
 				Ok(found) => {
 					next_nodes = flush_text(text, nodes).append(Strong(parse_inlines(found.before)))
 					parse_inlines_help(found.after, [], next_nodes)
@@ -524,7 +653,7 @@ parse_inlines_help = |input, text, nodes| {
 		}
 
 		['*', .. as rest] => {
-			match find_sequence(rest, "*".to_utf8()) {
+			match find_unescaped_sequence(rest, "*".to_utf8()) {
 				Ok(found) => {
 					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines(found.before)))
 					parse_inlines_help(found.after, [], next_nodes)
@@ -536,7 +665,7 @@ parse_inlines_help = |input, text, nodes| {
 		}
 
 		['_', .. as rest] => {
-			match find_sequence(rest, "_".to_utf8()) {
+			match find_unescaped_sequence(rest, "_".to_utf8()) {
 				Ok(found) => {
 					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines(found.before)))
 					parse_inlines_help(found.after, [], next_nodes)
@@ -548,7 +677,7 @@ parse_inlines_help = |input, text, nodes| {
 		}
 
 		['`', .. as rest] => {
-			match find_sequence(rest, "`".to_utf8()) {
+			match find_unescaped_sequence(rest, "`".to_utf8()) {
 				Ok(found) => {
 					next_nodes = flush_text(text, nodes).append(InlineCode(String.str_from_utf8(found.before)))
 					parse_inlines_help(found.after, [], next_nodes)
@@ -560,9 +689,9 @@ parse_inlines_help = |input, text, nodes| {
 		}
 
 		['[', .. as rest] => {
-			match find_sequence(rest, "](".to_utf8()) {
+			match find_unescaped_sequence(rest, "](".to_utf8()) {
 				Ok(label) => {
-					match find_sequence(label.after, ")".to_utf8()) {
+					match find_unescaped_sequence(label.after, ")".to_utf8()) {
 						Ok(href) => {
 							next_nodes =
 								flush_text(text, nodes)
@@ -586,6 +715,18 @@ parse_inlines_help = |input, text, nodes| {
 	}
 }
 
+is_escapable_inline_byte : U8 -> Bool
+is_escapable_inline_byte = |byte| {
+	byte == '\\'
+		or byte == '*'
+		or byte == '_'
+		or byte == '`'
+		or byte == '['
+		or byte == ']'
+		or byte == '('
+		or byte == ')'
+}
+
 flush_text : String.Utf8, List(Inline) -> List(Inline)
 flush_text = |text, nodes| {
 	if text.is_empty() {
@@ -598,6 +739,29 @@ flush_text = |text, nodes| {
 find_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
 find_sequence = |input, needle| {
 	find_sequence_help(input, needle, [])
+}
+
+find_unescaped_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_unescaped_sequence = |input, needle| {
+	find_unescaped_sequence_help(input, needle, [])
+}
+
+find_unescaped_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_unescaped_sequence_help = |input, needle, acc| {
+	if starts_with_bytes(input, needle) {
+		Ok({ before: acc, after: input.drop_first(needle.len()) })
+	} else {
+		match input {
+			[] =>
+				Err(NotFound)
+
+			['\\', escaped, .. as rest] if is_escapable_inline_byte(escaped) =>
+				find_unescaped_sequence_help(rest, needle, acc.append('\\').append(escaped))
+
+			[first, .. as rest] =>
+				find_unescaped_sequence_help(rest, needle, acc.append(first))
+		}
+	}
 }
 
 find_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
@@ -760,20 +924,20 @@ not_end_of_line = |b| {
 ## Hash-prefixed headings parse with their heading level.
 expect {
 	a = String.parse_str(Markdown.heading, "# Foo Bar")?
-	a == Heading(One, "Foo Bar")
+	a == Heading(One, [Text("Foo Bar")])
 }
 
 ## Underlined headings parse as level two headings.
 expect {
 	a = String.parse_str(Markdown.heading, "Foo Bar\n---")?
-	a == Heading(Two, "Foo Bar")
+	a == Heading(Two, [Text("Foo Bar")])
 }
 
 inline_heading =
 	Parser.const(
 		|level| {
 			|str| {
-				Heading(level, str)
+				Heading(level, parse_inlines(str.to_utf8()))
 			}
 		},
 	)
@@ -794,19 +958,19 @@ inline_heading =
 ## Inline headings capture the heading text after the marker.
 expect {
 	a = String.parse_str(inline_heading, "# Foo Bar")?
-	a == Heading(One, "Foo Bar")
+	a == Heading(One, [Text("Foo Bar")])
 }
 
 ## Inline heading partial parsing leaves the following line untouched.
 expect {
 	a = String.parse_str_partial(inline_heading, "### Foo Bar\nBaz")?
-	a == { val: Heading(Three, "Foo Bar"), input: "\nBaz" }
+	a == { val: Heading(Three, [Text("Foo Bar")]), input: "\nBaz" }
 }
 
 two_line_heading_level_one =
 	Parser.const(
 		|str| {
-			Heading(One, str)
+			Heading(One, parse_inlines(str.to_utf8()))
 		},
 	)
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
@@ -823,19 +987,19 @@ two_line_heading_level_one =
 ## Equal-sign underlines parse as level one headings.
 expect {
 	a = String.parse_str(two_line_heading_level_one, "Foo Bar\n==")?
-	a == Heading(One, "Foo Bar")
+	a == Heading(One, [Text("Foo Bar")])
 }
 
 ## Level one heading partial parsing leaves the trailing newline.
 expect {
 	a = String.parse_str_partial(two_line_heading_level_one, "Foo Bar\n=============\n")?
-	a == { val: Heading(One, "Foo Bar"), input: "\n" }
+	a == { val: Heading(One, [Text("Foo Bar")]), input: "\n" }
 }
 
 two_line_heading_level_two =
 	Parser.const(
 		|str| {
-			Heading(Two, str)
+			Heading(Two, parse_inlines(str.to_utf8()))
 		},
 	)
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
@@ -852,13 +1016,13 @@ two_line_heading_level_two =
 ## Dash underlines parse as level two headings.
 expect {
 	a = String.parse_str(two_line_heading_level_two, "Foo Bar\n---")?
-	a == Heading(Two, "Foo Bar")
+	a == Heading(Two, [Text("Foo Bar")])
 }
 
 ## Level two heading partial parsing leaves the following line.
 expect {
 	a = String.parse_str_partial(two_line_heading_level_two, "Foo Bar\n-----\nApples")?
-	a == { val: Heading(Two, "Foo Bar"), input: "\nApples" }
+	a == { val: Heading(Two, [Text("Foo Bar")]), input: "\nApples" }
 }
 
 ## Markdown links capture their label and target URL.
@@ -897,9 +1061,9 @@ expect {
 	a == Code({ ext: "roc", pre: "# some code\nfoo = bar\n" })
 }
 
-## Inline spans parse text, emphasis, strong, code, and prose links.
+## Public inline parser parses text, emphasis, strong, code, and prose links.
 expect {
-	actual = parse_inlines("Intro with **bold**, *em*, _also em_, `code`, and [a link](https://example.com).".to_utf8())
+	actual = String.parse_str(Markdown.inlines, "Intro with **bold**, *em*, _also em_, `code`, and [a link](https://example.com).")?
 
 	actual
 		== [
@@ -915,6 +1079,97 @@ expect {
 			InlineLink({ alt: [Text("a link")], href: "https://example.com" }),
 			Text("."),
 		]
+}
+
+## Escaped inline delimiters parse as literal text.
+expect {
+	text = "\\*literal\\*, \\_em\\_, \\`code\\`, and \\[a link](https://example.com)"
+
+	actual = String.parse_str(Markdown.inlines, text)?
+
+	actual == [Text("*literal*, _em_, `code`, and [a link](https://example.com)")]
+}
+
+## Heading text can contain inline spans.
+expect {
+	actual = String.parse_str(Markdown.heading, "# Title with **strong** text")?
+
+	actual
+		== Heading(
+			One,
+			[
+				Text("Title with "),
+				Strong([Text("strong")]),
+				Text(" text"),
+			],
+		)
+}
+
+## Standalone links in documents parse as paragraph inline links.
+expect {
+	actual = String.parse_str(Markdown.all, "[roc](https://roc-lang.org)")?
+
+	actual
+		== [
+			Paragraph(
+				[
+					InlineLink({ alt: [Text("roc")], href: "https://roc-lang.org" }),
+				],
+			),
+		]
+}
+
+## Horizontal rules parse as block nodes.
+expect {
+	actual = String.parse_str(Markdown.all, "---")?
+
+	actual == [HorizontalRule]
+}
+
+## Ordered list items parse into ordered list blocks.
+expect {
+	text =
+		\\1. One
+		\\2. Two
+
+	actual = String.parse_str(Markdown.all, text)?
+
+	actual
+		== [
+			OrderedList(
+				[
+					ListItem([Text("One")], []),
+					ListItem([Text("Two")], []),
+				],
+			),
+		]
+}
+
+## Indented list continuation lines are folded into the item text.
+expect {
+	text =
+		\\- first line
+		\\  continued line
+
+	actual = String.parse_str(Markdown.all, text)?
+
+	actual
+		== [
+			UnorderedList(
+				[
+					ListItem([Text("first line continued line")], []),
+				],
+			),
+		]
+}
+
+## Unclosed fenced code blocks fail document parsing.
+expect {
+	text =
+		\\```roc
+		\\main = 1
+
+	String.parse_str(Markdown.all, text).is_err()
 }
 
 ## Article body markdown parses into structured blocks without TODO fallbacks.
@@ -939,7 +1194,7 @@ expect {
 
 	actual
 		== [
-			Heading(One, "Title"),
+			Heading(One, [Text("Title")]),
 			Paragraph(
 				[
 					Text("Intro with "),

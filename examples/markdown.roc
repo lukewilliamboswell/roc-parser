@@ -9,11 +9,15 @@ import parser.Markdown
 
 content : Str
 content =
-	\\# Title
+	\\# Title with **style**
 	\\
 	\\Intro with **bold**, `code`, and [a link](https://example.com).
 	\\
+	\\[roc website](https://roc-lang.org)
+	\\
 	\\![alt text](/images/logo.png)
+	\\
+	\\---
 	\\
 	\\## Sub-title
 	\\
@@ -23,7 +27,11 @@ content =
 	\\```
 	\\
 	\\- One
+	\\  continued
 	\\  - Nested
+	\\
+	\\1. First
+	\\2. Second
 	\\
 	\\> Quote with **strong** text
 
@@ -48,8 +56,8 @@ render_content = |nodes, buf| {
 		[] =>
 			buf # base case
 
-		[Heading(level, str), .. as rest] =>
-			render_content(rest, buf.concat("HEADING: ${Str.inspect(level)} ${str}\n"))
+		[Heading(level, inlines), .. as rest] =>
+			render_content(rest, buf.concat("HEADING: ${Str.inspect(level)} ${render_inlines(inlines, "")}\n"))
 
 		[Paragraph(inlines), .. as rest] =>
 			render_content(rest, buf.concat("PARAGRAPH: ${render_inlines(inlines, "")}\n"))
@@ -60,8 +68,14 @@ render_content = |nodes, buf| {
 		[UnorderedList(items), .. as rest] =>
 			render_content(rest, buf.concat("LIST:\n").concat(render_list_items(items, "")))
 
+		[OrderedList(items), .. as rest] =>
+			render_content(rest, buf.concat("ORDERED LIST:\n").concat(render_ordered_list_items(items, 1, "")))
+
 		[ListItem(inlines, children), .. as rest] =>
 			render_content(rest, buf.concat("ITEM: ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+
+		[HorizontalRule, .. as rest] =>
+			render_content(rest, buf.concat("HORIZONTAL RULE\n"))
 
 		[Link({ alt, href }), .. as rest] =>
 			render_content(rest, buf.concat("LINK: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
@@ -88,6 +102,20 @@ render_list_items = |items, buf| {
 
 		[other, .. as rest] =>
 			render_list_items(rest, buf.concat(render_content([other], "")))
+	}
+}
+
+render_ordered_list_items : List(Markdown.Markdown), U64, Str -> Str
+render_ordered_list_items = |items, index, buf| {
+	match items {
+		[] =>
+			buf
+
+		[ListItem(inlines, children), .. as rest] =>
+			render_ordered_list_items(rest, index + 1, buf.concat("${index.to_str()}. ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+
+		[other, .. as rest] =>
+			render_ordered_list_items(rest, index, buf.concat(render_content([other], "")))
 	}
 }
 
