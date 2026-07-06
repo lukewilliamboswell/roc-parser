@@ -615,22 +615,25 @@ many_impl = |parser, vals, input| {
 		}
 }
 
+## Chomping until a newline returns the preceding bytes and leaves the newline.
 expect {
 	input = "# H\nR".to_utf8()
-	result = Parser.parse_partial(Parser.chomp_until('\n'), input)
-	result == Ok({ val: ['#', ' ', 'H'], input: ['\n', 'R'] })
+	result = Parser.parse_partial(Parser.chomp_until('\n'), input)?
+	result == { val: ['#', ' ', 'H'], input: ['\n', 'R'] }
 }
 
+## Chomping until a missing newline reports a parse error.
 expect {
 	Parser.parse_partial(Parser.chomp_until('\n'), []).is_err()
 }
 
+## Chomping while a predicate holds leaves the first non-matching byte.
 expect {
 	input : List(U8)
 	input = ['a', 's', '\n', 'd', 'f']
 	not_eol = |x| {
 		x != '\n'
 	}
-	result = Parser.parse_partial(Parser.chomp_while(not_eol), input)
-	result == Ok({ val: ['a', 's'], input: ['\n', 'd', 'f'] })
+	result = Parser.parse_partial(Parser.chomp_while(not_eol), input)?
+	result == { val: ['a', 's'], input: ['\n', 'd', 'f'] }
 }

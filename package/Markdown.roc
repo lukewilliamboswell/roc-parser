@@ -147,14 +147,16 @@ todo =
 	Parser.const(|s| TODO(s))
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
 
+## Unsupported markdown lines are preserved as TODO nodes.
 expect {
-	a = String.parse_str(todo, "Foo Bar")
-	a == Ok(TODO("Foo Bar"))
+	a = String.parse_str(todo, "Foo Bar")?
+	a == TODO("Foo Bar")
 }
 
+## Multiple markdown lines parse into separate TODO nodes when unsupported.
 expect {
-	a = String.parse_str(Markdown.all, "Foo Bar\n\nBaz")
-	a == Ok([TODO("Foo Bar"), TODO(""), TODO("Baz")])
+	a = String.parse_str(Markdown.all, "Foo Bar\n\nBaz")?
+	a == [TODO("Foo Bar"), TODO(""), TODO("Baz")]
 }
 
 end_of_line = Parser.one_of([String.string("\n"), String.string("\r\n")])
@@ -163,8 +165,17 @@ not_end_of_line = |b| {
 	b != '\n' and b != '\r'
 }
 
-expect String.parse_str(Markdown.heading, "# Foo Bar") == Ok(Heading(One, "Foo Bar"))
-expect String.parse_str(Markdown.heading, "Foo Bar\n---") == Ok(Heading(Two, "Foo Bar"))
+## Hash-prefixed headings parse with their heading level.
+expect {
+	a = String.parse_str(Markdown.heading, "# Foo Bar")?
+	a == Heading(One, "Foo Bar")
+}
+
+## Underlined headings parse as level two headings.
+expect {
+	a = String.parse_str(Markdown.heading, "Foo Bar\n---")?
+	a == Heading(Two, "Foo Bar")
+}
 
 inline_heading = 
 	Parser.const(
@@ -188,14 +199,16 @@ inline_heading =
 		)
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
 
+## Inline headings capture the heading text after the marker.
 expect {
-	a = String.parse_str(inline_heading, "# Foo Bar")
-	a == Ok(Heading(One, "Foo Bar"))
+	a = String.parse_str(inline_heading, "# Foo Bar")?
+	a == Heading(One, "Foo Bar")
 }
 
+## Inline heading partial parsing leaves the following line untouched.
 expect {
-	a = String.parse_str_partial(inline_heading, "### Foo Bar\nBaz")
-	a == Ok({ val: Heading(Three, "Foo Bar"), input: "\nBaz" })
+	a = String.parse_str_partial(inline_heading, "### Foo Bar\nBaz")?
+	a == { val: Heading(Three, "Foo Bar"), input: "\nBaz" }
 }
 
 two_line_heading_level_one = 
@@ -215,14 +228,16 @@ two_line_heading_level_one =
 			),
 		)
 
+## Equal-sign underlines parse as level one headings.
 expect {
-	a = String.parse_str(two_line_heading_level_one, "Foo Bar\n==")
-	a == Ok(Heading(One, "Foo Bar"))
+	a = String.parse_str(two_line_heading_level_one, "Foo Bar\n==")?
+	a == Heading(One, "Foo Bar")
 }
 
+## Level one heading partial parsing leaves the trailing newline.
 expect {
-	a = String.parse_str_partial(two_line_heading_level_one, "Foo Bar\n=============\n")
-	a == Ok({ val: Heading(One, "Foo Bar"), input: "\n" })
+	a = String.parse_str_partial(two_line_heading_level_one, "Foo Bar\n=============\n")?
+	a == { val: Heading(One, "Foo Bar"), input: "\n" }
 }
 
 two_line_heading_level_two = 
@@ -242,31 +257,44 @@ two_line_heading_level_two =
 			),
 		)
 
+## Dash underlines parse as level two headings.
 expect {
-	a = String.parse_str(two_line_heading_level_two, "Foo Bar\n---")
-	a == Ok(Heading(Two, "Foo Bar"))
+	a = String.parse_str(two_line_heading_level_two, "Foo Bar\n---")?
+	a == Heading(Two, "Foo Bar")
 }
 
+## Level two heading partial parsing leaves the following line.
 expect {
-	a = String.parse_str_partial(two_line_heading_level_two, "Foo Bar\n-----\nApples")
-	a == Ok({ val: Heading(Two, "Foo Bar"), input: "\nApples" })
+	a = String.parse_str_partial(two_line_heading_level_two, "Foo Bar\n-----\nApples")?
+	a == { val: Heading(Two, "Foo Bar"), input: "\nApples" }
 }
 
-expect String.parse_str(Markdown.link, "[roc](https://roc-lang.org)") == Ok(Link({ alt: "roc", href: "https://roc-lang.org" }))
-
+## Markdown links capture their label and target URL.
 expect {
-	a = String.parse_str_partial(Markdown.link, "[roc](https://roc-lang.org)\nApples")
-	a == Ok({ val: Link({ alt: "roc", href: "https://roc-lang.org" }), input: "\nApples" })
+	a = String.parse_str(Markdown.link, "[roc](https://roc-lang.org)")?
+	a == Link({ alt: "roc", href: "https://roc-lang.org" })
 }
 
-expect String.parse_str(Markdown.image, "![alt text](/images/logo.png)") == Ok(Image({ alt: "alt text", href: "/images/logo.png" }))
-
+## Link partial parsing leaves the next line untouched.
 expect {
-	a = String.parse_str_partial(Markdown.image, "![alt text](/images/logo.png)\nApples")
-	a == Ok({ val: Image({ alt: "alt text", href: "/images/logo.png" }), input: "\nApples" })
+	a = String.parse_str_partial(Markdown.link, "[roc](https://roc-lang.org)\nApples")?
+	a == { val: Link({ alt: "roc", href: "https://roc-lang.org" }), input: "\nApples" }
+}
+
+## Markdown images capture their alt text and source URL.
+expect {
+	a = String.parse_str(Markdown.image, "![alt text](/images/logo.png)")?
+	a == Image({ alt: "alt text", href: "/images/logo.png" })
+}
+
+## Image partial parsing leaves the next line untouched.
+expect {
+	a = String.parse_str_partial(Markdown.image, "![alt text](/images/logo.png)\nApples")?
+	a == { val: Image({ alt: "alt text", href: "/images/logo.png" }), input: "\nApples" }
 }
 
 # TODO: fix the following expect
+## Code blocks capture their extension and body text.
 expect {
 	text = 
 		\\```roc
@@ -274,8 +302,8 @@ expect {
 		\\foo = bar
 		\\```
 
-	a = String.parse_str(Markdown.code, text)
-	a == Ok(Code({ ext: "roc", pre: "# some code\nfoo = bar\n" }))
+	a = String.parse_str(Markdown.code, text)?
+	a == Code({ ext: "roc", pre: "# some code\nfoo = bar\n" })
 }
 
 chomp_until_code_block_end : Parser(String.Utf8, Str)
@@ -296,10 +324,11 @@ chomp_to_code_block_end_help = |{ val, input }| {
 	}
 }
 
+## Chomping code block contents stops before the closing backticks.
 expect {
 	val = "".to_utf8()
 	input = "some code\n```".to_utf8()
 	expected = "some code\n".to_utf8()
-	a = chomp_to_code_block_end_help({ val, input })
-	a == Ok({ val: expected, input: [] })
+	a = chomp_to_code_block_end_help({ val, input })?
+	a == { val: expected, input: [] }
 }

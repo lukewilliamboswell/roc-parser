@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst",
+	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
 	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.11.0/HS5cXN8JrJKdxM2Y8azXzbHCxCx2qxocySTGr6sLGQTZ.tar.zst",
 }
 
@@ -22,6 +22,7 @@ content =
 	\\foo = bar
 	\\```
 
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
 	parsed = 
 		String.parse_str(Markdown.all, content)
@@ -32,7 +33,7 @@ main! = |_args| {
 			)
 			?? "PARSING ERROR"
 
-	Stdout.line!(parsed)
+	Stdout.line!(parsed)?
 	Ok({})
 }
 

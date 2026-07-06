@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst",
+	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
 	# TODO: point to the migrated html library
 	html: "https://github.com/lukewilliamboswell/roc-html/...",
 	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/0.11.0/HS5cXN8JrJKdxM2Y8azXzbHCxCx2qxocySTGr6sLGQTZ.tar.zst",
@@ -28,20 +28,28 @@ expected_html =
 	\\    ] []
 	\\]
 
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
-	svg_converted_to_html = 
+	result = 
 		String.parse_str(Xml.xml_parser, svg_input)
 			.map_ok(
 				|xml| {
 					html_to_roc_dsl(svg_to_html(xml.root), "", 0)
 				},
-			)?
+			)
 
-	if svg_converted_to_html == expected_html {
-		Stdout.line!("Successfully converted SVG into HTML DSL")
-	} else {
-		Stdout.line!("Did not match expected HTML DSL")
-	}
+	match result {
+		Ok(svg_converted_to_html) if svg_converted_to_html == expected_html =>
+			Stdout.line!("Successfully converted SVG into HTML DSL")?
+
+		Ok(_) =>
+			Stdout.line!("Did not match expected HTML DSL")?
+
+		Err(_) =>
+			Stdout.line!("Failed while parsing SVG")?
+		}
+
+	Ok({})
 }
 
 svg_to_html : Xml.Node -> Html.Node
@@ -98,11 +106,13 @@ html_to_roc_dsl = |html, buf, depth| {
 	}
 }
 
+## Text nodes render as text calls.
 expect {
 	a = html_to_roc_dsl(Html.text("foo"), "", 0)
 	a == "text \"foo\""
 }
 
+## Element attributes render in a bracketed attribute list.
 expect {
 	a = html_to_roc_dsl(Html.h1([Attribute.class("green"), Attribute.width("1rem")], [Html.text("foo")]), "", 0)
 	a
@@ -115,6 +125,7 @@ expect {
 		\\]
 }
 
+## Multiple text children render on separate lines.
 expect {
 	a = html_to_roc_dsl(Html.h1([], [Html.text("foo"), Html.text("bar"), Html.text("baz")]), "", 0)
 	a
@@ -126,6 +137,7 @@ expect {
 		\\]
 }
 
+## Nested elements increase the rendered indentation.
 expect {
 	a = html_to_roc_dsl(Html.h1([], [Html.h2([Attribute.class("green")], [Html.text("foo")]), Html.text("bar")]), "", 0)
 	a
@@ -140,6 +152,7 @@ expect {
 		\\]
 }
 
+depth_to_ident : U8 -> Str
 depth_to_ident = |depth| {
 	(0..<depth)
 		.map(
@@ -150,6 +163,11 @@ depth_to_ident = |depth| {
 		.join_with("")
 }
 
+## Zero nesting renders no indentation.
 expect depth_to_ident(0) == ""
+
+## One nesting level renders four spaces.
 expect depth_to_ident(1) == "    "
+
+## Two nesting levels render eight spaces.
 expect depth_to_ident(2) == "        "
