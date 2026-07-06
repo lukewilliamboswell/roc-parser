@@ -3,36 +3,116 @@ import String
 
 # # Content values
 Markdown := [
-	Heading({ level : Level, content : List(Inline) }),
-	Paragraph(List(Inline)),
+	Heading({ level : Markdown.Level, content : List(Markdown.Inline) }),
+	Paragraph(List(Markdown.Inline)),
 	Blockquote(List(Markdown)),
-	ListBlock({ kind : ListKind, loose : Bool, items : List({ task : TaskState, blocks : List(Markdown) }) }),
+	ListBlock({ kind : Markdown.ListKind, loose : Bool, items : List({ task : Markdown.TaskState, blocks : List(Markdown) }) }),
 	Code({ info : Str, pre : Str }),
 	ThematicBreak,
-	Table({ header : List(List(Inline)), align : List(Alignment), rows : List(List(List(Inline))) }),
+	Table({ header : List(List(Markdown.Inline)), align : List(Markdown.Alignment), rows : List(List(List(Markdown.Inline))) }),
 	HtmlBlock(Str),
 	Frontmatter({ raw : Str }),
 	TODO(Str),
 ].{
-	Level : [One, Two, Three, Four, Five, Six]
+	to_inspect : Markdown -> Str
+	to_inspect = |node| {
+		inspect_markdown(node)
+	}
 
-	ListKind : [
+	is_eq : Markdown, Markdown -> Bool
+	is_eq = |left, right| {
+		markdown_is_eq(left, right)
+	}
+
+	to_debug_str : Markdown -> Str
+	to_debug_str = |node| {
+		inspect_markdown(node)
+	}
+
+	inline_to_debug_str : Markdown.Inline -> Str
+	inline_to_debug_str = |inline| {
+		inspect_inline(inline)
+	}
+
+	Level := [One, Two, Three, Four, Five, Six].{
+		to_inspect : Level -> Str
+		to_inspect = |level| {
+			inspect_level(level)
+		}
+
+		to_str : Level -> Str
+		to_str = |level| {
+			level_to_str(level)
+		}
+
+		is_eq : Level, Level -> Bool
+		is_eq = |left, right| {
+			level_is_eq(left, right)
+		}
+	}
+
+	ListKind := [
 		Unordered,
 		Ordered({ start : U64 }),
-	]
+	].{
+		to_inspect : ListKind -> Str
+		to_inspect = |kind| {
+			inspect_list_kind(kind)
+		}
 
-	TaskState : [
+		to_str : ListKind -> Str
+		to_str = |kind| {
+			list_kind_to_str(kind)
+		}
+
+		is_eq : ListKind, ListKind -> Bool
+		is_eq = |left, right| {
+			list_kind_is_eq(left, right)
+		}
+	}
+
+	TaskState := [
 		NoTask,
 		Unchecked,
 		Checked,
-	]
+	].{
+		to_inspect : TaskState -> Str
+		to_inspect = |task| {
+			inspect_task_state(task)
+		}
 
-	Alignment : [
+		to_str : TaskState -> Str
+		to_str = |task| {
+			task_state_to_str(task)
+		}
+
+		is_eq : TaskState, TaskState -> Bool
+		is_eq = |left, right| {
+			task_state_is_eq(left, right)
+		}
+	}
+
+	Alignment := [
 		Default,
 		Left,
 		Center,
 		Right,
-	]
+	].{
+		to_inspect : Alignment -> Str
+		to_inspect = |alignment| {
+			inspect_alignment(alignment)
+		}
+
+		to_str : Alignment -> Str
+		to_str = |alignment| {
+			alignment_to_str(alignment)
+		}
+
+		is_eq : Alignment, Alignment -> Bool
+		is_eq = |left, right| {
+			alignment_is_eq(left, right)
+		}
+	}
 
 	LinkTarget : {
 		href : Str,
@@ -49,7 +129,17 @@ Markdown := [
 		Image({ alt : List(Inline), target : LinkTarget }),
 		HardBreak,
 		HtmlInline(Str),
-	]
+	].{
+		to_inspect : Inline -> Str
+		to_inspect = |inline| {
+			inspect_inline(inline)
+		}
+
+		is_eq : Inline, Inline -> Bool
+		is_eq = |left, right| {
+			inline_is_eq(left, right)
+		}
+	}
 
 	all : Parser(String.Utf8, List(Markdown))
 	all = parse_all
@@ -137,6 +227,275 @@ Markdown := [
 				),
 			)
 			.keep(chomp_until_code_block_end)
+}
+
+inspect_markdown : Markdown -> Str
+inspect_markdown = |node| {
+	match node {
+		Heading({ level, content }) =>
+			"Heading({ level: ${Str.inspect(level)}, content: ${Str.inspect(content)} })"
+
+		Paragraph(content) =>
+			"Paragraph(${Str.inspect(content)})"
+
+		Blockquote(children) =>
+			"Blockquote(${Str.inspect(children)})"
+
+		ListBlock({ kind, loose, items }) =>
+			"ListBlock({ kind: ${Str.inspect(kind)}, loose: ${Str.inspect(loose)}, items: ${Str.inspect(items)} })"
+
+		Code({ info, pre }) =>
+			"Code({ info: ${Str.inspect(info)}, pre: ${Str.inspect(pre)} })"
+
+		ThematicBreak =>
+			"ThematicBreak"
+
+		Table({ header, align, rows }) =>
+			"Table({ header: ${Str.inspect(header)}, align: ${Str.inspect(align)}, rows: ${Str.inspect(rows)} })"
+
+		HtmlBlock(raw) =>
+			"HtmlBlock(${Str.inspect(raw)})"
+
+		Frontmatter({ raw }) =>
+			"Frontmatter({ raw: ${Str.inspect(raw)} })"
+
+		TODO(line) =>
+			"TODO(${Str.inspect(line)})"
+	}
+}
+
+markdown_is_eq : Markdown, Markdown -> Bool
+markdown_is_eq = |left, right| {
+	match { left, right } {
+		{ left: Heading(l), right: Heading(r) } =>
+			l.level == r.level and l.content == r.content
+
+		{ left: Paragraph(l), right: Paragraph(r) } =>
+			l == r
+
+		{ left: Blockquote(l), right: Blockquote(r) } =>
+			l == r
+
+		{ left: ListBlock(l), right: ListBlock(r) } =>
+			l.kind == r.kind and l.loose == r.loose and l.items == r.items
+
+		{ left: Code(l), right: Code(r) } =>
+			l.info == r.info and l.pre == r.pre
+
+		{ left: ThematicBreak, right: ThematicBreak } =>
+			Bool.True
+
+		{ left: Table(l), right: Table(r) } =>
+			l.header == r.header and l.align == r.align and l.rows == r.rows
+
+		{ left: HtmlBlock(l), right: HtmlBlock(r) } =>
+			l == r
+
+		{ left: Frontmatter(l), right: Frontmatter(r) } =>
+			l.raw == r.raw
+
+		{ left: TODO(l), right: TODO(r) } =>
+			l == r
+
+		_ =>
+			Bool.False
+	}
+}
+
+inspect_level : Markdown.Level -> Str
+inspect_level = |level| {
+	match level {
+		One => "One"
+		Two => "Two"
+		Three => "Three"
+		Four => "Four"
+		Five => "Five"
+		Six => "Six"
+	}
+}
+
+level_to_str : Markdown.Level -> Str
+level_to_str = |level| {
+	match level {
+		One => "1"
+		Two => "2"
+		Three => "3"
+		Four => "4"
+		Five => "5"
+		Six => "6"
+	}
+}
+
+level_is_eq : Markdown.Level, Markdown.Level -> Bool
+level_is_eq = |left, right| {
+	level_to_str(left) == level_to_str(right)
+}
+
+inspect_list_kind : Markdown.ListKind -> Str
+inspect_list_kind = |kind| {
+	match kind {
+		Unordered =>
+			"Unordered"
+
+		Ordered({ start }) =>
+			"Ordered({ start: ${start.to_str()} })"
+	}
+}
+
+list_kind_to_str : Markdown.ListKind -> Str
+list_kind_to_str = |kind| {
+	match kind {
+		Unordered =>
+			"unordered"
+
+		Ordered({ start }) =>
+			"ordered:${start.to_str()}"
+	}
+}
+
+list_kind_is_eq : Markdown.ListKind, Markdown.ListKind -> Bool
+list_kind_is_eq = |left, right| {
+	match { left, right } {
+		{ left: Unordered, right: Unordered } =>
+			Bool.True
+
+		{ left: Ordered(l), right: Ordered(r) } =>
+			l.start == r.start
+
+		_ =>
+			Bool.False
+	}
+}
+
+inspect_task_state : Markdown.TaskState -> Str
+inspect_task_state = |task| {
+	match task {
+		NoTask => "NoTask"
+		Unchecked => "Unchecked"
+		Checked => "Checked"
+	}
+}
+
+task_state_to_str : Markdown.TaskState -> Str
+task_state_to_str = |task| {
+	match task {
+		NoTask => "none"
+		Unchecked => "unchecked"
+		Checked => "checked"
+	}
+}
+
+task_state_is_eq : Markdown.TaskState, Markdown.TaskState -> Bool
+task_state_is_eq = |left, right| {
+	task_state_to_str(left) == task_state_to_str(right)
+}
+
+inspect_alignment : Markdown.Alignment -> Str
+inspect_alignment = |alignment| {
+	match alignment {
+		Default => "Default"
+		Left => "Left"
+		Center => "Center"
+		Right => "Right"
+	}
+}
+
+alignment_to_str : Markdown.Alignment -> Str
+alignment_to_str = |alignment| {
+	match alignment {
+		Default => "default"
+		Left => "left"
+		Center => "center"
+		Right => "right"
+	}
+}
+
+alignment_is_eq : Markdown.Alignment, Markdown.Alignment -> Bool
+alignment_is_eq = |left, right| {
+	alignment_to_str(left) == alignment_to_str(right)
+}
+
+inspect_inline : Markdown.Inline -> Str
+inspect_inline = |inline| {
+	match inline {
+		Text(text) =>
+			"Text(${Str.inspect(text)})"
+
+		Strong(children) =>
+			"Strong(${Str.inspect(children)})"
+
+		Emphasis(children) =>
+			"Emphasis(${Str.inspect(children)})"
+
+		Strikethrough(children) =>
+			"Strikethrough(${Str.inspect(children)})"
+
+		InlineCode(code) =>
+			"InlineCode(${Str.inspect(code)})"
+
+		Link({ label, target }) =>
+			"Link({ label: ${Str.inspect(label)}, target: ${inspect_link_target(target)} })"
+
+		Image({ alt, target }) =>
+			"Image({ alt: ${Str.inspect(alt)}, target: ${inspect_link_target(target)} })"
+
+		HardBreak =>
+			"HardBreak"
+
+		HtmlInline(raw) =>
+			"HtmlInline(${Str.inspect(raw)})"
+	}
+}
+
+inline_is_eq : Markdown.Inline, Markdown.Inline -> Bool
+inline_is_eq = |left, right| {
+	match { left, right } {
+		{ left: Text(l), right: Text(r) } =>
+			l == r
+
+		{ left: Strong(l), right: Strong(r) } =>
+			l == r
+
+		{ left: Emphasis(l), right: Emphasis(r) } =>
+			l == r
+
+		{ left: Strikethrough(l), right: Strikethrough(r) } =>
+			l == r
+
+		{ left: InlineCode(l), right: InlineCode(r) } =>
+			l == r
+
+		{ left: Link(l), right: Link(r) } =>
+			l.label == r.label and l.target == r.target
+
+		{ left: Image(l), right: Image(r) } =>
+			l.alt == r.alt and l.target == r.target
+
+		{ left: HardBreak, right: HardBreak } =>
+			Bool.True
+
+		{ left: HtmlInline(l), right: HtmlInline(r) } =>
+			l == r
+
+		_ =>
+			Bool.False
+	}
+}
+
+inspect_link_target : Markdown.LinkTarget -> Str
+inspect_link_target = |target| {
+	"{ href: ${Str.inspect(target.href)}, title: ${inspect_link_title(target.title)} }"
+}
+
+inspect_link_title : [Some(Str), None] -> Str
+inspect_link_title = |title| {
+	match title {
+		Some(value) =>
+			"Some(${Str.inspect(value)})"
+
+		None =>
+			"None"
+	}
 }
 
 Line : { raw : String.Utf8 }
@@ -1938,6 +2297,84 @@ todo =
 expect {
 	a = String.parse_str(todo, "Foo Bar")?
 	a == TODO("Foo Bar")
+}
+
+## Small nominal support types expose equality, debug, and string helpers.
+expect {
+	level : Markdown.Level
+	level = Two
+
+	kind : Markdown.ListKind
+	kind = Ordered({ start: 3 })
+
+	task : Markdown.TaskState
+	task = Checked
+
+	alignment : Markdown.Alignment
+	alignment = Right
+
+	actual =
+		\\level inspect: ${Str.inspect(level)}
+		\\level str: ${level.to_str()}
+		\\level eq: ${Str.inspect(level == Two)}
+		\\kind inspect: ${Str.inspect(kind)}
+		\\kind str: ${kind.to_str()}
+		\\kind eq same: ${Str.inspect(kind == Ordered({ start: 3 }))}
+		\\kind eq different: ${Str.inspect(kind == Ordered({ start: 4 }))}
+		\\task inspect: ${Str.inspect(task)}
+		\\task str: ${task.to_str()}
+		\\task eq: ${Str.inspect(task == Checked)}
+		\\alignment inspect: ${Str.inspect(alignment)}
+		\\alignment str: ${alignment.to_str()}
+		\\alignment eq: ${Str.inspect(alignment == Right)}
+
+	expected =
+		\\level inspect: Two
+		\\level str: 2
+		\\level eq: True
+		\\kind inspect: Ordered({ start: 3 })
+		\\kind str: ordered:3
+		\\kind eq same: True
+		\\kind eq different: False
+		\\task inspect: Checked
+		\\task str: checked
+		\\task eq: True
+		\\alignment inspect: Right
+		\\alignment str: right
+		\\alignment eq: True
+
+	actual == expected
+}
+
+## Inline and block AST nodes expose useful inspect strings and structural equality.
+expect {
+	inline : Markdown.Inline
+	inline = Strong([Text("Roc")])
+
+	block : Markdown
+	block = Heading({ level: Two, content: [Text("Roc")] })
+
+	actual =
+		\\inline inspect: ${Str.inspect(inline)}
+		\\inline debug: ${Markdown.inline_to_debug_str(inline)}
+		\\inline eq same: ${Str.inspect(inline == Strong([Text("Roc")]))}
+		\\inline eq different: ${Str.inspect(inline == Emphasis([Text("Roc")]))}
+		\\block inspect: ${Str.inspect(block)}
+		\\block debug: ${Markdown.to_debug_str(block)}
+		\\block eq same: ${Str.inspect(block == Heading({ level: Two, content: [Text("Roc")] }))}
+		\\block eq different: ${Str.inspect(block == Paragraph([Text("Roc")]))}
+
+	expected =
+		\\inline inspect: Strong([Text("Roc")])
+		\\inline debug: Strong([Text("Roc")])
+		\\inline eq same: True
+		\\inline eq different: False
+		\\block inspect: Heading({ level: Two, content: [Text("Roc")] })
+		\\block debug: Heading({ level: Two, content: [Text("Roc")] })
+		\\block eq same: True
+		\\block eq different: False
+
+	actual == expected
 }
 
 ## Hash-prefixed headings parse with inline content.

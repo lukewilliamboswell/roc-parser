@@ -71,7 +71,7 @@ render_content = |nodes, buf| {
 			render_content(rest, buf.concat("BLOCKQUOTE:\n").concat(render_content(children, "")))
 
 		[ListBlock({ kind, loose, items }), .. as rest] =>
-			render_content(rest, buf.concat("LIST ${render_list_kind(kind)} loose=${render_bool(loose)}:\n").concat(render_list_items(items, "")))
+			render_content(rest, buf.concat("LIST ${kind.to_str()} loose=${render_bool(loose)}:\n").concat(render_list_items(items, "")))
 
 		[Code({ info, pre }), .. as rest] =>
 			render_content(rest, buf.concat("CODE: info: ${Str.inspect(info)}, pre: ${Str.inspect(pre)}\n"))
@@ -93,17 +93,6 @@ render_content = |nodes, buf| {
 	}
 }
 
-render_list_kind : Markdown.ListKind -> Str
-render_list_kind = |kind| {
-	match kind {
-		Unordered =>
-			"unordered"
-
-		Ordered({ start }) =>
-			"ordered:${start.to_str()}"
-	}
-}
-
 render_list_items : List({ task : Markdown.TaskState, blocks : List(Markdown.Markdown) }), Str -> Str
 render_list_items = |items, buf| {
 	match items {
@@ -111,37 +100,13 @@ render_list_items = |items, buf| {
 			buf
 
 		[item, .. as rest] =>
-			render_list_items(rest, buf.concat("- ${render_task(item.task)}\n").concat(render_content(item.blocks, "")))
-	}
-}
-
-render_task : Markdown.TaskState -> Str
-render_task = |task| {
-	match task {
-		NoTask =>
-			""
-
-		Unchecked =>
-			"[ ]"
-
-		Checked =>
-			"[x]"
+			render_list_items(rest, buf.concat("- ${item.task.to_str()}\n").concat(render_content(item.blocks, "")))
 	}
 }
 
 render_alignments : List(Markdown.Alignment) -> Str
 render_alignments = |alignments| {
-	join_strs(alignments.map(render_alignment), ",")
-}
-
-render_alignment : Markdown.Alignment -> Str
-render_alignment = |alignment| {
-	match alignment {
-		Default => "default"
-		Left => "left"
-		Center => "center"
-		Right => "right"
-	}
+	join_strs(alignments.map(|alignment| alignment.to_str()), ",")
 }
 
 render_rows : List(List(List(Markdown.Inline))) -> Str
