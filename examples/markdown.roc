@@ -8,12 +8,12 @@ import parser.String
 import parser.Markdown
 
 content : Str
-content = 
+content =
 	\\# Title
 	\\
-	\\This is some text
+	\\Intro with **bold**, `code`, and [a link](https://example.com).
 	\\
-	\\[roc website](https://roc-lang.org)
+	\\![alt text](/images/logo.png)
 	\\
 	\\## Sub-title
 	\\
@@ -21,6 +21,11 @@ content =
 	\\# some code
 	\\foo = bar
 	\\```
+	\\
+	\\- One
+	\\  - Nested
+	\\
+	\\> Quote with **strong** text
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
@@ -46,6 +51,18 @@ render_content = |nodes, buf| {
 		[Heading(level, str), .. as rest] =>
 			render_content(rest, buf.concat("HEADING: ${Str.inspect(level)} ${str}\n"))
 
+		[Paragraph(inlines), .. as rest] =>
+			render_content(rest, buf.concat("PARAGRAPH: ${render_inlines(inlines, "")}\n"))
+
+		[Blockquote(children), .. as rest] =>
+			render_content(rest, buf.concat("BLOCKQUOTE:\n").concat(render_content(children, "")))
+
+		[UnorderedList(items), .. as rest] =>
+			render_content(rest, buf.concat("LIST:\n").concat(render_list_items(items, "")))
+
+		[ListItem(inlines, children), .. as rest] =>
+			render_content(rest, buf.concat("ITEM: ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+
 		[Link({ alt, href }), .. as rest] =>
 			render_content(rest, buf.concat("LINK: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
 
@@ -57,5 +74,42 @@ render_content = |nodes, buf| {
 
 		[TODO(line), .. as rest] =>
 			render_content(rest, buf.concat("TODO: ${line}\n"))
-		}
+	}
+}
+
+render_list_items : List(Markdown.Markdown), Str -> Str
+render_list_items = |items, buf| {
+	match items {
+		[] =>
+			buf
+
+		[ListItem(inlines, children), .. as rest] =>
+			render_list_items(rest, buf.concat("- ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+
+		[other, .. as rest] =>
+			render_list_items(rest, buf.concat(render_content([other], "")))
+	}
+}
+
+render_inlines : List(Markdown.Inline), Str -> Str
+render_inlines = |inlines, buf| {
+	match inlines {
+		[] =>
+			buf
+
+		[Text(text), .. as rest] =>
+			render_inlines(rest, buf.concat(text))
+
+		[Strong(children), .. as rest] =>
+			render_inlines(rest, buf.concat("**").concat(render_inlines(children, "")).concat("**"))
+
+		[Emphasis(children), .. as rest] =>
+			render_inlines(rest, buf.concat("*").concat(render_inlines(children, "")).concat("*"))
+
+		[InlineCode(code), .. as rest] =>
+			render_inlines(rest, buf.concat("`").concat(code).concat("`"))
+
+		[InlineLink({ alt, href }), .. as rest] =>
+			render_inlines(rest, buf.concat("[").concat(render_inlines(alt, "")).concat("](").concat(href).concat(")"))
+	}
 }

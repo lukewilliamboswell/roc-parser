@@ -4,6 +4,10 @@ import String
 # # Content values
 Markdown := [
 	Heading(Level, Str),
+	Paragraph(List(Inline)),
+	Blockquote(List(Markdown)),
+	UnorderedList(List(Markdown)),
+	ListItem(List(Inline), List(Markdown)),
 	Link({ alt : Str, href : Str }),
 	Image({ alt : Str, href : Str }),
 	Code({ ext : Str, pre : Str }),
@@ -11,18 +15,16 @@ Markdown := [
 ].{
 	Level : [One, Two, Three, Four, Five, Six]
 
+	Inline := [
+		Text(Str),
+		Strong(List(Inline)),
+		Emphasis(List(Inline)),
+		InlineCode(Str),
+		InlineLink({ alt : List(Inline), href : Str }),
+	]
+
 	all : Parser(String.Utf8, List(Markdown))
-	all = 
-		Parser.one_of(
-			[
-				heading,
-				link,
-				image,
-				code,
-				todo,
-			],
-		)
-			.sep_by(end_of_line)
+	all = parse_all
 
 	## Headings
 	##
@@ -31,7 +33,7 @@ Markdown := [
 	## expect String.parse_str(heading, "Foo Bar\n---") == Ok(Heading(Two, "Foo Bar"))
 	## ```
 	heading : Parser(String.Utf8, Markdown)
-	heading = 
+	heading =
 		Parser.one_of(
 			[
 				inline_heading,
@@ -43,10 +45,10 @@ Markdown := [
 	## Links
 	##
 	## ```roc
-	## expect String.parse_str(link, "[roc](https://roc-lang.org)") == Ok(Link("roc", "https://roc-lang.org"))
+	## expect String.parse_str(link, "[roc](https://roc-lang.org)") == Ok(Link({ alt: "roc", href: "https://roc-lang.org" }))
 	## ```
 	link : Parser(String.Utf8, Markdown)
-	link = 
+	link =
 		Parser.const(
 			|alt| {
 				|href| {
@@ -75,10 +77,10 @@ Markdown := [
 	## Images
 	##
 	## ```roc
-	## expect String.parse_str(image, "![alt text](/images/logo.png)") == Ok(Image("alt text", "/images/logo.png"))
+	## expect String.parse_str(image, "![alt text](/images/logo.png)") == Ok(Image({ alt: "alt text", href: "/images/logo.png" }))
 	## ```
 	image : Parser(String.Utf8, Markdown)
-	image = 
+	image =
 		Parser.const(
 			|alt| {
 				|href| {
@@ -120,7 +122,7 @@ Markdown := [
 	## }
 	## ```
 	code : Parser(String.Utf8, Markdown)
-	code = 
+	code =
 		Parser.const(|ext| |pre| Code({ ext, pre }))
 			.keep(
 				Parser.one_of(
@@ -140,23 +142,613 @@ Markdown := [
 			.keep(chomp_until_code_block_end)
 }
 
+Line : { raw : String.Utf8 }
+
+parse_all : Parser(String.Utf8, List(Markdown))
+parse_all =
+	Parser.build_primitive_parser(
+		|input| {
+			lines = split_lines(input)
+			parsed = parse_blocks_from_lines(lines, 0)?
+
+			match parsed.input {
+				[] =>
+					Ok({ val: parsed.val, input: [] })
+
+				_ =>
+					Err(ParsingFailure("unexpected unparsed markdown lines"))
+			}
+		},
+	)
+
+parse_blocks_from_lines : List(Line), U64 -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
+parse_blocks_from_lines = |lines, min_indent| {
+	parse_blocks_help(lines, min_indent, [])
+}
+
+parse_blocks_help : List(Line), U64, List(Markdown) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
+parse_blocks_help = |lines, min_indent, blocks| {
+	match lines {
+		[] =>
+			Ok({ val: blocks, input: [] })
+
+		[line, .. as rest] if line_is_blank(line) =>
+			parse_blocks_help(rest, min_indent, blocks)
+
+		[line, ..] if line_indent(line) < min_indent =>
+			Ok({ val: blocks, input: lines })
+
+		_ => {
+			parsed = parse_one_block(lines, min_indent)?
+			parse_blocks_help(parsed.input, min_indent, blocks.append(parsed.val))
+		}
+	}
+}
+
+parse_one_block : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_one_block = |lines, min_indent| {
+	match lines {
+		[line, underline, .. as rest_after_heading] if can_be_setext_heading_text(line, min_indent) => {
+			match underline_level(underline, min_indent) {
+				Ok(level) =>
+					Ok({ val: Heading(level, String.str_from_utf8(strip_indent(line, min_indent))), input: rest_after_heading })
+
+				Err(_) =>
+					parse_one_block_without_setext(lines, min_indent)
+			}
+		}
+
+		_ =>
+			parse_one_block_without_setext(lines, min_indent)
+	}
+}
+
+parse_one_block_without_setext : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_one_block_without_setext = |lines, min_indent| {
+	match lines {
+		[] =>
+			Err(ParsingFailure("expected a markdown block"))
+
+		[line, .. as rest] => {
+			content = strip_indent(line, min_indent)
+
+			match parse_hash_heading_line(content) {
+				Ok(block) =>
+					Ok({ val: block, input: rest })
+
+				Err(_) if is_code_fence_line(line, min_indent) =>
+					parse_code_block(lines, min_indent)
+
+				Err(_) => {
+					match parse_image_line(content) {
+						Ok(block) =>
+							Ok({ val: block, input: rest })
+
+						Err(_) => {
+							match parse_link_line(content) {
+								Ok(block) =>
+									Ok({ val: block, input: rest })
+
+								Err(_) if is_blockquote_line(line, min_indent) =>
+									parse_blockquote(lines, min_indent)
+
+								Err(_) if is_list_item_line(line, min_indent) =>
+									parse_unordered_list(lines, min_indent)
+
+								Err(_) =>
+									parse_paragraph(lines, min_indent)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+parse_paragraph : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_paragraph = |lines, min_indent| {
+	collected = collect_paragraph_lines(lines, min_indent, [])
+
+	if collected.val.is_empty() {
+		Err(ParsingFailure("expected a paragraph line"))
+	} else {
+		text = join_lines_with_spaces(collected.val)
+		Ok({ val: Paragraph(parse_inlines(text)), input: collected.input })
+	}
+}
+
+collect_paragraph_lines : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
+collect_paragraph_lines = |lines, min_indent, acc| {
+	match lines {
+		[] =>
+			{ val: acc, input: [] }
+
+		[line, ..] if line_is_blank(line) =>
+			{ val: acc, input: lines }
+
+		[line, ..] if line_indent(line) < min_indent =>
+			{ val: acc, input: lines }
+
+		[line, ..] if is_block_start(line, min_indent) =>
+			{ val: acc, input: lines }
+
+		[line, .. as rest] =>
+			collect_paragraph_lines(rest, min_indent, acc.append(strip_indent(line, min_indent)))
+	}
+}
+
+parse_code_block : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_code_block = |lines, min_indent| {
+	match lines {
+		[line, .. as rest] => {
+			fence = strip_indent(line, min_indent)
+			ext = String.str_from_utf8(fence.drop_first(3))
+			code = collect_code_lines(rest, min_indent, [])?
+
+			Ok({ val: Code({ ext, pre: String.str_from_utf8(code.val) }), input: code.input })
+		}
+
+		[] =>
+			Err(ParsingFailure("expected a code fence"))
+	}
+}
+
+collect_code_lines : List(Line), U64, String.Utf8 -> Try({ val : String.Utf8, input : List(Line) }, [ParsingFailure(Str)])
+collect_code_lines = |lines, min_indent, pre| {
+	match lines {
+		[] =>
+			Err(ParsingFailure("expected closing ```"))
+
+		[line, .. as rest] if is_code_fence_line(line, min_indent) =>
+			Ok({ val: pre, input: rest })
+
+		[line, .. as rest] => {
+			body_line = 
+				if line_indent(line) >= min_indent {
+					strip_indent(line, min_indent)
+				} else {
+					line.raw
+				}
+
+			collect_code_lines(rest, min_indent, append_line(pre, body_line))
+		}
+	}
+}
+
+parse_blockquote : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_blockquote = |lines, min_indent| {
+	quoted = collect_blockquote_lines(lines, min_indent, [])
+	inner = parse_blocks_from_lines(quoted.val, 0)?
+
+	Ok({ val: Blockquote(inner.val), input: quoted.input })
+}
+
+collect_blockquote_lines : List(Line), U64, List(Line) -> { val : List(Line), input : List(Line) }
+collect_blockquote_lines = |lines, min_indent, acc| {
+	match lines {
+		[] =>
+			{ val: acc, input: [] }
+
+		[line, .. as rest] if is_blockquote_line(line, min_indent) => {
+			content = strip_blockquote_marker(line, min_indent)
+			collect_blockquote_lines(rest, min_indent, acc.append({ raw: content }))
+		}
+
+		_ =>
+			{ val: acc, input: lines }
+	}
+}
+
+parse_unordered_list : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
+parse_unordered_list = |lines, min_indent| {
+	parsed = parse_list_items(lines, min_indent, [])?
+	Ok({ val: UnorderedList(parsed.val), input: parsed.input })
+}
+
+parse_list_items : List(Line), U64, List(Markdown) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
+parse_list_items = |lines, min_indent, items| {
+	match lines {
+		[line, .. as rest] if is_list_item_line(line, min_indent) => {
+			content = strip_indent(line, min_indent).drop_first(2)
+			children = parse_blocks_from_lines(rest, min_indent + 2)?
+			item = ListItem(parse_inlines(content), children.val)
+
+			parse_list_items(children.input, min_indent, items.append(item))
+		}
+
+		_ =>
+			Ok({ val: items, input: lines })
+	}
+}
+
+is_block_start : Line, U64 -> Bool
+is_block_start = |line, min_indent| {
+	if line_indent(line) < min_indent {
+		Bool.False
+	} else {
+		content = strip_indent(line, min_indent)
+
+		is_hash_heading_line(content)
+			or is_code_fence_line(line, min_indent)
+			or parse_image_line(content).is_ok()
+			or parse_link_line(content).is_ok()
+			or is_blockquote_line(line, min_indent)
+			or is_list_item_line(line, min_indent)
+	}
+}
+
+can_be_setext_heading_text : Line, U64 -> Bool
+can_be_setext_heading_text = |line, min_indent| {
+	(!line_is_blank(line)) and line_indent(line) >= min_indent and !is_block_start(line, min_indent)
+}
+
+underline_level : Line, U64 -> Try(Level, [NotFound])
+underline_level = |line, min_indent| {
+	if line_indent(line) != min_indent {
+		Err(NotFound)
+	} else {
+		content = strip_indent(line, min_indent)
+
+		match content {
+			['=', '=', .. as rest] if all_bytes_are(rest, '=') =>
+				Ok(One)
+
+			['-', '-', .. as rest] if all_bytes_are(rest, '-') =>
+				Ok(Two)
+
+			_ =>
+				Err(NotFound)
+		}
+	}
+}
+
+parse_hash_heading_line : String.Utf8 -> Try(Markdown, [NotFound])
+parse_hash_heading_line = |content| {
+	match content {
+		['#', ' ', .. as text] =>
+			Ok(Heading(One, String.str_from_utf8(text)))
+
+		['#', '#', ' ', .. as text] =>
+			Ok(Heading(Two, String.str_from_utf8(text)))
+
+		['#', '#', '#', ' ', .. as text] =>
+			Ok(Heading(Three, String.str_from_utf8(text)))
+
+		['#', '#', '#', '#', ' ', .. as text] =>
+			Ok(Heading(Four, String.str_from_utf8(text)))
+
+		['#', '#', '#', '#', '#', ' ', .. as text] =>
+			Ok(Heading(Five, String.str_from_utf8(text)))
+
+		['#', '#', '#', '#', '#', '#', ' ', .. as text] =>
+			Ok(Heading(Six, String.str_from_utf8(text)))
+
+		_ =>
+			Err(NotFound)
+	}
+}
+
+is_hash_heading_line : String.Utf8 -> Bool
+is_hash_heading_line = |content| {
+	parse_hash_heading_line(content).is_ok()
+}
+
+parse_image_line : String.Utf8 -> Try(Markdown, [NotFound])
+parse_image_line = |content| {
+	match content {
+		['!', '[', .. as rest] => {
+			label = find_sequence(rest, "](".to_utf8())?
+			href = find_sequence(label.after, ")".to_utf8())?
+
+			if href.after.is_empty() {
+				Ok(Image({ alt: String.str_from_utf8(label.before), href: String.str_from_utf8(href.before) }))
+			} else {
+				Err(NotFound)
+			}
+		}
+
+		_ =>
+			Err(NotFound)
+	}
+}
+
+parse_link_line : String.Utf8 -> Try(Markdown, [NotFound])
+parse_link_line = |content| {
+	match content {
+		['[', .. as rest] => {
+			label = find_sequence(rest, "](".to_utf8())?
+			href = find_sequence(label.after, ")".to_utf8())?
+
+			if href.after.is_empty() {
+				Ok(Link({ alt: String.str_from_utf8(label.before), href: String.str_from_utf8(href.before) }))
+			} else {
+				Err(NotFound)
+			}
+		}
+
+		_ =>
+			Err(NotFound)
+	}
+}
+
+is_code_fence_line : Line, U64 -> Bool
+is_code_fence_line = |line, min_indent| {
+	line_indent(line) >= min_indent and starts_with_bytes(strip_indent(line, min_indent), "```".to_utf8())
+}
+
+is_blockquote_line : Line, U64 -> Bool
+is_blockquote_line = |line, min_indent| {
+	line_indent(line) >= min_indent and starts_with_bytes(strip_indent(line, min_indent), ">".to_utf8())
+}
+
+strip_blockquote_marker : Line, U64 -> String.Utf8
+strip_blockquote_marker = |line, min_indent| {
+	content = strip_indent(line, min_indent).drop_first(1)
+
+	match content {
+		[' ', .. as rest] =>
+			rest
+
+		_ =>
+			content
+	}
+}
+
+is_list_item_line : Line, U64 -> Bool
+is_list_item_line = |line, min_indent| {
+	line_indent(line) == min_indent and starts_with_bytes(strip_indent(line, min_indent), "- ".to_utf8())
+}
+
+parse_inlines : String.Utf8 -> List(Inline)
+parse_inlines = |input| {
+	parse_inlines_help(input, [], [])
+}
+
+parse_inlines_help : String.Utf8, String.Utf8, List(Inline) -> List(Inline)
+parse_inlines_help = |input, text, nodes| {
+	match input {
+		[] =>
+			flush_text(text, nodes)
+
+		['*', '*', .. as rest] => {
+			match find_sequence(rest, "**".to_utf8()) {
+				Ok(found) => {
+					next_nodes = flush_text(text, nodes).append(Strong(parse_inlines(found.before)))
+					parse_inlines_help(found.after, [], next_nodes)
+				}
+
+				Err(_) =>
+					parse_inlines_help(rest, text.append('*').append('*'), nodes)
+			}
+		}
+
+		['*', .. as rest] => {
+			match find_sequence(rest, "*".to_utf8()) {
+				Ok(found) => {
+					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines(found.before)))
+					parse_inlines_help(found.after, [], next_nodes)
+				}
+
+				Err(_) =>
+					parse_inlines_help(rest, text.append('*'), nodes)
+			}
+		}
+
+		['_', .. as rest] => {
+			match find_sequence(rest, "_".to_utf8()) {
+				Ok(found) => {
+					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines(found.before)))
+					parse_inlines_help(found.after, [], next_nodes)
+				}
+
+				Err(_) =>
+					parse_inlines_help(rest, text.append('_'), nodes)
+			}
+		}
+
+		['`', .. as rest] => {
+			match find_sequence(rest, "`".to_utf8()) {
+				Ok(found) => {
+					next_nodes = flush_text(text, nodes).append(InlineCode(String.str_from_utf8(found.before)))
+					parse_inlines_help(found.after, [], next_nodes)
+				}
+
+				Err(_) =>
+					parse_inlines_help(rest, text.append('`'), nodes)
+			}
+		}
+
+		['[', .. as rest] => {
+			match find_sequence(rest, "](".to_utf8()) {
+				Ok(label) => {
+					match find_sequence(label.after, ")".to_utf8()) {
+						Ok(href) => {
+							next_nodes =
+								flush_text(text, nodes)
+									.append(InlineLink({ alt: parse_inlines(label.before), href: String.str_from_utf8(href.before) }))
+
+							parse_inlines_help(href.after, [], next_nodes)
+						}
+
+						Err(_) =>
+							parse_inlines_help(rest, text.append('['), nodes)
+					}
+				}
+
+				Err(_) =>
+					parse_inlines_help(rest, text.append('['), nodes)
+			}
+		}
+
+		[first, .. as rest] =>
+			parse_inlines_help(rest, text.append(first), nodes)
+	}
+}
+
+flush_text : String.Utf8, List(Inline) -> List(Inline)
+flush_text = |text, nodes| {
+	if text.is_empty() {
+		nodes
+	} else {
+		nodes.append(Text(String.str_from_utf8(text)))
+	}
+}
+
+find_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_sequence = |input, needle| {
+	find_sequence_help(input, needle, [])
+}
+
+find_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_sequence_help = |input, needle, acc| {
+	if starts_with_bytes(input, needle) {
+		Ok({ before: acc, after: input.drop_first(needle.len()) })
+	} else {
+		match input {
+			[] =>
+				Err(NotFound)
+
+			[first, .. as rest] =>
+				find_sequence_help(rest, needle, acc.append(first))
+		}
+	}
+}
+
+starts_with_bytes : String.Utf8, String.Utf8 -> Bool
+starts_with_bytes = |input, prefix| {
+	{ before: start, others: _ } = input.split_at(prefix.len())
+	start == prefix
+}
+
+split_lines : String.Utf8 -> List(Line)
+split_lines = |input| {
+	split_lines_help(input, [], [])
+}
+
+split_lines_help : String.Utf8, String.Utf8, List(Line) -> List(Line)
+split_lines_help = |input, current, lines| {
+	match input {
+		[] =>
+			lines.append({ raw: current })
+
+		['\r', '\n', .. as rest] =>
+			split_lines_help(rest, [], lines.append({ raw: current }))
+
+		['\n', .. as rest] =>
+			split_lines_help(rest, [], lines.append({ raw: current }))
+
+		[first, .. as rest] =>
+			split_lines_help(rest, current.append(first), lines)
+	}
+}
+
+line_indent : Line -> U64
+line_indent = |line| {
+	count_leading_spaces(line.raw, 0)
+}
+
+count_leading_spaces : String.Utf8, U64 -> U64
+count_leading_spaces = |input, count| {
+	match input {
+		[' ', .. as rest] =>
+			count_leading_spaces(rest, count + 1)
+
+		_ =>
+			count
+	}
+}
+
+strip_indent : Line, U64 -> String.Utf8
+strip_indent = |line, indent| {
+	line.raw.drop_first(indent)
+}
+
+line_is_blank : Line -> Bool
+line_is_blank = |line| {
+	bytes_are_blank(line.raw)
+}
+
+bytes_are_blank : String.Utf8 -> Bool
+bytes_are_blank = |bytes| {
+	match bytes {
+		[] =>
+			Bool.True
+
+		[' ', .. as rest] =>
+			bytes_are_blank(rest)
+
+		['\t', .. as rest] =>
+			bytes_are_blank(rest)
+
+		_ =>
+			Bool.False
+	}
+}
+
+all_bytes_are : String.Utf8, U8 -> Bool
+all_bytes_are = |bytes, expected| {
+	match bytes {
+		[] =>
+			Bool.True
+
+		[first, .. as rest] =>
+			first == expected and all_bytes_are(rest, expected)
+	}
+}
+
+join_lines_with_spaces : List(String.Utf8) -> String.Utf8
+join_lines_with_spaces = |lines| {
+	join_lines_with_spaces_help(lines, [])
+}
+
+join_lines_with_spaces_help : List(String.Utf8), String.Utf8 -> String.Utf8
+join_lines_with_spaces_help = |lines, acc| {
+	match lines {
+		[] =>
+			acc
+
+		[line, .. as rest] if acc.is_empty() =>
+			join_lines_with_spaces_help(rest, append_bytes(acc, line))
+
+		[line, .. as rest] =>
+			join_lines_with_spaces_help(rest, append_bytes(acc.append(' '), line))
+	}
+}
+
+append_line : String.Utf8, String.Utf8 -> String.Utf8
+append_line = |acc, line| {
+	append_bytes(acc, line).append('\n')
+}
+
+append_bytes : String.Utf8, String.Utf8 -> String.Utf8
+append_bytes = |left, right| {
+	match right {
+		[] =>
+			left
+
+		[first, .. as rest] =>
+			append_bytes(left.append(first), rest)
+	}
+}
+
 # # temporyary parser for anything that is not yet supported
 # # just parse into a TODO tag for now
 todo : Parser(String.Utf8, Markdown)
-todo = 
+todo =
 	Parser.const(|s| TODO(s))
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
 
-## Unsupported markdown lines are preserved as TODO nodes.
+## Unsupported markdown lines can still be preserved as TODO nodes directly.
 expect {
 	a = String.parse_str(todo, "Foo Bar")?
 	a == TODO("Foo Bar")
 }
 
-## Multiple markdown lines parse into separate TODO nodes when unsupported.
+## Multiple markdown lines parse into paragraph nodes and blank lines separate blocks.
 expect {
 	a = String.parse_str(Markdown.all, "Foo Bar\n\nBaz")?
-	a == [TODO("Foo Bar"), TODO(""), TODO("Baz")]
+	a == [Paragraph([Text("Foo Bar")]), Paragraph([Text("Baz")])]
 }
 
 end_of_line = Parser.one_of([String.string("\n"), String.string("\r\n")])
@@ -177,7 +769,7 @@ expect {
 	a == Heading(Two, "Foo Bar")
 }
 
-inline_heading = 
+inline_heading =
 	Parser.const(
 		|level| {
 			|str| {
@@ -211,7 +803,7 @@ expect {
 	a == { val: Heading(Three, "Foo Bar"), input: "\nBaz" }
 }
 
-two_line_heading_level_one = 
+two_line_heading_level_one =
 	Parser.const(
 		|str| {
 			Heading(One, str)
@@ -240,7 +832,7 @@ expect {
 	a == { val: Heading(One, "Foo Bar"), input: "\n" }
 }
 
-two_line_heading_level_two = 
+two_line_heading_level_two =
 	Parser.const(
 		|str| {
 			Heading(Two, str)
@@ -293,10 +885,9 @@ expect {
 	a == { val: Image({ alt: "alt text", href: "/images/logo.png" }), input: "\nApples" }
 }
 
-# TODO: fix the following expect
 ## Code blocks capture their extension and body text.
 expect {
-	text = 
+	text =
 		\\```roc
 		\\# some code
 		\\foo = bar
@@ -306,8 +897,92 @@ expect {
 	a == Code({ ext: "roc", pre: "# some code\nfoo = bar\n" })
 }
 
+## Inline spans parse text, emphasis, strong, code, and prose links.
+expect {
+	actual = parse_inlines("Intro with **bold**, *em*, _also em_, `code`, and [a link](https://example.com).".to_utf8())
+
+	actual
+		== [
+			Text("Intro with "),
+			Strong([Text("bold")]),
+			Text(", "),
+			Emphasis([Text("em")]),
+			Text(", "),
+			Emphasis([Text("also em")]),
+			Text(", "),
+			InlineCode("code"),
+			Text(", and "),
+			InlineLink({ alt: [Text("a link")], href: "https://example.com" }),
+			Text("."),
+		]
+}
+
+## Article body markdown parses into structured blocks without TODO fallbacks.
+expect {
+	text =
+		\\# Title
+		\\
+		\\Intro with **bold**, `code`, and [a link](https://example.com).
+		\\
+		\\![alt text](/image.png)
+		\\
+		\\```roc
+		\\main = 1
+		\\```
+		\\
+		\\- One
+		\\  - Nested
+		\\
+		\\> Quote with **strong** text
+
+	actual = String.parse_str(Markdown.all, text)?
+
+	actual
+		== [
+			Heading(One, "Title"),
+			Paragraph(
+				[
+					Text("Intro with "),
+					Strong([Text("bold")]),
+					Text(", "),
+					InlineCode("code"),
+					Text(", and "),
+					InlineLink({ alt: [Text("a link")], href: "https://example.com" }),
+					Text("."),
+				],
+			),
+			Image({ alt: "alt text", href: "/image.png" }),
+			Code({ ext: "roc", pre: "main = 1\n" }),
+			UnorderedList(
+				[
+					ListItem(
+						[Text("One")],
+						[
+							UnorderedList(
+								[
+									ListItem([Text("Nested")], []),
+								],
+							),
+						],
+					),
+				],
+			),
+			Blockquote(
+				[
+					Paragraph(
+						[
+							Text("Quote with "),
+							Strong([Text("strong")]),
+							Text(" text"),
+						],
+					),
+				],
+			),
+		]
+}
+
 chomp_until_code_block_end : Parser(String.Utf8, Str)
-chomp_until_code_block_end = 
+chomp_until_code_block_end =
 	Parser.build_primitive_parser(
 		|input| {
 			chomp_to_code_block_end_help({ val: List.with_capacity(1000), input })
