@@ -9,35 +9,40 @@ import parser.Markdown
 
 content : Str
 content =
+	\\---
+	\\title: Demo
+	\\---
 	\\# Title with **style**
 	\\
-	\\Intro with **bold**, `code`, and [a link](https://example.com).
+	\\Intro with **bold**, ~~old text~~, `code`, ![alt](/image.png), and [a link](https://example.com).
 	\\
-	\\[roc website](https://roc-lang.org)
+	\\[roc]: https://roc-lang.org "Roc"
+	\\Read [Roc][roc] and <https://example.com>.
 	\\
-	\\![alt text](/images/logo.png)
-	\\
-	\\---
-	\\
-	\\## Sub-title
+	\\| Name | Count |
+	\\| :--- | ---: |
+	\\| **Roc** | `1|2` |
 	\\
 	\\```roc
 	\\# some code
 	\\foo = bar
 	\\```
 	\\
-	\\- One
-	\\  continued
+	\\- [x] One
 	\\  - Nested
 	\\
 	\\1. First
 	\\2. Second
 	\\
 	\\> Quote with **strong** text
+	\\
+	\\<section>
+	\\raw
+	\\</section>
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
-	parsed = 
+	parsed =
 		String.parse_str(Markdown.all, content)
 			.map_ok(
 				|nodes| {
@@ -54,9 +59,9 @@ render_content : List(Markdown.Markdown), Str -> Str
 render_content = |nodes, buf| {
 	match nodes {
 		[] =>
-			buf # base case
+			buf
 
-		[Heading(level, inlines), .. as rest] =>
+		[Heading({ level, content: inlines }), .. as rest] =>
 			render_content(rest, buf.concat("HEADING: ${Str.inspect(level)} ${render_inlines(inlines, "")}\n"))
 
 		[Paragraph(inlines), .. as rest] =>
@@ -65,57 +70,122 @@ render_content = |nodes, buf| {
 		[Blockquote(children), .. as rest] =>
 			render_content(rest, buf.concat("BLOCKQUOTE:\n").concat(render_content(children, "")))
 
-		[UnorderedList(items), .. as rest] =>
-			render_content(rest, buf.concat("LIST:\n").concat(render_list_items(items, "")))
+		[ListBlock({ kind, loose, items }), .. as rest] =>
+			render_content(rest, buf.concat("LIST ${render_list_kind(kind)} loose=${render_bool(loose)}:\n").concat(render_list_items(items, "")))
 
-		[OrderedList(items), .. as rest] =>
-			render_content(rest, buf.concat("ORDERED LIST:\n").concat(render_ordered_list_items(items, 1, "")))
+		[Code({ info, pre }), .. as rest] =>
+			render_content(rest, buf.concat("CODE: info: ${Str.inspect(info)}, pre: ${Str.inspect(pre)}\n"))
 
-		[ListItem(inlines, children), .. as rest] =>
-			render_content(rest, buf.concat("ITEM: ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+		[ThematicBreak, .. as rest] =>
+			render_content(rest, buf.concat("THEMATIC BREAK\n"))
 
-		[HorizontalRule, .. as rest] =>
-			render_content(rest, buf.concat("HORIZONTAL RULE\n"))
+		[Table({ header, align, rows }), .. as rest] =>
+			render_content(rest, buf.concat("TABLE: ${render_cells(header)} | ${render_alignments(align)} | ${render_rows(rows)}\n"))
 
-		[Link({ alt, href }), .. as rest] =>
-			render_content(rest, buf.concat("LINK: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
+		[HtmlBlock(raw), .. as rest] =>
+			render_content(rest, buf.concat("HTML: ${Str.inspect(raw)}\n"))
 
-		[Image({ alt, href }), .. as rest] =>
-			render_content(rest, buf.concat("IMAGE: alt: ${Str.inspect(alt)}, ref: ${Str.inspect(href)}\n"))
-
-		[Code({ ext, pre }), .. as rest] =>
-			render_content(rest, buf.concat("CODE: ext: ${Str.inspect(ext)}, pre: ${Str.inspect(pre)}\n"))
+		[Frontmatter({ raw }), .. as rest] =>
+			render_content(rest, buf.concat("FRONTMATTER: ${Str.inspect(raw)}\n"))
 
 		[TODO(line), .. as rest] =>
 			render_content(rest, buf.concat("TODO: ${line}\n"))
 	}
 }
 
-render_list_items : List(Markdown.Markdown), Str -> Str
+render_list_kind : Markdown.ListKind -> Str
+render_list_kind = |kind| {
+	match kind {
+		Unordered =>
+			"unordered"
+
+		Ordered({ start }) =>
+			"ordered:${start.to_str()}"
+	}
+}
+
+render_list_items : List({ task : Markdown.TaskState, blocks : List(Markdown.Markdown) }), Str -> Str
 render_list_items = |items, buf| {
 	match items {
 		[] =>
 			buf
 
-		[ListItem(inlines, children), .. as rest] =>
-			render_list_items(rest, buf.concat("- ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
-
-		[other, .. as rest] =>
-			render_list_items(rest, buf.concat(render_content([other], "")))
+		[item, .. as rest] =>
+			render_list_items(rest, buf.concat("- ${render_task(item.task)}\n").concat(render_content(item.blocks, "")))
 	}
 }
 
-render_ordered_list_items : List(Markdown.Markdown), U64, Str -> Str
-render_ordered_list_items = |items, index, buf| {
+render_task : Markdown.TaskState -> Str
+render_task = |task| {
+	match task {
+		NoTask =>
+			""
+
+		Unchecked =>
+			"[ ]"
+
+		Checked =>
+			"[x]"
+	}
+}
+
+render_alignments : List(Markdown.Alignment) -> Str
+render_alignments = |alignments| {
+	join_strs(alignments.map(render_alignment), ",")
+}
+
+render_alignment : Markdown.Alignment -> Str
+render_alignment = |alignment| {
+	match alignment {
+		Default => "default"
+		Left => "left"
+		Center => "center"
+		Right => "right"
+	}
+}
+
+render_rows : List(List(List(Markdown.Inline))) -> Str
+render_rows = |rows| {
+	join_strs(rows.map(render_cells), ";")
+}
+
+render_cells : List(List(Markdown.Inline)) -> Str
+render_cells = |cells| {
+	join_strs(
+		cells.map(
+			|cell| {
+				render_inlines(cell, "")
+			},
+		),
+		"|",
+	)
+}
+
+render_bool : Bool -> Str
+render_bool = |value| {
+	if value {
+		"true"
+	} else {
+		"false"
+	}
+}
+
+join_strs : List(Str), Str -> Str
+join_strs = |items, separator| {
+	join_strs_help(items, separator, "")
+}
+
+join_strs_help : List(Str), Str, Str -> Str
+join_strs_help = |items, separator, acc| {
 	match items {
 		[] =>
-			buf
+			acc
 
-		[ListItem(inlines, children), .. as rest] =>
-			render_ordered_list_items(rest, index + 1, buf.concat("${index.to_str()}. ${render_inlines(inlines, "")}\n").concat(render_content(children, "")))
+		[item, .. as rest] if acc.is_empty() =>
+			join_strs_help(rest, separator, item)
 
-		[other, .. as rest] =>
-			render_ordered_list_items(rest, index, buf.concat(render_content([other], "")))
+		[item, .. as rest] =>
+			join_strs_help(rest, separator, acc.concat(separator).concat(item))
 	}
 }
 
@@ -134,10 +204,22 @@ render_inlines = |inlines, buf| {
 		[Emphasis(children), .. as rest] =>
 			render_inlines(rest, buf.concat("*").concat(render_inlines(children, "")).concat("*"))
 
+		[Strikethrough(children), .. as rest] =>
+			render_inlines(rest, buf.concat("~~").concat(render_inlines(children, "")).concat("~~"))
+
 		[InlineCode(code), .. as rest] =>
 			render_inlines(rest, buf.concat("`").concat(code).concat("`"))
 
-		[InlineLink({ alt, href }), .. as rest] =>
-			render_inlines(rest, buf.concat("[").concat(render_inlines(alt, "")).concat("](").concat(href).concat(")"))
+		[Link({ label, target }), .. as rest] =>
+			render_inlines(rest, buf.concat("[").concat(render_inlines(label, "")).concat("](").concat(target.href).concat(")"))
+
+		[Image({ alt, target }), .. as rest] =>
+			render_inlines(rest, buf.concat("![").concat(render_inlines(alt, "")).concat("](").concat(target.href).concat(")"))
+
+		[HardBreak, .. as rest] =>
+			render_inlines(rest, buf.concat("\\n"))
+
+		[HtmlInline(raw), .. as rest] =>
+			render_inlines(rest, buf.concat(raw))
 	}
 }
