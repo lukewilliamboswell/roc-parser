@@ -127,8 +127,17 @@ method =
 		],
 	)
 
-expect String.parse_str(method, "GET") == Ok(Get)
-expect String.parse_str(method, "DELETE") == Ok(Delete)
+## GET parses as the Get method tag.
+expect {
+	actual = String.parse_str(method, "GET")?
+	actual == Get
+}
+
+## DELETE parses as the Delete method tag.
+expect {
+	actual = String.parse_str(method, "DELETE")?
+	actual == Delete
+}
 
 # TODO: do we want more structure in the URI, or is Str actually what programs want anyway?
 # This is not a full URL!
@@ -163,9 +172,10 @@ http_version =
 		.skip(String.codeunit('.'))
 		.keep((String.digits).map(U64.to_u8_wrap)) # TODO: change to to_u8_try
 
+## HTTP version parsing captures the major and minor numbers.
 expect {
-	actual = String.parse_str(http_version, "HTTP/1.1")
-	expected = Ok({ major: 1, minor: 1 })
+	actual = String.parse_str(http_version, "HTTP/1.1")?
+	expected = { major: 1, minor: 1 }
 	actual == expected
 }
 
@@ -203,12 +213,14 @@ header =
 		.keep(string_without_cr)
 		.skip(crlf)
 
+## Header parsing splits the field name from its value.
 expect {
-	actual = String.parse_str(header, "Accept-Encoding: gzip, deflate\r\n")
-	expected = Ok(Header("Accept-Encoding", "gzip, deflate"))
+	actual = String.parse_str(header, "Accept-Encoding: gzip, deflate\r\n")?
+	expected = Header("Accept-Encoding", "gzip, deflate")
 	actual == expected
 }
 
+## HTTP request parsing captures method, URI, version, headers, and body.
 expect {
 	request_text = 
 		\\GET /things?id=1 HTTP/1.1\r
@@ -217,24 +229,23 @@ expect {
 		\\\r
 		\\Hello, world!
 	actual = 
-		String.parse_str(HTTP.request, request_text)
+		String.parse_str(HTTP.request, request_text)?
 
-	expected : Try(HTTP.Request, [ParsingFailure(Str), ParsingIncomplete(Str)])
-	expected = Ok(
-		{
-			method: Get,
-			uri: "/things?id=1",
-			http_version: { major: 1, minor: 1 },
-			headers: [
-				Header("Host", "bar.example"),
-				Header("Accept-Encoding", "gzip, deflate"),
-			],
-			body: "Hello, world!".to_utf8(),
-		},
-	)
+	expected : HTTP.Request
+	expected = {
+		method: Get,
+		uri: "/things?id=1",
+		http_version: { major: 1, minor: 1 },
+		headers: [
+			Header("Host", "bar.example"),
+			Header("Accept-Encoding", "gzip, deflate"),
+		],
+		body: "Hello, world!".to_utf8(),
+	}
 	actual == expected
 }
 
+## OPTIONS request parsing supports many headers and an empty body.
 expect {
 	request_text = 
 		\\OPTIONS /resources/post-here/ HTTP/1.1\r
@@ -248,28 +259,27 @@ expect {
 		\\Access-Control-Request-Headers: X-PINGOTHER, Content-Type\r
 		\\\r\n
 	actual = 
-		String.parse_str(HTTP.request, request_text)
-	expected = Ok(
-		{
-			method: Options,
-			uri: "/resources/post-here/",
-			http_version: { major: 1, minor: 1 },
-			headers: [
-				Header("Host", "bar.example"),
-				Header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
-				Header("Accept-Language", "en-us,en;q=0.5"),
-				Header("Accept-Encoding", "gzip,deflate"),
-				Header("Connection", "Parser.keep-alive"),
-				Header("Origin", "https://foo.example"),
-				Header("Access-Control-Request-Method", "POST"),
-				Header("Access-Control-Request-Headers", "X-PINGOTHER, Content-Type"),
-			],
-			body: [],
-		},
-	)
+		String.parse_str(HTTP.request, request_text)?
+	expected = {
+		method: Options,
+		uri: "/resources/post-here/",
+		http_version: { major: 1, minor: 1 },
+		headers: [
+			Header("Host", "bar.example"),
+			Header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+			Header("Accept-Language", "en-us,en;q=0.5"),
+			Header("Accept-Encoding", "gzip,deflate"),
+			Header("Connection", "Parser.keep-alive"),
+			Header("Origin", "https://foo.example"),
+			Header("Access-Control-Request-Method", "POST"),
+			Header("Access-Control-Request-Headers", "X-PINGOTHER, Content-Type"),
+		],
+		body: [],
+	}
 	actual == expected
 }
 
+## HTTP response parsing captures headers and leaves the body bytes intact.
 expect {
 	body = 
 		\\<!DOCTYPE html>\r
@@ -302,31 +312,28 @@ expect {
 		\\\r
 		\\${body}
 	actual = 
-		String.parse_str(HTTP.response, response_text)
-	expected = 
-		Ok(
-			{
-				http_version: { major: 1, minor: 1 },
-				status_code: 200,
-				status: "OK",
-				headers: [
-					Header("Content-Type", "text/html; charset=utf-8"),
-					Header("Content-Length", "55743"),
-					Header("Connection", "Parser.keep-alive"),
-					Header("Cache-Control", "s-maxage=300, public, max-age=0"),
-					Header("Content-Language", "en-US"),
-					Header("Date", "Thu, 06 Dec 2018 17:37:18 GMT"),
-					Header("ETag", "\"2e77ad1dc6ab0b53a2996dfd4653c1c3\""),
-					Header("Server", "meinheld/0.6.1"),
-					Header("Strict-Transport-Security", "max-age=63072000"),
-					Header("X-Content-Type-Options", "nosniff"),
-					Header("X-Frame-Options", "DENY"),
-					Header("X-XSS-Protection", "1; mode=block"),
-					Header("Vary", "Accept-Encoding,Cookie"),
-					Header("Age", "7"),
-				],
-				body: body.to_utf8(),
-			},
-		)
+		String.parse_str(HTTP.response, response_text)?
+	expected = {
+		http_version: { major: 1, minor: 1 },
+		status_code: 200,
+		status: "OK",
+		headers: [
+			Header("Content-Type", "text/html; charset=utf-8"),
+			Header("Content-Length", "55743"),
+			Header("Connection", "Parser.keep-alive"),
+			Header("Cache-Control", "s-maxage=300, public, max-age=0"),
+			Header("Content-Language", "en-US"),
+			Header("Date", "Thu, 06 Dec 2018 17:37:18 GMT"),
+			Header("ETag", "\"2e77ad1dc6ab0b53a2996dfd4653c1c3\""),
+			Header("Server", "meinheld/0.6.1"),
+			Header("Strict-Transport-Security", "max-age=63072000"),
+			Header("X-Content-Type-Options", "nosniff"),
+			Header("X-Frame-Options", "DENY"),
+			Header("X-XSS-Protection", "1; mode=block"),
+			Header("Vary", "Accept-Encoding,Cookie"),
+			Header("Age", "7"),
+		],
+		body: body.to_utf8(),
+	}
 	actual == expected
 }

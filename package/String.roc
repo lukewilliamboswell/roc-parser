@@ -189,8 +189,18 @@ String :: {}.{
 			Bool.True
 		},
 	)
-	expect any_codeunit->parse_str("a") == Ok('a')
-	expect any_codeunit->parse_str("\$") == Ok(36)
+
+	## Any codeunit accepts a lowercase ASCII byte.
+	expect {
+		actual = any_codeunit->parse_str("a")?
+		actual == 'a'
+	}
+
+	## Any codeunit accepts a dollar-sign byte.
+	expect {
+		actual = any_codeunit->parse_str("\$")?
+		actual == 36
+	}
 
 	## Matches any `Utf8` and consumes all the input without fail.
 	## ```roc
@@ -205,9 +215,12 @@ String :: {}.{
 			Ok({ val: input, input: [] })
 		},
 	)
+
+	## Any input parser consumes all bytes.
 	expect {
 		bytes = "consumes all the input".to_utf8()
-		any_thing.parse(bytes, List.is_empty) == Ok(bytes)
+		actual = any_thing.parse(bytes, List.is_empty)?
+		actual == bytes
 	}
 
 	# Matches any string
@@ -330,18 +343,29 @@ str_from_codeunit = |cu| {
 	String.str_from_utf8([cu])
 }
 
-expect String.parse_str(String.any_codeunit, "a") == Ok('a')
-expect String.parse_str(String.any_codeunit, "\$") == Ok(36)
+## Any codeunit parser accepts a lowercase ASCII byte.
+expect {
+	actual = String.parse_str(String.any_codeunit, "a")?
+	actual == 'a'
+}
 
+## Any codeunit parser accepts a dollar-sign byte.
+expect {
+	actual = String.parse_str(String.any_codeunit, "\$")?
+	actual == 36
+}
+
+## Any input parser consumes all bytes and returns them.
 expect {
 	bytes = "consumes all the input".to_utf8()
-	Parser.parse(
+	actual = Parser.parse(
 		String.any_thing,
 		bytes,
 		|l| {
 			l.is_empty()
 		},
-	) == Ok(bytes)
+	)?
+	actual == bytes
 }
 
 # -------------------- example snippets used in docs --------------------
@@ -350,7 +374,11 @@ parse_u32 : Parser(String.Utf8, U32)
 parse_u32 = 
 	Parser.const(U64.to_u32_wrap).keep(String.digits)
 
-expect String.parse_str(parse_u32, "123") == Ok(123.U32)
+## Digit parsing can be mapped into a U32.
+expect {
+	actual = String.parse_str(parse_u32, "123")?
+	actual == 123.U32
+}
 
 color : Parser(String.Utf8, [Red, Green, Blue])
 color = 
@@ -362,14 +390,28 @@ color =
 		],
 	)
 
-expect String.parse_str(color, "green") == Ok(Green)
+## One-of parsing selects the matching color tag.
+expect {
+	actual = String.parse_str(color, "green")?
+	actual == Green
+}
 
 parse_numbers : Parser(String.Utf8, List(U64))
 parse_numbers = (String.digits).sep_by(String.codeunit(','))
 
-expect String.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
+## Separator parsing returns the list of parsed numbers.
+expect {
+	actual = String.parse_str(parse_numbers, "1,2,3")?
+	actual == [1, 2, 3]
+}
 
-expect String.parse_str(String.string("Foo"), "Foo") == Ok("Foo")
+## Exact string parsing succeeds when the input matches.
+expect {
+	actual = String.parse_str(String.string("Foo"), "Foo")?
+	actual == "Foo"
+}
+
+## Exact string parsing reports non-matching input.
 expect String.parse_str(String.string("Foo"), "Bar").is_err()
 
 ignore_text : Parser(String.Utf8, U64)
@@ -383,7 +425,11 @@ ignore_text =
 		.skip(String.codeunit(':'))
 		.keep(String.digits)
 
-expect String.parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
+## Skipping a prefix can parse the numeric suffix.
+expect {
+	actual = String.parse_str(ignore_text, "ignore preceding text:123")?
+	actual == 123
+}
 
 ignore_numbers : Parser(String.Utf8, Str)
 ignore_numbers = 
@@ -401,25 +447,42 @@ ignore_numbers =
 		)
 		.keep(String.string("TEXT"))
 
-expect String.parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
+## Chomping digits can leave the following text parser result.
+expect {
+	actual = String.parse_str(ignore_numbers, "0123456789876543210TEXT")?
+	actual == "TEXT"
+}
 
 is_digit : U8 -> Bool
 is_digit = |b| {
 	b >= '0' and b <= '9'
 }
 
-expect String.parse_str(String.codeunit_satisfies(is_digit), "0") == Ok('0')
+## Codeunit predicates can accept digit bytes.
+expect {
+	actual = String.parse_str(String.codeunit_satisfies(is_digit), "0")?
+	actual == '0'
+}
+
+## Codeunit predicates reject bytes that do not satisfy the predicate.
 expect String.parse_str(String.codeunit_satisfies(is_digit), "*").is_err()
 
 at_sign : Parser(String.Utf8, [AtSign])
 at_sign = Parser.const(AtSign).skip(String.codeunit('@'))
 
-expect String.parse_str(at_sign, "@") == Ok(AtSign)
-expect String.parse_str_partial(at_sign, "@").map_ok(
-	|r| {
-		r.val
-	},
-) == Ok(AtSign)
+## The at-sign parser succeeds on an at-sign byte.
+expect {
+	actual = String.parse_str(at_sign, "@")?
+	actual == AtSign
+}
+
+## Partial parsing returns the parsed at-sign tag.
+expect {
+	actual = String.parse_str_partial(at_sign, "@")?
+	actual.val == AtSign
+}
+
+## The at-sign parser rejects other bytes.
 expect String.parse_str_partial(at_sign, "\$").is_err()
 
 Requirement : [Green(U64), Red(U64), Blue(U64)]
@@ -460,24 +523,36 @@ parse_game = |s| {
 	}
 }
 
+## Game parsing extracts requirements grouped by reveal.
 expect {
-	parse_game("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green")
-		== Ok(
-			{
-				id: 1,
-				requirements: [
-					[Blue(3), Red(4)],
-					[Red(1), Green(2), Blue(6)],
-					[Green(2)],
-				],
-			},
-		)
+	actual = parse_game("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green")?
+	actual
+		== {
+			id: 1,
+			requirements: [
+				[Blue(3), Red(4)],
+				[Red(1), Green(2), Blue(6)],
+				[Green(2)],
+			],
+		}
 }
 
-expect String.parse_str(String.digit, "0") == Ok(0)
+## Single digit parsing converts ASCII zero into numeric zero.
+expect {
+	actual = String.parse_str(String.digit, "0")?
+	actual == 0
+}
+
+## Single digit parsing rejects non-digit text.
 expect String.parse_str(String.digit, "not a digit").is_err()
 
-expect String.parse_str(String.digits, "0123") == Ok(123)
+## Multiple digit parsing accepts leading zeroes.
+expect {
+	actual = String.parse_str(String.digits, "0123")?
+	actual == 123
+}
+
+## Multiple digit parsing rejects text without a leading digit.
 expect String.parse_str(String.digits, "not a digit").is_err()
 
 bool_parser : Parser(String.Utf8, Bool)
@@ -489,6 +564,17 @@ bool_parser =
 			},
 		)
 
-expect String.parse_str(bool_parser, "true") == Ok(Bool.True)
-expect String.parse_str(bool_parser, "false") == Ok(Bool.False)
+## Boolean parser maps true text to Bool.True.
+expect {
+	actual = String.parse_str(bool_parser, "true")?
+	actual == Bool.True
+}
+
+## Boolean parser maps false text to Bool.False.
+expect {
+	actual = String.parse_str(bool_parser, "false")?
+	actual == Bool.False
+}
+
+## Boolean parser rejects other text.
 expect String.parse_str(bool_parser, "not a bool").is_err()

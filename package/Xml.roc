@@ -11,6 +11,11 @@ Xml :: {
 }.{
 	Attribute : { name : Str, value : Str }
 
+	Encoding := [
+		Utf8Encoding,
+		OtherEncoding(Str),
+	]
+
 	Declaration : {
 		version : Version,
 		encoding : [Given(Encoding), Missing],
@@ -20,15 +25,12 @@ Xml :: {
 		after_dot : U8,
 	}.{
 		new : U8 -> Version
-		new = |after_dot| { { after_dot } }
+		new = |after_dot| {
+			{ after_dot }
+		}
 		is_eq : Version, Version -> Bool
 		is_eq = |v1, v2| v1.after_dot == v2.after_dot
 	}
-
-	Encoding : [
-		Utf8Encoding,
-		OtherEncoding(Str),
-	]
 
 	Node := [
 		Element(Str, List({ name : Str, value : Str }), List(Node)),
@@ -52,47 +54,43 @@ v1_dot0 = {
 	Xml.Version.new(0)
 }
 
+## Full XML parsing captures the declaration and root element.
 expect {
-	# xml to be parsed
-	result = String.parse_str(Xml.xml_parser, test_xml)
+	result = String.parse_str(Xml.xml_parser, test_xml)?
 
 	result
-		== Ok(
-			{
-				xml_declaration: Given(
-					{
-						version: v1_dot0,
-						encoding: Given(Utf8Encoding),
-					},
-				),
-				root: Element(
-					"root",
-					[],
-					[
-						Text("\n    "),
-						Element(
-							"element",
-							[{ name: "arg", value: "value" }],
-							[],
-						),
-						Text("\n"),
-					],
-				),
-			},
-		)
+		== {
+			xml_declaration: Given(
+				{
+					version: v1_dot0,
+					encoding: Given(Utf8Encoding),
+				},
+			),
+			root: Element(
+				"root",
+				[],
+				[
+					Text("\n    "),
+					Element(
+						"element",
+						[{ name: "arg", value: "value" }],
+						[],
+					),
+					Text("\n"),
+				],
+			),
+		}
 }
 
+## XML parsing accepts documents without a prolog.
 expect {
-	# XML with empty prolog to be parsed
-	result = String.parse_str(Xml.xml_parser, "<element />")
+	result = String.parse_str(Xml.xml_parser, "<element />")?
 
 	result
-		== Ok(
-			{
-				xml_declaration: Missing,
-				root: Element("element", [], []),
-			},
-		)
+		== {
+			xml_declaration: Missing,
+			root: Element("element", [], []),
+		}
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-prolog
@@ -134,22 +132,20 @@ p_xml_declaration =
 		.skip(p_whitespace.many())
 		.skip(String.string("?>"))
 
+## XML declaration parsing captures version and encoding.
 expect {
-	# XML declaration to be parsed
 	result = 
 		String.parse_str(
 			p_xml_declaration,
 			\\<?xml version="1.0" encoding="utf-8"?>
 			,
-		)
+		)?
 
 	result
-		== Ok(
-			{
-				version: v1_dot0,
-				encoding: Given(Utf8Encoding),
-			},
-		)
+		== {
+			version: v1_dot0,
+			encoding: Given(Utf8Encoding),
+		}
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionInfo
@@ -209,11 +205,11 @@ p_encoding_name =
 		)
 		.flatten()
 
+## UTF-8 encoding names parse as the Utf8Encoding tag.
 expect {
-	# encoding name to be parsed
-	result = String.parse_str(p_encoding_name, "utf-8")
+	result = String.parse_str(p_encoding_name, "utf-8")?
 
-	result == Ok(Utf8Encoding)
+	result == Utf8Encoding
 }
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-element
@@ -265,157 +261,147 @@ p_element =
 			),
 		)
 
+## Empty elements can include whitespace before the self-closing marker.
 expect {
-	# empty element tag without arguments to be parsed
-	result = String.parse_str(p_element, "<element />")
+	result = String.parse_str(p_element, "<element />")?
 
-	result == Ok(Element("element", [], []))
+	result == Element("element", [], [])
 }
 
+## Empty elements can omit whitespace before the self-closing marker.
 expect {
-	# empty element tag without arguments and without whitespace to be parsed
-	result = String.parse_str(p_element, "<element/>")
+	result = String.parse_str(p_element, "<element/>")?
 
-	result == Ok(Element("element", [], []))
+	result == Element("element", [], [])
 }
 
+## Empty elements can carry attributes.
 expect {
-	# empty element tag with argument to be parsed
 	result = String.parse_str(
 		p_element,
 		\\<element arg="value"/>
 		,
-	)
+	)?
 
-	result == Ok(Element("element", [{ name: "arg", value: "value" }], []))
+	result == Element("element", [{ name: "arg", value: "value" }], [])
 }
 
+## Explicit start and end tags can represent an empty element.
 expect {
-	# empty element without arguments to be parsed
-	result = String.parse_str(p_element, "<element></element>")
+	result = String.parse_str(p_element, "<element></element>")?
 
-	result == Ok(Element("element", [], []))
+	result == Element("element", [], [])
 }
 
+## Elements can parse multiple attributes and text content.
 expect {
-	# element with multiple arguments and text content to be parsed
 	result = String.parse_str(
 		p_element,
 		\\<element firstArg="one" secondArg="two">text content</element>
 		,
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"element",
-				[
-					{ name: "firstArg", value: "one" },
-					{ name: "secondArg", value: "two" },
-				],
-				[Text("text content")],
-			),
+		== Element(
+			"element",
+			[
+				{ name: "firstArg", value: "one" },
+				{ name: "secondArg", value: "two" },
+			],
+			[Text("text content")],
 		)
 }
 
+## CDATA sections parse into text nodes.
 expect {
-	# content with CDATA sections to be parsed
 	result = String.parse_str(
 		p_element,
 		"<element><![CDATA[<literal />]]></element>",
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"element",
-				[],
-				[Text("<literal />")],
-			),
+		== Element(
+			"element",
+			[],
+			[Text("<literal />")],
 		)
 }
 
+## Partial CDATA closing text is preserved until the real close marker.
 expect {
-	# CDATA section with partial CDATA section end tag to be parsed
 	result = String.parse_str(
 		p_element,
 		"<element><![CDATA[this is ]] not ]> the end]]></element>",
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"element",
-				[],
-				[Text("this is ]] not ]> the end")],
-			),
+		== Element(
+			"element",
+			[],
+			[Text("this is ]] not ]> the end")],
 		)
 }
 
+## Nested elements parse into child nodes.
 expect {
-	# nested elements to be parsed
 	result = String.parse_str(
 		p_element,
 		"<parent><child /></parent>",
-	)
+	)?
 
-	result == Ok(Element("parent", [], [Element("child", [], [])]))
+	result == Element("parent", [], [Element("child", [], [])])
 }
 
+## Nested elements preserve attributes on parent and child nodes.
 expect {
-	# nested element with arguments to be parsed
 	result = String.parse_str(
 		p_element,
 		\\<parent argParent="outer"><child argChild="inner" /></parent>
 		,
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"parent",
-				[
-					{ name: "argParent", value: "outer" },
-				],
-				[
-					Element(
-						"child",
-						[
-							{ name: "argChild", value: "inner" },
-						],
-						[],
-					),
-				],
-			),
+		== Element(
+			"parent",
+			[
+				{ name: "argParent", value: "outer" },
+			],
+			[
+				Element(
+					"child",
+					[
+						{ name: "argChild", value: "inner" },
+					],
+					[],
+				),
+			],
 		)
 }
 
+## Nested element parsing preserves whitespace text nodes.
 expect {
-	# nested elements with whitespace to be parsed
 	result = String.parse_str(
 		p_element,
 		\\<parent>
 		\\    <child />
 		\\</parent>
 		,
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"parent",
-				[],
-				[
-					Text("\n    "),
-					Element("child", [], []),
-					Text("\n"),
-				],
-			),
+		== Element(
+			"parent",
+			[],
+			[
+				Text("\n    "),
+				Element("child", [], []),
+				Text("\n"),
+			],
 		)
 }
 
+## Elements can parse a diverse set of child nodes.
 expect {
-	# element with diverse children to be parsed
 	result = String.parse_str(
 		p_element,
 		\\<feed xmlns="http://www.w3.org/2005/Atom">
@@ -424,37 +410,35 @@ expect {
 		\\    <updated>2024-02-23T20:38:24Z</updated>
 		\\</feed>
 		,
-	)
+	)?
 
 	result
-		== Ok(
-			Element(
-				"feed",
-				[{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
-				[
-					Text("\n    "),
-					Element("title", [], [Text("Atom Feed")]),
-					Text("\n    "),
-					Element(
-						"link",
-						[
-							{ name: "rel", value: "self" },
-							{ name: "type", value: "application/atom+xml" },
-							{ name: "href", value: "http://example.org" },
-						],
-						[],
-					),
-					Text("\n    "),
-					Element(
-						"updated",
-						[],
-						[
-							Text("2024-02-23T20:38:24Z"),
-						],
-					),
-					Text("\n"),
-				],
-			),
+		== Element(
+			"feed",
+			[{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
+			[
+				Text("\n    "),
+				Element("title", [], [Text("Atom Feed")]),
+				Text("\n    "),
+				Element(
+					"link",
+					[
+						{ name: "rel", value: "self" },
+						{ name: "type", value: "application/atom+xml" },
+						{ name: "href", value: "http://example.org" },
+					],
+					[],
+				),
+				Text("\n    "),
+				Element(
+					"updated",
+					[],
+					[
+						Text("2024-02-23T20:38:24Z"),
+					],
+				),
+				Text("\n"),
+			],
 		)
 }
 
@@ -703,10 +687,9 @@ trailing_whitespace_xml =
 	\\<root><Example></Example></root>
 	\\
 
+## Full XML parsing ignores trailing whitespace after the root.
 expect {
-	# ignore trailing newline
-	result : Try(Xml, _)
-	result = String.parse_str(Xml.xml_parser, trailing_whitespace_xml)
+	result = String.parse_str(Xml.xml_parser, trailing_whitespace_xml)?
 
 	expected : Xml
 	expected = {
@@ -725,5 +708,5 @@ expect {
 		),
 	}
 
-	result == Ok(expected)
+	result == expected
 }
