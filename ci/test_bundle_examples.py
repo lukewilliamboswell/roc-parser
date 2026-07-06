@@ -18,7 +18,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DEPENDENCY_RE = re.compile(r'(?m)^(\s*parser:\s*)"[^"]+"')
 SKIPPED_EXAMPLES = {
-    "markdown.roc": "latest nightly overflows the compiler stack while checking this example",
     "xml-svg.roc": "missing migrated roc-html dependency",
 }
 
