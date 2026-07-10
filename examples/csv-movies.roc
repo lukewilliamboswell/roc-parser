@@ -17,8 +17,10 @@ input =
 MovieInfo : { title : Str, release_year : U64, actors : List(Str) }
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), StderrErr(Str), ..])
-main! = |_args| {
-	match CSV.parse_str(movie_info_parser, input) {
+main! = |args| {
+	csv_input = args.first() ?? input
+
+	match CSV.parse_str(movie_info_parser, csv_input) {
 		Ok(movies) => {
 			movies_string = 
 				movies

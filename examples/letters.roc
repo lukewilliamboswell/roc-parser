@@ -9,9 +9,10 @@ import parser.Parser
 import parser.String
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), StderrErr(Str), ..])
-main! = |_args| {
+main! = |args| {
+	input = args.first() ?? "AAAiBByAABBwBtCCCiAyArBBx"
 	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(letter_parser.many(), "AAAiBByAABBwBtCCCiAyArBBx")
+	result = String.parse_str(letter_parser.many(), input)
 
 	match result.map_ok(count_letter_as) {
 		Ok(count) => Stdout.line!("I counted ${count.to_str()} letter A's!")?

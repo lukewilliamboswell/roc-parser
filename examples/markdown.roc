@@ -41,9 +41,10 @@ content =
 	\\</section>
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
-main! = |_args| {
+main! = |args| {
+	markdown_input = args.first() ?? content
 	parsed =
-		String.parse_str(Markdown.all, content)
+		String.parse_str(Markdown.all, markdown_input)
 			.map_ok(
 				|nodes| {
 					render_content(nodes, "")
