@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Markdown Docs</title>
+    <meta name="viewport" content="width=device-width">
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../search.js" defer></script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <symbol id="link-icon" viewBox="0 0 640 512">
+      <path d="M562.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L405.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C189.5 251.2 196 330 246 380c56.5 56.5 148 56.5 204.5 0L562.8 267.7zM43.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C57 372 57 321 88.5 289.5L200.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C416.5 260.8 410 182 360 132c-56.5-56.5-148-56.5-204.5 0L43.2 244.3z"/>
+    </symbol>
+  </defs>
+</svg>
+    <nav id="sidebar-nav">
+        <div class="pkg-and-logo">
+            <a class="logo" href="../"><svg viewBox="0 -6 51 58" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logo-link">
+    <title id="logo-link">Home</title>
+    <polygon role="presentation" points="0,0 23.8834,3.21052 37.2438,19.0101 45.9665,16.6324 50.5,22 45,22 44.0315,26.3689 26.4673,39.3424 27.4527,45.2132 17.655,53 23.6751,22.7086" />
+</svg></a>
+            <h1 class="pkg-full-name"><a href="../">package</a></h1>
+        </div>
+        <div class="module-links-container">
+            <ul class="module-links">
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="CSV" href="../CSV/"><button class="entry-toggle"></button><span>CSV</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str">parse_str</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_csv">parse_csv</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_csv_record">parse_csv_record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.record">record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.field">field</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.string">string</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.u64">u64</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.f64">f64</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str_to_csv">parse_str_to_csv</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.parse_str_to_csv_record">parse_str_to_csv_record</a></li>
+                        <li><a class="sidebar-value" href="../CSV/#CSV.file">file</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../CSV/#CSV.CSVRecord">CSVRecord</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../CSV/#CSV.CSVField">CSVField</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="HTTP" href="../HTTP/"><button class="entry-toggle"></button><span>HTTP</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../HTTP/#HTTP.request">request</a></li>
+                        <li><a class="sidebar-value" href="../HTTP/#HTTP.response">response</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Method">Method</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.HttpVersion">HttpVersion</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Header">Header</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Request">Request</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../HTTP/#HTTP.Response">Response</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link active" data-module-name="Markdown" href="../Markdown/"><button class="entry-toggle"></button><span>Markdown</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.to_inspect">to_inspect</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.is_eq">is_eq</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.to_debug_str">to_debug_str</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.inline_to_debug_str">inline_to_debug_str</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.all">all</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.inlines">inlines</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.heading">heading</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.link">link</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.image">image</a></li>
+                        <li><a class="sidebar-value" href="../Markdown/#Markdown.code">code</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.Level">Level</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Level.to_inspect">to_inspect</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Level.to_str">to_str</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Level.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.ListKind">ListKind</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.ListKind.to_inspect">to_inspect</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.ListKind.to_str">to_str</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.ListKind.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.TaskState">TaskState</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.TaskState.to_inspect">to_inspect</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.TaskState.to_str">to_str</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.TaskState.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.Alignment">Alignment</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Alignment.to_inspect">to_inspect</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Alignment.to_str">to_str</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Alignment.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.LinkTarget">LinkTarget</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Markdown/#Markdown.Inline">Inline</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Inline.to_inspect">to_inspect</a></li>
+                          <li><a class="sidebar-value" href="../Markdown/#Markdown.Inline.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="Parser" href="../Parser/"><button class="entry-toggle"></button><span>Parser</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Parser/#Parser.build_primitive_parser">build_primitive_parser</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.parse_partial">parse_partial</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.parse">parse</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.fail">fail</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.const">const</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.alt">alt</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.apply">apply</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.one_of">one_of</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map">map</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map2">map2</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.map3">map3</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.flatten">flatten</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.lazy">lazy</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.maybe">maybe</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.many">many</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.one_or_more">one_or_more</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.between">between</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.sep_by1">sep_by1</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.sep_by">sep_by</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.ignore">ignore</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.keep">keep</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.skip">skip</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.chomp_until">chomp_until</a></li>
+                        <li><a class="sidebar-value" href="../Parser/#Parser.chomp_while">chomp_while</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Parser/#Parser.ParseResult">ParseResult</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="String" href="../String/"><button class="entry-toggle"></button><span>String</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../String/#String.parse_str">parse_str</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_str_partial">parse_str_partial</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_utf8">parse_utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.parse_utf8_partial">parse_utf8_partial</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.codeunit_satisfies">codeunit_satisfies</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.codeunit">codeunit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.utf8">utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.string">string</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_codeunit">any_codeunit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_thing">any_thing</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.any_string">any_string</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.digit">digit</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.digits">digits</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.one_of">one_of</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.str_from_utf8">str_from_utf8</a></li>
+                        <li><a class="sidebar-value" href="../String/#String.str_from_ascii">str_from_ascii</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../String/#String.Utf8">Utf8</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="sidebar-entry">
+                    <a class="sidebar-module-link" data-module-name="Xml" href="../Xml/"><button class="entry-toggle"></button><span>Xml</span></a>
+                    <ul class="sidebar-sub-entries">
+                        <li><a class="sidebar-value" href="../Xml/#Xml.xml_parser">xml_parser</a></li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Attribute">Attribute</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Encoding">Encoding</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Declaration">Declaration</a>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Version">Version</a>
+                          <ul class="sidebar-sub-entries">
+                          <li><a class="sidebar-value" href="../Xml/#Xml.Version.new">new</a></li>
+                          <li><a class="sidebar-value" href="../Xml/#Xml.Version.is_eq">is_eq</a></li>
+                          </ul>
+                        </li>
+                        <li class="sidebar-type">
+                          <a class="sidebar-type-name" href="../Xml/#Xml.Node">Node</a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    <main>
+        <form id="module-search-form">
+            <input type="search" id="module-search" placeholder="Search Documentation" autocomplete="off" />
+            <input type="search" id="module-search-nojs" placeholder="Enable JavaScript to search" autocomplete="off" disabled aria-label="Search requires JavaScript" />
+            <noscript><style>#module-search{display:none}#module-search-nojs{display:block}</style></noscript>
+            <button class="menu-toggle" type="button" aria-label="Toggle sidebar"><svg viewBox="0 6 18 12" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0 6h18v2H0V6zm0 5h18v2H0v-2zm0 5h18v2H0v-2z"/>
+</svg></button>
+            <ul id="search-type-ahead" class="hidden">
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">List</span>(<span class="type-var">a</span>), [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">SyntaxError</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_csv"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_csv</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">CSV</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">List</span>(<span class="type-var">a</span>), [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_csv_record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_csv_record</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>), <span class="type">CSVRecord</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">CSVRecord</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">record</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.field"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">field</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">CSVRecord</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.string"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">string</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.u64"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">u64</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.f64"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">f64</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">CSVField</span>, <span class="type">F64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str_to_csv"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str_to_csv</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">CSV</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.parse_str_to_csv_record"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">parse_str_to_csv_record</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type">CSVRecord</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.file"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">file</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">CSV</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.CSVRecord"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">CSVRecord</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">CSVField</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../CSV/#CSV.CSVField"><span class="type-ahead-module-name">CSV</span>.<span class="type-ahead-def-name">CSVField</span> <span class="type-ahead-signature">: <span class="type">Utf8</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.request"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">request</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Request</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.response"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">response</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Response</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Method"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Method</span> <span class="type-ahead-signature">: [<span class="type">Options</span>, <span class="type">Get</span>, <span class="type">Post</span>, <span class="type">Put</span>, <span class="type">Delete</span>, <span class="type">Head</span>, <span class="type">Trace</span>, <span class="type">Connect</span>, <span class="type">Patch</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.HttpVersion"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">HttpVersion</span> <span class="type-ahead-signature">: { major : <span class="type">U8</span>, minor : <span class="type">U8</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Header"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Header</span> <span class="type-ahead-signature">: [<span class="type">Header</span>(<span class="type">Str</span>, <span class="type">Str</span>)]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Request"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Request</span> <span class="type-ahead-signature">: { method : <span class="type">Method</span>, uri : <span class="type">Str</span>, http_version : <span class="type">HttpVersion</span>, headers : <span class="type">List</span>(<span class="type">Header</span>), body : <span class="type">List</span>(<span class="type">U8</span>) }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../HTTP/#HTTP.Response"><span class="type-ahead-module-name">HTTP</span>.<span class="type-ahead-def-name">Response</span> <span class="type-ahead-signature">: { http_version : <span class="type">HttpVersion</span>, status_code : <span class="type">U16</span>, status : <span class="type">Str</span>, headers : <span class="type">List</span>(<span class="type">Header</span>), body : <span class="type">List</span>(<span class="type">U8</span>) }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.to_inspect"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.is_eq"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Markdown</span>, <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.to_debug_str"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">to_debug_str</span> <span class="type-ahead-signature">: <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.inline_to_debug_str"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">inline_to_debug_str</span> <span class="type-ahead-signature">: <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.all"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">all</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">List</span>(<span class="type">Markdown</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.inlines"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">inlines</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">List</span>(<span class="type">Inline</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.heading"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">heading</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.link"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">link</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Inline</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.image"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">image</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Inline</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.code"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">code</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Markdown</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Level"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">Level</span> <span class="type-ahead-signature">:= [<span class="type">One</span>, <span class="type">Two</span>, <span class="type">Three</span>, <span class="type">Four</span>, <span class="type">Five</span>, <span class="type">Six</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Level.to_inspect"><span class="type-ahead-module-name">Markdown.Level</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Level.to_str"><span class="type-ahead-module-name">Markdown.Level</span>.<span class="type-ahead-def-name">to_str</span> <span class="type-ahead-signature">: <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Level.is_eq"><span class="type-ahead-module-name">Markdown.Level</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Level</span>, <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.ListKind"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">ListKind</span> <span class="type-ahead-signature">:= [<span class="type">Unordered</span>, <span class="type">Ordered</span>({ start : <span class="type">U64</span> })]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.ListKind.to_inspect"><span class="type-ahead-module-name">Markdown.ListKind</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.ListKind.to_str"><span class="type-ahead-module-name">Markdown.ListKind</span>.<span class="type-ahead-def-name">to_str</span> <span class="type-ahead-signature">: <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.ListKind.is_eq"><span class="type-ahead-module-name">Markdown.ListKind</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">ListKind</span>, <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.TaskState"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">TaskState</span> <span class="type-ahead-signature">:= [<span class="type">NoTask</span>, <span class="type">Unchecked</span>, <span class="type">Checked</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.TaskState.to_inspect"><span class="type-ahead-module-name">Markdown.TaskState</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.TaskState.to_str"><span class="type-ahead-module-name">Markdown.TaskState</span>.<span class="type-ahead-def-name">to_str</span> <span class="type-ahead-signature">: <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.TaskState.is_eq"><span class="type-ahead-module-name">Markdown.TaskState</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">TaskState</span>, <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Alignment"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">Alignment</span> <span class="type-ahead-signature">:= [<span class="type">Default</span>, <span class="type">Left</span>, <span class="type">Center</span>, <span class="type">Right</span>]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Alignment.to_inspect"><span class="type-ahead-module-name">Markdown.Alignment</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Alignment.to_str"><span class="type-ahead-module-name">Markdown.Alignment</span>.<span class="type-ahead-def-name">to_str</span> <span class="type-ahead-signature">: <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Alignment.is_eq"><span class="type-ahead-module-name">Markdown.Alignment</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Alignment</span>, <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.LinkTarget"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">LinkTarget</span> <span class="type-ahead-signature">: { href : <span class="type">Str</span>, title : [<span class="type">Some</span>(<span class="type">Str</span>), <span class="type">None</span>] }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Inline"><span class="type-ahead-module-name">Markdown</span>.<span class="type-ahead-def-name">Inline</span> <span class="type-ahead-signature">:= [<span class="type">Text</span>(<span class="type">Str</span>), <span class="type">Strong</span>(<span class="type">List</span>(<span class="type">Inline</span>)), <span class="type">Emphasis</span>(<span class="type">List</span>(<span class="type">Inline</span>)), <span class="type">Strikethrough</span>(<span class="type">List</span>(<span class="type">Inline</span>)), <span class="type">InlineCode</span>(<span class="type">Str</span>), <span class="type">Link</span>({ label : <span class="type">List</span>(<span class="type">Inline</span>), target : <span class="type">LinkTarget</span> }), <span class="type">Image</span>({ alt : <span class="type">List</span>(<span class="type">Inline</span>), target : <span class="type">LinkTarget</span> }), <span class="type">HardBreak</span>, <span class="type">HtmlInline</span>(<span class="type">Str</span>)]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Inline.to_inspect"><span class="type-ahead-module-name">Markdown.Inline</span>.<span class="type-ahead-def-name">to_inspect</span> <span class="type-ahead-signature">: <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Markdown/#Markdown.Inline.is_eq"><span class="type-ahead-module-name">Markdown.Inline</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Inline</span>, <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.build_primitive_parser"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">build_primitive_parser</span> <span class="type-ahead-signature">: (<span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">ParseResult</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.parse_partial"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">parse_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">ParseResult</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.parse"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">parse</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type-var">input</span>, (<span class="type-var">input</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type-var">input</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.fail"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">fail</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(_, _)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.const"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">const</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(_, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.alt"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">alt</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.apply"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">apply</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.one_of"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">one_of</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), (<span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map2"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map2</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>), (<span class="type-var">a</span>, <span class="type-var">b</span><span class="sig-arrow"> -&gt; </span><span class="type-var">c</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">c</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.map3"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">map3</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">c</span>), (<span class="type-var">a</span>, <span class="type-var">b</span>, <span class="type-var">c</span><span class="sig-arrow"> -&gt; </span><span class="type-var">d</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">d</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.flatten"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">flatten</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">Try</span>(<span class="type-var">a</span>, <span class="type">Str</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.lazy"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">lazy</span> <span class="type-ahead-signature">: ({  }<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.maybe"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">maybe</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">Nothing</span>]))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.many"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">many</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.one_or_more"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">one_or_more</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.between"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">between</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">open</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">close</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.sep_by1"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">sep_by1</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">sep</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.sep_by"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">sep_by</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">sep</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.ignore"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">ignore</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, {  })</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.keep"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">keep</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type-var">b</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">b</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.skip"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">skip</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>), <span class="type">Parser</span>(<span class="type-var">input</span>, _)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type-var">input</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.chomp_until"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">chomp_until</span> <span class="type-ahead-signature">: <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">List</span>(<span class="type-var">a</span>), <span class="type">List</span>(<span class="type-var">a</span>)) <span class="kw">where</span> { <span class="type-var">a</span>.is_eq : <span class="type-var">a</span>, <span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.chomp_while"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">chomp_while</span> <span class="type-ahead-signature">: (<span class="type-var">a</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">List</span>(<span class="type-var">a</span>), <span class="type">List</span>(<span class="type-var">a</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Parser/#Parser.ParseResult"><span class="type-ahead-module-name">Parser</span>.<span class="type-ahead-def-name">ParseResult</span> <span class="type-ahead-signature">: <span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type-var">input</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_str"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_str</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_str_partial"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_str_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type">Str</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_utf8</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>(<span class="type-var">a</span>, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>), <span class="type">ParsingIncomplete</span>(<span class="type">Utf8</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.parse_utf8_partial"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">parse_utf8_partial</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>), <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Try</span>({ val : <span class="type-var">a</span>, input : <span class="type">Utf8</span> }, [<span class="type">ParsingFailure</span>(<span class="type">Str</span>)])</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.codeunit_satisfies"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">codeunit_satisfies</span> <span class="type-ahead-signature">: (<span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.codeunit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">codeunit</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">utf8</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">U8</span>)<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">List</span>(<span class="type">U8</span>))</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.string"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">string</span> <span class="type-ahead-signature">: <span class="type">Str</span><span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_codeunit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_codeunit</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_thing"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_thing</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Utf8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.any_string"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">any_string</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Str</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.digit"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">digit</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.digits"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">digits</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">U64</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.one_of"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">one_of</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>))<span class="sig-arrow"> -&gt; </span><span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type-var">a</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.str_from_utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">str_from_utf8</span> <span class="type-ahead-signature">: <span class="type">Utf8</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.str_from_ascii"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">str_from_ascii</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Str</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../String/#String.Utf8"><span class="type-ahead-module-name">String</span>.<span class="type-ahead-def-name">Utf8</span> <span class="type-ahead-signature">: <span class="type">List</span>(<span class="type">U8</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.xml_parser"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">xml_parser</span> <span class="type-ahead-signature">: <span class="type">Parser</span>(<span class="type">Utf8</span>, <span class="type">Xml</span>)</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Attribute"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Attribute</span> <span class="type-ahead-signature">: { name : <span class="type">Str</span>, value : <span class="type">Str</span> }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Encoding"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Encoding</span> <span class="type-ahead-signature">:= [<span class="type">Utf8Encoding</span>, <span class="type">OtherEncoding</span>(<span class="type">Str</span>)]</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Declaration"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Declaration</span> <span class="type-ahead-signature">: { version : <span class="type">Version</span>, encoding : [<span class="type">Given</span>(<span class="type">Encoding</span>), <span class="type">Missing</span>] }</span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Version</span> <span class="type-ahead-signature"></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version.new"><span class="type-ahead-module-name">Xml.Version</span>.<span class="type-ahead-def-name">new</span> <span class="type-ahead-signature">: <span class="type">U8</span><span class="sig-arrow"> -&gt; </span><span class="type">Version</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Version.is_eq"><span class="type-ahead-module-name">Xml.Version</span>.<span class="type-ahead-def-name">is_eq</span> <span class="type-ahead-signature">: <span class="type">Version</span>, <span class="type">Version</span><span class="sig-arrow"> -&gt; </span><span class="type">Bool</span></span></a></li>
+            <li class="hidden"><a class="type-ahead-link" href="../Xml/#Xml.Node"><span class="type-ahead-module-name">Xml</span>.<span class="type-ahead-def-name">Node</span> <span class="type-ahead-signature">:= [<span class="type">Element</span>(<span class="type">Str</span>, <span class="type">List</span>({ name : <span class="type">Str</span>, value : <span class="type">Str</span> }), <span class="type">List</span>(<span class="type">Node</span>)), <span class="type">Text</span>(<span class="type">Str</span>)]</span></a></li>
+            </ul>
+        </form>
+        <div class="main-content">
+<!--! -->
+        <h1 class="module-name">Markdown</h1>
+<!--!-->
+        <code class="entry-type-def">:= [<span class="type">Heading</span>({ level : <span class="type">Level</span>, content : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>) }), <span class="type">Paragraph</span>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>)), <span class="type">Blockquote</span>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Markdown</span>)), <span class="type">ListBlock</span>({ kind : <span class="type">ListKind</span>, loose : <a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a>, items : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>({ task : <span class="type">TaskState</span>, blocks : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Markdown</span>) }) }), <span class="type">Code</span>({ info : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>, pre : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a> }), <span class="type">ThematicBreak</span>, <span class="type">Table</span>({ header : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>)), align : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Alignment</span>), rows : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>))) }), <span class="type">HtmlBlock</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">Frontmatter</span>({ raw : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a> }), <span class="type">TODO</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)]</code>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.to_inspect">
+            <div class="entry-signature">
+                <a href="#Markdown.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.is_eq">
+            <div class="entry-signature">
+                <a href="#Markdown.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">Markdown</span>, <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.to_debug_str">
+            <div class="entry-signature">
+                <a href="#Markdown.to_debug_str" class="entry-anchor" aria-label="Permalink to to_debug_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.to_debug_str" class="entry-name-link"><strong>to_debug_str</strong></a> : <span class="type">Markdown</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.inline_to_debug_str">
+            <div class="entry-signature">
+                <a href="#Markdown.inline_to_debug_str" class="entry-anchor" aria-label="Permalink to inline_to_debug_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.inline_to_debug_str" class="entry-name-link"><strong>inline_to_debug_str</strong></a> : <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.all">
+            <div class="entry-signature">
+                <a href="#Markdown.all" class="entry-anchor" aria-label="Permalink to all"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.all" class="entry-name-link"><strong>all</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Markdown</span>))</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.inlines">
+            <div class="entry-signature">
+                <a href="#Markdown.inlines" class="entry-anchor" aria-label="Permalink to inlines"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.inlines" class="entry-name-link"><strong>inlines</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>))</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.heading">
+            <div class="entry-signature">
+                <a href="#Markdown.heading" class="entry-anchor" aria-label="Permalink to heading"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.heading" class="entry-name-link"><strong>heading</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <span class="type">Markdown</span>)</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.link">
+            <div class="entry-signature">
+                <a href="#Markdown.link" class="entry-anchor" aria-label="Permalink to link"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.link" class="entry-name-link"><strong>link</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <span class="type">Inline</span>)</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.image">
+            <div class="entry-signature">
+                <a href="#Markdown.image" class="entry-anchor" aria-label="Permalink to image"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.image" class="entry-name-link"><strong>image</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <span class="type">Inline</span>)</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-value" id="Markdown.code">
+            <div class="entry-signature">
+                <a href="#Markdown.code" class="entry-anchor" aria-label="Permalink to code"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.code" class="entry-name-link"><strong>code</strong></a> : <a href="../Parser/#Parser.Parser"><span class="type">Parser</span></a>(<a href="../String/#String.String.Utf8"><span class="type">Utf8</span></a>, <span class="type">Markdown</span>)</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.Level">
+            <h2><a href="#Markdown.Level" class="entry-anchor" aria-label="Permalink to Level"><svg class="link-icon"><use href="#link-icon"/></svg></a> <a href="#Markdown.Level" class="entry-name-link">Level</a></h2>
+            <code class="entry-type-def">:= [<span class="type">One</span>, <span class="type">Two</span>, <span class="type">Three</span>, <span class="type">Four</span>, <span class="type">Five</span>, <span class="type">Six</span>]</code>
+            <div class="entry-children-container">
+                <article class="entry entry-value" id="Markdown.Level.to_inspect">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Level.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Level.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.Level.to_str">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Level.to_str" class="entry-anchor" aria-label="Permalink to to_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Level.to_str" class="entry-name-link"><strong>to_str</strong></a> : <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.Level.is_eq">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Level.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Level.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">Level</span>, <span class="type">Level</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+                    </div>
+                </article>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.ListKind">
+            <h2><a href="#Markdown.ListKind" class="entry-anchor" aria-label="Permalink to ListKind"><svg class="link-icon"><use href="#link-icon"/></svg></a> <a href="#Markdown.ListKind" class="entry-name-link">ListKind</a></h2>
+            <code class="entry-type-def">:= [<span class="type">Unordered</span>, <span class="type">Ordered</span>({ start : <a href="https://roc-lang.org/builtins/main/Num#U64"><span class="type">U64</span></a> })]</code>
+            <div class="entry-children-container">
+                <article class="entry entry-value" id="Markdown.ListKind.to_inspect">
+                    <div class="entry-signature">
+                        <a href="#Markdown.ListKind.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.ListKind.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.ListKind.to_str">
+                    <div class="entry-signature">
+                        <a href="#Markdown.ListKind.to_str" class="entry-anchor" aria-label="Permalink to to_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.ListKind.to_str" class="entry-name-link"><strong>to_str</strong></a> : <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.ListKind.is_eq">
+                    <div class="entry-signature">
+                        <a href="#Markdown.ListKind.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.ListKind.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">ListKind</span>, <span class="type">ListKind</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+                    </div>
+                </article>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.TaskState">
+            <h2><a href="#Markdown.TaskState" class="entry-anchor" aria-label="Permalink to TaskState"><svg class="link-icon"><use href="#link-icon"/></svg></a> <a href="#Markdown.TaskState" class="entry-name-link">TaskState</a></h2>
+            <code class="entry-type-def">:= [<span class="type">NoTask</span>, <span class="type">Unchecked</span>, <span class="type">Checked</span>]</code>
+            <div class="entry-children-container">
+                <article class="entry entry-value" id="Markdown.TaskState.to_inspect">
+                    <div class="entry-signature">
+                        <a href="#Markdown.TaskState.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.TaskState.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.TaskState.to_str">
+                    <div class="entry-signature">
+                        <a href="#Markdown.TaskState.to_str" class="entry-anchor" aria-label="Permalink to to_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.TaskState.to_str" class="entry-name-link"><strong>to_str</strong></a> : <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.TaskState.is_eq">
+                    <div class="entry-signature">
+                        <a href="#Markdown.TaskState.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.TaskState.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">TaskState</span>, <span class="type">TaskState</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+                    </div>
+                </article>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.Alignment">
+            <h2><a href="#Markdown.Alignment" class="entry-anchor" aria-label="Permalink to Alignment"><svg class="link-icon"><use href="#link-icon"/></svg></a> <a href="#Markdown.Alignment" class="entry-name-link">Alignment</a></h2>
+            <code class="entry-type-def">:= [<span class="type">Default</span>, <span class="type">Left</span>, <span class="type">Center</span>, <span class="type">Right</span>]</code>
+            <div class="entry-children-container">
+                <article class="entry entry-value" id="Markdown.Alignment.to_inspect">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Alignment.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Alignment.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.Alignment.to_str">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Alignment.to_str" class="entry-anchor" aria-label="Permalink to to_str"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Alignment.to_str" class="entry-name-link"><strong>to_str</strong></a> : <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.Alignment.is_eq">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Alignment.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Alignment.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">Alignment</span>, <span class="type">Alignment</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+                    </div>
+                </article>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.LinkTarget">
+            <div class="entry-signature">
+                <a href="#Markdown.LinkTarget" class="entry-anchor" aria-label="Permalink to LinkTarget"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                <code class="entry-signature-code"><a href="#Markdown.LinkTarget" class="entry-name-link"><strong>LinkTarget</strong></a> : { href : <a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>, title : [<span class="type">Some</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">None</span>] }</code>
+            </div>
+        </article>
+<!--!-->
+        <article class="entry entry-type" id="Markdown.Inline">
+            <h2><a href="#Markdown.Inline" class="entry-anchor" aria-label="Permalink to Inline"><svg class="link-icon"><use href="#link-icon"/></svg></a> <a href="#Markdown.Inline" class="entry-name-link">Inline</a></h2>
+            <code class="entry-type-def">:= [<span class="type">Text</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">Strong</span>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>)), <span class="type">Emphasis</span>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>)), <span class="type">Strikethrough</span>(<a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>)), <span class="type">InlineCode</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>), <span class="type">Link</span>({ label : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>), target : <span class="type">LinkTarget</span> }), <span class="type">Image</span>({ alt : <a href="https://roc-lang.org/builtins/main/List"><span class="type">List</span></a>(<span class="type">Inline</span>), target : <span class="type">LinkTarget</span> }), <span class="type">HardBreak</span>, <span class="type">HtmlInline</span>(<a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a>)]</code>
+            <div class="entry-children-container">
+                <article class="entry entry-value" id="Markdown.Inline.to_inspect">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Inline.to_inspect" class="entry-anchor" aria-label="Permalink to to_inspect"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Inline.to_inspect" class="entry-name-link"><strong>to_inspect</strong></a> : <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Str"><span class="type">Str</span></a></code>
+                    </div>
+                </article>
+                <article class="entry entry-value" id="Markdown.Inline.is_eq">
+                    <div class="entry-signature">
+                        <a href="#Markdown.Inline.is_eq" class="entry-anchor" aria-label="Permalink to is_eq"><svg class="link-icon"><use href="#link-icon"/></svg></a>
+                        <code class="entry-signature-code"><a href="#Markdown.Inline.is_eq" class="entry-name-link"><strong>is_eq</strong></a> : <span class="type">Inline</span>, <span class="type">Inline</span><span class="sig-arrow"> -&gt; </span><a href="https://roc-lang.org/builtins/main/Bool"><span class="type">Bool</span></a></code>
+                    </div>
+                </article>
+            </div>
+        </article>
+<!--!-->
+<!--!-->
+        </div>
+        <footer><p>Made by people who like to make nice things.</p></footer>
+    </main>
+</body>
+</html>
