@@ -38,7 +38,7 @@ jobs:
 
       - name: Validate release request
         id: validate
-        uses: roc-lang/release-package/actions/validate-release@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/validate-release@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           release_version: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
@@ -58,12 +58,12 @@ jobs:
       - name: Resolve previous release
         if: github.event_name == 'workflow_dispatch'
         id: previous
-        uses: roc-lang/release-package/actions/resolve-previous-release@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/resolve-previous-release@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           github_token: ${{ github.token }}
 
       - name: Check version bump
-        uses: roc-lang/release-package/actions/run-bump-check@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/run-bump-check@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
@@ -76,7 +76,7 @@ jobs:
 
       - name: Prepare release bundle metadata
         id: bundles
-        uses: roc-lang/release-package/actions/prepare-bundles@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/prepare-bundles@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           bundle_glob: dist/*.tar.zst
           test_os_json: '["ubuntu-latest"]'
@@ -126,7 +126,7 @@ jobs:
           path: .release/test-bundles
 
       - name: Test release bundle
-        uses: roc-lang/release-package/actions/test-bundle@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/test-bundle@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           test_bundle_command: python3 ci/test_bundle_examples.py --bundle-path
           bundle_path: .release/test-bundles/${{ matrix.artifact_file }}
@@ -162,14 +162,14 @@ jobs:
           path: .release
 
       - name: Make release notes
-        uses: roc-lang/release-package/actions/make-release-notes@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/make-release-notes@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
           github_token: ${{ github.token }}
 
       - name: Publish release
-        uses: roc-lang/release-package/actions/publish-release@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/publish-release@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
@@ -183,6 +183,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
       pages: write
       id-token: write
     environment:
@@ -239,7 +240,7 @@ jobs:
           done
 
       - name: Snapshot existing docs
-        uses: roc-lang/release-package/actions/docs-snapshot@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/docs-snapshot@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           docs_root: www
 
@@ -249,28 +250,29 @@ jobs:
           roc docs package/main.roc --output="www/${{ needs.build.outputs.docs_version }}"
 
       - name: Update docs index
-        uses: roc-lang/release-package/actions/docs-index@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/docs-index@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
 
       - name: Validate docs
-        uses: roc-lang/release-package/actions/docs-validate@e28a90a2ddeaa78a0da9ee91cc3e2d63fa770404
+        uses: roc-lang/release-package/actions/docs-validate@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
         with:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
 
-      - name: Commit docs and examples
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add examples www
-          if git diff --cached --quiet -- examples www; then
-            echo "Docs and examples did not change; skipping release follow-up commit."
-          else
-            git commit -m "Update docs and examples for ${{ needs.build.outputs.release_version }}"
-            git push origin "HEAD:${{ github.ref_name }}"
-          fi
+      - name: Open release follow-up PR
+        uses: roc-lang/release-package/actions/create-followup-pr@3a25de642bce84c70b0f4ab6b30ee0f730acb5cf
+        with:
+          release_version: ${{ needs.build.outputs.release_version }}
+          paths: |
+            examples
+            www
+          branch_prefix: release-followup
+          base_branch: ${{ github.ref_name }}
+          commit_message: Update docs and examples for ${{ needs.build.outputs.release_version }}
+          pr_title: Update docs and examples for ${{ needs.build.outputs.release_version }}
+          github_token: ${{ github.token }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
