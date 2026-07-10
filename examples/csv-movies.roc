@@ -9,16 +9,17 @@ import parser.String
 import cli.Stdout
 import cli.Stderr
 
-input : Str
 input = 
 	\\Airplane!,1980,\"Robert Hays,Julie Hagerty\"
 	\\Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
 
 MovieInfo : { title : Str, release_year : U64, actors : List(Str) }
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), StderrErr(Str), ..])
-main! = |_args| {
-	match CSV.parse_str(movie_info_parser, input) {
+main! : List(Str) => Try({}, _)
+main! = |args| {
+	csv_input = args.first() ?? input
+
+	match CSV.parse_str(movie_info_parser, csv_input) {
 		Ok(movies) => {
 			movies_string = 
 				movies

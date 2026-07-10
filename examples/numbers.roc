@@ -8,10 +8,11 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), StderrErr(Str), ..])
-main! = |_args| {
+main! : List(Str) => Try({}, _)
+main! = |args| {
+	input = args.first() ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(multiple_numbers.many(), "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n")
+	result = String.parse_str(multiple_numbers.many(), input)
 
 	match result.map_ok(largest) {
 		Ok(count) => Stdout.line!("The largest sum is ${count.to_str()}")?
