@@ -8,7 +8,7 @@ import cli.Stderr
 import parser.Parser
 import parser.String
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), StderrErr(Str), ..])
+main! : List(Str) => Try({}, _)
 main! = |args| {
 	input = args.first() ?? "AAAiBByAABBwBtCCCiAyArBBx"
 	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])

@@ -7,8 +7,7 @@ import cli.Stdout
 import parser.String
 import parser.Markdown
 
-content : Str
-content =
+content = 
 	\\---
 	\\title: Demo
 	\\---
@@ -40,10 +39,10 @@ content =
 	\\raw
 	\\</section>
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, _)
 main! = |args| {
 	markdown_input = args.first() ?? content
-	parsed =
+	parsed = 
 		String.parse_str(Markdown.all, markdown_input)
 			.map_ok(
 				|nodes| {
@@ -91,7 +90,7 @@ render_content = |nodes, buf| {
 
 		[TODO(line), .. as rest] =>
 			render_content(rest, buf.concat("TODO: ${line}\n"))
-	}
+		}
 }
 
 render_list_items : List({ task : Markdown.TaskState, blocks : List(Markdown.Markdown) }), Str -> Str
@@ -102,7 +101,7 @@ render_list_items = |items, buf| {
 
 		[item, .. as rest] =>
 			render_list_items(rest, buf.concat("- ${item.task.to_str()}\n").concat(render_content(item.blocks, "")))
-	}
+		}
 }
 
 render_alignments : List(Markdown.Alignment) -> Str
@@ -152,7 +151,7 @@ join_strs_help = |items, separator, acc| {
 
 		[item, .. as rest] =>
 			join_strs_help(rest, separator, acc.concat(separator).concat(item))
-	}
+		}
 }
 
 render_inlines : List(Markdown.Inline), Str -> Str
@@ -187,5 +186,5 @@ render_inlines = |inlines, buf| {
 
 		[HtmlInline(raw), .. as rest] =>
 			render_inlines(rest, buf.concat(raw))
-	}
+		}
 }
