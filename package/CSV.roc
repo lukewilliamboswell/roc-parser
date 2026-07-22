@@ -9,6 +9,8 @@ import String
 # # The following however *is* supported
 # # - A simple LF ("\n") instead of CRLF ("\r\n") to separate records.
 CSV :: { records : List(List(String.Utf8)) }.{
+	is_eq : _
+
 	CSVRecord : List(CSVField)
 	CSVField : String.Utf8
 
@@ -254,18 +256,25 @@ twodquotes = String.string("\"\"")
 nonescaped_csv_field : Parser(String.Utf8, CSV.CSVField)
 nonescaped_csv_field = textdata.many()
 
+comma : Parser(String.Utf8, U8)
 comma = String.codeunit(',')
 
+dquote : Parser(String.Utf8, U8)
 dquote = String.codeunit('"')
 
+end_of_line : Parser(String.Utf8, {})
 end_of_line = Parser.alt(Parser.ignore(crlf), Parser.ignore(lf))
 
+cr : Parser(String.Utf8, U8)
 cr = String.codeunit('\r')
 
+lf : Parser(String.Utf8, U8)
 lf = String.codeunit('\n')
 
+crlf : Parser(String.Utf8, Str)
 crlf = String.string("\r\n")
 
+textdata : Parser(String.Utf8, U8)
 textdata = String.codeunit_satisfies(
 	|x| {
 		(x >= 32 and x <= 33) or (x >= 35 and x <= 43) or (x >= 45 and x <= 126)

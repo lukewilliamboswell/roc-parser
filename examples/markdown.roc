@@ -41,7 +41,7 @@ content =
 
 main! : List(Str) => Try({}, _)
 main! = |args| {
-	markdown_input = args.first() ?? content
+	markdown_input = args.drop_first(1).first() ?? content
 	parsed = 
 		String.parse_str(Markdown.all, markdown_input)
 			.map_ok(

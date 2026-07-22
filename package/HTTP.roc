@@ -154,8 +154,10 @@ request_uri =
 		.one_or_more()
 		.map(String.str_from_utf8)
 
+sp : Parser(String.Utf8, U8)
 sp = String.codeunit(' ')
 
+crlf : Parser(String.Utf8, Str)
 crlf = String.string("\r\n")
 
 http_version : Parser(String.Utf8, HTTP.HttpVersion)

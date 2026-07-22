@@ -19,10 +19,7 @@ Markdown := [
 		inspect_markdown(node)
 	}
 
-	is_eq : Markdown, Markdown -> Bool
-	is_eq = |left, right| {
-		markdown_is_eq(left, right)
-	}
+	is_eq : _
 
 	to_debug_str : Markdown -> Str
 	to_debug_str = |node| {
@@ -45,10 +42,7 @@ Markdown := [
 			level_to_str(level)
 		}
 
-		is_eq : Level, Level -> Bool
-		is_eq = |left, right| {
-			level_is_eq(left, right)
-		}
+		is_eq : _
 	}
 
 	ListKind := [
@@ -65,10 +59,7 @@ Markdown := [
 			list_kind_to_str(kind)
 		}
 
-		is_eq : ListKind, ListKind -> Bool
-		is_eq = |left, right| {
-			list_kind_is_eq(left, right)
-		}
+		is_eq : _
 	}
 
 	TaskState := [
@@ -86,10 +77,7 @@ Markdown := [
 			task_state_to_str(task)
 		}
 
-		is_eq : TaskState, TaskState -> Bool
-		is_eq = |left, right| {
-			task_state_is_eq(left, right)
-		}
+		is_eq : _
 	}
 
 	Alignment := [
@@ -108,10 +96,7 @@ Markdown := [
 			alignment_to_str(alignment)
 		}
 
-		is_eq : Alignment, Alignment -> Bool
-		is_eq = |left, right| {
-			alignment_is_eq(left, right)
-		}
+		is_eq : _
 	}
 
 	LinkTarget : {
@@ -135,10 +120,7 @@ Markdown := [
 			inspect_inline(inline)
 		}
 
-		is_eq : Inline, Inline -> Bool
-		is_eq = |left, right| {
-			inline_is_eq(left, right)
-		}
+		is_eq : _
 	}
 
 	all : Parser(String.Utf8, List(Markdown))
@@ -264,44 +246,6 @@ inspect_markdown = |node| {
 	}
 }
 
-markdown_is_eq : Markdown, Markdown -> Bool
-markdown_is_eq = |left, right| {
-	match { left, right } {
-		{ left: Heading(l), right: Heading(r) } =>
-			l.level == r.level and l.content == r.content
-
-		{ left: Paragraph(l), right: Paragraph(r) } =>
-			l == r
-
-		{ left: Blockquote(l), right: Blockquote(r) } =>
-			l == r
-
-		{ left: ListBlock(l), right: ListBlock(r) } =>
-			l.kind == r.kind and l.loose == r.loose and l.items == r.items
-
-		{ left: Code(l), right: Code(r) } =>
-			l.info == r.info and l.pre == r.pre
-
-		{ left: ThematicBreak, right: ThematicBreak } =>
-			Bool.True
-
-		{ left: Table(l), right: Table(r) } =>
-			l.header == r.header and l.align == r.align and l.rows == r.rows
-
-		{ left: HtmlBlock(l), right: HtmlBlock(r) } =>
-			l == r
-
-		{ left: Frontmatter(l), right: Frontmatter(r) } =>
-			l.raw == r.raw
-
-		{ left: TODO(l), right: TODO(r) } =>
-			l == r
-
-		_ =>
-			Bool.False
-	}
-}
-
 inspect_level : Markdown.Level -> Str
 inspect_level = |level| {
 	match level {
@@ -326,11 +270,6 @@ level_to_str = |level| {
 	}
 }
 
-level_is_eq : Markdown.Level, Markdown.Level -> Bool
-level_is_eq = |left, right| {
-	level_to_str(left) == level_to_str(right)
-}
-
 inspect_list_kind : Markdown.ListKind -> Str
 inspect_list_kind = |kind| {
 	match kind {
@@ -353,20 +292,6 @@ list_kind_to_str = |kind| {
 	}
 }
 
-list_kind_is_eq : Markdown.ListKind, Markdown.ListKind -> Bool
-list_kind_is_eq = |left, right| {
-	match { left, right } {
-		{ left: Unordered, right: Unordered } =>
-			Bool.True
-
-		{ left: Ordered(l), right: Ordered(r) } =>
-			l.start == r.start
-
-		_ =>
-			Bool.False
-	}
-}
-
 inspect_task_state : Markdown.TaskState -> Str
 inspect_task_state = |task| {
 	match task {
@@ -383,11 +308,6 @@ task_state_to_str = |task| {
 		Unchecked => "unchecked"
 		Checked => "checked"
 	}
-}
-
-task_state_is_eq : Markdown.TaskState, Markdown.TaskState -> Bool
-task_state_is_eq = |left, right| {
-	task_state_to_str(left) == task_state_to_str(right)
 }
 
 inspect_alignment : Markdown.Alignment -> Str
@@ -408,11 +328,6 @@ alignment_to_str = |alignment| {
 		Center => "center"
 		Right => "right"
 	}
-}
-
-alignment_is_eq : Markdown.Alignment, Markdown.Alignment -> Bool
-alignment_is_eq = |left, right| {
-	alignment_to_str(left) == alignment_to_str(right)
 }
 
 inspect_inline : Markdown.Inline -> Str
@@ -444,41 +359,6 @@ inspect_inline = |inline| {
 
 		HtmlInline(raw) =>
 			"HtmlInline(${Str.inspect(raw)})"
-	}
-}
-
-inline_is_eq : Markdown.Inline, Markdown.Inline -> Bool
-inline_is_eq = |left, right| {
-	match { left, right } {
-		{ left: Text(l), right: Text(r) } =>
-			l == r
-
-		{ left: Strong(l), right: Strong(r) } =>
-			l == r
-
-		{ left: Emphasis(l), right: Emphasis(r) } =>
-			l == r
-
-		{ left: Strikethrough(l), right: Strikethrough(r) } =>
-			l == r
-
-		{ left: InlineCode(l), right: InlineCode(r) } =>
-			l == r
-
-		{ left: Link(l), right: Link(r) } =>
-			l.label == r.label and l.target == r.target
-
-		{ left: Image(l), right: Image(r) } =>
-			l.alt == r.alt and l.target == r.target
-
-		{ left: HardBreak, right: HardBreak } =>
-			Bool.True
-
-		{ left: HtmlInline(l), right: HtmlInline(r) } =>
-			l == r
-
-		_ =>
-			Bool.False
 	}
 }
 
@@ -1064,6 +944,7 @@ can_be_setext_heading_text = |line, min_indent| {
 	(!line_is_blank(line)) and line_indent(line) >= min_indent and !is_block_start(line, min_indent)
 }
 
+inline_heading : Parser(String.Utf8, Markdown)
 inline_heading =
 	Parser.const(
 		|level| {
@@ -1086,6 +967,7 @@ inline_heading =
 		)
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
 
+two_line_heading_level_one : Parser(String.Utf8, Markdown)
 two_line_heading_level_one =
 	Parser.const(
 		|str| {
@@ -1103,6 +985,7 @@ two_line_heading_level_one =
 			),
 		)
 
+two_line_heading_level_two : Parser(String.Utf8, Markdown)
 two_line_heading_level_two =
 	Parser.const(
 		|str| {
@@ -2282,8 +2165,10 @@ is_escapable_inline_byte = |byte| {
 		or byte == '|'
 }
 
+end_of_line : Parser(String.Utf8, Str)
 end_of_line = Parser.one_of([String.string("\n"), String.string("\r\n")])
 
+not_end_of_line : U8 -> Bool
 not_end_of_line = |b| {
 	b != '\n' and b != '\r'
 }

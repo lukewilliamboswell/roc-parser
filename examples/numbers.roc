@@ -10,7 +10,7 @@ import parser.String
 
 main! : List(Str) => Try({}, _)
 main! = |args| {
-	input = args.first() ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
+	input = args.drop_first(1).first() ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
 	result = String.parse_str(multiple_numbers.many(), input)
 

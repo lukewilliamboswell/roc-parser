@@ -17,7 +17,7 @@ MovieInfo : { title : Str, release_year : U64, actors : List(Str) }
 
 main! : List(Str) => Try({}, _)
 main! = |args| {
-	csv_input = args.first() ?? input
+	csv_input = args.drop_first(1).first() ?? input
 
 	match CSV.parse_str(movie_info_parser, csv_input) {
 		Ok(movies) => {

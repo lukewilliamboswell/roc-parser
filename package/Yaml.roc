@@ -19,6 +19,7 @@ Yaml := [
 	Mapping(List({ key : Str, value : Yaml })),
 ].{
 	Error : { line : U64, column : U64, message : Str }
+	is_eq : _
 
 	# # Parse one YAML configuration document from a string.
 	parse_str : Str -> Try(Yaml, [YamlError(Error)])
@@ -44,9 +45,6 @@ Yaml := [
 		}
 	}
 
-	is_eq : Yaml, Yaml -> Bool
-	is_eq = |left, right| yaml_is_eq(left, right)
-
 	to_inspect : Yaml -> Str
 	to_inspect = |value| inspect_yaml(value)
 }
@@ -55,17 +53,7 @@ Line : { content : String.Utf8, indent : U64, number : U64 }
 
 ParseResult : { val : Yaml, input : List(Line) }
 
-Quote := [NoQuote, SingleQuote, DoubleQuote].{
-	is_eq : Quote, Quote -> Bool
-	is_eq = |left, right| {
-		match { left, right } {
-			{ left: NoQuote, right: NoQuote } => Bool.True
-			{ left: SingleQuote, right: SingleQuote } => Bool.True
-			{ left: DoubleQuote, right: DoubleQuote } => Bool.True
-			_ => Bool.False
-		}
-	}
-}
+Quote : [NoQuote, SingleQuote, DoubleQuote]
 
 parse_node : List(Line), U64, U64 -> Try(ParseResult, [YamlError(Yaml.Error)])
 parse_node = |lines, indent, depth| {
@@ -689,20 +677,6 @@ lower_ascii = |bytes| {
 fail : U64, U64, Str -> Try(_, [YamlError(Yaml.Error)])
 fail = |line, column, message| Err(YamlError({ line, column, message }))
 
-yaml_is_eq : Yaml, Yaml -> Bool
-yaml_is_eq = |left, right| {
-	match { left, right } {
-		{ left: Null, right: Null } => Bool.True
-		{ left: Bool(a), right: Bool(b) } => a == b
-		{ left: Int(a), right: Int(b) } => a == b
-		{ left: Float(a), right: Float(b) } => a == b
-		{ left: String(a), right: String(b) } => a == b
-		{ left: Sequence(a), right: Sequence(b) } => a == b
-		{ left: Mapping(a), right: Mapping(b) } => a == b
-		_ => Bool.False
-	}
-}
-
 inspect_yaml : Yaml -> Str
 inspect_yaml = |value| {
 	match value {
@@ -716,6 +690,7 @@ inspect_yaml = |value| {
 	}
 }
 
+inspect_entry : { key : Str, value : Yaml } -> Str
 inspect_entry = |entry| "{ key: ${Str.inspect(entry.key)}, value: ${inspect_yaml(entry.value)} }"
 
 ## Empty documents parse as null.

@@ -9,12 +9,16 @@ Xml :: {
 	xml_declaration : [Given(Xml.Declaration), Missing],
 	root : Xml.Node,
 }.{
+	is_eq : _
+
 	Attribute : { name : Str, value : Str }
 
 	Encoding := [
 		Utf8Encoding,
 		OtherEncoding(Str),
-	]
+	].{
+		is_eq : _
+	}
 
 	Declaration : {
 		version : Version,
@@ -24,18 +28,20 @@ Xml :: {
 	Version :: {
 		after_dot : U8,
 	}.{
+		is_eq : _
+
 		new : U8 -> Version
 		new = |after_dot| {
 			{ after_dot }
 		}
-		is_eq : Version, Version -> Bool
-		is_eq = |v1, v2| v1.after_dot == v2.after_dot
 	}
 
 	Node := [
 		Element(Str, List({ name : Str, value : Str }), List(Node)),
 		Text(Str),
-	]
+	].{
+		is_eq : _
+	}
 
 	xml_parser : Parser(String.Utf8, Xml)
 	xml_parser = 
@@ -214,8 +220,13 @@ expect {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-element
 p_element : Parser(String.Utf8, Xml.Node)
-p_element = 
-	Parser.const(
+p_element = Parser.build_primitive_parser(parse_element_partial)
+
+# Keep recursive parsing behind a function. Mutually recursive top-level parser
+# values currently trigger roc-lang/roc#10098.
+parse_element_partial : String.Utf8 -> Parser.ParseResult(String.Utf8, Xml.Node)
+parse_element_partial = |input| {
+	parser = Parser.const(
 		|name| {
 			|arguments| {
 				|contents| {
@@ -246,11 +257,14 @@ p_element =
 				)
 					.skip(String.string(">"))
 					.keep(
-						Parser.lazy(
-							|_| {
-								p_element_contents
-							},
-						),
+						Parser.one_of(
+							[
+								p_character_data,
+								Parser.build_primitive_parser(parse_element_partial),
+								p_cdata_section,
+							],
+						)
+							.many(),
 					)
 					.skip(p_end_tag),
 				String.string("/>").map(
@@ -260,6 +274,9 @@ p_element =
 				),
 			),
 		)
+
+	Parser.parse_partial(parser, input)
+}
 
 ## Empty elements can include whitespace before the self-closing marker.
 expect {
@@ -481,17 +498,6 @@ p_attribute_value = |quote| {
 		.flatten()
 }
 
-p_element_contents : Parser(String.Utf8, List(Xml.Node))
-p_element_contents = 
-	Parser.one_of(
-		[
-			p_character_data,
-			p_element,
-			p_cdata_section,
-		],
-	)
-		.many()
-
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-ETag
 p_end_tag : Parser(String.Utf8, Str)
 p_end_tag = 
@@ -539,8 +545,11 @@ p_cdata_section =
 		.map(|s| Text(s))
 
 p_cdata_section_content : Parser(String.Utf8, Str)
-p_cdata_section_content = 
-	Parser.const(
+p_cdata_section_content = Parser.build_primitive_parser(parse_cdata_section_content_partial)
+
+parse_cdata_section_content_partial : String.Utf8 -> Parser.ParseResult(String.Utf8, Str)
+parse_cdata_section_content_partial = |input| {
+	parser = Parser.const(
 		|first| {
 			|rest| {
 				Str.concat(first, rest)
@@ -557,18 +566,17 @@ p_cdata_section_content =
 							""
 						},
 					),
-					Parser.lazy(
-						|_| {
-							p_cdata_section_content.map(
-								|rest| {
-									Str.concat("]", rest)
-								},
-							)
+					Parser.build_primitive_parser(parse_cdata_section_content_partial).map(
+						|rest| {
+							Str.concat("]", rest)
 						},
 					),
 				],
 			),
 		)
+
+	Parser.parse_partial(parser, input)
+}
 
 p_name : Parser(String.Utf8, Str)
 p_name = 
