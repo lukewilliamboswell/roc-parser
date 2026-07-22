@@ -22,6 +22,12 @@ Includes modules to parse the following (with various levels of maturity);
 - XML
 - Markdown
 - HTTP
+- YAML configuration files and Markdown frontmatter
+
+The YAML module supports a practical single-document subset: nested block
+mappings and sequences, flow collections, comments, quoted strings, and common
+scalar values. It deliberately rejects advanced features such as anchors,
+aliases, tags, directives, block scalars, complex keys, and document streams.
 
 ## Documentation
 
