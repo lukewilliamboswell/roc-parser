@@ -1,14 +1,14 @@
 import String
 
-# # # YAML configuration parser
-# #
-# # This module implements a deliberately small YAML 1.2-style subset aimed at
-# # configuration files and Markdown frontmatter. It supports a single block
-# # document, nested mappings and sequences, flow collections, comments, quoted
-# # strings, and common null, boolean, integer, and floating-point scalars.
-# #
-# # Anchors, aliases, tags, directives, block scalars, complex keys, and
-# # multi-document streams are rejected with a parse error.
+## A practical YAML configuration parser.
+##
+## This module implements a deliberately small YAML 1.2-style subset aimed at
+## configuration files and Markdown frontmatter. It supports a single block
+## document, nested mappings and sequences, flow collections, comments, quoted
+## strings, and common null, boolean, integer, and floating-point scalars.
+##
+## Anchors, aliases, tags, directives, block scalars, complex keys, and
+## multi-document streams are rejected with a parse error.
 Yaml := [
 	Null,
 	Bool(Bool),
@@ -18,10 +18,20 @@ Yaml := [
 	Sequence(List(Yaml)),
 	Mapping(List({ key : Str, value : Yaml })),
 ].{
+	## Location and explanation of invalid YAML input. Lines and columns are one-based.
 	Error : { line : U64, column : U64, message : Str }
+
+	## Compare two parsed YAML values structurally.
 	is_eq : _
 
-	# # Parse one YAML configuration document from a string.
+	## Parse one YAML configuration document from a string.
+	##
+	## Empty input produces `Null`. Invalid input returns `YamlError` with a
+	## one-based line and column. See the module description for the supported subset.
+	##
+	## ```roc
+	## expect Yaml.parse_str("draft: false") == Ok(Mapping([{ key: "draft", value: Bool(Bool.False) }]))
+	## ```
 	parse_str : Str -> Try(Yaml, [YamlError(Error)])
 	parse_str = |input| {
 		lines = prepare_lines(split_lines(input.to_utf8(), 1, [], []))?
@@ -45,6 +55,7 @@ Yaml := [
 		}
 	}
 
+	## Render a parsed YAML value in Roc source-like notation for inspection.
 	to_inspect : Yaml -> Str
 	to_inspect = |value| inspect_yaml(value)
 }

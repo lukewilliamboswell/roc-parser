@@ -1,48 +1,61 @@
-# # # XML Parser
-# # Original author: [Johannes Maas](https://github.com/j-maas)
-# #
-# # Following the specification from https://www.w3.org/TR/2008/REC-xml-20081126/
+# XML parser
+# Original author: [Johannes Maas](https://github.com/j-maas)
 import Parser
 import String
 
+## XML document tree and parser based on the XML 1.0 specification.
+##
+## The parser supports optional XML declarations, attributes, nested elements,
+## character data, CDATA sections, and self-closing elements.
 Xml :: {
 	xml_declaration : [Given(Xml.Declaration), Missing],
 	root : Xml.Node,
 }.{
+	## Compare two XML documents structurally.
 	is_eq : _
 
+	## An XML attribute name and decoded value.
 	Attribute : { name : Str, value : Str }
 
+	## Encoding declared by an XML declaration.
 	Encoding := [
 		Utf8Encoding,
 		OtherEncoding(Str),
 	].{
+		## Compare two XML encodings structurally.
 		is_eq : _
 	}
 
+	## Version and optional encoding from an XML declaration.
 	Declaration : {
 		version : Version,
 		encoding : [Given(Encoding), Missing],
 	}
 
+	## An XML 1.x version, storing the digit after `1.`.
 	Version :: {
 		after_dot : U8,
 	}.{
+		## Compare two XML versions.
 		is_eq : _
 
+		## Construct an XML 1.x version from the digit after `1.`.
 		new : U8 -> Version
 		new = |after_dot| {
 			{ after_dot }
 		}
 	}
 
+	## An XML element or text node.
 	Node := [
 		Element(Str, List({ name : Str, value : Str }), List(Node)),
 		Text(Str),
 	].{
+		## Compare two XML nodes structurally.
 		is_eq : _
 	}
 
+	## Parse one XML document, including an optional declaration and trailing whitespace.
 	xml_parser : Parser(String.Utf8, Xml)
 	xml_parser = 
 		Parser.const(

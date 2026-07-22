@@ -1,20 +1,21 @@
 import Parser
 import String
 
-# # This is a CSV parser which follows RFC4180
-# #
-# # For simplicity's sake, the following things are not yet supported:
-# # - CSV files with headings
-# #
-# # The following however *is* supported
-# # - A simple LF ("\n") instead of CRLF ("\r\n") to separate records.
+## RFC 4180-style CSV parsing and typed record decoding.
+##
+## Quoted fields, escaped double quotes, CRLF record separators, and simple LF
+## separators are supported. The first row is treated as data rather than as headings.
 CSV :: { records : List(List(String.Utf8)) }.{
+	## Compare two decoded CSV values structurally.
 	is_eq : _
 
+	## One CSV row represented as a list of raw UTF-8 fields.
 	CSVRecord : List(CSVField)
+
+	## One raw UTF-8 field from a CSV row.
 	CSVField : String.Utf8
 
-	# # Attempts to Parser.parse an `a` from a `Str` that is encoded in CSV format.
+	## Parse CSV text and decode every record with the supplied record parser.
 	parse_str : Parser(CSVRecord, a), Str -> Try(List(a), [ParsingFailure(Str), SyntaxError(Str), ParsingIncomplete(CSVRecord)])
 	parse_str = |csv_parser, input| {
 		match parse_str_to_csv(input) {
@@ -46,7 +47,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		}
 	}
 
-	# # Attempts to Parser.parse an `a` from a `CSV` datastructure (a list of lists of bytestring-fields).
+	## Decode every record in an already parsed `CSV` value.
 	parse_csv : Parser(CSVRecord, a), CSV -> Try(List(a), [ParsingFailure(Str), ParsingIncomplete(CSVRecord)])
 	parse_csv = |csv_parser, { records: csv_data }| {
 		csv_data
@@ -93,9 +94,9 @@ CSV :: { records : List(List(String.Utf8)) }.{
 			)
 	}
 
-	# # Attempts to Parser.parse an `a` from a `CSVRecord` datastructure (a list of bytestring-fields)
+	## Decode one `CSVRecord` with the supplied record parser.
 	##
-	# # This parser succeeds when all fields of the CSVRecord are consumed by the parser.
+	## Parsing succeeds only when the record parser consumes every field.
 	parse_csv_record : Parser(CSVRecord, a), CSVRecord -> Try(a, [ParsingFailure(Str), ParsingIncomplete(CSVRecord)])
 	parse_csv_record = |csv_parser, record_fields_list| {
 		Parser.parse(
@@ -107,20 +108,20 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		)
 	}
 
-	# # Wrapper function to combine a set of fields into your desired `a`
+	## Start a record parser with a curried constructor for the desired value.
 	##
-	# # ```roc
-	# # record(|first_name| |last_name| |age| User({ first_name, last_name, age }))
-	# # .field(string)
-	# # .field(string)
-	# # .field(u64)
-	# # ```
+	## ```roc
+	## record(|first_name| |last_name| |age| User({ first_name, last_name, age }))
+	## .field(string)
+	## .field(string)
+	## .field(u64)
+	## ```
 	record : a -> Parser(CSVRecord, a)
 	record = |f| {
 		Parser.const(f)
 	}
 
-	# # Turns a parser for a `List(U8)` into a parser that parses part of a `CSVRecord`.
+	## Consume the next field of a `CSVRecord` using a UTF-8 field parser.
 	field : Parser(String.Utf8, a) -> Parser(CSVRecord, a)
 	field = |field_parser| {
 		Parser.build_primitive_parser(
@@ -157,11 +158,11 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		)
 	}
 
-	# # Parser for a field containing a UTF8-encoded string
+	## Parse one CSV field as a valid UTF-8 string.
 	string : Parser(CSVField, Str)
 	string = String.any_string
 
-	# # Parse a number from a CSV field
+	## Parse one CSV field as an unsigned 64-bit integer.
 	u64 : Parser(CSVField, U64)
 	u64 = 
 		string
@@ -175,7 +176,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 			)
 			.flatten()
 
-	# # Parse a 64-bit float from a CSV field
+	## Parse one CSV field as a 64-bit floating-point number.
 	f64 : Parser(CSVField, F64)
 	f64 = 
 		string
@@ -189,7 +190,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 			)
 			.flatten()
 
-	# # Attempts to Parser.parse a Str into the internal `CSV` datastructure (A list of lists of bytestring-fields).
+	## Parse CSV text into raw records and UTF-8 fields.
 	parse_str_to_csv : Str -> Try(CSV, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
 	parse_str_to_csv = |input| {
 		Parser.parse(
@@ -201,7 +202,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		)
 	}
 
-	# # Attempts to Parser.parse a Str into the internal `CSVRecord` datastructure (A list of bytestring-fields).
+	## Parse one CSV row into raw UTF-8 fields.
 	parse_str_to_csv_record : Str -> Try(CSVRecord, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
 	parse_str_to_csv_record = |input| {
 		Parser.parse(
@@ -213,7 +214,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		)
 	}
 
-	# The following are parsers to turn strings into CSV structures
+	## Parse a complete RFC 4180-style CSV file into raw records and fields.
 	file : Parser(String.Utf8, CSV)
 	file = 
 		Parser.sep_by(csv_record, end_of_line)

@@ -1,13 +1,13 @@
 import Parser
 
+## Parsers and helpers specialized to UTF-8 byte lists and Roc `Str` values.
 String :: {}.{
 
-	## ```
-	## Utf8 : List U8
-	## ```
+	## UTF-8 input represented as a list of bytes.
 	Utf8 : List(U8)
 
-	## Parse a `Str` using a [Parser]
+	## Parse a `Str` using a [Parser].
+	##
 	## ```roc
 	## color : Parser(Utf8, [Red, Green, Blue])
 	## color = {
@@ -82,6 +82,8 @@ String :: {}.{
 		parser.parse_partial(input)
 	}
 
+	## Match one UTF-8 code unit when it satisfies the given predicate.
+	##
 	## ```roc
 	## is_digit : U8 -> Bool
 	## is_digit = |b| { b >= '0' and b <= '9' }
@@ -114,6 +116,8 @@ String :: {}.{
 		)
 	}
 
+	## Match one exact UTF-8 code unit.
+	##
 	## ```roc
 	## at_sign : Parser(Utf8, [AtSign])
 	## at_sign = Parser.const(AtSign).skip(codeunit('@'))
@@ -223,8 +227,7 @@ String :: {}.{
 		actual == bytes
 	}
 
-	# Matches any string
-	# as long as it is valid UTF8.
+	## Match all remaining input as a `Str`, failing if the bytes are not valid UTF-8.
 	any_string : Parser(Utf8, Str)
 	any_string = Parser.build_primitive_parser(
 		|field_utf8ing| {
@@ -238,6 +241,8 @@ String :: {}.{
 		},
 	)
 
+	## Parse one ASCII decimal digit into a `U64` from 0 through 9.
+	##
 	## ```roc
 	## expect digit->parse_str("0") == Ok(0)
 	## expect digit->parse_str("not a digit").is_err()
@@ -313,6 +318,8 @@ String :: {}.{
 		)
 	}
 
+	## Convert known-valid UTF-8 bytes to a `Str`.
+	## Crashes if the bytes are invalid UTF-8.
 	str_from_utf8 : Utf8 -> Str
 	str_from_utf8 = |raw_str| {
 		raw_str
@@ -322,6 +329,8 @@ String :: {}.{
 			}
 	}
 
+	## Convert one ASCII byte to a `Str`.
+	## Crashes if the byte is not valid as a single-byte UTF-8 scalar.
 	str_from_ascii : U8 -> Str
 	str_from_ascii = |ascii_num| {
 		match Str.from_utf8([ascii_num]) {

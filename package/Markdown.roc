@@ -1,7 +1,11 @@
 import Parser
 import String
 
-# # Content values
+## Markdown syntax tree and parsers for documents and inline content.
+##
+## The block parser preserves frontmatter, headings, paragraphs, blockquotes,
+## lists, code blocks, thematic breaks, tables, and raw HTML. Inline parsing
+## supports emphasis, links, images, code, hard breaks, and raw HTML.
 Markdown := [
 	Heading({ level : Markdown.Level, content : List(Markdown.Inline) }),
 	Paragraph(List(Markdown.Inline)),
@@ -14,96 +18,118 @@ Markdown := [
 	Frontmatter({ raw : Str }),
 	TODO(Str),
 ].{
+	## Render a Markdown block in Roc source-like notation for inspection.
 	to_inspect : Markdown -> Str
 	to_inspect = |node| {
 		inspect_markdown(node)
 	}
 
+	## Compare two Markdown syntax trees structurally.
 	is_eq : _
 
+	## Render a Markdown block as a stable debug string.
 	to_debug_str : Markdown -> Str
 	to_debug_str = |node| {
 		inspect_markdown(node)
 	}
 
+	## Render an inline node as a stable debug string.
 	inline_to_debug_str : Markdown.Inline -> Str
 	inline_to_debug_str = |inline| {
 		inspect_inline(inline)
 	}
 
+	## Heading levels from one through six.
 	Level := [One, Two, Three, Four, Five, Six].{
+		## Render a heading level for inspection.
 		to_inspect : Level -> Str
 		to_inspect = |level| {
 			inspect_level(level)
 		}
 
+		## Convert a heading level to its decimal representation.
 		to_str : Level -> Str
 		to_str = |level| {
 			level_to_str(level)
 		}
 
+		## Compare two heading levels.
 		is_eq : _
 	}
 
+	## The marker and starting number of a Markdown list.
 	ListKind := [
 		Unordered,
 		Ordered({ start : U64 }),
 	].{
+		## Render a list kind for inspection.
 		to_inspect : ListKind -> Str
 		to_inspect = |kind| {
 			inspect_list_kind(kind)
 		}
 
+		## Convert a list kind to a compact string.
 		to_str : ListKind -> Str
 		to_str = |kind| {
 			list_kind_to_str(kind)
 		}
 
+		## Compare two list kinds structurally.
 		is_eq : _
 	}
 
+	## Whether a list item is a task and, if so, whether it is checked.
 	TaskState := [
 		NoTask,
 		Unchecked,
 		Checked,
 	].{
+		## Render a task state for inspection.
 		to_inspect : TaskState -> Str
 		to_inspect = |task| {
 			inspect_task_state(task)
 		}
 
+		## Convert a task state to a compact string.
 		to_str : TaskState -> Str
 		to_str = |task| {
 			task_state_to_str(task)
 		}
 
+		## Compare two task states.
 		is_eq : _
 	}
 
+	## Column alignment declared by a Markdown table delimiter row.
 	Alignment := [
 		Default,
 		Left,
 		Center,
 		Right,
 	].{
+		## Render a table alignment for inspection.
 		to_inspect : Alignment -> Str
 		to_inspect = |alignment| {
 			inspect_alignment(alignment)
 		}
 
+		## Convert a table alignment to a compact string.
 		to_str : Alignment -> Str
 		to_str = |alignment| {
 			alignment_to_str(alignment)
 		}
 
+		## Compare two table alignments.
 		is_eq : _
 	}
 
+	## Destination and optional title of a link or image.
 	LinkTarget : {
 		href : Str,
 		title : [Some(Str), None],
 	}
 
+	## Inline Markdown syntax nodes.
 	Inline := [
 		Text(Str),
 		Strong(List(Inline)),
@@ -115,20 +141,25 @@ Markdown := [
 		HardBreak,
 		HtmlInline(Str),
 	].{
+		## Render an inline node in Roc source-like notation for inspection.
 		to_inspect : Inline -> Str
 		to_inspect = |inline| {
 			inspect_inline(inline)
 		}
 
+		## Compare two inline syntax trees structurally.
 		is_eq : _
 	}
 
+	## Parse a complete Markdown document into block nodes.
 	all : Parser(String.Utf8, List(Markdown))
 	all = parse_all
 
+	## Parse inline Markdown content.
 	inlines : Parser(String.Utf8, List(Inline))
 	inlines = parse_inlines_parser
 
+	## Parse an ATX or Setext heading.
 	heading : Parser(String.Utf8, Markdown)
 	heading =
 		Parser.one_of(
@@ -139,6 +170,7 @@ Markdown := [
 			],
 		)
 
+	## Parse an inline link with a destination in parentheses.
 	link : Parser(String.Utf8, Inline)
 	link =
 		Parser.const(
@@ -166,6 +198,7 @@ Markdown := [
 			)
 			.skip(String.codeunit(')'))
 
+	## Parse an inline image with a destination in parentheses.
 	image : Parser(String.Utf8, Inline)
 	image =
 		Parser.const(
@@ -193,6 +226,7 @@ Markdown := [
 			)
 			.skip(String.codeunit(')'))
 
+	## Parse a fenced code block delimited by triple backticks.
 	code : Parser(String.Utf8, Markdown)
 	code =
 		Parser.const(|info| |pre| Code({ info: info, pre: pre }))
