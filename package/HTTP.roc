@@ -1,13 +1,21 @@
 import Parser
 import String
 
+## Parsers and syntax types for basic HTTP/1.x requests and responses.
+##
+## Message bodies are returned as raw bytes. Header names and values are
+## preserved as strings without normalization.
 HTTP :: {}.{
+	## Supported HTTP request methods.
 	Method : [Options, Get, Post, Put, Delete, Head, Trace, Connect, Patch]
 
+	## An HTTP protocol version such as `HTTP/1.1`.
 	HttpVersion : { major : U8, minor : U8 }
 
+	## One HTTP header name and value.
 	Header : [Header(Str, Str)]
 
+	## A parsed HTTP request message.
 	Request : {
 		method : Method,
 		uri : Str,
@@ -16,6 +24,7 @@ HTTP :: {}.{
 		body : List(U8),
 	}
 
+	## A parsed HTTP response message.
 	Response : {
 		http_version : HttpVersion,
 		status_code : U16,
@@ -24,6 +33,7 @@ HTTP :: {}.{
 		body : List(U8),
 	}
 
+	## Parse a complete HTTP request line, headers, and remaining body bytes.
 	request : Parser(String.Utf8, Request)
 	request = 
 		Parser.const(
@@ -49,6 +59,7 @@ HTTP :: {}.{
 			.skip(crlf)
 			.keep(String.any_thing)
 
+	## Parse a complete HTTP response line, headers, and remaining body bytes.
 	response : Parser(String.Utf8, Response)
 	response = 
 		Parser.const(
@@ -154,8 +165,10 @@ request_uri =
 		.one_or_more()
 		.map(String.str_from_utf8)
 
+sp : Parser(String.Utf8, U8)
 sp = String.codeunit(' ')
 
+crlf : Parser(String.Utf8, Str)
 crlf = String.string("\r\n")
 
 http_version : Parser(String.Utf8, HTTP.HttpVersion)

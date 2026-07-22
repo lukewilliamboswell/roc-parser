@@ -6,5 +6,6 @@ package
 		HTTP,
 		Markdown,
 		Xml,
+		Yaml,
 	]
 	{}

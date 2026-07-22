@@ -10,7 +10,7 @@ import parser.String
 
 main! : List(Str) => Try({}, _)
 main! = |args| {
-	input = args.first() ?? "AAAiBByAABBwBtCCCiAyArBBx"
+	input = args.drop_first(1).first() ?? "AAAiBByAABBwBtCCCiAyArBBx"
 	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
 	result = String.parse_str(letter_parser.many(), input)
 

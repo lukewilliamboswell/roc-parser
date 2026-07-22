@@ -39,6 +39,7 @@ echo "Skipping package/HTTP.roc tests: latest nightly segfaults in the compiler 
 "$ROC_BIN" test package/Markdown.roc
 "$ROC_BIN" test package/String.roc
 "$ROC_BIN" test package/Xml.roc
+"$ROC_BIN" test package/Yaml.roc
 
 echo ""
 echo "Generating package docs..."
