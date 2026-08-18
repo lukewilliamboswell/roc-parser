@@ -1,30 +1,31 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.0.2/FrnJ4RGDKpQyoDyESNoBwFNviY4ZGbMVLnUjW9tvSRjk.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	parser: "../package/main.roc",
 }
 
-import parser.Parser
-import parser.CSV
-import parser.String
-import cli.Stdout
+import cli.OsStr
 import cli.Stderr
+import cli.Stdout
+import parser.CSV
+import parser.Parser
+import parser.String
 
-input = 
+input =
 	\\Airplane!,1980,\"Robert Hays,Julie Hagerty\"
 	\\Caddyshack,1980,\"Chevy Chase,Rodney Dangerfield,Ted Knight,Michael O'Keefe,Bill Murray\"
 
 MovieInfo : { title : Str, release_year : U64, actors : List(Str) }
 
-main! : List(Str) => Try({}, _)
+main! : List(OsStr) => Try({}, _)
 main! = |args| {
-	csv_input = args.drop_first(1).first() ?? input
+	csv_input = args.get(1).map_ok(OsStr.display) ?? input
 
 	match CSV.parse_str(movie_info_parser, csv_input) {
 		Ok(movies) => {
-			movies_string = 
+			movies_string =
 				movies
 					.map(movie_info_explanation)
-					->Str.join_with("\n")
+					|> Str.join_with("\n")
 
 			n_movies = movies.len().to_str()
 
@@ -38,11 +39,11 @@ main! = |args| {
 				}
 
 				ParsingIncomplete(leftover) => {
-					leftover_str = 
+					leftover_str =
 						leftover
 							.map(String.str_from_utf8)
 							.map(|val| "\"${val}\"")
-							->Str.join_with(", ")
+							|> Str.join_with(", ")
 
 					Stderr.line!("Parsing incomplete. Following leftover fields while parsing a record: ${leftover_str}\n")?
 				}
@@ -58,7 +59,7 @@ main! = |args| {
 }
 
 movie_info_parser : Parser(CSV.CSVRecord, MovieInfo)
-movie_info_parser = 
+movie_info_parser =
 	CSV.record(
 		|title| |release_year| |actors| {
 			{ title, release_year, actors }
@@ -90,7 +91,7 @@ enumerate = |elements| {
 		[actor] => actor
 		[.. as inits, last] =>
 			[last]
-				.prepend(inits->Str.join_with(", "))
-				->Str.join_with(" and ")
+				.prepend(inits |> Str.join_with(", "))
+				|> Str.join_with(" and ")
 		}
 }

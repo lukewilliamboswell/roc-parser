@@ -7,35 +7,34 @@ import String
 ##
 ## The parser supports optional XML declarations, attributes, nested elements,
 ## character data, CDATA sections, and self-closing elements.
-Xml :: {
+Xml := {
 	xml_declaration : [Given(Xml.Declaration), Missing],
 	root : Xml.Node,
 }.{
+
 	## Compare two XML documents structurally.
 	is_eq : _
 
 	## An XML attribute name and decoded value.
 	Attribute : { name : Str, value : Str }
 
-	## Encoding declared by an XML declaration.
-	Encoding := [
+	## Text encoding declared by an XML declaration.
+	TextEncoding : [
 		Utf8Encoding,
 		OtherEncoding(Str),
-	].{
-		## Compare two XML encodings structurally.
-		is_eq : _
-	}
+	]
 
 	## Version and optional encoding from an XML declaration.
 	Declaration : {
 		version : Version,
-		encoding : [Given(Encoding), Missing],
+		encoding : [Given(TextEncoding), Missing],
 	}
 
 	## An XML 1.x version, storing the digit after `1.`.
 	Version :: {
 		after_dot : U8,
 	}.{
+
 		## Compare two XML versions.
 		is_eq : _
 
@@ -51,13 +50,14 @@ Xml :: {
 		Element(Str, List({ name : Str, value : Str }), List(Node)),
 		Text(Str),
 	].{
+
 		## Compare two XML nodes structurally.
 		is_eq : _
 	}
 
 	## Parse one XML document, including an optional declaration and trailing whitespace.
 	xml_parser : Parser(String.Utf8, Xml)
-	xml_parser = 
+	xml_parser =
 		Parser.const(
 			|xml_declaration| |root| {
 				Xml.{ xml_declaration, root }
@@ -79,12 +79,10 @@ expect {
 
 	result
 		== {
-			xml_declaration: Given(
-				{
-					version: v1_dot0,
-					encoding: Given(Utf8Encoding),
-				},
-			),
+			xml_declaration: Given({
+				version: v1_dot0,
+				encoding: Given(Utf8Encoding),
+			}),
 			root: Element(
 				"root",
 				[],
@@ -114,7 +112,7 @@ expect {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-prolog
 p_prolog : Parser(String.Utf8, [Given(Xml.Declaration), Missing])
-p_prolog = 
+p_prolog =
 	Parser.const(
 		|xml_declaration| {
 			|_misc| {
@@ -122,12 +120,12 @@ p_prolog =
 			}
 		},
 	)
-		.keep(p_xml_declaration.map(|a| Given(a))->maybe_with_default(Missing))
+		.keep(p_xml_declaration.map(|a| Given(a)) |> maybe_with_default(Missing))
 		.keep(p_many_misc)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-XMLDecl
 p_xml_declaration : Parser(String.Utf8, Xml.Declaration)
-p_xml_declaration = 
+p_xml_declaration =
 	Parser.const(
 		|version| {
 			|encoding| {
@@ -146,14 +144,14 @@ p_xml_declaration =
 				.skip(p_whitespace.one_or_more())
 				.keep(p_encoding_declaration)
 				.map(|a| Given(a))
-				->maybe_with_default(Missing),
+				|> maybe_with_default(Missing),
 		)
 		.skip(p_whitespace.many())
 		.skip(String.string("?>"))
 
 ## XML declaration parsing captures version and encoding.
 expect {
-	result = 
+	result =
 		String.parse_str(
 			p_xml_declaration,
 			\\<?xml version="1.0" encoding="utf-8"?>
@@ -169,14 +167,14 @@ expect {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionInfo
 p_version : Parser(String.Utf8, Xml.Version)
-p_version = 
+p_version =
 	p_version_number
-		->between_quotes()
-		->p_attribute("version")
+		|> between_quotes
+		|> p_attribute("version")
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-VersionNum
 p_version_number : Parser(String.Utf8, Xml.Version)
-p_version_number = 
+p_version_number =
 	Parser.const(
 		|after_dot| {
 			Xml.Version.new(U64.to_u8_wrap(after_dot)) # TODO: change to to_u8_try
@@ -186,15 +184,15 @@ p_version_number =
 		.keep(String.digits)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-EncodingDecl
-p_encoding_declaration : Parser(String.Utf8, Xml.Encoding)
-p_encoding_declaration = 
+p_encoding_declaration : Parser(String.Utf8, Xml.TextEncoding)
+p_encoding_declaration =
 	p_encoding_name
-		->between_quotes()
-		->p_attribute("encoding")
+		|> between_quotes
+		|> p_attribute("encoding")
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-EncName
-p_encoding_name : Parser(String.Utf8, Xml.Encoding)
-p_encoding_name = 
+p_encoding_name : Parser(String.Utf8, Xml.TextEncoding)
+p_encoding_name =
 	Parser.const(
 		|first_char| {
 			|rest| {
@@ -270,13 +268,11 @@ parse_element_partial = |input| {
 				)
 					.skip(String.string(">"))
 					.keep(
-						Parser.one_of(
-							[
-								p_character_data,
-								Parser.build_primitive_parser(parse_element_partial),
-								p_cdata_section,
-							],
-						)
+						Parser.one_of([
+							p_character_data,
+							Parser.build_primitive_parser(parse_element_partial),
+							p_cdata_section,
+						])
 							.many(),
 					)
 					.skip(p_end_tag),
@@ -473,7 +469,7 @@ expect {
 }
 
 p_element_attribute : Parser(String.Utf8, Xml.Attribute)
-p_element_attribute = 
+p_element_attribute =
 	Parser.const(
 		|name| {
 			|value| {
@@ -487,12 +483,10 @@ p_element_attribute =
 		.keep(p_name)
 		.skip(p_equal)
 		.keep(
-			Parser.one_of(
-				[
-					p_attribute_value('"').between(String.string("\""), String.string("\"")),
-					p_attribute_value('\'').between(String.string("'"), String.string("'")),
-				],
-			),
+			Parser.one_of([
+				p_attribute_value('"').between(String.string("\""), String.string("\"")),
+				p_attribute_value('\'').between(String.string("'"), String.string("'")),
+			]),
 		)
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-AttValue
@@ -513,7 +507,7 @@ p_attribute_value = |quote| {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-ETag
 p_end_tag : Parser(String.Utf8, Str)
-p_end_tag = 
+p_end_tag =
 	Parser.const(
 		|name| {
 			name
@@ -526,7 +520,7 @@ p_end_tag =
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CharData
 p_character_data : Parser(String.Utf8, Xml.Node)
-p_character_data = 
+p_character_data =
 	Parser.const(
 		|first| {
 			|chars| {
@@ -547,7 +541,7 @@ is_character_data = |c| {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-CDSect
 p_cdata_section : Parser(String.Utf8, Xml.Node)
-p_cdata_section = 
+p_cdata_section =
 	Parser.const(
 		|text| {
 			text
@@ -572,27 +566,25 @@ parse_cdata_section_content_partial = |input| {
 		.keep(Parser.chomp_until(']').map(str_from_utf8).flatten())
 		.skip(String.string("]"))
 		.keep(
-			Parser.one_of(
-				[
-					String.string("]>").map(
-						|_| {
-							""
-						},
-					),
-					Parser.build_primitive_parser(parse_cdata_section_content_partial).map(
-						|rest| {
-							Str.concat("]", rest)
-						},
-					),
-				],
-			),
+			Parser.one_of([
+				String.string("]>").map(
+					|_| {
+						""
+					},
+				),
+				Parser.build_primitive_parser(parse_cdata_section_content_partial).map(
+					|rest| {
+						Str.concat("]", rest)
+					},
+				),
+			]),
 		)
 
 	Parser.parse_partial(parser, input)
 }
 
 p_name : Parser(String.Utf8, Str)
-p_name = 
+p_name =
 	Parser.const(|first_char| |rest| combine_to_str(first_char, rest))
 		.keep(String.codeunit_satisfies(is_name_start_char))
 		.keep(Parser.chomp_while(is_name_char))
@@ -616,7 +608,7 @@ combine_to_str : U8, List(U8) -> Try(Str, Str)
 combine_to_str = |first, rest| {
 	rest
 		.prepend(first)
-		->str_from_utf8()
+		|> str_from_utf8
 }
 
 str_from_utf8 : List(U8) -> Try(Str, Str)
@@ -632,7 +624,7 @@ str_from_utf8 = |chars| {
 XmlMisc : List([Comment, ProcessingInstruction])
 
 p_many_misc : Parser(String.Utf8, XmlMisc)
-p_many_misc = 
+p_many_misc =
 	p_whitespace.many()
 		.map(|_| [])
 
@@ -650,24 +642,22 @@ p_attribute = |parser, attribute_name| {
 
 # See https://www.w3.org/TR/2008/REC-xml-20081126/#NT-Eq
 p_equal : Parser(String.Utf8, Str)
-p_equal = 
+p_equal =
 	p_whitespace.many()
 		.skip(String.string("="))
 		.skip(p_whitespace.many())
 		.map(
 			|strings| {
-				strings->Str.join_with("")
+				strings |> Str.join_with("")
 			},
 		)
 
 between_quotes : Parser(String.Utf8, a) -> Parser(String.Utf8, a)
 between_quotes = |parser| {
-	Parser.one_of(
-		[
-			parser.between(String.string("\""), String.string("\"")),
-			parser.between(String.string("'"), String.string("'")),
-		],
-	)
+	Parser.one_of([
+		parser.between(String.string("\""), String.string("\"")),
+		parser.between(String.string("'"), String.string("'")),
+	])
 }
 
 maybe_with_default : Parser(input, output), output -> Parser(input, output)
@@ -676,15 +666,13 @@ maybe_with_default = |parser, default| {
 }
 
 p_whitespace : Parser(String.Utf8, Str)
-p_whitespace = 
-	Parser.one_of(
-		[
-			String.string("\u(20)"),
-			String.string("\u(9)"),
-			String.string("\u(D)"),
-			String.string("\u(A)"),
-		],
-	)
+p_whitespace =
+	Parser.one_of([
+		String.string("\u(20)"),
+		String.string("\u(9)"),
+		String.string("\u(D)"),
+		String.string("\u(A)"),
+	])
 
 is_alphabetical : U8 -> Bool
 is_alphabetical = |c| {
@@ -697,13 +685,13 @@ is_digit = |c| {
 	c >= '0' and c <= '9'
 }
 
-test_xml = 
+test_xml =
 	\\<?xml version=\"1.0\" encoding=\"utf-8\"?>
 	\\<root>
 	\\    <element arg=\"value\" />
 	\\</root>
 
-trailing_whitespace_xml = 
+trailing_whitespace_xml =
 	\\<?xml version="1.0" encoding="UTF-8"?>
 	\\<root><Example></Example></root>
 	\\
@@ -714,12 +702,10 @@ expect {
 
 	expected : Xml
 	expected = {
-		xml_declaration: Given(
-			{
-				version: v1_dot0,
-				encoding: Given(OtherEncoding("UTF-8")),
-			},
-		),
+		xml_declaration: Given({
+			version: v1_dot0,
+			encoding: Given(OtherEncoding("UTF-8")),
+		}),
 		root: Element(
 			"root",
 			[],

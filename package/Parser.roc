@@ -315,7 +315,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	lazy : ({} -> Parser(input, a)) -> Parser(input, a)
 	lazy = |thunk| {
 		const({})
-			->and_then(thunk)
+			|> and_then(thunk)
 	}
 
 	## A parser that tries to apply the given parser and returns
@@ -387,7 +387,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## The separators are consumed and omitted from the result.
 	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a))
 	sep_by1 = |parser, separator| {
-		parser_followed_by_sep = 
+		parser_followed_by_sep =
 			const(
 				|_| {
 					|val| {
@@ -574,12 +574,10 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 				if index == 0 {
 					Ok({ val: [], input: input })
 				} else {
-					Ok(
-						{
-							val: input.sublist({ start: 0, len: index }),
-							input: input.drop_first(index),
-						},
-					)
+					Ok({
+						val: input.sublist({ start: 0, len: index }),
+						input: input.drop_first(index),
+					})
 				}
 			},
 		)

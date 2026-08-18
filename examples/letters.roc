@@ -1,16 +1,17 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.0.2/FrnJ4RGDKpQyoDyESNoBwFNviY4ZGbMVLnUjW9tvSRjk.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	parser: "../package/main.roc",
 }
 
-import cli.Stdout
+import cli.OsStr
 import cli.Stderr
+import cli.Stdout
 import parser.Parser
 import parser.String
 
-main! : List(Str) => Try({}, _)
+main! : List(OsStr) => Try({}, _)
 main! = |args| {
-	input = args.drop_first(1).first() ?? "AAAiBByAABBwBtCCCiAyArBBx"
+	input = args.get(1).map_ok(OsStr.display) ?? "AAAiBByAABBwBtCCCiAyArBBx"
 	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
 	result = String.parse_str(letter_parser.many(), input)
 
@@ -40,7 +41,7 @@ letter_parser : Parser(List(U8), Letter)
 letter_parser = Parser.build_primitive_parser(
 	|input| {
 		val_result : Try(Letter, [ParsingFailure(Str)])
-		val_result = 
+		val_result =
 			match input {
 				[] => Err(ParsingFailure("Nothing to parse"))
 				['A', ..] => Ok(A)
@@ -59,7 +60,7 @@ letter_parser = Parser.build_primitive_parser(
 expect {
 	input = "B"
 	parser = letter_parser
-	result = parser->String.parse_str(input)?
+	result = parser |> String.parse_str(input)?
 	result == B
 }
 
@@ -68,6 +69,6 @@ expect {
 expect {
 	input = "BCXA"
 	parser = letter_parser.many()
-	result = parser->String.parse_str(input)?
+	result = parser |> String.parse_str(input)?
 	result == [B, C, Other, A]
 }
