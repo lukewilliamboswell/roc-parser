@@ -72,7 +72,9 @@ jobs:
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
-          bump_check: require
+          # The previous release may not compile with the current Roc nightly,
+          # which prevents roc bump from comparing the two public APIs.
+          bump_check: warn
           bump_entrypoint: package/main.roc
           previous_url: ${{ steps.previous.outputs.previous_url }}
 
