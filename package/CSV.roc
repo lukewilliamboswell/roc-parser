@@ -6,6 +6,7 @@ import String
 ## Quoted fields, escaped double quotes, CRLF record separators, and simple LF
 ## separators are supported. The first row is treated as data rather than as headings.
 CSV :: { records : List(List(String.Utf8)) }.{
+
 	## Compare two decoded CSV values structurally.
 	is_eq : _
 
@@ -62,7 +63,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 					match parse_csv_record(csv_parser, record_fields_list) {
 						Err(ParsingFailure(problem)) => {
 							index_str = (index + 1).to_str()
-							record_str = 
+							record_str =
 								record_fields_list
 									.map(String.str_from_utf8)
 									.map(
@@ -70,7 +71,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 											"\"${val}\""
 										},
 									)
-									->Str.join_with(", ")
+									|> Str.join_with(", ")
 							problem_str = "${problem}\nWhile parsing record no. ${index_str}: `${record_str}`"
 
 							Break(Err(ParsingFailure(problem_str)))
@@ -87,7 +88,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 										vals.append(val)
 									},
 								)
-								->Continue()
+								|> Continue
 						}
 					}
 				},
@@ -137,17 +138,17 @@ CSV :: { records : List(List(String.Utf8)) }.{
 							}
 
 							Err(ParsingFailure(reason)) => {
-								field_str = raw_str->String.str_from_utf8()
+								field_str = raw_str |> String.str_from_utf8
 
 								Err(ParsingFailure("Field `${field_str}` could not be parsed. ${reason}"))
 							}
 
 							Err(ParsingIncomplete(reason)) => {
 								reason_str = String.str_from_utf8(reason)
-								fields_str = 
+								fields_str =
 									fields_list
 										.map(String.str_from_utf8)
-										->Str.join_with(", ")
+										|> Str.join_with(", ")
 
 								Err(ParsingFailure("The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})"))
 							}
@@ -164,7 +165,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Parse one CSV field as an unsigned 64-bit integer.
 	u64 : Parser(CSVField, U64)
-	u64 = 
+	u64 =
 		string
 			.map(
 				|val| {
@@ -178,7 +179,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Parse one CSV field as a 64-bit floating-point number.
 	f64 : Parser(CSVField, F64)
-	f64 = 
+	f64 =
 		string
 			.map(
 				|val| {
@@ -216,7 +217,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Parse a complete RFC 4180-style CSV file into raw records and fields.
 	file : Parser(String.Utf8, CSV)
-	file = 
+	file =
 		Parser.sep_by(csv_record, end_of_line)
 			.map(
 				|records| {
@@ -235,20 +236,18 @@ escaped_csv_field : Parser(String.Utf8, CSV.CSVField)
 escaped_csv_field = Parser.between(escaped_contents, dquote, dquote)
 
 escaped_contents : Parser(String.Utf8, List(U8))
-escaped_contents = 
-	String.one_of(
-		[
-			twodquotes.map(
-				|_| {
-					'"'
-				},
-			),
-			comma,
-			cr,
-			lf,
-			textdata,
-		],
-	)
+escaped_contents =
+	String.one_of([
+		twodquotes.map(
+			|_| {
+				'"'
+			},
+		),
+		comma,
+		cr,
+		lf,
+		textdata,
+	])
 		.many()
 
 twodquotes : Parser(String.Utf8, Str)

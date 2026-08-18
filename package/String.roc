@@ -25,7 +25,7 @@ String :: {}.{
 	parse_str : Parser(Utf8, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
 	parse_str = |parser, input| {
 		parser
-			->parse_utf8(str_to_raw(input))
+			|> parse_utf8(str_to_raw(input))
 			.map_err(
 				|problem| {
 					match problem {
@@ -52,7 +52,7 @@ String :: {}.{
 	parse_str_partial : Parser(Utf8, a), Str -> Try({ val : a, input : Str }, [ParsingFailure(Str)])
 	parse_str_partial = |parser, input| {
 		parser
-			->parse_utf8_partial(str_to_raw(input))
+			|> parse_utf8_partial(str_to_raw(input))
 			.map_ok(
 				|{ val: val, input: rest_raw }| {
 					{ val: val, input: str_from_utf8(rest_raw) }
@@ -173,8 +173,8 @@ String :: {}.{
 	string : Str -> Parser(Utf8, Str)
 	string = |expected_string| {
 		expected_string
-			->str_to_raw()
-			->utf8()
+			|> str_to_raw
+			|> utf8
 			.map(
 				|_val| {
 					expected_string
@@ -196,13 +196,13 @@ String :: {}.{
 
 	## Any codeunit accepts a lowercase ASCII byte.
 	expect {
-		actual = any_codeunit->parse_str("a")?
+		actual = any_codeunit |> parse_str("a")?
 		actual == 'a'
 	}
 
 	## Any codeunit accepts a dollar-sign byte.
 	expect {
-		actual = any_codeunit->parse_str("\$")?
+		actual = any_codeunit |> parse_str("\$")?
 		actual == 36
 	}
 
@@ -248,7 +248,7 @@ String :: {}.{
 	## expect digit->parse_str("not a digit").is_err()
 	## ```
 	digit : Parser(Utf8, U64)
-	digit = 
+	digit =
 		Parser.build_primitive_parser(
 			|input| {
 				match input {
@@ -270,7 +270,7 @@ String :: {}.{
 	## expect digits->parse_str("not a digit").is_err()
 	## ```
 	digits : Parser(Utf8, U64)
-	digits = 
+	digits =
 		Parser.one_or_more(digit)
 			.map(
 				|ds| {
@@ -323,7 +323,7 @@ String :: {}.{
 	str_from_utf8 : Utf8 -> Str
 	str_from_utf8 = |raw_str| {
 		raw_str
-			->Str.from_utf8()
+			|> Str.from_utf8
 			?? {
 				crash "Unexpected problem while turning a List U8 (that was originally a Str) back into a Str. This should never happen!"
 			}
@@ -380,7 +380,7 @@ expect {
 # -------------------- example snippets used in docs --------------------
 
 parse_u32 : Parser(String.Utf8, U32)
-parse_u32 = 
+parse_u32 =
 	Parser.const(U64.to_u32_wrap).keep(String.digits)
 
 ## Digit parsing can be mapped into a U32.
@@ -390,14 +390,12 @@ expect {
 }
 
 color : Parser(String.Utf8, [Red, Green, Blue])
-color = 
-	String.one_of(
-		[
-			Parser.const(Red).skip(String.string("red")),
-			Parser.const(Green).skip(String.string("green")),
-			Parser.const(Blue).skip(String.string("blue")),
-		],
-	)
+color =
+	String.one_of([
+		Parser.const(Red).skip(String.string("red")),
+		Parser.const(Green).skip(String.string("green")),
+		Parser.const(Blue).skip(String.string("blue")),
+	])
 
 ## One-of parsing selects the matching color tag.
 expect {
@@ -424,7 +422,7 @@ expect {
 expect String.parse_str(String.string("Foo"), "Bar").is_err()
 
 ignore_text : Parser(String.Utf8, U64)
-ignore_text = 
+ignore_text =
 	Parser.const(
 		|d| {
 			d
@@ -441,7 +439,7 @@ expect {
 }
 
 ignore_numbers : Parser(String.Utf8, Str)
-ignore_numbers = 
+ignore_numbers =
 	Parser.const(
 		|str| {
 			str
@@ -513,7 +511,7 @@ parse_game = |s| {
 	requirements = requirement_set.sep_by(String.string("; "))
 
 	game : Parser(_, Game)
-	game = 
+	game =
 		Parser.const(
 			|id| {
 				|r| {
@@ -565,7 +563,7 @@ expect {
 expect String.parse_str(String.digits, "not a digit").is_err()
 
 bool_parser : Parser(String.Utf8, Bool)
-bool_parser = 
+bool_parser =
 	String.one_of([String.string("true"), String.string("false")])
 		.map(
 			|x| {

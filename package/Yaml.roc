@@ -18,6 +18,7 @@ Yaml := [
 	Sequence(List(Yaml)),
 	Mapping(List({ key : Str, value : Yaml })),
 ].{
+
 	## Location and explanation of invalid YAML input. Lines and columns are one-based.
 	Error : { line : U64, column : U64, message : Str }
 
@@ -696,8 +697,8 @@ inspect_yaml = |value| {
 		Int(integer) => "Int(${integer.to_str()})"
 		Float(float) => "Float(${float.to_str()})"
 		String(text) => "String(${Str.inspect(text)})"
-		Sequence(values) => "Sequence([${values.map(inspect_yaml)->Str.join_with(", ")}])"
-		Mapping(entries) => "Mapping([${entries.map(inspect_entry)->Str.join_with(", ")}])"
+		Sequence(values) => "Sequence([${values.map(inspect_yaml) |> Str.join_with(", ")}])"
+		Mapping(entries) => "Mapping([${entries.map(inspect_entry) |> Str.join_with(", ")}])"
 	}
 }
 

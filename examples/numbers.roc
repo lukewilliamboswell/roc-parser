@@ -1,16 +1,17 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.0.2/FrnJ4RGDKpQyoDyESNoBwFNviY4ZGbMVLnUjW9tvSRjk.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	parser: "../package/main.roc",
 }
 
+import cli.OsStr
 import cli.Stdout
 import cli.Stderr
 import parser.Parser
 import parser.String
 
-main! : List(Str) => Try({}, _)
+main! : List(OsStr) => Try({}, _)
 main! = |args| {
-	input = args.drop_first(1).first() ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
+	input = args.get(1).map_ok(OsStr.display) ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
 	result = String.parse_str(multiple_numbers.many(), input)
 
@@ -23,7 +24,7 @@ main! = |args| {
 
 # Parse a number followed by a newline
 single_number : Parser(List(U8), U64)
-single_number = 
+single_number =
 	Parser.const(|n| n)
 		.keep(String.digits)
 		.skip(String.string("\n"))
@@ -36,7 +37,7 @@ expect {
 
 # Parse a series of numbers followed by a newline
 multiple_numbers : Parser(List(U8), List(U64))
-multiple_numbers = 
+multiple_numbers =
 	Parser.const(|ns| ns)
 		.keep(single_number.many())
 		.skip(String.string("\n"))

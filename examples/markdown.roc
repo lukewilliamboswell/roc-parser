@@ -1,13 +1,14 @@
 app [main!] {
-	cli: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.0.2/FrnJ4RGDKpQyoDyESNoBwFNviY4ZGbMVLnUjW9tvSRjk.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	parser: "../package/main.roc",
 }
 
+import cli.OsStr
 import cli.Stdout
 import parser.String
 import parser.Markdown
 
-content = 
+content =
 	\\---
 	\\title: Demo
 	\\---
@@ -39,10 +40,10 @@ content =
 	\\raw
 	\\</section>
 
-main! : List(Str) => Try({}, _)
+main! : List(OsStr) => Try({}, _)
 main! = |args| {
-	markdown_input = args.drop_first(1).first() ?? content
-	parsed = 
+	markdown_input = args.get(1).map_ok(OsStr.display) ?? content
+	parsed =
 		String.parse_str(Markdown.all, markdown_input)
 			.map_ok(
 				|nodes| {

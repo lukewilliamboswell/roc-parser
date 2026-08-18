@@ -6,6 +6,7 @@ import String
 ## Message bodies are returned as raw bytes. Header names and values are
 ## preserved as strings without normalization.
 HTTP :: {}.{
+
 	## Supported HTTP request methods.
 	Method : [Options, Get, Post, Put, Delete, Head, Trace, Connect, Patch]
 
@@ -35,7 +36,7 @@ HTTP :: {}.{
 
 	## Parse a complete HTTP request line, headers, and remaining body bytes.
 	request : Parser(String.Utf8, Request)
-	request = 
+	request =
 		Parser.const(
 			|m| {
 				|u| {
@@ -61,7 +62,7 @@ HTTP :: {}.{
 
 	## Parse a complete HTTP response line, headers, and remaining body bytes.
 	response : Parser(String.Utf8, Response)
-	response = 
+	response =
 		Parser.const(
 			|hv| {
 				|sc| {
@@ -87,56 +88,54 @@ HTTP :: {}.{
 }
 
 method : Parser(String.Utf8, HTTP.Method)
-method = 
-	String.one_of(
-		[
-			String.string("OPTIONS").map(
-				|_| {
-					Options
-				},
-			),
-			String.string("GET").map(
-				|_| {
-					Get
-				},
-			),
-			String.string("POST").map(
-				|_| {
-					Post
-				},
-			),
-			String.string("PUT").map(
-				|_| {
-					Put
-				},
-			),
-			String.string("DELETE").map(
-				|_| {
-					Delete
-				},
-			),
-			String.string("HEAD").map(
-				|_| {
-					Head
-				},
-			),
-			String.string("TRACE").map(
-				|_| {
-					Trace
-				},
-			),
-			String.string("CONNECT").map(
-				|_| {
-					Connect
-				},
-			),
-			String.string("PATCH").map(
-				|_| {
-					Patch
-				},
-			),
-		],
-	)
+method =
+	String.one_of([
+		String.string("OPTIONS").map(
+			|_| {
+				Options
+			},
+		),
+		String.string("GET").map(
+			|_| {
+				Get
+			},
+		),
+		String.string("POST").map(
+			|_| {
+				Post
+			},
+		),
+		String.string("PUT").map(
+			|_| {
+				Put
+			},
+		),
+		String.string("DELETE").map(
+			|_| {
+				Delete
+			},
+		),
+		String.string("HEAD").map(
+			|_| {
+				Head
+			},
+		),
+		String.string("TRACE").map(
+			|_| {
+				Trace
+			},
+		),
+		String.string("CONNECT").map(
+			|_| {
+				Connect
+			},
+		),
+		String.string("PATCH").map(
+			|_| {
+				Patch
+			},
+		),
+	])
 
 ## GET parses as the Get method tag.
 expect {
@@ -156,7 +155,7 @@ expect {
 RequestUri : Str
 
 request_uri : Parser(String.Utf8, RequestUri)
-request_uri = 
+request_uri =
 	String.codeunit_satisfies(
 		|c| {
 			c != ' '
@@ -172,7 +171,7 @@ crlf : Parser(String.Utf8, Str)
 crlf = String.string("\r\n")
 
 http_version : Parser(String.Utf8, HTTP.HttpVersion)
-http_version = 
+http_version =
 	Parser.const(
 		|major| {
 			|minor| {
@@ -193,7 +192,7 @@ expect {
 }
 
 string_without_colon : Parser(String.Utf8, Str)
-string_without_colon = 
+string_without_colon =
 	String.codeunit_satisfies(
 		|c| {
 			c != ':'
@@ -203,7 +202,7 @@ string_without_colon =
 		.map(String.str_from_utf8)
 
 string_without_cr : Parser(String.Utf8, Str)
-string_without_cr = 
+string_without_cr =
 	String.codeunit_satisfies(
 		|c| {
 			c != '\r'
@@ -213,7 +212,7 @@ string_without_cr =
 		.map(String.str_from_utf8)
 
 header : Parser(String.Utf8, HTTP.Header)
-header = 
+header =
 	Parser.const(
 		|k| {
 			|v| {
@@ -235,13 +234,13 @@ expect {
 
 ## HTTP request parsing captures method, URI, version, headers, and body.
 expect {
-	request_text = 
+	request_text =
 		\\GET /things?id=1 HTTP/1.1\r
 		\\Host: bar.example\r
 		\\Accept-Encoding: gzip, deflate\r
 		\\\r
 		\\Hello, world!
-	actual = 
+	actual =
 		String.parse_str(HTTP.request, request_text)?
 
 	expected : HTTP.Request
@@ -260,7 +259,7 @@ expect {
 
 ## OPTIONS request parsing supports many headers and an empty body.
 expect {
-	request_text = 
+	request_text =
 		\\OPTIONS /resources/post-here/ HTTP/1.1\r
 		\\Host: bar.example\r
 		\\Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r
@@ -271,7 +270,7 @@ expect {
 		\\Access-Control-Request-Method: POST\r
 		\\Access-Control-Request-Headers: X-PINGOTHER, Content-Type\r
 		\\\r\n
-	actual = 
+	actual =
 		String.parse_str(HTTP.request, request_text)?
 	expected = {
 		method: Options,
@@ -294,7 +293,7 @@ expect {
 
 ## HTTP response parsing captures headers and leaves the body bytes intact.
 expect {
-	body = 
+	body =
 		\\<!DOCTYPE html>\r
 		\\<html lang="en">\r
 		\\<head>\r
@@ -306,7 +305,7 @@ expect {
 		\\<p>Hello, world!</p>\r
 		\\</body>\r
 		\\</html>\r\n
-	response_text = 
+	response_text =
 		\\HTTP/1.1 200 OK\r
 		\\Content-Type: text/html; charset=utf-8\r
 		\\Content-Length: 55743\r
@@ -324,7 +323,7 @@ expect {
 		\\Age: 7\r
 		\\\r
 		\\${body}
-	actual = 
+	actual =
 		String.parse_str(HTTP.response, response_text)?
 	expected = {
 		http_version: { major: 1, minor: 1 },

@@ -18,6 +18,7 @@ Markdown := [
 	Frontmatter({ raw : Str }),
 	TODO(Str),
 ].{
+
 	## Render a Markdown block in Roc source-like notation for inspection.
 	to_inspect : Markdown -> Str
 	to_inspect = |node| {
@@ -41,6 +42,7 @@ Markdown := [
 
 	## Heading levels from one through six.
 	Level := [One, Two, Three, Four, Five, Six].{
+
 		## Render a heading level for inspection.
 		to_inspect : Level -> Str
 		to_inspect = |level| {
@@ -62,6 +64,7 @@ Markdown := [
 		Unordered,
 		Ordered({ start : U64 }),
 	].{
+
 		## Render a list kind for inspection.
 		to_inspect : ListKind -> Str
 		to_inspect = |kind| {
@@ -84,6 +87,7 @@ Markdown := [
 		Unchecked,
 		Checked,
 	].{
+
 		## Render a task state for inspection.
 		to_inspect : TaskState -> Str
 		to_inspect = |task| {
@@ -107,6 +111,7 @@ Markdown := [
 		Center,
 		Right,
 	].{
+
 		## Render a table alignment for inspection.
 		to_inspect : Alignment -> Str
 		to_inspect = |alignment| {
@@ -141,6 +146,7 @@ Markdown := [
 		HardBreak,
 		HtmlInline(Str),
 	].{
+
 		## Render an inline node in Roc source-like notation for inspection.
 		to_inspect : Inline -> Str
 		to_inspect = |inline| {
@@ -162,13 +168,11 @@ Markdown := [
 	## Parse an ATX or Setext heading.
 	heading : Parser(String.Utf8, Markdown)
 	heading =
-		Parser.one_of(
-			[
-				inline_heading,
-				two_line_heading_level_one,
-				two_line_heading_level_two,
-			],
-		)
+		Parser.one_of([
+			inline_heading,
+			two_line_heading_level_one,
+			two_line_heading_level_two,
+		])
 
 	## Parse an inline link with a destination in parentheses.
 	link : Parser(String.Utf8, Inline)
@@ -231,16 +235,14 @@ Markdown := [
 	code =
 		Parser.const(|info| |pre| Code({ info: info, pre: pre }))
 			.keep(
-				Parser.one_of(
-					[
-						Parser.const(|i| i)
-							.skip(String.string("```"))
-							.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
-							.skip(end_of_line),
-						Parser.const("")
-							.skip(String.string("```")),
-					],
-				),
+				Parser.one_of([
+					Parser.const(|i| i)
+						.skip(String.string("```"))
+						.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+						.skip(end_of_line),
+					Parser.const("")
+						.skip(String.string("```")),
+				]),
 			)
 			.keep(chomp_until_code_block_end)
 }
@@ -277,7 +279,7 @@ inspect_markdown = |node| {
 
 		TODO(line) =>
 			"TODO(${Str.inspect(line)})"
-	}
+		}
 }
 
 inspect_level : Markdown.Level -> Str
@@ -312,7 +314,7 @@ inspect_list_kind = |kind| {
 
 		Ordered({ start }) =>
 			"Ordered({ start: ${start.to_str()} })"
-	}
+		}
 }
 
 list_kind_to_str : Markdown.ListKind -> Str
@@ -323,7 +325,7 @@ list_kind_to_str = |kind| {
 
 		Ordered({ start }) =>
 			"ordered:${start.to_str()}"
-	}
+		}
 }
 
 inspect_task_state : Markdown.TaskState -> Str
@@ -393,7 +395,7 @@ inspect_inline = |inline| {
 
 		HtmlInline(raw) =>
 			"HtmlInline(${Str.inspect(raw)})"
-	}
+		}
 }
 
 inspect_link_target : Markdown.LinkTarget -> Str
@@ -409,7 +411,7 @@ inspect_link_title = |title| {
 
 		None =>
 			"None"
-	}
+		}
 }
 
 Line : { raw : String.Utf8 }
@@ -456,7 +458,7 @@ parse_all =
 
 				_ =>
 					Err(ParsingFailure("unexpected unparsed markdown lines"))
-			}
+				}
 		},
 	)
 
@@ -488,12 +490,12 @@ take_frontmatter = |lines| {
 
 				Err(_) =>
 					{ frontmatter: None, input: lines }
-			}
+				}
 		}
 
 		_ =>
 			{ frontmatter: None, input: lines }
-	}
+		}
 }
 
 take_until_frontmatter_close : List(Line), List(String.Utf8) -> Try({ raw : List(String.Utf8), input : List(Line) }, [NotFound])
@@ -507,7 +509,7 @@ take_until_frontmatter_close = |lines, acc| {
 
 		[line, .. as rest] =>
 			take_until_frontmatter_close(rest, acc.append(line.raw))
-	}
+		}
 }
 
 collect_reference_definitions : List(Line), List(ReferenceDefinition), List(Line) -> { refs : List(ReferenceDefinition), lines : List(Line) }
@@ -523,7 +525,7 @@ collect_reference_definitions = |lines, refs, kept| {
 
 				Err(_) =>
 					collect_reference_definitions(rest, refs, kept.append(line))
-			}
+				}
 		}
 	}
 }
@@ -544,7 +546,7 @@ parse_reference_definition = |line| {
 
 		_ =>
 			Err(NotFound)
-	}
+		}
 }
 
 parse_blocks_from_lines : List(Line), U64, List(ReferenceDefinition) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
@@ -581,12 +583,12 @@ parse_one_block = |lines, min_indent, refs| {
 
 				Err(_) =>
 					parse_one_block_without_setext(lines, min_indent, refs)
-			}
+				}
 		}
 
 		_ =>
 			parse_one_block_without_setext(lines, min_indent, refs)
-	}
+		}
 }
 
 parse_one_block_without_setext : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
@@ -668,7 +670,7 @@ collect_paragraph_lines = |lines, min_indent, acc| {
 
 		[line, .. as rest] =>
 			collect_paragraph_lines(rest, min_indent, acc.append(strip_indent(line, min_indent)))
-	}
+		}
 }
 
 parse_fenced_code_block : List(Line), U64, Fence -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
@@ -682,7 +684,7 @@ parse_fenced_code_block = |lines, min_indent, fence| {
 
 		[] =>
 			Err(ParsingFailure("expected a code fence"))
-	}
+		}
 }
 
 collect_fenced_code_lines : List(Line), U64, Fence, List(String.Utf8) -> Try({ val : List(String.Utf8), input : List(Line) }, [ParsingFailure(Str)])
@@ -732,7 +734,7 @@ collect_indented_code_lines = |lines, min_indent, acc| {
 
 		_ =>
 			{ val: acc, input: lines }
-	}
+		}
 }
 
 parse_blockquote : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
@@ -757,7 +759,7 @@ collect_blockquote_lines = |lines, min_indent, acc| {
 
 		_ =>
 			{ val: acc, input: lines }
-	}
+		}
 }
 
 parse_list_block : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
@@ -772,12 +774,12 @@ parse_list_block = |lines, min_indent, refs| {
 
 				Err(_) =>
 					Err(ParsingFailure("expected list item"))
-			}
+				}
 		}
 
 		[] =>
 			Err(ParsingFailure("expected list item"))
-	}
+		}
 }
 
 parse_list_items : List(Line), U64, List(ReferenceDefinition), Markdown.ListKind, List({ task : Markdown.TaskState, blocks : List(Markdown) }), Bool -> Try({ items : List({ task : Markdown.TaskState, blocks : List(Markdown) }), loose : Bool, input : List(Line) }, [ParsingFailure(Str)])
@@ -792,12 +794,12 @@ parse_list_items = |lines, min_indent, refs, kind, items, loose| {
 
 				_ =>
 					Ok({ items, loose, input: lines })
-			}
+				}
 		}
 
 		[] =>
 			Ok({ items, loose, input: [] })
-	}
+		}
 }
 
 parse_list_item_after_marker : ListMarker, List(Line), U64, List(ReferenceDefinition) -> Try({ item : { task : Markdown.TaskState, blocks : List(Markdown) }, loose : Bool, input : List(Line) }, [ParsingFailure(Str)])
@@ -837,12 +839,12 @@ blank_line_keeps_list_loose = |lines, min_indent, content_indent| {
 
 				_ =>
 					Bool.False
-			}
+				}
 		}
 
 		_ =>
 			Bool.False
-	}
+		}
 }
 
 collect_list_item_continuation : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
@@ -862,7 +864,7 @@ collect_list_item_continuation = |lines, content_indent, acc| {
 
 		[line, .. as rest] =>
 			collect_list_item_continuation(rest, content_indent, acc.append(strip_indent(line, content_indent)))
-	}
+		}
 }
 
 parse_table_block : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
@@ -887,17 +889,17 @@ parse_table_block = |lines, min_indent, refs| {
 
 						Err(_) =>
 							Err(ParsingFailure("expected table delimiter"))
-					}
+						}
 				}
 
 				Err(_) =>
 					Err(ParsingFailure("expected table header"))
-			}
+				}
 		}
 
 		_ =>
 			Err(ParsingFailure("expected table"))
-	}
+		}
 }
 
 collect_table_rows : List(Line), U64, List(ReferenceDefinition), List(List(List(Markdown.Inline))) -> { rows : List(List(List(Markdown.Inline))), input : List(Line) }
@@ -924,7 +926,7 @@ collect_table_rows = |lines, min_indent, refs, rows| {
 
 				Err(_) =>
 					{ rows, input: lines }
-			}
+				}
 		}
 	}
 }
@@ -954,7 +956,7 @@ collect_html_block = |lines, min_indent, acc| {
 
 		[line, .. as rest] =>
 			collect_html_block(rest, min_indent, acc.append(strip_indent(line, min_indent)))
-	}
+		}
 }
 
 is_block_start : Line, U64 -> Bool
@@ -966,10 +968,10 @@ is_block_start = |line, min_indent| {
 
 		is_hash_heading_line(content)
 			or is_thematic_break_line(line, min_indent)
-			or parse_fence_start(line, min_indent).is_ok()
-			or is_html_block_line(line, min_indent)
-			or is_blockquote_line(line, min_indent)
-			or parse_list_marker(line, min_indent).is_ok()
+				or parse_fence_start(line, min_indent).is_ok()
+					or is_html_block_line(line, min_indent)
+						or is_blockquote_line(line, min_indent)
+							or parse_list_marker(line, min_indent).is_ok()
 	}
 }
 
@@ -988,16 +990,14 @@ inline_heading =
 		},
 	)
 		.keep(
-			Parser.one_of(
-				[
-					Parser.const(One).skip(String.string("# ")),
-					Parser.const(Two).skip(String.string("## ")),
-					Parser.const(Three).skip(String.string("### ")),
-					Parser.const(Four).skip(String.string("#### ")),
-					Parser.const(Five).skip(String.string("##### ")),
-					Parser.const(Six).skip(String.string("###### ")),
-				],
-			),
+			Parser.one_of([
+				Parser.const(One).skip(String.string("# ")),
+				Parser.const(Two).skip(String.string("## ")),
+				Parser.const(Three).skip(String.string("### ")),
+				Parser.const(Four).skip(String.string("#### ")),
+				Parser.const(Five).skip(String.string("##### ")),
+				Parser.const(Six).skip(String.string("###### ")),
+			]),
 		)
 		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
 
@@ -1054,7 +1054,7 @@ parse_hash_heading_line = |content, refs| {
 
 			_ =>
 				Err(NotFound)
-		}
+			}
 	}
 }
 
@@ -1092,7 +1092,7 @@ underline_level = |line, min_indent| {
 
 			_ =>
 				Err(NotFound)
-		}
+			}
 	}
 }
 
@@ -1117,7 +1117,7 @@ parse_fence_start = |line, min_indent| {
 
 			_ =>
 				Err(NotFound)
-		}
+			}
 	}
 }
 
@@ -1159,7 +1159,7 @@ is_thematic_break_line = |line, min_indent| {
 
 			_ =>
 				Bool.False
-		}
+			}
 	}
 }
 
@@ -1177,7 +1177,7 @@ thematic_marker_count = |content, marker, count| {
 
 		_ =>
 			0
-	}
+		}
 }
 
 is_blockquote_line : Line, U64 -> Bool
@@ -1195,7 +1195,7 @@ strip_blockquote_marker = |line, min_indent| {
 
 		_ =>
 			content
-	}
+		}
 }
 
 parse_list_marker : Line, U64 -> Try(ListMarker, [NotFound])
@@ -1220,7 +1220,7 @@ parse_list_marker = |line, min_indent| {
 
 			_ =>
 				Err(NotFound)
-		}
+			}
 	}
 }
 
@@ -1238,7 +1238,7 @@ parse_ordered_marker = |content, digits| {
 
 		_ =>
 			Err(NotFound)
-	}
+		}
 }
 
 list_kind_matches : Markdown.ListKind, Markdown.ListKind -> Bool
@@ -1252,7 +1252,7 @@ list_kind_matches = |expected, actual| {
 
 		_ =>
 			Bool.False
-	}
+		}
 }
 
 parse_task_marker : String.Utf8 -> { task : Markdown.TaskState, content : String.Utf8 }
@@ -1269,7 +1269,7 @@ parse_task_marker = |content| {
 
 		_ =>
 			{ task: NoTask, content }
-	}
+		}
 }
 
 is_html_block_line : Line, U64 -> Bool
@@ -1285,7 +1285,7 @@ is_html_block_line = |line, min_indent| {
 
 			_ =>
 				Bool.False
-		}
+			}
 	}
 }
 
@@ -1324,7 +1324,7 @@ split_table_cells_help = |input, current, cells, in_code, escaped| {
 
 		[first, .. as rest] =>
 			split_table_cells_help(rest, current.append(first), cells, in_code, Bool.False)
-	}
+		}
 }
 
 strip_outer_table_pipes : String.Utf8 -> String.Utf8
@@ -1358,7 +1358,7 @@ drop_trailing_pipe_help = |bytes, out, pending_spaces| {
 
 		[first, .. as rest] =>
 			drop_trailing_pipe_help(rest, append_bytes(out, pending_spaces).append(first), [])
-	}
+		}
 }
 
 parse_table_delimiter : List(String.Utf8) -> Try(List(Markdown.Alignment), [ParsingFailure(Str)])
@@ -1403,7 +1403,7 @@ align_has_failure = |items| {
 
 		[Ok(_), .. as rest] =>
 			align_has_failure(rest)
-	}
+		}
 }
 
 unwrap_alignment : Try(Markdown.Alignment, [NotFound]) -> Markdown.Alignment
@@ -1431,7 +1431,7 @@ only_alignment_chars = |bytes| {
 
 		_ =>
 			Bool.False
-	}
+		}
 }
 
 contains_unescaped_pipe : String.Utf8 -> Bool
@@ -1459,7 +1459,7 @@ contains_unescaped_pipe_help = |bytes, in_code, escaped| {
 
 		[_, .. as rest] =>
 			contains_unescaped_pipe_help(rest, in_code, Bool.False)
-	}
+		}
 }
 
 parse_inlines_parser : Parser(String.Utf8, List(Markdown.Inline))
@@ -1509,7 +1509,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, input.drop_first(1), text.append('!'), nodes)
-			}
+				}
 		}
 
 		['[', ..] => {
@@ -1519,7 +1519,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, input.drop_first(1), text.append('['), nodes)
-			}
+				}
 		}
 
 		['<', ..] => {
@@ -1529,7 +1529,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, input.drop_first(1), text.append('<'), nodes)
-			}
+				}
 		}
 
 		['~', '~', .. as rest] => {
@@ -1541,7 +1541,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, rest, text.append('~').append('~'), nodes)
-			}
+				}
 		}
 
 		['*', '*', .. as rest] => {
@@ -1553,7 +1553,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, rest, text.append('*').append('*'), nodes)
-			}
+				}
 		}
 
 		['*', .. as rest] => {
@@ -1565,7 +1565,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, rest, text.append('*'), nodes)
-			}
+				}
 		}
 
 		['_', .. as rest] => {
@@ -1577,7 +1577,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, rest, text.append('_'), nodes)
-			}
+				}
 		}
 
 		['`', .. as rest] => {
@@ -1589,7 +1589,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 				Err(_) =>
 					parse_inlines_help(refs, rest, text.append('`'), nodes)
-			}
+				}
 		}
 
 		_ if starts_with_bytes(input, "https://".to_utf8()) or starts_with_bytes(input, "http://".to_utf8()) or starts_with_bytes(input, "www.".to_utf8()) => {
@@ -1602,7 +1602,7 @@ parse_inlines_help = |refs, input, text, nodes| {
 
 		[first, .. as rest] =>
 			parse_inlines_help(refs, rest, text.append(first), nodes)
-	}
+		}
 }
 
 parse_image_inline : String.Utf8, List(ReferenceDefinition) -> Try({ val : Markdown.Inline, input : String.Utf8 }, [NotFound])
@@ -1617,7 +1617,7 @@ parse_image_inline = |input, refs| {
 
 		_ =>
 			Err(NotFound)
-	}
+		}
 }
 
 parse_link_inline : String.Utf8, List(ReferenceDefinition) -> Try({ val : Markdown.Inline, input : String.Utf8 }, [NotFound])
@@ -1632,7 +1632,7 @@ parse_link_inline = |input, refs| {
 
 		_ =>
 			Err(NotFound)
-	}
+		}
 }
 
 parse_link_or_reference_target : String.Utf8, String.Utf8, List(ReferenceDefinition) -> Try({ target : Markdown.LinkTarget, input : String.Utf8 }, [NotFound])
@@ -1680,7 +1680,7 @@ parse_angle_inline = |input| {
 
 		_ =>
 			Err(NotFound)
-	}
+		}
 }
 
 parse_bare_url : String.Utf8 -> { url : String.Utf8, input : String.Utf8 }
@@ -1702,7 +1702,7 @@ parse_bare_url_help = |input, url| {
 
 		[first, .. as rest] =>
 			parse_bare_url_help(rest, url.append(first))
-	}
+		}
 }
 
 parse_link_target : String.Utf8 -> Markdown.LinkTarget
@@ -1731,7 +1731,7 @@ lookup_reference = |refs, label| {
 
 		[_, .. as rest] =>
 			lookup_reference(rest, label)
-	}
+		}
 }
 
 flush_text : String.Utf8, List(Markdown.Inline) -> List(Markdown.Inline)
@@ -1764,7 +1764,7 @@ find_sequence_help = |input, needle, acc| {
 
 			[first, .. as rest] =>
 				find_sequence_help(rest, needle, acc.append(first))
-		}
+			}
 	}
 }
 
@@ -1782,7 +1782,7 @@ find_unescaped_sequence_help = |input, needle, acc| {
 
 			[first, .. as rest] =>
 				find_unescaped_sequence_help(rest, needle, acc.append(first))
-		}
+			}
 	}
 }
 
@@ -1805,7 +1805,7 @@ split_lines_help = |input, current, lines| {
 
 		[first, .. as rest] =>
 			split_lines_help(rest, current.append(first), lines)
-	}
+		}
 }
 
 consume_blank_lines : List(Line), Bool -> { input : List(Line), saw_blank : Bool }
@@ -1816,7 +1816,7 @@ consume_blank_lines = |lines, saw_blank| {
 
 		_ =>
 			{ input: lines, saw_blank }
-	}
+		}
 }
 
 line_indent : Line -> U64
@@ -1848,7 +1848,7 @@ bytes_are_blank = |bytes| {
 
 		_ =>
 			Bool.False
-	}
+		}
 }
 
 starts_with_bytes : String.Utf8, String.Utf8 -> Bool
@@ -1870,7 +1870,7 @@ ends_with_byte_help = |bytes, expected, last| {
 
 		[first, .. as rest] =>
 			ends_with_byte_help(rest, expected, Ok(first))
-	}
+		}
 }
 
 is_exact_bytes : String.Utf8, String.Utf8 -> Bool
@@ -1886,7 +1886,7 @@ all_bytes_are = |bytes, expected| {
 
 		[first, .. as rest] =>
 			first == expected and all_bytes_are(rest, expected)
-	}
+		}
 }
 
 append_bytes : String.Utf8, String.Utf8 -> String.Utf8
@@ -1897,7 +1897,7 @@ append_bytes = |left, right| {
 
 		[first, .. as rest] =>
 			append_bytes(left.append(first), rest)
-	}
+		}
 }
 
 join_lines_with_newlines : List(String.Utf8) -> String.Utf8
@@ -1913,7 +1913,7 @@ join_lines_with_newlines_help = |lines, acc| {
 
 		[line, .. as rest] =>
 			join_lines_with_newlines_help(rest, append_bytes(acc, line).append('\n'))
-	}
+		}
 }
 
 join_inline_lines : List(String.Utf8) -> String.Utf8
@@ -1935,7 +1935,7 @@ join_inline_lines_help = |lines, acc| {
 
 		[line, .. as rest] =>
 			join_inline_lines_help(rest, append_bytes(acc.append(' '), line))
-	}
+		}
 }
 
 ends_with_hard_break_marker : String.Utf8 -> Bool
@@ -1959,7 +1959,7 @@ ends_with_two_spaces_help = |bytes, spaces| {
 
 		[_, .. as rest] =>
 			ends_with_two_spaces_help(rest, 0)
-	}
+		}
 }
 
 trim_spaces : String.Utf8 -> String.Utf8
@@ -1978,7 +1978,7 @@ trim_start_spaces = |bytes| {
 
 		_ =>
 			bytes
-	}
+		}
 }
 
 trim_end_spaces : String.Utf8 -> String.Utf8
@@ -2000,7 +2000,7 @@ trim_end_spaces_help = |bytes, out, pending_spaces| {
 
 		[first, .. as rest] =>
 			trim_end_spaces_help(rest, append_bytes(out, pending_spaces).append(first), [])
-	}
+		}
 }
 
 trim_closing_heading_marker : String.Utf8 -> String.Utf8
@@ -2022,7 +2022,7 @@ trim_closing_heading_marker_help = |bytes, out, pending_hashes| {
 
 		[first, .. as rest] =>
 			trim_closing_heading_marker_help(rest, append_bytes(out, pending_hashes).append(first), [])
-	}
+		}
 }
 
 split_first_space : String.Utf8 -> { first : String.Utf8, rest : String.Utf8 }
@@ -2044,7 +2044,7 @@ split_first_space_help = |bytes, first_part| {
 
 		[first, .. as rest] =>
 			split_first_space_help(rest, first_part.append(first))
-	}
+		}
 }
 
 strip_wrapping_quotes : String.Utf8 -> String.Utf8
@@ -2062,7 +2062,7 @@ strip_wrapping_quotes = |bytes| {
 
 		_ =>
 			bytes
-	}
+		}
 }
 
 normalize_reference_label : String.Utf8 -> Str
@@ -2098,7 +2098,7 @@ collapse_reference_whitespace = |bytes, out, pending_space| {
 
 		[first, .. as rest] =>
 			collapse_reference_whitespace(rest, out.append(first), Bool.False)
-	}
+		}
 }
 
 count_leading_byte : String.Utf8, U8, U64 -> U64
@@ -2109,7 +2109,7 @@ count_leading_byte = |bytes, expected, count| {
 
 		_ =>
 			count
-	}
+		}
 }
 
 count_byte : String.Utf8, U8 -> U64
@@ -2128,7 +2128,7 @@ count_byte_help = |bytes, expected, count| {
 
 		[_, .. as rest] =>
 			count_byte_help(rest, expected, count)
-	}
+		}
 }
 
 first_non_space : String.Utf8 -> Try(U8, [NotFound])
@@ -2142,7 +2142,7 @@ first_non_space = |bytes| {
 
 		[first, ..] =>
 			Ok(first)
-	}
+		}
 }
 
 digits_to_u64 : String.Utf8 -> U64
@@ -2181,22 +2181,22 @@ contains_byte = |bytes, expected| {
 
 		[_, .. as rest] =>
 			contains_byte(rest, expected)
-	}
+		}
 }
 
 is_escapable_inline_byte : U8 -> Bool
 is_escapable_inline_byte = |byte| {
 	byte == '\\'
 		or byte == '*'
-		or byte == '_'
-		or byte == '`'
-		or byte == '['
-		or byte == ']'
-		or byte == '('
-		or byte == ')'
-		or byte == '!'
-		or byte == '~'
-		or byte == '|'
+			or byte == '_'
+				or byte == '`'
+					or byte == '['
+						or byte == ']'
+							or byte == '('
+								or byte == ')'
+									or byte == '!'
+										or byte == '~'
+											or byte == '|'
 }
 
 end_of_line : Parser(String.Utf8, Str)
@@ -2409,13 +2409,11 @@ expect {
 
 	actual
 		== [
-			Paragraph(
-				[
-					Text("Read "),
-					Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Some("Roc") } }),
-					Text("."),
-				],
-			),
+			Paragraph([
+				Text("Read "),
+				Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Some("Roc") } }),
+				Text("."),
+			]),
 		]
 }
 
@@ -2456,16 +2454,14 @@ expect {
 
 	actual
 		== [
-			ListBlock(
-				{
-					kind: Ordered({ start: 3 }),
-					loose: Bool.False,
-					items: [
-						{ task: Checked, blocks: [Paragraph([Text("Done")])] },
-						{ task: Unchecked, blocks: [Paragraph([Text("Later")])] },
-					],
-				},
-			),
+			ListBlock({
+				kind: Ordered({ start: 3 }),
+				loose: Bool.False,
+				items: [
+					{ task: Checked, blocks: [Paragraph([Text("Done")])] },
+					{ task: Unchecked, blocks: [Paragraph([Text("Later")])] },
+				],
+			}),
 		]
 }
 
@@ -2479,16 +2475,14 @@ expect {
 
 	actual
 		== [
-			ListBlock(
-				{
-					kind: Unordered,
-					loose: Bool.False,
-					items: [
-						{ task: NoTask, blocks: [Paragraph([Text("One")])] },
-						{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
-					],
-				},
-			),
+			ListBlock({
+				kind: Unordered,
+				loose: Bool.False,
+				items: [
+					{ task: NoTask, blocks: [Paragraph([Text("One")])] },
+					{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
+				],
+			}),
 		]
 }
 
@@ -2503,16 +2497,14 @@ expect {
 
 	actual
 		== [
-			ListBlock(
-				{
-					kind: Unordered,
-					loose: Bool.True,
-					items: [
-						{ task: NoTask, blocks: [Paragraph([Text("One")])] },
-						{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
-					],
-				},
-			),
+			ListBlock({
+				kind: Unordered,
+				loose: Bool.True,
+				items: [
+					{ task: NoTask, blocks: [Paragraph([Text("One")])] },
+					{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
+				],
+			}),
 		]
 }
 
@@ -2526,29 +2518,25 @@ expect {
 
 	actual
 		== [
-			ListBlock(
-				{
-					kind: Unordered,
-					loose: Bool.False,
-					items: [
-						{
-							task: NoTask,
-							blocks: [
-								Paragraph([Text("One")]),
-								ListBlock(
-									{
-										kind: Unordered,
-										loose: Bool.False,
-										items: [
-											{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
-										],
-									},
-								),
-							],
-						},
-					],
-				},
-			),
+			ListBlock({
+				kind: Unordered,
+				loose: Bool.False,
+				items: [
+					{
+						task: NoTask,
+						blocks: [
+							Paragraph([Text("One")]),
+							ListBlock({
+								kind: Unordered,
+								loose: Bool.False,
+								items: [
+									{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
+								],
+							}),
+						],
+					},
+				],
+			}),
 		]
 }
 
@@ -2582,18 +2570,16 @@ expect {
 
 	actual
 		== [
-			Table(
-				{
-					header: [[Text("Name")], [Text("Count")]],
-					align: [Left, Right],
-					rows: [
-						[
-							[Strong([Text("Roc")])],
-							[InlineCode("1|2")],
-						],
+			Table({
+				header: [[Text("Name")], [Text("Count")]],
+				align: [Left, Right],
+				rows: [
+					[
+						[Strong([Text("Roc")])],
+						[InlineCode("1|2")],
 					],
-				},
-			),
+				],
+			}),
 		]
 }
 
@@ -2656,53 +2642,43 @@ expect {
 		== [
 			Frontmatter({ raw: "title: Article\n" }),
 			Heading({ level: One, content: [Text("Title with "), Strong([Text("style")])] }),
-			Paragraph(
-				[
-					Text("Intro with "),
-					Strong([Text("bold")]),
-					Text(", "),
-					InlineCode("code"),
-					Text(", and "),
-					Link({ label: [Text("a link")], target: { href: "https://example.com", title: None } }),
-					Text("."),
-				],
-			),
+			Paragraph([
+				Text("Intro with "),
+				Strong([Text("bold")]),
+				Text(", "),
+				InlineCode("code"),
+				Text(", and "),
+				Link({ label: [Text("a link")], target: { href: "https://example.com", title: None } }),
+				Text("."),
+			]),
 			Paragraph([Image({ alt: [Text("alt text")], target: { href: "/image.png", title: None } })]),
 			Code({ info: "roc", pre: "main = 1\n" }),
-			ListBlock(
-				{
-					kind: Unordered,
-					loose: Bool.False,
-					items: [
-						{
-							task: NoTask,
-							blocks: [
-								Paragraph([Text("One")]),
-								ListBlock(
-									{
-										kind: Unordered,
-										loose: Bool.False,
-										items: [
-											{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
-										],
-									},
-								),
-							],
-						},
-					],
-				},
-			),
-			Blockquote(
-				[
-					Paragraph(
-						[
-							Text("Quote with "),
-							Strong([Text("strong")]),
-							Text(" text"),
+			ListBlock({
+				kind: Unordered,
+				loose: Bool.False,
+				items: [
+					{
+						task: NoTask,
+						blocks: [
+							Paragraph([Text("One")]),
+							ListBlock({
+								kind: Unordered,
+								loose: Bool.False,
+								items: [
+									{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
+								],
+							}),
 						],
-					),
+					},
 				],
-			),
+			}),
+			Blockquote([
+				Paragraph([
+					Text("Quote with "),
+					Strong([Text("strong")]),
+					Text(" text"),
+				]),
+			]),
 		]
 }
 
