@@ -19,6 +19,7 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
     outputs:
       nightly-tag: ${{ steps.bump.outputs.nightly-tag }}
@@ -35,17 +36,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/update_roc_nightly.py --repository "$GITHUB_REPOSITORY" --branch "$BRANCH" --github-output "$GITHUB_OUTPUT"
 
-  test:
-    needs: bump
-    if: needs.bump.outputs.changed == 'true'
-    permissions:
-      contents: read
-    uses: ./.github/workflows/tests.yaml
-    with:
-      ref: ${{ needs.bump.outputs.branch }}
+      - name: Dispatch tests on update branch
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run tests.yaml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 
   pull-request:
-    needs: [bump, test]
+    needs: bump
     if: always() && needs.bump.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -60,6 +58,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NIGHTLY_TAG: ${{ needs.bump.outputs.nightly-tag }}
-          TEST_RESULT: ${{ needs.test.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$GITHUB_REF_NAME" --title "Update Roc nightly pin to $NIGHTLY_TAG" --body "Updates .roc-version to [$NIGHTLY_TAG](https://github.com/roc-lang/nightlies/releases/tag/$NIGHTLY_TAG). This PR and its signed commit were created automatically by the Update Roc nightly workflow." --test-result "$TEST_RESULT" --run-url "$RUN_URL"
+        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$GITHUB_REF_NAME" --title "Update Roc nightly pin to $NIGHTLY_TAG" --body "Updates .roc-version to [$NIGHTLY_TAG](https://github.com/roc-lang/nightlies/releases/tag/$NIGHTLY_TAG). The repository test workflow was dispatched on the update branch. See the [update workflow run]($RUN_URL) for details. This PR and its signed commit were created automatically."
