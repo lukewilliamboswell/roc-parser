@@ -1,0 +1,10 @@
+[
+  "",
+  "<element/>",
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><child key=\"value\">text</child></root>",
+  "<root><![CDATA[<not-an-element>]]></root>",
+  "<root>text &amp; more</root>",
+  "<root><nested><leaf /></nested></root>",
+  "<root><mismatch></root>",
+  "<root attribute=\"unterminated></root>"
+]

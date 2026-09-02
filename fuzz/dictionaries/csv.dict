@@ -1,0 +1,6 @@
+comma=","
+quote="\""
+escaped_quote="\"\""
+crlf="\x0D\x0A"
+lf="\x0A"
+empty_field=",,"

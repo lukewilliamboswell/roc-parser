@@ -7,3 +7,5 @@ examples/xml-svg
 generated-docs/
 dist/
 .roc-parser-tmp/
+__pycache__/
+*.py[cod]

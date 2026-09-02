@@ -1,0 +1,9 @@
+[
+  "",
+  "GET / HTTP/1.1\r\n\r\n",
+  "POST /submit?x=1 HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\nbody",
+  "OPTIONS * HTTP/1.0\r\nAccept: */*\r\n\r\n",
+  "PATCH /resource HTTP/1.1\r\nX-Test: one:two\r\n\r\n{}",
+  "UNKNOWN / HTTP/1.1\r\n\r\n",
+  "GET / missing-version\n\n"
+]

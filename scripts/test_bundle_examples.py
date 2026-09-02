@@ -7,39 +7,35 @@ import http.server
 import os
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
 import threading
 from pathlib import Path
+from typing import Sequence
+
+try:
+    from ._common import ROOT, display_command, roc_command
+except ImportError:
+    from _common import ROOT, display_command, roc_command
 
 
-ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DEPENDENCY_RE = re.compile(r'(?m)^(\s*parser:\s*)"[^"]+"')
 SKIPPED_EXAMPLES = {
     "xml-svg.roc": "missing migrated roc-html dependency",
 }
 
 
-def roc_command() -> str:
-    roc = os.environ.get("ROC", "roc")
-    if "/" in roc or "\\" in roc:
-        return str(Path(roc).resolve())
-    return roc
-
-
-ROC = roc_command()
-
-
-def run(cmd: list[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
-    print("+", " ".join(cmd))
+def run(command: Sequence[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
+    normalized = list(command)
+    print("+", display_command(normalized), flush=True)
     completed = subprocess.run(
-        cmd,
+        normalized,
         cwd=cwd,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        check=False,
     )
 
     if completed.returncode != 0:
@@ -47,45 +43,46 @@ def run(cmd: list[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]
             print(completed.stdout)
         if completed.stderr:
             print(completed.stderr, file=sys.stderr)
-        raise SystemExit(f"command failed with exit code {completed.returncode}: {' '.join(cmd)}")
+        raise SystemExit(
+            f"command failed with exit code {completed.returncode}: {display_command(normalized)}"
+        )
 
     return completed
 
 
-def find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
-
-
 def bundle_package(bundle_dir: Path) -> Path:
-    completed = run(["scripts/bundle.sh", "--output-dir", str(bundle_dir)])
+    completed = run([sys.executable, "scripts/bundle.py", "--output-dir", str(bundle_dir)])
     match = re.search(r"^Created:\s+(.+\.tar\.zst)\s*$", completed.stdout, re.MULTILINE)
 
     if match is None:
         raise SystemExit("Could not find bundle path in roc bundle output")
 
     bundle_path = Path(match.group(1))
-    if not bundle_path.exists():
+    if not bundle_path.is_file():
         raise SystemExit(f"Bundle was not created: {bundle_path}")
 
     return bundle_path
 
 
 def start_server(directory: Path) -> tuple[http.server.ThreadingHTTPServer, str]:
-    port = find_free_port()
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(directory))
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = int(server.server_address[1])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, f"http://127.0.0.1:{port}"
 
 
-def copy_examples_with_bundle_url(examples_dir: Path, bundle_url: str) -> list[Path]:
+def copy_examples_with_bundle_url(
+    examples_dir: Path,
+    bundle_url: str,
+    *,
+    source_dir: Path = ROOT / "examples",
+) -> list[Path]:
     target_dir = examples_dir / "examples"
-    shutil.copytree(ROOT / "examples", target_dir)
+    shutil.copytree(source_dir, target_dir)
 
-    examples = []
+    examples: list[Path] = []
     for example in sorted(target_dir.glob("*.roc")):
         if example.name in SKIPPED_EXAMPLES:
             print(f"Skipping {example.name}: {SKIPPED_EXAMPLES[example.name]}.")
@@ -98,7 +95,9 @@ def copy_examples_with_bundle_url(examples_dir: Path, bundle_url: str) -> list[P
             count=1,
         )
         if count != 1:
-            raise SystemExit(f"{example.name} does not declare the expected parser package dependency")
+            raise SystemExit(
+                f"{example.name} does not declare the expected parser package dependency"
+            )
 
         example.write_text(rewritten, encoding="utf-8")
         examples.append(example)
@@ -106,35 +105,44 @@ def copy_examples_with_bundle_url(examples_dir: Path, bundle_url: str) -> list[P
     return examples
 
 
-def run_example_checks(examples: list[Path]) -> None:
+def run_example_checks(examples: Sequence[Path], roc: str) -> None:
     for example in examples:
-        run([ROC, "check", example.name, "--no-cache"], cwd=example.parent)
+        run([roc, "check", example.name, "--no-cache"], cwd=example.parent)
 
 
-def run_example_apps(examples: list[Path]) -> None:
+def run_example_apps(examples: Sequence[Path], roc: str) -> None:
     for example in examples:
-        run([ROC, example.name, "--no-cache"], cwd=example.parent)
+        run([roc, example.name, "--no-cache"], cwd=example.parent)
 
 
-def build_and_run_examples(examples: list[Path], build_dir: Path) -> None:
+def build_and_run_examples(examples: Sequence[Path], build_dir: Path, roc: str) -> None:
     build_dir.mkdir(parents=True, exist_ok=True)
     exe_suffix = ".exe" if os.name == "nt" else ""
 
     for example in examples:
         output = build_dir / f"{example.stem}{exe_suffix}"
-        run([ROC, "build", example.name, f"--output={output}", "--no-cache"], cwd=example.parent)
+        run([roc, "build", example.name, f"--output={output}", "--no-cache"], cwd=example.parent)
         run([str(output)])
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bundle-path", type=Path, help="Use an existing bundle instead of creating one")
-    parser.add_argument("--skip-build-run", action="store_true", help="Skip compiled example execution")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--bundle-path",
+        type=Path,
+        help="Use an existing bundle instead of creating one",
+    )
+    parser.add_argument(
+        "--skip-build-run",
+        action="store_true",
+        help="Skip compiled example execution",
+    )
+    args = parser.parse_args(argv)
 
     default_tmp = ROOT / ".roc-parser-tmp"
-    tmp_parent = Path(os.environ.get("ROC_PARSER_TMPDIR", default_tmp))
+    tmp_parent = Path(os.environ.get("ROC_PARSER_TMPDIR", default_tmp)).resolve()
     tmp_parent.mkdir(parents=True, exist_ok=True)
+    roc = roc_command()
 
     with tempfile.TemporaryDirectory(prefix="roc-parser-bundle-", dir=tmp_parent) as tmp:
         tmp_dir = Path(tmp)
@@ -149,7 +157,7 @@ def main() -> None:
             bundle_path = bundle_package(bundle_dir)
         else:
             source_bundle = args.bundle_path.resolve()
-            if not source_bundle.exists():
+            if not source_bundle.is_file():
                 raise SystemExit(f"Bundle does not exist: {source_bundle}")
 
             bundle_path = bundle_dir / source_bundle.name
@@ -161,15 +169,17 @@ def main() -> None:
             examples = copy_examples_with_bundle_url(examples_dir, bundle_url)
 
             print(f"Testing examples with bundled package: {bundle_url}")
-            run_example_checks(examples)
-            run_example_apps(examples)
+            run_example_checks(examples, roc)
+            run_example_apps(examples, roc)
 
             if not args.skip_build_run:
-                build_and_run_examples(examples, build_dir)
+                build_and_run_examples(examples, build_dir, roc)
         finally:
             server.shutdown()
             server.server_close()
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

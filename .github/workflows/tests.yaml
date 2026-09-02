@@ -4,6 +4,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # this cancels workflows currently in progress if you start a new one
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,11 +16,13 @@ jobs:
   test-examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Read Roc version
         id: roc-version
-        run: echo "nightly-tag=$(< .roc-version)" >> "$GITHUB_OUTPUT"
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
@@ -27,4 +32,8 @@ jobs:
 
       - run: roc version
 
-      - run: ./ci/all_tests.sh
+      - name: Test Python automation
+        run: python3 -m unittest discover -s scripts/tests -p "test_*.py"
+
+      - name: Run repository tests
+        run: python3 scripts/all_tests.py

@@ -717,3 +717,7 @@ expect {
 
 	result == expected
 }
+
+## Malformed input ending in a multibyte scalar returns an error instead of crashing
+## while rendering a parser failure from a mid-scalar byte position.
+expect String.parse_str(Xml.xml_parser, "<ӿ").is_err()
