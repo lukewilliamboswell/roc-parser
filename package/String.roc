@@ -275,13 +275,22 @@ String :: {}.{
 			.map(
 				|ds| {
 					ds.fold(
-						0,
-						|sum, d| {
-							sum * 10 + d
+						Ok(0),
+						|result, d| {
+							match result {
+								Err(problem) => Err(problem)
+								Ok(sum) =>
+									if sum > (18446744073709551615 - d) / 10 {
+										Err("Integer is too large for U64")
+									} else {
+										Ok(sum * 10 + d)
+									}
+							}
 						},
 					)
 				},
 			)
+			.flatten()
 
 	## Try a bunch of different parsers.
 	##
@@ -579,6 +588,15 @@ expect {
 	actual = String.parse_str(String.digits, "0123")?
 	actual == 123
 }
+
+## Multiple digit parsing accepts the largest U64.
+expect {
+	actual = String.parse_str(String.digits, "18446744073709551615")?
+	actual == 18446744073709551615
+}
+
+## Multiple digit parsing rejects values larger than U64 without crashing.
+expect String.parse_str(String.digits, "18446744073709551616").is_err()
 
 ## Multiple digit parsing rejects text without a leading digit.
 expect String.parse_str(String.digits, "not a digit").is_err()
