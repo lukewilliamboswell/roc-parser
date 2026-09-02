@@ -1,0 +1,10 @@
+[
+  "",
+  "a,b,c",
+  "one,two,three\nfour,five,six",
+  "name,year,actors\r\nAirplane!,1980,\"Robert Hays,Julie Hagerty\"",
+  "\"escaped \"\"quote\"\"\",plain,\"comma,inside\"",
+  "first,,third",
+  "\"multiline\nfield\",value",
+  "\"unterminated,field"
+]

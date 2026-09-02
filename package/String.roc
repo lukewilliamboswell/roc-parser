@@ -30,7 +30,7 @@ String :: {}.{
 				|problem| {
 					match problem {
 						ParsingFailure(msg) => ParsingFailure(msg)
-						ParsingIncomplete(leftover_raw) => ParsingIncomplete(str_from_utf8(leftover_raw))
+						ParsingIncomplete(leftover_raw) => ParsingIncomplete(str_from_utf8_lossy(leftover_raw))
 					}
 				},
 			)
@@ -55,7 +55,7 @@ String :: {}.{
 			|> parse_utf8_partial(str_to_raw(input))
 			.map_ok(
 				|{ val: val, input: rest_raw }| {
-					{ val: val, input: str_from_utf8(rest_raw) }
+					{ val: val, input: str_from_utf8_lossy(rest_raw) }
 				},
 			)
 	}
@@ -106,7 +106,7 @@ String :: {}.{
 							Ok({ val: start_codeunit, input: input_rest })
 						} else {
 							other_char = str_from_codeunit(start_codeunit)
-							input_str = str_from_utf8(input)
+							input_str = str_from_utf8_lossy(input)
 
 							Err(ParsingFailure("expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`"))
 						}
@@ -137,7 +137,7 @@ String :: {}.{
 						Ok({ val: expected_code_unit, input: rest })
 
 					[first, ..] =>
-						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${str_from_utf8(input)}`"))
+						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${str_from_utf8_lossy(input)}`"))
 					}
 			},
 		)
@@ -155,9 +155,9 @@ String :: {}.{
 				if start == expected_string {
 					Ok({ val: expected_string, input: input_rest })
 				} else {
-					error_string = str_from_utf8(expected_string)
-					other_string = str_from_utf8(start)
-					input_string = str_from_utf8(input)
+					error_string = str_from_utf8_lossy(expected_string)
+					other_string = str_from_utf8_lossy(start)
+					input_string = str_from_utf8_lossy(input)
 
 					Err(ParsingFailure("expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}"))
 				}
@@ -349,7 +349,14 @@ str_to_raw = |str| {
 
 str_from_codeunit : U8 -> Str
 str_from_codeunit = |cu| {
-	String.str_from_utf8([cu])
+	str_from_utf8_lossy([cu])
+}
+
+str_from_utf8_lossy : String.Utf8 -> Str
+str_from_utf8_lossy = |bytes| {
+	# Byte-oriented parsers can stop within a multibyte scalar. Diagnostics and
+	# Str leftovers must render that state without calling the strict converter.
+	Str.from_utf8_lossy(bytes)
 }
 
 ## Any codeunit parser accepts a lowercase ASCII byte.
@@ -491,6 +498,20 @@ expect {
 
 ## The at-sign parser rejects other bytes.
 expect String.parse_str_partial(at_sign, "\$").is_err()
+
+## Partial string parsing renders a leftover that begins within a UTF-8 scalar.
+expect {
+	actual = String.parse_str_partial(String.any_codeunit, "ӿ")?
+	actual.input == "�"
+}
+
+## Complete string parsing reports, rather than crashes on, a mid-scalar leftover.
+expect {
+	match String.parse_str(String.any_codeunit, "ӿ") {
+		Err(ParsingIncomplete(leftover)) => leftover == "�"
+		_ => Bool.False
+	}
+}
 
 Requirement : [Green(U64), Red(U64), Blue(U64)]
 

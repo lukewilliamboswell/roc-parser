@@ -1,0 +1,87 @@
+name: Property quality tests
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fuzz:
+    name: Quality ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - markdown-document
+          - markdown-inline
+          - yaml
+          - xml
+          - csv
+          - http-request
+          - http-response
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+
+      - name: Restore scheduled corpus
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}
+          key: fuzz-${{ runner.os }}-${{ matrix.target }}-${{ steps.roc-version.outputs.nightly-tag }}-${{ hashFiles('fuzz/**') }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ runner.os }}-${{ matrix.target }}-${{ steps.roc-version.outputs.nightly-tag }}-
+
+      - name: Run pull-request smoke campaign
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/run_fuzz.py smoke "${{ matrix.target }}"
+
+      - name: Run scheduled campaign
+        if: github.event_name != 'pull_request'
+        run: python3 scripts/run_fuzz.py campaign "${{ matrix.target }}" --seconds 600
+
+      - name: Upload failure reproducer
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-failure-${{ matrix.target }}
+          path: |
+            .roc-parser-tmp/fuzz/bin/${{ matrix.target }}
+            .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}/
+            .roc-parser-tmp/fuzz/runs/${{ matrix.target }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+  property-quality:
+    name: property-quality
+    if: always()
+    needs: fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require successful fuzzing
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.fuzz.result }}"

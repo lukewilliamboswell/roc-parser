@@ -1,0 +1,10 @@
+[
+  "",
+  "null",
+  "name: roc-parser\nenabled: true\ncount: 42\n",
+  "root:\n  child: value\n  values:\n    - 1\n    - 2\n",
+  "ports: [80, 443]\nlabels: { tier: web, public: true }\n",
+  "message: \"first\\nsecond\"\nowner: 'it''s me'\n",
+  "description: |\n  unsupported block scalar\n",
+  "name: first\nname: duplicate\n"
+]

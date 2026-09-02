@@ -1,0 +1,9 @@
+[
+  "",
+  "HTTP/1.1 200 OK\r\n\r\n",
+  "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nnot found",
+  "HTTP/1.0 204 No Content\r\nServer: roc\r\n\r\n",
+  "HTTP/1.1 500 Internal Server Error\r\nX-Test: one:two\r\n\r\nbody",
+  "HTTP/1.1 not-a-code Broken\r\n\r\n",
+  "HTTP/1.1 200 missing-crlf\n\n"
+]
