@@ -262,18 +262,18 @@ jobs:
         with:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
-      - name: Open release follow-up PR
-        uses: roc-lang/release-package/actions/create-followup-pr@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          release_version: ${{ needs.build.outputs.release_version }}
-          paths: |
-            examples
-            www
-          branch_prefix: release-followup
-          base_branch: ${{ github.ref_name }}
-          commit_message: Update docs and examples for ${{ needs.build.outputs.release_version }}
-          pr_title: Update docs and examples for ${{ needs.build.outputs.release_version }}
-          github_token: ${{ github.token }}
+      - name: Create signed release follow-up commit
+        id: follow-up
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: python3 scripts/github_signed_commit.py --repository "$GITHUB_REPOSITORY" --branch "release-followup/$RELEASE_VERSION" --message "Update docs and examples for $RELEASE_VERSION" --path examples --path www --github-output "$GITHUB_OUTPUT"
+      - name: Open or update release follow-up PR
+        if: steps.follow-up.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "release-followup/$RELEASE_VERSION" --base "$GITHUB_REF_NAME" --title "Update docs and examples for $RELEASE_VERSION" --body "Updates versioned documentation and example package URLs for release $RELEASE_VERSION. The commit was automatically signed by GitHub."
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Upload Pages artifact

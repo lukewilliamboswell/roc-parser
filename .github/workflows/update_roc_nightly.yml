@@ -1,0 +1,65 @@
+name: Update Roc nightly
+
+on:
+  schedule:
+    # New compiler nightlies are normally available by 10:30 UTC.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  BRANCH: update-roc-nightly
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      nightly-tag: ${{ steps.bump.outputs.nightly-tag }}
+      changed: ${{ steps.bump.outputs.changed }}
+      branch: ${{ steps.bump.outputs.branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Update pin with a signed commit
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/update_roc_nightly.py --repository "$GITHUB_REPOSITORY" --branch "$BRANCH" --github-output "$GITHUB_OUTPUT"
+
+  test:
+    needs: bump
+    if: needs.bump.outputs.changed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests.yaml
+    with:
+      ref: ${{ needs.bump.outputs.branch }}
+
+  pull-request:
+    needs: [bump, test]
+    if: always() && needs.bump.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Open or update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NIGHTLY_TAG: ${{ needs.bump.outputs.nightly-tag }}
+          TEST_RESULT: ${{ needs.test.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$GITHUB_REF_NAME" --title "Update Roc nightly pin to $NIGHTLY_TAG" --body "Updates .roc-version to [$NIGHTLY_TAG](https://github.com/roc-lang/nightlies/releases/tag/$NIGHTLY_TAG). This PR and its signed commit were created automatically by the Update Roc nightly workflow." --test-result "$TEST_RESULT" --run-url "$RUN_URL"
