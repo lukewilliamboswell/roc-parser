@@ -1,5 +1,8 @@
 # A Parser for Roc
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14421/badge)](https://www.bestpractices.dev/projects/14421)
+[![Roc-Lang][roc_badge]][roc_link]
+
 A simple [Parser Combinator](https://en.wikipedia.org/wiki/Parser_combinator) package for Roc.
 
 ```roc
@@ -118,3 +121,6 @@ Run the release workflow from GitHub Actions with a release version such as `0.1
 Each new release also publishes an SPDX SBOM and signed provenance. Verify a
 downloaded bundle with `gh release verify-asset VERSION PATH` and
 `gh attestation verify PATH --repo lukewilliamboswell/roc-parser`.
+
+[roc_badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Fpastebin.com%2Fraw%2FcFzuCCd7
+[roc_link]: https://github.com/roc-lang/roc
