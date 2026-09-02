@@ -21,10 +21,14 @@ python3 -m unittest discover -s scripts/tests -p "test_*.py"
 
 Before opening a pull request:
 
+- format changed Roc files with `roc fmt path/to/file.roc` using the compiler
+  pinned in `.roc-version`;
 - make sure the full test suite passes;
 - add or update tests for success cases, invalid input, and relevant boundary
   cases;
 - update documentation when a public parser API or supported syntax changes;
+- follow the existing module and public API naming patterns;
+- avoid unrelated formatting or refactoring changes;
 - keep generated artifacts and local build output out of the commit; and
 - sign commits so they satisfy the protected-branch policy.
 
