@@ -30,9 +30,54 @@ mappings and sequences, flow collections, comments, quoted strings, and common
 scalar values. It deliberately rejects advanced features such as anchors,
 aliases, tags, directives, block scalars, complex keys, and document streams.
 
+## Installation
+
+Roc packages are obtained directly from a bundle URL. Add the latest released
+`roc-parser` bundle to the package section of your application's header:
+
+```roc
+app [main!] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+    parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.1.0/AcowGJvjA8U2gCEf7E8QYNUePBdw7dzdRqSvERKaJZ53.tar.zst",
+}
+
+import parser.Parser
+import parser.String
+```
+
+You can then use the imported modules to define a parser:
+
+```roc
+color : Parser(String.Utf8, [Red, Green, Blue])
+color =
+    String.one_of([
+        Parser.const(Red).skip(String.string("red")),
+        Parser.const(Green).skip(String.string("green")),
+        Parser.const(Blue).skip(String.string("blue")),
+    ])
+
+expect String.parse_str(color, "green") == Ok(Green)
+```
+
+The [GitHub releases page](https://github.com/lukewilliamboswell/roc-parser/releases/latest)
+is the source of truth for the latest version and bundle URL. Existing complete
+programs are available in [`examples/`](examples/).
+
 ## Documentation
 
 See [lukewilliamboswell.github.io/roc-parser/](https://lukewilliamboswell.github.io/roc-parser/)
+
+## Compatibility and maturity
+
+The project uses semantic versioning for `roc-parser` releases. Parser modules
+have different levels of maturity, and their supported syntax is described in
+the module documentation and release notes. In particular, YAML intentionally
+implements the subset described above.
+
+Roc is still evolving and this package currently pins a nightly compiler in
+`.roc-version`. Compiler migrations can therefore require package API changes;
+check the release notes before upgrading. The `main` branch and latest release
+are supported, as described in [SECURITY.md](SECURITY.md).
 
 Locally generate versioned docs using:
 
