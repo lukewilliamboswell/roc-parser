@@ -191,6 +191,9 @@ expect {
 	actual == expected
 }
 
+## Oversized HTTP version numbers return a parse error instead of crashing.
+expect String.parse_str(http_version, "HTTP/1.044444444444444444444").is_err()
+
 string_without_colon : Parser(String.Utf8, Str)
 string_without_colon =
 	String.codeunit_satisfies(
