@@ -5,13 +5,19 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      nightly_validation:
+        description: "Validate a nightly candidate without publishing or deploying"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request' || inputs.nightly_validation) }}
 
 jobs:
   fuzz:
@@ -46,7 +52,7 @@ jobs:
           nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
 
       - name: Restore scheduled corpus
-        if: github.event_name != 'pull_request'
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}
@@ -54,11 +60,11 @@ jobs:
           restore-keys: fuzz-${{ runner.os }}-${{ matrix.target }}-${{ steps.roc-version.outputs.nightly-tag }}-
 
       - name: Run pull-request smoke campaign
-        if: github.event_name == 'pull_request'
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
         run: python3 scripts/run_fuzz.py smoke "${{ matrix.target }}"
 
       - name: Run scheduled campaign
-        if: github.event_name != 'pull_request'
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
         run: python3 scripts/run_fuzz.py campaign "${{ matrix.target }}" --seconds 600
 
       - name: Upload failure reproducer

@@ -1,0 +1,8 @@
+{
+  "workflows": [
+    "tests.yaml",
+    "release.yml",
+    "fuzz.yml",
+    "codeql.yml"
+  ]
+}

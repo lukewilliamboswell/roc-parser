@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: "29 2 * * 1"
   workflow_dispatch:
+    inputs:
+      nightly_validation:
+        description: "Validate a nightly candidate without publishing or deploying"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
