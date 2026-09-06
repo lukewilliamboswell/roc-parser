@@ -3,9 +3,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      nightly_validation:
+        description: "Validate a nightly candidate without publishing or deploying"
+        type: boolean
+        required: false
+        default: false
       release_version:
         description: "Release version, e.g. 1.0.1"
-        required: true
+        required: false
         type: string
   pull_request:
 
@@ -13,8 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', github.repository) || format('release-validate-{0}-{1}', github.repository, github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: ${{ (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation) && format('release-{0}', github.repository) || format('release-validate-{0}-{1}', github.repository, github.ref) }}
+  cancel-in-progress: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
 
 jobs:
   build:
@@ -25,6 +30,13 @@ jobs:
       docs_version: ${{ steps.validate.outputs.docs_version }}
       test_matrix: ${{ steps.bundles.outputs.test_matrix }}
     steps:
+      - name: Require a version for publication
+        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: test -n "$RELEASE_VERSION" || { echo "A release version is required for publication" >&2; exit 1; }
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,11 +54,11 @@ jobs:
         id: validate
         uses: roc-lang/release-package/actions/validate-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
-          release_version: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
-          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          release_version: ${{ (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation) && inputs.release_version || '' }}
+          dry_run: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
           github_token: ${{ github.token }}
       - name: Validate release branch
-        if: github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         env:
           RELEASE_REF_TYPE: ${{ github.ref_type }}
           RELEASE_REF_NAME: ${{ github.ref_name }}
@@ -57,7 +69,7 @@ jobs:
       - name: Validate package
         run: python3 scripts/all_tests.py
       - name: Resolve previous release
-        if: github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         id: previous
         uses: roc-lang/release-package/actions/resolve-previous-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
@@ -66,7 +78,7 @@ jobs:
         uses: roc-lang/release-package/actions/run-bump-check@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
-          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          dry_run: ${{ (github.event_name != 'workflow_dispatch' || inputs.nightly_validation) }}
           # Older bundles may not compile with the currently pinned Roc nightly.
           bump_check: warn
           bump_entrypoint: package/main.roc
@@ -148,7 +160,7 @@ jobs:
   publish-release:
     name: Publish GitHub release
     needs: [build, test-bundles, release-validation]
-    if: github.event_name == 'workflow_dispatch' && needs.release-validation.result == 'success'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation) && needs.release-validation.result == 'success'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -211,7 +223,7 @@ jobs:
   prepare-docs:
     name: Prepare versioned docs
     needs: [build, publish-release]
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -284,7 +296,7 @@ jobs:
   deploy-pages:
     name: Deploy versioned docs
     needs: prepare-docs
-    if: github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     runs-on: ubuntu-latest
     permissions:
       pages: write
