@@ -1,4 +1,5 @@
 {
+  "auto_merge": true,
   "workflows": [
     "tests.yaml",
     "release.yml",
