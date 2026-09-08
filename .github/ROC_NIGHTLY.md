@@ -12,10 +12,10 @@ package changes, while the published result is additionally authoritative for
 compiler-pin or committed-example changes.
 The controller, its tests, and job permissions are maintained in
 [roc-automation](https://github.com/lukewilliamboswell/roc-automation).
-The caller workflows pin shared code to `e1c09717083a1f8c0e380f9bc33ef1e9c46a78c4`.
+The caller workflows pin shared code to `e1c09714c4d9e93fc03d2d1e4186ca543bc60d50`.
 Dependabot proposes reviewed updates to Actions/workflow references.
 
-Follow the shared [integration and permissions guide](https://github.com/lukewilliamboswell/roc-automation/blob/e1c09717083a1f8c0e380f9bc33ef1e9c46a78c4/docs/integration.md)
+Follow the shared [integration and permissions guide](https://github.com/lukewilliamboswell/roc-automation/blob/e1c09714c4d9e93fc03d2d1e4186ca543bc60d50/docs/integration.md)
 for the PR-creation setting, action allowlists, required checks, and first live
 GITHUB_TOKEN run. Keep default token permissions read-only. Successful candidates
 are merged automatically after the controller independently rechecks their signed
@@ -32,6 +32,6 @@ The shared repository owns the controller regression suite. Project tests remain
 in this repository and run on the exact candidate commit. Scheduled bot-token
 acceptance must be verified after merge; file changes alone cannot prove it.
 
-Use the shared [OpenSSF rollout checklist](https://github.com/lukewilliamboswell/roc-automation/blob/e1c09717083a1f8c0e380f9bc33ef1e9c46a78c4/docs/openssf.md)
+Use the shared [OpenSSF rollout checklist](https://github.com/lukewilliamboswell/roc-automation/blob/e1c09714c4d9e93fc03d2d1e4186ca543bc60d50/docs/openssf.md)
 to record project-specific evidence. This integration does not establish badge
 compliance or change repository settings.
