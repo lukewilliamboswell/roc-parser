@@ -8,6 +8,18 @@ from scripts import test_bundle_examples
 
 
 class TestBundleExamplesScriptTests(unittest.TestCase):
+    def test_committed_examples_keep_published_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)
+            example = source / "example.roc"
+            published = "https://example.test/releases/1.2.3/package.tar.zst"
+            example.write_text(f'app [main] {{ parser: "{published}" }}\n', encoding="utf-8")
+
+            examples = test_bundle_examples.committed_examples(source)
+
+            self.assertEqual(examples, [example])
+            self.assertIn(published, example.read_text(encoding="utf-8"))
+
     def test_copy_examples_rewrites_url_and_skips_known_example(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
