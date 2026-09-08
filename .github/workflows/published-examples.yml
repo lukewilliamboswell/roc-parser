@@ -2,11 +2,6 @@ name: Published example compatibility
 
 on:
   pull_request:
-    paths:
-      - ".roc-version"
-      - "examples/**"
-      - "scripts/test_bundle_examples.py"
-      - ".github/workflows/published-examples.yml"
   workflow_dispatch:
     inputs:
       nightly_validation:

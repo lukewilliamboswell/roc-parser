@@ -6,9 +6,10 @@ after the upstream 09:00 UTC build. Late publication can wait until the next day
 `.roc-version` is the compiler pin. `.github/roc-nightly.json` selects this
 repository's validation workflows, including their validation-only release paths.
 Nightly candidates must pass both current-source bundle tests and committed example
-tests against unchanged released dependency URLs. Package-only pull requests use
-the current-source lane; compiler-pin or example changes additionally exercise the
-published-compatibility lane.
+tests against unchanged released dependency URLs. Both lanes run on pull requests
+to provide stable required checks; the current-source result is authoritative for
+package changes, while the published result is additionally authoritative for
+compiler-pin or committed-example changes.
 The controller, its tests, and job permissions are maintained in
 [roc-automation](https://github.com/lukewilliamboswell/roc-automation).
 The caller workflows pin shared code to `e1c09717083a1f8c0e380f9bc33ef1e9c46a78c4`.
