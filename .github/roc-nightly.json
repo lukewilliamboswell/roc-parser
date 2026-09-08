@@ -2,6 +2,7 @@
   "auto_merge": true,
   "workflows": [
     "tests.yaml",
+    "published-examples.yml",
     "release.yml",
     "fuzz.yml",
     "codeql.yml"

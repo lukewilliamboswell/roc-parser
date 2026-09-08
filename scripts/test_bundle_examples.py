@@ -125,6 +125,18 @@ def build_and_run_examples(examples: Sequence[Path], build_dir: Path, roc: str) 
         run([str(output)])
 
 
+def committed_examples(source_dir: Path = ROOT / "examples") -> list[Path]:
+    examples = []
+    for example in sorted(source_dir.glob("*.roc")):
+        if example.name in SKIPPED_EXAMPLES:
+            print(f"Skipping {example.name}: {SKIPPED_EXAMPLES[example.name]}.")
+            continue
+        examples.append(example)
+    if not examples:
+        raise SystemExit("No published examples found")
+    return examples
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -137,7 +149,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Skip compiled example execution",
     )
+    parser.add_argument(
+        "--published",
+        action="store_true",
+        help="Test committed examples against their unchanged released dependency URLs",
+    )
     args = parser.parse_args(argv)
+
+    if args.published and args.bundle_path is not None:
+        parser.error("--published cannot be combined with --bundle-path")
 
     default_tmp = ROOT / ".roc-parser-tmp"
     tmp_parent = Path(os.environ.get("ROC_PARSER_TMPDIR", default_tmp)).resolve()
@@ -146,9 +166,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with tempfile.TemporaryDirectory(prefix="roc-parser-bundle-", dir=tmp_parent) as tmp:
         tmp_dir = Path(tmp)
+        build_dir = tmp_dir / "build"
+
+        if args.published:
+            examples = committed_examples()
+            print("Testing committed examples with released dependencies")
+            run_example_checks(examples, roc)
+            run_example_apps(examples, roc)
+            if not args.skip_build_run:
+                build_and_run_examples(examples, build_dir, roc)
+            return 0
+
         bundle_dir = tmp_dir / "bundle"
         examples_dir = tmp_dir / "rewritten"
-        build_dir = tmp_dir / "build"
 
         bundle_dir.mkdir()
         examples_dir.mkdir()
