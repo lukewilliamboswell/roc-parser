@@ -4,11 +4,12 @@ import String
 ##
 ## This module implements a deliberately small YAML 1.2-style subset aimed at
 ## configuration files and Markdown frontmatter. It supports a single block
-## document, nested mappings and sequences, flow collections, comments, quoted
-## strings, and common null, boolean, integer, and floating-point scalars.
+## document, nested mappings and sequences, flow collections, comments, block
+## scalars, quoted strings, and common null, boolean, integer, and floating-point
+## scalars.
 ##
-## Anchors, aliases, tags, directives, block scalars, complex keys, and
-## multi-document streams are rejected with a parse error.
+## Anchors, aliases, tags, directives, complex keys, and multi-document
+## streams are rejected with a parse error.
 Yaml := [
 	Null,
 	Bool(Bool),
@@ -35,7 +36,8 @@ Yaml := [
 	## ```
 	parse_str : Str -> Try(Yaml, [YamlError(Error)])
 	parse_str = |input| {
-		lines = prepare_lines(split_lines(input.to_utf8(), 1, [], []))?
+		raw_lines = split_lines(input.to_utf8(), 1, [], [])
+		lines = prepare_lines(raw_lines)?
 
 		match lines {
 			[] => Ok(Null)
@@ -44,7 +46,7 @@ Yaml := [
 				fail(first.number, 1, "the document root must not be indented")
 
 			[first, ..] => {
-				parsed = parse_node(lines, first.indent, 0)?
+				parsed = parse_node(lines, first.indent, 0, raw_lines)?
 
 				match parsed.input {
 					[] => Ok(parsed.val)
@@ -67,8 +69,20 @@ ParseResult : { val : Yaml, input : List(Line) }
 
 Quote : [NoQuote, SingleQuote, DoubleQuote]
 
-parse_node : List(Line), U64, U64 -> Try(ParseResult, [YamlError(Yaml.Error)])
-parse_node = |lines, indent, depth| {
+BlockStyle : [LiteralBlock, FoldedBlock]
+
+BlockChomp : [ClipChomp, StripChomp, KeepChomp]
+
+BlockIndent : [AutoIndent, ExplicitIndent(U64)]
+
+ContentIndent : [PendingIndent, FixedIndent(U64)]
+
+BlockHeader : { style : BlockStyle, chomp : BlockChomp, indent : BlockIndent }
+
+BlockScalarResult : { value : Yaml, input : List(Line) }
+
+parse_node : List(Line), U64, U64, List(Line) -> Try(ParseResult, [YamlError(Yaml.Error)])
+parse_node = |lines, indent, depth, raw_lines| {
 	if depth >= 100 {
 		match lines {
 			[line, ..] => fail(line.number, line.indent + 1, "YAML nesting exceeds the supported limit of 100 levels")
@@ -82,14 +96,19 @@ parse_node = |lines, indent, depth| {
 				fail(first.number, first.indent + 1, "unexpected indentation")
 
 			[first, ..] if is_sequence_line(first.content) =>
-				parse_sequence(lines, indent, depth)
+				parse_sequence(lines, indent, depth, raw_lines)
 
 			[first, ..] => {
 				match split_mapping_entry(first.content) {
-					Ok(_) => parse_mapping(lines, indent, depth)
+					Ok(_) => parse_mapping(lines, indent, depth, raw_lines)
 					Err(_) => {
-						value = parse_inline_value(first.content, first.number, first.indent + 1)?
-						Ok({ val: value, input: lines.drop_first(1) })
+						if starts_block_scalar(first.content) {
+							block = parse_block_scalar(lines.drop_first(1), raw_lines, first.content, first.number, first.indent + 1, first.indent)?
+							Ok({ val: block.value, input: block.input })
+						} else {
+							value = parse_inline_value(first.content, first.number, first.indent + 1)?
+							Ok({ val: value, input: lines.drop_first(1) })
+						}
 					}
 				}
 			}
@@ -97,13 +116,13 @@ parse_node = |lines, indent, depth| {
 	}
 }
 
-parse_mapping : List(Line), U64, U64 -> Try(ParseResult, [YamlError(Yaml.Error)])
-parse_mapping = |lines, indent, depth| {
-	parse_mapping_help(lines, indent, depth, [])
+parse_mapping : List(Line), U64, U64, List(Line) -> Try(ParseResult, [YamlError(Yaml.Error)])
+parse_mapping = |lines, indent, depth, raw_lines| {
+	parse_mapping_help(lines, indent, depth, raw_lines, [])
 }
 
-parse_mapping_help : List(Line), U64, U64, List({ key : Str, value : Yaml }) -> Try(ParseResult, [YamlError(Yaml.Error)])
-parse_mapping_help = |lines, indent, depth, entries| {
+parse_mapping_help : List(Line), U64, U64, List(Line), List({ key : Str, value : Yaml }) -> Try(ParseResult, [YamlError(Yaml.Error)])
+parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 	match lines {
 		[] => Ok({ val: Mapping(entries), input: [] })
 
@@ -128,16 +147,19 @@ parse_mapping_help = |lines, indent, depth, entries| {
 					} else if parts.value.is_empty() {
 						match rest {
 							[next, ..] if next.indent > indent => {
-								child = parse_node(rest, next.indent, depth + 1)?
-								parse_mapping_help(child.input, indent, depth, entries.append({ key, value: child.val }))
+								child = parse_node(rest, next.indent, depth + 1, raw_lines)?
+								parse_mapping_help(child.input, indent, depth, raw_lines, entries.append({ key, value: child.val }))
 							}
 
 							_ =>
-								parse_mapping_help(rest, indent, depth, entries.append({ key, value: Null }))
+								parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value: Null }))
 							}
+					} else if starts_block_scalar(parts.value) {
+						block = parse_block_scalar(rest, raw_lines, parts.value, line.number, line.indent + parts.value_column, line.indent)?
+						parse_mapping_help(block.input, indent, depth, raw_lines, entries.append({ key, value: block.value }))
 					} else {
 						value = parse_inline_value(parts.value, line.number, line.indent + parts.value_column)?
-						parse_mapping_help(rest, indent, depth, entries.append({ key, value }))
+						parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value }))
 					}
 				}
 			}
@@ -145,13 +167,13 @@ parse_mapping_help = |lines, indent, depth, entries| {
 	}
 }
 
-parse_sequence : List(Line), U64, U64 -> Try(ParseResult, [YamlError(Yaml.Error)])
-parse_sequence = |lines, indent, depth| {
-	parse_sequence_help(lines, indent, depth, [])
+parse_sequence : List(Line), U64, U64, List(Line) -> Try(ParseResult, [YamlError(Yaml.Error)])
+parse_sequence = |lines, indent, depth, raw_lines| {
+	parse_sequence_help(lines, indent, depth, raw_lines, [])
 }
 
-parse_sequence_help : List(Line), U64, U64, List(Yaml) -> Try(ParseResult, [YamlError(Yaml.Error)])
-parse_sequence_help = |lines, indent, depth, values| {
+parse_sequence_help : List(Line), U64, U64, List(Line), List(Yaml) -> Try(ParseResult, [YamlError(Yaml.Error)])
+parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 	match lines {
 		[] => Ok({ val: Sequence(values), input: [] })
 
@@ -170,28 +192,282 @@ parse_sequence_help = |lines, indent, depth, values| {
 			if payload.is_empty() {
 				match rest {
 					[next, ..] if next.indent > indent => {
-						child = parse_node(rest, next.indent, depth + 1)?
-						parse_sequence_help(child.input, indent, depth, values.append(child.val))
+						child = parse_node(rest, next.indent, depth + 1, raw_lines)?
+						parse_sequence_help(child.input, indent, depth, raw_lines, values.append(child.val))
 					}
 
 					_ =>
-						parse_sequence_help(rest, indent, depth, values.append(Null))
+						parse_sequence_help(rest, indent, depth, raw_lines, values.append(Null))
 					}
 			} else {
 				match split_mapping_entry(payload) {
 					Ok(_) => {
 						virtual = { content: payload, indent: indent + 2, number: line.number }
-						child = parse_node(List.prepend(rest, virtual), indent + 2, depth + 1)?
-						parse_sequence_help(child.input, indent, depth, values.append(child.val))
+						child = parse_node(List.prepend(rest, virtual), indent + 2, depth + 1, raw_lines)?
+						parse_sequence_help(child.input, indent, depth, raw_lines, values.append(child.val))
 					}
 
 					Err(_) => {
-						value = parse_inline_value(payload, line.number, line.indent + 3)?
-						parse_sequence_help(rest, indent, depth, values.append(value))
+						if starts_block_scalar(payload) {
+							block = parse_block_scalar(rest, raw_lines, payload, line.number, line.indent + 3, line.indent)?
+							parse_sequence_help(block.input, indent, depth, raw_lines, values.append(block.value))
+						} else {
+							value = parse_inline_value(payload, line.number, line.indent + 3)?
+							parse_sequence_help(rest, indent, depth, raw_lines, values.append(value))
+						}
 					}
 				}
 			}
 		}
+	}
+}
+
+starts_block_scalar : String.Utf8 -> Bool
+starts_block_scalar = |bytes| {
+	match trim_spaces(bytes) {
+		['|', ..] | ['>', ..] => Bool.True
+		_ => Bool.False
+	}
+}
+
+parse_block_scalar : List(Line), List(Line), String.Utf8, U64, U64, U64 -> Try(BlockScalarResult, [YamlError(Yaml.Error)])
+parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, base_indent| {
+	header = parse_block_header(header_bytes, line, column)?
+	raw_tail = drop_lines_before_number(raw_lines, line + 1)
+	collected = collect_block_lines(raw_tail, base_indent, header.indent, PendingIndent, [], line)?
+	body = render_block_scalar(collected.lines, header.style, header.chomp)
+	input = drop_consumed_lines(clean_rest, collected.consumed_through)
+
+	Ok({ value: String(String.str_from_utf8(body)), input })
+}
+
+parse_block_header : String.Utf8, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
+parse_block_header = |raw, line, column| {
+	bytes = trim_spaces(raw)
+
+	match bytes {
+		['|', .. as rest] =>
+			parse_block_header_options(rest, { style: LiteralBlock, chomp: ClipChomp, indent: AutoIndent }, line, column)
+
+		['>', .. as rest] =>
+			parse_block_header_options(rest, { style: FoldedBlock, chomp: ClipChomp, indent: AutoIndent }, line, column)
+
+		_ => fail(line, column, "invalid block scalar header")
+	}
+}
+
+parse_block_header_options : String.Utf8, BlockHeader, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
+parse_block_header_options = |bytes, header, line, column| {
+	match bytes {
+		[] => Ok(header)
+
+		['-', .. as rest] => {
+			match header.chomp {
+				ClipChomp =>
+					parse_block_header_options(
+						rest,
+						{ style: header.style, chomp: StripChomp, indent: header.indent },
+						line,
+						column,
+					)
+
+				_ => fail(line, column, "duplicate block scalar chomping indicator")
+			}
+		}
+
+		['+', .. as rest] => {
+			match header.chomp {
+				ClipChomp =>
+					parse_block_header_options(
+						rest,
+						{ style: header.style, chomp: KeepChomp, indent: header.indent },
+						line,
+						column,
+					)
+
+				_ => fail(line, column, "duplicate block scalar chomping indicator")
+			}
+		}
+
+		[digit, .. as rest] if digit >= '1' and digit <= '9' => {
+			match header.indent {
+				AutoIndent => {
+					indent = block_indent_from_digit(digit)
+					parse_block_header_options(rest, { style: header.style, chomp: header.chomp, indent: ExplicitIndent(indent) }, line, column)
+				}
+
+				ExplicitIndent(_) => fail(line, column, "duplicate block scalar indentation indicator")
+			}
+		}
+
+		_ => fail(line, column, "unsupported block scalar header")
+	}
+}
+
+block_indent_from_digit : U8 -> U64
+block_indent_from_digit = |digit| {
+	match digit {
+		'1' => 1
+		'2' => 2
+		'3' => 3
+		'4' => 4
+		'5' => 5
+		'6' => 6
+		'7' => 7
+		'8' => 8
+		'9' => 9
+		_ => 1
+	}
+}
+
+collect_block_lines : List(Line), U64, BlockIndent, ContentIndent, List(String.Utf8), U64 -> Try({ lines : List(String.Utf8), consumed_through : U64 }, [YamlError(Yaml.Error)])
+collect_block_lines = |raw_lines, base_indent, block_indent, content_indent, out, consumed_through| {
+	match raw_lines {
+		[] => Ok({ lines: out, consumed_through })
+
+		[line, .. as rest] => {
+			indent = count_indent(line.content, 0, line.number)?
+			without_indent = line.content.drop_first(indent)
+
+			if trim_spaces(without_indent).is_empty() {
+				collect_block_lines(rest, base_indent, block_indent, content_indent, out.append([]), line.number)
+			} else if indent <= base_indent {
+				Ok({ lines: out, consumed_through })
+			} else {
+				required_indent =
+					match block_indent {
+						ExplicitIndent(offset) => base_indent + offset
+
+						AutoIndent =>
+							match content_indent {
+								PendingIndent => indent
+								FixedIndent(value) => value
+							}
+					}
+
+				if indent < required_indent {
+					Ok({ lines: out, consumed_through })
+				} else {
+					stripped = line.content.drop_first(required_indent)
+
+					next_content_indent =
+						match block_indent {
+							AutoIndent =>
+								match content_indent {
+									PendingIndent => FixedIndent(required_indent)
+									FixedIndent(_) => content_indent
+								}
+
+							ExplicitIndent(_) => content_indent
+						}
+
+					collect_block_lines(rest, base_indent, block_indent, next_content_indent, out.append(stripped), line.number)
+				}
+			}
+		}
+	}
+}
+
+render_block_scalar : List(String.Utf8), BlockStyle, BlockChomp -> String.Utf8
+render_block_scalar = |lines, style, chomp| {
+	body =
+		match style {
+			LiteralBlock => join_block_lines(lines)
+			FoldedBlock => fold_block_lines(lines)
+		}
+
+	with_terminal_newline =
+		if lines.is_empty() {
+			[]
+		} else {
+			body.append('\n')
+		}
+
+	match chomp {
+		KeepChomp => with_terminal_newline
+
+		StripChomp => trim_end_newlines(with_terminal_newline)
+
+		ClipChomp => {
+			if with_terminal_newline.is_empty() {
+				[]
+			} else {
+				trim_end_newlines(with_terminal_newline).append('\n')
+			}
+		}
+	}
+}
+
+join_block_lines : List(String.Utf8) -> String.Utf8
+join_block_lines = |lines| {
+	match lines {
+		[] => []
+		[first, .. as rest] => join_block_lines_help(rest, first)
+	}
+}
+
+join_block_lines_help : List(String.Utf8), String.Utf8 -> String.Utf8
+join_block_lines_help = |lines, out| {
+	match lines {
+		[] => out
+		[line, .. as rest] => join_block_lines_help(rest, append_bytes(out.append('\n'), line))
+	}
+}
+
+fold_block_lines : List(String.Utf8) -> String.Utf8
+fold_block_lines = |lines| {
+	match lines {
+		[] => []
+		[first, .. as rest] => fold_block_lines_help(rest, first, first)
+	}
+}
+
+fold_block_lines_help : List(String.Utf8), String.Utf8, String.Utf8 -> String.Utf8
+fold_block_lines_help = |lines, previous, out| {
+	match lines {
+		[] => out
+
+		[current, .. as rest] => {
+			separator =
+				if previous.is_empty() or current.is_empty() or starts_with_space(previous) or starts_with_space(current) {
+					'\n'
+				} else {
+					' '
+				}
+
+			next_out = append_bytes(out.append(separator), current)
+			fold_block_lines_help(rest, current, next_out)
+		}
+	}
+}
+
+trim_end_newlines : String.Utf8 -> String.Utf8
+trim_end_newlines = |bytes| trim_end_newlines_help(bytes, [], [])
+
+trim_end_newlines_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
+trim_end_newlines_help = |bytes, out, pending| {
+	match bytes {
+		[] => out
+		['\n', .. as rest] => trim_end_newlines_help(rest, out, pending.append('\n'))
+		[first, .. as rest] => trim_end_newlines_help(rest, append_bytes(out, pending).append(first), [])
+	}
+}
+
+drop_lines_before_number : List(Line), U64 -> List(Line)
+drop_lines_before_number = |lines, target| {
+	match lines {
+		[] => []
+		[line, .. as rest] if line.number < target => drop_lines_before_number(rest, target)
+		_ => lines
+	}
+}
+
+drop_consumed_lines : List(Line), U64 -> List(Line)
+drop_consumed_lines = |lines, consumed_through| {
+	match lines {
+		[] => []
+		[line, .. as rest] if line.number <= consumed_through => drop_consumed_lines(rest, consumed_through)
+		_ => lines
 	}
 }
 
@@ -207,7 +483,7 @@ parse_inline_value = |raw, line, column| {
 		['{', ..] => parse_flow_mapping(bytes, line, column)
 
 		['|', ..] | ['>', ..] =>
-			fail(line, column, "block scalars are not supported by this YAML subset")
+			fail(line, column, "block scalars are only supported as standalone mapping or sequence values")
 
 		['&', ..] | ['*', ..] | ['!', ..] =>
 			fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
@@ -850,6 +1126,54 @@ expect {
 	actual == Mapping([{ key: "message", value: String("first\nsecond") }])
 }
 
-## Block scalars and malformed flow collections fail rather than degrading to strings.
-expect Yaml.parse_str("description: |\n  multiline").is_err()
+## Block scalars parse as multiline strings, including folded style.
+expect {
+	actual =
+		Yaml.parse_str(
+			\\description: |
+			\\  first line
+			\\  second line
+			\\summary: >
+			\\  one
+			\\  two
+			,
+		)?
+
+	actual
+		== Mapping([
+			{ key: "description", value: String("first line\nsecond line\n") },
+			{ key: "summary", value: String("one two\n") },
+		])
+}
+
+## Chomping indicators are supported for block scalars.
+expect {
+	actual = Yaml.parse_str("note: |-\n  hello")?
+	actual == Mapping([{ key: "note", value: String("hello") }])
+}
+
+## Block scalar content keeps blank lines and # characters literally.
+expect {
+	actual = Yaml.parse_str("text: |\n  # not a comment\n\n  after")?
+	actual == Mapping([{ key: "text", value: String("# not a comment\n\nafter\n") }])
+}
+
+## Explicit block indentation indicators are supported.
+expect {
+	actual = Yaml.parse_str("script: |2-\n  echo one\n  echo two\nnext: done")?
+
+	actual
+		== Mapping([
+			{ key: "script", value: String("echo one\necho two") },
+			{ key: "next", value: String("done") },
+		])
+}
+
+## Folded blocks preserve line breaks around indented continuation lines.
+expect {
+	actual = Yaml.parse_str("text: >\n  intro\n    code\n  outro")?
+	actual == Mapping([{ key: "text", value: String("intro\n  code\noutro\n") }])
+}
+
+## Malformed flow collections still fail.
 expect Yaml.parse_str("values: [one, two").is_err()
