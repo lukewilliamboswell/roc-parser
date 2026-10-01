@@ -380,18 +380,25 @@ ReferenceDefinition : {
 ## stack of open blocks, then inline content is parsed once every link
 ## reference definition is known. GFM tables and task list items are layered
 ## on in the same places cmark-gfm hooks them in.
+##
+## The first phase records what happens as a flat list of events (a container
+## opens or closes, a leaf block is complete, definitions were found), and the
+## tree is built from them afterwards. Only the innermost leaf block collects
+## lines while the document is read; they are kept outside the open-block
+## stack. That keeps the whole parse linear in the input: a list growing inside
+## a record that is itself stored elsewhere would be copied on every append.
 ListInfo : { ordered : Bool, marker : U8, start : U64 }
 
 OpenKind : [
 	DocumentBlock,
 	QuoteBlock,
 	ListContainer(ListInfo),
-	ItemBlock({ info : ListInfo, marker_offset : U64, padding : U64, task : Markdown.TaskState }),
+	ItemBlock({ info : ListInfo, marker_offset : U64, padding : U64 }),
 	ParagraphBlock,
 	FencedBlock({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }),
 	IndentedBlock,
 	HtmlBlockOpen(U64),
-	TableBlock({ align : List(Markdown.Alignment), header : List(String.Utf8), rows : List(List(String.Utf8)) }),
+	TableBlock({ align : List(Markdown.Alignment), header : List(String.Utf8) }),
 ]
 
 ## First and last source line of a closed block, used to decide list looseness:
@@ -399,28 +406,44 @@ OpenKind : [
 ## gap.
 Span : { start : U64, end : U64 }
 
-DoneItem : { task : Markdown.TaskState, blocks : List(Markdown), span : Span, inner_gap : Bool }
-
 Open : {
 	kind : OpenKind,
 	start : U64,
+	# The last line that belongs to a leaf block (an indented code block's
+	# trailing blank lines do not).
 	last : U64,
-	children : List(Markdown),
-	spans : List(Span),
-	items : List(DoneItem),
-	lines : List(String.Utf8),
+	has_children : Bool,
 }
+
+Event : [
+	OpenContainer(OpenKind, U64),
+	CloseContainer(U64),
+	ItemTask(Markdown.TaskState),
+	Leaf(Markdown, Span),
+	Definitions(List(ReferenceDefinition)),
+]
 
 BlockState : {
 	stack : List(Open),
-	refs : List(ReferenceDefinition),
 	line : String.Utf8,
+	# For each byte offset of the line: the offset of the next byte that is not
+	# a space or tab, and the column of each offset (tab stops of 4). Computed
+	# once per line, so that finding the next non-space character is constant
+	# time however deeply the containers nest.
+	next_nonspace : List(U64),
+	columns : List(U64),
 	line_number : U64,
 	offset : U64,
 	column : U64,
 	partial_tab : Bool,
 	all_closed : Bool,
 	last_matched : U64,
+	# The innermost leaf block's lines from earlier lines (read only), whether
+	# that leaf was closed on this line, and the lines added on this line.
+	leaf_lines : List(String.Utf8),
+	leaf_reset : Bool,
+	leaf_added : List(String.Utf8),
+	events : List(Event),
 }
 
 Nonspace : { pos : U64, column : U64, indent : U64, blank : Bool }
@@ -442,8 +465,9 @@ parse_document : String.Utf8 -> List(Markdown)
 parse_document = |input| {
 	all_lines = split_document_lines(input)
 	front = take_frontmatter(all_lines)
-	parsed = parse_block_lines(front.lines)
-	blocks = List.from_iter(parsed.blocks.iter().map(|block| resolve_inlines(block, parsed.refs)))
+	events = parse_block_lines(front.lines)
+	refs = collect_definitions(events)
+	blocks = List.from_iter(build_blocks(events, 0).blocks.iter().map(|block| resolve_inlines(block, refs)))
 
 	match front.frontmatter {
 		Ok(raw) => List.prepend(blocks, Frontmatter({ raw: raw }))
@@ -506,30 +530,48 @@ take_frontmatter = |lines| {
 
 new_open : OpenKind, U64 -> Open
 new_open = |kind, line_number| {
-	{ kind, start: line_number, last: line_number, children: [], spans: [], items: [], lines: [] }
+	{ kind, start: line_number, last: line_number, has_children: Bool.False }
 }
 
-parse_block_lines : List(String.Utf8) -> { blocks : List(Markdown), refs : List(ReferenceDefinition) }
+parse_block_lines : List(String.Utf8) -> List(Event)
 parse_block_lines = |lines| {
 	var $state = {
 		stack: [new_open(DocumentBlock, 0)],
-		refs: [],
 		line: [],
+		next_nonspace: [],
+		columns: [],
 		line_number: 0,
 		offset: 0,
 		column: 0,
 		partial_tab: Bool.False,
 		all_closed: Bool.True,
 		last_matched: 0,
+		leaf_lines: [],
+		leaf_reset: Bool.False,
+		leaf_added: [],
+		events: [],
 	}
+	var $events = []
+	var $leaf = []
+	var $reset = Bool.False
+	var $added = []
 	for line in lines {
-		$state = process_line({ ..$state, line, line_number: $state.line_number + 1 })
+		# The previous line's result is gone by now, so the leaf's lines are
+		# not shared and grow in place.
+		$leaf = if $reset $added else $leaf.concat($added)
+		index = index_line(line)
+		result = process_line({ ..$state, line, next_nonspace: index.next_nonspace, columns: index.columns, line_number: $state.line_number + 1, leaf_lines: $leaf, leaf_reset: Bool.False, leaf_added: [], events: [] })
+		$events = $events.concat(result.events)
+		$reset = result.leaf_reset
+		$added = result.leaf_added
+		$state = { ..result, leaf_lines: [], leaf_added: [], events: [] }
 	}
-	while $state.stack.len() > 1 {
-		$state = close_tip($state, $state.line_number)
+	$leaf = if $reset $added else $leaf.concat($added)
+	var $closing = { ..$state, leaf_lines: $leaf, leaf_reset: Bool.False, leaf_added: [], events: [] }
+	while $closing.stack.len() > 1 {
+		$closing = close_tip($closing, $closing.line_number)
 	}
-	document = $state.stack.first() ?? new_open(DocumentBlock, 0)
-	{ blocks: document.children, refs: $state.refs }
+	$events.concat($closing.events)
 }
 
 tip_kind : BlockState -> OpenKind
@@ -657,7 +699,7 @@ process_line = |initial| {
 				}
 			}
 
-			TableBlock(_) => add_table_row($s)
+			TableBlock(_) => add_line_to_tip($s)
 			_ =>
 				if blank {
 					$s
@@ -668,24 +710,38 @@ process_line = |initial| {
 	}
 }
 
-find_nonspace : BlockState -> Nonspace
-find_nonspace = |s| {
-	var $pos = s.offset
-	var $column = s.column
-	var $scanning = Bool.True
-	while $scanning {
-		byte = s.line.get($pos) ?? 'x'
-		if byte == ' ' {
-			$pos = $pos + 1
-			$column = $column + 1
-		} else if byte == '\t' and $pos < s.line.len() {
-			$pos = $pos + 1
-			$column = $column + (4 - ($column % 4))
+index_line : String.Utf8 -> { next_nonspace : List(U64), columns : List(U64) }
+index_line = |line| {
+	len = line.len()
+	var $columns = List.with_capacity(len + 1)
+	var $column = 0
+	for byte in line {
+		$columns = $columns.append($column)
+		$column = if byte == '\t' $column + (4 - ($column % 4)) else $column + 1
+	}
+	$columns = $columns.append($column)
+
+	var $next = List.repeat(len, len + 1)
+	var $index = len
+	while $index > 0 {
+		$index = $index - 1
+		if is_space_or_tab(line.get($index) ?? 'x') {
+			$next = List.set($next, $index, $next.get($index + 1) ?? len) ?? $next
 		} else {
-			$scanning = Bool.False
+			$next = List.set($next, $index, $index) ?? $next
 		}
 	}
-	{ pos: $pos, column: $column, indent: $column - s.column, blank: $pos >= s.line.len() }
+	{ next_nonspace: $next, columns: $columns }
+}
+
+## The first character from the current offset that is not a space or tab. A
+## partly consumed tab at the offset counts only its remaining columns.
+find_nonspace : BlockState -> Nonspace
+find_nonspace = |s| {
+	len = s.line.len()
+	pos = if s.offset >= len len else s.next_nonspace.get(s.offset) ?? len
+	column = s.columns.get(pos) ?? s.column
+	{ pos, column, indent: if column > s.column column - s.column else 0, blank: pos >= len }
 }
 
 advance_to_nonspace : BlockState, Nonspace -> BlockState
@@ -729,7 +785,7 @@ advance_offset = |s, count, columns| {
 
 has_children : BlockState, U64, Open -> Bool
 has_children = |s, index, open| {
-	!open.children.is_empty() or index + 1 < s.stack.len()
+	open.has_children or index + 1 < s.stack.len()
 }
 
 continue_block : BlockState, Open, U64 -> Continuation
@@ -857,7 +913,13 @@ add_child = |s, kind| {
 	while !can_contain(tip_kind($next), kind) {
 		$next = close_tip($next, $next.line_number - 1)
 	}
-	{ ..$next, stack: $next.stack.append(new_open(kind, $next.line_number)) }
+	stack = update_tip($next.stack, |open| { ..open, has_children: Bool.True }).append(new_open(kind, $next.line_number))
+	opened =
+		match kind {
+			QuoteBlock | ListContainer(_) | ItemBlock(_) => $next.events.append(OpenContainer(kind, $next.line_number))
+			_ => $next.events
+		}
+	{ ..$next, stack, events: opened }
 }
 
 ## Attach a block that is complete as soon as it starts (headings, breaks).
@@ -868,7 +930,7 @@ add_closed_child = |s, block| {
 		$next = close_tip($next, $next.line_number - 1)
 	}
 	span = { start: $next.line_number, end: $next.line_number }
-	{ ..$next, stack: update_tip($next.stack, |open| { ..open, children: open.children.append(block), spans: open.spans.append(span) }) }
+	{ ..$next, stack: update_tip($next.stack, |open| { ..open, has_children: Bool.True }), events: $next.events.append(Leaf(block, span)) }
 }
 
 update_tip : List(Open), (Open -> Open) -> List(Open)
@@ -894,8 +956,24 @@ add_line_to_tip : BlockState -> BlockState
 add_line_to_tip = |s| {
 	content = line_rest(s)
 	counts = !(is_indented_kind(tip_kind(s)) and bytes_are_blank(content))
-	{ ..s, stack: update_tip(s.stack, |open| { ..open, lines: open.lines.append(content), last: if counts s.line_number else open.last }) }
+	{ ..s, leaf_added: s.leaf_added.append(content), stack: if counts set_tip_last(s.stack, s.line_number) else s.stack }
 }
+
+## The innermost leaf block's lines so far.
+tip_lines : BlockState -> List(String.Utf8)
+tip_lines = |s| if s.leaf_reset s.leaf_added else s.leaf_lines.concat(s.leaf_added)
+
+tip_last_line : BlockState -> String.Utf8
+tip_last_line = |s| {
+	match s.leaf_added.last() {
+		Ok(line) => line
+		Err(_) => if s.leaf_reset [] else s.leaf_lines.last() ?? []
+	}
+}
+
+## Forget the innermost leaf block's lines (it was closed or emptied).
+reset_leaf : BlockState -> BlockState
+reset_leaf = |s| { ..s, leaf_reset: Bool.True, leaf_added: [] }
 
 is_indented_kind : OpenKind -> Bool
 is_indented_kind = |kind| {
@@ -905,38 +983,23 @@ is_indented_kind = |kind| {
 	}
 }
 
-add_table_row : BlockState -> BlockState
-add_table_row = |s| {
-	cells = split_table_row(s.line.drop_first(s.offset))
-	{
-		..s,
-		stack: update_tip(
-			s.stack,
-			|open| {
-				match open.kind {
-					TableBlock(table) => { ..open, kind: TableBlock({ ..table, rows: table.rows.append(cells) }), last: s.line_number }
-					_ => open
-				}
-			},
-		),
-	}
-}
-
-## Pop the innermost open block, finish it, and attach it to its parent.
+## Pop the innermost open block, finish it, and record it.
 close_tip : BlockState, U64 -> BlockState
 close_tip = |s, line_number| {
 	match s.stack.last() {
 		Err(_) => s
 		Ok(open) => {
-			rest = s.stack.drop_last(1)
-			finished = finish_block(open, line_number, s.refs)
-			stack =
-				match finished.result {
-					Block(block, span) => update_tip(rest, |parent| { ..parent, children: parent.children.append(block), spans: parent.spans.append(span) })
-					Item(item) => update_tip(rest, |parent| { ..parent, items: parent.items.append(item) })
-					Nothing => rest
+			rest = { ..s, stack: s.stack.drop_last(1) }
+			match open.kind {
+				DocumentBlock => s
+				QuoteBlock => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
+				ListContainer(_) => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
+				ItemBlock(_) => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
+				_ => {
+					events = rest.events.concat(finish_leaf(open, tip_lines(s)))
+					reset_leaf({ ..rest, events })
 				}
-			{ ..s, stack, refs: finished.refs }
+			}
 		}
 	}
 }
@@ -959,52 +1022,31 @@ has_gap = |spans| {
 placeholder : String.Utf8 -> List(Markdown.Inline)
 placeholder = |raw| [Text(String.str_from_utf8(raw))]
 
-finish_block : Open, U64, List(ReferenceDefinition) -> { result : [Block(Markdown, Span), Item(DoneItem), Nothing], refs : List(ReferenceDefinition) }
-finish_block = |open, line_number, refs| {
-	leaf_span = { start: open.start, end: open.last }
+## The events for a closed leaf block with these lines.
+finish_leaf : Open, List(String.Utf8) -> List(Event)
+finish_leaf = |open, lines| {
+	span = { start: open.start, end: open.last }
 	match open.kind {
-		DocumentBlock =>
-			{ result: Nothing, refs }
-
-		QuoteBlock =>
-			{ result: Block(Blockquote(open.children), { start: open.start, end: line_number }), refs }
-
-		ItemBlock(item) => {
-			end = (open.spans.last() ?? { start: open.start, end: open.start }).end
-			{ result: Item({ task: item.task, blocks: open.children, span: { start: open.start, end }, inner_gap: has_gap(open.spans) }), refs }
-		}
-
-		ListContainer(info) => {
-			loose = open.items.any(|item| item.inner_gap) or has_gap(open.items.map(|item| item.span))
-			kind = if info.ordered Ordered({ start: info.start }) else Unordered
-			items = open.items.map(|item| { task: item.task, blocks: item.blocks })
-			end = (open.items.last() ?? { task: NoTask, blocks: [], span: { start: open.start, end: open.start }, inner_gap: Bool.False }).span.end
-			{ result: Block(ListBlock({ kind, loose, items }), { start: open.start, end }), refs }
-		}
-
 		ParagraphBlock => {
-			extracted = extract_reference_definitions(join_with_newlines(open.lines), refs)
+			extracted = extract_reference_definitions(join_with_newlines(lines), [])
 			content = trim_end_spaces(extracted.rest)
-			if content.is_empty() {
-				{ result: Nothing, refs: extracted.refs }
-			} else {
-				{ result: Block(Paragraph(placeholder(content)), leaf_span), refs: extracted.refs }
-			}
+			definitions = if extracted.refs.is_empty() [] else [Definitions(extracted.refs)]
+			if content.is_empty() definitions else definitions.append(Leaf(Paragraph(placeholder(content)), span))
 		}
 
 		FencedBlock(fence) =>
-			{ result: Block(Code({ info: fence.info, pre: String.str_from_utf8(join_lines_with_newlines(open.lines)) }), leaf_span), refs }
+			[Leaf(Code({ info: fence.info, pre: String.str_from_utf8(join_lines_with_newlines(lines)) }), span)]
 
 		IndentedBlock => {
-			var $lines = open.lines
+			var $lines = lines
 			while bytes_are_blank($lines.last() ?? [0]) {
 				$lines = $lines.drop_last(1)
 			}
-			{ result: Block(Code({ info: "", pre: String.str_from_utf8(join_lines_with_newlines($lines)) }), leaf_span), refs }
+			[Leaf(Code({ info: "", pre: String.str_from_utf8(join_lines_with_newlines($lines)) }), span)]
 		}
 
 		HtmlBlockOpen(_) =>
-			{ result: Block(HtmlBlock(String.str_from_utf8(join_lines_with_newlines(open.lines))), leaf_span), refs }
+			[Leaf(HtmlBlock(String.str_from_utf8(join_lines_with_newlines(lines))), span)]
 
 		TableBlock(table) => {
 			columns = table.align.len()
@@ -1017,9 +1059,134 @@ finish_block = |open, line_number, refs| {
 				}
 				$out
 			}
-			{ result: Block(Table({ header: fit(table.header), align: table.align, rows: table.rows.map(fit) }), leaf_span), refs }
+			rows = lines.map(|line| fit(split_table_row(line)))
+			[Leaf(Table({ header: fit(table.header), align: table.align, rows }), span)]
+		}
+
+		_ => []
+	}
+}
+
+## Rebuild the tree from the events, starting at `start` and stopping at the
+## close of the enclosing container. Looseness comes from the children's spans.
+Built : [BuiltBlock(Markdown, Span), BuiltItem({ task : Markdown.TaskState, blocks : List(Markdown), span : Span, inner_gap : Bool })]
+
+build_blocks : List(Event), U64 -> { blocks : List(Markdown), built : List(Built), index : U64, end : U64 }
+build_blocks = |events, start| {
+	var $index = start
+	var $blocks = []
+	var $built = []
+	var $end = 0
+	var $running = Bool.True
+	while $running and $index < events.len() {
+		event = events.get($index) ?? CloseContainer(0)
+		match event {
+			Leaf(block, span) => {
+				$blocks = $blocks.append(block)
+				$built = $built.append(BuiltBlock(block, span))
+				$index = $index + 1
+			}
+
+			OpenContainer(kind, line) => {
+				{ task, inner_start } =
+					match events.get($index + 1) {
+						Ok(ItemTask(state)) => { task: state, inner_start: $index + 2 }
+						_ => { task: NoTask, inner_start: $index + 1 }
+					}
+				inner = build_blocks(events, inner_start)
+				spans = inner.built.map(built_span)
+				child =
+					match kind {
+						ItemBlock(_) => {
+							end = (spans.last() ?? { start: line, end: line }).end
+							BuiltItem({ task, blocks: inner.blocks, span: { start: line, end }, inner_gap: has_gap(spans) })
+						}
+
+						ListContainer(info) => {
+							items = inner.built.keep_if(is_built_item)
+							loose = items.any(built_inner_gap) or has_gap(spans)
+							list_kind = if info.ordered Ordered({ start: info.start }) else Unordered
+							block = ListBlock({ kind: list_kind, loose, items: items.map(built_item) })
+							BuiltBlock(block, { start: line, end: (spans.last() ?? { start: line, end: line }).end })
+						}
+
+						_ =>
+							BuiltBlock(Blockquote(inner.blocks), { start: line, end: inner.end })
+					}
+				match child {
+					BuiltBlock(block, _) => {
+						$blocks = $blocks.append(block)
+					}
+
+					_ => {}
+				}
+				$built = $built.append(child)
+				$index = inner.index + 1
+			}
+
+			CloseContainer(line) => {
+				$end = line
+				$running = Bool.False
+			}
+
+			_ => {
+				$index = $index + 1
+			}
 		}
 	}
+	{ blocks: $blocks, built: $built, index: $index, end: $end }
+}
+
+built_span : Built -> Span
+built_span = |built| {
+	match built {
+		BuiltBlock(_, span) => span
+		BuiltItem(item) => item.span
+	}
+}
+
+is_built_item : Built -> Bool
+is_built_item = |built| {
+	match built {
+		BuiltItem(_) => Bool.True
+		_ => Bool.False
+	}
+}
+
+built_inner_gap : Built -> Bool
+built_inner_gap = |built| {
+	match built {
+		BuiltItem(item) => item.inner_gap
+		_ => Bool.False
+	}
+}
+
+built_item : Built -> { task : Markdown.TaskState, blocks : List(Markdown) }
+built_item = |built| {
+	match built {
+		BuiltItem(item) => { task: item.task, blocks: item.blocks }
+		BuiltBlock(_, _) => { task: NoTask, blocks: [] }
+	}
+}
+
+## Every definition, in document order; the first one for a label wins.
+collect_definitions : List(Event) -> List(ReferenceDefinition)
+collect_definitions = |events| {
+	var $refs = []
+	for event in events {
+		match event {
+			Definitions(found) => {
+				for def in found {
+					if !$refs.any(|ref| ref.label == def.label) {
+						$refs = $refs.append(def)
+					}
+				}
+			}
+
+			_ => {}
+		}
+	}
+	$refs
 }
 
 join_with_newlines : List(String.Utf8) -> String.Utf8
@@ -1079,17 +1246,17 @@ try_block_starts = |s, container, ns| {
 			Ok(level) => {
 				closed = close_unmatched(s)
 				paragraph = closed.stack.last() ?? new_open(ParagraphBlock, 0)
-				extracted = extract_reference_definitions(join_with_newlines(paragraph.lines), closed.refs)
+				extracted = extract_reference_definitions(join_with_newlines(tip_lines(closed)), [])
+				definitions = if extracted.refs.is_empty() [] else [Definitions(extracted.refs)]
 				if !extracted.rest.is_empty() {
 					heading = Heading({ level, content: placeholder(trim_end_spaces(extracted.rest)) })
 					span = { start: paragraph.start, end: closed.line_number }
-					stack = update_tip(closed.stack.drop_last(1), |parent| { ..parent, children: parent.children.append(heading), spans: parent.spans.append(span) })
-					return LineDone({ ..closed, stack, refs: extracted.refs })
+					events = closed.events.concat(definitions).append(Leaf(heading, span))
+					return LineDone(reset_leaf({ ..closed, stack: closed.stack.drop_last(1), events }))
 				} else {
 					# Only reference definitions: keep the (now empty) paragraph and
 					# let the underline be read as something else.
-					emptied = update_tip(closed.stack, |open| { ..open, lines: [] })
-					return try_after_setext({ ..closed, stack: emptied, refs: extracted.refs }, container, ns)
+					return try_after_setext(reset_leaf({ ..closed, events: closed.events.concat(definitions) }), container, ns)
 				}
 			}
 
@@ -1125,13 +1292,13 @@ try_after_setext = |s, container, ns| {
 	if !indented and is_paragraph_kind(container_kind) and s.all_closed {
 		match parse_table_delimiter_row(rest) {
 			Ok(align) => {
-				paragraph = s.stack.last() ?? new_open(ParagraphBlock, 0)
-				header_line = paragraph.lines.last() ?? []
-				header = split_table_row(header_line)
+				header = split_table_row(tip_last_line(s))
 				if !header.is_empty() and header.len() == align.len() {
-					before = update_tip(s.stack, |open| { ..open, lines: open.lines.drop_last(1), last: s.line_number - 2 })
-					closed = close_tip({ ..s, stack: before }, s.line_number - 2)
-					table = { ..new_open(TableBlock({ align, header, rows: [] }), s.line_number - 1), last: s.line_number }
+					# The paragraph keeps its other lines; its last line is the header.
+					lines = tip_lines(s)
+					before = { ..s, stack: set_tip_last(s.stack, s.line_number - 2), leaf_reset: Bool.True, leaf_added: lines.drop_last(1) }
+					closed = close_tip(before, s.line_number - 2)
+					table = { ..new_open(TableBlock({ align, header }), s.line_number - 1), last: s.line_number }
 					return LineDone({ ..closed, stack: closed.stack.append(table) })
 				}
 			}
@@ -1170,7 +1337,7 @@ start_list_item = |s, container_kind, ns, marker| {
 			ListContainer(info) if lists_match(info, marker.info) and is_list_tip(closed) => closed
 			_ => add_child(closed, ListContainer(marker.info))
 		}
-	item = add_child(with_list, ItemBlock({ info: marker.info, marker_offset, padding, task: NoTask }))
+	item = add_child(with_list, ItemBlock({ info: marker.info, marker_offset, padding }))
 
 	# GFM task list item: `[ ]`, `[x]` or `[X]` then a space or tab opens the
 	# item's first paragraph.
@@ -1179,7 +1346,7 @@ start_list_item = |s, container_kind, ns, marker| {
 	match task_rest {
 		['[', mark, ']', after, ..] if task_ns.indent < 4 and (mark == ' ' or mark == 'x' or mark == 'X') and is_space_or_tab(after) => {
 			task = if mark == ' ' Unchecked else Checked
-			marked = { ..item, stack: update_tip(item.stack, |open| { ..open, kind: ItemBlock({ info: marker.info, marker_offset, padding, task }) }) }
+			marked = { ..item, events: item.events.append(ItemTask(task)) }
 			StopStarts(advance_offset(advance_to_nonspace(marked, task_ns), 3, Bool.False))
 		}
 
