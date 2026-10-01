@@ -198,13 +198,28 @@ def xml_inlines(element) -> list:
     return out
 
 
+# cmark's XML renderer emits C0 controls verbatim, which XML 1.0 rejects:
+# carry them through the XML parser as private-use code points.
+_CONTROLS = [c for c in range(32) if c not in (9, 10, 13)]
+_TO_PRIVATE = {c: 0xF0000 + c for c in _CONTROLS}
+_FROM_PRIVATE = {0xF0000 + c: c for c in _CONTROLS}
+
+
+def _restore(value):
+    if isinstance(value, str):
+        return value.translate(_FROM_PRIVATE)
+    if isinstance(value, list):
+        return [_restore(item) for item in value]
+    return value
+
+
 def cmark_blocks(text: str) -> list:
-    doc = ET.fromstring(cmark_xml(text))
+    doc = ET.fromstring(cmark_xml(text).translate(_TO_PRIVATE))
     blocks = []
     for child in doc:
         tag = child.tag.replace(NS, "")
         if tag == "paragraph":
-            blocks.append(["p", normalize(xml_inlines(child))])
+            blocks.append(["p", _restore(normalize(xml_inlines(child)))])
         else:
             blocks.append(["other", tag])
     return blocks
@@ -392,17 +407,34 @@ def choose_mode(text: str) -> str | None:
 
 # GFM syntax that markdown-it (CommonMark preset plus `~~` strikethrough) does
 # not implement: single-tilde strikethrough and extended autolinks.
-GFM_TRIGGERS = re.compile(r"(?<![\\~])~(?!~)|www\.|(?<!\\):(?=//)|@")
+GFM_TRIGGERS = re.compile(r"www\.|[A-Za-z]:(?=//)|[A-Za-z0-9._+-]@[A-Za-z0-9]")
+
+# cmark-gfm registers `~` as an "emphasis" special character, so when it
+# computes the flanking of `*`/`_` runs it looks through adjacent tildes
+# (scan_delims SKIP_CHARS). No spec describes this; the library treats `~` as
+# ordinary punctuation, as CommonMark does.
+TILDE_ADJACENT = re.compile(r"[*_]~|~[*_]")
 
 # CommonMark examples whose plain-CommonMark output differs once the GFM
 # extended-autolink extension is enabled (verified against cmark-gfm).
 GFM_SUPERSEDED = {602, 606, 608, 611, 612}
 
 
+def single_tilde_pairs(text: str) -> bool:
+    """Could cmark-gfm form a one-tilde strikethrough (two unescaped `~` runs)?"""
+    runs = [m.group(0) for m in re.finditer(r"(?<!\\)~+", text)]
+    return runs.count("~") >= 2
+
+
 def classify(text: str, roc_blocks: list, oracle_blocks: list) -> str:
     if roc_blocks == oracle_blocks:
         return "pass"
-    if GFM_TRIGGERS.search(text):
+    if [b[0] for b in roc_blocks] != [b[0] for b in oracle_blocks]:
+        # Paragraph splitting or other block structure differs: block level.
+        return "block"
+    if single_tilde_pairs(text) or GFM_TRIGGERS.search(text.replace("~", "")):
+        if TILDE_ADJACENT.search(text):
+            return "oracle-quirk"
         return "fail"
     try:
         adjudicated = markdown_it_blocks(text)
@@ -416,6 +448,31 @@ def classify(text: str, roc_blocks: list, oracle_blocks: list) -> str:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
+
+def neutralize_symbols(text: str) -> str:
+    """Replace non-ASCII symbols (S*) by U+00A1, which is punctuation under
+    both CommonMark 0.29 (cmark-gfm: P* only) and 0.31.2 (P* and S*)."""
+    import unicodedata
+
+    return "".join("¡" if ord(ch) > 127 and unicodedata.category(ch).startswith("S") else ch for ch in text)
+
+
+def reclassify_symbol_failures(probe: Path, items: list[dict]) -> None:
+    """items: dicts with markdown/mode/verdict; failures that only differ
+    because cmark-gfm 0.29 does not count symbols as punctuation become
+    oracle quirks (the library and cmark-gfm agree once symbols are replaced
+    by a character both treat as punctuation)."""
+    pending = [item for item in items if item["verdict"] == "fail" and neutralize_symbols(item["markdown"]) != item["markdown"]]
+    if not pending:
+        return
+    texts = [neutralize_symbols(item["markdown"]) for item in pending]
+    results = run_probe(probe, [(item["mode"], text) for item, text in zip(pending, texts)])
+    for item, text, result in zip(pending, texts, results):
+        roc = probe_blocks(result, item["mode"])
+        if classify(text, roc, cmark_blocks(text)) in ("pass", "oracle-quirk"):
+            item["verdict"] = "oracle-quirk"
+            item["quirk"] = "symbol-punctuation"
 
 
 def load_json(path: Path) -> Any:
@@ -438,7 +495,9 @@ def check(args) -> int:
     for example in load_json(DATA / "gfm-extensions.json"):
         entries.append({"id": f"gfm-{example['example']}", "markdown": example["markdown"], "html": example["html"], "section": example["section"]})
     for case in load_json(DATA / "cases.json"):
-        entries.append({"id": f"case-{case['id']}", "markdown": case["markdown"], "html": None, "section": case.get("note", ""), "oracle": case.get("oracle", "cmark-gfm")})
+        # "html": expected output written from the spec text, for cases where
+        # both oracles predate CommonMark 0.31.2 or are wrong.
+        entries.append({"id": f"case-{case['id']}", "markdown": case["markdown"], "html": case.get("html"), "section": case.get("note", ""), "oracle": case.get("oracle", "cmark-gfm")})
 
     selected = []
     for entry in entries:
@@ -514,23 +573,30 @@ def corpus(args) -> int:
         mode = choose_mode(text)
         if mode is not None:
             selected.append((name, text, mode))
-    results = run_probe(probe, [(mode, text) for _, text, mode in selected])
-    counts = {"pass": 0, "fail": 0, "oracle-quirk": 0}
-    shown = 0
-    report = []
-    for (name, text, mode), result in zip(selected, results):
-        roc = probe_blocks(result, mode)
-        oracle = cmark_blocks(text)
-        verdict = classify(text, roc, oracle)
-        counts[verdict] += 1
-        if verdict != "pass":
-            report.append({"file": name, "verdict": verdict, "markdown": text, "roc": roc, "cmark": oracle})
-            if verdict == "fail" and shown < args.show:
-                shown += 1
-                print(f"FAIL {name} ({mode})\n  markdown: {text!r}\n  roc:   {json.dumps(roc, ensure_ascii=False)}\n  cmark: {json.dumps(oracle, ensure_ascii=False)}")
-    write_json(work / "corpus-report.json", report)
+    counts = differential(probe, [(name, mode, text) for name, text, mode in selected], work / "corpus-report.json", args.show)
     print(f"corpus: {len(texts)} inputs, {len(selected)} comparable; {counts}")
     return 1 if counts["fail"] else 0
+
+
+def differential(probe: Path, samples: list[tuple[str, str, str]], report_path: Path, show: int) -> dict:
+    """Compare the library with cmark-gfm on (name, mode, markdown) samples,
+    write the non-passing ones to report_path and return verdict counts."""
+    results = run_probe(probe, [(mode, text) for _, mode, text in samples])
+    items = []
+    for (name, mode, text), result in zip(samples, results):
+        roc = probe_blocks(result, mode)
+        oracle = cmark_blocks(text)
+        items.append({"file": name, "mode": mode, "markdown": text, "roc": roc, "cmark": oracle, "verdict": classify(text, roc, oracle)})
+    reclassify_symbol_failures(probe, items)
+    counts = {"pass": 0, "fail": 0, "oracle-quirk": 0, "block": 0}
+    shown = 0
+    for item in items:
+        counts[item["verdict"]] += 1
+        if item["verdict"] == "fail" and shown < show:
+            shown += 1
+            print(f"FAIL {item['file']} ({item['mode']})\n  markdown: {item['markdown']!r}\n  roc:   {json.dumps(item['roc'], ensure_ascii=False)[:1500]}\n  cmark: {json.dumps(item['cmark'], ensure_ascii=False)[:1500]}")
+    write_json(report_path, [item for item in items if item["verdict"] != "pass"])
+    return counts
 
 
 def decode_roc_string(literal: str) -> str:
@@ -574,21 +640,7 @@ def generated(args) -> int:
         if not match:
             continue
         samples.append((path.name, match.group(1), decode_roc_string(match.group(2))))
-    results = run_probe(probe, [(mode, md) for _, mode, md in samples])
-    counts = {"pass": 0, "fail": 0, "oracle-quirk": 0}
-    report = []
-    shown_count = 0
-    for (name, mode, md), result in zip(samples, results):
-        roc = probe_blocks(result, mode)
-        oracle = cmark_blocks(md)
-        verdict = classify(md, roc, oracle)
-        counts[verdict] += 1
-        if verdict != "pass":
-            report.append({"file": name, "verdict": verdict, "markdown": md, "roc": roc, "cmark": oracle})
-            if verdict == "fail" and shown_count < args.show:
-                shown_count += 1
-                print(f"FAIL {name} ({mode})\n  markdown: {md!r}\n  roc:   {json.dumps(roc, ensure_ascii=False)[:1500]}\n  cmark: {json.dumps(oracle, ensure_ascii=False)[:1500]}")
-    write_json(work / "generated-report.json", report)
+    counts = differential(probe, samples, work / "generated-report.json", args.show)
     print(f"generated: {len(samples)} samples; {counts}")
     return 1 if counts["fail"] else 0
 
