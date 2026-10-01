@@ -491,32 +491,44 @@ parse_document = |input| {
 ## ending does not start another line.
 split_document_lines : Utf8.Bytes -> List(Utf8.Bytes)
 split_document_lines = |input| {
+	# Lines are slices of the input; only a line with U+0000 is copied.
 	var $lines = []
-	var $current = []
+	var $start = 0
+	var $has_nul = False
 	var $index = 0
 	len = input.len()
 	while $index < len {
 		byte = input.get($index) ?? 0
-		if byte == '\n' {
-			$lines = $lines.append($current)
-			$current = []
-		} else if byte == '\r' {
-			$lines = $lines.append($current)
-			$current = []
-			if (input.get($index + 1) ?? 0) == '\n' {
+		if byte == '\n' or byte == '\r' {
+			$lines = $lines.append(document_line(input, $start, $index, $has_nul))
+			if byte == '\r' and (input.get($index + 1) ?? 0) == '\n' {
 				$index = $index + 1
 			}
+			$start = $index + 1
+			$has_nul = False
 		} else if byte == 0 {
-			$current = $current.concat([0xEF, 0xBF, 0xBD])
-		} else {
-			$current = $current.append(byte)
+			$has_nul = True
 		}
 		$index = $index + 1
 	}
-	if $current.is_empty() {
-		$lines
+	if $start < len {
+		$lines.append(document_line(input, $start, len, $has_nul))
 	} else {
-		$lines.append($current)
+		$lines
+	}
+}
+
+document_line : Utf8.Bytes, U64, U64, Bool -> Utf8.Bytes
+document_line = |input, start, end, has_nul| {
+	line = input.sublist({ start, len: end - start })
+	if has_nul {
+		var $out = List.with_capacity(line.len() + 8)
+		for byte in line {
+			$out = if byte == 0 $out.concat([0xEF, 0xBF, 0xBD]) else $out.append(byte)
+		}
+		$out
+	} else {
+		line
 	}
 }
 
@@ -1207,7 +1219,7 @@ collect_definitions = |events| {
 
 join_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
 join_with_newlines = |lines| {
-	var $out = []
+	var $out = List.with_capacity(lines.fold(0, |sum, line| sum + line.len() + 1))
 	for line in lines {
 		if !$out.is_empty() {
 			$out = $out.append('\n')
