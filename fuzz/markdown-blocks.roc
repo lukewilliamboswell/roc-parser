@@ -22,7 +22,7 @@ import parser.String
 ## containers it sits in (a lazy continuation line).
 ##
 ## Inline content is restricted to plain words so that the inline parser's
-## result is known: `Text` with the words joined by single spaces.
+## result is known: `Text` with the words, a line feed for each soft break.
 ##
 ## Metamorphic relations: CRLF and CR line endings, and a missing final line
 ## ending, give the same tree.
@@ -128,7 +128,7 @@ gen_paragraph = |start, flush| {
 		$texts = $texts.append(ws.text)
 		$index = $index + 1
 	}
-	{ lines: $lines, node: Paragraph(inline_text(Str.join_with($texts, " "))), kind: KParagraph, cur: $cur }
+	{ lines: $lines, node: Paragraph(inline_text(Str.join_with($texts, "\n"))), kind: KParagraph, cur: $cur }
 }
 
 gen_atx : Cur, Bool -> Gen

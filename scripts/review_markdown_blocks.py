@@ -136,9 +136,9 @@ def _inlines(element) -> list:
         if kind == "text":
             out.append(["text", _t(child.text)])
         elif kind == "softbreak":
-            # The Roc AST has no soft-break node; the block parser joins
-            # paragraph lines with a single space.
-            out.append(["text", " "])
+            # The Roc AST has no soft-break node; a soft break stays a line
+            # feed inside the surrounding text.
+            out.append(["text", "\n"])
         elif kind == "linebreak":
             out.append(["br"])
         elif kind == "code":

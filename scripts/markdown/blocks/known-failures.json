@@ -16,388 +16,43 @@
       "sha256": "d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20"
     },
     "markdown_sha256": "bfe6f3f4a19b5b487d87f6de906cfa3ad73fdf2a104dfabd6b5c6258a41c643a",
-    "source_revision": "64bc07a5ed8859848313a22489cf12f8c61cb50f"
+    "source_revision": "7afc7413563eb8dcaa8bc6c5eb94f527f483ca7e"
   },
   "failures": {
-    "spec/014": {
-      "signature": "40317226a1b9294584da495e1a9e5477e934b04a7baf689ea2f3b24f843ad1bf",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/025": {
-      "signature": "7b42f8ad099d011568fabf744adf66313e502137d579d701ca92457b32c864b3",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
     "spec/028": {
-      "signature": "a195d437c2cd2823defdcd550d10065e0e2c5495a5a6b2e68c0161a35f0b5b7b",
+      "signature": "fb29376901e1939c6fa5453fcaa50f05d50bf26f4a7bd82197425794556e06d6",
       "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/037": {
-      "signature": "6a859804ae204bc2c3ffcaed26397565e78a0796385ce3994c49d8537611f500",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/046": {
-      "signature": "654b5d1eabe1eb723a8b4c4ba37b1ddb4bd8820c5f6979b26541e92fa5326afb",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/049": {
-      "signature": "e744c3f3c3e2b295cdda8b553358f002120ea403f58e21a7313089f9250160d0",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/070": {
-      "signature": "38ffd45e69f2b1e7f095301905e71dfc04944aaadb743b8509ebb58bf1bedf6a",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/081": {
-      "signature": "2977ac3875e30087ce55b45746d692dd80fbab8b4c25dfdcf839e70721d13ee9",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/082": {
-      "signature": "88aac946d2cbe0e00063d3fdda7d6bbc45f1bf5f00da188f3f459f9ec75e04a1",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/087": {
-      "signature": "9c372adae92dc9beff5aa90c3df591aa0f5cd77308ae243866d6ef54aa53c11b",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/088": {
-      "signature": "b8376073f7449bd060c1a7df3ddb9422cb975fa399cf9d39db6caacf758888e1",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/093": {
-      "signature": "9788206a0e63f966f706f4d9dbf4f08edfced835eb0299408ec8efc309b781d7",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/095": {
-      "signature": "fa79a5466fab1de87275bbee0ee30734f82d8091b2453a14387abe4b2b2c7f10",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/104": {
-      "signature": "3c75fccfa1d9b3706421ada7a32aeabdebb94a53bd1754f329d6b67a12009c14",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/105": {
-      "signature": "c8154a402f046ea46705a0f6be29854394207e3b79daebb96146f9772bd06581",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/106": {
-      "signature": "3d32e6845f42c50a2d3d8fe8cff7e2aee6780f2ccf02b70cb7272c4fbfac0cf0",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/113": {
-      "signature": "e07bc2b0e239cb309cb632d583070be7319f72917388301a33b7a0d64fe4f65a",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/138": {
-      "signature": "e91db2edc10c0d95eb225ebdaee7d13285783118023de7eb3bf1b6243db61104",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/145": {
-      "signature": "354805870a09f437fe41fcb24353107b81872e17c2a8f88f408803d4890bbeab",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/148": {
-      "signature": "9bd6002f8c042b805c92de9015eafb8156d9e8b254931be749386ec964e4af28",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/187": {
-      "signature": "4be717ac0201ae157870147c95a4179b806ecb8e88a1455af3bf574e64ff94e8",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/213": {
-      "signature": "6eff7a4177158e724009a4be5edb8d775eb7c9fefb34df9f655557cdf7e907df",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/216": {
-      "signature": "607d10ff8cf5f37ac8fe0b63dd976e6caa5a09ea6bd561ec17d8210f2a907946",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/217": {
-      "signature": "0acbeb002e9c93978fa40d7743cb232e4f0b8f6d2132adc1ffc146cff7535608",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/220": {
-      "signature": "ec7cb88a827cee764266a075d4571c7ef5d08e60c916bfd889daa4dce398c3be",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/222": {
-      "signature": "bc14de6605bdf4d6034e14727c552d7aec2b6c1f155142847cbef612b0835b21",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/223": {
-      "signature": "1a1d2199d2ce4f66968accaae97678bc5bd7b70f0d8bf15ff25af9e9bb8f22a0",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/224": {
-      "signature": "972987e3daf91a983d9068160fe746212bbb6e06744facdb82eb8f6fba9fec6b",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/228": {
-      "signature": "afeafab3e895ab2e513355f2e889173799c05e99bc6fcf95824fe004984fdaf6",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/229": {
-      "signature": "79fb7a5bca4a7232209f87a260e175f0faf2a701aae10c005e31191539c0029a",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/230": {
-      "signature": "c63ee6a97d27bb9835e1f1f0587ac8b815fc1640817dc64a3fa179e5603333e4",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/232": {
-      "signature": "0fa5b804da335d8b74515cb16a8b9f995bd6f4a518c8d620da385ed7e562fc0d",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/233": {
-      "signature": "56f5e949ab4fdd82b3ee5875b44c8a463c7ef005a254344c378680676fdaff26",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/238": {
-      "signature": "eceecae6ac71744a1b94d577df7ae706610b57e71f37f13c584ce815bfef8096",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/243": {
-      "signature": "71337afb9e22dabcd4ac71e1ba3e08bd9c35a4975ae1ef477557d7933b915354",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/247": {
-      "signature": "d32b53fdbb7297278fc55a7c2fd31cc931b8fb0d81faa5e161e2754097bfb0e7",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/250": {
-      "signature": "8217e877429848e9396bb971e9a0112fcb18c47c3218948338ec63467e7fcd95",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/251": {
-      "signature": "48f038cae9bafed4de9ec24890688a2ec228a07468ae9ec9e0372c20ba96e9ff",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/253": {
-      "signature": "c75e30b49923c67dd36f76e0e5b1b89332ad3bae8f5f3f12b62c35c7b025c747",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/254": {
-      "signature": "a5455db4c47b6c25f9b0018d14a4134dd4efa211086b97655b54ae759d4ba099",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/285": {
-      "signature": "2930a43b5c18c209d8113023ef48272c00b0fa4b269b30869733c962bdaf068e",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/286": {
-      "signature": "75e91dfec66396479b507dfcd8d673848f8905661eb9ba83663d0e74f4c92a1d",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/287": {
-      "signature": "4e5358809c50ea5cc7fadd3f7869c832ad59de621be2cfac6235580e1bff1eaf",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/288": {
-      "signature": "e036dcdc052fb362f64c909af900ea66ad025e9c403ca41915686acfbc968fd5",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/290": {
-      "signature": "e13d11339f16ccd40f3b02790caf89665520bcbf9396680d4a3ce86af6e9214c",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/291": {
-      "signature": "4d889f3c91d560ea5ed4f2ba96a705e6047f8b41dd86748a1ad99a9df77e944e",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/292": {
-      "signature": "eb8f616c349940365f0bc48bd4997e4fc4147ffbdaae8aec27abc820a3f1b2e8",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/293": {
-      "signature": "264ecc363e37b3a9edf87d806188f8446da6b2d2f044a88f371b4c468cd6a24f",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/304": {
-      "signature": "33b3c349b54e897cdab2e145a4a3213261a8e0f36496a01ea4883439833a3df8",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/312": {
-      "signature": "76de5ee6f696dc45767e9fdc5f135c960bd2c52dc89f0bd9b3835f36411447b2",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/334": {
-      "signature": "f0bc0c5db1a5037ca26bfa110a996339f7f762a09c746299d978f78b864d1cc7",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
+      "reason": "Oracle predates 0.31.2: cmark-gfm 0.29 decodes 8-digit numeric references (&#87654321;); the spec allows at most 7 digits."
     },
     "spec/354": {
       "signature": "1eaf2e798ec5c455067deae14c6a638cc3f9c9116205719dcd4924ad51c00887",
       "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/367": {
-      "signature": "691493f5118563c16f7b8c585f120636be97b7279b210b8d402b6737d1acf050",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/384": {
-      "signature": "3c98a93a51cf6304062d63e71c13b041aea3bea66bc2521a170ac527603979bd",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/394": {
-      "signature": "a970a8a8369c904a3c5f081f2c118184c009edc47f4b9a34a166ba249a9a4c7e",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/405": {
-      "signature": "bb892bdb3a256fcecc29492397afc1051d25947004fc0028b985a1d8a756e801",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/423": {
-      "signature": "30fcb4c606528a0a7b5125baed04a36ef4171a6836165ed76b6acf45b907fc3c",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/432": {
-      "signature": "f9d868fc5a59a70557b356f1507278c85c4d8b4d17296193e25cf662ea4589ab",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/490": {
-      "signature": "490f75dfba67de56b2eef1a76e5cdf10c7f10335f8bac5e6905dce8231d48c25",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/494": {
-      "signature": "2cb963028a50890d764d22486f5f2fd79a7c142ad259bdc8fd76de116ec09311",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/505": {
-      "signature": "4e80203bb640559f8379d26fe68476787f2c5bb8a53cb05f8f20735b3166c19e",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/543": {
-      "signature": "cab0255648dc0952c469d9ef218f68065ffdf5c29304611adcd1a547b885df99",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/552": {
-      "signature": "9869e3e0722238459dba4dee806f6aa5d66de1a686c2ac055b226f681a0f66e8",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/556": {
-      "signature": "c715aca53a5592ddd29eb1be720a420ddcc3030fb3c22b5eeedb45d6028fda34",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/587": {
-      "signature": "537e4edef292cacf264570f54c9bb0673ce026e91dda1201cfd227397e3ca506",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
+      "reason": "Oracle predates 0.31.2: cmark-gfm 0.29 does not count Unicode symbols (S*) as punctuation for emphasis flanking."
     },
     "spec/602": {
       "signature": "a31a1a05e6448859f3a6ee93cb573a64cbf2e76102a727e12ce857ae17cabe49",
       "kind": "wrong_inline",
-      "reason": "TODO: explain"
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
     },
     "spec/606": {
       "signature": "f8490cf7578b1ed8a604a4286396313810c7fd17869f307bf0cf1417b1994046",
       "kind": "wrong_inline",
-      "reason": "TODO: explain"
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
     },
     "spec/608": {
       "signature": "3a99175dd9461f1ed91bd46467a36f4efe0ec37768442907493b60178c732faf",
       "kind": "wrong_inline",
-      "reason": "TODO: explain"
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
     },
     "spec/611": {
       "signature": "cfde3f9b9be39e7a2baeaee2661e9b6b2d5b6fb8b297535247c288381cfd27a2",
       "kind": "wrong_inline",
-      "reason": "TODO: explain"
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
     },
     "spec/612": {
       "signature": "3a2cbf279895d44ea89d93d90189449c09d2544680868fd150db3fc32b366ad4",
       "kind": "wrong_inline",
-      "reason": "TODO: explain"
-    },
-    "spec/621": {
-      "signature": "6426c3d89d9403b0b80861f9b05be48e57562f5b75f73a96e72ce06dc32cbc1f",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/648": {
-      "signature": "2af075673a46014ae3f009a740c7f96ba2345683913b36c78ff33649fb441f7b",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "spec/649": {
-      "signature": "42cba9472b2c685df1b8e42fb895ada9d771bdf576ad7e41bc46b246ee3f115a",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "case/crlf-paragraph": {
-      "signature": "f6295bcd41fa9188037b1aa30dbfde6654047e5db46259567a083ffc6cd5af14",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "case/soft-break-trailing-space": {
-      "signature": "9950edc1fc32d60e18cc024eb4004905d205a644bdcdb2cd79cc73afa49cc680",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
-    },
-    "case/nested-containers": {
-      "signature": "56b4076997c3872aa6934860ea64298e2a0b5cae3ba4872d056beb0249225008",
-      "kind": "wrong_text",
-      "reason": "TODO: explain"
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
     }
   }
 }

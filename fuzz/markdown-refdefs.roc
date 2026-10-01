@@ -161,7 +161,7 @@ gen_block = |start| {
 	node =
 		if all_valid {
 			rest = [junk, tail_text].keep_if(|part| !part.is_empty())
-			if rest.is_empty() None else Some(Paragraph([Text(Str.join_with(rest, " "))]))
+			if rest.is_empty() None else Some(Paragraph([Text(Str.join_with(rest, "\n"))]))
 		} else {
 			Some(Paragraph([Text("?")]))
 		}
@@ -243,7 +243,7 @@ generate = |bytes| {
 	interrupt = pick($cur, 4)
 	$cur = interrupt.cur
 	late = if interrupt.n == 0 "para\n[late]: /late\n\n" else ""
-	late_node = if interrupt.n == 0 [Paragraph([Text("para [late]: /late")])] else []
+	late_node = if interrupt.n == 0 [Paragraph([Text("para\n[late]: /late")])] else []
 	uses = labels.map_with_index(|label, index| "[t${index.to_str()}][${label}]")
 	use_line = Str.join_with(uses, " ")
 	use_inlines = labels.map_with_index(
