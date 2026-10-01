@@ -581,9 +581,9 @@ parse_element = |bytes, start| {
 						$first_child = parent.first_child
 					}
 				}
-			} else if starts_with_at(bytes, $pos, "<!--".to_utf8()) {
+			} else if next == '!' and starts_with_at(bytes, $pos, "<!--".to_utf8()) {
 				$pos = skip_comment(bytes, $pos)?
-			} else if starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
+			} else if next == '!' and starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
 				parsed = parse_cdata(bytes, $pos, $text)?
 				$text = parsed.val
 				$pos = parsed.pos
@@ -609,7 +609,7 @@ parse_element = |bytes, start| {
 			}
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
-			$text = $text.concat(reference.val)
+			$text = append_utf8($text, reference.val)
 			$pos = reference.pos
 		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
 			return fail($pos, "']]>' is not allowed in character data")
@@ -617,8 +617,10 @@ parse_element = |bytes, start| {
 			$text = $text.append('\n')
 			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
 		} else if byte >= 0x20 and byte < 0x80 {
-			$text = $text.append(byte)
-			$pos = $pos + 1
+			# Copy a run of plain ASCII at once rather than byte by byte.
+			end = plain_run_end(bytes, $pos + 1)
+			$text = append_run($text, bytes.sublist({ start: $pos, len: end - $pos }))
+			$pos = end
 		} else {
 			next = check_char(bytes, $pos)?
 			$text = $text.concat(bytes.sublist({ start: $pos, len: next - $pos }))
@@ -679,7 +681,7 @@ parse_start_tag = |bytes, start| {
 		if bytes.get($pos) == Ok('>') {
 			return Ok({ name: name.val, attributes: $attributes, empty: False, pos: $pos + 1 })
 		}
-		if starts_with_at(bytes, $pos, "/>".to_utf8()) {
+		if bytes.get($pos) == Ok('/') and bytes.get($pos + 1) == Ok('>') {
 			return Ok({ name: name.val, attributes: $attributes, empty: True, pos: $pos + 2 })
 		}
 		if $pos >= bytes.len() {
@@ -705,6 +707,7 @@ parse_start_tag = |bytes, start| {
 	crash "unreachable: the start tag loop only exits by returning"
 }
 
+# Up to this many attributes, duplicates are found by scanning the list.
 # See https://www.w3.org/TR/xml/#NT-AttValue and https://www.w3.org/TR/xml/#AVNormalize
 parse_attribute_value : List(U8), U64 -> Parsed(Str)
 parse_attribute_value = |bytes, start| {
@@ -722,7 +725,7 @@ parse_attribute_value = |bytes, start| {
 			return fail($pos, "'<' is not allowed in attribute values")
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
-			$value = $value.concat(reference.val)
+			$value = append_utf8($value, reference.val)
 			$pos = reference.pos
 		} else if byte == '\r' {
 			$value = $value.append(' ')
@@ -730,6 +733,10 @@ parse_attribute_value = |bytes, start| {
 		} else if byte == '\n' or byte == '\t' {
 			$value = $value.append(' ')
 			$pos = $pos + 1
+		} else if byte >= 0x20 and byte < 0x80 {
+			end = plain_run_end(bytes, $pos + 1)
+			$value = append_run($value, bytes.sublist({ start: $pos, len: end - $pos }))
+			$pos = end
 		} else {
 			next = check_char(bytes, $pos)?
 			$value = $value.concat(bytes.sublist({ start: $pos, len: next - $pos }))
@@ -740,11 +747,14 @@ parse_attribute_value = |bytes, start| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-Reference
-parse_reference : List(U8), U64 -> Parsed(List(U8))
+#
+# Returns the code point the reference stands for, so the caller can append
+# its bytes without building a list for each reference.
+parse_reference : List(U8), U64 -> Parsed(U32)
 parse_reference = |bytes, start| {
-	if starts_with_at(bytes, start, "&#x".to_utf8()) {
+	if bytes.get(start + 1) == Ok('#') and bytes.get(start + 2) == Ok('x') {
 		parse_char_reference(bytes, start, start + 3, 16)
-	} else if starts_with_at(bytes, start, "&#".to_utf8()) {
+	} else if bytes.get(start + 1) == Ok('#') {
 		parse_char_reference(bytes, start, start + 2, 10)
 	} else {
 		name =
@@ -757,19 +767,19 @@ parse_reference = |bytes, start| {
 		}
 		replacement =
 			match name.val {
-				"lt" => "<"
-				"gt" => ">"
-				"amp" => "&"
-				"apos" => "'"
-				"quot" => "\""
+				"lt" => '<'
+				"gt" => '>'
+				"amp" => '&'
+				"apos" => '\''
+				"quot" => '"'
 				other => return fail(start, "undeclared entity &${other};")
 			}
-		Ok({ val: replacement.to_utf8(), pos: name.pos + 1 })
+		Ok({ val: replacement, pos: name.pos + 1 })
 	}
 }
 
 # See https://www.w3.org/TR/xml/#NT-CharRef
-parse_char_reference : List(U8), U64, U64, U32 -> Parsed(List(U8))
+parse_char_reference : List(U8), U64, U64, U32 -> Parsed(U32)
 parse_char_reference = |bytes, start, digits_start, base| {
 	var $code = 0
 	var $pos = digits_start
@@ -793,7 +803,7 @@ parse_char_reference = |bytes, start, digits_start, base| {
 	if !is_xml_char($code) {
 		return fail(start, "character reference to a character that is not allowed in XML")
 	}
-	Ok({ val: utf8_encode($code), pos: $pos + 1 })
+	Ok({ val: $code, pos: $pos + 1 })
 }
 
 ## The value of a hexadecimal digit, or 255 for any other byte.
@@ -921,17 +931,45 @@ decode_scalar = |bytes, pos| {
 	}
 }
 
-utf8_encode : U32 -> List(U8)
-utf8_encode = |code| {
+## `out` with the UTF-8 encoding of `code` appended.
+append_utf8 : List(U8), U32 -> List(U8)
+append_utf8 = |out, code| {
 	if code < 0x80 {
-		[U32.to_u8_wrap(code)]
+		out.append(U32.to_u8_wrap(code))
 	} else if code < 0x800 {
-		[U32.to_u8_wrap(0xC0 + code // 64), U32.to_u8_wrap(0x80 + code % 64)]
+		out.append(U32.to_u8_wrap(0xC0 + code // 64)).append(U32.to_u8_wrap(0x80 + code % 64))
 	} else if code < 0x10000 {
-		[U32.to_u8_wrap(0xE0 + code // 4096), U32.to_u8_wrap(0x80 + (code // 64) % 64), U32.to_u8_wrap(0x80 + code % 64)]
+		out.append(U32.to_u8_wrap(0xE0 + code // 4096)).append(U32.to_u8_wrap(0x80 + (code // 64) % 64)).append(U32.to_u8_wrap(0x80 + code % 64))
 	} else {
-		[U32.to_u8_wrap(0xF0 + code // 262144), U32.to_u8_wrap(0x80 + (code // 4096) % 64), U32.to_u8_wrap(0x80 + (code // 64) % 64), U32.to_u8_wrap(0x80 + code % 64)]
+		out.append(U32.to_u8_wrap(0xF0 + code // 262144)).append(U32.to_u8_wrap(0x80 + (code // 4096) % 64)).append(U32.to_u8_wrap(0x80 + (code // 64) % 64)).append(U32.to_u8_wrap(0x80 + code % 64))
 	}
+}
+
+# The end of a run of printable ASCII from `start` that needs no special
+# handling in character data or attribute values: anything but '<', '&', ']'
+# and quotes. Stopping early is harmless; the caller handles the byte and
+# starts a new run.
+## `out` followed by `run`, a slice of the input. When `out` is empty the
+## slice itself is kept, so text with no references or line breaks to rewrite
+## becomes a `Str` that shares the input's bytes instead of a copy.
+append_run : List(U8), List(U8) -> List(U8)
+append_run = |out, run| if out.is_empty() run else out.concat(run)
+
+plain_run_end : List(U8), U64 -> U64
+plain_run_end = |bytes, start| {
+	var $pos = start
+	var $going = True
+	while $going {
+		match bytes.get($pos) {
+			Ok(b) if b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']' and b != '"' and b != '\'' => {
+				$pos = $pos + 1
+			}
+			_ => {
+				$going = False
+			}
+		}
+	}
+	$pos
 }
 
 starts_with_at : List(U8), U64, List(U8) -> Bool
@@ -1244,14 +1282,14 @@ expect {
 			leaf = Text("t")
 			root.name() == Ok("p")
 				and root.attribute("id") == Ok("x")
-				and root.attribute("class") == Err(Missing)
-				and root.children_named("b").len() == 2
-				and root.children_named("i") == []
-				and root.text() == "Hi there!"
-				and leaf.name() == Err(NotAnElement)
-				and leaf.attribute("id") == Err(Missing)
-				and leaf.children_named("b") == []
-				and leaf.text() == "t"
+					and root.attribute("class") == Err(Missing)
+						and root.children_named("b").len() == 2
+							and root.children_named("i") == []
+								and root.text() == "Hi there!"
+									and leaf.name() == Err(NotAnElement)
+										and leaf.attribute("id") == Err(Missing)
+											and leaf.children_named("b") == []
+												and leaf.text() == "t"
 		}
 
 		Err(_) => False
