@@ -8,7 +8,7 @@ import parser.CSV
 import parser.HTTP
 import parser.Markdown
 import parser.Parser
-import parser.String
+import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
@@ -31,12 +31,12 @@ parse = |format, input| {
 		"csv" => CSV.parse_str(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()
-		"markdown" => String.parse_str(Markdown.all, input).is_ok()
+		"markdown" => Utf8.parse_str(Markdown.all, input).is_ok()
 		"http" =>
 			if input.starts_with("HTTP/") {
-				String.parse_str(HTTP.response, input).is_ok()
+				Utf8.parse_str(HTTP.response, input).is_ok()
 			} else {
-				String.parse_str(HTTP.request, input).is_ok()
+				Utf8.parse_str(HTTP.request, input).is_ok()
 			}
 		_ => Bool.False
 	}

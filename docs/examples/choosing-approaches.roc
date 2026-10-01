@@ -5,7 +5,7 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 import parser.Yaml
 
 # tag::decode[]
@@ -38,15 +38,15 @@ expect top_level_keys("name: web\nport: 8080\nextra: [1, 2]") == Ok(["name", "po
 # be digits and the grammar is yours to define.
 Endpoint : { host : Str, port : U64 }
 
-endpoint : Parser(String.Utf8, Endpoint)
+endpoint : Parser(Utf8.Bytes, Endpoint)
 endpoint =
 	Parser.const(|host| |port| { host, port })
-		.keep(Parser.chomp_while(|b| b != ':').map(String.str_from_utf8))
-		.skip(String.codeunit(':'))
-		.keep(String.digits)
+		.keep(Parser.chomp_while(|b| b != ':').map(Str.from_utf8_lossy))
+		.skip(Utf8.codeunit(':'))
+		.keep(Utf8.digits)
 
-expect String.parse_str(endpoint, "example.com:443") == Ok({ host: "example.com", port: 443 })
-expect String.parse_str(endpoint, "example.com:https").is_err()
+expect Utf8.parse_str(endpoint, "example.com:443") == Ok({ host: "example.com", port: 443 })
+expect Utf8.parse_str(endpoint, "example.com:https").is_err()
 # end::combinators[]
 
 # tag::split[]
@@ -60,6 +60,6 @@ expect fields("a\tb\tc") == ["a", "b", "c"]
 main! = |_args| {
 	Stdout.line!(Str.inspect(decode_service("{\"name\": \"web\", \"port\": 8080}")))?
 	Stdout.line!(Str.inspect(top_level_keys("name: web\nport: 8080\nextra: [1, 2]")))?
-	Stdout.line!(Str.inspect(String.parse_str(endpoint, "example.com:443")))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(endpoint, "example.com:443")))?
 	Stdout.line!(Str.inspect(fields("a\tb\tc")))
 }

@@ -5,7 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.HTTP
-import parser.String
+import parser.Utf8
 import Bench
 
 ## Benchmark driver: one message through HTTP.response when it starts with
@@ -16,12 +16,12 @@ main! = |args| Bench.run!(args, parse)
 parse : Str -> Try(U64, U64)
 parse = |input| {
 	if input.starts_with("HTTP/") {
-		match String.parse_str(HTTP.response, input) {
+		match Utf8.parse_str(HTTP.response, input) {
 			Ok(response) => Ok(response.headers.len() + response.body.len() + response.status_code.to_u64())
 			Err(_) => Err(1)
 		}
 	} else {
-		match String.parse_str(HTTP.request, input) {
+		match Utf8.parse_str(HTTP.request, input) {
 			Ok(request) => Ok(request.headers.len() + request.body.len() + request.uri.count_utf8_bytes().to_u64())
 			Err(_) => Err(1)
 		}

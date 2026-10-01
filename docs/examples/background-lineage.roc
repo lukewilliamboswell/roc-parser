@@ -5,75 +5,68 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 # tag::applicative[]
 # Applicative style: a constructor function, then one `keep` per field and
 # one `skip` per piece of punctuation. No step depends on an earlier value.
 Point : { x : U64, y : U64 }
 
-point : Parser(String.Utf8, Point)
+point : Parser(Utf8.Bytes, Point)
 point =
 	Parser.const(|x| |y| { x, y })
-		.skip(String.codeunit('('))
-		.keep(String.digits)
-		.skip(String.codeunit(','))
-		.keep(String.digits)
-		.skip(String.codeunit(')'))
+		.skip(Utf8.codeunit('('))
+		.keep(Utf8.digits)
+		.skip(Utf8.codeunit(','))
+		.keep(Utf8.digits)
+		.skip(Utf8.codeunit(')'))
 
-expect String.parse_str(point, "(3,4)") == Ok({ x: 3, y: 4 })
+expect Utf8.parse_str(point, "(3,4)") == Ok({ x: 3, y: 4 })
 # end::applicative[]
 
 # tag::monadic[]
 # A parser is a function from input to a result and the rest of the input.
-# `build_primitive_parser` wraps such a function directly.
-take : U64 -> Parser(String.Utf8, String.Utf8)
+# `custom` wraps such a function directly.
+take : U64 -> Parser(Utf8.Bytes, Utf8.Bytes)
 take = |n|
-	Parser.build_primitive_parser(
+	Parser.custom(
 		|input|
 			if input.len() >= n {
-				Ok({ val: input.take_first(n), input: input.drop_first(n) })
+				Ok({ value: input.take_first(n), rest: input.drop_first(n) })
 			} else {
-				Err(ParsingFailure("expected ${n.to_str()} more bytes"))
+				Err(ParseError({ message: "expected ${n.to_str()} more bytes", offset: 0 }))
 			},
 	)
 
 # Monadic style: the next parser depends on a value already read. Here a
 # length prefix says how many bytes follow.
-length_prefix : Parser(String.Utf8, U64)
-length_prefix = String.digits.skip(String.codeunit(':'))
+length_prefix : Parser(Utf8.Bytes, U64)
+length_prefix = Utf8.digits.skip(Utf8.codeunit(':'))
 
-counted : Parser(String.Utf8, Str)
-counted =
-	Parser.build_primitive_parser(
-		|input| {
-			{ val: n, input: rest } = Parser.parse_partial(length_prefix, input)?
-			Parser.parse_partial(take(n), rest)
-		},
-	)
-		.map(String.str_from_utf8)
+counted : Parser(Utf8.Bytes, Str)
+counted = length_prefix.and_then(take).map(Str.from_utf8_lossy)
 
-expect String.parse_str(counted, "3:abc") == Ok("abc")
-expect String.parse_str(counted, "3:ab").is_err()
+expect Utf8.parse_str(counted, "3:abc") == Ok("abc")
+expect Utf8.parse_str(counted, "3:ab").is_err()
 # end::monadic[]
 
 # tag::ordered[]
 # Ordered choice, as in a PEG: the first alternative that succeeds wins, and
 # a failed alternative is retried from the same input.
-sign : Parser(String.Utf8, [Plus, Minus, PlusPlus])
+sign : Parser(Utf8.Bytes, [Plus, Minus, PlusPlus])
 sign =
-	String.one_of([
-		Parser.const(PlusPlus).skip(String.string("++")),
-		Parser.const(Plus).skip(String.string("+")),
-		Parser.const(Minus).skip(String.string("-")),
+	Parser.one_of([
+		Parser.const(PlusPlus).skip(Utf8.string("++")),
+		Parser.const(Plus).skip(Utf8.string("+")),
+		Parser.const(Minus).skip(Utf8.string("-")),
 	])
 
-expect String.parse_str(sign, "++") == Ok(PlusPlus)
-expect String.parse_str(sign, "-") == Ok(Minus)
+expect Utf8.parse_str(sign, "++") == Ok(PlusPlus)
+expect Utf8.parse_str(sign, "-") == Ok(Minus)
 # end::ordered[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(point, "(3,4)")))?
-	Stdout.line!(Str.inspect(String.parse_str(counted, "3:abc")))?
-	Stdout.line!(Str.inspect(String.parse_str(sign, "++")))
+	Stdout.line!(Str.inspect(Utf8.parse_str(point, "(3,4)")))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(counted, "3:abc")))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(sign, "++")))
 }
