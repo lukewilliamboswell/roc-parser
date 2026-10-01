@@ -1,3 +1,4 @@
 Ok({ x: 3, y: 4 })
 Ok("abc")
 Ok(PlusPlus)
+Err(ParseError({ message: "Not a digit", offset: 8 }))

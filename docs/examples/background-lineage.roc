@@ -65,8 +65,18 @@ expect Utf8.parse_str(sign, "++") == Ok(PlusPlus)
 expect Utf8.parse_str(sign, "-") == Ok(Minus)
 # end::ordered[]
 
+# tag::furthest[]
+# Furthest failure: `many` stops at the bad second point, but the error the
+# runner reports is that point's own failure, at the byte where it happened.
+points : Parser(Utf8.Bytes, List(Point))
+points = Parser.many(point)
+
+expect Utf8.parse_str(points, "(1,2)(3,x)") == Err(ParseError({ message: "Not a digit", offset: 8 }))
+# end::furthest[]
+
 main! = |_args| {
 	Stdout.line!(Str.inspect(Utf8.parse_str(point, "(3,4)")))?
 	Stdout.line!(Str.inspect(Utf8.parse_str(counted, "3:abc")))?
-	Stdout.line!(Str.inspect(Utf8.parse_str(sign, "++")))
+	Stdout.line!(Str.inspect(Utf8.parse_str(sign, "++")))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(points, "(1,2)(3,x)")))
 }

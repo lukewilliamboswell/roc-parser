@@ -10,7 +10,7 @@ endif::[]
 = Where the design comes from
 
 roc-parser is not a new idea. Parser combinators have been studied and used
-for fifty years, and almost every choice in the `Parser` and `String` modules
+for fifty years, and almost every choice in the `Parser` and `Utf8` modules
 repeats, adapts or deliberately declines something from that history. This
 chapter traces those ideas to their sources, so you can see why the library
 behaves as it does and where it differs from the libraries you may already
@@ -41,17 +41,15 @@ reference.
 
 roc-parser keeps the function and drops the list. A `Parser(input, a)` wraps
 a function from `input` to a `Try` holding either the value and the rest of
-the input, or a failure message. `Parser.build_primitive_parser` takes such a
-function directly, so you can always step outside the combinators:
+the input, `{ value, rest }`, or a `ParseError` with a message and an offset.
+`Parser.custom` takes such a function directly, so you can always step
+outside the combinators, and `Parser.run` runs a parser and returns the same
+shape:
 
 [source,roc]
 ----
 include::examples/background-lineage.roc[tag=monadic,indent=0]
 ----
-
-// TODO(2.0 API): build_primitive_parser becomes Parser.custom, parse_partial
-// becomes Parser.run, and the result record { val, input } becomes the langref
-// parser_for shape { value, rest }. Update this text and the example.
 
 A parser returns one result, not a list. Wadler's list of successes allows
 ambiguous grammars, where one input has several readings, but the formats this
@@ -65,8 +63,8 @@ Hutton and Erik Meijer's "Monadic parser combinators" (1996) and the shorter
 "Monadic parsing in Haskell" (1998) observed that parsers form a _monad_: the
 sequencing operation, usually called `bind` or `and_then`, passes the value
 from the first parser to a function that chooses the second. That is what
-`counted` above does by hand: the length it reads decides how many bytes the
-next parser takes.
+`counted` above does with `and_then`: the length it reads decides how many
+bytes the next parser takes.
 
 Most of a grammar does not need that power. In "Applicative programming with
 effects" (2008), Conor McBride and Ross Paterson named the weaker
@@ -89,13 +87,10 @@ you keep:
 include::examples/background-lineage.roc[tag=applicative,indent=0]
 ----
 
-roc-parser builds `map` and `keep` on this same application step. It does
-not yet export the monadic `and_then`, which is why `counted` uses
-`build_primitive_parser`.
-
-// TODO(2.0 API): the 2.0 spec moves and_then into the Parser type block with
-// docs, so `counted` can be written with .and_then(take). Rewrite the
-// paragraph above and the example when that lands.
+roc-parser builds `map` and `keep` on this same application step, and also
+offers the monadic `and_then` method for the cases that need it, such as
+`counted`. Prefer `keep` and `skip` when the grammar allows: a parser that
+uses only them can be read top to bottom as a description of its input.
 
 == Choice and backtracking
 
@@ -122,24 +117,23 @@ define choice as prioritized: `A / B` tries `A`, and tries `B` from the same
 position only if `A` fails. Once `A` succeeds, `B` is never considered, even
 if the rest of the parse then fails.
 
-roc-parser's `Parser.alt`, `Parser.one_of` and `String.one_of` are PEG
-ordered choice. A failed alternative is always retried from the original
-input, so there is no `try`, and the first success wins:
+roc-parser's `Parser.alt` and `Parser.one_of` are PEG ordered choice. A
+failed alternative is always retried from the original input, so there is no
+`try`, and the first success wins:
 
 [source,roc]
 ----
 include::examples/background-lineage.roc[tag=ordered,indent=0]
 ----
 
-// TODO(2.0 API): String.one_of is removed in 2.0; use Parser.one_of. Update
-// the example and this paragraph.
-
 The trade-offs follow from the history. Without a commit point, you never
 have to decide where to put `try`, and a grammar reads the same as its PEG.
-The costs are the ones Parsec was designed to avoid: a failure deep inside an
-early alternative is replaced by the failures of the later ones, and a
-grammar whose alternatives share long prefixes re-reads them. <<combinators>>
-shows how to order alternatives so that this rarely matters.
+The costs are the ones Parsec was designed to avoid: a grammar whose
+alternatives share long prefixes re-reads them, and without help a failure
+deep inside an early alternative would be replaced by the failures of the
+later ones. The furthest-failure rule described below provides that help,
+and <<combinators>> shows how to order alternatives so that re-reading rarely
+matters.
 
 == Repetition that always ends
 
@@ -151,12 +145,11 @@ Repeating a parser that can succeed without reading anything, such as
 `chomp_while` or `maybe(p)`, would loop forever. Parsec refuses at run time,
 with the error "combinator 'many' is applied to a parser that accepts an
 empty string". roc-parser instead stops the repetition at the first element
-that makes no progress, and returns what it has collected. A Roc program
+that makes no progress, and returns what it has collected. The check compares
+input lengths, so it costs O(1) per element and needs only the `len` method
+from the input type, which the `where` clause on `many` states. A Roc program
 should not crash on its input, so a well-defined result is better than an
 error that only appears for some inputs.
-
-// TODO(2.0 API): the spec makes the many progress check O(1) instead of
-// comparing whole inputs. The behaviour described here does not change.
 
 == Error reporting
 
@@ -169,21 +162,26 @@ that got further into the input. Elm's parser adds _context_: a parser can
 say "I am reading a list", so the error can name what was being read and not
 just the row and column, which the Elm compiler uses for its error messages.
 
-roc-parser's combinators currently report a message string. `alt` joins the
-messages of both alternatives with "or", and a bad element in the middle of a
-repetition shows up as unread input (`ParsingIncomplete`) rather than as that
-element's failure; <<errors>> shows how to work with this. The format modules
-do better on their own: `Yaml`, `Xml` and `CSV` report line and column.
+roc-parser adopts megaparsec's rule. Parsers track the _furthest failure_,
+the failure that read furthest into the input, and every runner reports it
+as `ParseError({ message, offset })`, where `offset` is a byte offset. A
+repetition that stops at a bad element remembers that element's failure, so
+if the parse then fails, the error points at the bad element rather than at
+the input left over after the repetition:
 
-The 2.0 design adopts megaparsec's rule. The runners track the _furthest
-failure_, the failure that read furthest into the input, and report it with
-its byte offset. The alternative that got furthest is almost always the one
-the author of the input meant, so this recovers most of the precision of
-committed choice while keeping ordered choice.
+[source,roc]
+----
+include::examples/background-lineage.roc[tag=furthest,indent=0]
+----
 
-// TODO(2.0 API): furthest-failure reporting and the
-// ParseError({ message, offset }) error tag are planned for 2.0 and not in the
-// current code. Rewrite this section in the present tense when they land.
+The alternative that got furthest is almost always the one the author of the
+input meant, so this recovers most of the precision of committed choice while
+keeping ordered choice. `ParseError` is an open tag union, so `?` passes it
+through a function that returns other errors too.
+
+The format modules go further on their own: `Yaml` and `Xml` report line
+and column, `CSV` the record and field, and `HTTP` the byte offset, each in an
+error tag named after the format. <<errors>> shows how to present them.
 
 == Bytes, not characters
 
@@ -195,13 +193,12 @@ advice for Roc: in
 {langref}/strings.md[the strings chapter of the language reference], it
 recommends working in UTF-8 bytes when implementing a parser.
 
-So `String.Utf8` is `List(U8)`, and `'a'` is a byte. Every format in this
+So the input type of the text parsers, `Utf8.Bytes`, is `List(U8)`, and
+`'a'` is a byte. Every format in this
 package is defined over ASCII delimiters, which in UTF-8 are single bytes that
 never appear inside a multi-byte character, so reading bytes is both correct
 and fast. Text is turned back into `Str` only once a whole field has been
 read.
-
-// TODO(2.0 API): String becomes Utf8 and String.Utf8 becomes Utf8.Bytes.
 
 == Recursion and laziness
 
@@ -283,7 +280,7 @@ and conformance-suite inputs. <<property-testing>> describes the process.
 
 |Monadic sequencing
 |Hutton and Meijer 1996 and 1998
-|Internal `and_then`; use `build_primitive_parser` today
+|`and_then`, and `custom` for anything else
 
 |Choice
 |Parsec 2001 (committed, with `try`); Ford 2004 (ordered)
@@ -295,7 +292,7 @@ and conformance-suite inputs. <<property-testing>> describes the process.
 
 |Error reporting
 |Parsec, megaparsec (longest match), elm/parser (context)
-|Messages now; furthest failure with a byte offset planned for 2.0
+|Furthest failure with a byte offset; line and column in the formats
 
 |Input type
 |attoparsec, nom (bytes)
