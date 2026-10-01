@@ -47,14 +47,9 @@ yaml_value = |text| {
 	}
 }
 
-# Markdown: the `all` parser accepts every complete document.
+# Markdown: parsing never fails, so `parse_str` returns the blocks directly.
 markdown_blocks : Str -> Str
-markdown_blocks = |text| {
-	match Utf8.parse_str(Markdown.all, text) {
-		Ok(blocks) => blocks.map(Markdown.to_debug_str) |> Str.join_with("\n")
-		Err(_) => "unreachable"
-	}
-}
+markdown_blocks = |text| Str.join_with(Markdown.parse_str(text).map(Str.inspect), "\n")
 
 # end::entry-points[]
 
