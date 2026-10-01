@@ -18,5 +18,7 @@
   "res/reason-ctl": "RFC 9112 4 reason-phrase is HTAB / SP / VCHAR / obs-text; h11 accepts other controls.",
   "res/te-cl": "As req/te-cl.",
   "res/obs-fold": "As req/obs-fold.",
-  "res/lf-endings": "As req/lf-line-endings."
+  "res/lf-endings": "As req/lf-line-endings.",
+  "res/101-unsolicited": "h11 rejects a 101 the client did not ask for (connection state); as a message parser this library returns it with no body (RFC 9112 6.3 item 1).",
+  "res/chunked-ext-bws": "As req/chunked-ext-bws."
 }

@@ -782,6 +782,18 @@
   "expect": "ok"
  },
  {
+  "id": "res/101-unsolicited",
+  "mode": "S",
+  "input": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: x\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/chunked-ext-bws",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2 ;a = \"b\"\r\nhi\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
   "id": "res/version-only",
   "mode": "S",
   "input": "HTTP/1.1\r\n\r\n",
