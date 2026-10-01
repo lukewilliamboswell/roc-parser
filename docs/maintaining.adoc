@@ -92,25 +92,32 @@ runs these jobs:
 Build release bundle:: Validates the version and that the run is on the
 default branch, runs the Python unit tests and `scripts/all_tests.py`, checks
 that the version increases on the previous release, and bundles the package
-with `scripts/bundle.py`.
-Test bundles:: Builds and runs the examples against the new bundle.
+with `scripts/bundle.py`. It also packages the examples archive from the
+bundle's metadata, as a dry run of the asset the release attaches.
+Test bundles:: Packages the examples archive pinned to the new bundle, served
+locally, and checks, runs and builds every app in it.
 Publish GitHub release:: Creates the tag and the GitHub release, with the
 release notes from `docs/releases/<version>.md`, the bundle, an SPDX SBOM
 (`scripts/release_security_assets.py sbom`), and build-provenance and SBOM
-attestations, combined into one offline attestation bundle.
+attestations, combined into one offline attestation bundle. It also attaches
+`roc-parser-examples-<version>.zip`
+(`scripts/release_helpers.py package-examples`): the examples, with their
+`parser` dependency pinned to the release bundle's URL, and a README saying
+how to run them.
 Docs:: Builds the manual and the API reference for the version with
 `scripts/build_manual.py --docs-version <version>` and
 `scripts/build_docs.py`, packages them with
 `scripts/release_helpers.py package-docs`, assembles the GitHub Pages site with
 `scripts/release_helpers.py assemble-pages`, and deploys it.
 
-The workflow also opens a signed follow-up pull request that updates the
-package URLs in `examples/` to the new bundle. Review and merge it.
+Nothing in the repository changes after a release. The examples in
+`examples/` always use the package source (`parser: "../package/main.roc"`);
+only the archive attached to the release points them at its URL.
 
 === After the release
 
-. Check the release page: the notes, the `.tar.zst` bundle, the SBOM and the
-  attestation bundle.
+. Check the release page: the notes, the `.tar.zst` bundle, the examples
+  archive, the SBOM and the attestation bundle.
 . Verify the provenance of the bundle you downloaded:
 +
 [source,bash]
@@ -119,7 +126,6 @@ gh attestation verify <bundle>.tar.zst --repo lukewilliamboswell/roc-parser
 ----
 . Open the published manual and API reference and check that they show the new
   version.
-. Merge the follow-up pull request for the examples.
 
 == Security reports
 

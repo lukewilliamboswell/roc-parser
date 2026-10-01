@@ -24,7 +24,19 @@ write formats back out.
 
 ## Try it
 
-Copy the `.tar.zst` link from the newest
+To run the complete examples:
+
+1. Open the [latest release](https://github.com/lukewilliamboswell/roc-parser/releases/latest)
+   and install the Roc nightly its notes name.
+2. Download that release's `roc-parser-examples-<version>.zip` and unzip it.
+3. In the `examples/` directory inside, run:
+
+```bash
+roc version
+roc csv-movies.roc
+```
+
+To use the package in your own app, copy the `.tar.zst` link from the newest
 [release](https://github.com/lukewilliamboswell/roc-parser/releases) into your
 app's header, then decode some CSV into records:
 
@@ -79,7 +91,9 @@ explains it line by line.
 - [The roc-parser manual](https://lukewilliamboswell.github.io/roc-parser/)
   ([PDF](https://lukewilliamboswell.github.io/roc-parser/roc-parser.pdf))
 - [API reference](https://lukewilliamboswell.github.io/roc-parser/api/)
-- Complete programs in [`examples/`](examples/)
+- Complete programs in [`examples/`](examples/), which use the package
+  source; each release attaches them pinned to its bundle as
+  `roc-parser-examples-<version>.zip`
 
 ## Compatibility
 

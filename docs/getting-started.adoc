@@ -72,6 +72,11 @@ The examples in this manual are tested against the package source in the
 repository, so their headers say `parser: "../../package/main.roc"` instead.
 Everything else in them is the same.
 
+For complete programs to start from, download
+`roc-parser-examples-<version>.zip` from the same release. Its apps are already
+pinned to that release; unzip it and follow the `README.md` inside, which runs
+them with `roc <name>.roc` from its `examples/` directory.
+
 == Read CSV into records
 
 Add the rest of the program below the header:

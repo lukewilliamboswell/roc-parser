@@ -68,7 +68,7 @@ all use it, locally and in CI.
 |===
 |Path |Purpose
 |`package/` |The library: `Parser`, `Utf8`, and one module per format
-|`examples/` |Small apps that use the package
+|`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
 |`scripts/` |Test, review, fuzz, documentation and release automation, all in Python
 |`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
@@ -105,8 +105,10 @@ python3 -m unittest discover -s scripts/tests -p "test_*.py"
 ----
 
 Run the same validation as the `Tests` workflow. `scripts/all_tests.py` checks
-and tests every module, builds and runs the examples, generates the API
-documentation and builds a bundle, under `.roc-parser-tmp/`:
+and tests every module, generates the API documentation, builds a bundle,
+and then packages the examples archive exactly as a release does, pinned to
+that bundle served on localhost, and checks, runs and builds every app in it.
+Its scratch files go under `.roc-parser-tmp/`:
 
 [source,bash]
 ----
