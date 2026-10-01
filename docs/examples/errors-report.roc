@@ -7,7 +7,6 @@ import cli.Stdout
 import parser.CSV
 import parser.HTTP
 import parser.Parser
-import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
@@ -55,9 +54,9 @@ csv_message = |source| {
 # tag::http[]
 http_message : Str -> Str
 http_message = |source| {
-	match Utf8.parse_str(HTTP.request, source) {
-		Ok(request) => "request for ${request.target}"
-		Err(ParseError({ message, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${message}"
+	match HTTP.parse_request(source.to_utf8()) {
+		Ok({ request, rest: _ }) => "request for ${request.target}"
+		Err(InvalidHttp({ message, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${message}"
 	}
 }
 

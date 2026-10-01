@@ -21,42 +21,47 @@ output is checked in as
 
 == Summary
 
+Every format type module reports invalid input with one tag named after the
+format, carrying a record with a `message` and the most precise location the
+format has. Combinator runners report the furthest failure.
+
 [cols="1,2,2",options="header"]
 |===
-|Module |Error |What it tells you
+|Function |Error |What it tells you
 
-|`Yaml.parse_str`
-|`YamlError({ line, column, message })`
-|Where the problem is and what it is.
-
-|`Xml.parse_str`
-|`XmlError({ line, column, message })`
+|`Yaml.parse_str`, `Yaml.decode`
+|`InvalidYaml({ line, column, message })`
 |Where the problem is and what it is. Columns count bytes.
 
-|`CSV.parse_str`
-|`SyntaxError(rest)`
-|The text was not valid CSV. `rest` is the input from the start of the bad
-field.
+|`Xml.parse_str`
+|`InvalidXml({ line, column, message })`
+|Where the problem is and what it is. Columns count bytes.
 
-|
-|`ParsingFailure(message)`
-|A field did not match your record parser. The message names the field and
-the record number.
+|`CSV.parse`, `CSV.parse_str`, `CSV.parse_records`
+|`InvalidCsv({ record, field, line, column, message })`
+|The record and field that failed, where they start in the text, and why:
+bad CSV syntax, a field your parser rejected, or a row of the wrong width.
 
-|
-|`ParsingIncomplete(fields)`
-|A row had more fields than your record parser reads. `fields` are the
-extra ones.
+|`CSV.parse`, `Yaml.decode`
+|`MissingRequiredField(name)`
+|A record field that is not a `Try(_, [Missing])` had no column or key.
 
-|`HTTP.request`, `HTTP.response`
-|`ParseError({ message, offset })`
-|Why the message was rejected.
+|`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.parse_requests`
+|`InvalidHttp({ offset, message })`
+|Why the message was rejected, and the byte offset of the problem.
 
-|Your own parsers
+|`Markdown.parse_str`
+|None
+|Every input is a Markdown document, so parsing cannot fail.
+
+|Your own parsers, run with `Utf8.parse_str` or `Parser.parse`
 |`ParseError({ message, offset })`
 |The furthest failure, or `unexpected input` where input was left over,
 with its byte offset.
 |===
+
+All of these are open tag unions, so `?` passes them through a function such
+as `main!` that returns other errors too, without `map_err`.
 
 == YAML and XML: show the location
 
@@ -74,7 +79,7 @@ For the inputs `"name: demo\nport: [8080\n"` and
 
 [source,text]
 ----
-config.yaml:2:6: unterminated flow collection
+config.yaml:2:7: unterminated flow collection
 feed.xml:2:10: end tag </feed> does not match start tag <entry>
 ----
 
@@ -82,11 +87,13 @@ YAML input outside the supported subset, such as an anchor or a tag, is
 reported the same way, with a message that names the feature. Tell users
 which subset you accept so that the message makes sense to them.
 
-== CSV: separate syntax from content
+== CSV: report the record and field
 
-`CSV.parse_str` first checks that the text is CSV and then runs your record
-parser on each row. Its three errors come from those two stages, and each
-deserves a different message:
+Every CSV failure is `InvalidCsv` with the same record, whether the text is
+not valid CSV, a field does not match your parser, or a row has the wrong
+number of fields. The `record` and `field` numbers are one-based and suit a
+spreadsheet user; `line` and `column` point into the text, where the field
+starts:
 
 [source,roc]
 ----
@@ -98,22 +105,21 @@ For an unterminated quote (`pears,"2`), a non-number in a number column
 
 [source,text]
 ----
-not valid CSV from here: "2
-a field did not match: Field `many` could not be parsed. many is not a U64.
-While parsing record no. 2: `"pears", "many"`
-a row has 1 extra fields
+line 2, column 7 (record 2, field 2): unterminated quoted field
+line 2, column 7 (record 2, field 2): expected a U64, found `many`
+line 1, column 10 (record 1, field 3): the record has 3 fields, but the parser read only 2
 ----
 
-`SyntaxError` carries the rest of the input rather than a position. To show a
-line number, count the line breaks in the part of the input before it: the
-original length minus the length of `rest` is the byte offset. The
-`ParsingFailure` message already names the record.
+The messages quote a short excerpt of the field, so a huge or binary field
+cannot flood a log. `CSV.parse` reports the same `InvalidCsv` errors, and
+adds `MissingRequiredField(name)` when the header has no column for a
+required record field (see <<csv>>).
 
 == HTTP: reject the message
 
 The HTTP parsers reject anything ambiguous, because a server and a proxy that
 disagree about where a message ends can be exploited. Treat every
-`ParseError` as a `400 Bad Request` and close the connection; do not try
+`InvalidHttp` error as a `400 Bad Request` and close the connection; do not try
 to repair the message.
 
 [source,roc]
@@ -125,15 +131,15 @@ For an HTTP/1.1 request without a `Host` field this prints:
 
 [source,text]
 ----
-400 Bad Request (byte 0): invalid HTTP request: an HTTP/1.1 request needs a Host field
+400 Bad Request (byte 0): an HTTP/1.1 request needs a Host field
 ----
 
 The message is meant for your logs. It may quote the client's input, so
 think before sending it back in a response.
 
-An `unexpected input` failure here means the input holds more than one
-message. Use `Utf8.parse_bytes_partial` to read one message and keep the rest
-for the next.
+`HTTP.parse_request` returns the bytes after the message as `rest`, which
+is the next pipelined message, if any. `HTTP.parse_requests` reads a whole
+pipeline and fails if it does not end exactly at the end of a message.
 
 == Your own parsers: say where and what
 

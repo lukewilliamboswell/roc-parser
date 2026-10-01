@@ -3,4 +3,4 @@ feed.xml:2:10: end tag </feed> does not match start tag <entry>
 line 2, column 7 (record 2, field 2): unterminated quoted field
 line 2, column 7 (record 2, field 2): expected a U64, found `many`
 line 1, column 10 (record 1, field 3): the record has 3 fields, but the parser read only 2
-400 Bad Request (byte 0): invalid HTTP request: an HTTP/1.1 request needs a Host field
+400 Bad Request (byte 0): an HTTP/1.1 request needs a Host field
