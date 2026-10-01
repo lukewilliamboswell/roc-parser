@@ -72,7 +72,7 @@ Utf8 :: [].{
 
 	## Match one UTF-8 code unit when it satisfies the given predicate.
 	##
-	## Fails on empty input or when the predicate returns `Bool.False`.
+	## Fails on empty input or when the predicate returns `False`.
 	##
 	## ```roc
 	## is_digit : U8 -> Bool
@@ -180,23 +180,7 @@ Utf8 :: [].{
 	## expect Utf8.parse_str(Utf8.any_codeunit, "$") == Ok('$')
 	## ```
 	any_codeunit : Parser(Bytes, U8)
-	any_codeunit = codeunit_satisfies(
-		|_| {
-			Bool.True
-		},
-	)
-
-	## Any codeunit accepts a lowercase ASCII byte.
-	expect {
-		actual = any_codeunit |> parse_str("a")?
-		actual == 'a'
-	}
-
-	## Any codeunit accepts a dollar-sign byte.
-	expect {
-		actual = any_codeunit |> parse_str("\$")?
-		actual == 36
-	}
+	any_codeunit = codeunit_satisfies(|_| True)
 
 	## Consume the rest of the input and return it as bytes; never fails.
 	##
@@ -212,13 +196,6 @@ Utf8 :: [].{
 			Ok({ value: input, rest: [] })
 		},
 	)
-
-	## Any input parser consumes all bytes.
-	expect {
-		bytes = "consumes all the input".to_utf8()
-		actual = rest.parse(bytes)?
-		actual == bytes
-	}
 
 	## Consume the rest of the input as a `Str`, failing if the bytes are not valid UTF-8.
 	rest_str : Parser(Bytes, Str)
@@ -313,12 +290,12 @@ excerpt = |bytes| {
 	}
 }
 
-## Failure messages quote only a bounded prefix of the remaining input.
+# Failure messages quote only a bounded prefix of the remaining input.
 expect {
 	long = List.repeat('b', 1000)
 	match Parser.run(Utf8.codeunit('a'), long) {
 		Err(ParseError({ message, offset: _ })) => message.count_utf8_bytes() < 200
-		Ok(_) => Bool.False
+		Ok(_) => False
 	}
 }
 
@@ -329,19 +306,19 @@ str_from_utf8 = |bytes| {
 	Str.from_utf8_lossy(bytes)
 }
 
-## Any codeunit parser accepts a lowercase ASCII byte.
+# Any codeunit parser accepts a lowercase ASCII byte.
 expect {
 	actual = Utf8.parse_str(Utf8.any_codeunit, "a")?
 	actual == 'a'
 }
 
-## Any codeunit parser accepts a dollar-sign byte.
+# Any codeunit parser accepts a dollar-sign byte.
 expect {
 	actual = Utf8.parse_str(Utf8.any_codeunit, "\$")?
 	actual == 36
 }
 
-## Any input parser consumes all bytes and returns them.
+# Any input parser consumes all bytes and returns them.
 expect {
 	bytes = "consumes all the input".to_utf8()
 	actual = Parser.parse(Utf8.rest, bytes)?
@@ -354,7 +331,7 @@ parse_u32 : Parser(Utf8.Bytes, U32)
 parse_u32 =
 	Parser.const(U64.to_u32_wrap).keep(Utf8.digits)
 
-## Digit parsing can be mapped into a U32.
+# Digit parsing can be mapped into a U32.
 expect {
 	actual = Utf8.parse_str(parse_u32, "123")?
 	actual == 123.U32
@@ -368,7 +345,7 @@ color =
 		Parser.const(Blue).skip(Utf8.string("blue")),
 	])
 
-## One-of parsing selects the matching color tag.
+# One-of parsing selects the matching color tag.
 expect {
 	actual = Utf8.parse_str(color, "green")?
 	actual == Green
@@ -377,19 +354,19 @@ expect {
 parse_numbers : Parser(Utf8.Bytes, List(U64))
 parse_numbers = (Utf8.digits).sep_by(Utf8.codeunit(','))
 
-## Separator parsing returns the list of parsed numbers.
+# Separator parsing returns the list of parsed numbers.
 expect {
 	actual = Utf8.parse_str(parse_numbers, "1,2,3")?
 	actual == [1, 2, 3]
 }
 
-## Exact string parsing succeeds when the input matches.
+# Exact string parsing succeeds when the input matches.
 expect {
 	actual = Utf8.parse_str(Utf8.string("Foo"), "Foo")?
 	actual == "Foo"
 }
 
-## Exact string parsing reports non-matching input.
+# Exact string parsing reports non-matching input.
 expect Utf8.parse_str(Utf8.string("Foo"), "Bar").is_err()
 
 ignore_text : Parser(Utf8.Bytes, U64)
@@ -403,7 +380,7 @@ ignore_text =
 		.skip(Utf8.codeunit(':'))
 		.keep(Utf8.digits)
 
-## Skipping a prefix can parse the numeric suffix.
+# Skipping a prefix can parse the numeric suffix.
 expect {
 	actual = Utf8.parse_str(ignore_text, "ignore preceding text:123")?
 	actual == 123
@@ -425,7 +402,7 @@ ignore_numbers =
 		)
 		.keep(Utf8.string("TEXT"))
 
-## Chomping digits can leave the following text parser result.
+# Chomping digits can leave the following text parser result.
 expect {
 	actual = Utf8.parse_str(ignore_numbers, "0123456789876543210TEXT")?
 	actual == "TEXT"
@@ -436,40 +413,40 @@ is_digit = |b| {
 	b >= '0' and b <= '9'
 }
 
-## Codeunit predicates can accept digit bytes.
+# Codeunit predicates can accept digit bytes.
 expect {
 	actual = Utf8.parse_str(Utf8.codeunit_satisfies(is_digit), "0")?
 	actual == '0'
 }
 
-## Codeunit predicates reject bytes that do not satisfy the predicate.
+# Codeunit predicates reject bytes that do not satisfy the predicate.
 expect Utf8.parse_str(Utf8.codeunit_satisfies(is_digit), "*").is_err()
 
 at_sign : Parser(Utf8.Bytes, [AtSign])
 at_sign = Parser.const(AtSign).skip(Utf8.codeunit('@'))
 
-## The at-sign parser succeeds on an at-sign byte.
+# The at-sign parser succeeds on an at-sign byte.
 expect {
 	actual = Utf8.parse_str(at_sign, "@")?
 	actual == AtSign
 }
 
-## Partial parsing returns the parsed at-sign tag.
+# Partial parsing returns the parsed at-sign tag.
 expect {
 	actual = Utf8.parse_str_partial(at_sign, "@")?
 	actual.value == AtSign
 }
 
-## The at-sign parser rejects other bytes.
+# The at-sign parser rejects other bytes.
 expect Utf8.parse_str_partial(at_sign, "\$").is_err()
 
-## Partial string parsing renders a leftover that begins within a UTF-8 scalar.
+# Partial string parsing renders a leftover that begins within a UTF-8 scalar.
 expect {
 	actual = Utf8.parse_str_partial(Utf8.any_codeunit, "ӿ")?
 	actual.rest == "�"
 }
 
-## Complete string parsing reports a leftover as unexpected input at its byte offset.
+# Complete string parsing reports a leftover as unexpected input at its byte offset.
 expect Utf8.parse_str(Utf8.any_codeunit, "ӿ") == Err(ParseError({ message: "unexpected input", offset: 1 }))
 
 Requirement : [Green(U64), Red(U64), Blue(U64)]
@@ -510,7 +487,7 @@ parse_game = |s| {
 	}
 }
 
-## Game parsing extracts requirements grouped by reveal.
+# Game parsing extracts requirements grouped by reveal.
 expect {
 	actual = parse_game("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green")?
 	actual
@@ -524,31 +501,31 @@ expect {
 		}
 }
 
-## Single digit parsing converts ASCII zero into numeric zero.
+# Single digit parsing converts ASCII zero into numeric zero.
 expect {
 	actual = Utf8.parse_str(Utf8.digit, "0")?
 	actual == 0
 }
 
-## Single digit parsing rejects non-digit text.
+# Single digit parsing rejects non-digit text.
 expect Utf8.parse_str(Utf8.digit, "not a digit").is_err()
 
-## Multiple digit parsing accepts leading zeroes.
+# Multiple digit parsing accepts leading zeroes.
 expect {
 	actual = Utf8.parse_str(Utf8.digits, "0123")?
 	actual == 123
 }
 
-## Multiple digit parsing accepts the largest U64.
+# Multiple digit parsing accepts the largest U64.
 expect {
 	actual = Utf8.parse_str(Utf8.digits, "18446744073709551615")?
 	actual == 18446744073709551615
 }
 
-## Multiple digit parsing rejects values larger than U64 without crashing.
+# Multiple digit parsing rejects values larger than U64 without crashing.
 expect Utf8.parse_str(Utf8.digits, "18446744073709551616").is_err()
 
-## Multiple digit parsing rejects text without a leading digit.
+# Multiple digit parsing rejects text without a leading digit.
 expect Utf8.parse_str(Utf8.digits, "not a digit").is_err()
 
 bool_parser : Parser(Utf8.Bytes, Bool)
@@ -560,19 +537,19 @@ bool_parser =
 			},
 		)
 
-## Boolean parser maps true text to Bool.True.
+# Boolean parser maps true text to True.
 expect {
 	actual = Utf8.parse_str(bool_parser, "true")?
-	actual == Bool.True
+	actual == True
 }
 
-## Boolean parser maps false text to Bool.False.
+# Boolean parser maps false text to False.
 expect {
 	actual = Utf8.parse_str(bool_parser, "false")?
-	actual == Bool.False
+	actual == False
 }
 
-## Boolean parser rejects other text.
+# Boolean parser rejects other text.
 expect Utf8.parse_str(bool_parser, "not a bool").is_err()
 
 even : Parser(Utf8.Bytes, U64)
@@ -589,19 +566,19 @@ even =
 		)
 		.flatten()
 
-## Flattening keeps an Ok value from the mapped function.
+# Flattening keeps an Ok value from the mapped function.
 expect Utf8.parse_str(even, "42") == Ok(42)
 
-## Flattening turns an Err value into a parse failure with its message.
+# Flattening turns an Err value into a parse failure with its message.
 expect Utf8.parse_str(even, "7") == Err(ParseError({ message: "odd number", offset: 0 }))
 
-## Capturing up to a delimiter returns the bytes before it.
+# Capturing up to a delimiter returns the bytes before it.
 expect {
 	capture_text = Parser.const(|codeunits| codeunits).keep(Parser.chomp_until(':')).skip(Utf8.codeunit(':'))
 	Utf8.parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
 }
 
-## Capturing while a predicate holds returns the matching bytes.
+# Capturing while a predicate holds returns the matching bytes.
 expect {
 	capture_numbers =
 		Parser.const(|codeunits| codeunits)
@@ -610,7 +587,7 @@ expect {
 	Utf8.parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
 }
 
-## Mapping three parsers matches applying a curried constructor three times.
+# Mapping three parsers matches applying a curried constructor three times.
 expect {
 	space = Utf8.codeunit(' ')
 	mapped = Parser.map3(Utf8.digits.skip(space), Utf8.digits.skip(space), Utf8.digits, |x, y, z| Triple(x, y, z))
@@ -620,4 +597,43 @@ expect {
 			.keep(Utf8.digits.skip(space))
 			.keep(Utf8.digits)
 	Utf8.parse_str(mapped, "1 2 3") == Ok(Triple(1, 2, 3)) and Utf8.parse_str(applied, "1 2 3") == Ok(Triple(1, 2, 3))
+}
+
+# A length-prefixed field reads as many bytes as its digit says.
+expect {
+	sized : Parser(Utf8.Bytes, List(U8))
+	sized = Utf8.digit.and_then(|n| Utf8.any_codeunit.many().map(|bytes| bytes.take_first(n)))
+	Utf8.parse_str(sized, "2abc") == Ok(['a', 'b'])
+}
+
+# Between keeps only the delimited value.
+expect {
+	between_brackets = |parser| parser.between(Utf8.codeunit('['), Utf8.codeunit(']'))
+	Utf8.parse_str(between_brackets(Utf8.digits), "[42]") == Ok(42)
+}
+
+# The rest of the input is read as a Str, and invalid UTF-8 fails without crashing.
+expect Utf8.parse_str(Utf8.rest_str, "héllo") == Ok("héllo")
+expect Utf8.parse_bytes(Utf8.rest_str, [0xFF]).is_err()
+
+# A bad element in the middle of a repetition reports its own failure and offset.
+expect {
+	numbers = Utf8.digits.sep_by(Utf8.codeunit(','))
+	match Utf8.parse_str(numbers, "1,2,x,4") {
+		Err(ParseError({ offset, message: _ })) => offset == 4
+		Ok(_) => False
+	}
+}
+
+# Leftover input reports the failure that stopped the parser there.
+expect Utf8.parse_str(Utf8.digits, "12 ") == Err(ParseError({ message: "Not a digit", offset: 2 }))
+
+# ParseError composes with `?` in a function that returns other errors too.
+expect {
+	both : Str -> Try(U64, [ParseError({ message : Str, offset : U64 }), TooBig])
+	both = |text| {
+		n = Utf8.parse_str(Utf8.digits, text)?
+		if n > 100 Err(TooBig) else Ok(n)
+	}
+	both("7") == Ok(7) and both("700") == Err(TooBig) and both("x").is_err()
 }

@@ -4,7 +4,7 @@
 ## A `Parser(input, a)` is a value that describes how to read an `a` from the
 ## front of an `input`. Combine small parsers with `keep`, `skip`, `map`,
 ## `one_of`, `many` and `sep_by` to build larger ones, then run the result with
-## `Utf8.parse_str` (for `Str`) or `Parser.parse` (for any input type).
+## `Utf8.parse_str` (for `Str`) or [Parser.parse] (for any input type).
 ##
 ## This parser turns `"Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"`
 ## into `{ id: 1, requirements: [[Blue(3), Red(4)], [Red(1), Green(2), Blue(6)], [Green(2)]] }`
@@ -172,7 +172,7 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## Try a list of parsers in turn, until one of them succeeds.
 	##
 	## Each parser starts from the same input. An empty list always fails.
-	## For UTF-8 input, `Parser.one_of` behaves the same way.
+	## For UTF-8 input, [Parser.one_of] behaves the same way.
 	## ```roc
 	## color : Parser(Utf8.Bytes, [Red, Green, Blue])
 	## color =
