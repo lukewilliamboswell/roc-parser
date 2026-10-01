@@ -82,11 +82,7 @@ Roc is still evolving and this package currently pins a nightly compiler in
 check the release notes before upgrading. The `main` branch and latest release
 are supported, as described in [SECURITY.md](SECURITY.md).
 
-Locally generate versioned docs using:
-
-```sh
-python3 scripts/generate_docs.py 1.1.0
-```
+Build the API reference with `python3 scripts/build_docs.py --check` and the manual (HTML and PDF, needs Docker) with `python3 scripts/build_manual.py --pdf`.
 
 ## Contributing
 
@@ -116,7 +112,7 @@ Bundle the package for distribution using:
 python3 scripts/bundle.py --output-dir dist
 ```
 
-Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, creates the GitHub release, generates versioned docs, commits the generated `www/` update, and publishes the docs to GitHub Pages.
+Run the release workflow from GitHub Actions with a release version such as `0.11.0`. It builds and tests the bundle, creates the GitHub release with the manual (HTML zip and PDF) and API reference attached, and publishes the manual and API reference to GitHub Pages.
 
 Each new release also publishes an SPDX SBOM and signed provenance. Verify a
 downloaded bundle with `gh release verify-asset VERSION PATH` and

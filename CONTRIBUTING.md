@@ -26,7 +26,9 @@ Before opening a pull request:
 - make sure the full test suite passes;
 - add or update tests for success cases, invalid input, and relevant boundary
   cases;
-- update documentation when a public parser API or supported syntax changes;
+- update documentation when a public parser API or supported syntax changes
+  (check it with `python3 scripts/build_docs.py --check`,
+  `python3 scripts/check_doc_examples.py` and `python3 scripts/build_manual.py --pdf`);
 - follow the existing module and public API naming patterns;
 - avoid unrelated formatting or refactoring changes;
 - keep generated artifacts and local build output out of the commit; and
