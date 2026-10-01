@@ -375,7 +375,10 @@ class Builder:
     def python_impls(self, formats: tuple[str, ...]) -> list[Impl]:
         python = self.python
         if python is None:
-            venv = self.out / "venv"
+            # Outside the checkout: repository policy rejects Python files
+            # anywhere but scripts/, and a venv is full of them.
+            cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+            venv = cache / "roc-parser" / "bench-venv"
             python = str(venv / "bin" / "python")
             if not Path(python).exists():
                 if not self.run("python-venv", [sys.executable, "-m", "venv", str(venv)]):
