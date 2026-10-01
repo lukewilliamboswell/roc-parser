@@ -37,7 +37,7 @@ bench_tools = [
 config = [
 	Name("roc-parser-bench"),
 	Systems(["x86_64-linux", "aarch64-darwin"]),
-	Overlay("github:roc-lang/roc-overlay/76befb4facc5c12dbd88a86e89bb82881c03887c"),
+	Overlay("github:roc-lang/roc-overlay"),
 	Shell("default", [Tools(bench_tools)]),
 	Raw("nix", "shell:default", Attrs([
 		# scripts/bench.py records that it ran here, and which Blueprint.lock.
