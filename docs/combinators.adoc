@@ -92,13 +92,13 @@ bytes.
 `apply` is the same operation under another name.
 
 |`p.skip(q)`
-|Runs `q` after `p` and discards `q`'s result.
+|Runs `q` after `p` and discards ``q``'s result.
 
 |`p.map(f)`, `Parser.map2`, `Parser.map3`
 |Transforms one, two or three results with an ordinary function.
 
 |`p.between(open, close)`
-|Reads `open`, `p`, `close` and keeps only `p`'s result.
+|Reads `open`, `p`, `close` and keeps only ``p``'s result.
 
 |`p.ignore()`
 |Keeps the input `p` reads but replaces its result with `{}`.

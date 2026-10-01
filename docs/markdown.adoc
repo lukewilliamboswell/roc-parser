@@ -258,7 +258,7 @@ Output:
 include::examples/markdown-render.expected[]
 ----
 
-A complete renderer would also handle `Table`, use `Code`'s `info` for a
+A complete renderer would also handle `Table`, use ``Code``'s `info` for a
 `language-` class, and pass `Ordered({ start })` through as the `start`
 attribute.
 
