@@ -42,6 +42,7 @@ DEFAULT_WORK = ROOT / ".roc-parser-tmp" / "xml-review"
 DEFAULT_ROC = Path.home() / "roc_nightly-macos_apple_silicon-2026-09-29-7f11a82" / "roc"
 SUITE_URL = "https://www.w3.org/XML/Test/xmlts20130923.tar.gz"
 SUITE_SHA256 = "9b61db9f5dbffa545f4b8d78422167083a8568c59bd1129f94138f936cf6fc1f"
+FIFTH_EDITION_ONLY = "\U00010000"  # a name character expat (pre-5th edition tables) rejects
 FATAL = {"crash", "timeout", "protocol_error", "invalid_diagnostic"}
 
 
@@ -271,12 +272,19 @@ def corpus(args) -> int:
     counts, mismatches = Counter(), []
     for path in sorted(args.corpus.iterdir()):
         shown = subprocess.run([str(target), "show", str(path)], capture_output=True, text=True, check=False).stdout
-        match = re.search(r"XML: (\".*\")\s*$", shown, re.S)
+        match = re.search(r"XML-HEX: ([0-9a-f]*)", shown)
         if not match:
             counts["no_document"] += 1
             continue
-        text = json.loads(match[1])
-        row = compare({"id": path.name, "input": text}, probe(executable, text), oracle(text))
+        text = bytes.fromhex(match[1]).decode("utf-8")
+        actual, expected = probe(executable, text), oracle(text)
+        if expected["status"] == "error" and FIFTH_EDITION_ONLY in text:
+            # expat's pre-Fifth Edition name tables reject U+10000 in names;
+            # compare with an ASCII stand-in and count the disagreement.
+            counts["expat_fifth_edition_names"] += 1
+            expected = oracle(text.replace(FIFTH_EDITION_ONLY, "U"))
+            actual = json.loads(json.dumps(actual).replace(json.dumps(FIFTH_EDITION_ONLY)[1:-1], "U"))
+        row = compare({"id": path.name, "input": text}, actual, expected)
         counts[row["kind"]] += 1
         if row["kind"] != "pass":
             mismatches.append(row)
