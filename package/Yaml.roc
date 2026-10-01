@@ -1725,7 +1725,9 @@ parse_key = |raw, line, column| {
 		['\'', ..] => parse_single_quoted(bytes, line, column)
 		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
 		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
-		[first, ..] if first == '|' or first == '>' or first == '%' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
+		# Like a value, and like a first line before any `---`, `%` reads as a directive.
+		['%', ..] => fail(line, column, "YAML directives are not supported by this YAML subset")
+		[first, ..] if first == '|' or first == '>' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
 			fail(line, column, "a plain mapping key cannot start with `${Str.from_utf8_lossy([first])}`")
 		_ => Ok(Str.from_utf8_lossy(bytes))
 	}
@@ -2903,3 +2905,6 @@ expect {
 	dec = Yaml.decode("a: .inf\n")
 	(result == Ok({ a: -F64.infinity, b: 1000.0 })) and (dec == Err(InvalidYaml({ line: 1, column: 4, message: "number `.inf` cannot be represented as Dec" })))
 }
+
+# A key starting with % is reported as a directive, with or without a leading --- (fuzz: yaml-raw).
+expect when_error(Yaml.parse_str("%:")) == when_error(Yaml.parse_str("---\n%:"))
