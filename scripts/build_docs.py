@@ -14,6 +14,7 @@ or doc prose that renders as something other than what was meant.
 
 from __future__ import annotations
 
+import os
 import argparse
 import html
 import re
@@ -368,7 +369,7 @@ def validate(version_root: Path) -> list[str]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--roc", default="roc", help="Roc compiler binary")
+    parser.add_argument("--roc", default=os.environ.get("ROC", "roc"), help="Roc compiler binary (default: $ROC or roc)")
     parser.add_argument("--docs-root", default=".docs-api", help="versioned docs root (default: .docs-api)")
     parser.add_argument("--version", help="release version, e.g. 2.0.0")
     parser.add_argument(
