@@ -4,5 +4,6 @@ Ok([{ age: 36, name: "Ada" }, { age: 41, name: "Alan" }])
 Element({ attributes: [{ name: "lang", value: "en" }], children: [Text("hi")], name: "greeting" })
 1:7: end tag </a> does not match start tag <b>
 Mapping([{ key: "title", value: Text("Notes") }, { key: "draft", value: Bool(False) }])
+Ok({ draft: False, title: "Notes" })
 Heading({ level: One, content: [Text("Title")] })
 Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")])
