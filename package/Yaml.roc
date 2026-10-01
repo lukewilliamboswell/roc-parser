@@ -325,9 +325,9 @@ Yaml := [
 			value =
 				if !scalar.plain {
 					return scalar_mismatch(scalar, "a boolean")
-				} else if ["true", "True", "TRUE"].contains(scalar.text) {
+				} else if is_true_text(scalar.text) {
 					True
-				} else if ["false", "False", "FALSE"].contains(scalar.text) {
+				} else if is_false_text(scalar.text) {
 					False
 				} else {
 					return scalar_mismatch(scalar, "a boolean")
@@ -752,7 +752,54 @@ scalar_mismatch = |scalar, expected| {
 }
 
 is_null_text : Str -> Bool
-is_null_text = |text| ["", "null", "Null", "NULL", "~"].contains(text)
+is_null_text = |text| {
+	match text {
+		"" | "null" | "Null" | "NULL" | "~" => True
+		_ => False
+	}
+}
+
+# Literal matches instead of `[...].contains(text)`, which builds the list of
+# strings on every call.
+is_true_text : Str -> Bool
+is_true_text = |text| {
+	match text {
+		"true" | "True" | "TRUE" => True
+		_ => False
+	}
+}
+
+is_false_text : Str -> Bool
+is_false_text = |text| {
+	match text {
+		"false" | "False" | "FALSE" => True
+		_ => False
+	}
+}
+
+is_infinity_text : Str -> Bool
+is_infinity_text = |text| {
+	match text {
+		".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => True
+		_ => False
+	}
+}
+
+is_negative_infinity_text : Str -> Bool
+is_negative_infinity_text = |text| {
+	match text {
+		"-.inf" | "-.Inf" | "-.INF" => True
+		_ => False
+	}
+}
+
+is_nan_text : Str -> Bool
+is_nan_text = |text| {
+	match text {
+		".nan" | ".NaN" | ".NAN" => True
+		_ => False
+	}
+}
 
 ## Read an integer scalar (or integer mapping key) with the core schema's
 ## decimal, `0o` octal and `0x` hexadecimal forms.
@@ -830,11 +877,11 @@ decode_float = |cursor, type_name, from_str, special| {
 	parsed =
 		if !scalar.plain {
 			Err(NotNumber)
-		} else if [".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF"].contains(text) {
+		} else if is_infinity_text(text) {
 			special(Infinity).map_err(|_| OutOfRange)
-		} else if ["-.inf", "-.Inf", "-.INF"].contains(text) {
+		} else if is_negative_infinity_text(text) {
 			special(NegativeInfinity).map_err(|_| OutOfRange)
-		} else if [".nan", ".NaN", ".NAN"].contains(text) {
+		} else if is_nan_text(text) {
 			special(NaN).map_err(|_| OutOfRange)
 		} else if is_decimal_integer(bytes) {
 			from_str(Str.drop_prefix(text, "+")).map_err(|_| OutOfRange)
@@ -1557,13 +1604,22 @@ parse_inline_value = |raw, line, column, depth| {
 ## ": " or a final ":" inside a plain scalar would start a mapping value.
 contains_mapping_indicator : Utf8.Bytes -> Bool
 contains_mapping_indicator = |bytes| {
-	match bytes {
-		[] => False
-		[':'] => True
-		[':', ' ', ..] | [':', '\t', ..] => True
-		[_, .. as rest] => contains_mapping_indicator(rest)
+	len = bytes.len()
+	var $index = Utf8.find_any(bytes, 0, colon)
+	var $found = False
+	while !$found and $index < len {
+		next = bytes.get($index + 1) ?? ' '
+		if next == ' ' or next == '\t' {
+			$found = True
+		} else {
+			$index = Utf8.find_any(bytes, $index + 1, colon)
+		}
 	}
+	$found
 }
+
+colon : Utf8.ByteClass
+colon = Utf8.ByteClass.from_bytes([':'])
 
 ## Resolve a plain scalar with the YAML 1.2 core schema (10.3.2). Anything
 ## that matches none of its forms is a string.
@@ -1571,11 +1627,11 @@ resolve_plain : Utf8.Bytes, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
 resolve_plain = |bytes, line, column| {
 	text = bytes_to_str(bytes)
 
-	if ["", "null", "Null", "NULL", "~"].contains(text) {
+	if is_null_text(text) {
 		Ok(Null)
-	} else if ["true", "True", "TRUE"].contains(text) {
+	} else if is_true_text(text) {
 		Ok(Bool(True))
-	} else if ["false", "False", "FALSE"].contains(text) {
+	} else if is_false_text(text) {
 		Ok(Bool(False))
 	} else if is_decimal_integer(bytes) {
 		match I64.from_str(text) {
@@ -1605,11 +1661,11 @@ resolve_plain = |bytes, line, column| {
 
 special_float : Str -> Try(F64, [NotSpecial])
 special_float = |text| {
-	if [".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF"].contains(text) {
+	if is_infinity_text(text) {
 		Ok(F64.infinity)
-	} else if ["-.inf", "-.Inf", "-.INF"].contains(text) {
+	} else if is_negative_infinity_text(text) {
 		Ok(-F64.infinity)
-	} else if [".nan", ".NaN", ".NAN"].contains(text) {
+	} else if is_nan_text(text) {
 		Ok(F64.nan)
 	} else {
 		Err(NotSpecial)
