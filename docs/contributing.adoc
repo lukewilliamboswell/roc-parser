@@ -54,7 +54,11 @@ Output:
 Roc compiler version nightly-2026-09-29-7f11a82
 ----
 
-`.roc-version` is the only compiler pin. The package, its tests, its examples,
+With Nix, `blueprint shell` provides this exact nightly together with Go, Rust
+and Python, on Linux and on Apple silicon Macs; see <<benchmarks-blueprint>>.
+
+`.roc-version` is the only compiler pin; `Blueprint.roc` mirrors it, and a test
+keeps the two in step. The package, its tests, its examples,
 its releases, the property tests, the conformance reviews and the benchmarks
 all use it, locally and in CI.
 
