@@ -5,11 +5,25 @@ import unicode.Case
 import unicode.GeneralCategory
 import unicode.Scalar
 
-## Markdown syntax tree and parsers for documents and inline content.
+## A Markdown document as a tree of blocks with inline content.
 ##
-## The block parser preserves frontmatter, headings, paragraphs, blockquotes,
-## lists, code blocks, thematic breaks, tables, and raw HTML. Inline parsing
-## supports emphasis, links, images, code, hard breaks, and raw HTML.
+## The parser follows [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/)
+## plus these GitHub Flavored Markdown extensions: tables, task list items,
+## strikethrough (`~~text~~`) and extended autolinks (`www.example.com`,
+## `https://example.com` and `me@example.com` without angle brackets). It also
+## accepts one extension of its own: a frontmatter block between two `---`
+## lines at the very start of a document, kept raw as [Markdown.Frontmatter].
+##
+## Markdown has no syntax errors, so parsing never fails: [Markdown.parse_str]
+## returns `List(Markdown)` directly, and text that looks like broken syntax is
+## kept as text. Soft line breaks are kept as `"\n"` inside `Text`. Block
+## quotes and lists nest at most 1,000 levels deep; deeper `>` and list markers
+## are read as text.
+##
+## **Security:** raw HTML passes through unchanged as `HtmlBlock` and
+## `HtmlInline`, with no GFM tagfilter, and link destinations are not checked
+## (a `javascript:` URL is kept as written). If you render untrusted Markdown
+## to HTML, sanitize the HTML or drop those nodes and unsafe URLs yourself.
 Markdown := [
 	Heading({ level : Markdown.Level, content : List(Markdown.Inline) }),
 	Paragraph(List(Markdown.Inline)),
@@ -19,8 +33,7 @@ Markdown := [
 	ThematicBreak,
 	Table({ header : List(List(Markdown.Inline)), align : List(Markdown.Alignment), rows : List(List(List(Markdown.Inline))) }),
 	HtmlBlock(Str),
-	Frontmatter({ raw : Str }),
-	TODO(Str),
+	Frontmatter(Str),
 ].{
 
 	## Render a Markdown block in Roc source-like notation for inspection.
@@ -31,18 +44,6 @@ Markdown := [
 
 	## Compare two Markdown syntax trees structurally.
 	is_eq : _
-
-	## Render a Markdown block as a stable debug string.
-	to_debug_str : Markdown -> Str
-	to_debug_str = |node| {
-		inspect_markdown(node)
-	}
-
-	## Render an inline node as a stable debug string.
-	inline_to_debug_str : Markdown.Inline -> Str
-	inline_to_debug_str = |inline| {
-		inspect_inline(inline)
-	}
 
 	## Heading levels from one through six.
 	Level := [One, Two, Three, Four, Five, Six].{
@@ -61,6 +62,9 @@ Markdown := [
 
 		## Compare two heading levels.
 		is_eq : _
+
+		## Hash this value, so that it can be a `Dict` key or `Set` element.
+		to_hash : _
 	}
 
 	## The marker and starting number of a Markdown list.
@@ -83,6 +87,9 @@ Markdown := [
 
 		## Compare two list kinds structurally.
 		is_eq : _
+
+		## Hash this value, so that it can be a `Dict` key or `Set` element.
+		to_hash : _
 	}
 
 	## Whether a list item is a task and, if so, whether it is checked.
@@ -106,6 +113,9 @@ Markdown := [
 
 		## Compare two task states.
 		is_eq : _
+
+		## Hash this value, so that it can be a `Dict` key or `Set` element.
+		to_hash : _
 	}
 
 	## Column alignment declared by a Markdown table delimiter row.
@@ -130,12 +140,15 @@ Markdown := [
 
 		## Compare two table alignments.
 		is_eq : _
+
+		## Hash this value, so that it can be a `Dict` key or `Set` element.
+		to_hash : _
 	}
 
 	## Destination and optional title of a link or image.
 	LinkTarget : {
 		href : Str,
-		title : [Some(Str), None],
+		title : Try(Str, [Missing]),
 	}
 
 	## Inline Markdown syntax nodes.
@@ -159,48 +172,67 @@ Markdown := [
 
 		## Compare two inline syntax trees structurally.
 		is_eq : _
+
+		## Hash this value, so that it can be a `Dict` key or `Set` element.
+		to_hash : _
 	}
 
-	## Parse a complete Markdown document into block nodes.
-	all : Parser(Utf8.Bytes, List(Markdown))
-	all = parse_all
+	## Hash a Markdown syntax tree, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
 
-	## Parse inline Markdown content.
-	inlines : Parser(Utf8.Bytes, List(Inline))
-	inlines = parse_inlines_parser
+	## Parse a whole Markdown document into its blocks.
+	##
+	## Every input is a document, so this never fails. A leading frontmatter
+	## block becomes the first block, [Markdown.Frontmatter].
+	##
+	## ```roc
+	## expect Markdown.parse_str("# Hi\n\nSome *text*.") == [
+	##     Heading({ level: One, content: [Text("Hi")] }),
+	##     Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")]),
+	## ]
+	## ```
+	parse_str : Str -> List(Markdown)
+	parse_str = |text| parse_document(text.to_utf8())
 
-	## Parse an ATX or Setext heading.
-	heading : Parser(Utf8.Bytes, Markdown)
-	heading =
-		Parser.one_of([
-			inline_heading,
-			two_line_heading_level_one,
-			two_line_heading_level_two,
-		])
+	## Parse inline content, such as a single line of a table cell or a title,
+	## without any block structure. Reference links cannot resolve here, because
+	## their definitions are blocks: use [Markdown.parse_str] for those.
+	##
+	## ```roc
+	## expect Markdown.parse_inlines("**Bold** and `code`") == [
+	##     Strong([Text("Bold")]),
+	##     Text(" and "),
+	##     InlineCode("code"),
+	## ]
+	## ```
+	parse_inlines : Str -> List(Inline)
+	parse_inlines = |text| parse_inline_bytes(text.to_utf8())
 
-	## Parse an inline link (`[label](destination "title")`) at the start of the input.
-	link : Parser(Utf8.Bytes, Inline)
-	link = Parser.custom(|input| parse_leading_link(input, Bool.False))
+	## [Markdown.parse_str] as a [Parser] over bytes, for use with the
+	## combinators. It consumes all of its input and never fails.
+	parser : Parser(Utf8.Bytes, List(Markdown))
+	parser = Parser.custom(|input| Ok({ value: parse_document(input), rest: [] }))
 
-	## Parse an inline image (`![alt](destination "title")`) at the start of the input.
-	image : Parser(Utf8.Bytes, Inline)
-	image = Parser.custom(|input| parse_leading_link(input, Bool.True))
+	## [Markdown.parse_inlines] as a [Parser] over bytes. It consumes all of its
+	## input and never fails.
+	inline_parser : Parser(Utf8.Bytes, List(Inline))
+	inline_parser = Parser.custom(|input| Ok({ value: parse_inline_bytes(input), rest: [] }))
 
-	## Parse a fenced code block delimited by triple backticks.
-	code : Parser(Utf8.Bytes, Markdown)
-	code =
-		Parser.const(|info| |pre| Code({ info: info, pre: pre }))
-			.keep(
-				Parser.one_of([
-					Parser.const(|i| i)
-						.skip(Utf8.string("```"))
-						.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
-						.skip(end_of_line),
-					Parser.const("")
-						.skip(Utf8.string("```")),
-				]),
-			)
-			.keep(chomp_until_code_block_end)
+	## The raw text of the document's frontmatter, or `Err(Missing)` when the
+	## document has none.
+	##
+	## ```roc
+	## expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody")) == Ok("title: Hi\n")
+	## expect Markdown.frontmatter(Markdown.parse_str("Body")) == Err(Missing)
+	## ```
+	frontmatter : List(Markdown) -> Try(Str, [Missing])
+	frontmatter = |blocks| {
+		match blocks.first() {
+			Ok(Frontmatter(raw)) => Ok(raw)
+			_ => Err(Missing)
+		}
+	}
+
 }
 
 inspect_markdown : Markdown -> Str
@@ -230,12 +262,9 @@ inspect_markdown = |node| {
 		HtmlBlock(raw) =>
 			"HtmlBlock(${Str.inspect(raw)})"
 
-		Frontmatter({ raw }) =>
-			"Frontmatter({ raw: ${Str.inspect(raw)} })"
-
-		TODO(line) =>
-			"TODO(${Str.inspect(line)})"
-		}
+		Frontmatter(raw) =>
+			"Frontmatter(${Str.inspect(raw)})"
+	}
 }
 
 inspect_level : Markdown.Level -> Str
@@ -270,7 +299,7 @@ inspect_list_kind = |kind| {
 
 		Ordered({ start }) =>
 			"Ordered({ start: ${start.to_str()} })"
-		}
+	}
 }
 
 list_kind_to_str : Markdown.ListKind -> Str
@@ -281,7 +310,7 @@ list_kind_to_str = |kind| {
 
 		Ordered({ start }) =>
 			"ordered:${start.to_str()}"
-		}
+	}
 }
 
 inspect_task_state : Markdown.TaskState -> Str
@@ -351,7 +380,7 @@ inspect_inline = |inline| {
 
 		HtmlInline(raw) =>
 			"HtmlInline(${Str.inspect(raw)})"
-		}
+	}
 }
 
 inspect_link_target : Markdown.LinkTarget -> Str
@@ -359,15 +388,15 @@ inspect_link_target = |target| {
 	"{ href: ${Str.inspect(target.href)}, title: ${inspect_link_title(target.title)} }"
 }
 
-inspect_link_title : [Some(Str), None] -> Str
+inspect_link_title : Try(Str, [Missing]) -> Str
 inspect_link_title = |title| {
 	match title {
-		Some(value) =>
-			"Some(${Str.inspect(value)})"
+		Ok(value) =>
+			"Ok(${Str.inspect(value)})"
 
-		None =>
-			"None"
-		}
+		Err(Missing) =>
+			"Err(Missing)"
+	}
 }
 
 ReferenceDefinition : {
@@ -464,14 +493,6 @@ Continuation : [Matched(BlockState), NotMatched, Consumed(BlockState)]
 
 StartResult : [NoStart(BlockState), StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
 
-parse_all : Parser(Utf8.Bytes, List(Markdown))
-parse_all =
-	Parser.custom(
-		|input| {
-			Ok({ value: parse_document(input), rest: [] })
-		},
-	)
-
 ## Markdown has no syntax errors: every input is a document.
 parse_document : Utf8.Bytes -> List(Markdown)
 parse_document = |input| {
@@ -482,7 +503,7 @@ parse_document = |input| {
 	blocks = List.from_iter(build_blocks(events, 0).blocks.iter().map(|block| resolve_inlines(block, refs)))
 
 	match front.frontmatter {
-		Ok(raw) => List.prepend(blocks, Frontmatter({ raw: raw }))
+		Ok(raw) => List.prepend(blocks, Frontmatter(raw))
 		Err(_) => blocks
 	}
 }
@@ -548,7 +569,7 @@ take_frontmatter = |lines| {
 
 			Err(_) =>
 				{ frontmatter: Err(NotFound), lines }
-			}
+		}
 	}
 }
 
@@ -568,31 +589,31 @@ parse_block_lines = |lines| {
 		line_number: 0,
 		offset: 0,
 		column: 0,
-		partial_tab: Bool.False,
-		all_closed: Bool.True,
+		partial_tab: False,
+		all_closed: True,
 		last_matched: 0,
 		leaf_lines: [],
-		leaf_reset: Bool.False,
+		leaf_reset: False,
 		leaf_added: [],
 		events: [],
 	}
 	var $events = []
 	var $leaf = []
-	var $reset = Bool.False
+	var $reset = False
 	var $added = []
 	for line in lines {
 		# The previous line's result is gone by now, so the leaf's lines are
 		# not shared and grow in place.
 		$leaf = if $reset $added else $leaf.concat($added)
 		index = index_line(line)
-		result = process_line({ ..$state, line, next_nonspace: index.next_nonspace, columns: index.columns, line_number: $state.line_number + 1, leaf_lines: $leaf, leaf_reset: Bool.False, leaf_added: [], events: [] })
+		result = process_line({ ..$state, line, next_nonspace: index.next_nonspace, columns: index.columns, line_number: $state.line_number + 1, leaf_lines: $leaf, leaf_reset: False, leaf_added: [], events: [] })
 		$events = $events.concat(result.events)
 		$reset = result.leaf_reset
 		$added = result.leaf_added
 		$state = { ..result, leaf_lines: [], leaf_added: [], events: [] }
 	}
 	$leaf = if $reset $added else $leaf.concat($added)
-	var $closing = { ..$state, leaf_lines: $leaf, leaf_reset: Bool.False, leaf_added: [], events: [] }
+	var $closing = { ..$state, leaf_lines: $leaf, leaf_reset: False, leaf_added: [], events: [] }
 	while $closing.depth > 1 {
 		$closing = close_tip($closing, $closing.line_number)
 	}
@@ -607,8 +628,8 @@ tip_kind = |state| {
 is_paragraph_kind : OpenKind -> Bool
 is_paragraph_kind = |kind| {
 	match kind {
-		ParagraphBlock => Bool.True
-		_ => Bool.False
+		ParagraphBlock => True
+		_ => False
 	}
 }
 
@@ -616,22 +637,22 @@ is_paragraph_kind = |kind| {
 accepts_lines : OpenKind -> Bool
 accepts_lines = |kind| {
 	match kind {
-		FencedBlock(_) => Bool.True
-		IndentedBlock => Bool.True
-		HtmlBlockOpen(_) => Bool.True
-		_ => Bool.False
+		FencedBlock(_) => True
+		IndentedBlock => True
+		HtmlBlockOpen(_) => True
+		_ => False
 	}
 }
 
 process_line : BlockState -> BlockState
 process_line = |initial| {
-	var $s = { ..initial, offset: 0, column: 0, partial_tab: Bool.False }
+	var $s = { ..initial, offset: 0, column: 0, partial_tab: False }
 
 	# 1. Match the line against each open block's continuation condition.
 	var $container = 0
 	var $index = 1
-	var $matching = Bool.True
-	var $consumed = Bool.False
+	var $matching = True
+	var $consumed = False
 	while $matching and $index < $s.depth {
 		open = $s.stack.get($index) ?? new_open(DocumentBlock, 0)
 		match continue_block($s, open, $index) {
@@ -642,13 +663,13 @@ process_line = |initial| {
 			}
 
 			NotMatched => {
-				$matching = Bool.False
+				$matching = False
 			}
 
 			Consumed(next) => {
 				$s = next
-				$matching = Bool.False
-				$consumed = Bool.True
+				$matching = False
+				$consumed = True
 			}
 		}
 	}
@@ -662,13 +683,13 @@ process_line = |initial| {
 	# 2. Try block starts, unless the matched block is a leaf taking raw lines.
 	container_kind = ($s.stack.get($container) ?? new_open(DocumentBlock, 0)).kind
 	var $starting = !accepts_lines(container_kind)
-	var $done = Bool.False
+	var $done = False
 	while $starting {
 		ns = find_nonspace($s)
 		match try_block_starts($s, $container, ns) {
 			NoStart(next) => {
 				$s = advance_to_nonspace(next, ns)
-				$starting = Bool.False
+				$starting = False
 			}
 
 			StartedContainer(next) => {
@@ -679,19 +700,19 @@ process_line = |initial| {
 			StopStarts(next) => {
 				$s = advance_to_nonspace(next, find_nonspace(next))
 				$container = next.depth - 1
-				$starting = Bool.False
+				$starting = False
 			}
 
 			StartedLeaf(next) => {
 				$s = next
 				$container = next.depth - 1
-				$starting = Bool.False
+				$starting = False
 			}
 
 			LineDone(next) => {
 				$s = next
-				$starting = Bool.False
-				$done = Bool.True
+				$starting = False
+				$done = True
 			}
 		}
 	}
@@ -768,7 +789,7 @@ find_nonspace = |s| {
 
 advance_to_nonspace : BlockState, Nonspace -> BlockState
 advance_to_nonspace = |s, ns| {
-	{ ..s, offset: ns.pos, column: ns.column, partial_tab: Bool.False }
+	{ ..s, offset: ns.pos, column: ns.column, partial_tab: False }
 }
 
 ## Advance by `count` bytes, or by `count` columns when `columns` is set, in
@@ -790,13 +811,13 @@ advance_offset = |s, count, columns| {
 				$offset = if $partial $offset else $offset + 1
 				$count = $count - step
 			} else {
-				$partial = Bool.False
+				$partial = False
 				$column = $column + to_tab
 				$offset = $offset + 1
 				$count = $count - 1
 			}
 		} else {
-			$partial = Bool.False
+			$partial = False
 			$offset = $offset + 1
 			$column = $column + 1
 			$count = $count - 1
@@ -824,7 +845,7 @@ continue_block = |s, open, index| {
 
 		ItemBlock(item) =>
 			if ns.indent >= item.marker_offset + item.padding {
-				Matched(advance_offset(s, item.marker_offset + item.padding, Bool.True))
+				Matched(advance_offset(s, item.marker_offset + item.padding, True))
 			} else if ns.blank and has_children(s, index, open) {
 				Matched(advance_to_nonspace(s, ns))
 			} else {
@@ -840,7 +861,7 @@ continue_block = |s, open, index| {
 				var $next = s
 				var $remaining = fence.fence_offset
 				while $remaining > 0 and is_space_or_tab($next.line.get($next.offset) ?? 'x') {
-					$next = advance_offset($next, 1, Bool.True)
+					$next = advance_offset($next, 1, True)
 					$remaining = $remaining - 1
 				}
 				Matched($next)
@@ -849,7 +870,7 @@ continue_block = |s, open, index| {
 
 		IndentedBlock =>
 			if ns.indent >= 4 {
-				Matched(advance_offset(s, 4, Bool.True))
+				Matched(advance_offset(s, 4, True))
 			} else if ns.blank {
 				Matched(advance_to_nonspace(s, ns))
 			} else {
@@ -880,9 +901,9 @@ continue_block = |s, open, index| {
 
 skip_quote_marker : BlockState -> BlockState
 skip_quote_marker = |s| {
-	after = advance_offset(s, 1, Bool.False)
+	after = advance_offset(s, 1, False)
 	if is_space_or_tab(after.line.get(after.offset) ?? 'x') {
-		advance_offset(after, 1, Bool.True)
+		advance_offset(after, 1, True)
 	} else {
 		after
 	}
@@ -901,7 +922,7 @@ close_unmatched = |s| {
 		while $next.depth - 1 > s.last_matched {
 			$next = close_tip($next, s.line_number - 1)
 		}
-		{ ..$next, all_closed: Bool.True }
+		{ ..$next, all_closed: True }
 	}
 }
 
@@ -912,15 +933,15 @@ can_contain = |parent, child| {
 		QuoteBlock => !is_item_kind(child)
 		ItemBlock(_) => !is_item_kind(child)
 		ListContainer(_) => is_item_kind(child)
-		_ => Bool.False
+		_ => False
 	}
 }
 
 is_item_kind : OpenKind -> Bool
 is_item_kind = |kind| {
 	match kind {
-		ItemBlock(_) => Bool.True
-		_ => Bool.False
+		ItemBlock(_) => True
+		_ => False
 	}
 }
 
@@ -1008,13 +1029,13 @@ tip_last_line = |s| {
 
 ## Forget the innermost leaf block's lines (it was closed or emptied).
 reset_leaf : BlockState -> BlockState
-reset_leaf = |s| { ..s, leaf_reset: Bool.True, leaf_added: [] }
+reset_leaf = |s| { ..s, leaf_reset: True, leaf_added: [] }
 
 is_indented_kind : OpenKind -> Bool
 is_indented_kind = |kind| {
 	match kind {
-		IndentedBlock => Bool.True
-		_ => Bool.False
+		IndentedBlock => True
+		_ => False
 	}
 }
 
@@ -1035,12 +1056,12 @@ close_tip = |s, line_number| {
 has_gap : List(Span) -> Bool
 has_gap = |spans| {
 	var $index = 1
-	var $gap = Bool.False
+	var $gap = False
 	while !$gap and $index < spans.len() {
 		before = spans.get($index - 1) ?? { start: 0, end: 0 }
 		after = spans.get($index) ?? { start: 0, end: 0 }
 		if after.start > before.end + 1 {
-			$gap = Bool.True
+			$gap = True
 		}
 		$index = $index + 1
 	}
@@ -1105,7 +1126,7 @@ build_blocks = |events, start| {
 	var $blocks = []
 	var $built = []
 	var $end = 0
-	var $running = Bool.True
+	var $running = True
 	while $running and $index < events.len() {
 		event = events.get($index) ?? CloseContainer(0)
 		match event {
@@ -1154,7 +1175,7 @@ build_blocks = |events, start| {
 
 			CloseContainer(line) => {
 				$end = line
-				$running = Bool.False
+				$running = False
 			}
 
 			_ => {
@@ -1176,8 +1197,8 @@ built_span = |built| {
 is_built_item : Built -> Bool
 is_built_item = |built| {
 	match built {
-		BuiltItem(_) => Bool.True
-		_ => Bool.False
+		BuiltItem(_) => True
+		_ => False
 	}
 }
 
@@ -1185,7 +1206,7 @@ built_inner_gap : Built -> Bool
 built_inner_gap = |built| {
 	match built {
 		BuiltItem(item) => item.inner_gap
-		_ => Bool.False
+		_ => False
 	}
 }
 
@@ -1317,7 +1338,7 @@ try_after_setext = |s, container, ns| {
 	}
 
 	if indented and !is_paragraph_kind(tip_kind(s)) and !ns.blank {
-		started = add_child(close_unmatched(advance_offset(s, 4, Bool.True)), IndentedBlock)
+		started = add_child(close_unmatched(advance_offset(s, 4, True)), IndentedBlock)
 		return StartedLeaf(started)
 	}
 
@@ -1347,17 +1368,17 @@ ListMarker : { info : ListInfo, width : U64 }
 start_list_item : BlockState, OpenKind, Nonspace, ListMarker -> StartResult
 start_list_item = |s, container_kind, ns, marker| {
 	marker_offset = ns.indent
-	at_marker = advance_offset(advance_to_nonspace(s, ns), marker.width, Bool.True)
+	at_marker = advance_offset(advance_to_nonspace(s, ns), marker.width, True)
 	spaces_start = at_marker
-	var $probe = advance_offset(at_marker, 1, Bool.True)
+	var $probe = advance_offset(at_marker, 1, True)
 	while $probe.column - spaces_start.column < 5 and is_space_or_tab($probe.line.get($probe.offset) ?? 'x') {
-		$probe = advance_offset($probe, 1, Bool.True)
+		$probe = advance_offset($probe, 1, True)
 	}
 	blank_item = $probe.offset >= $probe.line.len()
 	spaces_after = $probe.column - spaces_start.column
 	{ after_marker, padding } =
 		if spaces_after >= 5 or spaces_after < 1 or blank_item {
-			skipped = if is_space_or_tab(spaces_start.line.get(spaces_start.offset) ?? 'x') advance_offset(spaces_start, 1, Bool.True) else spaces_start
+			skipped = if is_space_or_tab(spaces_start.line.get(spaces_start.offset) ?? 'x') advance_offset(spaces_start, 1, True) else spaces_start
 			{ after_marker: skipped, padding: marker.width + 1 }
 		} else {
 			{ after_marker: $probe, padding: marker.width + spaces_after }
@@ -1379,7 +1400,7 @@ start_list_item = |s, container_kind, ns, marker| {
 		['[', mark, ']', after, ..] if task_ns.indent < 4 and (mark == ' ' or mark == 'x' or mark == 'X') and is_space_or_tab(after) => {
 			task = if mark == ' ' Unchecked else Checked
 			marked = { ..item, events: item.events.append(ItemTask(task)) }
-			StopStarts(advance_offset(advance_to_nonspace(marked, task_ns), 3, Bool.False))
+			StopStarts(advance_offset(advance_to_nonspace(marked, task_ns), 3, False))
 		}
 
 		_ =>
@@ -1398,8 +1419,8 @@ is_list_kind = |kind| {
 is_list_tip : BlockState -> Bool
 is_list_tip = |s| {
 	match tip_kind(s) {
-		ListContainer(_) => Bool.True
-		_ => Bool.False
+		ListContainer(_) => True
+		_ => False
 	}
 }
 
@@ -1419,12 +1440,12 @@ parse_list_marker = |rest, interrupts_paragraph| {
 	first = rest.first() ?? 0
 	parsed =
 		if first == '-' or first == '+' or first == '*' {
-			Ok({ info: { ordered: Bool.False, marker: first, start: 1 }, width: 1 })
+			Ok({ info: { ordered: False, marker: first, start: 1 }, width: 1 })
 		} else {
 			digits = count_leading_digits(rest)
 			delimiter = rest.get(digits) ?? 0
 			if digits >= 1 and digits <= 9 and (delimiter == '.' or delimiter == ')') {
-				Ok({ info: { ordered: Bool.True, marker: delimiter, start: digits_to_u64(rest.take_first(digits)) }, width: digits + 1 })
+				Ok({ info: { ordered: True, marker: delimiter, start: digits_to_u64(rest.take_first(digits)) }, width: digits + 1 })
 			} else {
 				Err(NotFound)
 			}
@@ -1504,7 +1525,7 @@ is_thematic_break : Utf8.Bytes -> Bool
 is_thematic_break = |rest| {
 	marker = rest.first() ?? 0
 	if marker != '-' and marker != '_' and marker != '*' {
-		Bool.False
+		False
 	} else {
 		rest.all(|byte| byte == marker or is_space_or_tab(byte)) and rest.count_if(|byte| byte == marker) >= 3
 	}
@@ -1538,7 +1559,68 @@ html_type_1_tags = ["pre", "script", "style", "textarea"]
 
 html_type_6_tags : List(Str)
 html_type_6_tags = [
-	"address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+	"address",
+	"article",
+	"aside",
+	"base",
+	"basefont",
+	"blockquote",
+	"body",
+	"caption",
+	"center",
+	"col",
+	"colgroup",
+	"dd",
+	"details",
+	"dialog",
+	"dir",
+	"div",
+	"dl",
+	"dt",
+	"fieldset",
+	"figcaption",
+	"figure",
+	"footer",
+	"form",
+	"frame",
+	"frameset",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"head",
+	"header",
+	"hr",
+	"html",
+	"iframe",
+	"legend",
+	"li",
+	"link",
+	"main",
+	"menu",
+	"menuitem",
+	"nav",
+	"noframes",
+	"ol",
+	"optgroup",
+	"option",
+	"p",
+	"param",
+	"search",
+	"section",
+	"summary",
+	"table",
+	"tbody",
+	"td",
+	"tfoot",
+	"th",
+	"thead",
+	"title",
+	"tr",
+	"track",
+	"ul",
 ]
 
 lowercase_ascii : Utf8.Bytes -> Utf8.Bytes
@@ -1577,7 +1659,7 @@ is_type_6_start = |lower| {
 	after = lower.drop_first(name_start + name.len())
 	next = after.first() ?? ' '
 	html_type_6_tags.any(|tag| tag.to_utf8() == name)
-	and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
+		and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
 }
 
 take_tag_name : Utf8.Bytes -> Utf8.Bytes
@@ -1612,7 +1694,7 @@ is_type_7_start = |rest| {
 		}
 	match end {
 		Ok(len) => bytes_are_blank(rest.drop_first(len))
-		Err(_) => Bool.False
+		Err(_) => False
 	}
 }
 
@@ -1625,17 +1707,17 @@ html_block_ends = |html_type, rest| {
 		3 => contains_bytes(rest, "?>".to_utf8())
 		4 => rest.contains('>')
 		5 => contains_bytes(rest, "]]>".to_utf8())
-		_ => Bool.False
+		_ => False
 	}
 }
 
 contains_bytes : Utf8.Bytes, Utf8.Bytes -> Bool
 contains_bytes = |haystack, needle| {
 	var $index = 0
-	var $found = Bool.False
+	var $found = False
 	while !$found and $index + needle.len() <= haystack.len() {
 		if haystack.sublist({ start: $index, len: needle.len() }) == needle {
-			$found = Bool.True
+			$found = True
 		}
 		$index = $index + 1
 	}
@@ -1653,22 +1735,22 @@ split_table_row = |line| {
 	body = if trimmed.first() == Ok('|') trimmed.drop_first(1) else trimmed
 	var $cells = []
 	var $current = []
-	var $pending = Bool.False
+	var $pending = False
 	var $index = 0
 	while $index < body.len() {
 		byte = body.get($index) ?? 0
 		if byte == '\\' and (body.get($index + 1) ?? 0) == '|' {
 			$current = $current.append('|')
-			$pending = Bool.True
+			$pending = True
 			$index = $index + 2
 		} else if byte == '|' {
 			$cells = $cells.append(trim_spaces($current))
 			$current = []
-			$pending = Bool.False
+			$pending = False
 			$index = $index + 1
 		} else {
 			$current = $current.append(byte)
-			$pending = Bool.True
+			$pending = True
 			$index = $index + 1
 		}
 	}
@@ -1723,7 +1805,7 @@ extract_reference_definitions : Utf8.Bytes, List(ReferenceDefinition) -> { rest 
 extract_reference_definitions = |content, refs| {
 	var $rest = content
 	var $refs = refs
-	var $scanning = Bool.True
+	var $scanning = True
 	while $scanning {
 		match parse_reference_definition($rest) {
 			Ok(found) => {
@@ -1732,7 +1814,7 @@ extract_reference_definitions = |content, refs| {
 			}
 
 			Err(_) => {
-				$scanning = Bool.False
+				$scanning = False
 			}
 		}
 	}
@@ -1775,8 +1857,8 @@ parse_reference_definition = |bytes| {
 		}
 	{ end, title_value } =
 		match title {
-			Ok(found) => { end: skip_spaces_tabs(bytes, found.end), title_value: Some(unescape_link_text(found.raw)) }
-			Err(_) => { end: skip_spaces_tabs(bytes, before_title), title_value: None }
+			Ok(found) => { end: skip_spaces_tabs(bytes, found.end), title_value: Ok(unescape_link_text(found.raw)) }
+			Err(_) => { end: skip_spaces_tabs(bytes, before_title), title_value: Err(Missing) }
 		}
 	if !at_line_end(bytes, end) {
 		return Err(NotFound)
@@ -1815,63 +1897,6 @@ placeholder_raw = |content| {
 		_ => []
 	}
 }
-
-inline_heading : Parser(Utf8.Bytes, Markdown)
-inline_heading =
-	Parser.const(
-		|level| {
-			|str| {
-				Heading({ level: level, content: parse_inlines(trim_closing_heading_marker(str.to_utf8())) })
-			}
-		},
-	)
-		.keep(
-			Parser.one_of([
-				Parser.const(One).skip(Utf8.string("# ")),
-				Parser.const(Two).skip(Utf8.string("## ")),
-				Parser.const(Three).skip(Utf8.string("### ")),
-				Parser.const(Four).skip(Utf8.string("#### ")),
-				Parser.const(Five).skip(Utf8.string("##### ")),
-				Parser.const(Six).skip(Utf8.string("###### ")),
-			]),
-		)
-		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
-
-two_line_heading_level_one : Parser(Utf8.Bytes, Markdown)
-two_line_heading_level_one =
-	Parser.const(
-		|str| {
-			Heading({ level: One, content: parse_inlines(str.to_utf8()) })
-		},
-	)
-		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
-		.skip(end_of_line)
-		.skip(Utf8.string("=="))
-		.skip(
-			Parser.chomp_while(
-				|b| {
-					not_end_of_line(b) and b == '='
-				},
-			),
-		)
-
-two_line_heading_level_two : Parser(Utf8.Bytes, Markdown)
-two_line_heading_level_two =
-	Parser.const(
-		|str| {
-			Heading({ level: Two, content: parse_inlines(str.to_utf8()) })
-		},
-	)
-		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
-		.skip(end_of_line)
-		.skip(Utf8.string("--"))
-		.skip(
-			Parser.chomp_while(
-				|b| {
-					not_end_of_line(b) and b == '-'
-				},
-			),
-		)
 
 heading_level_from_count : U64 -> Try(Markdown.Level, [NotFound])
 heading_level_from_count = |count| {
@@ -1918,60 +1943,14 @@ InlineBracket : { item : U64, start : U64, image : Bool, sequence : U64 }
 ## A maximal run of backticks in the input.
 TickRun : { start : U64, len : U64 }
 
-InlineStop : [Finished, Stopped({ node : Markdown.Inline, end : U64 }), Failed]
-
-parse_inlines_parser : Parser(Utf8.Bytes, List(Markdown.Inline))
-parse_inlines_parser =
-	Parser.custom(
-		|input| {
-			Ok({ value: parse_inlines(input), rest: [] })
-		},
-	)
-
-parse_inlines : Utf8.Bytes -> List(Markdown.Inline)
-parse_inlines = |input| {
+parse_inline_bytes : Utf8.Bytes -> List(Markdown.Inline)
+parse_inline_bytes = |input| {
 	parse_inlines_with_refs([], input)
 }
 
 parse_inlines_with_refs : List(ReferenceDefinition), Utf8.Bytes -> List(Markdown.Inline)
 parse_inlines_with_refs = |refs, input| {
-	scan_inlines(prepare_inline_input(input), refs, Bool.False).nodes
-}
-
-## Parse a link or image that starts at the beginning of `input`, returning the
-## node and the unconsumed input. Used by the `Markdown.link`/`Markdown.image`
-## parsers.
-parse_leading_link : Utf8.Bytes, Bool -> Try({ value : Markdown.Inline, rest : Utf8.Bytes }, [ParseError({ message : Str, offset : U64 })])
-parse_leading_link = |input, image| {
-	opens =
-		if image {
-			byte_at(input, 0) == '!' and byte_at(input, 1) == '['
-		} else {
-			byte_at(input, 0) == '['
-		}
-
-	if !opens {
-		Err(ParseError({ message: if image "expected ![" else "expected [", offset: 0 }))
-	} else {
-		match scan_inlines(input, [], Bool.True).stop {
-			Stopped({ node, end }) => {
-				matches_kind =
-					match node {
-						Image(_) => image
-						Link(_) => !image
-						_ => Bool.False
-					}
-				if matches_kind {
-					Ok({ value: node, rest: input.drop_first(end) })
-				} else {
-					Err(ParseError({ message: "expected an inline link", offset: 0 }))
-				}
-			}
-
-			_ =>
-				Err(ParseError({ message: "expected an inline link", offset: 0 }))
-			}
-	}
+	scan_inlines(prepare_inline_input(input), refs)
 }
 
 ## Normalize paragraph content: replace U+0000 with U+FFFD, strip the leading
@@ -1980,7 +1959,7 @@ parse_leading_link = |input, image| {
 prepare_inline_input : List(U8) -> List(U8)
 prepare_inline_input = |input| {
 	var $out = List.with_capacity(input.len())
-	var $line_start = Bool.True
+	var $line_start = True
 	for byte in input {
 		if $line_start and (byte == ' ' or byte == '\t') {
 			{}
@@ -1988,7 +1967,7 @@ prepare_inline_input = |input| {
 			{}
 		} else if byte == 0 {
 			$out = $out.concat([0xEF, 0xBF, 0xBD])
-			$line_start = Bool.False
+			$line_start = False
 		} else {
 			$out = $out.append(byte)
 			$line_start = byte == '\n' or byte == '\r'
@@ -2027,10 +2006,9 @@ is_cmark_space = |byte| byte == ' ' or byte == '\t' or byte == '\n' or byte == '
 byte_at : List(U8), U64 -> U8
 byte_at = |bytes, index| bytes.get(index) ?? 0
 
-## The main inline scanner. With `leading_link`, stop as soon as the bracket at
-## offset 0 is resolved (used to parse a single leading link or image).
-scan_inlines : List(U8), List(ReferenceDefinition), Bool -> { nodes : List(Markdown.Inline), stop : InlineStop }
-scan_inlines = |input, refs, leading_link| {
+## The main inline scanner.
+scan_inlines : List(U8), List(ReferenceDefinition) -> List(Markdown.Inline)
+scan_inlines = |input, refs| {
 	len = input.len()
 	ticks = backtick_runs(input)
 	var $pos = 0
@@ -2044,11 +2022,9 @@ scan_inlines = |input, refs, leading_link| {
 	# Once a scan for the end of a comment, processing instruction, CDATA
 	# section or declaration fails, later scans would fail too (cmark does the
 	# same to avoid quadratic behaviour).
-	var $html_skip = { comment: Bool.False, pi: Bool.False, cdata: Bool.False, declaration: Bool.False }
-	var $stop = Finished
-	var $running = Bool.True
+	var $html_skip = { comment: False, pi: False, cdata: False, declaration: False }
 
-	while $running and $pos < len {
+	while $pos < len {
 		byte = byte_at(input, $pos)
 
 		if byte == '\n' or byte == '\r' {
@@ -2106,13 +2082,13 @@ scan_inlines = |input, refs, leading_link| {
 		} else if byte == '!' and byte_at(input, $pos + 1) == '[' {
 			$items = flush_chars($items, $text).append(Chars(['!', '[']))
 			$text = []
-			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 2, image: Bool.True, sequence: $bracket_pushes })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 2, image: True, sequence: $bracket_pushes })
 			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 2
 		} else if byte == '[' {
 			$items = flush_chars($items, $text).append(Chars(['[']))
 			$text = []
-			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 1, image: Bool.False, sequence: $bracket_pushes })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 1, image: False, sequence: $bracket_pushes })
 			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 1
 		} else if byte == ']' {
@@ -2151,23 +2127,13 @@ scan_inlines = |input, refs, leading_link| {
 							if !opener.image {
 								$link_floor = $brackets.len()
 							}
-							if leading_link and opener.item == 0 {
-								$stop = Stopped({ node: autolink_emails(node), end: found.end })
-								$running = Bool.False
-							} else {
-								$items = $items.append(Node(node))
-								$pos = found.end
-							}
+							$items = $items.append(Node(node))
+							$pos = found.end
 						}
 
 						Err(_) => {
-							if leading_link and opener.item == 0 {
-								$stop = Failed
-								$running = Bool.False
-							} else {
-								$items = $items.append(Chars([']']))
-								$pos = after
-							}
+							$items = $items.append(Chars([']']))
+							$pos = after
 						}
 					}
 				}
@@ -2216,7 +2182,7 @@ scan_inlines = |input, refs, leading_link| {
 				Ok(end) => {
 					raw = input.sublist({ start: $pos, len: end - $pos })
 					label = Str.from_utf8_lossy(raw)
-					node = Link({ label: [Text(label)], target: { href: Str.concat("http://", label), title: None } })
+					node = Link({ label: [Text(label)], target: { href: Str.concat("http://", label), title: Err(Missing) } })
 					$items = flush_chars($items, $text).append(Node(node))
 					$text = []
 					$pos = end
@@ -2232,7 +2198,7 @@ scan_inlines = |input, refs, leading_link| {
 				Ok(found) => {
 					raw = input.sublist({ start: $pos - found.rewind, len: found.end - ($pos - found.rewind) })
 					url = Str.from_utf8_lossy(raw)
-					node = Link({ label: [Text(url)], target: { href: url, title: None } })
+					node = Link({ label: [Text(url)], target: { href: url, title: Err(Missing) } })
 					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Node(node))
 					$text = []
 					$pos = found.end
@@ -2250,16 +2216,9 @@ scan_inlines = |input, refs, leading_link| {
 		}
 	}
 
-	match $stop {
-		Finished => {
-			nodes = process_emphasis(flush_chars($items, $text))
-			# GFM email autolinks need an `@` in the text.
-			{ nodes: if input.contains('@') autolink_emails_in(nodes) else nodes, stop: Finished }
-		}
-
-		_ =>
-			{ nodes: [], stop: $stop }
-		}
+	nodes = process_emphasis(flush_chars($items, $text))
+	# GFM email autolinks need an `@` in the text.
+	if input.contains('@') autolink_emails_in(nodes) else nodes
 }
 
 ## Bytes that may start an inline construct (cmark's SPECIAL_CHARS plus the
@@ -2267,8 +2226,8 @@ scan_inlines = |input, refs, leading_link| {
 is_special_byte : U8 -> Bool
 is_special_byte = |byte| {
 	match byte {
-		'\n' | '\r' | '\\' | '`' | '*' | '_' | '~' | '!' | '[' | ']' | '<' | '&' | 'w' | ':' => Bool.True
-		_ => Bool.False
+		'\n' | '\r' | '\\' | '`' | '*' | '_' | '~' | '!' | '[' | ']' | '<' | '&' | 'w' | ':' => True
+		_ => False
 	}
 }
 
@@ -2363,12 +2322,12 @@ decode_utf8 = |bytes, index| {
 			invalid
 		} else {
 			var $value = if width == 2 b0 - 0xC0 else if width == 3 b0 - 0xE0 else b0 - 0xF0
-			var $ok = Bool.True
+			var $ok = True
 			var $offset = 1
 			while $offset < width {
 				continuation = byte_at(bytes, index + $offset).to_u32()
 				if continuation < 0x80 or continuation > 0xBF {
-					$ok = Bool.False
+					$ok = False
 				}
 				$value = $value * 64 + (continuation % 64)
 				$offset = $offset + 1
@@ -2424,8 +2383,8 @@ is_unicode_whitespace = |scalar| {
 		scalar == ' ' or scalar == '\t' or scalar == '\n' or scalar == 0x0C or scalar == '\r'
 	} else {
 		match general_category(scalar) {
-			Ok(Zs) => Bool.True
-			_ => Bool.False
+			Ok(Zs) => True
+			_ => False
 		}
 	}
 }
@@ -2437,9 +2396,9 @@ is_unicode_punctuation = |scalar| {
 		is_ascii_punctuation(scalar.to_u8_wrap())
 	} else {
 		match general_category(scalar) {
-			Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => Bool.True
-			Ok(Sc) | Ok(Sk) | Ok(Sm) | Ok(So) => Bool.True
-			_ => Bool.False
+			Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => True
+			Ok(Sc) | Ok(Sk) | Ok(Sm) | Ok(So) => True
+			_ => False
 		}
 	}
 }
@@ -2521,7 +2480,7 @@ process_emphasis = |items| {
 					match find_opener($stack, $bottoms, $closer) {
 						Err(_) => {
 							$bottoms = $bottoms.set(opener_bottom_key($closer), $stack.len()) ?? $bottoms
-							$searching = Bool.False
+							$searching = False
 						}
 
 						Ok(index) => {
@@ -2539,9 +2498,9 @@ process_emphasis = |items| {
 									# cmark-gfm: tilde runs of different lengths do not
 									# pair; both, and the delimiters between them, stay text.
 									$out = fill_placeholders($out, [opener])
-									$closer = { ..$closer, can_open: Bool.False }
+									$closer = { ..$closer, can_open: False }
 								}
-								$searching = Bool.False
+								$searching = False
 							} else {
 								used = if $closer.count >= 2 and opener.delim.count >= 2 2 else 1
 								children = merge_text_nodes($out.drop_first(opener.at + 1))
@@ -2633,12 +2592,12 @@ merge_text_nodes = |nodes| {
 					_ => {
 						$out = $out.append(node)
 					}
-					}
+				}
 
 			_ => {
 				$out = $out.append(node)
 			}
-			}
+		}
 	}
 	$out
 }
@@ -2901,7 +2860,7 @@ resolve_link = |input, after, opener, bracket_after, close, refs| {
 
 					Err(_) =>
 						Err(NotFound)
-					}
+				}
 			}
 		}
 	}
@@ -2933,15 +2892,15 @@ scan_link_label = |input, start| {
 	} else {
 		var $index = start + 1
 		var $result = Err(NotFound)
-		var $scanning = Bool.True
+		var $scanning = True
 		while $scanning and $index < input.len() {
 			byte = byte_at(input, $index)
 			if byte == ']' {
 				raw = input.sublist({ start: start + 1, len: $index - start - 1 })
 				$result = Ok({ raw: trim_cmark_space(raw), end: $index + 1 })
-				$scanning = Bool.False
+				$scanning = False
 			} else if byte == '[' {
-				$scanning = Bool.False
+				$scanning = False
 			} else {
 				$index =
 					if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
@@ -2950,7 +2909,7 @@ scan_link_label = |input, start| {
 						$index + 1
 					}
 				if $index - start - 1 > 1000 {
-					$scanning = Bool.False
+					$scanning = False
 				}
 			}
 		}
@@ -2997,8 +2956,8 @@ scan_inline_link_tail = |input, open| {
 		}
 	{ title_value, title_end } =
 		match title {
-			Ok(found) => { title_value: Some(unescape_link_text(found.raw)), title_end: found.end }
-			Err(_) => { title_value: None, title_end: dest.end }
+			Ok(found) => { title_value: Ok(unescape_link_text(found.raw)), title_end: found.end }
+			Err(_) => { title_value: Err(Missing), title_end: dest.end }
 		}
 	close = skip_link_space(input, title_end)
 	if byte_at(input, close) == ')' and close < input.len() {
@@ -3015,16 +2974,16 @@ scan_link_destination = |input, start| {
 	if byte_at(input, start) == '<' {
 		var $index = start + 1
 		var $result = Err(NotFound)
-		var $scanning = Bool.True
+		var $scanning = True
 		while $scanning and $index < input.len() {
 			byte = byte_at(input, $index)
 			if byte == '>' {
 				$result = Ok({ raw: input.sublist({ start: start + 1, len: $index - start - 1 }), end: $index + 1 })
-				$scanning = Bool.False
+				$scanning = False
 			} else if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
 				$index = $index + 2
 			} else if byte == '\n' or byte == '\r' or byte == '<' {
-				$scanning = Bool.False
+				$scanning = False
 			} else {
 				$index = $index + 1
 			}
@@ -3033,8 +2992,8 @@ scan_link_destination = |input, start| {
 	} else {
 		var $index = start
 		var $depth = 0
-		var $failed = Bool.False
-		var $scanning = Bool.True
+		var $failed = False
+		var $scanning = True
 		while $scanning and $index < input.len() {
 			byte = byte_at(input, $index)
 			if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
@@ -3043,18 +3002,18 @@ scan_link_destination = |input, start| {
 				$depth = $depth + 1
 				$index = $index + 1
 				if $depth > 32 {
-					$failed = Bool.True
-					$scanning = Bool.False
+					$failed = True
+					$scanning = False
 				}
 			} else if byte == ')' {
 				if $depth == 0 {
-					$scanning = Bool.False
+					$scanning = False
 				} else {
 					$depth = $depth - 1
 					$index = $index + 1
 				}
 			} else if byte <= ' ' or byte == 0x7F {
-				$scanning = Bool.False
+				$scanning = False
 			} else {
 				$index = $index + 1
 			}
@@ -3087,49 +3046,21 @@ scan_link_title = |input, start| {
 	} else {
 		var $index = start + 1
 		var $result = Err(NotFound)
-		var $scanning = Bool.True
+		var $scanning = True
 		while $scanning and $index < input.len() {
 			byte = byte_at(input, $index)
 			if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
 				$index = $index + 2
 			} else if byte == close {
 				$result = Ok({ raw: input.sublist({ start: start + 1, len: $index - start - 1 }), end: $index + 1 })
-				$scanning = Bool.False
+				$scanning = False
 			} else if open == '(' and byte == '(' {
-				$scanning = Bool.False
+				$scanning = False
 			} else {
 				$index = $index + 1
 			}
 		}
 		$result
-	}
-}
-
-## The destination and optional title of a link reference definition
-## (CommonMark 4.7) given the text after `]:`. The destination must be
-## non-empty unless written `<>`, a title must be separated from it by
-## whitespace, and nothing may follow the title.
-parse_reference_target : List(U8) -> Try(Markdown.LinkTarget, [NotFound])
-parse_reference_target = |text| {
-	start = skip_link_space(text, 0)
-	dest = scan_link_destination(text, start)?
-	if dest.end == start {
-		Err(NotFound)
-	} else {
-		href = unescape_link_text(trim_cmark_space(dest.raw))
-		title_start = skip_link_space(text, dest.end)
-		if skip_spaces_tabs(text, dest.end) >= text.len() {
-			Ok({ href, title: None })
-		} else if title_start == dest.end {
-			Err(NotFound)
-		} else {
-			title = scan_link_title(text, title_start)?
-			if skip_spaces_tabs(text, title.end) >= text.len() {
-				Ok({ href, title: Some(unescape_link_text(title.raw)) })
-			} else {
-				Err(NotFound)
-			}
-		}
 	}
 }
 
@@ -3143,14 +3074,14 @@ scan_autolink = |input, start| {
 		Ok(end) => {
 			raw = input.sublist({ start: start + 1, len: end - start - 2 })
 			text = unescape_entities(raw)
-			Ok({ node: Link({ label: [Text(text)], target: { href: text, title: None } }), end })
+			Ok({ node: Link({ label: [Text(text)], target: { href: text, title: Err(Missing) } }), end })
 		}
 
 		Err(_) => {
 			end = scan_autolink_email(input, start + 1)?
 			raw = input.sublist({ start: start + 1, len: end - start - 2 })
 			text = unescape_entities(raw)
-			Ok({ node: Link({ label: [Text(text)], target: { href: Str.concat("mailto:", text), title: None } }), end })
+			Ok({ node: Link({ label: [Text(text)], target: { href: Str.concat("mailto:", text), title: Err(Missing) } }), end })
 		}
 	}
 }
@@ -3200,7 +3131,7 @@ scan_autolink_email = |input, start| {
 	} else {
 		var $cursor = $index + 1
 		var $result = Err(NotFound)
-		var $scanning = Bool.True
+		var $scanning = True
 		while $scanning {
 			label_start = $cursor
 			while $cursor < input.len() and (is_ascii_alnum(byte_at(input, $cursor)) or byte_at(input, $cursor) == '-') {
@@ -3209,14 +3140,14 @@ scan_autolink_email = |input, start| {
 			label_len = $cursor - label_start
 			valid_label = label_len >= 1 and label_len <= 63 and is_ascii_alnum(byte_at(input, label_start)) and is_ascii_alnum(byte_at(input, $cursor - 1))
 			if !valid_label {
-				$scanning = Bool.False
+				$scanning = False
 			} else if byte_at(input, $cursor) == '.' and $cursor < input.len() {
 				$cursor = $cursor + 1
 			} else if byte_at(input, $cursor) == '>' and $cursor < input.len() {
 				$result = Ok($cursor + 1)
-				$scanning = Bool.False
+				$scanning = False
 			} else {
-				$scanning = Bool.False
+				$scanning = False
 			}
 		}
 		$result
@@ -3226,11 +3157,11 @@ scan_autolink_email = |input, start| {
 is_email_local_byte : U8 -> Bool
 is_email_local_byte = |byte| {
 	if is_ascii_alnum(byte) {
-		Bool.True
+		True
 	} else {
 		match byte {
-			'.' | '!' | '#' | '$' | '%' | '&' | '\'' | '*' | '+' | '/' | '=' | '?' | '^' | '_' | '`' | '{' | '|' | '}' | '~' | '-' => Bool.True
-			_ => Bool.False
+			'.' | '!' | '#' | '$' | '%' | '&' | '\'' | '*' | '+' | '/' | '=' | '?' | '^' | '_' | '`' | '{' | '|' | '}' | '~' | '-' => True
+			_ => False
 		}
 	}
 }
@@ -3252,7 +3183,7 @@ scan_raw_html = |input, start, skip| {
 			} else {
 				match find_bytes(input, start + 4, "-->".to_utf8()) {
 					Ok(found) => { end: Ok(found + 3), skip }
-					Err(_) => { end: Err(NotFound), skip: { ..skip, comment: Bool.True } }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, comment: True } }
 				}
 			}
 		} else if starts_with_at(input, start + 2, "[CDATA[".to_utf8()) {
@@ -3261,7 +3192,7 @@ scan_raw_html = |input, start, skip| {
 			} else {
 				match find_bytes(input, start + 9, "]]>".to_utf8()) {
 					Ok(found) => { end: Ok(found + 3), skip }
-					Err(_) => { end: Err(NotFound), skip: { ..skip, cdata: Bool.True } }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, cdata: True } }
 				}
 			}
 		} else if is_ascii_alpha(byte_at(input, start + 2)) {
@@ -3270,7 +3201,7 @@ scan_raw_html = |input, start, skip| {
 			} else {
 				match find_bytes(input, start + 3, ">".to_utf8()) {
 					Ok(found) => { end: Ok(found + 1), skip }
-					Err(_) => { end: Err(NotFound), skip: { ..skip, declaration: Bool.True } }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, declaration: True } }
 				}
 			}
 		} else {
@@ -3282,7 +3213,7 @@ scan_raw_html = |input, start, skip| {
 		} else {
 			match find_bytes(input, start + 2, "?>".to_utf8()) {
 				Ok(found) => { end: Ok(found + 2), skip }
-				Err(_) => { end: Err(NotFound), skip: { ..skip, pi: Bool.True } }
+				Err(_) => { end: Err(NotFound), skip: { ..skip, pi: True } }
 			}
 		}
 	} else if second == '/' {
@@ -3348,23 +3279,27 @@ scan_open_tag : List(U8), U64 -> Try(U64, [NotFound])
 scan_open_tag = |input, start| {
 	var $index = scan_tag_name(input, start)?
 	var $result = Err(NotFound)
-	var $scanning = Bool.True
+	var $scanning = True
 	while $scanning {
 		after_space = skip_html_space(input, $index)
 		next = byte_at(input, after_space)
 		if next == '>' and after_space < input.len() {
 			$result = Ok(after_space + 1)
-			$scanning = Bool.False
+			$scanning = False
 		} else if next == '/' and byte_at(input, after_space + 1) == '>' {
 			$result = Ok(after_space + 2)
-			$scanning = Bool.False
+			$scanning = False
 		} else if after_space > $index and is_attribute_name_start(next) {
 			match scan_attribute(input, after_space) {
-				Ok(end) => { $index = end }
-				Err(_) => { $scanning = Bool.False }
+				Ok(end) => {
+					$index = end
+				}
+				Err(_) => {
+					$scanning = False
+				}
 			}
 		} else {
-			$scanning = Bool.False
+			$scanning = False
 		}
 	}
 	$result
@@ -3411,8 +3346,8 @@ scan_attribute = |input, start| {
 is_unquoted_attribute_byte : U8 -> Bool
 is_unquoted_attribute_byte = |byte| {
 	match byte {
-		' ' | '\t' | '\n' | '\r' | '"' | '\'' | '=' | '<' | '>' | '`' => Bool.False
-		_ => Bool.True
+		' ' | '\t' | '\n' | '\r' | '"' | '\'' | '=' | '<' | '>' | '`' => False
+		_ => True
 	}
 }
 
@@ -3427,19 +3362,19 @@ is_gfm_host_byte_at = |input, index| {
 	byte = byte_at(input, index)
 	if byte >= 0x80 and byte <= 0xBF {
 		# A continuation byte does not start a valid scalar.
-		Bool.False
+		False
 	} else {
 		decoded = decode_utf8(input, index)
 		if index >= input.len() or (decoded.scalar == 0xFFFD and decoded.width == 1) {
-			Bool.False
+			False
 		} else if decoded.scalar < 128 {
 			!is_unicode_whitespace(decoded.scalar) and !is_ascii_punctuation(byte)
 		} else if is_unicode_whitespace(decoded.scalar) {
-			Bool.False
+			False
 		} else {
 			match general_category(decoded.scalar) {
-				Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => Bool.False
-				_ => Bool.True
+				Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => False
+				_ => True
 			}
 		}
 	}
@@ -3453,7 +3388,7 @@ gfm_check_domain = |input, start, size, allow_short| {
 	var $periods = 0
 	var $underscores_previous = 0
 	var $underscores = 0
-	var $scanning = Bool.True
+	var $scanning = True
 	while $scanning and $index + 1 < size {
 		if byte_at(input, start + $index) == '\\' and $index + 2 < size {
 			$index = $index + 1
@@ -3466,7 +3401,7 @@ gfm_check_domain = |input, start, size, allow_short| {
 			$underscores = 0
 			$periods = $periods + 1
 		} else if !is_gfm_host_byte_at(input, start + $index) and byte != '-' {
-			$scanning = Bool.False
+			$scanning = False
 		}
 		if $scanning {
 			$index = $index + 1
@@ -3505,12 +3440,12 @@ gfm_autolink_delim = |input, start, link_end| {
 			$index = $index + 1
 		}
 	}
-	var $trimming = Bool.True
+	var $trimming = True
 	while $trimming and $end > 0 {
 		last = byte_at(input, start + $end - 1)
 		if last == ')' {
 			if $closing <= $opening {
-				$trimming = Bool.False
+				$trimming = False
 			} else {
 				$closing = $closing - 1
 				$end = $end - 1
@@ -3532,7 +3467,7 @@ gfm_autolink_delim = |input, start, link_end| {
 				$end = $end - 1
 			}
 		} else {
-			$trimming = Bool.False
+			$trimming = False
 		}
 	}
 	$end
@@ -3557,7 +3492,7 @@ match_www_autolink = |input, start| {
 	if !allowed_before or size < 4 or !starts_with_at(input, start, "www.".to_utf8()) {
 		Err(NotFound)
 	} else {
-		domain = gfm_check_domain(input, start, size, Bool.False)
+		domain = gfm_check_domain(input, start, size, False)
 		if domain == 0 {
 			Err(NotFound)
 		} else {
@@ -3589,7 +3524,7 @@ match_url_autolink = |input, colon, pending| {
 		if !known or $rewind > pending or !is_gfm_host_byte_at(input, colon + 3) {
 			Err(NotFound)
 		} else {
-			domain = gfm_check_domain(input, colon + 3, size - 3, Bool.True)
+			domain = gfm_check_domain(input, colon + 3, size - 3, True)
 			if domain == 0 {
 				Err(NotFound)
 			} else {
@@ -3644,43 +3579,43 @@ autolink_email_text = |text| {
 	var $start = 0
 	var $offset = 0
 	var $remaining = data.len()
-	var $running = Bool.True
+	var $running = True
 	while $running {
 		if $offset >= $remaining {
-			$running = Bool.False
+			$running = False
 		} else {
 			match find_bytes(data.take_first($start + $remaining), $start + $offset, ['@']) {
 				Err(_) => {
-					$running = Bool.False
+					$running = False
 				}
 
 				Ok(at) => {
 					var $max_rewind = at - ($start + $offset)
-					var $auto_mailto = Bool.True
-					var $is_xmpp = Bool.False
+					var $auto_mailto = True
+					var $is_xmpp = False
 					var $periods = 0
 					var $rewind = 0
 					var $link_end = 0
-					var $retry = Bool.True
+					var $retry = True
 					var $outcome = Skip(0)
 					while $retry {
-						$retry = Bool.False
+						$retry = False
 						at_index = $start + $offset + $max_rewind
 						$rewind = 0
-						var $rewinding = Bool.True
+						var $rewinding = True
 						while $rewinding and $rewind < $max_rewind {
 							c = byte_at(data, at_index - $rewind - 1)
 							if is_ascii_alnum(c) or c == '.' or c == '+' or c == '-' or c == '_' {
 								$rewind = $rewind + 1
 							} else if c == ':' and gfm_validate_protocol("mailto:".to_utf8(), data, at_index, $rewind, $max_rewind) {
-								$auto_mailto = Bool.False
+								$auto_mailto = False
 								$rewind = $rewind + 1
 							} else if c == ':' and gfm_validate_protocol("xmpp:".to_utf8(), data, at_index, $rewind, $max_rewind) {
-								$auto_mailto = Bool.False
-								$is_xmpp = Bool.True
+								$auto_mailto = False
+								$is_xmpp = True
 								$rewind = $rewind + 1
 							} else {
-								$rewinding = Bool.False
+								$rewinding = False
 							}
 						}
 						if $rewind == 0 {
@@ -3688,7 +3623,7 @@ autolink_email_text = |text| {
 						} else {
 							limit = $remaining - $offset - $max_rewind
 							$link_end = 1
-							var $forward = Bool.True
+							var $forward = True
 							while $forward and $link_end < limit {
 								c = byte_at(data, at_index + $link_end)
 								if is_ascii_alnum(c) {
@@ -3696,15 +3631,15 @@ autolink_email_text = |text| {
 								} else if c == '@' {
 									$offset = $offset + $max_rewind + 1
 									$max_rewind = $link_end - 1
-									$retry = Bool.True
-									$forward = Bool.False
+									$retry = True
+									$forward = False
 								} else if c == '.' and $link_end < limit - 1 and is_ascii_alnum(byte_at(data, at_index + $link_end + 1)) {
 									$periods = $periods + 1
 									$link_end = $link_end + 1
 								} else if c == '/' and $is_xmpp {
 									$link_end = $link_end + 1
 								} else if c != '-' and c != '_' {
-									$forward = Bool.False
+									$forward = False
 								} else {
 									$link_end = $link_end + 1
 								}
@@ -3736,7 +3671,7 @@ autolink_email_text = |text| {
 							email = Str.from_utf8_lossy(data.sublist({ start: link_start, len: $link_end + $rewind }))
 							href = if $auto_mailto Str.concat("mailto:", email) else email
 							before = data.sublist({ start: $start, len: link_start - $start })
-							$out = $out.append(Text(Str.from_utf8_lossy(before))).append(Link({ label: [Text(email)], target: { href, title: None } }))
+							$out = $out.append(Text(Str.from_utf8_lossy(before))).append(Link({ label: [Text(email)], target: { href, title: Err(Missing) } }))
 							consumed = $offset + $max_rewind + $link_end
 							$start = $start + consumed
 							$remaining = $remaining - consumed
@@ -3755,48 +3690,13 @@ gfm_validate_protocol : List(U8), List(U8), U64, U64, U64 -> Bool
 gfm_validate_protocol = |protocol, data, at_index, rewind, max_rewind| {
 	len = protocol.len()
 	if len > max_rewind - rewind {
-		Bool.False
+		False
 	} else if data.sublist({ start: at_index - rewind - len, len }) != protocol {
-		Bool.False
+		False
 	} else if len == max_rewind - rewind {
-		Bool.True
+		True
 	} else {
 		!is_ascii_alnum(byte_at(data, at_index - rewind - len - 1))
-	}
-}
-
-parse_link_target : Utf8.Bytes -> Markdown.LinkTarget
-parse_link_target = |raw| {
-	clean = trim_spaces(raw)
-	parts = split_first_space(clean)
-
-	title =
-		if parts.rest.is_empty() {
-			None
-		} else {
-			Some(Str.from_utf8_lossy(strip_wrapping_quotes(trim_spaces(parts.rest))))
-		}
-
-	{ href: Str.from_utf8_lossy(parts.first), title }
-}
-
-find_sequence : Utf8.Bytes, Utf8.Bytes -> Try({ before : Utf8.Bytes, after : Utf8.Bytes }, [NotFound])
-find_sequence = |input, needle| {
-	find_sequence_help(input, needle, [])
-}
-
-find_sequence_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Try({ before : Utf8.Bytes, after : Utf8.Bytes }, [NotFound])
-find_sequence_help = |input, needle, acc| {
-	if starts_with_bytes(input, needle) {
-		Ok({ before: acc, after: input.drop_first(needle.len()) })
-	} else {
-		match input {
-			[] =>
-				Err(NotFound)
-
-			[first, .. as rest] =>
-				find_sequence_help(rest, needle, acc.append(first))
-			}
 	}
 }
 
@@ -3804,7 +3704,7 @@ bytes_are_blank : Utf8.Bytes -> Bool
 bytes_are_blank = |bytes| {
 	match bytes {
 		[] =>
-			Bool.True
+			True
 
 		[' ', .. as rest] =>
 			bytes_are_blank(rest)
@@ -3813,30 +3713,8 @@ bytes_are_blank = |bytes| {
 			bytes_are_blank(rest)
 
 		_ =>
-			Bool.False
-		}
-}
-
-starts_with_bytes : Utf8.Bytes, Utf8.Bytes -> Bool
-starts_with_bytes = |input, prefix| {
-	{ before: start, others: _ } = input.split_at(prefix.len())
-	start == prefix
-}
-
-ends_with_byte : Utf8.Bytes, U8 -> Bool
-ends_with_byte = |bytes, expected| {
-	ends_with_byte_help(bytes, expected, Err(NotFound))
-}
-
-ends_with_byte_help : Utf8.Bytes, U8, Try(U8, [NotFound]) -> Bool
-ends_with_byte_help = |bytes, expected, last| {
-	match bytes {
-		[] =>
-			last == Ok(expected)
-
-		[first, .. as rest] =>
-			ends_with_byte_help(rest, expected, Ok(first))
-		}
+			False
+	}
 }
 
 append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
@@ -3847,7 +3725,7 @@ append_bytes = |left, right| {
 
 		[first, .. as rest] =>
 			append_bytes(left.append(first), rest)
-		}
+	}
 }
 
 join_lines_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
@@ -3863,7 +3741,7 @@ join_lines_with_newlines_help = |lines, acc| {
 
 		[line, .. as rest] =>
 			join_lines_with_newlines_help(rest, append_bytes(acc, line).append('\n'))
-		}
+	}
 }
 
 trim_spaces : Utf8.Bytes -> Utf8.Bytes
@@ -3882,7 +3760,7 @@ trim_start_spaces = |bytes| {
 
 		_ =>
 			bytes
-		}
+	}
 }
 
 trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
@@ -3904,69 +3782,7 @@ trim_end_spaces_help = |bytes, out, pending_spaces| {
 
 		[first, .. as rest] =>
 			trim_end_spaces_help(rest, append_bytes(out, pending_spaces).append(first), [])
-		}
-}
-
-trim_closing_heading_marker : Utf8.Bytes -> Utf8.Bytes
-trim_closing_heading_marker = |bytes| {
-	trim_closing_heading_marker_help(trim_spaces(bytes), [], [])
-}
-
-trim_closing_heading_marker_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
-trim_closing_heading_marker_help = |bytes, out, pending_hashes| {
-	match bytes {
-		[] if pending_hashes.is_empty() =>
-			out
-
-		[] =>
-			trim_spaces(out)
-
-		['#', .. as rest] =>
-			trim_closing_heading_marker_help(rest, out, pending_hashes.append('#'))
-
-		[first, .. as rest] =>
-			trim_closing_heading_marker_help(rest, append_bytes(out, pending_hashes).append(first), [])
-		}
-}
-
-split_first_space : Utf8.Bytes -> { first : Utf8.Bytes, rest : Utf8.Bytes }
-split_first_space = |bytes| {
-	split_first_space_help(bytes, [])
-}
-
-split_first_space_help : Utf8.Bytes, Utf8.Bytes -> { first : Utf8.Bytes, rest : Utf8.Bytes }
-split_first_space_help = |bytes, first_part| {
-	match bytes {
-		[] =>
-			{ first: first_part, rest: [] }
-
-		[' ', .. as rest] =>
-			{ first: first_part, rest }
-
-		['\t', .. as rest] =>
-			{ first: first_part, rest }
-
-		[first, .. as rest] =>
-			split_first_space_help(rest, first_part.append(first))
-		}
-}
-
-strip_wrapping_quotes : Utf8.Bytes -> Utf8.Bytes
-strip_wrapping_quotes = |bytes| {
-	match bytes {
-		['"', .. as rest] => {
-			found = find_sequence(rest, "\"".to_utf8()) ?? { before: rest, after: [] }
-			found.before
-		}
-
-		['\'', .. as rest] => {
-			found = find_sequence(rest, "'".to_utf8()) ?? { before: rest, after: [] }
-			found.before
-		}
-
-		_ =>
-			bytes
-		}
+	}
 }
 
 ## Link label matching (CommonMark 4.7): Unicode case fold, strip leading and
@@ -3980,24 +3796,19 @@ normalize_reference_label = |label| {
 			Err(_) => source
 		}
 	var $out = []
-	var $pending_space = Bool.False
+	var $pending_space = False
 	for byte in folded.to_utf8() {
 		if is_cmark_space(byte) {
-			$pending_space = Bool.True
+			$pending_space = True
 		} else {
 			if $pending_space and !$out.is_empty() {
 				$out = $out.append(' ')
 			}
-			$pending_space = Bool.False
+			$pending_space = False
 			$out = $out.append(byte)
 		}
 	}
 	Str.from_utf8_lossy($out)
-}
-
-lower_ascii_bytes : Utf8.Bytes -> Utf8.Bytes
-lower_ascii_bytes = |bytes| {
-	List.from_iter(bytes.iter().map(lower_ascii_byte))
 }
 
 lower_ascii_byte : U8 -> U8
@@ -4009,23 +3820,6 @@ lower_ascii_byte = |byte| {
 	}
 }
 
-collapse_reference_whitespace : Utf8.Bytes, Utf8.Bytes, Bool -> Utf8.Bytes
-collapse_reference_whitespace = |bytes, out, pending_space| {
-	match bytes {
-		[] =>
-			out
-
-		[first, .. as rest] if first == ' ' or first == '\t' or first == '\n' =>
-			collapse_reference_whitespace(rest, out, Bool.True)
-
-		[first, .. as rest] if pending_space and !out.is_empty() =>
-			collapse_reference_whitespace(rest, out.append(' ').append(first), Bool.False)
-
-		[first, .. as rest] =>
-			collapse_reference_whitespace(rest, out.append(first), Bool.False)
-		}
-}
-
 count_leading_byte : Utf8.Bytes, U8, U64 -> U64
 count_leading_byte = |bytes, expected, count| {
 	match bytes {
@@ -4034,7 +3828,7 @@ count_leading_byte = |bytes, expected, count| {
 
 		_ =>
 			count
-		}
+	}
 }
 
 digits_to_u64 : Utf8.Bytes -> U64
@@ -4057,26 +3851,7 @@ is_alphabetic_byte = |byte| {
 	(byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z')
 }
 
-end_of_line : Parser(Utf8.Bytes, Str)
-end_of_line = Parser.one_of([Utf8.string("\n"), Utf8.string("\r\n")])
-
-not_end_of_line : U8 -> Bool
-not_end_of_line = |b| {
-	b != '\n' and b != '\r'
-}
-
-todo : Parser(Utf8.Bytes, Markdown)
-todo =
-	Parser.const(|s| TODO(s))
-		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
-
-## Unsupported markdown lines can still be preserved as TODO nodes directly.
-expect {
-	a = Utf8.parse_str(todo, "Foo Bar")?
-	a == TODO("Foo Bar")
-}
-
-## Small nominal support types expose equality, debug, and string helpers.
+# Small nominal support types expose equality, debug, and string helpers.
 expect {
 	level : Markdown.Level
 	level = Two
@@ -4123,7 +3898,7 @@ expect {
 	actual == expected
 }
 
-## Inline and block AST nodes expose useful inspect strings and structural equality.
+# Inline and block AST nodes expose useful inspect strings and structural equality.
 expect {
 	inline : Markdown.Inline
 	inline = Strong([Text("Roc")])
@@ -4133,66 +3908,26 @@ expect {
 
 	actual =
 		\\inline inspect: ${Str.inspect(inline)}
-		\\inline debug: ${Markdown.inline_to_debug_str(inline)}
 		\\inline eq same: ${Str.inspect(inline == Strong([Text("Roc")]))}
 		\\inline eq different: ${Str.inspect(inline == Emphasis([Text("Roc")]))}
 		\\block inspect: ${Str.inspect(block)}
-		\\block debug: ${Markdown.to_debug_str(block)}
 		\\block eq same: ${Str.inspect(block == Heading({ level: Two, content: [Text("Roc")] }))}
 		\\block eq different: ${Str.inspect(block == Paragraph([Text("Roc")]))}
 
 	expected =
 		\\inline inspect: Strong([Text("Roc")])
-		\\inline debug: Strong([Text("Roc")])
 		\\inline eq same: True
 		\\inline eq different: False
 		\\block inspect: Heading({ level: Two, content: [Text("Roc")] })
-		\\block debug: Heading({ level: Two, content: [Text("Roc")] })
 		\\block eq same: True
 		\\block eq different: False
 
 	actual == expected
 }
 
-## Hash-prefixed headings parse with inline content.
+# Public inline parser parses emphasis, strong, strikethrough, code, and links.
 expect {
-	a = Utf8.parse_str(Markdown.heading, "# Foo **Bar** #")?
-	a == Heading({ level: One, content: [Text("Foo "), Strong([Text("Bar")])] })
-}
-
-## Underlined headings parse as level two headings.
-expect {
-	a = Utf8.parse_str(Markdown.heading, "Foo Bar\n---")?
-	a == Heading({ level: Two, content: [Text("Foo Bar")] })
-}
-
-## Markdown links parse as inline link nodes.
-expect {
-	a = Utf8.parse_str(Markdown.link, "[roc](https://roc-lang.org \"Roc\")")?
-	a == Link({ label: [Text("roc")], target: { href: "https://roc-lang.org", title: Some("Roc") } })
-}
-
-## Markdown images parse as inline image nodes.
-expect {
-	a = Utf8.parse_str(Markdown.image, "![alt text](/images/logo.png)")?
-	a == Image({ alt: [Text("alt text")], target: { href: "/images/logo.png", title: None } })
-}
-
-## Code blocks capture their info string and body text.
-expect {
-	text =
-		\\```roc
-		\\# some code
-		\\foo = bar
-		\\```
-
-	a = Utf8.parse_str(Markdown.code, text)?
-	a == Code({ info: "roc", pre: "# some code\nfoo = bar\n" })
-}
-
-## Public inline parser parses emphasis, strong, strikethrough, code, and links.
-expect {
-	actual = Utf8.parse_str(Markdown.inlines, "Intro with **bold**, *em*, ~~gone~~, `code`, and [a link](https://example.com).")?
+	actual = Markdown.parse_inlines("Intro with **bold**, *em*, ~~gone~~, `code`, and [a link](https://example.com).")
 
 	actual
 		== [
@@ -4205,63 +3940,63 @@ expect {
 			Text(", "),
 			InlineCode("code"),
 			Text(", and "),
-			Link({ label: [Text("a link")], target: { href: "https://example.com", title: None } }),
+			Link({ label: [Text("a link")], target: { href: "https://example.com", title: Err(Missing) } }),
 			Text("."),
 		]
 }
 
-## Escaped inline delimiters parse as literal text.
+# Escaped inline delimiters parse as literal text.
 expect {
 	text = "\\*literal\\*, \\_em\\_, \\`code\\`, and \\[a link](target)"
 
-	actual = Utf8.parse_str(Markdown.inlines, text)?
+	actual = Markdown.parse_inlines(text)
 
 	actual == [Text("*literal*, _em_, `code`, and [a link](target)")]
 }
 
-## Inline images parse inside prose.
+# Inline images parse inside prose.
 expect {
-	actual = Utf8.parse_str(Markdown.inlines, "Logo ![Roc](/roc.png) here")?
+	actual = Markdown.parse_inlines("Logo ![Roc](/roc.png) here")
 
 	actual
 		== [
 			Text("Logo "),
-			Image({ alt: [Text("Roc")], target: { href: "/roc.png", title: None } }),
+			Image({ alt: [Text("Roc")], target: { href: "/roc.png", title: Err(Missing) } }),
 			Text(" here"),
 		]
 }
 
-## Autolinks and bare URLs parse as inline links.
+# Autolinks and bare URLs parse as inline links.
 expect {
-	actual = Utf8.parse_str(Markdown.inlines, "<https://example.com> and www.example.com")?
+	actual = Markdown.parse_inlines("<https://example.com> and www.example.com")
 
 	actual
 		== [
-			Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: None } }),
+			Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: Err(Missing) } }),
 			Text(" and "),
-			Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: None } }),
+			Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: Err(Missing) } }),
 		]
 }
 
-## Hard line breaks parse from trailing spaces and backslash newlines.
+# Hard line breaks parse from trailing spaces and backslash newlines.
 expect {
-	actual = Utf8.parse_str(Markdown.inlines, "one  \ntwo\\\nthree")?
+	actual = Markdown.parse_inlines("one  \ntwo\\\nthree")
 
 	actual == [Text("one"), HardBreak, Text("two"), HardBreak, Text("three")]
 }
 
-## Raw HTML inline spans are preserved.
+# Raw HTML inline spans are preserved.
 expect {
-	actual = Utf8.parse_str(Markdown.inlines, "Hello <span>world</span>")?
+	actual = Markdown.parse_inlines("Hello <span>world</span>")
 
 	actual == [Text("Hello "), HtmlInline("<span>"), Text("world"), HtmlInline("</span>")]
 }
 
 inline_test : Str -> List(Markdown.Inline)
-inline_test = |text| Utf8.parse_str(Markdown.inlines, text) ?? [Text("<parse error>")]
+inline_test = |text| Markdown.parse_inlines(text)
 
 ## Emphasis follows the delimiter-run algorithm (CommonMark 6.2): flanking,
-## intraword underscores, the rule of three and nesting.
+# intraword underscores, the rule of three and nesting.
 expect inline_test("*foo bar *") == [Text("*foo bar *")]
 expect inline_test("foo_bar_") == [Text("foo_bar_")]
 expect inline_test("*foo**bar**baz*") == [Emphasis([Text("foo"), Strong([Text("bar")]), Text("baz")])]
@@ -4272,112 +4007,107 @@ expect inline_test("foo******bar*********baz") == [Text("foo"), Strong([Strong([
 expect inline_test("*(*foo*)*") == [Emphasis([Text("("), Emphasis([Text("foo")]), Text(")")])]
 
 ## Unicode punctuation includes symbols (CommonMark 0.31.2), so a currency sign
-## next to `*` makes the run left-flanking only.
+# next to `*` makes the run left-flanking only.
 expect inline_test("*£*bravo.") == [Text("*£*bravo.")]
 expect inline_test("a\u(A0)*b*") == [Text("a\u(A0)"), Emphasis([Text("b")])]
 
-## Code spans take precedence over emphasis and links; backtick runs must match.
+# Code spans take precedence over emphasis and links; backtick runs must match.
 expect inline_test("*a `*` b*") == [Emphasis([Text("a "), InlineCode("*"), Text(" b")])]
 expect inline_test("``foo`bar``") == [InlineCode("foo`bar")]
 expect inline_test("`a``b`` c") == [Text("`a"), InlineCode("b"), Text(" c")]
 expect inline_test("` `` `") == [InlineCode("``")]
 expect inline_test("`foo\nbar`") == [InlineCode("foo bar")]
 
-## Backslash escapes and entity references decode to text.
+# Backslash escapes and entity references decode to text.
 expect inline_test("\\*not emphasis\\* \\a") == [Text("*not emphasis* \\a")]
 expect inline_test("&copy; &#35; &#X22; &#0; &nosuch;") == [Text("© # \" \u(FFFD) &nosuch;")]
 expect inline_test("&amp;ouml;") == [Text("&ouml;")]
 
-## Links: destinations, titles, nesting rules and precedence.
-expect inline_test("[a](<b c> \"t\")") == [Link({ label: [Text("a")], target: { href: "b c", title: Some("t") } })]
-expect inline_test("[a](b(c)d)") == [Link({ label: [Text("a")], target: { href: "b(c)d", title: None } })]
+# Links: destinations, titles, nesting rules and precedence.
+expect inline_test("[a](<b c> \"t\")") == [Link({ label: [Text("a")], target: { href: "b c", title: Ok("t") } })]
+expect inline_test("[a](b(c)d)") == [Link({ label: [Text("a")], target: { href: "b(c)d", title: Err(Missing) } })]
 
 ## Whitespace around a `<...>` destination is not part of the URL (as in
-## cmark and markdown-it, and WHATWG URL parsing); escaped content is kept.
-expect inline_test("[a](<  b c  >) [d](< \\) >)") == [Link({ label: [Text("a")], target: { href: "b c", title: None } }), Text(" "), Link({ label: [Text("d")], target: { href: ")", title: None } })]
+# cmark and markdown-it, and WHATWG URL parsing); escaped content is kept.
+expect inline_test("[a](<  b c  >) [d](< \\) >)") == [Link({ label: [Text("a")], target: { href: "b c", title: Err(Missing) } }), Text(" "), Link({ label: [Text("d")], target: { href: ")", title: Err(Missing) } })]
 expect inline_test("[a](/u\\*v &auml;)") == [Text("[a](/u*v ä)")]
-expect inline_test("[a](/u\\*v '&auml;')") == [Link({ label: [Text("a")], target: { href: "/u*v", title: Some("ä") } })]
-expect inline_test("[foo [bar](/u)](/v)") == [Text("[foo "), Link({ label: [Text("bar")], target: { href: "/u", title: None } }), Text("](/v)")]
-expect inline_test("![a [b](/u)](/v)") == [Image({ alt: [Text("a "), Link({ label: [Text("b")], target: { href: "/u", title: None } })], target: { href: "/v", title: None } })]
-expect inline_test("*[foo*](/u)") == [Text("*"), Link({ label: [Text("foo*")], target: { href: "/u", title: None } })]
+expect inline_test("[a](/u\\*v '&auml;')") == [Link({ label: [Text("a")], target: { href: "/u*v", title: Ok("ä") } })]
+expect inline_test("[foo [bar](/u)](/v)") == [Text("[foo "), Link({ label: [Text("bar")], target: { href: "/u", title: Err(Missing) } }), Text("](/v)")]
+expect inline_test("![a [b](/u)](/v)") == [Image({ alt: [Text("a "), Link({ label: [Text("b")], target: { href: "/u", title: Err(Missing) } })], target: { href: "/v", title: Err(Missing) } })]
+expect inline_test("*[foo*](/u)") == [Text("*"), Link({ label: [Text("foo*")], target: { href: "/u", title: Err(Missing) } })]
 expect inline_test("[foo`](/u)`") == [Text("[foo"), InlineCode("](/u)")]
 
-## Public link/image parsers consume one leading inline link.
-expect Utf8.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ value: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), rest: " rest" })
-expect Utf8.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ value: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), rest: "!" })
-expect Utf8.parse_str_partial(Markdown.link, "[a][b]").is_err()
-
-## Reference labels match case-insensitively after Unicode case folding.
+# Reference labels match case-insensitively after Unicode case folding.
 expect {
-	actual = Utf8.parse_str(Markdown.all, "[ẞ]\n\n[SS]: /url")?
-	actual == [Paragraph([Link({ label: [Text("ẞ")], target: { href: "/url", title: None } })])]
+	actual = Markdown.parse_str("[ẞ]\n\n[SS]: /url")
+	actual == [Paragraph([Link({ label: [Text("ẞ")], target: { href: "/url", title: Err(Missing) } })])]
 }
 
-## Reference definitions decode escapes and entities and reject bracketed labels.
+# Reference definitions decode escapes and entities and reject bracketed labels.
 expect {
-	actual = Utf8.parse_str(Markdown.all, "[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")?
-	actual == [Paragraph([Link({ label: [Text("foo")], target: { href: "/fö*", title: Some("t*") } })])]
+	actual = Markdown.parse_str("[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")
+	actual == [Paragraph([Link({ label: [Text("foo")], target: { href: "/fö*", title: Ok("t*") } })])]
 }
 
 expect {
-	actual = Utf8.parse_str(Markdown.all, "[a[b]\n\n[a[b]: /u")?
+	actual = Markdown.parse_str("[a[b]\n\n[a[b]: /u")
 	actual == [Paragraph([Text("[a[b]")]), Paragraph([Text("[a[b]: /u")])]
 }
 
-## Autolinks and raw HTML follow the CommonMark grammars.
-expect inline_test("<http://a.b/c?d=1&amp;e> <a@b.co>") == [Link({ label: [Text("http://a.b/c?d=1&e")], target: { href: "http://a.b/c?d=1&e", title: None } }), Text(" "), Link({ label: [Text("a@b.co")], target: { href: "mailto:a@b.co", title: None } })]
+# Autolinks and raw HTML follow the CommonMark grammars.
+expect inline_test("<http://a.b/c?d=1&amp;e> <a@b.co>") == [Link({ label: [Text("http://a.b/c?d=1&e")], target: { href: "http://a.b/c?d=1&e", title: Err(Missing) } }), Text(" "), Link({ label: [Text("a@b.co")], target: { href: "mailto:a@b.co", title: Err(Missing) } })]
 expect inline_test("<a href=\"x\" b> <!-- c --> <?p?> <!X y> <![CDATA[z]]> </a >") == [HtmlInline("<a href=\"x\" b>"), Text(" "), HtmlInline("<!-- c -->"), Text(" "), HtmlInline("<?p?>"), Text(" "), HtmlInline("<!X y>"), Text(" "), HtmlInline("<![CDATA[z]]>"), Text(" "), HtmlInline("</a >")]
 expect inline_test("<a b='c' d> <1a> <a =b>") == [HtmlInline("<a b='c' d>"), Text(" <1a> <a =b>")]
 
 ## Pathological shapes stay linear: many open brackets, deeply nested images
-## and long delimiter runs that match two characters at a time.
+# and long delimiter runs that match two characters at a time.
 expect inline_test(Str.repeat("[a", 20000)) == [Text(Str.repeat("[a", 20000))]
 expect inline_test("${Str.repeat("![", 5000)}a${Str.repeat("](u)", 5000)}").len() == 1
 expect inline_test("${Str.repeat("*", 20000)}a${Str.repeat("*", 20000)}").len() == 1
 
-## Soft and hard line breaks.
+# Soft and hard line breaks.
 expect inline_test("a  \n   b\\\nc \nd") == [Text("a"), HardBreak, Text("b"), HardBreak, Text("c\nd")]
 expect inline_test("  a  ") == [Text("a")]
 
 ## Only spaces and tabs are stripped around line endings; vertical tab and
-## form feed are text. Leading blank lines are not paragraph content.
+# form feed are text. Leading blank lines are not paragraph content.
 expect inline_test("\n\r\na\u(B)\nb\u(C)") == [Text("a\u(B)\nb\u(C)")]
 
-## GFM strikethrough pairs runs of equal length (one or two tildes).
+# GFM strikethrough pairs runs of equal length (one or two tildes).
 expect inline_test("~~a~~ ~b~ ~~~c~~~") == [Strikethrough([Text("a")]), Text(" "), Strikethrough([Text("b")]), Text(" ~~~c~~~")]
 expect inline_test("~~a~ b~~") == [Text("~~a~ b~~")]
 
-## GFM extended autolinks: www., scheme:// and bare email addresses.
-expect inline_test("see www.a.b/c). and http://x.y/z?") == [Text("see "), Link({ label: [Text("www.a.b/c")], target: { href: "http://www.a.b/c", title: None } }), Text("). and "), Link({ label: [Text("http://x.y/z")], target: { href: "http://x.y/z", title: None } }), Text("?")]
-expect inline_test("mail a.b+c@d.ef.") == [Text("mail "), Link({ label: [Text("a.b+c@d.ef")], target: { href: "mailto:a.b+c@d.ef", title: None } }), Text(".")]
-expect inline_test("[x www.a.b](/u)") == [Link({ label: [Text("x www.a.b")], target: { href: "/u", title: None } })]
+# GFM extended autolinks: www., scheme:// and bare email addresses.
+expect inline_test("see www.a.b/c). and http://x.y/z?") == [Text("see "), Link({ label: [Text("www.a.b/c")], target: { href: "http://www.a.b/c", title: Err(Missing) } }), Text("). and "), Link({ label: [Text("http://x.y/z")], target: { href: "http://x.y/z", title: Err(Missing) } }), Text("?")]
+expect inline_test("mail a.b+c@d.ef.") == [Text("mail "), Link({ label: [Text("a.b+c@d.ef")], target: { href: "mailto:a.b+c@d.ef", title: Err(Missing) } }), Text(".")]
+expect inline_test("[x www.a.b](/u)") == [Link({ label: [Text("x www.a.b")], target: { href: "/u", title: Err(Missing) } })]
 
-## Reference links resolve using definitions and definitions are omitted from blocks.
+# Reference links resolve using definitions and definitions are omitted from blocks.
 expect {
 	text =
 		\\[roc]: https://roc-lang.org "Roc"
 		\\Read [Roc][roc].
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
 			Paragraph([
 				Text("Read "),
-				Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Some("Roc") } }),
+				Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Ok("Roc") } }),
 				Text("."),
 			]),
 		]
 }
 
-## Unresolved references remain literal text.
+# Unresolved references remain literal text.
 expect {
-	actual = Utf8.parse_str(Markdown.all, "Read [Roc][missing].")?
+	actual = Markdown.parse_str("Read [Roc][missing].")
 
 	actual == [Paragraph([Text("Read [Roc][missing].")])]
 }
 
-## Frontmatter is preserved only at the start of a document.
+# Frontmatter is preserved only at the start of a document.
 expect {
 	text =
 		\\---
@@ -4385,31 +4115,31 @@ expect {
 		\\---
 		\\Body
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
-	actual == [Frontmatter({ raw: "title: Hello\n" }), Paragraph([Text("Body")])]
+	actual == [Frontmatter("title: Hello\n"), Paragraph([Text("Body")])]
 }
 
-## Standalone thematic breaks parse as block nodes.
+# Standalone thematic breaks parse as block nodes.
 expect {
-	actual = Utf8.parse_str(Markdown.all, "- - -")?
+	actual = Markdown.parse_str("- - -")
 
 	actual == [ThematicBreak]
 }
 
-## Ordered lists preserve their starting number and task list state.
+# Ordered lists preserve their starting number and task list state.
 expect {
 	text =
 		\\3) [x] Done
 		\\4) [ ] Later
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
 			ListBlock({
 				kind: Ordered({ start: 3 }),
-				loose: Bool.False,
+				loose: False,
 				items: [
 					{ task: Checked, blocks: [Paragraph([Text("Done")])] },
 					{ task: Unchecked, blocks: [Paragraph([Text("Later")])] },
@@ -4418,35 +4148,35 @@ expect {
 		]
 }
 
-## Changing the bullet character starts a new list (CommonMark example 301).
+# Changing the bullet character starts a new list (CommonMark example 301).
 expect {
 	text =
 		\\* One
 		\\+ Two
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
-			ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [Paragraph([Text("One")])] }] }),
-			ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [Paragraph([Text("Two")])] }] }),
+			ListBlock({ kind: Unordered, loose: False, items: [{ task: NoTask, blocks: [Paragraph([Text("One")])] }] }),
+			ListBlock({ kind: Unordered, loose: False, items: [{ task: NoTask, blocks: [Paragraph([Text("Two")])] }] }),
 		]
 }
 
-## Blank lines inside lists mark the list as loose.
+# Blank lines inside lists mark the list as loose.
 expect {
 	text =
 		\\- One
 		\\
 		\\- Two
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
 			ListBlock({
 				kind: Unordered,
-				loose: Bool.True,
+				loose: True,
 				items: [
 					{ task: NoTask, blocks: [Paragraph([Text("One")])] },
 					{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
@@ -4455,19 +4185,19 @@ expect {
 		]
 }
 
-## Nested unordered lists parse as child blocks.
+# Nested unordered lists parse as child blocks.
 expect {
 	text =
 		\\- One
 		\\  - Nested
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
 			ListBlock({
 				kind: Unordered,
-				loose: Bool.False,
+				loose: False,
 				items: [
 					{
 						task: NoTask,
@@ -4475,7 +4205,7 @@ expect {
 							Paragraph([Text("One")]),
 							ListBlock({
 								kind: Unordered,
-								loose: Bool.False,
+								loose: False,
 								items: [
 									{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
 								],
@@ -4487,34 +4217,34 @@ expect {
 		]
 }
 
-## Tilde fenced code blocks parse with info strings.
+# Tilde fenced code blocks parse with info strings.
 expect {
 	text =
 		\\~~~roc
 		\\main = 1
 		\\~~~
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
 
-## Indented code blocks parse from four leading spaces.
+# Indented code blocks parse from four leading spaces.
 expect {
-	actual = Utf8.parse_str(Markdown.all, "    main = 1")?
+	actual = Markdown.parse_str("    main = 1")
 
 	actual == [Code({ info: "", pre: "main = 1\n" })]
 }
 
 ## Pipe tables parse header alignment and inline cell content. A pipe inside a
-## code span must still be escaped (GFM example 200).
+# code span must still be escaped (GFM example 200).
 expect {
 	text =
 		\\| Name | Count |
 		\\| :--- | ---: |
 		\\| **Roc** | `1\\|2` |
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
@@ -4531,51 +4261,51 @@ expect {
 		]
 }
 
-## Malformed tables remain paragraph text.
+# Malformed tables remain paragraph text.
 expect {
 	text =
 		\\Name | Count
 		\\not a delimiter
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual == [Paragraph([Text("Name | Count\nnot a delimiter")])]
 }
 
-## Raw HTML blocks are preserved without validation.
+# Raw HTML blocks are preserved without validation.
 expect {
 	text =
 		\\<section>
 		\\raw
 		\\</section>
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual == [HtmlBlock("<section>\nraw\n</section>\n")]
 }
 
 ## An unclosed fenced code block runs to the end of the document (CommonMark
-## example 96); Markdown documents never fail to parse.
+# example 96); Markdown documents never fail to parse.
 expect {
 	text =
 		\\```roc
 		\\main = 1
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
 
 ## A closing `</pre>`, `</script>`, `</style>` or `</textarea>` tag alone on a
 ## line starts a type 7 HTML block; only the open tags are excluded from type
-## 7 (CommonMark 4.6).
+# 7 (CommonMark 4.6).
 expect {
-	actual = Utf8.parse_str(Markdown.all, "a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")?
+	actual = Markdown.parse_str("a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")
 
 	actual == [Paragraph([Text("a")]), HtmlBlock("</textarea>\nb\n"), HtmlBlock("<pre class=\"x\">\n")]
 }
 
-## Article body markdown parses into structured blocks without TODO fallbacks.
+# Article body markdown parses into structured blocks fully.
 expect {
 	text =
 		\\---
@@ -4596,11 +4326,11 @@ expect {
 		\\
 		\\> Quote with **strong** text
 
-	actual = Utf8.parse_str(Markdown.all, text)?
+	actual = Markdown.parse_str(text)
 
 	actual
 		== [
-			Frontmatter({ raw: "title: Article\n" }),
+			Frontmatter("title: Article\n"),
 			Heading({ level: One, content: [Text("Title with "), Strong([Text("style")])] }),
 			Paragraph([
 				Text("Intro with "),
@@ -4608,14 +4338,14 @@ expect {
 				Text(", "),
 				InlineCode("code"),
 				Text(", and "),
-				Link({ label: [Text("a link")], target: { href: "https://example.com", title: None } }),
+				Link({ label: [Text("a link")], target: { href: "https://example.com", title: Err(Missing) } }),
 				Text("."),
 			]),
-			Paragraph([Image({ alt: [Text("alt text")], target: { href: "/image.png", title: None } })]),
+			Paragraph([Image({ alt: [Text("alt text")], target: { href: "/image.png", title: Err(Missing) } })]),
 			Code({ info: "roc", pre: "main = 1\n" }),
 			ListBlock({
 				kind: Unordered,
-				loose: Bool.False,
+				loose: False,
 				items: [
 					{
 						task: NoTask,
@@ -4623,7 +4353,7 @@ expect {
 							Paragraph([Text("One")]),
 							ListBlock({
 								kind: Unordered,
-								loose: Bool.False,
+								loose: False,
 								items: [
 									{ task: NoTask, blocks: [Paragraph([Text("Nested")])] },
 								],
@@ -4642,29 +4372,60 @@ expect {
 		]
 }
 
-chomp_until_code_block_end : Parser(Utf8.Bytes, Str)
-chomp_until_code_block_end =
-	Parser.custom(
-		|input| {
-			chomp_to_code_block_end_help({ value: List.with_capacity(1000), rest: input })
-		},
-	)
-		.map(Str.from_utf8_lossy)
+# -------------------- example snippets used in docs --------------------
 
-chomp_to_code_block_end_help : { value : Utf8.Bytes, rest : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
-chomp_to_code_block_end_help = |{ value: val, rest: input }| {
-	match input {
-		[] => Err(ParseError({ message: "expected ```, ran out of input", offset: 0 }))
-		['`', '`', '`', .. as rest] => Ok({ value: val, rest: rest })
-		[first, .. as rest] => chomp_to_code_block_end_help({ value: val.append(first), rest: rest })
+# Markdown.parse_str doc example.
+expect Markdown.parse_str("# Hi\n\nSome *text*.") == [
+	Heading({ level: One, content: [Text("Hi")] }),
+	Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")]),
+]
+
+# Markdown.parse_inlines doc example.
+expect Markdown.parse_inlines("**Bold** and `code`") == [
+	Strong([Text("Bold")]),
+	Text(" and "),
+	InlineCode("code"),
+]
+
+# Markdown.frontmatter doc examples.
+expect Markdown.frontmatter(Markdown.parse_str("---\ntitle: Hi\n---\nBody")) == Ok("title: Hi\n")
+expect Markdown.frontmatter(Markdown.parse_str("Body")) == Err(Missing)
+
+# The parsers consume their whole input and never fail.
+expect Utf8.parse_str(Markdown.parser, "a\n\n> b") == Ok([Paragraph([Text("a")]), Blockquote([Paragraph([Text("b")])])])
+expect Utf8.parse_str(Markdown.inline_parser, "*a") == Ok([Text("*a")])
+
+# A link title is optional.
+expect Markdown.parse_inlines("[a](/u \"t\") [b](/v)") == [
+	Link({ label: [Text("a")], target: { href: "/u", title: Ok("t") } }),
+	Text(" "),
+	Link({ label: [Text("b")], target: { href: "/v", title: Err(Missing) } }),
+]
+
+# Syntax trees can be hashed, so they can be Set elements.
+expect Set.from_list(Markdown.parse_str("a\n\n---\n\na")).len() == 2
+
+# Block quotes nest at most 1000 deep; deeper markers are text.
+expect {
+	blocks = Markdown.parse_str(Str.concat(Str.repeat(">", 1002), " a"))
+	quote_depth(blocks) == 1000 and innermost(blocks) == [Paragraph([Text(">> a")])]
+}
+
+# Lists stop nesting at the limit too.
+expect Markdown.parse_str(Str.repeat("- ", 1500)).len() == 1
+
+quote_depth : List(Markdown) -> U64
+quote_depth = |blocks| {
+	match blocks {
+		[Blockquote(children)] => 1 + quote_depth(children)
+		_ => 0
 	}
 }
 
-## Chomping code block contents stops before the closing backticks.
-expect {
-	val = "".to_utf8()
-	input = "some code\n```".to_utf8()
-	expected = "some code\n".to_utf8()
-	a = chomp_to_code_block_end_help({ value: val, rest: input })?
-	a == { value: expected, rest: [] }
+innermost : List(Markdown) -> List(Markdown)
+innermost = |blocks| {
+	match blocks {
+		[Blockquote(children)] => innermost(children)
+		_ => blocks
+	}
 }
