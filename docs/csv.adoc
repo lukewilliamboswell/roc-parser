@@ -3,11 +3,183 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#csv]
-= CSV
+= Read CSV data
 
-Content in progress.
+This chapter shows how to turn comma-separated text into Roc values: first
+as plain lists of strings, then as typed records, and how to tell the user
+which row was wrong when decoding fails. It is for Roc programmers who have
+added `parser` to their app's dependencies. You do not need to know the
+combinator library; the CSV module wraps the parts you need.
+
+Every example on this page comes from
+link:{src}/docs/examples/csv-guide.roc[`docs/examples/csv-guide.roc`], which
+CI runs, and imports `parser.CSV` and `parser.Parser`.
+
+== Read every field as a string
+
+Use this when the columns vary or you only need text. `Parser.many` applied to
+`CSV.field(CSV.string)` reads every field of a record, so `CSV.parse_str`
+returns one `List(Str)` per row:
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=raw,indent=0]
+----
+
+Given a header row, a quoted field containing `""` and `,`, and a row whose
+last field is empty:
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=raw-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/csv-guide.expected[lines=1..3]
+----
+
+The first row is returned as data. CSV has no reliable way to say that a row
+is a header, so skip it yourself with `List.drop_first(records, 1)` when your
+files have one.
+
+`CSV.parse_str_to_csv` also parses text into a `CSV` value, but that type is
+opaque: you can only pass it on to `CSV.parse_csv` with a record parser. Use a
+record parser such as `all_fields` above when you want the raw strings.
+
+== Decode rows into typed records
+
+Describe one row with `CSV.record`, giving it a function that takes one
+argument per column, then add one `.keep(CSV.field(...))` per column in
+order:
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=typed,indent=0]
+----
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=print,indent=0]
+----
+
+Running `print_products!("bolt,250,0.15\nnut,+40,.05\n")` prints:
+
+.Output
+[source,text]
+----
+include::examples/csv-guide.expected[lines=7..8]
+----
+
+A record parser must use every field in the row. A row with more fields than
+`.keep` calls fails, and so does a row with fewer.
+
+The built-in field parsers accept these forms:
+
+[cols="1,3"]
+|===
+|Parser |Accepted field text
+
+|`CSV.string`
+|Any valid UTF-8, kept exactly, including leading and trailing spaces.
+
+|`CSV.u64`
+|ASCII digits with an optional leading `+`, and a value that fits in a `U64`.
+Spaces, `_`, `-` and `0x` prefixes are rejected.
+
+|`CSV.f64`
+|An optional sign, then `inf`, `infinity` or `nan` in any letter case, or a
+decimal number with an optional fraction and exponent: `12`, `1.5`, `.5`,
+`5.`, `1e-3`, `2.5E+10`. Values too large become infinity and values too small
+become zero. Spaces, `_` and hexadecimal forms are rejected.
+|===
+
+These match Rust's `u64::from_str` and `f64::from_str`. For any other column
+type, map a string field yourself; for example
+`CSV.string.map(|s| Str.split_on(s, ";"))` reads a list stored in one field.
+
+== Report which row failed
+
+`CSV.parse_str` stops at the first problem and returns one of three errors:
+
+[cols="1,3"]
+|===
+|Error |Meaning
+
+|`SyntaxError(rest)`
+|The text is not valid CSV. `rest` is the input from the record that could
+not be read, for example an unterminated quoted field.
+
+|`ParsingFailure(message)`
+|A field did not match its parser, or a row ran out of fields. The message
+names the field and ends with the one-based record number and the record's
+fields.
+
+|`ParsingIncomplete(fields)`
+|The record parser finished but the row still had `fields` left over.
+|===
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/csv-guide.expected[lines=9..12]
+----
+
+`ParsingIncomplete` does not say which record had extra fields. If you need
+that, add one more `.keep` that reads the rest of the row with
+`Parser.many(CSV.field(CSV.string))` and check that it is empty.
+
+== Which CSV files are accepted
+
+The dialect is RFC 4180 with the relaxations that Python's `csv` module (in
+strict mode) and Rust's `csv` crate also accept:
+
+* Fields are separated by `,`. Records end with CRLF, LF or a lone CR, and the
+  line break after the last record is optional.
+* An unquoted field is any run of bytes other than `,`, CR and LF. A `"`
+  inside an unquoted field is an ordinary character.
+* A field that starts with `"` is quoted. It may contain `,`, CR and LF, and
+  `""` stands for one `"`. The closing quote must be followed by `,`, a line
+  break or the end of input; an unterminated quoted field is a `SyntaxError`.
+* Spaces and tabs are kept as part of the field.
+* Empty input has no records. A blank line in the middle of the input is a
+  record with one empty field.
+* Rows may have different numbers of fields.
+
+[source,roc]
+----
+include::examples/csv-guide.roc[tag=dialect-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/csv-guide.expected[lines=4..6]
+----
+
+== Limitations
+
+* The separator is always `,`. Tab- or semicolon-separated files are not
+  supported.
+* A UTF-8 byte order mark is not removed; it becomes part of the first field.
+* Headers are not interpreted, so columns are matched by position, not name.
+* The whole input is parsed before decoding starts, so very large files are
+  held in memory.
+
+For every function and type in the module, see the
+link:{api}CSV[CSV API reference].

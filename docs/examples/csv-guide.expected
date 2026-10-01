@@ -1,0 +1,12 @@
+name | note
+widget | says "hi", twice
+empty | 
+size | 6" pipe
+count | 
+empty input: Ok([])
+bolt: 250 at 0.15
+nut: 40 at 0.05
+bad record: Field `forty` could not be parsed. forty is not a U64.
+While parsing record no. 2: `"nut", "forty", "0.05"`
+1 extra fields
+syntax error before: "250
