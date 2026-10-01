@@ -1442,9 +1442,10 @@ InlineItem : [
 ## `count` is how many delimiter characters are still unused.
 InlineDelim : { char : U8, length : U64, count : U64, can_open : Bool, can_close : Bool }
 
-## An entry of the bracket stack: the `[` or `![` item, and the input offset
-## just after the bracket.
-InlineBracket : { item : U64, start : U64, image : Bool, bracket_after : Bool }
+## An entry of the bracket stack: the `[` or `![` item, the input offset just
+## after the bracket, and its push sequence number (a later bracket was pushed
+## when the push counter has moved on by more than one).
+InlineBracket : { item : U64, start : U64, image : Bool, sequence : U64 }
 
 ## A maximal run of backticks in the input.
 TickRun : { start : U64, len : U64 }
@@ -1568,6 +1569,7 @@ scan_inlines = |input, refs, leading_link| {
 	var $items = []
 	var $text = []
 	var $brackets = []
+	var $bracket_pushes = 0
 	# Non-image brackets below this stack index are inactive (CommonMark 6.3:
 	# links may not contain other links).
 	var $link_floor = 0
@@ -1636,12 +1638,14 @@ scan_inlines = |input, refs, leading_link| {
 		} else if byte == '!' and byte_at(input, $pos + 1) == '[' {
 			$items = flush_chars($items, $text).append(Chars(['!', '[']))
 			$text = []
-			$brackets = push_bracket($brackets, { item: $items.len() - 1, start: $pos + 2, image: Bool.True, bracket_after: Bool.False })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 2, image: Bool.True, sequence: $bracket_pushes })
+			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 2
 		} else if byte == '[' {
 			$items = flush_chars($items, $text).append(Chars(['[']))
 			$text = []
-			$brackets = push_bracket($brackets, { item: $items.len() - 1, start: $pos + 1, image: Bool.False, bracket_after: Bool.False })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 1, image: Bool.False, sequence: $bracket_pushes })
+			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 1
 		} else if byte == ']' {
 			$items = flush_chars($items, $text)
@@ -1660,15 +1664,16 @@ scan_inlines = |input, refs, leading_link| {
 					$link_floor = min_u64($link_floor, $brackets.len())
 					resolved =
 						if active {
-							resolve_link(input, after, opener, $pos, refs)
+							resolve_link(input, after, opener, $bracket_pushes > opener.sequence + 1, $pos, refs)
 						} else {
 							Err(NotFound)
 						}
 					match resolved {
 						Ok(found) => {
-							content = $items.drop_first(opener.item + 1)
+							# Consume the content slice before truncating, so the
+							# item list stays uniquely owned and is not copied.
+							children = process_emphasis($items.drop_first(opener.item + 1))
 							$items = $items.take_first(opener.item)
-							children = process_emphasis(content)
 							node =
 								if opener.image {
 									Image({ alt: children, target: found.target })
@@ -1778,8 +1783,11 @@ scan_inlines = |input, refs, leading_link| {
 	}
 
 	match $stop {
-		Finished =>
-			{ nodes: autolink_emails_in(process_emphasis(flush_chars($items, $text))), stop: Finished }
+		Finished => {
+			nodes = process_emphasis(flush_chars($items, $text))
+			# GFM email autolinks need an `@` in the text.
+			{ nodes: if input.contains('@') autolink_emails_in(nodes) else nodes, stop: Finished }
+		}
 
 		_ =>
 			{ nodes: [], stop: $stop }
@@ -1812,16 +1820,6 @@ flush_chars = |items, text| {
 	} else {
 		items.append(Chars(text))
 	}
-}
-
-push_bracket : List(InlineBracket), InlineBracket -> List(InlineBracket)
-push_bracket = |brackets, bracket| {
-	marked =
-		match brackets.last() {
-			Ok(top) => brackets.drop_last(1).append({ ..top, bracket_after: Bool.True })
-			Err(_) => brackets
-		}
-	marked.append(bracket)
 }
 
 skip_byte_run : List(U8), U64, U8 -> U64
@@ -2029,8 +2027,10 @@ opener_bottom_key = |delim| {
 EmphOpener : { delim : InlineDelim, at : U64 }
 
 ## Resolve emphasis and strikethrough in a run of scanned items. Unmatched
-## delimiters become text. Delimiter text lives in `out` as placeholder `Text`
-## nodes; `stack` records where each potential opener sits in `out`.
+## delimiters become text. Each potential opener on `stack` owns an empty
+## placeholder `Text` in `out` (at index `at`); its remaining delimiter
+## characters are written there only when it leaves the stack unmatched, so
+## partially used runs are not re-rendered on every match.
 process_emphasis : List(InlineItem) -> List(Markdown.Inline)
 process_emphasis = |items| {
 	var $out = []
@@ -2058,6 +2058,8 @@ process_emphasis = |items| {
 
 						Ok(index) => {
 							opener = $stack.get(index) ?? { delim: $closer, at: $out.len() }
+							# Delimiters between the opener and the closer become text.
+							$out = fill_placeholders($out, $stack.drop_first(index + 1))
 							$bottoms = $bottoms.map(|bottom| min_u64(bottom, index))
 							$stack = $stack.take_first(index)
 							if $closer.char == '~' {
@@ -2068,6 +2070,7 @@ process_emphasis = |items| {
 								} else {
 									# cmark-gfm: tilde runs of different lengths do not
 									# pair; both, and the delimiters between them, stay text.
+									$out = fill_placeholders($out, [opener])
 									$closer = { ..$closer, can_open: Bool.False }
 								}
 								$searching = Bool.False
@@ -2079,7 +2082,7 @@ process_emphasis = |items| {
 								if remaining == 0 {
 									$out = $out.take_first(opener.at).append(node)
 								} else {
-									$out = $out.take_first(opener.at).append(delimiter_text(opener.delim.char, remaining)).append(node)
+									$out = $out.take_first(opener.at).append(Text("")).append(node)
 									$stack = $stack.append({ delim: { ..opener.delim, count: remaining }, at: opener.at })
 								}
 								$closer = { ..$closer, count: $closer.count - used }
@@ -2091,13 +2094,29 @@ process_emphasis = |items| {
 				if $closer.count > 0 {
 					if $closer.can_open {
 						$stack = $stack.append({ delim: $closer, at: $out.len() })
+						$out = $out.append(Text(""))
+					} else {
+						$out = $out.append(delimiter_text($closer.char, $closer.count))
 					}
-					$out = $out.append(delimiter_text($closer.char, $closer.count))
 				}
 			}
 		}
 	}
-	merge_text_nodes($out)
+	merge_text_nodes(fill_placeholders($out, $stack))
+}
+
+## Write the remaining delimiter characters of openers leaving the stack.
+fill_placeholders : List(Markdown.Inline), List(EmphOpener) -> List(Markdown.Inline)
+fill_placeholders = |out, openers| {
+	var $out = out
+	for opener in openers {
+		$out =
+			match $out.set(opener.at, delimiter_text(opener.delim.char, opener.delim.count)) {
+				Ok(updated) => updated
+				Err(_) => []
+			}
+	}
+	$out
 }
 
 delimiter_text : U8, U64 -> Markdown.Inline
@@ -2379,8 +2398,10 @@ unescape_entities = |bytes| {
 
 ## Decide whether the `]` at `close` (with `after` just past it) closes a link
 ## or image: an inline link, then a full, collapsed or shortcut reference.
-resolve_link : List(U8), U64, InlineBracket, U64, List(ReferenceDefinition) -> Try({ target : Markdown.LinkTarget, end : U64 }, [NotFound])
-resolve_link = |input, after, opener, close, refs| {
+## `bracket_after` tells whether another bracket was opened after `opener`,
+## in which case its text cannot serve as a (collapsed or shortcut) label.
+resolve_link : List(U8), U64, InlineBracket, Bool, U64, List(ReferenceDefinition) -> Try({ target : Markdown.LinkTarget, end : U64 }, [NotFound])
+resolve_link = |input, after, opener, bracket_after, close, refs| {
 	inline =
 		if byte_at(input, after) == '(' {
 			scan_inline_link_tail(input, after)
@@ -2399,9 +2420,9 @@ resolve_link = |input, after, opener, close, refs| {
 				candidate =
 					match scan_link_label(input, after) {
 						Ok(label) if !label.raw.is_empty() => Ok({ label: label.raw, end: label.end })
-						Ok(label) if !opener.bracket_after => Ok({ label: own_label, end: label.end })
+						Ok(label) if !bracket_after => Ok({ label: own_label, end: label.end })
 						Ok(_) => Err(NotFound)
-						Err(_) if !opener.bracket_after => Ok({ label: own_label, end: after })
+						Err(_) if !bracket_after => Ok({ label: own_label, end: after })
 						Err(_) => Err(NotFound)
 					}
 				match candidate {
@@ -3115,38 +3136,24 @@ match_url_autolink = |input, colon, pending| {
 	}
 }
 
-## Apply GFM email autolinks to every text node outside links.
+## Apply GFM email autolinks to every text node outside links, in one walk.
+## Text nodes are never adjacent, so the pieces of a split text need no
+## merging with their neighbours.
 autolink_emails_in : List(Markdown.Inline) -> List(Markdown.Inline)
 autolink_emails_in = |nodes| {
-	if !nodes.any(contains_at_sign) {
-		nodes
-	} else {
-		var $out = []
-		for node in nodes {
-			match node {
-				Text(text) => {
-					$out = $out.concat(autolink_email_text(text))
-				}
+	var $out = List.with_capacity(nodes.len())
+	for node in nodes {
+		match node {
+			Text(text) if Str.contains(text, "@") => {
+				$out = $out.concat(autolink_email_text(text))
+			}
 
-				_ => {
-					$out = $out.append(autolink_emails(node))
-				}
-				}
+			_ => {
+				$out = $out.append(autolink_emails(node))
+			}
 		}
-		merge_text_nodes($out)
 	}
-}
-
-contains_at_sign : Markdown.Inline -> Bool
-contains_at_sign = |node| {
-	match node {
-		Text(text) => Str.contains(text, "@")
-		Strong(children) => children.any(contains_at_sign)
-		Emphasis(children) => children.any(contains_at_sign)
-		Strikethrough(children) => children.any(contains_at_sign)
-		Image({ alt, .. }) => alt.any(contains_at_sign)
-		_ => Bool.False
-	}
+	$out
 }
 
 autolink_emails : Markdown.Inline -> Markdown.Inline
@@ -3998,6 +4005,12 @@ expect {
 expect inline_test("<http://a.b/c?d=1&amp;e> <a@b.co>") == [Link({ label: [Text("http://a.b/c?d=1&e")], target: { href: "http://a.b/c?d=1&e", title: None } }), Text(" "), Link({ label: [Text("a@b.co")], target: { href: "mailto:a@b.co", title: None } })]
 expect inline_test("<a href=\"x\" b> <!-- c --> <?p?> <!X y> <![CDATA[z]]> </a >") == [HtmlInline("<a href=\"x\" b>"), Text(" "), HtmlInline("<!-- c -->"), Text(" "), HtmlInline("<?p?>"), Text(" "), HtmlInline("<!X y>"), Text(" "), HtmlInline("<![CDATA[z]]>"), Text(" "), HtmlInline("</a >")]
 expect inline_test("<a b='c' d> <1a> <a =b>") == [HtmlInline("<a b='c' d>"), Text(" <1a> <a =b>")]
+
+## Pathological shapes stay linear: many open brackets, deeply nested images
+## and long delimiter runs that match two characters at a time.
+expect inline_test(Str.repeat("[a", 20000)) == [Text(Str.repeat("[a", 20000))]
+expect inline_test("${Str.repeat("![", 5000)}a${Str.repeat("](u)", 5000)}").len() == 1
+expect inline_test("${Str.repeat("*", 20000)}a${Str.repeat("*", 20000)}").len() == 1
 
 ## Soft and hard line breaks.
 expect inline_test("a  \n   b\\\nc \nd") == [Text("a"), HardBreak, Text("b"), HardBreak, Text("c\nd")]
