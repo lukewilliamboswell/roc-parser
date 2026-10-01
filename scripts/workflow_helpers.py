@@ -33,13 +33,6 @@ def read_roc_version(path: Path = ROOT / ".roc-version") -> str:
     return version
 
 
-def select_roc_version(pinned: str | None, nightly_validation: bool) -> str:
-    """Use a workflow's pinned nightly, except when validating the .roc-version candidate."""
-    if pinned and not nightly_validation:
-        return pinned
-    return read_roc_version()
-
-
 def validate_release_ref(ref_type: str, ref_name: str, default_branch: str) -> None:
     if ref_type != "branch":
         raise ValueError("Release workflow must be run from a branch")
@@ -108,11 +101,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     roc_version = subparsers.add_parser("roc-version")
     roc_version.add_argument("--github-output", type=Path, required=True)
-    roc_version.add_argument(
-        "--pinned",
-        help="use this nightly tag instead of .roc-version, unless validating a candidate",
-    )
-    roc_version.add_argument("--nightly-validation", default="false")
 
     release_ref = subparsers.add_parser("validate-release-ref")
     release_ref.add_argument("--ref-type", required=True)
@@ -140,7 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             append_github_output(
                 args.github_output,
                 "nightly-tag",
-                select_roc_version(args.pinned, args.nightly_validation == "true"),
+                read_roc_version(),
             )
         elif args.command == "validate-release-ref":
             validate_release_ref(args.ref_type, args.ref_name, args.default_branch)

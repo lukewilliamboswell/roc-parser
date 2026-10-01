@@ -15,11 +15,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # roc-fuzz 0.4.2 needs a newer compiler than .roc-version, which waits on
-  # basic-cli for the examples. Return to .roc-version once it reaches this.
-  QUALITY_ROC_NIGHTLY: nightly-2026-09-29-7f11a82
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ (github.event_name == 'pull_request' || inputs.nightly_validation) }}
@@ -67,8 +62,7 @@ jobs:
 
       - name: Read Roc version
         id: roc-version
-        # Nightly validation tests the candidate in .roc-version instead of the pin.
-        run: python3 scripts/workflow_helpers.py roc-version --pinned "$QUALITY_ROC_NIGHTLY" --nightly-validation "${{ inputs.nightly_validation || false }}" --github-output "$GITHUB_OUTPUT"
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
@@ -137,11 +131,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
       - name: Install review compiler
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
         with:
           version: nightly-new-compiler
-          nightly-tag: ${{ env.QUALITY_ROC_NIGHTLY }}
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
       - name: Create oracle environment
         run: python3 -m venv /tmp/roc-parser-oracle
       - name: Install pinned oracle

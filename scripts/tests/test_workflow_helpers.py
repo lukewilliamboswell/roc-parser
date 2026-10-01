@@ -9,14 +9,6 @@ from scripts import workflow_helpers
 
 
 class WorkflowHelpersTests(unittest.TestCase):
-    def test_select_roc_version_prefers_pin_except_for_candidate_validation(self) -> None:
-        self.assertEqual(workflow_helpers.select_roc_version("nightly-pin", False), "nightly-pin")
-        self.assertEqual(
-            workflow_helpers.select_roc_version("nightly-pin", True),
-            workflow_helpers.read_roc_version(),
-        )
-        self.assertEqual(workflow_helpers.select_roc_version(None, False), workflow_helpers.read_roc_version())
-
     def test_read_roc_version_and_append_github_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

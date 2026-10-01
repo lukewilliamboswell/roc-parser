@@ -20,10 +20,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # The benchmark drivers use basic-cli 0.23.0, like the quality workflow.
-  BENCH_ROC_NIGHTLY: nightly-2026-09-29-7f11a82
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -39,11 +35,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
       - name: Install Roc
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
         with:
           version: nightly-new-compiler
-          nightly-tag: ${{ env.BENCH_ROC_NIGHTLY }}
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
       - name: Run quick benchmarks
         run: python3 scripts/bench.py --quick --langs roc --timeout 60 --fail-on-error
       - name: Upload reports
@@ -67,11 +66,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
       - name: Install Roc
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
         with:
           version: nightly-new-compiler
-          nightly-tag: ${{ env.BENCH_ROC_NIGHTLY }}
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
       - name: Show toolchains
         run: go version && cargo --version && python3 --version
       - name: Run the full comparison

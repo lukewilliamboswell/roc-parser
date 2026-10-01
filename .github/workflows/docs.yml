@@ -24,11 +24,6 @@ concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # The examples use basic-cli 0.23.0, which needs a newer compiler than
-  # .roc-version. Return to .roc-version once it reaches this.
-  QUALITY_ROC_NIGHTLY: nightly-2026-09-29-7f11a82
-
 jobs:
   docs:
     name: Docs
@@ -42,8 +37,7 @@ jobs:
 
       - name: Read Roc version
         id: roc-version
-        # Nightly validation tests the candidate in .roc-version instead of the pin.
-        run: python3 scripts/workflow_helpers.py roc-version --pinned "$QUALITY_ROC_NIGHTLY" --nightly-validation "${{ inputs.nightly_validation || false }}" --github-output "$GITHUB_OUTPUT"
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
 
       - name: Install Roc
         uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
