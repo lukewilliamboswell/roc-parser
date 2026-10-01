@@ -35,7 +35,7 @@ xml_message = |file_name, source| {
 # tag::csv[]
 Row : { name : Str, count : U64 }
 
-row : Parser(CSV.CSVRecord, Row)
+row : Parser(CSV.Record, Row)
 row =
 	CSV.record(|name| |count| { name, count })
 		.keep(CSV.field(CSV.string))
@@ -45,9 +45,8 @@ csv_message : Str -> Str
 csv_message = |source| {
 	match CSV.parse_str(row, source) {
 		Ok(rows) => "${rows.len().to_str()} rows"
-		Err(SyntaxError(rest)) => "not valid CSV from here: ${rest.trim_end()}"
-		Err(ParsingFailure(message)) => "a field did not match: ${message}"
-		Err(ParsingIncomplete(extra)) => "a row has ${extra.len().to_str()} extra fields"
+		Err(InvalidCsv({ line, column, record, field, message })) =>
+			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${message}"
 	}
 }
 

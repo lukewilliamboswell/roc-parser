@@ -12,7 +12,7 @@ import parser.Parser
 
 Planet : { name : Str, moons : U64 }
 
-planet : Parser(CSV.CSVRecord, Planet)
+planet : Parser(CSV.Record, Planet)
 planet =
 	CSV.record(|name| |moons| { name, moons })
 		.keep(CSV.field(CSV.string))

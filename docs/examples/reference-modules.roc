@@ -18,7 +18,7 @@ pair : Parser(Utf8.Bytes, (U64, U64))
 pair = Parser.const(|a| |b| (a, b)).keep(Utf8.digits).skip(Utf8.codeunit(',')).keep(Utf8.digits)
 
 # CSV: decode every record with a record parser.
-row : Parser(CSV.CSVRecord, { name : Str, age : U64 })
+row : Parser(CSV.Record, { name : Str, age : U64 })
 row = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
 
 # HTTP: parse one message; bytes after it are left for the next message.
