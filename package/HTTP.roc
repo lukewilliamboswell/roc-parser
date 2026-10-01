@@ -632,7 +632,7 @@ check_chunk_extensions = |bytes, line_len| {
 		[] => if bytes.is_empty() Ok({}) else fail(line_len - bytes.len(), "whitespace after chunk size")
 		[';', .. as after_semicolon] => {
 			name_onwards = trim_start_ows(after_semicolon)
-			name_len = prefix_len(name_onwards, is_tchar)
+			name_len = Utf8.skip_class(name_onwards, 0, tchar_class)
 			if name_len == 0 {
 				fail(line_len - name_onwards.len(), "chunk extension needs a name")
 			} else {
@@ -657,7 +657,7 @@ chunk_ext_value_len = |bytes| {
 	match bytes {
 		['"', ..] => quoted_string_len(bytes)
 		_ => {
-			token_len = prefix_len(bytes, is_tchar)
+			token_len = Utf8.skip_class(bytes, 0, tchar_class)
 			if token_len == 0 fail(0, "chunk extension needs a value after =") else Ok(token_len)
 		}
 	}
