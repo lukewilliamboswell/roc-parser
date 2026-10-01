@@ -3,11 +3,142 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#maintaining]
-= Maintaining
+= Compiler updates, releases and security reports
 
-Content in progress.
+This chapter is for maintainers with write access to the repository. It covers
+how the Roc compiler pin is kept current, how a release is cut and what it
+publishes, and how security reports are handled. It assumes <<contributing>>.
+
+== Roc nightly updates
+
+Roc has no stable release yet, so roc-parser pins one nightly build in
+`.roc-version` and moves it forward as the compiler changes. This is automated.
+
+The `Update Roc nightly` workflow
+({src}/.github/workflows/update-roc-nightly.yml[`update-roc-nightly.yml`])
+runs once a day at 13:16 UTC, about four hours after the upstream nightly
+build. It calls the shared controller in
+https://github.com/lukewilliamboswell/roc-automation[roc-automation], which:
+
+. writes the newest nightly tag to `.roc-version` on the reserved branch
+  `automation/roc-nightly` and opens a pull request;
+. dispatches the validation workflows listed in
+  {src}/.github/roc-nightly.json[`.github/roc-nightly.json`] (`Tests`,
+  `Published example compatibility`, `Release`, `Property quality tests` and
+  `CodeQL`) on the candidate, with the `nightly_validation` input set, so that
+  the release path runs without publishing anything; and
+. merges the pull request automatically once every check passes and the
+  controller has rechecked the signed commit and branch protection.
+
+A failed candidate stays open for investigation. Diagnose it: a new compiler
+error, a changed standard library function, or a real regression. Put the
+compatibility fix on a separate branch, not on `automation/roc-nightly`, which
+is reserved for the bot's pin-only commits.
+
+[WARNING]
+====
+Do not weaken a test, gate a fuzz target or re-record a conformance baseline to
+make a compiler candidate pass. A changed result after a compiler update is a
+bug in the compiler or in the package, and needs a fix or an upstream issue.
+====
+
+{src}/.github/ROC_NIGHTLY.md[`.github/ROC_NIGHTLY.md`] records the
+integration details: required checks, token permissions and the pinned
+controller commit.
+
+=== The quality nightly
+
+The property tests and conformance reviews run under a second pin,
+`QUALITY_ROC_NIGHTLY` in `.github/workflows/fuzz.yml`, because roc-fuzz 0.4.2
+needs a newer compiler than `.roc-version` currently allows. During nightly
+validation, `scripts/workflow_helpers.py roc-version` ignores that pin and uses
+the `.roc-version` candidate, so every candidate is also checked by the fuzz
+targets. Move `QUALITY_ROC_NIGHTLY` forward by hand, in a normal pull request,
+when roc-fuzz or a target needs a newer compiler. Remove it once `.roc-version`
+has caught up.
+
+== Release a new version
+
+Releases follow semantic versioning: a release that changes the result of a
+public function on any input, or removes or changes a public signature, is a
+major release.
+
+=== Before you start
+
+. Confirm that `main` is green: `Tests`, `Property quality tests` and `Docs`.
+. Write the release notes as `docs/releases/<version>.md`, for example
+  `docs/releases/2.0.0.md`, and link them from `docs/releases/index.adoc`. Put
+  the upgrade impact first: every change a user's code or data might notice.
+  Merge them through a normal pull request.
+. Optionally run the `Release` workflow from the Actions tab with
+  `nightly_validation` checked. It runs the whole release path, including the
+  documentation build, without publishing.
+
+=== Run the release
+
+[WARNING]
+====
+A published release is permanent: the bundle URL is content-addressed and
+users pin it in their `app` headers. Check the version number before you
+start the workflow; a mistake needs a new release, not an edit.
+====
+
+Run the `Release` workflow
+({src}/.github/workflows/release.yml[`release.yml`]) from the Actions tab on
+`main`, with `release_version` set to the new version, for example `2.0.0`. It
+runs these jobs:
+
+Build release bundle:: Validates the version and that the run is on the
+default branch, runs the Python unit tests and `scripts/all_tests.py`, checks
+that the version increases on the previous release, and bundles the package
+with `scripts/bundle.py`.
+Test bundles:: Builds and runs the examples against the new bundle.
+Publish GitHub release:: Creates the tag and the GitHub release, with the
+release notes from `docs/releases/<version>.md`, the bundle, an SPDX SBOM
+(`scripts/release_security_assets.py sbom`), and build-provenance and SBOM
+attestations, combined into one offline attestation bundle.
+Docs:: Builds the manual and the API reference for the version with
+`scripts/build_manual.py --docs-version <version>` and
+`scripts/build_docs.py`, packages them with
+`scripts/release_helpers.py package-docs`, assembles the GitHub Pages site with
+`scripts/release_helpers.py assemble-pages`, and deploys it.
+
+The workflow also opens a signed follow-up pull request that updates the
+package URLs in `examples/` to the new bundle. Review and merge it.
+
+=== After the release
+
+. Check the release page: the notes, the `.tar.zst` bundle, the SBOM and the
+  attestation bundle.
+. Verify the provenance of the bundle you downloaded:
++
+[source,bash]
+----
+gh attestation verify <bundle>.tar.zst --repo lukewilliamboswell/roc-parser
+----
+. Open the published manual and API reference and check that they show the new
+  version.
+. Merge the follow-up pull request for the examples.
+
+== Security reports
+
+The policy is in {src}/SECURITY.md[`SECURITY.md`]: security fixes are made
+for `main` and the latest release, and reports arrive privately through GitHub
+private vulnerability reporting, never in public issues.
+
+When a report arrives:
+
+. Acknowledge it within 7 calendar days and give an initial assessment within
+  14.
+. Reproduce it with the reporter's input. If it is a crash, hang or excessive
+  resource use, add the input to the matching fuzz target's seeds or the
+  module's tests in the private fix branch, as described in
+  <<property-testing>>.
+. Prepare the fix in the private security advisory's temporary fork, and agree
+  a disclosure date with the reporter. The target is coordinated disclosure
+  within 90 days.
+. Release the fix as a new version, then publish the advisory, crediting the
+  reporter if they agree.
