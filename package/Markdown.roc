@@ -370,570 +370,1245 @@ inspect_link_title = |title| {
 		}
 }
 
-Line : { raw : String.Utf8 }
-
 ReferenceDefinition : {
 	label : Str,
 	target : Markdown.LinkTarget,
 }
 
-DocumentParts : {
-	frontmatter : [Some(Markdown), None],
+## Block structure follows the two-phase strategy of CommonMark 0.31.2
+## (appendix "A parsing strategy"): lines are consumed one at a time against a
+## stack of open blocks, then inline content is parsed once every link
+## reference definition is known. GFM tables and task list items are layered
+## on in the same places cmark-gfm hooks them in.
+ListInfo : { ordered : Bool, marker : U8, start : U64 }
+
+OpenKind : [
+	DocumentBlock,
+	QuoteBlock,
+	ListContainer(ListInfo),
+	ItemBlock({ info : ListInfo, marker_offset : U64, padding : U64, task : Markdown.TaskState }),
+	ParagraphBlock,
+	FencedBlock({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }),
+	IndentedBlock,
+	HtmlBlockOpen(U64),
+	TableBlock({ align : List(Markdown.Alignment), header : List(String.Utf8), rows : List(List(String.Utf8)) }),
+]
+
+## First and last source line of a closed block, used to decide list looseness:
+## two siblings are separated by a blank line exactly when their spans leave a
+## gap.
+Span : { start : U64, end : U64 }
+
+DoneItem : { task : Markdown.TaskState, blocks : List(Markdown), span : Span, inner_gap : Bool }
+
+Open : {
+	kind : OpenKind,
+	start : U64,
+	last : U64,
+	children : List(Markdown),
+	spans : List(Span),
+	items : List(DoneItem),
+	lines : List(String.Utf8),
+}
+
+BlockState : {
+	stack : List(Open),
 	refs : List(ReferenceDefinition),
-	lines : List(Line),
+	line : String.Utf8,
+	line_number : U64,
+	offset : U64,
+	column : U64,
+	partial_tab : Bool,
+	all_closed : Bool,
+	last_matched : U64,
 }
 
-ListMarker : {
-	kind : Markdown.ListKind,
-	width : U64,
-	content : String.Utf8,
-}
+Nonspace : { pos : U64, column : U64, indent : U64, blank : Bool }
 
-Fence : {
-	marker : U8,
-	len : U64,
-	info : Str,
-}
+Continuation : [Matched(BlockState), NotMatched, Consumed(BlockState)]
+
+StartResult : [NoStart, StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
 
 parse_all : Parser(String.Utf8, List(Markdown))
 parse_all =
 	Parser.build_primitive_parser(
 		|input| {
-			prepared = prepare_document(split_lines(input))
-			parsed = parse_blocks_from_lines(prepared.lines, 0, prepared.refs)?
-
-			blocks =
-				match prepared.frontmatter {
-					Some(block) => List.prepend(parsed.val, block)
-					None => parsed.val
-				}
-
-			match parsed.input {
-				[] =>
-					Ok({ val: blocks, input: [] })
-
-				_ =>
-					Err(ParsingFailure("unexpected unparsed markdown lines"))
-				}
+			Ok({ val: parse_document(input), input: [] })
 		},
 	)
 
-prepare_document : List(Line) -> DocumentParts
-prepare_document = |lines| {
-	front = take_frontmatter(lines)
-	without_front =
-		match front.frontmatter {
-			Some(_) => front.input
-			None => lines
-		}
+## Markdown has no syntax errors: every input is a document.
+parse_document : String.Utf8 -> List(Markdown)
+parse_document = |input| {
+	all_lines = split_document_lines(input)
+	front = take_frontmatter(all_lines)
+	parsed = parse_block_lines(front.lines)
+	blocks = List.from_iter(parsed.blocks.iter().map(|block| resolve_inlines(block, parsed.refs)))
 
-	refs = collect_reference_definitions(without_front, [], [])
-
-	{ frontmatter: front.frontmatter, refs: refs.refs, lines: refs.lines }
-}
-
-take_frontmatter : List(Line) -> { frontmatter : [Some(Markdown), None], input : List(Line) }
-take_frontmatter = |lines| {
-	match lines {
-		[first, .. as rest] if is_exact_bytes(first.raw, "---".to_utf8()) => {
-			found = take_until_frontmatter_close(rest, [])
-
-			match found {
-				Ok(done) => {
-					raw = String.str_from_utf8(join_lines_with_newlines(done.raw))
-					{ frontmatter: Some(Frontmatter({ raw: raw })), input: done.input }
-				}
-
-				Err(_) =>
-					{ frontmatter: None, input: lines }
-				}
-		}
-
-		_ =>
-			{ frontmatter: None, input: lines }
-		}
-}
-
-take_until_frontmatter_close : List(Line), List(String.Utf8) -> Try({ raw : List(String.Utf8), input : List(Line) }, [NotFound])
-take_until_frontmatter_close = |lines, acc| {
-	match lines {
-		[] =>
-			Err(NotFound)
-
-		[line, .. as rest] if is_exact_bytes(line.raw, "---".to_utf8()) =>
-			Ok({ raw: acc, input: rest })
-
-		[line, .. as rest] =>
-			take_until_frontmatter_close(rest, acc.append(line.raw))
-		}
-}
-
-collect_reference_definitions : List(Line), List(ReferenceDefinition), List(Line) -> { refs : List(ReferenceDefinition), lines : List(Line) }
-collect_reference_definitions = |lines, refs, kept| {
-	match lines {
-		[] =>
-			{ refs: refs, lines: kept }
-
-		[line, .. as rest] => {
-			match parse_reference_definition(line.raw) {
-				Ok(ref) =>
-					collect_reference_definitions(rest, refs.append(ref), kept)
-
-				Err(_) =>
-					collect_reference_definitions(rest, refs, kept.append(line))
-				}
-		}
+	match front.frontmatter {
+		Ok(raw) => List.prepend(blocks, Frontmatter({ raw: raw }))
+		Err(_) => blocks
 	}
 }
 
-parse_reference_definition : String.Utf8 -> Try(ReferenceDefinition, [NotFound])
-parse_reference_definition = |line| {
-	trimmed = trim_spaces(line)
-	# The label follows the inline link label rules (no unescaped brackets,
-	# at most 999 characters, not blank) and must be followed by `:`.
-	label = scan_link_label(trimmed, 0)?
-	if label.raw.is_empty() or byte_at(trimmed, label.end) != ':' {
-		Err(NotFound)
-	} else {
-		target_text = trim_spaces(trimmed.drop_first(label.end + 1))
-
-		if target_text.is_empty() {
-			Err(NotFound)
+## Line endings are LF, CRLF, or a lone CR; U+0000 becomes U+FFFD. A final line
+## ending does not start another line.
+split_document_lines : String.Utf8 -> List(String.Utf8)
+split_document_lines = |input| {
+	var $lines = []
+	var $current = []
+	var $index = 0
+	len = input.len()
+	while $index < len {
+		byte = input.get($index) ?? 0
+		if byte == '\n' {
+			$lines = $lines.append($current)
+			$current = []
+		} else if byte == '\r' {
+			$lines = $lines.append($current)
+			$current = []
+			if (input.get($index + 1) ?? 0) == '\n' {
+				$index = $index + 1
+			}
+		} else if byte == 0 {
+			$current = $current.concat([0xEF, 0xBF, 0xBD])
 		} else {
-			Ok({ label: normalize_reference_label(label.raw), target: parse_reference_target(target_text)? })
+			$current = $current.append(byte)
 		}
+		$index = $index + 1
+	}
+	if $current.is_empty() {
+		$lines
+	} else {
+		$lines.append($current)
 	}
 }
 
-parse_blocks_from_lines : List(Line), U64, List(ReferenceDefinition) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
-parse_blocks_from_lines = |lines, min_indent, refs| {
-	parse_blocks_help(lines, min_indent, refs, [])
-}
+## Extension: a first line of exactly `---` up to the next line of exactly
+## `---` is raw frontmatter, not Markdown. Without a closing line the document
+## is ordinary Markdown.
+take_frontmatter : List(String.Utf8) -> { frontmatter : Try(Str, [NotFound]), lines : List(String.Utf8) }
+take_frontmatter = |lines| {
+	if (lines.first() ?? []) != "---".to_utf8() {
+		{ frontmatter: Err(NotFound), lines }
+	} else {
+		match lines.drop_first(1).find_first_index(|line| line == "---".to_utf8()) {
+			Ok(index) => {
+				raw = lines.sublist({ start: 1, len: index }).fold([], |acc, line| acc.concat(line).append('\n'))
+				{ frontmatter: Ok(String.str_from_utf8(raw)), lines: lines.drop_first(index + 2) }
+			}
 
-parse_blocks_help : List(Line), U64, List(ReferenceDefinition), List(Markdown) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
-parse_blocks_help = |lines, min_indent, refs, blocks| {
-	match lines {
-		[] =>
-			Ok({ val: blocks, input: [] })
-
-		[line, .. as rest] if line_is_blank(line) =>
-			parse_blocks_help(rest, min_indent, refs, blocks)
-
-		[line, ..] if line_indent(line) < min_indent =>
-			Ok({ val: blocks, input: lines })
-
-		_ => {
-			parsed = parse_one_block(lines, min_indent, refs)?
-			parse_blocks_help(parsed.input, min_indent, refs, blocks.append(parsed.val))
-		}
+			Err(_) =>
+				{ frontmatter: Err(NotFound), lines }
+			}
 	}
 }
 
-parse_one_block : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_one_block = |lines, min_indent, refs| {
-	match lines {
-		[line, underline, .. as rest_after_heading] if can_be_setext_heading_text(line, min_indent) => {
-			match underline_level(underline, min_indent) {
-				Ok(level) =>
-					Ok({ val: Heading({ level: level, content: parse_inlines_with_refs(refs, strip_indent(line, min_indent)) }), input: rest_after_heading })
-
-				Err(_) =>
-					parse_one_block_without_setext(lines, min_indent, refs)
-				}
-		}
-
-		_ =>
-			parse_one_block_without_setext(lines, min_indent, refs)
-		}
+new_open : OpenKind, U64 -> Open
+new_open = |kind, line_number| {
+	{ kind, start: line_number, last: line_number, children: [], spans: [], items: [], lines: [] }
 }
 
-parse_one_block_without_setext : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_one_block_without_setext = |lines, min_indent, refs| {
-	match lines {
-		[] =>
-			Err(ParsingFailure("expected a markdown block"))
+parse_block_lines : List(String.Utf8) -> { blocks : List(Markdown), refs : List(ReferenceDefinition) }
+parse_block_lines = |lines| {
+	var $state = {
+		stack: [new_open(DocumentBlock, 0)],
+		refs: [],
+		line: [],
+		line_number: 0,
+		offset: 0,
+		column: 0,
+		partial_tab: Bool.False,
+		all_closed: Bool.True,
+		last_matched: 0,
+	}
+	for line in lines {
+		$state = process_line({ ..$state, line, line_number: $state.line_number + 1 })
+	}
+	while $state.stack.len() > 1 {
+		$state = close_tip($state, $state.line_number)
+	}
+	document = $state.stack.first() ?? new_open(DocumentBlock, 0)
+	{ blocks: document.children, refs: $state.refs }
+}
 
-		[line, ..] if line_indent(line) >= min_indent + 4 =>
-			parse_indented_code_block(lines, min_indent)
+tip_kind : BlockState -> OpenKind
+tip_kind = |state| {
+	match state.stack.last() {
+		Ok(open) => open.kind
+		Err(_) => DocumentBlock
+	}
+}
 
-		[line, .. as rest] => {
-			content = strip_indent(line, min_indent)
+is_paragraph_kind : OpenKind -> Bool
+is_paragraph_kind = |kind| {
+	match kind {
+		ParagraphBlock => Bool.True
+		_ => Bool.False
+	}
+}
 
-			match parse_hash_heading_line(content, refs) {
-				Ok(block) =>
-					Ok({ val: block, input: rest })
+## Leaf blocks that take whole lines: no block starts are tried inside them.
+accepts_lines : OpenKind -> Bool
+accepts_lines = |kind| {
+	match kind {
+		FencedBlock(_) => Bool.True
+		IndentedBlock => Bool.True
+		HtmlBlockOpen(_) => Bool.True
+		_ => Bool.False
+	}
+}
 
-				Err(_) => {
-					match parse_fence_start(line, min_indent) {
-						Ok(fence) =>
-							parse_fenced_code_block(lines, min_indent, fence)
+process_line : BlockState -> BlockState
+process_line = |initial| {
+	var $s = { ..initial, offset: 0, column: 0, partial_tab: Bool.False }
 
-						Err(_) if is_thematic_break_line(line, min_indent) =>
-							Ok({ val: ThematicBreak, input: rest })
+	# 1. Match the line against each open block's continuation condition.
+	var $container = 0
+	var $index = 1
+	var $matching = Bool.True
+	var $consumed = Bool.False
+	while $matching and $index < $s.stack.len() {
+		open = $s.stack.get($index) ?? new_open(DocumentBlock, 0)
+		match continue_block($s, open, $index) {
+			Matched(next) => {
+				$s = next
+				$container = $index
+				$index = $index + 1
+			}
 
-						Err(_) => {
-							match parse_table_block(lines, min_indent, refs) {
-								Ok(table_block) =>
-									Ok(table_block)
+			NotMatched => {
+				$matching = Bool.False
+			}
 
-								Err(_) if is_html_block_line(line, min_indent) =>
-									parse_html_block(lines, min_indent)
-
-								Err(_) if is_blockquote_line(line, min_indent) =>
-									parse_blockquote(lines, min_indent, refs)
-
-								Err(_) => {
-									match parse_list_marker(line, min_indent) {
-										Ok(_) => parse_list_block(lines, min_indent, refs)
-										Err(_) => parse_paragraph(lines, min_indent, refs)
-									}
-								}
-							}
-						}
-					}
-				}
+			Consumed(next) => {
+				$s = next
+				$matching = Bool.False
+				$consumed = Bool.True
 			}
 		}
 	}
-}
 
-parse_paragraph : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_paragraph = |lines, min_indent, refs| {
-	collected = collect_paragraph_lines(lines, min_indent, [])
-
-	if collected.val.is_empty() {
-		Err(ParsingFailure("expected a paragraph line"))
-	} else {
-		text = join_inline_lines(collected.val)
-		Ok({ val: Paragraph(parse_inlines_with_refs(refs, text)), input: collected.input })
+	if $consumed {
+		return $s
 	}
-}
 
-collect_paragraph_lines : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
-collect_paragraph_lines = |lines, min_indent, acc| {
-	match lines {
-		[] =>
-			{ val: acc, input: [] }
+	$s = { ..$s, all_closed: $container == $s.stack.len() - 1, last_matched: $container }
 
-		[line, ..] if line_is_blank(line) =>
-			{ val: acc, input: lines }
+	# 2. Try block starts, unless the matched block is a leaf taking raw lines.
+	container_kind = ($s.stack.get($container) ?? new_open(DocumentBlock, 0)).kind
+	var $starting = !accepts_lines(container_kind)
+	var $done = Bool.False
+	while $starting {
+		ns = find_nonspace($s)
+		match try_block_starts($s, $container, ns) {
+			NoStart => {
+				$s = advance_to_nonspace($s, ns)
+				$starting = Bool.False
+			}
 
-		[line, ..] if line_indent(line) < min_indent =>
-			{ val: acc, input: lines }
+			StartedContainer(next) => {
+				$s = next
+				$container = next.stack.len() - 1
+			}
 
-		[line, ..] if is_block_start(line, min_indent) =>
-			{ val: acc, input: lines }
+			StopStarts(next) => {
+				$s = advance_to_nonspace(next, find_nonspace(next))
+				$container = next.stack.len() - 1
+				$starting = Bool.False
+			}
 
-		[line, .. as rest] =>
-			collect_paragraph_lines(rest, min_indent, acc.append(strip_indent(line, min_indent)))
+			StartedLeaf(next) => {
+				$s = next
+				$container = next.stack.len() - 1
+				$starting = Bool.False
+			}
+
+			LineDone(next) => {
+				$s = next
+				$starting = Bool.False
+				$done = Bool.True
+			}
 		}
-}
+	}
 
-parse_fenced_code_block : List(Line), U64, Fence -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_fenced_code_block = |lines, min_indent, fence| {
-	match lines {
-		[_line, .. as rest] => {
-			code = collect_fenced_code_lines(rest, min_indent, fence, [])?
+	if $done {
+		return $s
+	}
 
-			Ok({ val: Code({ info: fence.info, pre: String.str_from_utf8(join_lines_with_newlines(code.val)) }), input: code.input })
-		}
-
-		[] =>
-			Err(ParsingFailure("expected a code fence"))
-		}
-}
-
-collect_fenced_code_lines : List(Line), U64, Fence, List(String.Utf8) -> Try({ val : List(String.Utf8), input : List(Line) }, [ParsingFailure(Str)])
-collect_fenced_code_lines = |lines, min_indent, fence, acc| {
-	match lines {
-		[] =>
-			Err(ParsingFailure("expected closing code fence"))
-
-		[line, .. as rest] if is_matching_fence_close(line, min_indent, fence) =>
-			Ok({ val: acc, input: rest })
-
-		[line, .. as rest] => {
-			body_line =
-				if line_indent(line) >= min_indent {
-					strip_indent(line, min_indent)
+	# 3. Add the rest of the line to the right block.
+	blank = find_nonspace($s).blank
+	if !$s.all_closed and !blank and is_paragraph_kind(tip_kind($s)) {
+		# Lazy continuation line.
+		add_line_to_tip($s)
+	} else {
+		$s = close_unmatched($s)
+		match tip_kind($s) {
+			ParagraphBlock => add_line_to_tip($s)
+			FencedBlock(_) => add_line_to_tip($s)
+			IndentedBlock => add_line_to_tip($s)
+			HtmlBlockOpen(html_type) => {
+				rest = $s.line.drop_first($s.offset)
+				added = add_line_to_tip($s)
+				if html_type <= 5 and html_block_ends(html_type, rest) {
+					close_tip(added, added.line_number)
 				} else {
-					line.raw
+					added
 				}
+			}
 
-			collect_fenced_code_lines(rest, min_indent, fence, acc.append(body_line))
+			TableBlock(_) => add_table_row($s)
+			_ =>
+				if blank {
+					$s
+				} else {
+					add_line_to_tip(add_child($s, ParagraphBlock))
+				}
 		}
 	}
 }
 
-parse_indented_code_block : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_indented_code_block = |lines, min_indent| {
-	collected = collect_indented_code_lines(lines, min_indent, [])
-
-	if collected.val.is_empty() {
-		Err(ParsingFailure("expected indented code"))
-	} else {
-		Ok({ val: Code({ info: "", pre: String.str_from_utf8(join_lines_with_newlines(collected.val)) }), input: collected.input })
-	}
-}
-
-collect_indented_code_lines : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
-collect_indented_code_lines = |lines, min_indent, acc| {
-	match lines {
-		[] =>
-			{ val: acc, input: [] }
-
-		[line, .. as rest] if line_is_blank(line) =>
-			collect_indented_code_lines(rest, min_indent, acc.append([]))
-
-		[line, .. as rest] if line_indent(line) >= min_indent + 4 =>
-			collect_indented_code_lines(rest, min_indent, acc.append(strip_indent(line, min_indent + 4)))
-
-		_ =>
-			{ val: acc, input: lines }
-		}
-}
-
-parse_blockquote : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_blockquote = |lines, min_indent, refs| {
-	quoted = collect_blockquote_lines(lines, min_indent, [])
-	inner = parse_blocks_from_lines(quoted.val, 0, refs)?
-
-	Ok({ val: Blockquote(inner.val), input: quoted.input })
-}
-
-collect_blockquote_lines : List(Line), U64, List(Line) -> { val : List(Line), input : List(Line) }
-collect_blockquote_lines = |lines, min_indent, acc| {
-	match lines {
-		[] =>
-			{ val: acc, input: [] }
-
-		[line, .. as rest] if is_blockquote_line(line, min_indent) =>
-			collect_blockquote_lines(rest, min_indent, acc.append({ raw: strip_blockquote_marker(line, min_indent) }))
-
-		[line, .. as rest] if line_is_blank(line) =>
-			collect_blockquote_lines(rest, min_indent, acc.append({ raw: [] }))
-
-		_ =>
-			{ val: acc, input: lines }
-		}
-}
-
-parse_list_block : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_list_block = |lines, min_indent, refs| {
-	match lines {
-		[first, ..] => {
-			match parse_list_marker(first, min_indent) {
-				Ok(marker) => {
-					parsed = parse_list_items(lines, min_indent, refs, marker.kind, [], Bool.False)?
-					Ok({ val: ListBlock({ kind: marker.kind, loose: parsed.loose, items: parsed.items }), input: parsed.input })
-				}
-
-				Err(_) =>
-					Err(ParsingFailure("expected list item"))
-				}
-		}
-
-		[] =>
-			Err(ParsingFailure("expected list item"))
-		}
-}
-
-parse_list_items : List(Line), U64, List(ReferenceDefinition), Markdown.ListKind, List({ task : Markdown.TaskState, blocks : List(Markdown) }), Bool -> Try({ items : List({ task : Markdown.TaskState, blocks : List(Markdown) }), loose : Bool, input : List(Line) }, [ParsingFailure(Str)])
-parse_list_items = |lines, min_indent, refs, kind, items, loose| {
-	match lines {
-		[line, .. as rest] => {
-			match parse_list_marker(line, min_indent) {
-				Ok(marker) if list_kind_matches(kind, marker.kind) => {
-					item = parse_list_item_after_marker(marker, rest, min_indent, refs)?
-					parse_list_items(item.input, min_indent, refs, kind, items.append(item.item), loose or item.loose)
-				}
-
-				_ =>
-					Ok({ items, loose, input: lines })
-				}
-		}
-
-		[] =>
-			Ok({ items, loose, input: [] })
-		}
-}
-
-parse_list_item_after_marker : ListMarker, List(Line), U64, List(ReferenceDefinition) -> Try({ item : { task : Markdown.TaskState, blocks : List(Markdown) }, loose : Bool, input : List(Line) }, [ParsingFailure(Str)])
-parse_list_item_after_marker = |marker, rest, min_indent, refs| {
-	task = parse_task_marker(marker.content)
-	content_indent = min_indent + marker.width
-	continuation = collect_list_item_continuation(rest, content_indent, [task.content])
-	saw_blank_before_children = blank_line_keeps_list_loose(continuation.input, min_indent, content_indent)
-	children = parse_blocks_from_lines(continuation.input, content_indent, refs)?
-
-	content_text = join_inline_lines(continuation.val)
-	content_blocks =
-		if trim_spaces(content_text).is_empty() {
-			children.val
+find_nonspace : BlockState -> Nonspace
+find_nonspace = |s| {
+	var $pos = s.offset
+	var $column = s.column
+	var $scanning = Bool.True
+	while $scanning {
+		byte = s.line.get($pos) ?? 'x'
+		if byte == ' ' {
+			$pos = $pos + 1
+			$column = $column + 1
+		} else if byte == '\t' and $pos < s.line.len() {
+			$pos = $pos + 1
+			$column = $column + (4 - ($column % 4))
 		} else {
-			List.prepend(children.val, Paragraph(parse_inlines_with_refs(refs, content_text)))
+			$scanning = Bool.False
 		}
-
-	blank = consume_blank_lines(children.input, Bool.False)
-	saw_blank_after_children = blank_line_keeps_list_loose(children.input, min_indent, content_indent)
-
-	Ok({ item: { task: task.task, blocks: content_blocks }, loose: saw_blank_before_children or saw_blank_after_children, input: blank.input })
+	}
+	{ pos: $pos, column: $column, indent: $column - s.column, blank: $pos >= s.line.len() }
 }
 
-blank_line_keeps_list_loose : List(Line), U64, U64 -> Bool
-blank_line_keeps_list_loose = |lines, min_indent, content_indent| {
-	match lines {
-		[line, ..] if line_is_blank(line) => {
-			after_blank = consume_blank_lines(lines, Bool.False)
+advance_to_nonspace : BlockState, Nonspace -> BlockState
+advance_to_nonspace = |s, ns| {
+	{ ..s, offset: ns.pos, column: ns.column, partial_tab: Bool.False }
+}
 
-			match after_blank.input {
-				[next, ..] if line_indent(next) >= content_indent =>
-					Bool.True
-
-				[next, ..] if parse_list_marker(next, min_indent).is_ok() =>
-					Bool.True
-
-				_ =>
-					Bool.False
-				}
+## Advance by `count` bytes, or by `count` columns when `columns` is set, in
+## which case a tab may be only partly consumed (CommonMark 2.2 Tabs).
+advance_offset : BlockState, U64, Bool -> BlockState
+advance_offset = |s, count, columns| {
+	var $count = count
+	var $offset = s.offset
+	var $column = s.column
+	var $partial = s.partial_tab
+	while $count > 0 and $offset < s.line.len() {
+		byte = s.line.get($offset) ?? 0
+		if byte == '\t' {
+			to_tab = 4 - ($column % 4)
+			if columns {
+				$partial = to_tab > $count
+				step = if to_tab > $count $count else to_tab
+				$column = $column + step
+				$offset = if $partial $offset else $offset + 1
+				$count = $count - step
+			} else {
+				$partial = Bool.False
+				$column = $column + to_tab
+				$offset = $offset + 1
+				$count = $count - 1
+			}
+		} else {
+			$partial = Bool.False
+			$offset = $offset + 1
+			$column = $column + 1
+			$count = $count - 1
 		}
+	}
+	{ ..s, offset: $offset, column: $column, partial_tab: $partial }
+}
+
+has_children : BlockState, U64, Open -> Bool
+has_children = |s, index, open| {
+	!open.children.is_empty() or index + 1 < s.stack.len()
+}
+
+continue_block : BlockState, Open, U64 -> Continuation
+continue_block = |s, open, index| {
+	ns = find_nonspace(s)
+
+	match open.kind {
+		QuoteBlock =>
+			if ns.indent <= 3 and (s.line.get(ns.pos) ?? 0) == '>' {
+				Matched(skip_quote_marker(advance_to_nonspace(s, ns)))
+			} else {
+				NotMatched
+			}
+
+		ItemBlock(item) =>
+			if ns.indent >= item.marker_offset + item.padding {
+				Matched(advance_offset(s, item.marker_offset + item.padding, Bool.True))
+			} else if ns.blank and has_children(s, index, open) {
+				Matched(advance_to_nonspace(s, ns))
+			} else {
+				NotMatched
+			}
+
+		FencedBlock(fence) => {
+			rest = s.line.drop_first(ns.pos)
+			if ns.indent <= 3 and is_closing_fence(rest, fence.fence_char, fence.fence_len) {
+				closed = close_tip({ ..s, stack: set_tip_last(s.stack, s.line_number) }, s.line_number)
+				Consumed(closed)
+			} else {
+				var $next = s
+				var $remaining = fence.fence_offset
+				while $remaining > 0 and is_space_or_tab($next.line.get($next.offset) ?? 'x') {
+					$next = advance_offset($next, 1, Bool.True)
+					$remaining = $remaining - 1
+				}
+				Matched($next)
+			}
+		}
+
+		IndentedBlock =>
+			if ns.indent >= 4 {
+				Matched(advance_offset(s, 4, Bool.True))
+			} else if ns.blank {
+				Matched(advance_to_nonspace(s, ns))
+			} else {
+				NotMatched
+			}
+
+		HtmlBlockOpen(html_type) =>
+			if ns.blank and html_type >= 6 {
+				NotMatched
+			} else {
+				Matched(s)
+			}
+
+		ParagraphBlock =>
+			if ns.blank NotMatched else Matched(s)
+
+		TableBlock(_) =>
+			if ns.blank or split_table_row(s.line.drop_first(ns.pos)).is_empty() {
+				NotMatched
+			} else {
+				Matched(s)
+			}
 
 		_ =>
-			Bool.False
-		}
-}
-
-collect_list_item_continuation : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
-collect_list_item_continuation = |lines, content_indent, acc| {
-	match lines {
-		[] =>
-			{ val: acc, input: [] }
-
-		[line, ..] if line_is_blank(line) =>
-			{ val: acc, input: lines }
-
-		[line, ..] if line_indent(line) < content_indent =>
-			{ val: acc, input: lines }
-
-		[line, ..] if is_block_start(line, content_indent) =>
-			{ val: acc, input: lines }
-
-		[line, .. as rest] =>
-			collect_list_item_continuation(rest, content_indent, acc.append(strip_indent(line, content_indent)))
-		}
-}
-
-parse_table_block : List(Line), U64, List(ReferenceDefinition) -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_table_block = |lines, min_indent, refs| {
-	match lines {
-		[header, delimiter, .. as rest] if line_indent(header) >= min_indent and line_indent(delimiter) >= min_indent => {
-			match split_table_cells(strip_indent(header, min_indent)) {
-				Ok(header_cells) => {
-					match split_table_cells(strip_indent(delimiter, min_indent)) {
-						Ok(delimiter_cells) => {
-							align = parse_table_delimiter(delimiter_cells)?
-
-							if header_cells.len() != align.len() {
-								Err(ParsingFailure("table header and delimiter column counts differ"))
-							} else {
-								rows = collect_table_rows(rest, min_indent, refs, [])
-								parsed_header = List.from_iter(header_cells.iter().map(|cell| parse_inlines_with_refs(refs, trim_spaces(cell))))
-
-								Ok({ val: Table({ header: parsed_header, align, rows: rows.rows }), input: rows.input })
-							}
-						}
-
-						Err(_) =>
-							Err(ParsingFailure("expected table delimiter"))
-						}
-				}
-
-				Err(_) =>
-					Err(ParsingFailure("expected table header"))
-				}
-		}
-
-		_ =>
-			Err(ParsingFailure("expected table"))
-		}
-}
-
-collect_table_rows : List(Line), U64, List(ReferenceDefinition), List(List(List(Markdown.Inline))) -> { rows : List(List(List(Markdown.Inline))), input : List(Line) }
-collect_table_rows = |lines, min_indent, refs, rows| {
-	match lines {
-		[] =>
-			{ rows, input: [] }
-
-		[line, ..] if line_is_blank(line) =>
-			{ rows, input: lines }
-
-		[line, ..] if line_indent(line) < min_indent =>
-			{ rows, input: lines }
-
-		[line, ..] if is_block_start(line, min_indent) =>
-			{ rows, input: lines }
-
-		[line, .. as rest] => {
-			match split_table_cells(strip_indent(line, min_indent)) {
-				Ok(cells) => {
-					parsed = List.from_iter(cells.iter().map(|cell| parse_inlines_with_refs(refs, trim_spaces(cell))))
-					collect_table_rows(rest, min_indent, refs, rows.append(parsed))
-				}
-
-				Err(_) =>
-					{ rows, input: lines }
-				}
-		}
+			Matched(s)
 	}
 }
 
-parse_html_block : List(Line), U64 -> Try({ val : Markdown, input : List(Line) }, [ParsingFailure(Str)])
-parse_html_block = |lines, min_indent| {
-	collected = collect_html_block(lines, min_indent, [])
-
-	if collected.val.is_empty() {
-		Err(ParsingFailure("expected HTML block"))
+skip_quote_marker : BlockState -> BlockState
+skip_quote_marker = |s| {
+	after = advance_offset(s, 1, Bool.False)
+	if is_space_or_tab(after.line.get(after.offset) ?? 'x') {
+		advance_offset(after, 1, Bool.True)
 	} else {
-		Ok({ val: HtmlBlock(String.str_from_utf8(join_lines_with_newlines(collected.val))), input: collected.input })
+		after
 	}
 }
 
-collect_html_block : List(Line), U64, List(String.Utf8) -> { val : List(String.Utf8), input : List(Line) }
-collect_html_block = |lines, min_indent, acc| {
-	match lines {
-		[] =>
-			{ val: acc, input: [] }
-
-		[line, ..] if line_is_blank(line) =>
-			{ val: acc, input: lines }
-
-		[line, ..] if line_indent(line) < min_indent =>
-			{ val: acc, input: lines }
-
-		[line, .. as rest] =>
-			collect_html_block(rest, min_indent, acc.append(strip_indent(line, min_indent)))
-		}
+set_tip_last : List(Open), U64 -> List(Open)
+set_tip_last = |stack, line_number| {
+	match stack.last() {
+		Ok(open) => stack.drop_last(1).append({ ..open, last: line_number })
+		Err(_) => stack
+	}
 }
 
-is_block_start : Line, U64 -> Bool
-is_block_start = |line, min_indent| {
-	if line_indent(line) < min_indent {
+## Close blocks left unmatched by a line that is not a lazy continuation.
+close_unmatched : BlockState -> BlockState
+close_unmatched = |s| {
+	if s.all_closed {
+		s
+	} else {
+		var $next = s
+		while $next.stack.len() - 1 > s.last_matched {
+			$next = close_tip($next, s.line_number - 1)
+		}
+		{ ..$next, all_closed: Bool.True }
+	}
+}
+
+can_contain : OpenKind, OpenKind -> Bool
+can_contain = |parent, child| {
+	match parent {
+		DocumentBlock => !is_item_kind(child)
+		QuoteBlock => !is_item_kind(child)
+		ItemBlock(_) => !is_item_kind(child)
+		ListContainer(_) => is_item_kind(child)
+		_ => Bool.False
+	}
+}
+
+is_item_kind : OpenKind -> Bool
+is_item_kind = |kind| {
+	match kind {
+		ItemBlock(_) => Bool.True
+		_ => Bool.False
+	}
+}
+
+add_child : BlockState, OpenKind -> BlockState
+add_child = |s, kind| {
+	var $next = s
+	while !can_contain(tip_kind($next), kind) {
+		$next = close_tip($next, $next.line_number - 1)
+	}
+	{ ..$next, stack: $next.stack.append(new_open(kind, $next.line_number)) }
+}
+
+## Attach a block that is complete as soon as it starts (headings, breaks).
+add_closed_child : BlockState, Markdown -> BlockState
+add_closed_child = |s, block| {
+	var $next = s
+	while !can_contain(tip_kind($next), ParagraphBlock) {
+		$next = close_tip($next, $next.line_number - 1)
+	}
+	span = { start: $next.line_number, end: $next.line_number }
+	{ ..$next, stack: update_tip($next.stack, |open| { ..open, children: open.children.append(block), spans: open.spans.append(span) }) }
+}
+
+update_tip : List(Open), (Open -> Open) -> List(Open)
+update_tip = |stack, f| {
+	match stack.last() {
+		Ok(open) => stack.drop_last(1).append(f(open))
+		Err(_) => stack
+	}
+}
+
+## The rest of the line from the current offset; a partly consumed tab
+## contributes its remaining columns as spaces.
+line_rest : BlockState -> String.Utf8
+line_rest = |s| {
+	if s.partial_tab {
+		List.repeat(' ', 4 - (s.column % 4)).concat(s.line.drop_first(s.offset + 1))
+	} else {
+		s.line.drop_first(s.offset)
+	}
+}
+
+add_line_to_tip : BlockState -> BlockState
+add_line_to_tip = |s| {
+	content = line_rest(s)
+	counts = !(is_indented_kind(tip_kind(s)) and bytes_are_blank(content))
+	{ ..s, stack: update_tip(s.stack, |open| { ..open, lines: open.lines.append(content), last: if counts s.line_number else open.last }) }
+}
+
+is_indented_kind : OpenKind -> Bool
+is_indented_kind = |kind| {
+	match kind {
+		IndentedBlock => Bool.True
+		_ => Bool.False
+	}
+}
+
+add_table_row : BlockState -> BlockState
+add_table_row = |s| {
+	cells = split_table_row(s.line.drop_first(s.offset))
+	{
+		..s,
+		stack: update_tip(
+			s.stack,
+			|open| {
+				match open.kind {
+					TableBlock(table) => { ..open, kind: TableBlock({ ..table, rows: table.rows.append(cells) }), last: s.line_number }
+					_ => open
+				}
+			},
+		),
+	}
+}
+
+## Pop the innermost open block, finish it, and attach it to its parent.
+close_tip : BlockState, U64 -> BlockState
+close_tip = |s, line_number| {
+	match s.stack.last() {
+		Err(_) => s
+		Ok(open) => {
+			rest = s.stack.drop_last(1)
+			finished = finish_block(open, line_number, s.refs)
+			stack =
+				match finished.result {
+					Block(block, span) => update_tip(rest, |parent| { ..parent, children: parent.children.append(block), spans: parent.spans.append(span) })
+					Item(item) => update_tip(rest, |parent| { ..parent, items: parent.items.append(item) })
+					Nothing => rest
+				}
+			{ ..s, stack, refs: finished.refs }
+		}
+	}
+}
+
+has_gap : List(Span) -> Bool
+has_gap = |spans| {
+	var $index = 1
+	var $gap = Bool.False
+	while !$gap and $index < spans.len() {
+		before = spans.get($index - 1) ?? { start: 0, end: 0 }
+		after = spans.get($index) ?? { start: 0, end: 0 }
+		if after.start > before.end + 1 {
+			$gap = Bool.True
+		}
+		$index = $index + 1
+	}
+	$gap
+}
+
+placeholder : String.Utf8 -> List(Markdown.Inline)
+placeholder = |raw| [Text(String.str_from_utf8(raw))]
+
+finish_block : Open, U64, List(ReferenceDefinition) -> { result : [Block(Markdown, Span), Item(DoneItem), Nothing], refs : List(ReferenceDefinition) }
+finish_block = |open, line_number, refs| {
+	leaf_span = { start: open.start, end: open.last }
+	match open.kind {
+		DocumentBlock =>
+			{ result: Nothing, refs }
+
+		QuoteBlock =>
+			{ result: Block(Blockquote(open.children), { start: open.start, end: line_number }), refs }
+
+		ItemBlock(item) => {
+			end = (open.spans.last() ?? { start: open.start, end: open.start }).end
+			{ result: Item({ task: item.task, blocks: open.children, span: { start: open.start, end }, inner_gap: has_gap(open.spans) }), refs }
+		}
+
+		ListContainer(info) => {
+			loose = open.items.any(|item| item.inner_gap) or has_gap(open.items.map(|item| item.span))
+			kind = if info.ordered Ordered({ start: info.start }) else Unordered
+			items = open.items.map(|item| { task: item.task, blocks: item.blocks })
+			end = (open.items.last() ?? { task: NoTask, blocks: [], span: { start: open.start, end: open.start }, inner_gap: Bool.False }).span.end
+			{ result: Block(ListBlock({ kind, loose, items }), { start: open.start, end }), refs }
+		}
+
+		ParagraphBlock => {
+			extracted = extract_reference_definitions(join_with_newlines(open.lines), refs)
+			content = trim_end_spaces(extracted.rest)
+			if content.is_empty() {
+				{ result: Nothing, refs: extracted.refs }
+			} else {
+				{ result: Block(Paragraph(placeholder(content)), leaf_span), refs: extracted.refs }
+			}
+		}
+
+		FencedBlock(fence) =>
+			{ result: Block(Code({ info: fence.info, pre: String.str_from_utf8(join_lines_with_newlines(open.lines)) }), leaf_span), refs }
+
+		IndentedBlock => {
+			var $lines = open.lines
+			while bytes_are_blank($lines.last() ?? [0]) {
+				$lines = $lines.drop_last(1)
+			}
+			{ result: Block(Code({ info: "", pre: String.str_from_utf8(join_lines_with_newlines($lines)) }), leaf_span), refs }
+		}
+
+		HtmlBlockOpen(_) =>
+			{ result: Block(HtmlBlock(String.str_from_utf8(join_lines_with_newlines(open.lines))), leaf_span), refs }
+
+		TableBlock(table) => {
+			columns = table.align.len()
+			fit = |cells| {
+				var $out = []
+				var $column = 0
+				while $column < columns {
+					$out = $out.append(placeholder(cells.get($column) ?? []))
+					$column = $column + 1
+				}
+				$out
+			}
+			{ result: Block(Table({ header: fit(table.header), align: table.align, rows: table.rows.map(fit) }), leaf_span), refs }
+		}
+	}
+}
+
+join_with_newlines : List(String.Utf8) -> String.Utf8
+join_with_newlines = |lines| {
+	var $out = []
+	for line in lines {
+		if !$out.is_empty() {
+			$out = $out.append('\n')
+		}
+		$out = $out.concat(line)
+	}
+	$out
+}
+
+## Block starts, in the order of CommonMark appendix A / cmark-gfm.
+try_block_starts : BlockState, U64, Nonspace -> StartResult
+try_block_starts = |s, container, ns| {
+	container_kind = (s.stack.get(container) ?? new_open(DocumentBlock, 0)).kind
+	rest = s.line.drop_first(ns.pos)
+	indented = ns.indent >= 4
+	first = rest.first() ?? 0
+
+	if !indented and first == '>' {
+		started = add_child(close_unmatched(skip_quote_marker(advance_to_nonspace(s, ns))), QuoteBlock)
+		return StartedContainer(started)
+	}
+
+	if !indented and first == '#' {
+		match parse_atx_heading(rest) {
+			Ok(heading) => return LineDone(add_closed_child(close_unmatched(s), heading))
+			Err(_) => {}
+		}
+	}
+
+	if !indented and (first == '`' or first == '~') {
+		match parse_fence_open(rest) {
+			Ok(fence) => {
+				kind = FencedBlock({ ..fence, fence_offset: ns.indent })
+				return LineDone(add_child(close_unmatched(s), kind))
+			}
+
+			Err(_) => {}
+		}
+	}
+
+	if !indented and first == '<' {
+		lazy_paragraph = !s.all_closed and !ns.blank and is_paragraph_kind(tip_kind(s))
+		allow_type_7 = !is_paragraph_kind(container_kind) and !lazy_paragraph
+		match html_block_start(rest, allow_type_7) {
+			Ok(html_type) => return StartedLeaf(add_child(close_unmatched(s), HtmlBlockOpen(html_type)))
+			Err(_) => {}
+		}
+	}
+
+	if !indented and is_paragraph_kind(container_kind) and (first == '=' or first == '-') {
+		match setext_level(rest) {
+			Ok(level) => {
+				closed = close_unmatched(s)
+				paragraph = closed.stack.last() ?? new_open(ParagraphBlock, 0)
+				extracted = extract_reference_definitions(join_with_newlines(paragraph.lines), closed.refs)
+				if !extracted.rest.is_empty() {
+					heading = Heading({ level, content: placeholder(trim_end_spaces(extracted.rest)) })
+					span = { start: paragraph.start, end: closed.line_number }
+					stack = update_tip(closed.stack.drop_last(1), |parent| { ..parent, children: parent.children.append(heading), spans: parent.spans.append(span) })
+					return LineDone({ ..closed, stack, refs: extracted.refs })
+				} else {
+					# Only reference definitions: keep the (now empty) paragraph and
+					# let the underline be read as something else.
+					emptied = update_tip(closed.stack, |open| { ..open, lines: [] })
+					return try_after_setext({ ..closed, stack: emptied, refs: extracted.refs }, container, ns)
+				}
+			}
+
+			Err(_) => {}
+		}
+	}
+
+	try_after_setext(s, container, ns)
+}
+
+try_after_setext : BlockState, U64, Nonspace -> StartResult
+try_after_setext = |s, container, ns| {
+	container_kind = (s.stack.get(container) ?? new_open(DocumentBlock, 0)).kind
+	rest = s.line.drop_first(ns.pos)
+	indented = ns.indent >= 4
+
+	if !indented and is_thematic_break(rest) {
+		return LineDone(add_closed_child(close_unmatched(s), ThematicBreak))
+	}
+
+	if !indented {
+		match parse_list_marker(rest, is_paragraph_kind(container_kind)) {
+			Ok(marker) => return start_list_item(s, container_kind, ns, marker)
+			Err(_) => {}
+		}
+	}
+
+	if indented and !is_paragraph_kind(tip_kind(s)) and !ns.blank {
+		started = add_child(close_unmatched(advance_offset(s, 4, Bool.True)), IndentedBlock)
+		return StartedLeaf(started)
+	}
+
+	if !indented and is_paragraph_kind(container_kind) and s.all_closed {
+		match parse_table_delimiter_row(rest) {
+			Ok(align) => {
+				paragraph = s.stack.last() ?? new_open(ParagraphBlock, 0)
+				header_line = paragraph.lines.last() ?? []
+				header = split_table_row(header_line)
+				if !header.is_empty() and header.len() == align.len() {
+					before = update_tip(s.stack, |open| { ..open, lines: open.lines.drop_last(1), last: s.line_number - 2 })
+					closed = close_tip({ ..s, stack: before }, s.line_number - 2)
+					table = { ..new_open(TableBlock({ align, header, rows: [] }), s.line_number - 1), last: s.line_number }
+					return LineDone({ ..closed, stack: closed.stack.append(table) })
+				}
+			}
+
+			Err(_) => {}
+		}
+	}
+
+	NoStart
+}
+
+ListMarker : { info : ListInfo, width : U64 }
+
+start_list_item : BlockState, OpenKind, Nonspace, ListMarker -> StartResult
+start_list_item = |s, container_kind, ns, marker| {
+	marker_offset = ns.indent
+	at_marker = advance_offset(advance_to_nonspace(s, ns), marker.width, Bool.True)
+	spaces_start = at_marker
+	var $probe = advance_offset(at_marker, 1, Bool.True)
+	while $probe.column - spaces_start.column < 5 and is_space_or_tab($probe.line.get($probe.offset) ?? 'x') {
+		$probe = advance_offset($probe, 1, Bool.True)
+	}
+	blank_item = $probe.offset >= $probe.line.len()
+	spaces_after = $probe.column - spaces_start.column
+	{ after_marker, padding } =
+		if spaces_after >= 5 or spaces_after < 1 or blank_item {
+			skipped = if is_space_or_tab(spaces_start.line.get(spaces_start.offset) ?? 'x') advance_offset(spaces_start, 1, Bool.True) else spaces_start
+			{ after_marker: skipped, padding: marker.width + 1 }
+		} else {
+			{ after_marker: $probe, padding: marker.width + spaces_after }
+		}
+
+	closed = close_unmatched(after_marker)
+	with_list =
+		match container_kind {
+			ListContainer(info) if lists_match(info, marker.info) and is_list_tip(closed) => closed
+			_ => add_child(closed, ListContainer(marker.info))
+		}
+	item = add_child(with_list, ItemBlock({ info: marker.info, marker_offset, padding, task: NoTask }))
+
+	# GFM task list item: `[ ]`, `[x]` or `[X]` then a space or tab opens the
+	# item's first paragraph.
+	task_ns = find_nonspace(item)
+	task_rest = item.line.drop_first(task_ns.pos)
+	match task_rest {
+		['[', mark, ']', after, ..] if task_ns.indent < 4 and (mark == ' ' or mark == 'x' or mark == 'X') and is_space_or_tab(after) => {
+			task = if mark == ' ' Unchecked else Checked
+			marked = { ..item, stack: update_tip(item.stack, |open| { ..open, kind: ItemBlock({ info: marker.info, marker_offset, padding, task }) }) }
+			StopStarts(advance_offset(advance_to_nonspace(marked, task_ns), 3, Bool.False))
+		}
+
+		_ =>
+			StartedContainer(item)
+	}
+}
+
+is_list_tip : BlockState -> Bool
+is_list_tip = |s| {
+	match tip_kind(s) {
+		ListContainer(_) => Bool.True
+		_ => Bool.False
+	}
+}
+
+lists_match : ListInfo, ListInfo -> Bool
+lists_match = |a, b| {
+	a.ordered == b.ordered and a.marker == b.marker
+}
+
+is_space_or_tab : U8 -> Bool
+is_space_or_tab = |byte| byte == ' ' or byte == '\t'
+
+## List item marker at the first non-space (CommonMark 5.2). When it would
+## interrupt a paragraph, the item may not start blank and an ordered list
+## must start at 1.
+parse_list_marker : String.Utf8, Bool -> Try(ListMarker, [NotFound])
+parse_list_marker = |rest, interrupts_paragraph| {
+	first = rest.first() ?? 0
+	parsed =
+		if first == '-' or first == '+' or first == '*' {
+			Ok({ info: { ordered: Bool.False, marker: first, start: 1 }, width: 1 })
+		} else {
+			digits = count_leading_digits(rest)
+			delimiter = rest.get(digits) ?? 0
+			if digits >= 1 and digits <= 9 and (delimiter == '.' or delimiter == ')') {
+				Ok({ info: { ordered: Bool.True, marker: delimiter, start: digits_to_u64(rest.take_first(digits)) }, width: digits + 1 })
+			} else {
+				Err(NotFound)
+			}
+		}
+	marker = parsed?
+	after = rest.drop_first(marker.width)
+	next = after.first() ?? ' '
+	if !is_space_or_tab(next) {
+		Err(NotFound)
+	} else if interrupts_paragraph and (bytes_are_blank(after) or (marker.info.ordered and marker.info.start != 1)) {
+		Err(NotFound)
+	} else {
+		Ok(marker)
+	}
+}
+
+count_leading_digits : String.Utf8 -> U64
+count_leading_digits = |bytes| {
+	var $count = 0
+	while is_digit_byte(bytes.get($count) ?? 'x') {
+		$count = $count + 1
+	}
+	$count
+}
+
+## ATX heading (CommonMark 4.2): 1-6 `#` then a space, tab, or end of line.
+parse_atx_heading : String.Utf8 -> Try(Markdown, [NotFound])
+parse_atx_heading = |rest| {
+	hashes = count_leading_byte(rest, '#', 0)
+	after = rest.drop_first(hashes)
+	level = heading_level_from_count(hashes)?
+	if !after.is_empty() and !is_space_or_tab(after.first() ?? 0) {
+		Err(NotFound)
+	} else {
+		content = trim_spaces(after)
+		closing = count_trailing_byte(content, '#')
+		without_closing =
+			if closing == content.len() {
+				[]
+			} else if closing > 0 and is_space_or_tab(content.get(content.len() - closing - 1) ?? 0) {
+				trim_end_spaces(content.drop_last(closing))
+			} else {
+				content
+			}
+		Ok(Heading({ level, content: placeholder(without_closing) }))
+	}
+}
+
+count_trailing_byte : String.Utf8, U8 -> U64
+count_trailing_byte = |bytes, expected| {
+	var $count = 0
+	while $count < bytes.len() and (bytes.get(bytes.len() - 1 - $count) ?? 0) == expected {
+		$count = $count + 1
+	}
+	$count
+}
+
+## Setext underline (CommonMark 4.3): `=`s or `-`s, then only spaces or tabs.
+setext_level : String.Utf8 -> Try(Markdown.Level, [NotFound])
+setext_level = |rest| {
+	marker = rest.first() ?? 0
+	run = count_leading_byte(rest, marker, 0)
+	if run == 0 or !bytes_are_blank(rest.drop_first(run)) {
+		Err(NotFound)
+	} else if marker == '=' {
+		Ok(One)
+	} else if marker == '-' {
+		Ok(Two)
+	} else {
+		Err(NotFound)
+	}
+}
+
+## Thematic break (CommonMark 4.1): three or more matching `-`, `_` or `*`,
+## optionally separated by spaces or tabs.
+is_thematic_break : String.Utf8 -> Bool
+is_thematic_break = |rest| {
+	marker = rest.first() ?? 0
+	if marker != '-' and marker != '_' and marker != '*' {
 		Bool.False
 	} else {
-		content = strip_indent(line, min_indent)
-
-		is_hash_heading_line(content)
-			or is_thematic_break_line(line, min_indent)
-				or parse_fence_start(line, min_indent).is_ok()
-					or is_html_block_line(line, min_indent)
-						or is_blockquote_line(line, min_indent)
-							or parse_list_marker(line, min_indent).is_ok()
+		rest.all(|byte| byte == marker or is_space_or_tab(byte)) and rest.count_if(|byte| byte == marker) >= 3
 	}
 }
 
-can_be_setext_heading_text : Line, U64 -> Bool
-can_be_setext_heading_text = |line, min_indent| {
-	(!line_is_blank(line)) and line_indent(line) >= min_indent and !is_block_start(line, min_indent)
+## Opening code fence (CommonMark 4.5). A backtick fence's info string may not
+## contain backticks. Backslash escapes and entity references in the info
+## string are resolved.
+parse_fence_open : String.Utf8 -> Try({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }, [NotFound])
+parse_fence_open = |rest| {
+	fence_char = rest.first() ?? 0
+	fence_len = count_leading_byte(rest, fence_char, 0)
+	info = trim_spaces(rest.drop_first(fence_len))
+	if fence_len < 3 or (fence_char == '`' and info.contains('`')) {
+		Err(NotFound)
+	} else {
+		Ok({ fence_char, fence_len, fence_offset: 0, info: unescape_link_text(info) })
+	}
+}
+
+is_closing_fence : String.Utf8, U8, U64 -> Bool
+is_closing_fence = |rest, fence_char, fence_len| {
+	run = count_leading_byte(rest, fence_char, 0)
+	run >= fence_len and bytes_are_blank(rest.drop_first(run))
+}
+
+## --- HTML blocks (CommonMark 4.6) -------------------------------------------
+
+html_type_1_tags : List(Str)
+html_type_1_tags = ["pre", "script", "style", "textarea"]
+
+html_type_6_tags : List(Str)
+html_type_6_tags = [
+	"address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+]
+
+lowercase_ascii : String.Utf8 -> String.Utf8
+lowercase_ascii = |bytes| bytes.map(|byte| if byte >= 'A' and byte <= 'Z' byte + 32 else byte)
+
+html_block_start : String.Utf8, Bool -> Try(U64, [NotFound])
+html_block_start = |rest, allow_type_7| {
+	lower = lowercase_ascii(rest)
+	tag_end = |name_len| {
+		next = rest.get(name_len) ?? ' '
+		next == ' ' or next == '\t' or next == '>'
+	}
+	if html_type_1_tags.any(|tag| lower.starts_with("<${tag}".to_utf8()) and tag_end(tag.to_utf8().len() + 1)) {
+		Ok(1)
+	} else if lower.starts_with("<!--".to_utf8()) {
+		Ok(2)
+	} else if lower.starts_with("<?".to_utf8()) {
+		Ok(3)
+	} else if lower.starts_with("<![cdata[".to_utf8()) {
+		Ok(5)
+	} else if lower.starts_with("<!".to_utf8()) and is_alphabetic_byte(rest.get(2) ?? 0) {
+		Ok(4)
+	} else if is_type_6_start(lower) {
+		Ok(6)
+	} else if allow_type_7 and is_type_7_start(rest) {
+		Ok(7)
+	} else {
+		Err(NotFound)
+	}
+}
+
+is_type_6_start : String.Utf8 -> Bool
+is_type_6_start = |lower| {
+	name_start = if lower.starts_with("</".to_utf8()) 2 else 1
+	name = take_tag_name(lower.drop_first(name_start))
+	after = lower.drop_first(name_start + name.len())
+	next = after.first() ?? ' '
+	html_type_6_tags.any(|tag| tag.to_utf8() == name)
+	and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
+}
+
+take_tag_name : String.Utf8 -> String.Utf8
+take_tag_name = |bytes| {
+	match bytes.first() {
+		Ok(first) if is_alphabetic_byte(first) => {
+			var $len = 1
+			while is_tag_name_byte(bytes.get($len) ?? ' ') {
+				$len = $len + 1
+			}
+			bytes.take_first($len)
+		}
+
+		_ => []
+	}
+}
+
+is_tag_name_byte : U8 -> Bool
+is_tag_name_byte = |byte| is_alphabetic_byte(byte) or is_digit_byte(byte) or byte == '-'
+
+## Type 7: a complete open or closing tag, other than the type 1 tags, alone
+## on the line.
+is_type_7_start : String.Utf8 -> Bool
+is_type_7_start = |rest| {
+	end =
+		if rest.starts_with("</".to_utf8()) {
+			scan_closing_tag(rest, 2)
+		} else {
+			scan_open_tag(rest, 1)
+		}
+	match end {
+		Ok(len) => {
+			name = lowercase_ascii(take_tag_name(rest.drop_first(if rest.starts_with("</".to_utf8()) 2 else 1)))
+			!html_type_1_tags.any(|tag| tag.to_utf8() == name) and bytes_are_blank(rest.drop_first(len))
+		}
+
+		Err(_) => Bool.False
+	}
+}
+
+html_block_ends : U64, String.Utf8 -> Bool
+html_block_ends = |html_type, rest| {
+	lower = lowercase_ascii(rest)
+	match html_type {
+		1 => ["</pre>", "</script>", "</style>", "</textarea>"].any(|end| contains_bytes(lower, end.to_utf8()))
+		2 => contains_bytes(rest, "-->".to_utf8())
+		3 => contains_bytes(rest, "?>".to_utf8())
+		4 => rest.contains('>')
+		5 => contains_bytes(rest, "]]>".to_utf8())
+		_ => Bool.False
+	}
+}
+
+contains_bytes : String.Utf8, String.Utf8 -> Bool
+contains_bytes = |haystack, needle| {
+	var $index = 0
+	var $found = Bool.False
+	while !$found and $index + needle.len() <= haystack.len() {
+		if haystack.sublist({ start: $index, len: needle.len() }) == needle {
+			$found = Bool.True
+		}
+		$index = $index + 1
+	}
+	$found
+}
+
+## --- GFM tables -----------------------------------------------------------
+
+## Cells of a table row: an optional leading and trailing pipe, cells split on
+## unescaped pipes (even inside code spans), `\|` unescaped to `|`, and each
+## cell trimmed. A row needs at least one cell.
+split_table_row : String.Utf8 -> List(String.Utf8)
+split_table_row = |line| {
+	trimmed = trim_spaces(line)
+	body = if trimmed.first() == Ok('|') trimmed.drop_first(1) else trimmed
+	var $cells = []
+	var $current = []
+	var $pending = Bool.False
+	var $index = 0
+	while $index < body.len() {
+		byte = body.get($index) ?? 0
+		if byte == '\\' and (body.get($index + 1) ?? 0) == '|' {
+			$current = $current.append('|')
+			$pending = Bool.True
+			$index = $index + 2
+		} else if byte == '|' {
+			$cells = $cells.append(trim_spaces($current))
+			$current = []
+			$pending = Bool.False
+			$index = $index + 1
+		} else {
+			$current = $current.append(byte)
+			$pending = Bool.True
+			$index = $index + 1
+		}
+	}
+	if $pending and !bytes_are_blank($current) {
+		$cells.append(trim_spaces($current))
+	} else {
+		$cells
+	}
+}
+
+## Delimiter row: cells of `:?-+:?` surrounded by optional spaces or tabs.
+parse_table_delimiter_row : String.Utf8 -> Try(List(Markdown.Alignment), [NotFound])
+parse_table_delimiter_row = |rest| {
+	if !rest.contains('-') or rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) {
+		return Err(NotFound)
+	}
+	cells = split_table_row(rest)
+	if cells.is_empty() {
+		Err(NotFound)
+	} else {
+		var $align = []
+		for cell in cells {
+			$align = $align.append(parse_alignment_cell(cell)?)
+		}
+		Ok($align)
+	}
+}
+
+parse_alignment_cell : String.Utf8 -> Try(Markdown.Alignment, [NotFound])
+parse_alignment_cell = |cell| {
+	left = cell.first() == Ok(':')
+	right = cell.len() > 1 and cell.last() == Ok(':')
+	dashes = cell.drop_first(if left 1 else 0).drop_last(if right 1 else 0)
+	if dashes.is_empty() or dashes.any(|byte| byte != '-') {
+		Err(NotFound)
+	} else if left and right {
+		Ok(Center)
+	} else if left {
+		Ok(Left)
+	} else if right {
+		Ok(Right)
+	} else {
+		Ok(Default)
+	}
+}
+
+## --- Link reference definitions (CommonMark 4.7) ----------------------------
+
+## Remove the link reference definitions that begin a paragraph's raw content,
+## registering each (the first definition of a label wins).
+extract_reference_definitions : String.Utf8, List(ReferenceDefinition) -> { rest : String.Utf8, refs : List(ReferenceDefinition) }
+extract_reference_definitions = |content, refs| {
+	var $rest = content
+	var $refs = refs
+	var $scanning = Bool.True
+	while $scanning {
+		match parse_reference_definition($rest) {
+			Ok(found) => {
+				$refs = if $refs.any(|ref| ref.label == found.def.label) $refs else $refs.append(found.def)
+				$rest = $rest.drop_first(found.consumed)
+			}
+
+			Err(_) => {
+				$scanning = Bool.False
+			}
+		}
+	}
+	{ rest: $rest, refs: $refs }
+}
+
+## Spaces or tabs, then at most one line ending, then spaces or tabs.
+skip_spnl : String.Utf8, U64 -> U64
+skip_spnl = |bytes, start| {
+	first = skip_spaces_tabs(bytes, start)
+	if (bytes.get(first) ?? 0) == '\n' skip_spaces_tabs(bytes, first + 1) else first
+}
+
+## One definition at the start of `bytes` (CommonMark 4.7), using the inline
+## parser's label, destination and title scanners. It may span lines but must
+## end at a line ending; a title followed by anything else is dropped and the
+## definition ends after its destination if that ends its line.
+parse_reference_definition : String.Utf8 -> Try({ def : ReferenceDefinition, consumed : U64 }, [NotFound])
+parse_reference_definition = |bytes| {
+	label = scan_link_label(bytes, 0)?
+	if label.raw.is_empty() or (bytes.get(label.end) ?? 0) != ':' {
+		return Err(NotFound)
+	}
+	dest_start = skip_spnl(bytes, label.end + 1)
+	destination = scan_link_destination(bytes, dest_start)?
+	pointy = (bytes.get(dest_start) ?? 0) == '<'
+	if destination.end == dest_start or (!pointy and destination.raw.is_empty()) {
+		return Err(NotFound)
+	}
+	before_title = destination.end
+	title_start = skip_spnl(bytes, before_title)
+	title =
+		if title_start > before_title {
+			match scan_link_title(bytes, title_start) {
+				Ok(found) if at_line_end(bytes, skip_spaces_tabs(bytes, found.end)) => Ok(found)
+				_ => Err(NotFound)
+			}
+		} else {
+			Err(NotFound)
+		}
+	{ end, title_value } =
+		match title {
+			Ok(found) => { end: skip_spaces_tabs(bytes, found.end), title_value: Some(unescape_link_text(found.raw)) }
+			Err(_) => { end: skip_spaces_tabs(bytes, before_title), title_value: None }
+		}
+	if !at_line_end(bytes, end) {
+		return Err(NotFound)
+	}
+	consumed = if end < bytes.len() end + 1 else end
+	href = unescape_link_text(trim_cmark_space(destination.raw))
+	Ok({ def: { label: normalize_reference_label(label.raw), target: { href, title: title_value } }, consumed })
+}
+
+at_line_end : String.Utf8, U64 -> Bool
+at_line_end = |bytes, index| index >= bytes.len() or (bytes.get(index) ?? 0) == '\n'
+
+## --- Inline phase ---------------------------------------------------------
+
+## Replace the raw text placeholders left by the block phase with parsed
+## inline content, now that every reference definition is known.
+resolve_inlines : Markdown, List(ReferenceDefinition) -> Markdown
+resolve_inlines = |block, refs| {
+	inline = |content| parse_inlines_with_refs(refs, placeholder_raw(content))
+	match block {
+		Heading({ level, content }) => Heading({ level, content: inline(content) })
+		Paragraph(content) => Paragraph(inline(content))
+		Blockquote(children) => Blockquote(children.map(|child| resolve_inlines(child, refs)))
+		ListBlock({ kind, loose, items }) =>
+			ListBlock({ kind, loose, items: items.map(|item| { task: item.task, blocks: item.blocks.map(|child| resolve_inlines(child, refs)) }) })
+		Table({ header, align, rows }) =>
+			Table({ header: header.map(inline), align, rows: rows.map(|row| row.map(inline)) })
+		other => other
+	}
+}
+
+placeholder_raw : List(Markdown.Inline) -> String.Utf8
+placeholder_raw = |content| {
+	match content {
+		[Text(raw)] => raw.to_utf8()
+		_ => []
+	}
 }
 
 inline_heading : Parser(String.Utf8, Markdown)
@@ -993,32 +1668,6 @@ two_line_heading_level_two =
 			),
 		)
 
-parse_hash_heading_line : String.Utf8, List(ReferenceDefinition) -> Try(Markdown, [NotFound])
-parse_hash_heading_line = |content, refs| {
-	hashes = count_leading_byte(content, '#', 0)
-
-	if hashes < 1 or hashes > 6 {
-		Err(NotFound)
-	} else {
-		after_hashes = content.drop_first(hashes)
-
-		match after_hashes {
-			[' ', .. as raw_text] => {
-				level = heading_level_from_count(hashes)?
-				Ok(Heading({ level: level, content: parse_inlines_with_refs(refs, trim_closing_heading_marker(raw_text)) }))
-			}
-
-			_ =>
-				Err(NotFound)
-			}
-	}
-}
-
-is_hash_heading_line : String.Utf8 -> Bool
-is_hash_heading_line = |content| {
-	parse_hash_heading_line(content, []).is_ok()
-}
-
 heading_level_from_count : U64 -> Try(Markdown.Level, [NotFound])
 heading_level_from_count = |count| {
 	match count {
@@ -1030,392 +1679,6 @@ heading_level_from_count = |count| {
 		6 => Ok(Six)
 		_ => Err(NotFound)
 	}
-}
-
-underline_level : Line, U64 -> Try(Markdown.Level, [NotFound])
-underline_level = |line, min_indent| {
-	if line_indent(line) != min_indent {
-		Err(NotFound)
-	} else {
-		content = trim_spaces(strip_indent(line, min_indent))
-
-		match content {
-			['=', '=', ..] if underline_rest_matches(content, '=') =>
-				Ok(One)
-
-			['-', '-', ..] if underline_rest_matches(content, '-') =>
-				Ok(Two)
-
-			_ =>
-				Err(NotFound)
-			}
-	}
-}
-
-underline_rest_matches : String.Utf8, U8 -> Bool
-underline_rest_matches = |content, marker| {
-	all_bytes_are(content.drop_first(2), marker)
-}
-
-parse_fence_start : Line, U64 -> Try(Fence, [NotFound])
-parse_fence_start = |line, min_indent| {
-	if line_indent(line) < min_indent {
-		Err(NotFound)
-	} else {
-		content = strip_indent(line, min_indent)
-
-		match content {
-			['`', '`', '`', ..] =>
-				parse_fence_start_help(content, '`')
-
-			['~', '~', '~', ..] =>
-				parse_fence_start_help(content, '~')
-
-			_ =>
-				Err(NotFound)
-			}
-	}
-}
-
-parse_fence_start_help : String.Utf8, U8 -> Try(Fence, [NotFound])
-parse_fence_start_help = |content, marker| {
-	len = count_leading_byte(content, marker, 0)
-
-	if len < 3 {
-		Err(NotFound)
-	} else {
-		info = trim_spaces(content.drop_first(len))
-		Ok({ marker, len, info: String.str_from_utf8(info) })
-	}
-}
-
-is_matching_fence_close : Line, U64, Fence -> Bool
-is_matching_fence_close = |line, min_indent, fence| {
-	if line_indent(line) < min_indent {
-		Bool.False
-	} else {
-		content = trim_spaces(strip_indent(line, min_indent))
-		count = count_leading_byte(content, fence.marker, 0)
-		rest = content.drop_first(count)
-
-		count >= fence.len and rest.is_empty()
-	}
-}
-
-is_thematic_break_line : Line, U64 -> Bool
-is_thematic_break_line = |line, min_indent| {
-	if line_indent(line) != min_indent {
-		Bool.False
-	} else {
-		content = strip_indent(line, min_indent)
-
-		match first_non_space(content) {
-			Ok(marker) if marker == '-' or marker == '*' or marker == '_' =>
-				thematic_marker_count(content, marker, 0) >= 3
-
-			_ =>
-				Bool.False
-			}
-	}
-}
-
-thematic_marker_count : String.Utf8, U8, U64 -> U64
-thematic_marker_count = |content, marker, count| {
-	match content {
-		[] =>
-			count
-
-		[' ', .. as rest] =>
-			thematic_marker_count(rest, marker, count)
-
-		[first, .. as rest] if first == marker =>
-			thematic_marker_count(rest, marker, count + 1)
-
-		_ =>
-			0
-		}
-}
-
-is_blockquote_line : Line, U64 -> Bool
-is_blockquote_line = |line, min_indent| {
-	line_indent(line) >= min_indent and starts_with_bytes(strip_indent(line, min_indent), ">".to_utf8())
-}
-
-strip_blockquote_marker : Line, U64 -> String.Utf8
-strip_blockquote_marker = |line, min_indent| {
-	content = strip_indent(line, min_indent).drop_first(1)
-
-	match content {
-		[' ', .. as rest] =>
-			rest
-
-		_ =>
-			content
-		}
-}
-
-parse_list_marker : Line, U64 -> Try(ListMarker, [NotFound])
-parse_list_marker = |line, min_indent| {
-	if line_indent(line) != min_indent {
-		Err(NotFound)
-	} else {
-		content = strip_indent(line, min_indent)
-
-		match content {
-			['-', ' ', .. as rest] =>
-				Ok({ kind: Unordered, width: 2, content: rest })
-
-			['*', ' ', .. as rest] =>
-				Ok({ kind: Unordered, width: 2, content: rest })
-
-			['+', ' ', .. as rest] =>
-				Ok({ kind: Unordered, width: 2, content: rest })
-
-			[first, .. as rest] if is_digit_byte(first) =>
-				parse_ordered_marker(rest, [first])
-
-			_ =>
-				Err(NotFound)
-			}
-	}
-}
-
-parse_ordered_marker : String.Utf8, String.Utf8 -> Try(ListMarker, [NotFound])
-parse_ordered_marker = |content, digits| {
-	match content {
-		['.', ' ', .. as rest] =>
-			Ok({ kind: Ordered({ start: digits_to_u64(digits) }), width: digits.len() + 2, content: rest })
-
-		[')', ' ', .. as rest] =>
-			Ok({ kind: Ordered({ start: digits_to_u64(digits) }), width: digits.len() + 2, content: rest })
-
-		[first, .. as rest] if is_digit_byte(first) =>
-			parse_ordered_marker(rest, digits.append(first))
-
-		_ =>
-			Err(NotFound)
-		}
-}
-
-list_kind_matches : Markdown.ListKind, Markdown.ListKind -> Bool
-list_kind_matches = |expected, actual| {
-	match { expected, actual } {
-		{ expected: Unordered, actual: Unordered } =>
-			Bool.True
-
-		{ expected: Ordered(_), actual: Ordered(_) } =>
-			Bool.True
-
-		_ =>
-			Bool.False
-		}
-}
-
-parse_task_marker : String.Utf8 -> { task : Markdown.TaskState, content : String.Utf8 }
-parse_task_marker = |content| {
-	match content {
-		['[', ' ', ']', ' ', .. as rest] =>
-			{ task: Unchecked, content: rest }
-
-		['[', 'x', ']', ' ', .. as rest] =>
-			{ task: Checked, content: rest }
-
-		['[', 'X', ']', ' ', .. as rest] =>
-			{ task: Checked, content: rest }
-
-		_ =>
-			{ task: NoTask, content }
-		}
-}
-
-is_html_block_line : Line, U64 -> Bool
-is_html_block_line = |line, min_indent| {
-	if line_indent(line) < min_indent {
-		Bool.False
-	} else {
-		content = trim_spaces(strip_indent(line, min_indent))
-
-		match content {
-			['<', first, ..] if is_alphabetic_byte(first) or first == '/' or first == '!' =>
-				Bool.True
-
-			_ =>
-				Bool.False
-			}
-	}
-}
-
-split_table_cells : String.Utf8 -> Try(List(String.Utf8), [NotFound])
-split_table_cells = |line| {
-	if !contains_unescaped_pipe(line) {
-		Err(NotFound)
-	} else {
-		cells = split_table_cells_help(strip_outer_table_pipes(line), [], [], Bool.False, Bool.False)
-
-		if cells.is_empty() {
-			Err(NotFound)
-		} else {
-			Ok(cells)
-		}
-	}
-}
-
-split_table_cells_help : String.Utf8, String.Utf8, List(String.Utf8), Bool, Bool -> List(String.Utf8)
-split_table_cells_help = |input, current, cells, in_code, escaped| {
-	match input {
-		[] =>
-			cells.append(current)
-
-		[first, .. as rest] if escaped =>
-			split_table_cells_help(rest, current.append(first), cells, in_code, Bool.False)
-
-		['\\', .. as rest] =>
-			split_table_cells_help(rest, current.append('\\'), cells, in_code, Bool.True)
-
-		['`', .. as rest] =>
-			split_table_cells_help(rest, current.append('`'), cells, !in_code, Bool.False)
-
-		['|', .. as rest] if !in_code =>
-			split_table_cells_help(rest, [], cells.append(current), in_code, Bool.False)
-
-		[first, .. as rest] =>
-			split_table_cells_help(rest, current.append(first), cells, in_code, Bool.False)
-		}
-}
-
-strip_outer_table_pipes : String.Utf8 -> String.Utf8
-strip_outer_table_pipes = |line| {
-	trimmed = trim_spaces(line)
-	left =
-		match trimmed {
-			['|', .. as rest] => rest
-			_ => trimmed
-		}
-
-	drop_trailing_pipe(trim_spaces(left))
-}
-
-drop_trailing_pipe : String.Utf8 -> String.Utf8
-drop_trailing_pipe = |bytes| {
-	drop_trailing_pipe_help(bytes, [], [])
-}
-
-drop_trailing_pipe_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
-drop_trailing_pipe_help = |bytes, out, pending_spaces| {
-	match bytes {
-		[] =>
-			out
-
-		[' ', .. as rest] =>
-			drop_trailing_pipe_help(rest, out, pending_spaces.append(' '))
-
-		['|'] =>
-			out
-
-		[first, .. as rest] =>
-			drop_trailing_pipe_help(rest, append_bytes(out, pending_spaces).append(first), [])
-		}
-}
-
-parse_table_delimiter : List(String.Utf8) -> Try(List(Markdown.Alignment), [ParsingFailure(Str)])
-parse_table_delimiter = |cells| {
-	align = List.from_iter(cells.iter().map(parse_alignment_cell))
-
-	if align_has_failure(align) {
-		Err(ParsingFailure("expected table delimiter"))
-	} else {
-		Ok(List.from_iter(align.iter().map(unwrap_alignment)))
-	}
-}
-
-parse_alignment_cell : String.Utf8 -> Try(Markdown.Alignment, [NotFound])
-parse_alignment_cell = |cell| {
-	trimmed = trim_spaces(cell)
-	left_colon = starts_with_bytes(trimmed, ":".to_utf8())
-	right_colon = ends_with_byte(trimmed, ':')
-	dashes = count_byte(trimmed, '-')
-
-	if dashes < 3 or !only_alignment_chars(trimmed) {
-		Err(NotFound)
-	} else if left_colon and right_colon {
-		Ok(Center)
-	} else if left_colon {
-		Ok(Left)
-	} else if right_colon {
-		Ok(Right)
-	} else {
-		Ok(Default)
-	}
-}
-
-align_has_failure : List(Try(Markdown.Alignment, [NotFound])) -> Bool
-align_has_failure = |items| {
-	match items {
-		[] =>
-			Bool.False
-
-		[Err(_), ..] =>
-			Bool.True
-
-		[Ok(_), .. as rest] =>
-			align_has_failure(rest)
-		}
-}
-
-unwrap_alignment : Try(Markdown.Alignment, [NotFound]) -> Markdown.Alignment
-unwrap_alignment = |item| {
-	match item {
-		Ok(align) => align
-		Err(_) => Default
-	}
-}
-
-only_alignment_chars : String.Utf8 -> Bool
-only_alignment_chars = |bytes| {
-	match bytes {
-		[] =>
-			Bool.True
-
-		['-', .. as rest] =>
-			only_alignment_chars(rest)
-
-		[':', .. as rest] =>
-			only_alignment_chars(rest)
-
-		[' ', .. as rest] =>
-			only_alignment_chars(rest)
-
-		_ =>
-			Bool.False
-		}
-}
-
-contains_unescaped_pipe : String.Utf8 -> Bool
-contains_unescaped_pipe = |bytes| {
-	contains_unescaped_pipe_help(bytes, Bool.False, Bool.False)
-}
-
-contains_unescaped_pipe_help : String.Utf8, Bool, Bool -> Bool
-contains_unescaped_pipe_help = |bytes, in_code, escaped| {
-	match bytes {
-		[] =>
-			Bool.False
-
-		[_, .. as rest] if escaped =>
-			contains_unescaped_pipe_help(rest, in_code, Bool.False)
-
-		['\\', .. as rest] =>
-			contains_unescaped_pipe_help(rest, in_code, Bool.True)
-
-		['`', .. as rest] =>
-			contains_unescaped_pipe_help(rest, !in_code, Bool.False)
-
-		['|', ..] if !in_code =>
-			Bool.True
-
-		[_, .. as rest] =>
-			contains_unescaped_pipe_help(rest, in_code, Bool.False)
-		}
 }
 
 ## ---------------------------------------------------------------------------
@@ -3332,54 +3595,6 @@ find_sequence_help = |input, needle, acc| {
 	}
 }
 
-split_lines : String.Utf8 -> List(Line)
-split_lines = |input| {
-	split_lines_help(input, [], [])
-}
-
-split_lines_help : String.Utf8, String.Utf8, List(Line) -> List(Line)
-split_lines_help = |input, current, lines| {
-	match input {
-		[] =>
-			lines.append({ raw: current })
-
-		['\r', '\n', .. as rest] =>
-			split_lines_help(rest, [], lines.append({ raw: current }))
-
-		['\n', .. as rest] =>
-			split_lines_help(rest, [], lines.append({ raw: current }))
-
-		[first, .. as rest] =>
-			split_lines_help(rest, current.append(first), lines)
-		}
-}
-
-consume_blank_lines : List(Line), Bool -> { input : List(Line), saw_blank : Bool }
-consume_blank_lines = |lines, saw_blank| {
-	match lines {
-		[line, .. as rest] if line_is_blank(line) =>
-			consume_blank_lines(rest, Bool.True)
-
-		_ =>
-			{ input: lines, saw_blank }
-		}
-}
-
-line_indent : Line -> U64
-line_indent = |line| {
-	count_leading_byte(line.raw, ' ', 0)
-}
-
-strip_indent : Line, U64 -> String.Utf8
-strip_indent = |line, indent| {
-	line.raw.drop_first(indent)
-}
-
-line_is_blank : Line -> Bool
-line_is_blank = |line| {
-	bytes_are_blank(line.raw)
-}
-
 bytes_are_blank : String.Utf8 -> Bool
 bytes_are_blank = |bytes| {
 	match bytes {
@@ -3419,22 +3634,6 @@ ends_with_byte_help = |bytes, expected, last| {
 		}
 }
 
-is_exact_bytes : String.Utf8, String.Utf8 -> Bool
-is_exact_bytes = |left, right| {
-	left == right
-}
-
-all_bytes_are : String.Utf8, U8 -> Bool
-all_bytes_are = |bytes, expected| {
-	match bytes {
-		[] =>
-			Bool.True
-
-		[first, .. as rest] =>
-			first == expected and all_bytes_are(rest, expected)
-		}
-}
-
 append_bytes : String.Utf8, String.Utf8 -> String.Utf8
 append_bytes = |left, right| {
 	match right {
@@ -3459,54 +3658,6 @@ join_lines_with_newlines_help = |lines, acc| {
 
 		[line, .. as rest] =>
 			join_lines_with_newlines_help(rest, append_bytes(acc, line).append('\n'))
-		}
-}
-
-join_inline_lines : List(String.Utf8) -> String.Utf8
-join_inline_lines = |lines| {
-	join_inline_lines_help(lines, [])
-}
-
-join_inline_lines_help : List(String.Utf8), String.Utf8 -> String.Utf8
-join_inline_lines_help = |lines, acc| {
-	match lines {
-		[] =>
-			acc
-
-		[line, .. as rest] if acc.is_empty() =>
-			join_inline_lines_help(rest, append_bytes(acc, line))
-
-		[line, .. as rest] if ends_with_hard_break_marker(acc) =>
-			join_inline_lines_help(rest, append_bytes(acc.append('\n'), line))
-
-		# Keep the line ending: the inline parser turns it into a soft break
-		# (CommonMark 6.13) and strips the surrounding spaces.
-		[line, .. as rest] =>
-			join_inline_lines_help(rest, append_bytes(acc.append('\n'), line))
-		}
-}
-
-ends_with_hard_break_marker : String.Utf8 -> Bool
-ends_with_hard_break_marker = |bytes| {
-	ends_with_byte(bytes, '\\') or ends_with_two_spaces(bytes)
-}
-
-ends_with_two_spaces : String.Utf8 -> Bool
-ends_with_two_spaces = |bytes| {
-	ends_with_two_spaces_help(bytes, 0)
-}
-
-ends_with_two_spaces_help : String.Utf8, U64 -> Bool
-ends_with_two_spaces_help = |bytes, spaces| {
-	match bytes {
-		[] =>
-			spaces >= 2
-
-		[' ', .. as rest] =>
-			ends_with_two_spaces_help(rest, spaces + 1)
-
-		[_, .. as rest] =>
-			ends_with_two_spaces_help(rest, 0)
 		}
 }
 
@@ -3678,39 +3829,6 @@ count_leading_byte = |bytes, expected, count| {
 
 		_ =>
 			count
-		}
-}
-
-count_byte : String.Utf8, U8 -> U64
-count_byte = |bytes, expected| {
-	count_byte_help(bytes, expected, 0)
-}
-
-count_byte_help : String.Utf8, U8, U64 -> U64
-count_byte_help = |bytes, expected, count| {
-	match bytes {
-		[] =>
-			count
-
-		[first, .. as rest] if first == expected =>
-			count_byte_help(rest, expected, count + 1)
-
-		[_, .. as rest] =>
-			count_byte_help(rest, expected, count)
-		}
-}
-
-first_non_space : String.Utf8 -> Try(U8, [NotFound])
-first_non_space = |bytes| {
-	match bytes {
-		[] =>
-			Err(NotFound)
-
-		[' ', .. as rest] =>
-			first_non_space(rest)
-
-		[first, ..] =>
-			Ok(first)
 		}
 }
 
@@ -4095,7 +4213,7 @@ expect {
 		]
 }
 
-## Unordered marker variants parse into one unordered list.
+## Changing the bullet character starts a new list (CommonMark example 301).
 expect {
 	text =
 		\\* One
@@ -4105,14 +4223,8 @@ expect {
 
 	actual
 		== [
-			ListBlock({
-				kind: Unordered,
-				loose: Bool.False,
-				items: [
-					{ task: NoTask, blocks: [Paragraph([Text("One")])] },
-					{ task: NoTask, blocks: [Paragraph([Text("Two")])] },
-				],
-			}),
+			ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [Paragraph([Text("One")])] }] }),
+			ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [Paragraph([Text("Two")])] }] }),
 		]
 }
 
@@ -4189,12 +4301,13 @@ expect {
 	actual == [Code({ info: "", pre: "main = 1\n" })]
 }
 
-## Pipe tables parse header alignment and inline cell content.
+## Pipe tables parse header alignment and inline cell content. A pipe inside a
+## code span must still be escaped (GFM example 200).
 expect {
 	text =
 		\\| Name | Count |
 		\\| :--- | ---: |
-		\\| **Roc** | `1|2` |
+		\\| **Roc** | `1\\|2` |
 
 	actual = String.parse_str(Markdown.all, text)?
 
@@ -4236,13 +4349,16 @@ expect {
 	actual == [HtmlBlock("<section>\nraw\n</section>\n")]
 }
 
-## Unclosed fenced code blocks fail document parsing.
+## An unclosed fenced code block runs to the end of the document (CommonMark
+## example 96); Markdown documents never fail to parse.
 expect {
 	text =
 		\\```roc
 		\\main = 1
 
-	String.parse_str(Markdown.all, text).is_err()
+	actual = String.parse_str(Markdown.all, text)?
+
+	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
 
 ## Article body markdown parses into structured blocks without TODO fallbacks.
