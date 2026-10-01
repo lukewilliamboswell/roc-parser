@@ -101,6 +101,18 @@ jobs:
         run: python3 scripts/release_helpers.py package-docs --release-version dry-run --output-dir .release/docs-dry-run
       - name: Discard the documentation dry run
         run: rm -rf .release/docs-dry-run
+      # The examples in the repository use the package source; the archive a
+      # release attaches pins them to the release bundle's URL. Build that
+      # archive from this bundle's metadata so a broken example header is found
+      # here, not mid-release. (The test-bundles job runs the archive's apps.)
+      - name: Check the examples archive can be built
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.release_version || 'dry-run' }}
+        run: python3 scripts/release_helpers.py package-examples --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --output .release/examples-dry-run.zip
+      - name: Validate the examples archive
+        run: python3 scripts/workflow_helpers.py validate-examples --archive .release/examples-dry-run.zip
+      - name: Discard the examples dry run
+        run: rm -f .release/examples-dry-run.zip
       - name: Upload release bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -146,7 +158,9 @@ jobs:
         with:
           name: release-bundles
           path: .release/test-bundles
-      - name: Test release bundle
+      # Packages the examples archive pinned to this bundle (served locally),
+      # then checks, runs and builds the archive's apps.
+      - name: Test release bundle and examples archive
         uses: roc-lang/release-package/actions/test-bundle@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           test_bundle_command: python3 scripts/test_bundle_examples.py --bundle-path
@@ -238,6 +252,12 @@ jobs:
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
           DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
         run: python3 scripts/release_helpers.py package-docs --release-version "$RELEASE_VERSION" --docs-version "$DOCS_VERSION" --output-dir .release
+      # The examples, with their parser dependency pinned to this release's
+      # bundle; the repository's copies use the package source instead.
+      - name: Package examples
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: python3 scripts/release_helpers.py package-examples --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --output-dir .release
       - name: Publish release
         uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
@@ -248,56 +268,8 @@ jobs:
             .release/roc-parser-manual-${{ needs.build.outputs.release_version }}.zip
             .release/roc-parser-manual-${{ needs.build.outputs.release_version }}.pdf
             .release/roc-parser-api-docs-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-parser-examples-${{ needs.build.outputs.release_version }}.zip
           github_token: ${{ github.token }}
-
-  update-examples:
-    name: Update example URLs
-    needs: [build, publish-release]
-    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Read Roc version
-        id: roc-version
-        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
-      - name: Install Roc
-        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
-      - name: Download release metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-metadata
-          path: .release
-      - name: Resolve release bundle URL
-        id: bundle-url
-        env:
-          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/workflow_helpers.py bundle-url --metadata .release/release-bundles.json --repository "$GITHUB_REPOSITORY" --version "$RELEASE_VERSION" --github-output "$GITHUB_OUTPUT"
-      - name: Update example package URLs
-        env:
-          BUNDLE_URL: ${{ steps.bundle-url.outputs.bundle-url }}
-        run: python3 scripts/update_example_urls.py --bundle-url "$BUNDLE_URL"
-      - name: Validate updated examples
-        run: python3 scripts/workflow_helpers.py validate-examples
-      - name: Create signed release follow-up commit
-        id: follow-up
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/github_signed_commit.py --repository "$GITHUB_REPOSITORY" --branch "release-followup/$RELEASE_VERSION" --message "Update examples for $RELEASE_VERSION" --path examples --github-output "$GITHUB_OUTPUT"
-      - name: Open or update release follow-up PR
-        if: steps.follow-up.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "release-followup/$RELEASE_VERSION" --base "$GITHUB_REF_NAME" --title "Update examples for $RELEASE_VERSION" --body "Updates example package URLs for release $RELEASE_VERSION. The commit was automatically signed by GitHub."
 
   publish-docs:
     name: Publish the docs
