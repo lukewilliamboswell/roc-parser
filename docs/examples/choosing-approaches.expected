@@ -1,4 +1,6 @@
 Ok({ name: "web", port: 8080 })
+Ok([{ moons: 2, name: "Mars", rings: Err(Missing) }])
+Err(MissingRequiredField("port"))
 Ok(["name", "port", "extra"])
 Ok({ host: "example.com", port: 443 })
 ["a", "b", "c"]

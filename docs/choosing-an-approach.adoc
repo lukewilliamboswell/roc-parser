@@ -40,7 +40,9 @@ include::examples/choosing-approaches.roc[tag=decode,indent=0]
 ----
 
 The {langref}/parsers.md[parsers chapter of the language reference] describes
-the mechanism, called `parser_for`. A field of type `Try(_, [Missing])` is
+the mechanism. Every type has a `parser_for` method, which the compiler
+derives for records, lists and tuples, and a format is a type module whose
+methods read one value at a time. Static dispatch joins the two. A field of type `Try(_, [Missing])` is
 optional, a missing required field is reported by name, and when the parser
 is a top-level constant it is assembled at compile time.
 
@@ -50,27 +52,31 @@ Choose this when:
 * the mapping from the format to your type is the obvious one: object keys
   are field names, arrays are lists, and so on.
 
-roc-parser will provide formats for this mechanism too. In 2.0, CSV rows and
-YAML documents decode straight into your record types, so a CSV file with a
-header row becomes a `List({ name : Str, moons : U64 })` without a line of
-parser code.
+roc-parser's `CSV` and `Yaml` modules are formats for this mechanism.
+`CSV.parse` reads a file with a header row into a list of records, matching
+columns to fields by name, and `Yaml.decode` reads a document into a record.
+Neither takes the type as an argument: the annotation chooses it. A required
+field with no column or key fails with `MissingRequiredField(name)`, a tag
+the compiler adds to the error type, so the annotation names it alongside
+the format's own error:
 
-// TODO(2.0 API): parser_for for CSV and YAML is being designed now and is not
-// in the current code. The planned shape (spec item 8) is CSV.parse(text)
-// inferring the row record type, and Yaml decoding into records with
-// Try(_, [Missing]) fields optional. Replace this paragraph with a tested
-// example once it lands, and add CSV and Yaml to the decision table rows.
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=decode-formats,indent=0]
+----
 
 Its limits come from the same design. The format decides the representation,
-so you cannot ask it to accept `yes` as a boolean, to read a date in your
-own layout, or to say which line a wrong value was on unless the format
-reports that itself. And the type must be known when you compile.
+so you cannot ask it to accept `yes` as a boolean or to read a date in your
+own layout. Where a wrong value is depends on the format: `CSV.parse` reports
+the record, field, line and column, and `Yaml.decode` the line and column. And the type must be known when you compile.
 
 == Read a document tree
 
 roc-parser's `Yaml`, `Xml` and `Markdown` modules read a whole document into a
 tree that mirrors the format, and `HTTP` reads a message into a record of its
-parts. You then walk the tree with ordinary pattern matching:
+parts. You then walk the tree with pattern matching, or with the tree
+methods such as `get_path` and `as_i64` on a `Yaml` value and `attribute`
+and `children_named` on an `Xml.Node`:
 
 [source,roc]
 ----
@@ -95,24 +101,16 @@ something you check, not something the type system checks for you. The
 format chapters (<<yaml>>, <<xml>>, <<markdown>> and <<http>>) show helper
 functions that keep the walk short.
 
-// TODO(2.0 API): Yaml's String tag becomes Text, and the 2.0 helpers
-// Yaml.get, at, as_str and get_path, and Xml.attribute, children_named and
-// text, replace most hand-written walking. Update this section and the
-// example.
-
 == Build a parser with combinators
 
 When no format module reads your input, write a parser from the `Parser` and
-`String` combinators. A parser is a value made of smaller parsers, so the
+`Utf8` combinators. A parser is a value made of smaller parsers, so the
 code has the shape of the grammar:
 
 [source,roc]
 ----
 include::examples/choosing-approaches.roc[tag=combinators,indent=0]
 ----
-
-// TODO(2.0 API): String becomes Utf8, and str_from_utf8 becomes internal; the
-// example needs a public way to turn the host bytes into a Str.
 
 Choose this when:
 
@@ -126,11 +124,12 @@ Choose this when:
   `70000` or a date of `2026-02-30` fails at the right place with your own
   message;
 * you want to read only the start of the input and keep the rest, such as one
-  message from a buffer that holds several (`String.parse_str_partial`).
+  message from a buffer that holds several (`Utf8.parse_str_partial`).
 
 Combinators are also how you extend a format module. `CSV.record` and
-`CSV.field` are combinators, and you can mix `String` parsers into any parser
-of your own. <<combinator-primer>> teaches the method and <<custom-format>>
+`CSV.field` are combinators, every format module has a `parser` value to
+embed, and you can mix `Utf8` parsers into any parser of your own. A
+combinator parser's failure is the furthest failure, with a byte offset. <<combinator-primer>> teaches the method and <<custom-format>>
 applies it to a real format.
 
 == Use no parser at all
@@ -174,7 +173,7 @@ read. <<background>> explains these limits.
 |===
 |You need |Decode into a type |Document tree |Combinators |No parser
 
-|A standard format into known records, with little code
+|A standard format (CSV, YAML) into known records, with little code
 |Best
 |Possible
 |Possible
@@ -193,9 +192,9 @@ read. <<background>> explains these limits.
 |No
 
 |Line and column in errors
-|If the format reports them
+|Yes for `CSV` and `Yaml`
 |Yes
-|A message only
+|A byte offset
 |No
 
 |Your own or a legacy format, a protocol or a small language
@@ -212,7 +211,7 @@ read. <<background>> explains these limits.
 
 |Read one message and keep the rest
 |No
-|`HTTP` only
+|`HTTP.parse_request` returns the `rest`
 |Yes
 |By hand
 
@@ -228,11 +227,6 @@ read. <<background>> explains these limits.
 |No
 |Use a parser generator
 |===
-
-// TODO(2.0 API): when CSV and Yaml implement parser_for, "Decode into a type"
-// becomes an option for them; HTTP parse_request and parse_response return
-// { request, rest } and take List(U8); combinator errors gain a byte offset
-// from furthest-failure tracking. Review each cell.
 
 == Decision flow
 
