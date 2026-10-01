@@ -34,7 +34,7 @@ process in {src}/SECURITY.md[the security policy] instead.
 Install:
 
 * the Roc nightly named in {src}/.roc-version[`.roc-version`], for example
-  `nightly-2026-09-19-d025939`;
+  `nightly-2026-09-29-7f11a82`;
 * Python 3, for the test, review and release scripts;
 * Docker, to build this manual locally (see <<contributing-docs>>).
 
@@ -51,24 +51,12 @@ Output:
 
 [source,text]
 ----
-Roc compiler version nightly-2026-09-19-d025939
+Roc compiler version nightly-2026-09-29-7f11a82
 ----
 
-=== Two compiler pins
-
-The repository pins two nightlies, and you will meet both:
-
-* `.roc-version` is the compiler for the package, its tests, its examples and
-  its releases.
-* `QUALITY_ROC_NIGHTLY` near the top of
-  {src}/.github/workflows/fuzz.yml[`.github/workflows/fuzz.yml`] is the
-  compiler for the property tests and conformance reviews. It is newer, because
-  roc-fuzz 0.4.2 needs a newer compiler than `.roc-version`, which is held back
-  by basic-cli warnings in the examples.
-
-Use the quality nightly when you run `scripts/run_fuzz.py` or a
-`scripts/review_*.py` script. When `.roc-version` catches up, the two pins can
-be merged again.
+`.roc-version` is the only compiler pin. The package, its tests, its examples,
+its releases, the property tests, the conformance reviews and the benchmarks
+all use it, locally and in CI.
 
 == Repository map
 
@@ -121,8 +109,8 @@ documentation and builds a bundle, under `.roc-parser-tmp/`:
 python3 scripts/all_tests.py
 ----
 
-A quick property-test pass over every fuzz target takes a few minutes and
-needs the quality nightly (see <<property-testing>>):
+A quick property-test pass over every fuzz target takes a few minutes (see
+<<property-testing>>):
 
 [source,bash]
 ----

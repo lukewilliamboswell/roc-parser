@@ -21,14 +21,10 @@ standard library often. Each roc-parser release is therefore built and tested
 with one Roc nightly:
 
 * `.roc-version` at the repository root names the nightly for the package,
-  its tests and the examples, for example `nightly-2026-09-19-d025939`.
+  its tests, the examples, the property tests, the conformance reviews and the
+  benchmarks, for example `nightly-2026-09-29-7f11a82`.
 * An automated workflow proposes an update to a newer nightly when one is
   published, and merges it only when the tests pass with it.
-* The property-testing and conformance workflow
-  (`.github/workflows/fuzz.yml`) pins a newer nightly in its
-  `QUALITY_ROC_NIGHTLY` setting, because the property-testing library needs a
-  newer compiler than the examples' platform supports yet. That pin returns to
-  `.roc-version` once the two match.
 
 Use the nightly named by the release you depend on. A newer nightly often
 works, but a compiler change can break the build without any change to this

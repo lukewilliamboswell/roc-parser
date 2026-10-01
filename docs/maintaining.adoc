@@ -49,16 +49,14 @@ bug in the compiler or in the package, and needs a fix or an upstream issue.
 integration details: required checks, token permissions and the pinned
 controller commit.
 
-=== The quality nightly
+=== One compiler pin
 
-The property tests and conformance reviews run under a second pin,
-`QUALITY_ROC_NIGHTLY` in `.github/workflows/fuzz.yml`, because roc-fuzz 0.4.2
-needs a newer compiler than `.roc-version` currently allows. During nightly
-validation, `scripts/workflow_helpers.py roc-version` ignores that pin and uses
-the `.roc-version` candidate, so every candidate is also checked by the fuzz
-targets. Move `QUALITY_ROC_NIGHTLY` forward by hand, in a normal pull request,
-when roc-fuzz or a target needs a newer compiler. Remove it once `.roc-version`
-has caught up.
+Every workflow, including the property tests, conformance reviews, docs and
+benchmarks, reads `.roc-version` through `scripts/workflow_helpers.py
+roc-version`. A nightly candidate is therefore checked by the fuzz targets and
+conformance reviews as well as the tests. Do not add a second pin to a
+workflow; if one part of the repository needs a newer compiler, move
+`.roc-version` forward for everything.
 
 == Release a new version
 

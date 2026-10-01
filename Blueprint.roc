@@ -13,7 +13,7 @@
 # bench/compare/go/go.sum and bench/compare/python/requirements.txt (which
 # scripts/bench.py installs into a virtual environment), so they match runs
 # made without blueprint. Roc comes from roc-overlay's moving nightly, which
-# cannot yet name nightly-2026-09-29-7f11a82 (the compiler the benchmark
+# may not yet name the nightly in .roc-version (the compiler the benchmark
 # workflow uses); the report records `roc version`, so check it, or set ROC.
 app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.3.0/DdfMePZbeL5hodg7j4B6Jzpm9t555B9SPPAJNQ5WzCR9.tar.zst" }
 

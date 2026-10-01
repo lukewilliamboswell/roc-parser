@@ -15,8 +15,8 @@ reviews against a mature reference implementation. The second half is a set of
 how-to sections: run the targets, reproduce and minimise a failure, turn it
 into a regression, and update a conformance baseline.
 
-It assumes the setup in <<contributing>>, including the quality nightly pinned
-in `.github/workflows/fuzz.yml`. Every command below uses that compiler:
+It assumes the setup in <<contributing>>, including the Roc nightly pinned
+in `.roc-version`. Every command below uses that compiler:
 
 [source,bash]
 ----

@@ -78,8 +78,8 @@ will change as the parsers and test sets change; rerun the commands in
 == Reproducing the results
 
 The review scripts need Python 3, the pinned oracles, and a Roc compiler. Set
-`ROC` to the compiler you want to test with; CI uses the nightly named by
-`QUALITY_ROC_NIGHTLY` in `.github/workflows/fuzz.yml` (see
+`ROC` to the compiler you want to test with; CI uses the nightly named in
+`.roc-version` (see
 <<compatibility,Compatibility>>). Install each oracle into its own virtual
 environment under `.roc-parser-tmp/`, which git ignores:
 

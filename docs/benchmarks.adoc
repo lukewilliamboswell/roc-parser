@@ -16,8 +16,7 @@ and how to read a report.
 
 == Run the benchmarks
 
-You need the Roc nightly that the quality workflow pins
-(`nightly-2026-09-29-7f11a82`, because the drivers use basic-cli 0.23.0). Go,
+You need the Roc nightly named in `.roc-version`. Go,
 Rust (cargo) and Python 3 are optional: a missing toolchain is skipped and
 named in the report.
 
@@ -266,7 +265,7 @@ $ blueprint shell             # every toolchain on PATH
 
 Library versions do not come from Nix; they are pinned by the lock files
 above, so a blueprint run and a plain run measure the same code. roc-overlay
-cannot yet name `nightly-2026-09-29-7f11a82`, so check the Roc version in the
+may not yet name the nightly in `.roc-version`, so check the Roc version in the
 report, or set `ROC`. Without blueprint, install the toolchains yourself and
 run `scripts/bench.py` as shown in <<benchmarks>>; the report records every
 version either way.
