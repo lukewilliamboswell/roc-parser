@@ -1391,22 +1391,20 @@ take_tag_name = |bytes| {
 is_tag_name_byte : U8 -> Bool
 is_tag_name_byte = |byte| is_alphabetic_byte(byte) or is_digit_byte(byte) or byte == '-'
 
-## Type 7: a complete open or closing tag, other than the type 1 tags, alone
-## on the line.
+## Type 7: a complete closing tag, or a complete open tag other than the
+## type 1 tags (`<pre>` and friends open type 1 blocks instead), alone on the
+## line.
 is_type_7_start : String.Utf8 -> Bool
 is_type_7_start = |rest| {
 	end =
 		if rest.starts_with("</".to_utf8()) {
 			scan_closing_tag(rest, 2)
 		} else {
-			scan_open_tag(rest, 1)
+			name = lowercase_ascii(take_tag_name(rest.drop_first(1)))
+			if html_type_1_tags.any(|tag| tag.to_utf8() == name) Err(NotFound) else scan_open_tag(rest, 1)
 		}
 	match end {
-		Ok(len) => {
-			name = lowercase_ascii(take_tag_name(rest.drop_first(if rest.starts_with("</".to_utf8()) 2 else 1)))
-			!html_type_1_tags.any(|tag| tag.to_utf8() == name) and bytes_are_blank(rest.drop_first(len))
-		}
-
+		Ok(len) => bytes_are_blank(rest.drop_first(len))
 		Err(_) => Bool.False
 	}
 }
@@ -4359,6 +4357,15 @@ expect {
 	actual = String.parse_str(Markdown.all, text)?
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
+}
+
+## A closing `</pre>`, `</script>`, `</style>` or `</textarea>` tag alone on a
+## line starts a type 7 HTML block; only the open tags are excluded from type
+## 7 (CommonMark 4.6).
+expect {
+	actual = String.parse_str(Markdown.all, "a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")?
+
+	actual == [Paragraph([Text("a")]), HtmlBlock("</textarea>\nb\n"), HtmlBlock("<pre class=\"x\">\n")]
 }
 
 ## Article body markdown parses into structured blocks without TODO fallbacks.

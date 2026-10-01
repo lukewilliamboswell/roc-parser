@@ -294,6 +294,7 @@ html_openers = [
 	{ text: "<section/>", html_type: 6 },
 	{ text: "<my-tag data-x='1'>", html_type: 7 },
 	{ text: "</custom>", html_type: 7 },
+	{ text: "</TEXTAREA >", html_type: 7 },
 	{ text: "<a href=\"x\" title=y>", html_type: 7 },
 	{ text: "<!-- comment", html_type: 2 },
 	{ text: "<?php", html_type: 3 },
