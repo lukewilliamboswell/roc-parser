@@ -591,7 +591,7 @@ null_node = |line, column| Node.{ line, column, kind: Plain("") }
 parse_tree : Utf8.Bytes -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_tree = |input| {
 	bytes = check_printable(drop_byte_order_mark(input))?
-	raw_lines = split_lines(bytes, 1, [], [])
+	raw_lines = split_lines(bytes, 1)
 	lines = prepare_lines(raw_lines)?
 	start = { lines, at: 0, head: Err(NoHead) }
 
@@ -1948,7 +1948,7 @@ clean_lines = |lines, out| {
 		[line, .. as rest] => {
 			indent = count_spaces(line.content, 0)
 			after_indent = line.content.drop_first(indent)
-			content = trim_end_spaces(strip_comment(after_indent, NoQuote, False, True, []))
+			content = trim_end_spaces(strip_comment(after_indent))
 			tab = after_indent.first() == Ok('\t')
 
 			if content.is_empty() {
@@ -1979,55 +1979,80 @@ remove_document_end = |lines, out| {
 	}
 }
 
-split_lines : Utf8.Bytes, U64, Utf8.Bytes, List(Line) -> List(Line)
-split_lines = |input, number, current, lines| {
-	match input {
-		# A line break ends a line; it does not start an empty final one.
-		[] if current.is_empty() and !lines.is_empty() => lines
-		[] => lines.append({ content: current, indent: 0, number, terminated: False, tab: False })
-		['\r', '\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: True, tab: False }))
-		['\n', .. as rest] | ['\r', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: True, tab: False }))
-		[first, .. as rest] => split_lines(rest, number, current.append(first), lines)
+## The lines of `input`, each a slice of it rather than a copy.
+split_lines : Utf8.Bytes, U64 -> List(Line)
+split_lines = |input, first_number| {
+	var $lines = []
+	var $number = first_number
+	var $start = 0
+	var $index = 0
+	while $index < input.len() {
+		byte = input.get($index) ?? 0
+		if byte == '\n' or byte == '\r' {
+			$lines = $lines.append({ content: input.sublist({ start: $start, len: $index - $start }), indent: 0, number: $number, terminated: True, tab: False })
+			$number = $number + 1
+			$index = if byte == '\r' and input.get($index + 1) == Ok('\n') $index + 2 else $index + 1
+			$start = $index
+		} else {
+			$index = $index + 1
+		}
+	}
+	# A line break ends a line; it does not start an empty final one.
+	if $start == input.len() and !$lines.is_empty() {
+		$lines
+	} else {
+		$lines.append({ content: input.sublist({ start: $start, len: input.len() - $start }), indent: 0, number: $number, terminated: False, tab: False })
 	}
 }
 
-strip_comment : Utf8.Bytes, Quote, Bool, Bool, Utf8.Bytes -> Utf8.Bytes
-strip_comment = |bytes, quote, escaped, separated, out| strip_comment_help(bytes, quote, escaped, separated, 0, out)
-
-strip_comment_help : Utf8.Bytes, Quote, Bool, Bool, U64, Utf8.Bytes -> Utf8.Bytes
-strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
-	match bytes {
-		[] => out
-
-		[first, ..] if first == '#' and quote == NoQuote and separated => out
-
-		['\\', .. as rest] if quote == DoubleQuote and !escaped =>
-			strip_comment_help(rest, quote, True, False, depth, out.append('\\'))
-
-		['"', .. as rest] if quote == NoQuote and scalar_can_start(out, depth > 0) =>
-			strip_comment_help(rest, DoubleQuote, False, False, depth, out.append('"'))
-
-		['"', .. as rest] if quote == DoubleQuote and !escaped =>
-			strip_comment_help(rest, NoQuote, False, False, depth, out.append('"'))
-
-		['\'', .. as rest] if quote == NoQuote and scalar_can_start(out, depth > 0) =>
-			strip_comment_help(rest, SingleQuote, False, False, depth, out.append('\''))
-
-		['\'', '\'', .. as rest] if quote == SingleQuote =>
-			strip_comment_help(rest, quote, False, False, depth, out.concat(['\'', '\'']))
-
-		['\'', .. as rest] if quote == SingleQuote =>
-			strip_comment_help(rest, NoQuote, False, False, depth, out.append('\''))
-
-		[open, .. as rest] if (open == '[' or open == '{') and quote == NoQuote and (depth > 0 or scalar_can_start(out, False)) =>
-			strip_comment_help(rest, quote, False, False, depth + 1, out.append(open))
-
-		[close, .. as rest] if (close == ']' or close == '}') and quote == NoQuote and depth > 0 =>
-			strip_comment_help(rest, quote, False, False, depth - 1, out.append(close))
-
-		[first, .. as rest] =>
-			strip_comment_help(rest, quote, False, first == ' ' or first == '\t', depth, out.append(first))
+## `bytes` up to the comment that ends it, if any, as a slice of `bytes`.
+## Quotes and flow brackets are tracked so a `#` inside them is kept, and a
+## `#` only starts a comment at the start or after white space.
+strip_comment : Utf8.Bytes -> Utf8.Bytes
+strip_comment = |bytes| {
+	var $quote = NoQuote
+	var $escaped = False
+	var $separated = True
+	var $depth = 0
+	var $index = 0
+	var $end = bytes.len()
+	while $index < $end {
+		first = bytes.get($index) ?? 0
+		was_escaped = $escaped
+		was_separated = $separated
+		$escaped = False
+		$separated = False
+		if first == '#' and $quote == NoQuote and was_separated {
+			$end = $index
+		} else if first == '\\' and $quote == DoubleQuote and !was_escaped {
+			$escaped = True
+			$index = $index + 1
+		} else if first == '"' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: 0, len: $index }), $depth > 0) {
+			$quote = DoubleQuote
+			$index = $index + 1
+		} else if first == '"' and $quote == DoubleQuote and !was_escaped {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if first == '\'' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: 0, len: $index }), $depth > 0) {
+			$quote = SingleQuote
+			$index = $index + 1
+		} else if first == '\'' and $quote == SingleQuote and bytes.get($index + 1) == Ok('\'') {
+			$index = $index + 2
+		} else if first == '\'' and $quote == SingleQuote {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if (first == '[' or first == '{') and $quote == NoQuote and ($depth > 0 or scalar_can_start(bytes.sublist({ start: 0, len: $index }), False)) {
+			$depth = $depth + 1
+			$index = $index + 1
+		} else if (first == ']' or first == '}') and $quote == NoQuote and $depth > 0 {
+			$depth = $depth - 1
+			$index = $index + 1
+		} else {
+			$separated = first == ' ' or first == '\t'
+			$index = $index + 1
+		}
 	}
+	bytes.sublist({ start: 0, len: $end })
 }
 
 ## Whether a scalar or flow collection may start after `prefix`: only white
