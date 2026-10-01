@@ -1506,13 +1506,16 @@ parse_leading_link = |input, image| {
 }
 
 ## Normalize paragraph content: replace U+0000 with U+FFFD, strip the leading
-## spaces and tabs of every line, and strip trailing whitespace.
+## spaces and tabs of every line, drop leading blank lines and strip trailing
+## whitespace.
 prepare_inline_input : List(U8) -> List(U8)
 prepare_inline_input = |input| {
 	var $out = List.with_capacity(input.len())
 	var $line_start = Bool.True
 	for byte in input {
 		if $line_start and (byte == ' ' or byte == '\t') {
+			{}
+		} else if $out.is_empty() and (byte == '\n' or byte == '\r') {
 			{}
 		} else if byte == 0 {
 			$out = $out.concat([0xEF, 0xBF, 0xBD])
@@ -1534,8 +1537,8 @@ trim_trailing_whitespace = |bytes| {
 	bytes.take_first($len)
 }
 
-## Trailing spaces and tabs (and other non-newline ASCII whitespace) before a
-## line ending are not part of the text.
+## Trailing spaces and tabs before a line ending are not part of the text.
+## (Vertical tab and form feed are ordinary characters in CommonMark.)
 trim_trailing_line_space : List(U8) -> List(U8)
 trim_trailing_line_space = |bytes| {
 	var $len = bytes.len()
@@ -1546,11 +1549,11 @@ trim_trailing_line_space = |bytes| {
 }
 
 is_line_space : U8 -> Bool
-is_line_space = |byte| byte == ' ' or byte == '\t' or byte == 0x0B or byte == 0x0C
+is_line_space = |byte| byte == ' ' or byte == '\t'
 
-## ASCII whitespace as used by cmark (`cmark_isspace`).
+## Spaces, tabs and line endings (cmark's `cmark_isspace`).
 is_cmark_space : U8 -> Bool
-is_cmark_space = |byte| byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r' or byte == 0x0B or byte == 0x0C
+is_cmark_space = |byte| byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r'
 
 byte_at : List(U8), U64 -> U8
 byte_at = |bytes, index| bytes.get(index) ?? 0
@@ -3999,6 +4002,10 @@ expect inline_test("<a b='c' d> <1a> <a =b>") == [HtmlInline("<a b='c' d>"), Tex
 ## Soft and hard line breaks.
 expect inline_test("a  \n   b\\\nc \nd") == [Text("a"), HardBreak, Text("b"), HardBreak, Text("c\nd")]
 expect inline_test("  a  ") == [Text("a")]
+
+## Only spaces and tabs are stripped around line endings; vertical tab and
+## form feed are text. Leading blank lines are not paragraph content.
+expect inline_test("\n\r\na\u(B)\nb\u(C)") == [Text("a\u(B)\nb\u(C)")]
 
 ## GFM strikethrough pairs runs of equal length (one or two tildes).
 expect inline_test("~~a~~ ~b~ ~~~c~~~") == [Strikethrough([Text("a")]), Text(" "), Strikethrough([Text("b")]), Text(" ~~~c~~~")]
