@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
+import parser.Parser
 import parser.String
 
 ## Arbitrary bytes through Markdown.inlines. Parsing never fails or crashes
@@ -40,6 +41,8 @@ test = |bytes| {
 			check_well_formed(input, tree)
 			check_crlf(input, tree)
 			check_escaped(input)
+			check_leading_link(input, tree, Markdown.link)
+			check_leading_link(input, tree, Markdown.image)
 			Fuzz.keep
 		}
 	}
@@ -126,6 +129,33 @@ is_autolink_shaped = |label, href| {
 	match label {
 		[Text(text)] => text == href or Str.concat("mailto:", text) == href or Str.concat("http://", text) == href
 		_ => Bool.False
+	}
+}
+
+## ---------------------------------------------------------------------------
+## Markdown.link / Markdown.image
+## ---------------------------------------------------------------------------
+
+## On one line without U+0000 or leading whitespace (which paragraph content
+## would normalize), a successful leading link/image parse leaves a suffix of
+## the input and is exactly the first node Markdown.inlines produces.
+check_leading_link : Str, Tree, Parser.Parser(String.Utf8, Markdown.Inline) -> {}
+check_leading_link = |input, tree, parser| {
+	bytes = input.to_utf8()
+	single_line = !bytes.contains('\n') and !bytes.contains('\r') and !bytes.contains(0)
+	match String.parse_str_partial(parser, input) {
+		Err(_) => {}
+		Ok({ val, input: rest }) => {
+			if !Str.ends_with(input, rest) {
+				crash "leading link parser returned input that is not a suffix\ninput: ${Str.inspect(input)}\nrest:  ${Str.inspect(rest)}"
+			}
+			if single_line and !Str.starts_with(input, " ") and !Str.starts_with(input, "\t") {
+				match tree.first() {
+					Ok(first) if first == val => {}
+					_ => crash "leading link parser disagrees with Markdown.inlines\ninput:  ${Str.inspect(input)}\nparser: ${Markdown.inline_to_debug_str(val)}\ninlines: ${show(tree)}"
+				}
+			}
+		}
 	}
 }
 
