@@ -161,7 +161,7 @@ parse_node = |lines, indent, depth, raw_lines| {
 							block = parse_block_scalar(lines.drop_first(1), raw_lines, first.content, first.number, first.indent + 1, min_indent)?
 							Ok({ val: block.value, input: block.input })
 						} else {
-							value = parse_inline_value(first.content, first.number, first.indent + 1)?
+							value = parse_inline_value(first.content, first.number, first.indent + 1, depth + 1)?
 							Ok({ val: value, input: lines.drop_first(1) })
 						}
 					}
@@ -221,7 +221,7 @@ parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 						block = parse_block_scalar(rest, raw_lines, parts.value, line.number, line.indent + parts.value_column, line.indent + 1)?
 						parse_mapping_help(block.input, indent, depth, raw_lines, entries.append({ key, value: block.value }))
 					} else {
-						value = parse_inline_value(parts.value, line.number, line.indent + parts.value_column)?
+						value = parse_inline_value(parts.value, line.number, line.indent + parts.value_column, depth + 1)?
 						parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value }))
 					}
 				}
@@ -283,7 +283,7 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 							block = parse_block_scalar(rest, raw_lines, payload, line.number, payload_indent + 1, line.indent + 1)?
 							parse_sequence_help(block.input, indent, depth, raw_lines, values.append(block.value))
 						} else {
-							value = parse_inline_value(payload, line.number, payload_indent + 1)?
+							value = parse_inline_value(payload, line.number, payload_indent + 1, depth + 1)?
 							parse_sequence_help(rest, indent, depth, raw_lines, values.append(value))
 						}
 					}
@@ -612,16 +612,18 @@ drop_consumed_lines = |lines, consumed_through| {
 	}
 }
 
-parse_inline_value : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
-parse_inline_value = |raw, line, column| {
+parse_inline_value : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_inline_value = |raw, line, column, depth| {
 	bytes = trim_spaces(raw)
 
 	match bytes {
 		[] => Ok(Null)
 
-		['[', ..] => parse_flow_sequence(bytes, line, column)
+		['[', ..] | ['{', ..] if depth >= 100 => fail(line, column, "YAML nesting exceeds the supported limit of 100 levels")
 
-		['{', ..] => parse_flow_mapping(bytes, line, column)
+		['[', ..] => parse_flow_sequence(bytes, line, column, depth)
+
+		['{', ..] => parse_flow_mapping(bytes, line, column, depth)
 
 		['|', ..] | ['>', ..] =>
 			fail(line, column, "block scalars are only supported as standalone mapping or sequence values")
@@ -791,45 +793,45 @@ count_while = |bytes, keep| {
 	$count
 }
 
-parse_flow_sequence : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
-parse_flow_sequence = |bytes, line, column| {
+parse_flow_sequence : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_flow_sequence = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '[', ']', line, column)?
 
 	if trim_spaces(inner).is_empty() {
 		Ok(Sequence([]))
 	} else {
 		parts = split_flow_items(inner, line, column)?
-		values = parse_flow_values(parts, line, column, [])?
+		values = parse_flow_values(parts, line, column, depth, [])?
 		Ok(Sequence(values))
 	}
 }
 
-parse_flow_values : List(String.Utf8), U64, U64, List(Yaml) -> Try(List(Yaml), [YamlError(Yaml.Error)])
-parse_flow_values = |parts, line, column, values| {
+parse_flow_values : List(String.Utf8), U64, U64, U64, List(Yaml) -> Try(List(Yaml), [YamlError(Yaml.Error)])
+parse_flow_values = |parts, line, column, depth, values| {
 	match parts {
 		[] => Ok(values)
 		[part, .. as rest] => {
-			value = parse_inline_value(part, line, column)?
-			parse_flow_values(rest, line, column, values.append(value))
+			value = parse_inline_value(part, line, column, depth + 1)?
+			parse_flow_values(rest, line, column, depth, values.append(value))
 		}
 	}
 }
 
-parse_flow_mapping : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
-parse_flow_mapping = |bytes, line, column| {
+parse_flow_mapping : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_flow_mapping = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '{', '}', line, column)?
 
 	if trim_spaces(inner).is_empty() {
 		Ok(Mapping([]))
 	} else {
 		parts = split_flow_items(inner, line, column)?
-		entries = parse_flow_entries(parts, line, column, [])?
+		entries = parse_flow_entries(parts, line, column, depth, [])?
 		Ok(Mapping(entries))
 	}
 }
 
-parse_flow_entries : List(String.Utf8), U64, U64, List({ key : Str, value : Yaml }) -> Try(List({ key : Str, value : Yaml }), [YamlError(Yaml.Error)])
-parse_flow_entries = |parts, line, column, entries| {
+parse_flow_entries : List(String.Utf8), U64, U64, U64, List({ key : Str, value : Yaml }) -> Try(List({ key : Str, value : Yaml }), [YamlError(Yaml.Error)])
+parse_flow_entries = |parts, line, column, depth, entries| {
 	match parts {
 		[] => Ok(entries)
 
@@ -843,8 +845,8 @@ parse_flow_entries = |parts, line, column, entries| {
 					if mapping_has_key(entries, key) {
 						fail(line, column, "duplicate mapping key `${key}`")
 					} else {
-						value = parse_inline_value(split.value, line, column)?
-						parse_flow_entries(rest, line, column, entries.append({ key, value }))
+						value = parse_inline_value(split.value, line, column, depth + 1)?
+						parse_flow_entries(rest, line, column, depth, entries.append({ key, value }))
 					}
 				}
 			}
@@ -1545,6 +1547,13 @@ expect {
 expect {
 	actual = Yaml.parse_str("-\t-1\n")?
 	actual == Sequence([Int(-1)]) and Yaml.parse_str("-\t-\n").is_err() and Yaml.parse_str("- \t-\n").is_err()
+}
+
+## Flow collections count toward the nesting limit.
+expect {
+	deep = Str.concat(Str.repeat("[", 150), Str.repeat("]", 150))
+	shallow = Str.concat(Str.repeat("[", 50), Str.repeat("]", 50))
+	Yaml.parse_str(deep).is_err() and Yaml.parse_str(shallow).is_ok() and Yaml.parse_str(Str.concat("a:\n  b: ", deep)).is_err()
 }
 
 ## Syntax errors report their source location.
