@@ -3,11 +3,263 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#conformance]
-= Conformance and limitations
+= Conformance
 
-Content in progress.
+This chapter is for readers deciding whether a format parser is accurate
+enough for their input, and for contributors who need to reproduce the
+numbers. For each format it names the specification the parser follows, the
+reference implementation (the _oracle_) its results are compared with, the
+results last measured, and the known gaps.
+
+== How conformance is checked
+
+Each format has a review script in `scripts/` that feeds a fixed set of inputs
+to a small Roc program (the _probe_) and to a pinned reference implementation,
+normalises both results and compares them. The inputs come from the format's
+official test suite where one exists, plus hand-written cases in
+`scripts/<format>/cases.json`.
+
+Every case where the library and the oracle disagree on purpose is listed in a
+`known-failures.json` file with its reason. A review fails when a case
+disagrees and is not listed, or when a listed case starts to agree (the list is
+stale). The scripts never update the list themselves.
+
+Where the oracle is itself wrong, the script records an _oracle disagreement_
+and uses the specification's expected result instead; these cases are reported
+but are not failures.
+
+== Results
+
+The numbers below were measured on 1 October 2026 at commit `7afc741`, with Roc
+`nightly-2026-09-29-7f11a82` on macOS (Apple silicon) and Python 3.14. They
+will change as the parsers and test sets change; rerun the commands in
+<<conformance-reproduce>> for current figures.
+
+[cols="1,2,2,2",options="header"]
+|===
+|Format |Specification |Oracle |Result
+
+|CSV
+|RFC 4180
+|Python's `csv` module (standard library)
+|2035 of 2035 cases agree (35 fixed, 2000 random), no known failures
+
+|HTTP
+|RFC 9112 (messages) and RFC 9110 (fields)
+|h11 0.16.0; llhttp's behaviour where the library is stricter than h11
+|134 cases: 112 agree, 22 are listed deliberate divergences
+
+|Markdown, inline
+|CommonMark 0.31.2 and GFM
+|The spec's own expected output; cmark-gfm 0.29.0.gfm.13 (through cmarkgfm 2025.10.22) for extra cases
+|389 of 389 applicable cases pass, no known failures
+
+|Markdown, blocks
+|CommonMark 0.31.2 and GFM
+|The spec's own expected output, compared as a tree; cmark-gfm 0.29.0.gfm.13 for extra cases
+|593 of 669 cases pass; 76 are listed known failures
+
+|XML
+|XML 1.0 (Fifth Edition), well-formedness only
+|expat 2.7.4 and the W3C XML Conformance Test Suite (2013-09-23)
+|324 of 326 cases pass; 2 are listed known failures
+
+|YAML
+|YAML 1.2 with the core schema
+|ruamel.yaml 0.18.16 (pure Python) and the yaml-test-suite (revision `6ad3d2c`)
+|595 of 803 cases pass; 206 rejections and 2 key-typing differences, see <<conformance-yaml>>
+|===
+
+[#conformance-reproduce]
+== Reproducing the results
+
+The review scripts need Python 3, the pinned oracles, and a Roc compiler. Set
+`ROC` to the compiler you want to test with; CI uses the nightly named by
+`QUALITY_ROC_NIGHTLY` in `.github/workflows/fuzz.yml` (see
+<<compatibility,Compatibility>>). Install each oracle into its own virtual
+environment under `.roc-parser-tmp/`, which git ignores:
+
+[source,sh]
+----
+export ROC=/path/to/roc
+python3 -m venv .roc-parser-tmp/venv-yaml
+.roc-parser-tmp/venv-yaml/bin/pip install --no-deps -r scripts/yaml/requirements.txt
+python3 -m venv .roc-parser-tmp/venv-http
+.roc-parser-tmp/venv-http/bin/pip install --no-deps -r scripts/http/requirements.txt
+python3 -m venv .roc-parser-tmp/venv-md
+.roc-parser-tmp/venv-md/bin/pip install --no-deps -r scripts/markdown/requirements.txt
+----
+
+Then run one command per format. CSV and XML need only the standard library;
+the XML script downloads the W3C suite on first use and checks its SHA-256.
+
+[source,sh]
+----
+python3 scripts/review_csv.py
+python3 scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+.roc-parser-tmp/venv-http/bin/python scripts/review_http.py
+.roc-parser-tmp/venv-md/bin/python scripts/review_markdown.py check
+.roc-parser-tmp/venv-md/bin/python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
+.roc-parser-tmp/venv-yaml/bin/python scripts/review_yaml.py check --baseline scripts/yaml/known-failures.json
+----
+
+Each script prints a summary, such as the following for HTTP:
+
+[source,text]
+----
+134 cases, 22 known divergences, 0 failures, 0 crashes, 0 stale (h11 0.16.0)
+----
+
+The XML, YAML and Markdown block scripts also write a JSON report, with every
+case's expected and actual result, under `.roc-parser-tmp/`.
+
+== CSV
+
+The parser follows RFC 4180 with the relaxations most CSV readers share: LF
+and lone CR line breaks as well as CRLF, an optional final line break, rows of
+different lengths, and any UTF-8 in unquoted fields. The {api}CSV/[CSV module
+documentation] lists the dialect exactly.
+
+`scripts/review_csv.py` compares the raw records with Python's `csv.reader`
+in strict mode, on the fixed cases and 2000 random inputs from a fixed seed.
+
+Known differences, by design:
+
+* A blank line is a record with one empty field, as RFC 4180's grammar says.
+  Python returns an empty row; the script accounts for this.
+* A byte order mark is not removed; it becomes part of the first field.
+* There is no heading-row support, no other delimiter or quote character, and
+  no whitespace trimming.
+
+== HTTP
+
+The parser follows the message syntax of RFC 9112 and the field syntax of RFC
+9110. It is a message parser: it reads bytes that are already in memory and
+does not manage connections.
+
+`scripts/review_http.py` compares the verdict, start line, fields, decoded body
+and leftover bytes with h11. Most of the 22 listed divergences are places where
+RFC 9112 allows a parser to reject something and this one does, as llhttp does
+by default while h11 accepts it: line folding, bare LF line endings, control
+characters in field values, `Transfer-Encoding` in an HTTP/1.0 message, and a
+message with both `Transfer-Encoding` and `Content-Length`. Rejecting these is
+what prevents request smuggling. The others are by design:
+
+* Methods are a closed tag union (`Method`), so methods outside it, and
+  lowercase method names, are rejected.
+* Field values are `Str`, so field values that are not valid UTF-8 are rejected.
+* A `101` response the client did not ask for is returned like any other
+  message; h11 rejects it because it tracks the connection.
+
+Limitations:
+
+* A response with neither `Content-Length` nor `Transfer-Encoding` takes the
+  rest of the input as its body.
+* The parser cannot see the request a response answers, so responses to `HEAD`
+  and 2xx responses to `CONNECT` must have their framing fields removed, or a
+  status that implies no body, before parsing.
+
+== Markdown
+
+The parser follows CommonMark 0.31.2 with the GitHub Flavored Markdown
+extensions for tables, task list items, strikethrough and extended autolinks.
+It also reads a frontmatter block between `---` lines at the start of a
+document.
+
+Two scripts check it:
+
+* `scripts/review_markdown.py` checks inline parsing against the spec
+  examples (compared as HTML), the GFM extension examples, and hand-written
+  cases compared with cmark-gfm's syntax tree. Of its 399 entries it runs the
+  389 whose expected output consists only of paragraphs, so that block
+  structure cannot affect the result. Its `corpus` mode compares fuzzing
+  inputs with cmark-gfm and asks markdown-it-py 4.0.0, which implements
+  CommonMark 0.31.2, to settle disagreements where cmark-gfm follows an older
+  spec version.
+* `scripts/review_markdown_blocks.py` checks the whole document, every
+  CommonMark spec example plus extra block cases, as a tree.
+
+All 76 known failures of the block check are differences of representation
+or of the oracle, not wrong structure:
+
+* 69 cases contain a soft line break. The library keeps it as `\n` inside the
+  `Text` node, while the comparison expects a space, which is how HTML renders it.
+* 5 cases are bare URLs and email addresses that the library turns into links
+  by the GFM extended autolink rules, which the oracle configuration does not
+  enable.
+* 2 cases (spec examples 28 and 354) are ones where the spec and cmark-gfm,
+  which follows an older spec version, disagree.
+
+The known-failures file does not yet give each entry its reason; the grouping
+above comes from comparing the expected and actual trees.
+
+Markdown has no syntax errors, so every input produces a document.
+
+== XML
+
+The parser checks well-formedness as defined by XML 1.0 (Fifth Edition) for
+documents without a document type declaration. It does not validate.
+
+`scripts/review_xml.py` compares verdicts and trees with expat and selects the
+W3C conformance cases inside the supported subset: UTF-8 text, XML 1.0, no
+`<!DOCTYPE>`. The two known failures are:
+
+* `decl/version-2`: expat accepts `version="2.0"`, but the specification requires
+  `1.` followed by digits, so rejecting it is correct.
+* `xmlconf/hst-lhs-007`: the input is already decoded text, so a declared
+  encoding cannot contradict the byte order mark, and the parser does not
+  report it.
+
+The 11 oracle disagreements are cases where expat uses older name-character
+tables than the Fifth Edition; the suite's verdict is used.
+
+Limitations: document type declarations and therefore all entities other than
+the five predefined ones are rejected, namespaces are not processed, the input
+must be a `Str` (already decoded), and comments and processing instructions are
+dropped from the tree.
+
+[#conformance-yaml]
+== YAML
+
+The parser implements a subset of YAML 1.2 for configuration files and
+frontmatter, and resolves plain scalars with the core schema.
+
+`scripts/review_yaml.py` runs every yaml-test-suite case and the hand-written
+cases, and compares the value with ruamel.yaml's pure-Python parser. Of the
+803 cases:
+
+* 595 produce the same value or the same rejection as the oracle.
+* 206 are valid YAML that the parser rejects because it uses a feature
+  outside the subset. The largest groups are anchors, aliases and tags (47),
+  multi-document streams (32), multi-line flow collections (29), multi-line
+  quoted scalars (30) and complex mapping keys (19).
+* 2 differ by design because mapping keys are their source text: `true: one`
+  has the key `"true"`, not a Boolean, so `1` and `01` are different keys
+  rather than duplicates.
+
+Two of the 206 rejections, `limits/flow-depth-100` and `limits/flow-depth-512`,
+come from the 100-level nesting limit, which now also applies to flow
+collections. At the measured commit they are not yet in
+`scripts/yaml/known-failures.json`, so `review_yaml.py check` reports them as
+new failures. The 58 oracle disagreements are cases where ruamel.yaml differs
+from the test suite's expected result; the suite wins.
+
+Limitations: besides the features above, integers must fit in `I64`, tabs may
+not be used for indentation, and nesting deeper than 100 levels is rejected.
+The {api}Yaml/[Yaml module documentation] describes the subset.
+
+== Property testing
+
+Conformance checks compare chosen inputs with an oracle. Alongside them, every
+parser runs under coverage-guided property tests built with `roc-fuzz`, which
+generate inputs, including malformed and pathological ones, and check
+properties such as: the parser never crashes or hangs, rendering a value and
+parsing it again gives the same value, and results agree with a simple model.
+The review scripts can also compare a fuzzing corpus with the oracles. CI runs a short
+campaign for every target on each pull request and a longer one every night.
+<<property-testing,Property testing>> describes the targets and how to run
+them.
