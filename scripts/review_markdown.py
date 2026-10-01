@@ -80,7 +80,7 @@ def cmark_xml(text: str) -> str:
             out = ctypes.string_at(raw).decode("utf-8")
         finally:
             libc.free(raw)
-        _cmark.lib.cmark_node_free(root)
+        so.cmark_node_free(ctypes.c_void_p(address))
     finally:
         cmark.parser_free(parser)
     return out
@@ -96,7 +96,75 @@ def cmark_html(text: str) -> str:
 def markdown_it_html(text: str) -> str:
     from markdown_it import MarkdownIt
 
-    return MarkdownIt("commonmark").render(text)
+    return MarkdownIt("commonmark").enable("strikethrough").render(text)
+
+
+def markdown_it_blocks(text: str) -> list:
+    """markdown-it-py's token stream as the same block/inline tree shape."""
+    from markdown_it import MarkdownIt
+
+    tokens = MarkdownIt("commonmark").enable("strikethrough").parse(text)
+    blocks = []
+    for index, token in enumerate(tokens):
+        if token.type == "inline" and index > 0 and tokens[index - 1].type == "paragraph_open":
+            blocks.append(["p", normalize(mdit_inlines(token.children or []))])
+        elif token.type.endswith("_open") and token.type != "paragraph_open" and token.level == 0:
+            blocks.append(["other", token.type])
+        elif token.type in ("fence", "code_block", "html_block", "hr") and token.level == 0:
+            blocks.append(["other", token.type])
+    return blocks
+
+
+def mdit_inlines(tokens: list) -> list:
+    root: list = []
+    stack = [root]
+    for token in tokens:
+        out = stack[-1]
+        kind = token.type
+        if kind in ("text", "text_special"):
+            # text_special: an entity or backslash escape, already decoded.
+            out.append(["text", token.content])
+        elif kind == "softbreak":
+            out.append(["text", "\n"])
+        elif kind == "hardbreak":
+            out.append(["br"])
+        elif kind == "code_inline":
+            out.append(["code", token.content])
+        elif kind == "html_inline":
+            out.append(["html", token.content])
+        elif kind in ("em_open", "strong_open", "s_open"):
+            node = [{"em_open": "emph", "strong_open": "strong", "s_open": "del"}[kind], []]
+            out.append(node)
+            stack.append(node[1])
+        elif kind == "link_open":
+            node = ["link", token.attrGet("href") or "", token.attrGet("title") or "", []]
+            out.append(node)
+            stack.append(node[3])
+        elif kind in ("em_close", "strong_close", "s_close", "link_close"):
+            stack.pop()
+        elif kind == "image":
+            out.append(["image", token.attrGet("src") or "", token.attrGet("title") or "", mdit_inlines(token.children or [])])
+        else:
+            out.append(["unknown", kind])
+    return root
+
+
+def comparable_hrefs(blocks: list) -> list:
+    """Percent-decode destinations: markdown-it stores normalized URLs."""
+    from urllib.parse import unquote
+
+    def walk(nodes: list) -> list:
+        out = []
+        for node in nodes:
+            if node[0] in ("link", "image"):
+                out.append([node[0], unquote(node[1]), node[2], walk(node[3])])
+            elif node[0] in ("emph", "strong", "del"):
+                out.append([node[0], walk(node[1])])
+            else:
+                out.append(node)
+        return out
+
+    return [[b[0], walk(b[1])] if b[0] == "p" else b for b in blocks]
 
 
 NS = "{http://commonmark.org/xml/1.0}"
@@ -322,7 +390,9 @@ def choose_mode(text: str) -> str | None:
     return "doc"
 
 
-GFM_TRIGGERS = re.compile(r"~|www\.|://|@")
+# GFM syntax that markdown-it (CommonMark preset plus `~~` strikethrough) does
+# not implement: single-tilde strikethrough and extended autolinks.
+GFM_TRIGGERS = re.compile(r"(?<![\\~])~(?!~)|www\.|(?<!\\):(?=//)|@")
 
 # CommonMark examples whose plain-CommonMark output differs once the GFM
 # extended-autolink extension is enabled (verified against cmark-gfm).
@@ -335,10 +405,10 @@ def classify(text: str, roc_blocks: list, oracle_blocks: list) -> str:
     if GFM_TRIGGERS.search(text):
         return "fail"
     try:
-        adjudicated = markdown_it_html(text)
+        adjudicated = markdown_it_blocks(text)
     except Exception:  # pragma: no cover - adjudicator failure
         return "fail"
-    if render_blocks(roc_blocks) == adjudicated:
+    if comparable_hrefs(roc_blocks) == comparable_hrefs(adjudicated):
         return "oracle-quirk"
     return "fail"
 
@@ -368,7 +438,7 @@ def check(args) -> int:
     for example in load_json(DATA / "gfm-extensions.json"):
         entries.append({"id": f"gfm-{example['example']}", "markdown": example["markdown"], "html": example["html"], "section": example["section"]})
     for case in load_json(DATA / "cases.json"):
-        entries.append({"id": f"case-{case['id']}", "markdown": case["markdown"], "html": None, "section": case.get("note", "")})
+        entries.append({"id": f"case-{case['id']}", "markdown": case["markdown"], "html": None, "section": case.get("note", ""), "oracle": case.get("oracle", "cmark-gfm")})
 
     selected = []
     for entry in entries:
@@ -389,7 +459,9 @@ def check(args) -> int:
             got = render_blocks(roc)
             want = entry["html"]
         else:
-            want_blocks = cmark_blocks(entry["markdown"])
+            # cases.json may name markdown-it where cmark-gfm has a known bug.
+            want_blocks = comparable_hrefs(markdown_it_blocks(entry["markdown"])) if entry.get("oracle") == "markdown-it" else cmark_blocks(entry["markdown"])
+            roc = comparable_hrefs(roc) if entry.get("oracle") == "markdown-it" else roc
             ok = roc == want_blocks
             got = json.dumps(roc, ensure_ascii=False)
             want = json.dumps(want_blocks, ensure_ascii=False)
@@ -461,6 +533,66 @@ def corpus(args) -> int:
     return 1 if counts["fail"] else 0
 
 
+def decode_roc_string(literal: str) -> str:
+    """Decode a Roc string literal as printed by Str.inspect."""
+    assert literal.startswith('"') and literal.endswith('"'), literal[:40]
+    body = literal[1:-1]
+    out = []
+    index = 0
+    simple = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\", "$": "$"}
+    while index < len(body):
+        ch = body[index]
+        if ch == "\\":
+            nxt = body[index + 1]
+            if nxt in simple:
+                out.append(simple[nxt])
+                index += 2
+            elif nxt == "u":
+                close = body.index(")", index)
+                out.append(chr(int(body[index + 3:close], 16)))
+                index = close + 1
+            else:
+                raise ValueError(f"unknown escape \\{nxt}")
+        else:
+            out.append(ch)
+            index += 1
+    return "".join(out)
+
+
+def generated(args) -> int:
+    """Differential check of a typed target's generated Markdown: run the
+    target's `show` on every corpus entry, then compare the library with
+    cmark-gfm on the shown Markdown (the target itself asserts that the
+    library matches the generator's expected tree)."""
+    work = Path(args.work)
+    probe = Path(args.probe) if args.probe else build_probe(work)
+    samples = []
+    for path in sorted(Path(args.corpus).iterdir()):
+        shown = subprocess.run([args.binary, "show", str(path)], capture_output=True, timeout=60)
+        text = shown.stdout.decode("utf-8", "replace") + shown.stderr.decode("utf-8", "replace")
+        match = re.search(r'^(inline|doc): (".*")$', text, re.M)
+        if not match:
+            continue
+        samples.append((path.name, match.group(1), decode_roc_string(match.group(2))))
+    results = run_probe(probe, [(mode, md) for _, mode, md in samples])
+    counts = {"pass": 0, "fail": 0, "oracle-quirk": 0}
+    report = []
+    shown_count = 0
+    for (name, mode, md), result in zip(samples, results):
+        roc = probe_blocks(result, mode)
+        oracle = cmark_blocks(md)
+        verdict = classify(md, roc, oracle)
+        counts[verdict] += 1
+        if verdict != "pass":
+            report.append({"file": name, "verdict": verdict, "markdown": md, "roc": roc, "cmark": oracle})
+            if verdict == "fail" and shown_count < args.show:
+                shown_count += 1
+                print(f"FAIL {name} ({mode})\n  markdown: {md!r}\n  roc:   {json.dumps(roc, ensure_ascii=False)[:1500]}\n  cmark: {json.dumps(oracle, ensure_ascii=False)[:1500]}")
+    write_json(work / "generated-report.json", report)
+    print(f"generated: {len(samples)} samples; {counts}")
+    return 1 if counts["fail"] else 0
+
+
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -477,9 +609,15 @@ def main() -> int:
     corpus_parser.add_argument("dirs", nargs="+")
     corpus_parser.add_argument("--max-len", type=int, default=4096)
     corpus_parser.add_argument("--show", type=int, default=10)
+    generated_parser = sub.add_parser("generated")
+    generated_parser.add_argument("binary", help="built typed fuzz target (e.g. markdown-inline-ast)")
+    generated_parser.add_argument("corpus")
+    generated_parser.add_argument("--show", type=int, default=10)
     args = parser.parse_args()
     if args.command == "check":
         return check(args)
+    if args.command == "generated":
+        return generated(args)
     return corpus(args)
 
 
