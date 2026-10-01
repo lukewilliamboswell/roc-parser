@@ -1,4 +1,2 @@
-# cmark-gfm (0.29.0.gfm.13), the CommonMark reference implementation with
-# GitHub's table/tasklist/strikethrough extensions, which Markdown.roc claims.
-# The wheel bundles the C library; review_markdown.py reads its XML AST.
-cmarkgfm==2025.10.22
+# Same oracles as the inline review: cmark-gfm 0.29.0.gfm.13 via cmarkgfm.
+-r ../requirements.txt
