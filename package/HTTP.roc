@@ -302,26 +302,24 @@ at_least_1_1 = |version| version.major > 1 or (version.major == 1 and version.mi
 # the optional leniency for bare LF).
 take_line : Bytes -> Try({ line : Bytes, rest : Bytes }, Failure)
 take_line = |bytes| {
+	# Build the error only when there is one: a `Try` holding an error
+	# message costs an allocation even on the success path.
 	var $index = 0
-	var $result = fail(bytes.len(), "message ended before CRLF")
-	var $searching = True
-	while $searching and $index < bytes.len() {
+	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '\r' {
-			$result =
+			return
 				if bytes.get($index + 1) == Ok('\n') {
 					Ok({ line: bytes.sublist({ start: 0, len: $index }), rest: bytes.drop_first($index + 2) })
 				} else {
 					fail($index, "CR not followed by LF")
 				}
-			$searching = False
 		} else if byte == '\n' {
-			$result = fail($index, "LF not preceded by CR")
-			$searching = False
+			return fail($index, "LF not preceded by CR")
 		}
 		$index = $index + 1
 	}
-	$result
+	fail(bytes.len(), "message ended before CRLF")
 }
 
 # request-line = method SP request-target SP HTTP-version
@@ -670,29 +668,24 @@ chunk_ext_value_len = |bytes| {
 quoted_string_len : Bytes -> Try(U64, Failure)
 quoted_string_len = |bytes| {
 	var $index = 1
-	var $result = fail(bytes.len(), "unterminated quoted string")
-	var $searching = True
-	while $searching and $index < bytes.len() {
+	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '"' {
-			$result = Ok($index + 1)
-			$searching = False
+			return Ok($index + 1)
 		} else if byte == '\\' {
 			escaped = bytes.get($index + 1) ?? 0
 			if $index + 1 < bytes.len() and (escaped == '\t' or escaped == ' ' or is_vchar(escaped) or escaped >= 0x80) {
 				$index = $index + 2
 			} else {
-				$result = fail($index, "invalid quoted-pair in quoted string")
-				$searching = False
+				return fail($index, "invalid quoted-pair in quoted string")
 			}
 		} else if byte == '\t' or byte == ' ' or is_vchar(byte) or byte >= 0x80 {
 			$index = $index + 1
 		} else {
-			$result = fail($index, "control character in quoted string")
-			$searching = False
+			return fail($index, "control character in quoted string")
 		}
 	}
-	$result
+	fail(bytes.len(), "unterminated quoted string")
 }
 
 prefix_len : Bytes, (U8 -> Bool) -> U64
