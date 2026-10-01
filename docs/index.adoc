@@ -1,0 +1,94 @@
+= roc-parser: A manual for parsing text and data in Roc
+:doctype: book
+:author: The roc-parser contributors
+// The build stamps the package version it documents. A checkout that has not
+// been released yet says so rather than claiming a version it is not.
+:revnumber: {docs-version}
+:revremark: Parser combinators, with CSV, YAML, XML, Markdown and HTTP/1.1 parsers
+:toc: left
+:toclevels: 3
+:sectnums:
+:sectanchors:
+:!icons:
+:source-highlighter: rouge
+:imagesdir: images
+// Links into the repository. The manual is published away from the source
+// tree, so a relative link to an example or script would not resolve.
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
+
+[.lead]
+Parse text and data in Roc. roc-parser gives you small parsers that combine
+into larger ones, and ready-made parsers for CSV, YAML, XML, Markdown and
+HTTP/1.1 built from the same pieces.
+
+ifdef::backend-html5[]
+{api}[Browse the API reference] ·
+link:roc-parser.pdf[Download this manual as a PDF].
+endif::[]
+
+[discrete]
+== Choose a path
+
+New to roc-parser:: Read <<overview>>, then <<getting-started>>, then
+<<combinator-primer>>.
+Parsing a format roc-parser already supports:: Go to its guide: <<csv>>,
+<<yaml>>, <<xml>>, <<markdown>> or <<http>>.
+Writing your own parser:: Read <<combinators>>, <<custom-format>> and
+<<errors>>.
+Looking something up:: <<modules>>, <<conformance>>, <<compatibility>> and
+<<glossary>>.
+Contributing to roc-parser:: Start with <<contributing>>.
+
+= Start here
+
+include::overview.adoc[leveloffset=+1]
+
+include::getting-started.adoc[leveloffset=+1]
+
+include::combinator-primer.adoc[leveloffset=+1]
+
+= Guides
+
+include::csv.adoc[leveloffset=+1]
+
+include::yaml.adoc[leveloffset=+1]
+
+include::xml.adoc[leveloffset=+1]
+
+include::markdown.adoc[leveloffset=+1]
+
+include::http.adoc[leveloffset=+1]
+
+include::combinators.adoc[leveloffset=+1]
+
+include::custom-format.adoc[leveloffset=+1]
+
+include::errors.adoc[leveloffset=+1]
+
+= Reference
+
+include::modules.adoc[leveloffset=+1]
+
+include::conformance.adoc[leveloffset=+1]
+
+include::compatibility.adoc[leveloffset=+1]
+
+include::glossary.adoc[leveloffset=+1]
+
+= Contributing
+
+include::contributing.adoc[leveloffset=+1]
+
+include::property-testing.adoc[leveloffset=+1]
+
+include::adding-a-format.adoc[leveloffset=+1]
+
+include::maintaining.adoc[leveloffset=+1]
+
+= Release notes
+
+include::releases/index.adoc[leveloffset=+1]

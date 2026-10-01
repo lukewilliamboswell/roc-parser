@@ -1,0 +1,25 @@
+// Release notes are written in Markdown, one file per version
+// (docs/releases/<version>.md). The release workflow publishes that file as
+// the GitHub release page (`scripts/release_helpers.py make-release-notes`),
+// so the manual links to it rather than restating it.
+
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:tree: {repo}/tree/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#release-notes]
+= Release history
+
+Each release's notes are on its {repo}/releases[GitHub release page], and
+their source is in {tree}/docs/releases[`docs/releases/`].
+
+* {repo}/releases/tag/2.0.0[2.0.0] ({src}/docs/releases/2.0.0.md[source])
+
+Each release also carries this manual as a PDF and as a zipped website, and
+the API reference as a zipped website, so the documentation for an earlier
+release stays available after this site moves on.
