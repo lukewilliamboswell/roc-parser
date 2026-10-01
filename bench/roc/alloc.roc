@@ -31,14 +31,14 @@ parse = |format, input| {
 		"csv" => CSV.parse_str(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()
-		"markdown" => Utf8.parse_str(Markdown.all, input).is_ok()
+		"markdown" => Markdown.parse_str(input).len() + 1 > 0
 		"http" =>
 			if input.starts_with("HTTP/") {
 				HTTP.parse_response(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
 			} else {
 				HTTP.parse_request(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
 			}
-		_ => Bool.False
+		_ => False
 	}
 	if accepted "ok" else "error"
 }

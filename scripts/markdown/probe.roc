@@ -7,12 +7,11 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Markdown
-import parser.Utf8
 
 ## Batch probe for scripts/review_markdown.py.
 ##
 ## stdin is a sequence of frames `<mode> <byte length>\n<bytes>`, where mode is
-## `inline` (parse with `Markdown.inlines`) or `doc` (parse with `Markdown.all`
+## `inline` (parse with `Markdown.parse_inlines`) or `doc` (parse with `Markdown.parse_str`
 ## and report paragraphs). One JSON line is printed per frame.
 main! : List(OsStr) => Try({}, _)
 main! = |_| {
@@ -32,22 +31,14 @@ main! = |_| {
 
 run_case : List(U8), List(U8) -> Str
 run_case = |mode, body| {
+	text = Str.from_utf8_lossy(body)
 	if mode == "count".to_utf8() {
 		# Timing mode: parse and count nodes without building JSON.
-		match Utf8.parse_bytes(Markdown.inlines, body) {
-			Ok(nodes) => "{\"status\":\"ok\",\"nodes\":${count_nodes(nodes).to_str()}}"
-			Err(_) => "{\"status\":\"error\"}"
-		}
+		"{\"status\":\"ok\",\"nodes\":${count_nodes(Markdown.parse_inlines(text)).to_str()}}"
 	} else if mode == "inline".to_utf8() {
-		match Utf8.parse_bytes(Markdown.inlines, body) {
-			Ok(nodes) => "{\"status\":\"ok\",\"inlines\":${encode_inlines(nodes)}}"
-			Err(_) => "{\"status\":\"error\"}"
-		}
+		"{\"status\":\"ok\",\"inlines\":${encode_inlines(Markdown.parse_inlines(text))}}"
 	} else {
-		match Utf8.parse_bytes(Markdown.all, body) {
-			Ok(blocks) => "{\"status\":\"ok\",\"blocks\":[${blocks.map(encode_block) |> Str.join_with(",")}]}"
-			Err(_) => "{\"status\":\"error\"}"
-		}
+		"{\"status\":\"ok\",\"blocks\":[${Str.join_with(Markdown.parse_str(text).map(encode_block), ",")}]}"
 	}
 }
 
@@ -56,12 +47,12 @@ encode_block = |block| {
 	match block {
 		Paragraph(inlines) => "[\"p\",${encode_inlines(inlines)}]"
 		Heading({ level, content }) => "[\"h\",${level.to_str()},${encode_inlines(content)}]"
-		_ => "[\"other\",${json_string(Markdown.to_debug_str(block))}]"
+		_ => "[\"other\",${json_string(Str.inspect(block))}]"
 	}
 }
 
 encode_inlines : List(Markdown.Inline) -> Str
-encode_inlines = |nodes| "[${nodes.map(encode_inline) |> Str.join_with(",")}]"
+encode_inlines = |nodes| "[${Str.join_with(nodes.map(encode_inline), ",")}]"
 
 encode_inline : Markdown.Inline -> Str
 encode_inline = |node| {
@@ -97,11 +88,11 @@ count_nodes = |nodes| {
 	)
 }
 
-encode_title : [Some(Str), None] -> Str
+encode_title : Try(Str, [Missing]) -> Str
 encode_title = |title| {
 	match title {
-		Some(text) => json_string(text)
-		None => "null"
+		Ok(text) => json_string(text)
+		Err(Missing) => "null"
 	}
 }
 

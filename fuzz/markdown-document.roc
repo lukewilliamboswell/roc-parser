@@ -24,9 +24,9 @@ Parsed : List(Markdown)
 
 parse : Str -> Parsed
 parse = |text| {
-	match Utf8.parse_str(Markdown.all, text) {
+	match Utf8.parse_str(Markdown.parser, text) {
 		Ok(blocks) => blocks
-		Err(_) => crash "Markdown.all rejected a document:\n${Str.inspect(text)}"
+		Err(_) => crash "Markdown.parser rejected a document:\n${Str.inspect(text)}"
 	}
 }
 
@@ -116,12 +116,12 @@ expand_indentation_tabs : Str -> Str
 expand_indentation_tabs = |text| {
 	var $out = []
 	var $column = 0
-	var $leading = Bool.True
+	var $leading = True
 	for byte in text.to_utf8() {
 		if byte == '\n' or byte == '\r' {
 			$out = $out.append(byte)
 			$column = 0
-			$leading = Bool.True
+			$leading = True
 		} else if $leading and byte == '\t' {
 			width = 4 - ($column % 4)
 			$out = $out.concat(List.repeat(' ', width))
@@ -131,7 +131,7 @@ expand_indentation_tabs = |text| {
 			$column = $column + 1
 		} else {
 			$out = $out.append(byte)
-			$leading = Bool.False
+			$leading = False
 		}
 	}
 	Str.from_utf8($out) ?? text
@@ -146,7 +146,7 @@ skeleton = |blocks| {
 			match block {
 				Code(code) => Code({ info: code.info, pre: "" })
 				HtmlBlock(_) => HtmlBlock("")
-				Frontmatter(_) => Frontmatter({ raw: "" })
+				Frontmatter(_) => Frontmatter("")
 				Blockquote(children) => Blockquote(skeleton(children))
 				ListBlock({ kind, loose, items }) => ListBlock({ kind, loose, items: items.map(|item| { task: item.task, blocks: skeleton(item.blocks) }) })
 				other => other
@@ -156,7 +156,7 @@ skeleton = |blocks| {
 }
 
 show : Parsed -> Str
-show = |blocks| Str.join_with(blocks.map(Markdown.to_debug_str), "\n")
+show = |blocks| Str.join_with(blocks.map(Str.inspect), "\n")
 
 target = Fuzz.target_with({
 	name: "markdown-document",

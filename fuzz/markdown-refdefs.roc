@@ -64,19 +64,19 @@ destinations = [
 	{ text: "\"quoted\"", href: "\"quoted\"" },
 ]
 
-Title : { text : Str, value : [Some(Str), None] }
+Title : { text : Str, value : Try(Str, [Missing]) }
 
 titles : List(Title)
 titles = [
-	{ text: "", value: None },
-	{ text: "\"title\"", value: Some("title") },
-	{ text: "'it''s'", value: None },
-	{ text: "'single'", value: Some("single") },
-	{ text: "(paren)", value: Some("paren") },
-	{ text: "\"two\nlines\"", value: Some("two\nlines") },
-	{ text: "\"esc \\\" q\"", value: Some("esc \" q") },
-	{ text: "(a \\) b)", value: Some("a ) b") },
-	{ text: "\"\"", value: Some("") },
+	{ text: "", value: Err(Missing) },
+	{ text: "\"title\"", value: Ok("title") },
+	{ text: "'it''s'", value: Err(Missing) },
+	{ text: "'single'", value: Ok("single") },
+	{ text: "(paren)", value: Ok("paren") },
+	{ text: "\"two\nlines\"", value: Ok("two\nlines") },
+	{ text: "\"esc \\\" q\"", value: Ok("esc \" q") },
+	{ text: "(a \\) b)", value: Ok("a ) b") },
+	{ text: "\"\"", value: Ok("") },
 ]
 
 ## Separators between the label's colon, the destination and the title: some
@@ -94,7 +94,7 @@ gen_def = |start| {
 	dest_choice = pick(style.cur, destinations.len())
 	dest = destinations.get(dest_choice.n) ?? { text: "/url", href: "/url" }
 	title_choice = pick(dest_choice.cur, titles.len())
-	title = titles.get(title_choice.n) ?? { text: "", value: None }
+	title = titles.get(title_choice.n) ?? { text: "", value: Err(Missing) }
 	sep1 = pick(title_choice.cur, separators.len())
 	sep2 = pick(sep1.cur, separators.len())
 	trail = pick(sep2.cur, 3)
@@ -109,18 +109,18 @@ gen_def = |start| {
 	# next line the definition stands without a title and the junk is text.
 	junk_title = title.text == "'it''s'"
 	title_part = if title.text.is_empty() "" else "${before_title}${title.text}"
-	title_value = if junk_title None else title.value
+	title_value = if junk_title Err(Missing) else title.value
 	valid_shape = !(junk_title and !Str.contains(before_title, "\n"))
 	text_ok = "[${written_label}]:${before_dest}${dest.text}${title_part}${trailing}"
 	target = { href: dest.href, title: title_value }
 	{ text, valid } =
 		match broken.n {
-			0 => { text: "[${written_label}]: <a\nb>", valid: Bool.False }
-			1 => { text: "[${written_label}]:${before_dest}(open${title_part}", valid: Bool.False }
-			2 => { text: "[${written_label}]:${before_dest}/a\u(7)b${title_part}", valid: Bool.False }
-			3 => { text: "[${written_label}]:${before_dest}${dest.text} \"t\" junk", valid: Bool.False }
-			4 => { text: "[${written_label}]:${before_dest}<bar>(baz)", valid: Bool.False }
-			5 => { text: "[${written_label}[x]]:${before_dest}${dest.text}", valid: Bool.False }
+			0 => { text: "[${written_label}]: <a\nb>", valid: False }
+			1 => { text: "[${written_label}]:${before_dest}(open${title_part}", valid: False }
+			2 => { text: "[${written_label}]:${before_dest}/a\u(7)b${title_part}", valid: False }
+			3 => { text: "[${written_label}]:${before_dest}${dest.text} \"t\" junk", valid: False }
+			4 => { text: "[${written_label}]:${before_dest}<bar>(baz)", valid: False }
+			5 => { text: "[${written_label}[x]]:${before_dest}${dest.text}", valid: False }
 			_ => { text: text_ok, valid: valid_shape }
 		}
 	junk = valid and junk_title and broken.n > 5
@@ -129,7 +129,7 @@ gen_def = |start| {
 
 Input : { markdown : Str, expected : List(Markdown) }
 
-Block : { lines : List(Str), defs : List(Def), node : [Some(Markdown), None] }
+Block : { lines : List(Str), defs : List(Def), node : Try(Markdown, [Missing]) }
 
 ## One paragraph that starts with definitions, possibly followed by text.
 gen_block : Cur -> { block : Block, cur : Cur }
@@ -155,15 +155,15 @@ gen_block = |start| {
 		Ok(def) if all_valid and def.junk => "'it''s'"
 		_ => ""
 	}
-	lines = $defs.map(|def| def.text).concat(if tail_text.is_empty() [] else [tail_text]) |> Str.join_with("\n") |> Str.split_on("\n")
+	lines = Str.join_with($defs.map(|def| def.text).concat(if tail_text.is_empty() [] else [tail_text]), "\n").split_on("\n")
 	# Only an all-valid run followed by plain text gives a predictable node;
 	# otherwise the paragraph's content is checked loosely (see `test`).
 	node =
 		if all_valid {
 			rest = [junk, tail_text].keep_if(|part| !part.is_empty())
-			if rest.is_empty() None else Some(Paragraph([Text(Str.join_with(rest, "\n"))]))
+			if rest.is_empty() Err(Missing) else Ok(Paragraph([Text(Str.join_with(rest, "\n"))]))
 		} else {
-			Some(Paragraph([Text("?")]))
+			Ok(Paragraph([Text("?")]))
 		}
 	{ block: { lines, defs: valid_prefix, node }, cur: $cur }
 }
@@ -171,7 +171,7 @@ gen_block = |start| {
 take_valid : List(Def) -> List(Def)
 take_valid = |defs| {
 	var $out = []
-	var $going = Bool.True
+	var $going = True
 	for def in defs {
 		match def.target {
 			Valid(_) if $going => {
@@ -180,7 +180,7 @@ take_valid = |defs| {
 			}
 
 			_ => {
-				$going = Bool.False
+				$going = False
 			}
 		}
 	}
@@ -216,24 +216,24 @@ generate = |bytes| {
 		$chunks = $chunks.append(Str.join_with(contain(block.lines, container.n, $index), "\n"))
 		node =
 			match block.node {
-				Some(paragraph) =>
+				Ok(paragraph) =>
 					match container.n {
-						1 => Some(Blockquote([paragraph]))
-						2 => Some(ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [paragraph] }] }))
-						_ => Some(paragraph)
+						1 => Ok(Blockquote([paragraph]))
+						2 => Ok(ListBlock({ kind: Unordered, loose: False, items: [{ task: NoTask, blocks: [paragraph] }] }))
+						_ => Ok(paragraph)
 					}
 
-				None =>
+				Err(Missing) =>
 					match container.n {
-						1 => Some(Blockquote([]))
-						2 => Some(ListBlock({ kind: Unordered, loose: Bool.False, items: [{ task: NoTask, blocks: [] }] }))
-						_ => None
+						1 => Ok(Blockquote([]))
+						2 => Ok(ListBlock({ kind: Unordered, loose: False, items: [{ task: NoTask, blocks: [] }] }))
+						_ => Err(Missing)
 					}
 			}
 		$expected =
 			match node {
-				Some(n) => $expected.append(n)
-				None => $expected
+				Ok(n) => $expected.append(n)
+				Err(Missing) => $expected
 			}
 		$defs = $defs.concat(block.defs)
 		$index = $index + 1
@@ -324,7 +324,7 @@ normalize = |blocks| {
 matches : List(Markdown), List(Markdown) -> Bool
 matches = |expected, actual| {
 	if expected.len() != actual.len() {
-		Bool.False
+		False
 	} else {
 		List.map2(expected, actual, |e, a| block_matches(e, a)).all(|ok| ok)
 	}
@@ -333,7 +333,7 @@ matches = |expected, actual| {
 block_matches : Markdown, Markdown -> Bool
 block_matches = |expected, actual| {
 	match (expected, actual) {
-		(Paragraph([Text("?")]), Paragraph(_)) => Bool.True
+		(Paragraph([Text("?")]), Paragraph(_)) => True
 		(Blockquote(e), Blockquote(a)) => matches(e, a)
 		(ListBlock(e), ListBlock(a)) =>
 			e.kind == a.kind and e.loose == a.loose and e.items.len() == a.items.len() and List.map2(e.items, a.items, |x, y| x.task == y.task and matches(x.blocks, y.blocks)).all(|ok| ok)
@@ -344,9 +344,9 @@ block_matches = |expected, actual| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	actual =
-		match Utf8.parse_str(Markdown.all, input.markdown) {
+		match Utf8.parse_str(Markdown.parser, input.markdown) {
 			Ok(blocks) => normalize(blocks)
-			Err(_) => crash "Markdown.all failed"
+			Err(_) => crash "Markdown.parser failed"
 		}
 	if !matches(input.expected, actual) {
 		crash "reference definition mismatch\n--- markdown ---\n${input.markdown}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${show(actual)}"
@@ -355,16 +355,16 @@ test = |input| {
 }
 
 show : List(Markdown) -> Str
-show = |blocks| Str.join_with(blocks.map(Markdown.to_debug_str), "\n")
+show = |blocks| Str.join_with(blocks.map(Str.inspect), "\n")
 
 ## `show` prints one JSON object, {"markdown", "expected"}, in
 ## scripts/markdown/blocks/probe.roc's shape for `review_markdown_blocks.py crosscheck`; a
 ## paragraph of just "?" stands for any paragraph.
 encode_blocks : List(Markdown) -> Str
-encode_blocks = |blocks| "[${blocks.map(encode_block) |> Str.join_with(",")}]"
+encode_blocks = |blocks| "[${Str.join_with(blocks.map(encode_block), ",")}]"
 
 encode_inlines : List(Markdown.Inline) -> Str
-encode_inlines = |inlines| "[${inlines.map(encode_inline) |> Str.join_with(",")}]"
+encode_inlines = |inlines| "[${Str.join_with(inlines.map(encode_inline), ",")}]"
 
 encode_block : Markdown -> Str
 encode_block = |block| {
@@ -377,10 +377,10 @@ encode_block = |block| {
 					Unordered => "\"bullet\""
 					Ordered({ start }) => start.to_str()
 				}
-			items_json = items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]") |> Str.join_with(",")
+			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
 			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
 		}
-		other => "[\"other\",${json_string(Markdown.to_debug_str(other))}]"
+		other => "[\"other\",${json_string(Str.inspect(other))}]"
 	}
 }
 
@@ -391,12 +391,12 @@ encode_inline = |inline| {
 		Link({ label, target }) => {
 			title =
 				match target.title {
-					Some(text) => json_string(text)
-					None => "null"
+					Ok(text) => json_string(text)
+					Err(Missing) => "null"
 				}
 			"[\"link\",${json_string(target.href)},${title},${encode_inlines(label)}]"
 		}
-		_ => "[\"other\",${json_string(Markdown.inline_to_debug_str(inline))}]"
+		_ => "[\"other\",${json_string(Str.inspect(inline))}]"
 	}
 }
 

@@ -8,7 +8,7 @@ import parser.Markdown
 import parser.Parser
 import parser.Utf8
 
-## Arbitrary bytes through Markdown.inlines. Parsing never fails or crashes
+## Arbitrary bytes through Markdown.inline_parser. Parsing never fails or crashes
 ## (also on invalid UTF-8), and for valid UTF-8:
 ##
 ## - the tree is well formed: no empty or adjacent text nodes, no link inside
@@ -26,9 +26,9 @@ Tree : List(Markdown.Inline)
 
 parse : List(U8) -> Tree
 parse = |bytes| {
-	match Utf8.parse_bytes(Markdown.inlines, bytes) {
+	match Utf8.parse_bytes(Markdown.inline_parser, bytes) {
 		Ok(nodes) => nodes
-		Err(_) => crash "Markdown.inlines must accept every input: ${Str.inspect(Str.from_utf8_lossy(bytes))}"
+		Err(_) => crash "Markdown.inline_parser must accept every input: ${Str.inspect(Str.from_utf8_lossy(bytes))}"
 	}
 }
 
@@ -41,15 +41,13 @@ test = |bytes| {
 			check_well_formed(input, tree)
 			check_crlf(input, tree)
 			check_escaped(input)
-			check_leading_link(input, tree, Markdown.link)
-			check_leading_link(input, tree, Markdown.image)
 			Fuzz.keep
 		}
 	}
 }
 
 show : Tree -> Str
-show = |nodes| "[${nodes.map(Markdown.inline_to_debug_str) |> Str.join_with(", ")}]"
+show = |nodes| "[${Str.join_with(nodes.map(Str.inspect), ", ")}]"
 
 fail : Str, Str, Tree -> {}
 fail = |message, input, tree| {
@@ -62,7 +60,7 @@ fail = |message, input, tree| {
 
 check_well_formed : Str, Tree -> {}
 check_well_formed = |input, tree| {
-	match well_formed(tree, Bool.False) {
+	match well_formed(tree, False) {
 		Ok({}) => {}
 		Err(problem) => fail(problem, input, tree)
 	}
@@ -74,7 +72,7 @@ check_well_formed = |input, tree| {
 
 well_formed : Tree, Bool -> Try({}, Str)
 well_formed = |nodes, in_link| {
-	var $previous_text = Bool.False
+	var $previous_text = False
 	var $result = Ok({})
 	for node in nodes {
 		problem =
@@ -105,7 +103,7 @@ well_formed = |nodes, in_link| {
 					if in_link and !is_autolink_shaped(label, target.href) {
 						Err("link inside a link label")
 					} else {
-						well_formed(label, Bool.True)
+						well_formed(label, True)
 					}
 
 				Image({ alt, .. }) => well_formed(alt, in_link)
@@ -114,8 +112,8 @@ well_formed = |nodes, in_link| {
 			}
 		$previous_text =
 			match node {
-				Text(_) => Bool.True
-				_ => Bool.False
+				Text(_) => True
+				_ => False
 			}
 		if $result == Ok({}) {
 			$result = problem
@@ -128,34 +126,7 @@ is_autolink_shaped : Tree, Str -> Bool
 is_autolink_shaped = |label, href| {
 	match label {
 		[Text(text)] => text == href or Str.concat("mailto:", text) == href or Str.concat("http://", text) == href
-		_ => Bool.False
-	}
-}
-
-## ---------------------------------------------------------------------------
-## Markdown.link / Markdown.image
-## ---------------------------------------------------------------------------
-
-## On one line without U+0000 or leading whitespace (which paragraph content
-## would normalize), a successful leading link/image parse leaves a suffix of
-## the input and is exactly the first node Markdown.inlines produces.
-check_leading_link : Str, Tree, Parser.Parser(Utf8.Bytes, Markdown.Inline) -> {}
-check_leading_link = |input, tree, parser| {
-	bytes = input.to_utf8()
-	single_line = !bytes.contains('\n') and !bytes.contains('\r') and !bytes.contains(0)
-	match Utf8.parse_str_partial(parser, input) {
-		Err(_) => {}
-		Ok({ value: val, rest: rest }) => {
-			if !Str.ends_with(input, rest) {
-				crash "leading link parser returned input that is not a suffix\ninput: ${Str.inspect(input)}\nrest:  ${Str.inspect(rest)}"
-			}
-			if single_line and !Str.starts_with(input, " ") and !Str.starts_with(input, "\t") {
-				match tree.first() {
-					Ok(first) if first == val => {}
-					_ => crash "leading link parser disagrees with Markdown.inlines\ninput:  ${Str.inspect(input)}\nparser: ${Markdown.inline_to_debug_str(val)}\ninlines: ${show(tree)}"
-				}
-			}
-		}
+		_ => False
 	}
 }
 
@@ -183,8 +154,8 @@ lf_node = |node| {
 lf_target : Markdown.LinkTarget -> Markdown.LinkTarget
 lf_target = |target| {
 	match target.title {
-		Some(title) => { ..target, title: Some(Str.replace_each(title, "\r\n", "\n")) }
-		None => target
+		Ok(title) => { ..target, title: Ok(Str.replace_each(title, "\r\n", "\n")) }
+		Err(Missing) => target
 	}
 }
 
@@ -280,7 +251,7 @@ check_escaped = |input| {
 	}
 
 	link_input = ['[', 'x'].concat(escaped).concat("x](u)".to_utf8())
-	expected_link = [Link({ label: [Text("x${text}x")], target: { href: "u", title: None } })]
+	expected_link = [Link({ label: [Text("x${text}x")], target: { href: "u", title: Err(Missing) } })]
 	link = parse(link_input)
 	if link != expected_link {
 		mismatch("escaped text inside a link", link_input, expected_link, link)

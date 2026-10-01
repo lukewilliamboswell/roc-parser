@@ -7,7 +7,6 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Markdown
-import parser.Utf8
 
 ## Reads a Markdown document from stdin and prints the parsed block tree as
 ## JSON for scripts/review_markdown_blocks.py. Node shapes:
@@ -24,20 +23,17 @@ main! = |_| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
-			match Utf8.parse_str(Markdown.all, input) {
-				Ok(blocks) => Stdout.line!("{\"status\":\"ok\",\"value\":${encode_blocks(blocks)}}")?
-				Err(_) => Stdout.line!("{\"status\":\"error\"}")?
-			}
+			Stdout.line!("{\"status\":\"ok\",\"value\":${encode_blocks(Markdown.parse_str(input))}}")?
 		}
 	}
 	Ok({})
 }
 
 encode_blocks : List(Markdown) -> Str
-encode_blocks = |blocks| "[${blocks.map(encode_block) |> Str.join_with(",")}]"
+encode_blocks = |blocks| "[${Str.join_with(blocks.map(encode_block), ",")}]"
 
 encode_inlines : List(Markdown.Inline) -> Str
-encode_inlines = |inlines| "[${inlines.map(encode_inline) |> Str.join_with(",")}]"
+encode_inlines = |inlines| "[${Str.join_with(inlines.map(encode_inline), ",")}]"
 
 encode_block : Markdown -> Str
 encode_block = |block| {
@@ -51,19 +47,18 @@ encode_block = |block| {
 					Unordered => "\"bullet\""
 					Ordered({ start }) => start.to_str()
 				}
-			items_json = items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]") |> Str.join_with(",")
+			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
 			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
 		}
 		Code({ info, pre }) => "[\"code\",${json_string(info)},${json_string(pre)}]"
 		ThematicBreak => "[\"hr\"]"
 		Table({ header, align, rows }) => {
-			align_json = align.map(|a| json_string(a.to_str())) |> Str.join_with(",")
-			row_json = |cells| "[${cells.map(encode_inlines) |> Str.join_with(",")}]"
-			"[\"table\",[${align_json}],${row_json(header)},[${rows.map(row_json) |> Str.join_with(",")}]]"
+			align_json = Str.join_with(align.map(|a| json_string(a.to_str())), ",")
+			row_json = |cells| "[${Str.join_with(cells.map(encode_inlines), ",")}]"
+			"[\"table\",[${align_json}],${row_json(header)},[${Str.join_with(rows.map(row_json), ",")}]]"
 		}
 		HtmlBlock(text) => "[\"html\",${json_string(text)}]"
-		Frontmatter({ raw }) => "[\"frontmatter\",${json_string(raw)}]"
-		TODO(text) => "[\"todo\",${json_string(text)}]"
+		Frontmatter(raw) => "[\"frontmatter\",${json_string(raw)}]"
 	}
 }
 
@@ -82,11 +77,11 @@ encode_inline = |inline| {
 	}
 }
 
-encode_title : [Some(Str), None] -> Str
+encode_title : Try(Str, [Missing]) -> Str
 encode_title = |title| {
 	match title {
-		Some(text) => json_string(text)
-		None => "null"
+		Ok(text) => json_string(text)
+		Err(Missing) => "null"
 	}
 }
 

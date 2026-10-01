@@ -47,10 +47,10 @@ repeat = |text, count| Str.join_with(List.repeat(text, count), "")
 Line : { text : Str, lazy : Bool, blank : Bool }
 
 text_line : Str -> Line
-text_line = |text| { text, lazy: Bool.False, blank: Bool.False }
+text_line = |text| { text, lazy: False, blank: False }
 
 blank_line : Line
-blank_line = { text: "", lazy: Bool.False, blank: Bool.True }
+blank_line = { text: "", lazy: False, blank: True }
 
 ## What a following sibling must take into account.
 Kind : [
@@ -124,7 +124,7 @@ gen_paragraph = |start, flush| {
 		lead = if indent.n < 4 and !(flush and $index == 0) spaces(indent.n) else ""
 		last = $index == count.n
 		tail = if trail.n == 1 " " else if trail.n == 2 and last "   " else ""
-		$lines = $lines.append({ text: "${lead}${ws.text}${tail}", lazy: $index > 0, blank: Bool.False })
+		$lines = $lines.append({ text: "${lead}${ws.text}${tail}", lazy: $index > 0, blank: False })
 		$texts = $texts.append(ws.text)
 		$index = $index + 1
 	}
@@ -180,7 +180,7 @@ gen_setext = |start, flush| {
 			_ => []
 		}
 	# Continuation lines of a setext heading are kept with their prefixes.
-	lines = para.lines.map(|line| { ..line, lazy: Bool.False }).append(text_line(underline))
+	lines = para.lines.map(|line| { ..line, lazy: False }).append(text_line(underline))
 	{ lines, node: Heading({ level: if style.n == 0 One else Two, content }), kind: KSetext, cur: trail.cur }
 }
 
@@ -404,11 +404,11 @@ gen_table = |start| {
 	# delimiter cells unpadded then.
 	delim_line =
 		if outer == 0 or outer == 1 or (outer == 3 and columns == 1) {
-			render_row($delims, outer, Bool.True)
+			render_row($delims, outer, True)
 		} else {
 			"${Str.join_with($delims.map(Str.trim), "|")}${if outer == 2 "|" else ""}"
 		}
-	lines = [text_line(header_line), text_line(delim_line)].concat($rows.map(|row| text_line(render_row(row, outer, Bool.True))))
+	lines = [text_line(header_line), text_line(delim_line)].concat($rows.map(|row| text_line(render_row(row, outer, True))))
 	node = Table({ header: $header.map(inline_text), align: $align, rows: $expected_rows })
 	{ lines, node, kind: KTable, cur: $cur }
 }
@@ -457,27 +457,27 @@ may_touch = |prev, next| {
 	match prev {
 		KParagraph =>
 			match next {
-				SAtx | SFenced | SQuote | STable => Bool.True
+				SAtx | SFenced | SQuote | STable => True
 				SBreak(c) => c != '-'
 				SHtml(h) => h.html_type <= 6
 				SList(l) => !l.first_blank and (!l.ordered or l.start == 1)
-				_ => Bool.False
+				_ => False
 			}
 
 		KAtx | KSetext | KBreak | KFenced | KHtmlComment =>
 			match next {
 				# A paragraph directly after a fence could be read as a setext
 				# underline's text only when it is followed by one; fine here.
-				_ => Bool.True
+				_ => True
 			}
 
 		KIndented =>
 			match next {
-				SIndented => Bool.False
-				_ => Bool.True
+				SIndented => False
+				_ => True
 			}
 
-		_ => Bool.False
+		_ => False
 	}
 }
 
@@ -485,10 +485,10 @@ may_touch = |prev, next| {
 may_follow : Kind, Start -> Bool
 may_follow = |prev, next| {
 	match (prev, next) {
-		(KIndented, SIndented) => Bool.False
-		(KList(_), SIndented) => Bool.False
+		(KIndented, SIndented) => False
+		(KList(_), SIndented) => False
 		(KList(a), SList(b)) => !(a.ordered == b.ordered and a.marker == b.marker)
-		_ => Bool.True
+		_ => True
 	}
 }
 
@@ -554,7 +554,7 @@ gen_sequence = |start, depth, max, top_level, first_on_marker_line| {
 	var $cur = count.cur
 	var $lines = []
 	var $nodes = []
-	var $blank_between = Bool.False
+	var $blank_between = False
 	var $prev = Err(NoPrevious)
 	var $first_start = SParagraph
 	var $index = 0
@@ -569,7 +569,7 @@ gen_sequence = |start, depth, max, top_level, first_on_marker_line| {
 		follows =
 			match $prev {
 				Ok(kind) => may_follow(kind, $choice.start)
-				Err(_) => Bool.True
+				Err(_) => True
 			}
 		if !follows {
 			$choice = { ..$choice, start: SParagraph }
@@ -577,8 +577,8 @@ gen_sequence = |start, depth, max, top_level, first_on_marker_line| {
 		last = $index == count.n
 		after_list =
 			match $prev {
-				Ok(KList(_)) => Bool.True
-				_ => Bool.False
+				Ok(KList(_)) => True
+				_ => False
 			}
 		block = gen_block($choice, depth, top_level and last, (first and first_on_marker_line) or after_list)
 		$cur = block.cur
@@ -594,7 +594,7 @@ gen_sequence = |start, depth, max, top_level, first_on_marker_line| {
 					if may_touch(kind, $choice.start) and touch.n == 0 {
 						[]
 					} else {
-						$blank_between = Bool.True
+						$blank_between = True
 						[blank_line]
 					}
 				}
@@ -621,7 +621,7 @@ marker_line_safe = |s| {
 	match s {
 		SIndented => SParagraph
 		SBreak(_) => SBreak('_')
-		SList(l) => SList({ ..l, first_blank: Bool.False })
+		SList(l) => SList({ ..l, first_blank: False })
 		_ => s
 	}
 }
@@ -641,13 +641,13 @@ prefix_lines = |lines, first_prefix, rest_prefix, blank_prefix, start| {
 		$cur = drop.cur
 		prefixed =
 			if $index == 0 {
-				{ text: "${first_prefix}${line.text}", lazy: Bool.False, blank: Bool.False }
+				{ text: "${first_prefix}${line.text}", lazy: False, blank: False }
 			} else if line.blank {
-				{ text: blank_prefix, lazy: Bool.False, blank: Bool.True }
+				{ text: blank_prefix, lazy: False, blank: True }
 			} else if line.lazy and drop.n == 0 {
 				line
 			} else {
-				{ text: "${rest_prefix}${line.text}", lazy: Bool.False, blank: Bool.False }
+				{ text: "${rest_prefix}${line.text}", lazy: False, blank: False }
 			}
 		$out = $out.append(prefixed)
 		$index = $index + 1
@@ -658,7 +658,7 @@ prefix_lines = |lines, first_prefix, rest_prefix, blank_prefix, start| {
 gen_quote : Cur, U64, Bool -> Gen
 gen_quote = |start, depth, flush| {
 	style = pick(start, 4)
-	inner = gen_sequence(style.cur, depth, 3, Bool.False, Bool.False)
+	inner = gen_sequence(style.cur, depth, 3, False, False)
 	# `>` then an optional space; content starting with a space needs the
 	# space written out so the content keeps its indentation.
 	lead = if style.n == 3 and !flush " " else ""
@@ -672,13 +672,13 @@ gen_quote = |start, depth, flush| {
 		prefixed =
 			if line.blank {
 				# Not blank any more for enclosing containers: the `>` must stay.
-				{ text: if form.n == 0 "${lead}> " else "${lead}>", lazy: Bool.False, blank: Bool.False }
+				{ text: if form.n == 0 "${lead}> " else "${lead}>", lazy: False, blank: False }
 			} else if line.lazy and drop.n == 0 and !$out.is_empty() {
 				line
 			} else if form.n == 0 and !starts_space {
-				{ text: "${lead}>${line.text}", lazy: Bool.False, blank: Bool.False }
+				{ text: "${lead}>${line.text}", lazy: False, blank: False }
 			} else {
-				{ text: "${lead}> ${line.text}", lazy: Bool.False, blank: Bool.False }
+				{ text: "${lead}> ${line.text}", lazy: False, blank: False }
 			}
 		$out = $out.append(prefixed)
 	}
@@ -693,7 +693,7 @@ gen_list = |start, depth, info, flush| {
 	var $cur = count.cur
 	var $lines = []
 	var $items = []
-	var $loose = Bool.False
+	var $loose = False
 	var $prev_content = 4
 	var $index = 0
 	marker_char = Str.from_utf8([info.marker]) ?? "-"
@@ -717,15 +717,15 @@ gen_list = |start, depth, info, flush| {
 		item =
 			if empty {
 				empty_item = { task: NoTask, blocks: [] }
-				{ lines: [text_line("${spaces(marker_indent)}${marker}")], item: empty_item, loose: Bool.False, content: marker_indent + marker_width + 1 }
+				{ lines: [text_line("${spaces(marker_indent)}${marker}")], item: empty_item, loose: False, content: marker_indent + marker_width + 1 }
 			} else {
-				inner = gen_sequence($cur, depth, 2, Bool.False, !blank_start)
+				inner = gen_sequence($cur, depth, 2, False, !blank_start)
 				$cur = inner.cur
 				content_width = marker_indent + marker_width + (if blank_start 1 else gap.n + 1)
 				first_paragraph =
 					match inner.first_start {
-						SParagraph => Bool.True
-						_ => Bool.False
+						SParagraph => True
+						_ => False
 					}
 				task = if first_paragraph and !blank_start and task_choice.n < 3 task_choice.n else 3
 				task_text = if task == 0 "[ ] " else if task == 1 "[x] " else if task == 2 "[X] " else ""
@@ -748,7 +748,7 @@ gen_list = |start, depth, info, flush| {
 				blank = pick($cur, 3)
 				$cur = blank.cur
 				if blank.n == 0 {
-					$loose = Bool.True
+					$loose = True
 					[blank_line]
 				} else {
 					[]
@@ -770,7 +770,7 @@ Input : { markdown : Str, expected : List(Markdown) }
 
 generate : List(U8) -> Input
 generate = |bytes| {
-	seq = gen_sequence({ bytes, pos: 0 }, 0, 5, Bool.True, Bool.False)
+	seq = gen_sequence({ bytes, pos: 0 }, 0, 5, True, False)
 	# A first line of exactly `---` with another later would be frontmatter.
 	lines = seq.lines.map(|line| line.text)
 	safe = if lines.first() == Ok("---") List.set(lines, 0, "***") ?? lines else lines
@@ -780,9 +780,9 @@ generate = |bytes| {
 
 parse : Str -> List(Markdown)
 parse = |text| {
-	match Utf8.parse_str(Markdown.all, text) {
+	match Utf8.parse_str(Markdown.parser, text) {
 		Ok(blocks) => blocks
-		Err(_) => crash "Markdown.all failed on:\n${text}"
+		Err(_) => crash "Markdown.parser failed on:\n${text}"
 	}
 }
 
@@ -810,7 +810,7 @@ test = |input| {
 }
 
 show_blocks : List(Markdown) -> Str
-show_blocks = |blocks| Str.join_with(blocks.map(Markdown.to_debug_str), "\n")
+show_blocks = |blocks| Str.join_with(blocks.map(Str.inspect), "\n")
 
 ## `show` prints one JSON object, {"markdown", "expected"}, with `expected` in
 ## scripts/markdown/blocks/probe.roc's shape, so scripts/review_markdown_blocks.py crosscheck
@@ -819,10 +819,10 @@ show : Input -> Str
 show = |input| "{\"markdown\":${json_string(input.markdown)},\"expected\":${encode_blocks(input.expected)}}"
 
 encode_blocks : List(Markdown) -> Str
-encode_blocks = |blocks| "[${blocks.map(encode_block) |> Str.join_with(",")}]"
+encode_blocks = |blocks| "[${Str.join_with(blocks.map(encode_block), ",")}]"
 
 encode_inlines : List(Markdown.Inline) -> Str
-encode_inlines = |inlines| "[${inlines.map(encode_inline) |> Str.join_with(",")}]"
+encode_inlines = |inlines| "[${Str.join_with(inlines.map(encode_inline), ",")}]"
 
 encode_block : Markdown -> Str
 encode_block = |block| {
@@ -836,19 +836,18 @@ encode_block = |block| {
 					Unordered => "\"bullet\""
 					Ordered({ start }) => start.to_str()
 				}
-			items_json = items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]") |> Str.join_with(",")
+			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
 			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
 		}
 		Code({ info, pre }) => "[\"code\",${json_string(info)},${json_string(pre)}]"
 		ThematicBreak => "[\"hr\"]"
 		Table({ header, align, rows }) => {
-			align_json = align.map(|a| json_string(a.to_str())) |> Str.join_with(",")
-			row_json = |cells| "[${cells.map(encode_inlines) |> Str.join_with(",")}]"
-			"[\"table\",[${align_json}],${row_json(header)},[${rows.map(row_json) |> Str.join_with(",")}]]"
+			align_json = Str.join_with(align.map(|a| json_string(a.to_str())), ",")
+			row_json = |cells| "[${Str.join_with(cells.map(encode_inlines), ",")}]"
+			"[\"table\",[${align_json}],${row_json(header)},[${Str.join_with(rows.map(row_json), ",")}]]"
 		}
 		HtmlBlock(text) => "[\"html\",${json_string(text)}]"
-		Frontmatter({ raw }) => "[\"frontmatter\",${json_string(raw)}]"
-		TODO(text) => "[\"todo\",${json_string(text)}]"
+		Frontmatter(raw) => "[\"frontmatter\",${json_string(raw)}]"
 	}
 }
 
@@ -856,7 +855,7 @@ encode_inline : Markdown.Inline -> Str
 encode_inline = |inline| {
 	match inline {
 		Text(text) => "[\"text\",${json_string(text)}]"
-		_ => "[\"other\",${json_string(Markdown.inline_to_debug_str(inline))}]"
+		_ => "[\"other\",${json_string(Str.inspect(inline))}]"
 	}
 }
 

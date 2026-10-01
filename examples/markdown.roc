@@ -5,7 +5,6 @@ app [main!] {
 
 import cli.OsStr
 import cli.Stdout
-import parser.Utf8
 import parser.Markdown
 
 content =
@@ -43,16 +42,7 @@ content =
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	markdown_input = args.get(1).map_ok(OsStr.display) ?? content
-	parsed =
-		Utf8.parse_str(Markdown.all, markdown_input)
-			.map_ok(
-				|nodes| {
-					render_content(nodes, "")
-				},
-			)
-			?? "PARSING ERROR"
-
-	Stdout.line!(parsed)?
+	Stdout.line!(render_content(Markdown.parse_str(markdown_input), ""))?
 	Ok({})
 }
 
@@ -86,11 +76,8 @@ render_content = |nodes, buf| {
 		[HtmlBlock(raw), .. as rest] =>
 			render_content(rest, buf.concat("HTML: ${Str.inspect(raw)}\n"))
 
-		[Frontmatter({ raw }), .. as rest] =>
+		[Frontmatter(raw), .. as rest] =>
 			render_content(rest, buf.concat("FRONTMATTER: ${Str.inspect(raw)}\n"))
-
-		[TODO(line), .. as rest] =>
-			render_content(rest, buf.concat("TODO: ${line}\n"))
 	}
 }
 

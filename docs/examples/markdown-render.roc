@@ -4,7 +4,6 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.Utf8
 import parser.Markdown
 
 source =
@@ -59,11 +58,11 @@ render_inline = |inline| {
 	}
 }
 
-title_attr : [Some(Str), None] -> Str
+title_attr : Try(Str, [Missing]) -> Str
 title_attr = |title| {
 	match title {
-		Some(text) => " title=\"${escape(text)}\""
-		None => ""
+		Ok(text) => " title=\"${escape(text)}\""
+		Err(Missing) => ""
 	}
 }
 
@@ -163,7 +162,7 @@ table_of_contents = |blocks| {
 
 main! = |_args| {
 	# tag::main[]
-	blocks = Utf8.parse_str(Markdown.all, source)?
+	blocks = Markdown.parse_str(source)
 	Stdout.write!(render_blocks(blocks))?
 	Stdout.line!("--- contents ---")?
 	for line in table_of_contents(blocks) {

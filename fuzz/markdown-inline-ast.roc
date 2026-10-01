@@ -27,7 +27,7 @@ import parser.Utf8
 ## * code fences are longer than any backtick run in the content, padded when
 ##   the content starts or ends with a backtick or is wrapped in spaces.
 ##
-## In document mode the text is parsed with Markdown.all and links may be
+## In document mode the text is parsed with Markdown.parser and links may be
 ## written as full, collapsed or shortcut references with definitions after
 ## the paragraph.
 
@@ -151,14 +151,14 @@ gen_node = |cursor, ctx| {
 		5 => gen_delimited(c, ctx, Emph)
 		6 => gen_delimited(c, ctx, Strong)
 		7 => gen_delimited(c, ctx, Del)
-		8 => if ctx.in_link gen_delimited(c, ctx, Emph) else gen_link(c, ctx, Bool.False)
-		9 => gen_link(c, ctx, Bool.True)
-		_ => if ctx.in_link gen_delimited(c, ctx, Strong) else gen_link(c, ctx, Bool.False)
+		8 => if ctx.in_link gen_delimited(c, ctx, Emph) else gen_link(c, ctx, False)
+		9 => gen_link(c, ctx, True)
+		_ => if ctx.in_link gen_delimited(c, ctx, Strong) else gen_link(c, ctx, False)
 	}
 }
 
 leaf : Cursor, List(Markdown.Inline), Str -> { nodes : List(Markdown.Inline), md : Str, defs : List(Str), cursor : Cursor, spaced : Bool }
-leaf = |cursor, nodes, md| { nodes, md, defs: [], cursor, spaced: Bool.False }
+leaf = |cursor, nodes, md| { nodes, md, defs: [], cursor, spaced: False }
 
 gen_break : Cursor -> { nodes : List(Markdown.Inline), md : Str, defs : List(Str), cursor : Cursor, spaced : Bool }
 gen_break = |cursor| {
@@ -234,10 +234,10 @@ gen_autolink = |cursor, ctx| {
 		gen_code(word.cursor)
 	} else {
 		match form.value {
-			0 => leaf(word.cursor, [Link({ label: [Text("https://${host}")], target: { href: "https://${host}", title: None } })], "<https://${host}>")
-			1 => leaf(word.cursor, [Link({ label: [Text("irc:${host}")], target: { href: "irc:${host}", title: None } })], "<irc:${host}>")
-			2 => leaf(word.cursor, [Link({ label: [Text("me.too+x@ex.com")], target: { href: "mailto:me.too+x@ex.com", title: None } })], "<me.too+x@ex.com>")
-			_ => leaf(word.cursor, [Link({ label: [Text("MAILTO:a@b")], target: { href: "MAILTO:a@b", title: None } })], "<MAILTO:a@b>")
+			0 => leaf(word.cursor, [Link({ label: [Text("https://${host}")], target: { href: "https://${host}", title: Err(Missing) } })], "<https://${host}>")
+			1 => leaf(word.cursor, [Link({ label: [Text("irc:${host}")], target: { href: "irc:${host}", title: Err(Missing) } })], "<irc:${host}>")
+			2 => leaf(word.cursor, [Link({ label: [Text("me.too+x@ex.com")], target: { href: "mailto:me.too+x@ex.com", title: Err(Missing) } })], "<me.too+x@ex.com>")
+			_ => leaf(word.cursor, [Link({ label: [Text("MAILTO:a@b")], target: { href: "MAILTO:a@b", title: Err(Missing) } })], "<MAILTO:a@b>")
 		}
 	}
 }
@@ -270,8 +270,8 @@ gen_delimited = |cursor, ctx, kind| {
 is_text : Markdown.Inline -> Bool
 is_text = |node| {
 	match node {
-		Text(_) => Bool.True
-		_ => Bool.False
+		Text(_) => True
+		_ => False
 	}
 }
 
@@ -296,11 +296,11 @@ gen_href = |cursor| {
 title_chars : List(Str)
 title_chars = ["t", " ", "\"", "'", "(", ")", "&", "\\", "*", "ü"]
 
-gen_title : Cursor -> { title : [Some(Str), None], cursor : Cursor }
+gen_title : Cursor -> { title : Try(Str, [Missing]), cursor : Cursor }
 gen_title = |cursor| {
 	present = pick(cursor, 2)
 	if present.value == 0 {
-		{ title: None, cursor: present.cursor }
+		{ title: Err(Missing), cursor: present.cursor }
 	} else {
 		count = pick(present.cursor, 5)
 		var $title = ""
@@ -312,7 +312,7 @@ gen_title = |cursor| {
 			$cursor = ch.cursor
 			$index = $index + 1
 		}
-		{ title: Some($title), cursor: $cursor }
+		{ title: Ok($title), cursor: $cursor }
 	}
 }
 
@@ -341,11 +341,11 @@ render_destination = |href, form| {
 	}
 }
 
-render_title : [Some(Str), None], U64 -> Str
+render_title : Try(Str, [Missing]), U64 -> Str
 render_title = |title, form| {
 	match title {
-		None => ""
-		Some(text) =>
+		Err(Missing) => ""
+		Ok(text) =>
 			match form {
 				0 => " \"${escape_punct(text)}\""
 				1 => " '${escape_punct(text)}'"
@@ -374,7 +374,7 @@ gen_link = |cursor, ctx, image| {
 		match form.value {
 			4 => {
 				key = "ref${cursor.pos.to_str()}"
-				{ nodes: [node], md: "${open}${label.md}][${key}]", defs: label.defs.append("[${key}]: ${destination}${title_md}"), cursor: form.cursor, spaced: Bool.False }
+				{ nodes: [node], md: "${open}${label.md}][${key}]", defs: label.defs.append("[${key}]: ${destination}${title_md}"), cursor: form.cursor, spaced: False }
 			}
 
 			_ if plain_label => {
@@ -382,14 +382,14 @@ gen_link = |cursor, ctx, image| {
 				labelled_node = if image Image({ alt: labelled, target }) else Link({ label: labelled, target })
 				raw = "${unique} ${label.md}"
 				suffix = if form.value == 5 "[]" else ""
-				{ nodes: [labelled_node], md: "${open}${raw}]${suffix}", defs: label.defs.append("[${raw}]: ${destination}${title_md}"), cursor: form.cursor, spaced: Bool.False }
+				{ nodes: [labelled_node], md: "${open}${raw}]${suffix}", defs: label.defs.append("[${raw}]: ${destination}${title_md}"), cursor: form.cursor, spaced: False }
 			}
 
 			_ =>
-				{ nodes: [node], md: "${open}${label.md}](${destination}${title_md})", defs: label.defs, cursor: form.cursor, spaced: Bool.False }
+				{ nodes: [node], md: "${open}${label.md}](${destination}${title_md})", defs: label.defs, cursor: form.cursor, spaced: False }
 		}
 	} else {
-		{ nodes: [node], md: "${open}${label.md}](${destination}${title_md})", defs: label.defs, cursor: form.cursor, spaced: Bool.False }
+		{ nodes: [node], md: "${open}${label.md}](${destination}${title_md})", defs: label.defs, cursor: form.cursor, spaced: False }
 	}
 }
 
@@ -399,7 +399,7 @@ is_delimited = |node| {
 		Emphasis(children) => children.all(|n| is_text(n) or is_delimited(n))
 		Strong(children) => children.all(|n| is_text(n) or is_delimited(n))
 		Strikethrough(children) => children.all(|n| is_text(n) or is_delimited(n))
-		_ => Bool.False
+		_ => False
 	}
 }
 
@@ -436,7 +436,7 @@ generate : List(U8) -> Input
 generate = |bytes| {
 	mode = pick({ bytes, pos: 0 }, 4)
 	doc = mode.value == 0
-	built = gen_sequence(mode.cursor, { depth: 0, in_link: Bool.False, ancestors: [], doc }, 4)
+	built = gen_sequence(mode.cursor, { depth: 0, in_link: False, ancestors: [], doc }, 4)
 	md =
 		if built.defs.is_empty() {
 			built.md
@@ -449,13 +449,13 @@ generate = |bytes| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	if input.doc {
-		match Utf8.parse_str(Markdown.all, input.md) {
+		match Utf8.parse_str(Markdown.parser, input.md) {
 			Ok([Paragraph(actual)]) if actual == input.expected => Fuzz.keep
-			Ok(blocks) => crash "document mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${blocks.map(Markdown.to_debug_str) |> Str.join_with("\n")}"
+			Ok(blocks) => crash "document mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${Str.join_with(blocks.map(Str.inspect), "\n")}"
 			Err(_) => crash "document failed to parse\n${input.md}"
 		}
 	} else {
-		match Utf8.parse_str(Markdown.inlines, input.md) {
+		match Utf8.parse_str(Markdown.inline_parser, input.md) {
 			Ok(actual) if actual == input.expected => Fuzz.keep
 			Ok(actual) => crash "inline mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${show(actual)}"
 			Err(_) => crash "inline failed to parse\n${input.md}"
@@ -464,7 +464,7 @@ test = |input| {
 }
 
 show : List(Markdown.Inline) -> Str
-show = |nodes| "[${nodes.map(Markdown.inline_to_debug_str) |> Str.join_with(", ")}]"
+show = |nodes| "[${Str.join_with(nodes.map(Str.inspect), ", ")}]"
 
 target = Fuzz.target_with({
 	name: "markdown-inline-ast",

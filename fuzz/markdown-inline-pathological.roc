@@ -87,7 +87,7 @@ generate = |bytes| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match Utf8.parse_str(Markdown.inlines, input.text) {
+	match Utf8.parse_str(Markdown.inline_parser, input.text) {
 		Ok(nodes) => {
 			# Walk the whole tree (linearly) so no work is skipped.
 			if count_nodes(nodes) == 0 and !Str.is_empty(Str.trim(input.text)) {
@@ -96,7 +96,7 @@ test = |input| {
 			Fuzz.keep
 		}
 
-		Err(_) => crash "Markdown.inlines failed on ${input.name} x${input.count.to_str()}"
+		Err(_) => crash "Markdown.inline_parser failed on ${input.name} x${input.count.to_str()}"
 	}
 }
 

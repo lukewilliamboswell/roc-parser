@@ -4,7 +4,6 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.Utf8
 import parser.Markdown
 import parser.Yaml
 
@@ -18,17 +17,20 @@ post =
 	\\
 	\\First post.
 
-main! = |_args| {
-	blocks = Utf8.parse_str(Markdown.all, post)?
-	match blocks {
-		[Frontmatter({ raw }), .. as body] => {
+main! = |_args| show!(post)
+
+show! = |text| {
+	blocks = Markdown.parse_str(text)
+	match Markdown.frontmatter(blocks) {
+		Ok(raw) => {
 			Stdout.line!("raw: ${Str.inspect(raw)}")?
 			meta = Yaml.parse_str(raw)?
 			Stdout.line!("meta: ${meta.to_inspect()}")?
-			Stdout.line!("body blocks: ${body.len().to_str()}")?
+			# The frontmatter is the first block.
+			Stdout.line!("body blocks: ${(blocks.len() - 1).to_str()}")?
 		}
 
-		_ => Stdout.line!("no frontmatter")?
+		Err(Missing) => Stdout.line!("no frontmatter")?
 	}
 	Ok({})
 }
