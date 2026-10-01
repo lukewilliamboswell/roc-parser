@@ -1733,6 +1733,10 @@ radix_integer = |digits, radix, text, line, column| {
 ## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
 core_float_text : Utf8.Bytes -> Try(Str, [NotFloat])
 core_float_text = |bytes| {
+	# Most plain scalars are words; reject them before slicing anything.
+	if !bytes.all(is_float_byte) {
+		return Err(NotFloat)
+	}
 	{ sign, unsigned } =
 		match bytes {
 			['-', .. as rest] => { sign: "-", unsigned: rest }
@@ -1767,6 +1771,9 @@ core_float_text = |bytes| {
 		Err(NotFloat)
 	}
 }
+
+is_float_byte : U8 -> Bool
+is_float_byte = |b| (b >= '0' and b <= '9') or b == '.' or b == 'e' or b == 'E' or b == '+' or b == '-'
 
 count_while : Utf8.Bytes, (U8 -> Bool) -> U64
 count_while = |bytes, keep| {
@@ -2367,10 +2374,12 @@ is_decimal_integer = |bytes| {
 
 all_digits : Utf8.Bytes -> Bool
 all_digits = |bytes| {
-	match bytes {
-		[] => True
-		[first, .. as rest] => first >= '0' and first <= '9' and all_digits(rest)
+	var $index = 0
+	len = bytes.len()
+	while $index < len and is_digit(bytes.get($index) ?? 0) {
+		$index = $index + 1
 	}
+	$index == len
 }
 
 is_digit : U8 -> Bool
@@ -2389,11 +2398,16 @@ trim_spaces = |bytes| trim_end_spaces(trim_start_spaces(bytes))
 
 trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_start_spaces = |bytes| {
-	match bytes {
-		[' ', .. as rest] | ['\t', .. as rest] => trim_start_spaces(rest)
-		_ => bytes
+	len = bytes.len()
+	var $start = 0
+	while $start < len and is_space_or_tab(bytes.get($start) ?? 0) {
+		$start = $start + 1
 	}
+	if $start == 0 bytes else bytes.sublist({ start: $start, len: len - $start })
 }
+
+is_space_or_tab : U8 -> Bool
+is_space_or_tab = |b| b == ' ' or b == '\t'
 
 trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces = |bytes| {
