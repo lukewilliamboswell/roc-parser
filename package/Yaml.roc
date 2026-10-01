@@ -621,7 +621,7 @@ parse_tree = |input| {
 resolve : Node -> Try(Yaml, [InvalidYaml(Yaml.Error)])
 resolve = |node| {
 	match node.kind {
-		Plain(text) => resolve_plain(text.to_utf8(), node.line, node.column)
+		Plain(text) => resolve_plain(text, node.line, node.column)
 		Quoted(text) => Ok(Text(text))
 
 		Seq(items) => {
@@ -1650,11 +1650,14 @@ colon = Utf8.ByteClass.from_bytes([':'])
 
 ## Resolve a plain scalar with the YAML 1.2 core schema (10.3.2). Anything
 ## that matches none of its forms is a string.
-resolve_plain : Utf8.Bytes, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
-resolve_plain = |bytes, line, column| {
-	text = bytes_to_str(bytes)
+resolve_plain : Str, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
+resolve_plain = |text, line, column| {
+	bytes = text.to_utf8()
 
-	if is_null_text(text) {
+	if !may_be_typed(bytes.first() ?? '~') {
+		# Most scalars are words: no core-schema form starts with their first byte.
+		Ok(Text(text))
+	} else if is_null_text(text) {
 		Ok(Null)
 	} else if is_true_text(text) {
 		Ok(Bool(True))
@@ -1683,6 +1686,16 @@ resolve_plain = |bytes, line, column| {
 						}
 				}
 		}
+	}
+}
+
+## Whether a plain scalar starting with this byte may be a null, boolean,
+## integer or float rather than a string.
+may_be_typed : U8 -> Bool
+may_be_typed = |byte| {
+	match byte {
+		'0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '+' | '-' | '.' | '~' | 'n' | 'N' | 't' | 'T' | 'f' | 'F' => True
+		_ => False
 	}
 }
 
