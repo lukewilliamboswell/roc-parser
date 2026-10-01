@@ -3,11 +3,149 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#xml]
-= XML
+= Read XML documents
 
-Content in progress.
+This chapter shows how to parse an XML document into a tree, find elements,
+attributes and text in it, and report malformed input with a line and column.
+It is for Roc programmers who have added `parser` to their app's dependencies
+and need data out of XML such as feeds, SVG files or configuration.
+
+The parser checks that a document is well-formed according to XML 1.0 and
+gives you the tree after the usual XML clean-up: references replaced by their
+text, line endings normalised, comments dropped. It does not validate against
+a schema or DTD, and it rejects documents that contain a `<!DOCTYPE>`; see
+<<xml-unsupported,what is not supported>> before using it on documents from
+other tools.
+
+Every example on this page comes from
+link:{src}/docs/examples/xml-guide.roc[`docs/examples/xml-guide.roc`], which
+CI runs, and imports `parser.Xml`.
+
+== Parse a document and find elements
+
+`Xml.parse_str` takes the whole document and returns an `Xml` record with
+the document's `root` element and its `xml_declaration`. Each node in the tree
+is one of:
+
+[source,roc]
+----
+Node := [
+    Element(Str, List({ name : Str, value : Str }), List(Node)),
+    Text(Str),
+]
+----
+
+An `Element` holds its name, its attributes in source order, and its
+children. There is no query language, so walk the tree with small recursive
+helpers:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=walk,indent=0]
+----
+
+Given this document:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=document,indent=0]
+----
+
+parse it and describe each `entry` element under the root:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=parse,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=1..2]
+----
+
+The whitespace between elements is kept as `Text` nodes, which is why
+`children_named` filters for elements. `&amp;`, the CDATA section and the
+character reference `&#x1F600;` have already been turned into ordinary text.
+
+== What the tree contains
+
+The tree is what an XML processor reports, not the literal source:
+
+* The five predefined entities `&lt;` `&gt;` `&amp;` `&apos;` `&quot;` and
+  decimal (`&#65;`) or hexadecimal (`&#x42;`) character references are
+  replaced by their characters, in text and in attribute values.
+* CDATA sections become text, and adjacent text, including text on both
+  sides of a comment, is merged into one `Text` node.
+* Line endings (`\r\n` and lone `\r`) become `\n`.
+* In attribute values, tabs and line breaks become spaces.
+* Comments and processing instructions are checked and then dropped.
+* The XML declaration is available as `xml_declaration`: `Given({ version,
+  encoding })` or `Missing`.
+
+This document has every one of these in a single element:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=normalise-run,indent=0]
+----
+
+Printing the root with `Str.inspect` gives:
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=3..4]
+----
+
+== Report malformed input
+
+When a document is not well-formed, `Xml.parse_str` returns
+`XmlError({ line, column, message })`. Lines and columns are one-based, and
+columns count UTF-8 bytes, so a column after non-ASCII text is larger than the
+number of characters a user sees.
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=5..9]
+----
+
+If you are combining XML with other parsers, `Xml.xml_parser` is the same
+parser as a `Parser(String.Utf8, Xml)`. It leaves any input after the document
+for the next parser, and its failure message has the form
+`line:column: message`.
+
+[#xml-unsupported]
+== What is not supported
+
+These limits are by design:
+
+Document type declarations:: A `<!DOCTYPE ...>` is rejected. As a result only
+the five predefined entities exist, and any other reference, such as
+`&nbsp;`, is an error. Replace HTML entities with character references
+(`&#160;`) before parsing.
+Namespaces:: Names are kept exactly as written. `svg:path` is an element
+named `"svg:path"`, and `xmlns` declarations are ordinary attributes; prefixes
+are not resolved to URIs.
+Declared encodings:: The input is a Roc `Str`, which is already UTF-8. An
+`encoding="..."` in the declaration is reported in `xml_declaration` but not
+used. Convert other encodings to UTF-8 before parsing.
+Validation:: Only well-formedness is checked. Required elements, attribute
+types and schemas are not.
+
+For the full module interface, see the link:{api}Xml[Xml API reference].
