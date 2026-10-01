@@ -273,10 +273,11 @@ link:{api}CSV[CSV API reference].
 [#csv-performance]
 == Performance
 
-Reading every field as a string runs at 125–150 MB/s on an Apple M2, from
-a 1.6 KB export to a 1 MiB file: within 20% of Rust's `csv` crate, about 3
+Reading every field as a string runs at 120–150 MB/s on an Apple M2, from
+a 1.6 KB export to a 1 MiB file: on par with Rust's `csv` crate, about 2.3
 times slower than Go's `encoding/csv` and nearly twice as fast as Python's C
-`csv` module.
+`csv` module. Delimiters and quotes are found 16 bytes at a time with SIMD,
+and fields without doubled quotes are slices of the input.
 The parser is a byte scanner and stays linear on very wide rows and long runs
 of escaped quotes. Decoding typed columns adds the cost of each conversion.
 The whole file and every field are held in memory: about 12 MiB of peak

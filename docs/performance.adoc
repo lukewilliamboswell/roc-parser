@@ -28,9 +28,11 @@ The HTTP row covers the three documents without a body (two sample heads and
 one with 64 header fields).
 
 Measured on 1 October 2026 on an Apple M2 (8 cores, macOS 26.3), roc-parser
-at commit `9c7b2fd` (the parsers measured) built with Roc
+at commit `2138e04` for CSV, XML, YAML and HTTP (after the SIMD and slicing
+work described in <<performance-simd>>) and `9c7b2fd` for Markdown, built with Roc
 `nightly-2026-09-29-7f11a82` and `--opt=speed`, Rust 1.94, Go 1.26.2 and
-Python 3.14. Another process was using about three cores during the run, so
+Python 3.14 (the Python ratios for CSV, XML and HTTP are scaled from the
+`9c7b2fd` run). Another process was using about three cores during the run, so
 read the ratios rather than the absolute rates, and treat both as rough: they
 move by tens of percent between machines and runs.
 
@@ -39,10 +41,10 @@ move by tens of percent between machines and runs.
 |Format |roc-parser |Rust |Go |Python
 
 |CSV
-|125 MB/s
-|csv: 1.2x
-|encoding/csv: 3.0x
-|csv (C): 0.6x
+|145 MB/s
+|csv: 1.0x
+|encoding/csv: 2.3x
+|csv (C): 0.5x
 
 |YAML
 |25 MB/s
@@ -51,10 +53,10 @@ move by tens of percent between machines and runs.
 |PyYAML with libyaml: 0.3x; pure Python: 0.04x
 
 |XML
-|100 MB/s
-|roxmltree: 2.4x; quick-xml: 1.7x
-|encoding/xml: 0.6x
-|ElementTree (expat): 0.4x
+|120 MB/s
+|roxmltree: 2.0x; quick-xml: 1.4x
+|encoding/xml: 0.45x
+|ElementTree (expat): 0.3x
 
 |Markdown
 |15 MB/s
@@ -63,16 +65,17 @@ move by tens of percent between machines and runs.
 |markdown-it-py: 0.2x
 
 |HTTP/1.1 (message heads)
-|100–200 MB/s
-|httparse: 4.8x
-|net/http: 1.4x
-|h11: 0.1x
+|200–300 MB/s
+|httparse: 2.8x
+|net/http: 0.9x
+|h11: 0.05x
 |===
 
-In short: roc-parser is within a factor of about two of the best Rust
-library for CSV, YAML and XML, matches or beats Go's and Python's libraries
-for YAML and XML, and is faster than every Python parser measured. It is five
-times slower than the Rust and Go Markdown parsers and HTTP head parsers.
+In short: roc-parser matches Rust's csv crate on the generated CSV
+documents, is within a factor of about two of the best Rust library for YAML
+and XML and three for HTTP heads, matches or beats Go's libraries for YAML,
+XML and HTTP, and is faster than every Python parser measured. It is five
+times slower than the Rust and Go Markdown parsers.
 Bodies are not in the HTTP row because roc-parser returns a `Content-Length`
 body as a slice of the input without copying it, while the other programs
 copy it, so roc-parser's figures for large bodies are meaninglessly high.
@@ -88,7 +91,7 @@ roc-parser is a good fit when:
 * *Documents are up to a few megabytes.* Configuration files, front matter,
   READMEs, SVG icons, CSV exports and API messages parse in microseconds to a
   few milliseconds, and a 1 MiB YAML or XML document in 45 ms or 10 ms.
-* *You parse at start-up or per request.* An HTTP head parses in 2–4 µs;
+* *You parse at start-up or per request.* An HTTP head parses in 1.5–2 µs;
   a 4 KiB YAML configuration in under 0.2 ms.
 * *You want a pure-Roc package*, typed errors with line and
   column, strict input checking, and no native code or FFI.
@@ -99,8 +102,8 @@ Look elsewhere, or measure carefully first, when:
 
 * *Parsing is your bottleneck* at high volume (log pipelines, Markdown
   rendering for a large site, a proxy parsing every request). The best Rust
-  parsers are about 2 times faster for YAML and XML and 5–14 times faster
-  for Markdown and HTTP heads.
+  parsers are about 2 times faster for YAML and XML, 3 times for HTTP heads
+  and 5–14 times for Markdown.
 * *Input arrives as a stream or does not fit in memory.* Every roc-parser
   parser needs the complete input, and returns a tree; there is no streaming
   or event interface.
@@ -222,9 +225,9 @@ compiler cost:
   parser cannot avoid today: a string literal longer than 23 bytes is copied
   to the heap every time it is evaluated, so an error message built on the
   success path costs an allocation; `List.drop_last` followed by `append` can
-  copy the whole list instead of reusing it; `Str.from_utf8` validates text
-  that came from a `Str` and is known to be valid; and there is no SIMD in
-  the byte scans that Rust parsers vectorise. The `basic-cli` platform used
+  copy the whole list instead of reusing it; and `Str.from_utf8` validates text
+  that came from a `Str` and is known to be valid (XML now avoids this, see
+  <<performance-simd>>). The `basic-cli` platform used
   by the drivers also hashes every freed pointer, about 5–10% of the time in
   allocation-heavy parsers.
 
@@ -232,10 +235,85 @@ Getting closer to Rust would need either borrowed results (slices or events
 instead of an owned tree) or compiler work on those points; both are tracked
 as future work rather than promised.
 
+[#performance-simd]
+== How roc-parser uses SIMD and slices
+
+Roc's `U8x16` builtin lowers to SSE/AVX on x86-64, NEON on Arm and simd128
+on WebAssembly. `Utf8.ByteClass` builds on it: a class is any set of bytes,
+and `Utf8.find_any`, `Utf8.skip_class`, `Utf8.find_line_end` and
+`Utf8.span_class` load 16 bytes at a time, test them all at once and count
+the trailing zeros of the resulting bit mask. Sets of one to three bytes are
+compared directly; larger sets, such as RFC 9110 token characters or XML
+name characters, use the nibble-table technique from simdjson (two
+calls to `table_lookup`, which are `pshufb` and `tbl`). A byte loop handles the last
+few bytes. Measured on an Apple M2, scanning 1 MiB with no match runs at
+38–41 GB/s against about 2 GB/s for a byte loop, but the gain falls with the
+distance between matches: 3.4 times for 77-byte lines, 1.3 times for markup
+every ten bytes, and none when every other byte matches.
+
+The format parsers already track byte offsets into the input and hand out
+slices of it. Since Roc lists and strings can be seamless slices, a
+`List.sublist` of the input, or `Str.from_utf8` of such a slice, shares the
+input's memory instead of copying it. `Str.from_utf8` still validates the
+bytes each time, so the XML parser validates the whole input once and cuts
+names, text and attribute values from that `Str` with `Str.drop_first_bytes`
+and `Str.drop_last_bytes`, which check only the two boundary bytes.
+
+Measured effect, 1 MiB generated documents, Apple M2:
+
+[cols="1,2,2,2",options="header"]
+|===
+|Format |Before |After |Allocations
+
+|XML
+|10.9 ms (96 MB/s)
+|8.6 ms (122 MB/s)
+|98,072 → 64,677
+
+|CSV
+|8.6 ms (121 MB/s)
+|7.2 ms (146 MB/s)
+|105,415 → 99,214
+
+|HTTP head (64 fields)
+|24.7 µs
+|11.9 µs
+|313 → 11
+
+|YAML
+|48.2 ms
+|47.7 ms
+|unchanged
+|===
+
+The HTTP gain is mostly not SIMD: the old token check tested membership in
+a list literal that was rebuilt for every byte. YAML did not change because
+splitting lines is a small part of its time. A faster scan matters only
+where runs between interesting bytes are long; in every format the
+remaining cost is building the result tree (allocation, freeing and
+reference counting).
+
+*Retained memory.* A slice keeps its whole input alive. A program that parses
+a large document and keeps one short string from it keeps the whole document
+in memory; copy such values if that matters.
+
+Using a position into a borrowed input instead of returning the rest of the
+input as a slice was also measured, with minimal combinator cores of both
+shapes on 1 MiB inputs: it was 1.4 times faster on a list of numbers, 1.15
+times slower on alternatives and 1.6 times faster on byte-by-byte spans. That
+is not a consistent enough gain to change `Parser(input, a)`. The same
+measurement found that `Parser` itself was 5–20 times slower than the minimal
+core because `Utf8.codeunit` and its relatives built an error message on
+every failure; building it once, when the parser is made, closed that gap.
+
 [#performance-tips]
 == Tips for your own parsers
 
 * *Build with `--opt=speed`* before measuring anything.
+* *Scan runs with `Utf8.ByteClass`.* Build a class once, at the top level,
+  and use `Utf8.span_class`, `Utf8.skip_class` or `Utf8.find_any` for runs
+  longer than a few bytes; `Parser.span` returns what a parser consumed as a
+  slice.
 * *Prefer byte-level primitives.* `Parser.chomp_while` and
   `Parser.chomp_until` consume a run of bytes in one step; `Parser.many` over a
   single-byte parser makes one closure call and one list append per byte.

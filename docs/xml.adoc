@@ -160,12 +160,14 @@ For the full module interface, see the link:{api}Xml[Xml API reference].
 [#xml-performance]
 == Performance
 
-`Xml.parse_str` builds the tree at about 100 MB/s on an Apple M2, and the
+`Xml.parse_str` builds the tree at about 120–135 MB/s on an Apple M2, and the
 rate stays flat from 4 KiB to 1 MiB documents: the parser is linear in the
-input size. On the generated documents that is about 1.8 times as fast as
-Go's `encoding/xml` and 2.8 times as fast as Python's ElementTree, and 1.7–2.4
-times slower than Rust's quick-xml and roxmltree. Text and attribute values
-with nothing to unescape share the input's memory instead of being copied.
+input size. On the generated documents that is about 2.2 times as fast as
+Go's `encoding/xml`, and 1.4–2 times slower than Rust's quick-xml and
+roxmltree. Character data and attribute values are found 16 bytes at a time
+with SIMD, the input is validated as UTF-8 once, and names, text and
+attribute values with nothing to unescape are slices of the input string,
+so they keep the input alive.
 Elements are parsed with an explicit stack, so 5,000 levels of nesting are
 safe, and duplicate-attribute checks are linear: an element with 5,000
 attributes parses 19 times faster than with the Rust libraries. See

@@ -289,9 +289,10 @@ The {api}[API reference] lists the `HTTP` types and parsers.
 [#http-performance]
 == Performance
 
-A typical request or response head parses in 2–4 µs on an Apple M2, about
-1.4 times slower than Go's `net/http` and 5 times slower than Rust's
-httparse, which checks less (see <<performance-fairness>>). A
+A typical request or response head parses in 1.5–2 µs on an Apple M2, as
+fast as Go's `net/http` and about 3 times slower than Rust's httparse, which
+checks less (see <<performance-fairness>>). Line ends, tokens and field
+values are checked 16 bytes at a time with SIMD. A
 `Content-Length` body is returned without copying, so body size barely
 affects the time; a chunked body is assembled once, in linear time even with
 thousands of one-byte chunks (20,000 of them in 0.7 ms). See <<performance>>
