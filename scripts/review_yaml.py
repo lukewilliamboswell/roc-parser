@@ -270,6 +270,16 @@ def oracle(text: str) -> dict:
         sys.setrecursionlimit(previous_limit)
 
 
+def failure_reason(row: dict) -> str:
+    """Explain a baselined failure for reviewers of known-failures.json."""
+    if row["kind"] == "valid_rejection":
+        message = (row.get("actual") or {}).get("message", "")
+        return "Valid YAML outside the supported subset: " + message if message else "Valid YAML outside the supported subset."
+    if row["id"].startswith("core/") and "key" in row["id"]:
+        return "By design: mapping keys are their source text (Str), not core-schema typed values."
+    return "Known divergence from the YAML 1.2 reference behaviour."
+
+
 def build(roc: str, parser_root: Path, output_dir: Path, fuzz: str | None = None) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     source = ROOT / "fuzz" / (fuzz + ".roc") if fuzz else DATA / "probe.roc"
@@ -371,7 +381,7 @@ def check(args, executable: Path) -> int:
     if args.record_known_failures:
         if any(row["kind"] in FATAL for row in rows):
             raise ValueError("crashes, hangs, protocol errors, and invalid diagnostics cannot be baselined")
-        write_json(args.record_known_failures, {"metadata": report["metadata"], "failures": {row["id"]: {"signature": signature(row), "kind": row["kind"], "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."} for row in failures}})
+        write_json(args.record_known_failures, {"metadata": report["metadata"], "failures": {row["id"]: {"signature": signature(row), "kind": row["kind"], "reason": failure_reason(row)} for row in failures}})
         return 0
     if args.baseline:
         known = json.loads(args.baseline.read_text())["failures"]

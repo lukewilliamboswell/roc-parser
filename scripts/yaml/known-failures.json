@@ -3,9 +3,9 @@
     "roc": "Roc compiler version nightly-2026-09-29-7f11a82",
     "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 16.0.0 (clang-1600.0.26.6)]",
     "oracle": "0.18.16",
-    "parser_root": "/Users/luke/Documents/GitHub/roc-parser/.roc-parser-tmp/yaml-review/sources/base",
-    "yaml_sha256": "c10772e4adb2e7ef51f0fec5a6d52214889bbdb49486291cf76000166738c6f7",
-    "binary_sha256": "27645dc28130889ec7dea7610240da48dabd81c36aed91cf5fcc64deebd9ffc8",
+    "parser_root": "/Users/luke/Documents/GitHub/roc-parser",
+    "yaml_sha256": "fd0e21492c2ab43f424fa941c276b954743d413510306ab6aac7ad314fdcfb22",
+    "binary_sha256": "0c2922e6b5c7a29bcdaa4577a403c2454869aedd4765c593e058c5ed37fa7269",
     "suite": {
       "repository": "https://github.com/yaml/yaml-test-suite",
       "revision": "6ad3d2c62885d82fc349026c136ef560838fdf3d",
@@ -16,3191 +16,1038 @@
       "url": "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
       "sha256": "60d45f07a51515f2a49eadcf2163fb9c2801df5341c8b8685f81581010c7dd2c"
     },
-    "source_revision": {
-      "repository": "https://github.com/lukewilliamboswell/roc-parser",
-      "revision": "eb4127ca42ef22ae59288ac8decf7a530a7d3922"
-    }
+    "source_revision": "4b2302a9279f6729cf3e999264ee7628b59aacd5"
   },
   "failures": {
-    "block/explicit-124-clip-1-indent-first-eof": {
-      "signature": "1c0e03e3a7a503e46cfdc30a838ff04ffede19cf5dcaadfd78589acf14705e98",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-1-indent-first-lf": {
-      "signature": "d5f0d710273f210366dc330be19124ef997a7b740ac2ab1b529829329fdf1bc5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-1-chomp-first-eof": {
-      "signature": "1c0e03e3a7a503e46cfdc30a838ff04ffede19cf5dcaadfd78589acf14705e98",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-1-chomp-first-lf": {
-      "signature": "d5f0d710273f210366dc330be19124ef997a7b740ac2ab1b529829329fdf1bc5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-2-indent-first-eof": {
-      "signature": "51f6d9a005c7cdb6ff53dfd4b7f61eab1c6457d8dec9a1ab3500c1a47f54c1d7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-2-indent-first-lf": {
-      "signature": "f8581b0319e9686fb55920673e710bc066a6e70727a47fc6f3af932a845cab23",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-2-chomp-first-eof": {
-      "signature": "51f6d9a005c7cdb6ff53dfd4b7f61eab1c6457d8dec9a1ab3500c1a47f54c1d7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-2-chomp-first-lf": {
-      "signature": "f8581b0319e9686fb55920673e710bc066a6e70727a47fc6f3af932a845cab23",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-3-indent-first-eof": {
-      "signature": "134ce67afcc13b27c89f929607a0b5578418347b0ccbd1b0c21487db282e5204",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-3-indent-first-lf": {
-      "signature": "c64bd257eb93c61b8f246fabfed28632792ad1686fd53d5f119d3291a2c7d460",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-3-chomp-first-eof": {
-      "signature": "134ce67afcc13b27c89f929607a0b5578418347b0ccbd1b0c21487db282e5204",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-3-chomp-first-lf": {
-      "signature": "c64bd257eb93c61b8f246fabfed28632792ad1686fd53d5f119d3291a2c7d460",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-4-indent-first-eof": {
-      "signature": "4672583ca1dd93926724c8232eeb311607e67d40bcdaa6a02f1796e1a1236e49",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-4-indent-first-lf": {
-      "signature": "bf1aaad3d3722b066d3d49555d022c148e5a2143e897ed4cdce8288adb149689",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-4-chomp-first-eof": {
-      "signature": "4672583ca1dd93926724c8232eeb311607e67d40bcdaa6a02f1796e1a1236e49",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-4-chomp-first-lf": {
-      "signature": "bf1aaad3d3722b066d3d49555d022c148e5a2143e897ed4cdce8288adb149689",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-5-indent-first-eof": {
-      "signature": "b341abbcea510d03711b6134663f55e5130c9698ec55eef4ad7607df8764eb70",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-5-indent-first-lf": {
-      "signature": "60169c49d44eef9b253b08b6c78861dc8ef6e21b9e7dc2964bf6ae04cc574968",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-5-chomp-first-eof": {
-      "signature": "b341abbcea510d03711b6134663f55e5130c9698ec55eef4ad7607df8764eb70",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-5-chomp-first-lf": {
-      "signature": "60169c49d44eef9b253b08b6c78861dc8ef6e21b9e7dc2964bf6ae04cc574968",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-6-indent-first-eof": {
-      "signature": "287408d6ddd0c891e3fa8979791773419bd33f9d15591d42bc12d320c2508b64",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-6-indent-first-lf": {
-      "signature": "127af2d4d363a943d461ac216c2071e048d8ca130df3d41edd07b9956d3939fd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-6-chomp-first-eof": {
-      "signature": "287408d6ddd0c891e3fa8979791773419bd33f9d15591d42bc12d320c2508b64",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-6-chomp-first-lf": {
-      "signature": "127af2d4d363a943d461ac216c2071e048d8ca130df3d41edd07b9956d3939fd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-7-indent-first-eof": {
-      "signature": "984471fb7116b90dbdf0430a8848b389be2b4816981f901e877b3c7bf63a622b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-7-indent-first-lf": {
-      "signature": "b20ac63a9f1ef9c25fbe2972dfca90245adcd58d78d62e95a4688bef3353bc73",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-7-chomp-first-eof": {
-      "signature": "984471fb7116b90dbdf0430a8848b389be2b4816981f901e877b3c7bf63a622b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-7-chomp-first-lf": {
-      "signature": "b20ac63a9f1ef9c25fbe2972dfca90245adcd58d78d62e95a4688bef3353bc73",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-8-indent-first-eof": {
-      "signature": "1c0280599f0e7c03956282e230b240c3c9eb279a181c2e8da77e7916121ee4b4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-8-indent-first-lf": {
-      "signature": "d6d35330c1930529ad93da6ffed42d45a0223e75752da151970f56ff70bbf7f6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-8-chomp-first-eof": {
-      "signature": "1c0280599f0e7c03956282e230b240c3c9eb279a181c2e8da77e7916121ee4b4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-8-chomp-first-lf": {
-      "signature": "d6d35330c1930529ad93da6ffed42d45a0223e75752da151970f56ff70bbf7f6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-9-indent-first-eof": {
-      "signature": "3bec4d1a5f38aae75cef9b72d6829bfd36210942229baacd7a10bcb6e6f05fcb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-9-indent-first-lf": {
-      "signature": "f4b4420ca0a7f94156874039f880abb1eca80413ba050c98bb74e1e24760548d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-9-chomp-first-eof": {
-      "signature": "3bec4d1a5f38aae75cef9b72d6829bfd36210942229baacd7a10bcb6e6f05fcb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-clip-9-chomp-first-lf": {
-      "signature": "f4b4420ca0a7f94156874039f880abb1eca80413ba050c98bb74e1e24760548d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---1-indent-first-eof": {
-      "signature": "e491639e72103f466182b6f42d67a63fc128f51a36ee543e228f4078a506b237",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---1-indent-first-lf": {
-      "signature": "38fa91442be1e06bf4c831ca83fba407379578aa51b7e914ba8dbe4241cbb6a8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---1-chomp-first-eof": {
-      "signature": "9cbbc5100a86393d7ca9986de3f95a4fe7814d67e2ad02bf04c0e91cdb2bbc26",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---1-chomp-first-lf": {
-      "signature": "a280034cb78984a24e8527ce366356b13e081ba392889543099c96768d3dbe90",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---2-indent-first-eof": {
-      "signature": "0308f444eab05203c192e1c0c76451856ae4179f26fd4d9db58d4173aa745dd3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---2-indent-first-lf": {
-      "signature": "2194887e2bcf94562fcc9a05167d1b8aa15370cdad87749a9365ff800a773e95",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---2-chomp-first-eof": {
-      "signature": "2c338adf141d82674da40f3b975d3da7055a0432e6f4a6107d2bfbb83d19c8e6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---2-chomp-first-lf": {
-      "signature": "66eaeac3e29dbfbd0031b531b7d53827b0bf8a3041aa2397b3049f975dd67cb4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---3-indent-first-eof": {
-      "signature": "b0f85492e35dea3c697ed40486e637c89b006cbdcfe06ee095a3c5477d555b5c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---3-indent-first-lf": {
-      "signature": "61d0e487660bcc04afb4b4da67c83bb5c3630a8c494248e9c73a4007d69b2862",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---3-chomp-first-eof": {
-      "signature": "9b3de92e4096ba976f021cecebcb5cd341c65f8f85d47f326c39c7ba51ce80cf",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---3-chomp-first-lf": {
-      "signature": "550960a73468003f0848d5becd772298ecc729dbc9ad45a25399eb7d0ecaa335",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---4-indent-first-eof": {
-      "signature": "ef5d7141b6cc39ce76e778ba71b37d10c44c4655bc0c6415ed2fe2a6590c3181",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---4-indent-first-lf": {
-      "signature": "ae12a4a74db96a3e6821693af5c44f94c27492ecb12f4457985440bc27469c34",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---4-chomp-first-eof": {
-      "signature": "890d00541235c38f9936126749b455f3ffdf85350bc4bab46864dbcd0ce9d471",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---4-chomp-first-lf": {
-      "signature": "ab9fbfb557858331d69d732b91eb768d7bb187ee7dae8ddfc679fd422622f8a0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---5-indent-first-eof": {
-      "signature": "1d266c42ee113c812b4274a33261ec2045acb52406471cf6ab78ea6f75c54249",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---5-indent-first-lf": {
-      "signature": "d53e56f9646674a5239308facb1bbfccd14f9b669eecde6fc0bec124f9db1016",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---5-chomp-first-eof": {
-      "signature": "9c186667a69b8f3b33af14e850540a359231940c86ccc49233b82bfddf244df7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---5-chomp-first-lf": {
-      "signature": "99f27c54ae851f0c5ee599207327d7e66cba832dd60f09ec8d8e3a6e51357223",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---6-indent-first-eof": {
-      "signature": "39c38dd818e77dc15a68cd273bd5e32e4a2cc7bcade5dded42e9ad7ecd517c23",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---6-indent-first-lf": {
-      "signature": "f0f708122cb95c4d33ffd4fcc72389f0464429e115734c7cda302285e67cc232",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---6-chomp-first-eof": {
-      "signature": "fd6a23a91251e8dcfe27b51948cbde8a1f9e617c0d6415590b5f7123b257ff19",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---6-chomp-first-lf": {
-      "signature": "31664b15e3981a5035fcccd5b1484c29ff2003a298790c42311c94f9c0a32a95",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---7-indent-first-eof": {
-      "signature": "cf08ba0b6d6a864fa3ebdf940a6d03702ad799419c184835161527845710c0b0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---7-indent-first-lf": {
-      "signature": "fb5cee899b8e99eb85149ec16d2adcfd7e8579639966bf0b707b4b4d38225902",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---7-chomp-first-eof": {
-      "signature": "6b4720856f1f8366ecff65cc9002825559edb9059fc032ee44190dfa05799710",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---7-chomp-first-lf": {
-      "signature": "2d24d1c0afeea1f6f77a1a5226d26663df98cde709e5d16a823cfa94ad4421e5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---8-indent-first-eof": {
-      "signature": "bacb3c58920c9f7423b573695cdb4edfcc1319fe0b14e5516ed644d32cda243f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---8-indent-first-lf": {
-      "signature": "bc5f854014f5b79d78fab920c317ad20bf841f9e258604eb348bc05cbb9c4e06",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---8-chomp-first-eof": {
-      "signature": "2d784ff2e4f51a9705fcd721478039c1d18a06cc54701abcaa2e6dddc2af9591",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---8-chomp-first-lf": {
-      "signature": "a563f030f1e0825087bbcd86f2a19a8d9d040a2f24f64296f5592d5509da235b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---9-indent-first-eof": {
-      "signature": "bf0e777f4e2ba37a9c50ea3ea797857b8d4b73463d1dcda118cdac6ebd980563",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---9-indent-first-lf": {
-      "signature": "ae24959909e98f2445707a312d30046a99b0c3ced3df30d6b72427cfe8e1a12f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---9-chomp-first-eof": {
-      "signature": "09f77a3d5e8c2c490c83ab3c8d29b10e3db6936eada40959175801f0fc4f5132",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124---9-chomp-first-lf": {
-      "signature": "957d454b7c5bf137062479fd1af7524eb43606e5e79c0628a370ea3744b5ea06",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-1-indent-first-eof": {
-      "signature": "3fe4da5d4d1d3baf70da64198c56ba574699e11a50e9973513cb91b52d853b80",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-1-indent-first-lf": {
-      "signature": "4e2b7f116174b5251bfa9a95b1762ce12e5758351beaab18268c9b25fc879e83",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-1-chomp-first-eof": {
-      "signature": "4b1719419d436d373c74206dc7fbb9828b95d2f692c0bf6a06258635d48f4893",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-1-chomp-first-lf": {
-      "signature": "58a6be98a7a7476f269ef7935fad19686b57c3e3a4e6ed73ddf2a6d94853bc30",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-2-indent-first-eof": {
-      "signature": "db1d9f6bfae58d4981af6366f7c5d7330e14ddd0098799006e0ca942bf278a59",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-2-indent-first-lf": {
-      "signature": "fbd667c764c2b52d7ff7b8dccb574ee46c0d4eb83a0eb5efdfedf0c54d0fd7d5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-2-chomp-first-eof": {
-      "signature": "90aec9cb875018fe814a671ee074afe6aa0b5fa982103f78d7e20f21a151d9d7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-2-chomp-first-lf": {
-      "signature": "40e8dc95a7d73f80f253e5c246343c2db157360f354cee65f1af017c18f1eeb6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-3-indent-first-eof": {
-      "signature": "6b8ce46f6ba20dbd016555edb6a29f29d6bad342a20a87856d01f68350ae75d5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-3-indent-first-lf": {
-      "signature": "edaa9ff3e0252686d4f1eae6eb7635aae12c212be2a17b4ab20e68bd7f11ddca",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-3-chomp-first-eof": {
-      "signature": "fb5aa52e9121a7ad965040f3e0861f48c99cc8d90c9eec4f6ddb11f2af1f4eb7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-3-chomp-first-lf": {
-      "signature": "3cb6f7552fcefdd3bdaf24943866fc45a2b273d8f093b249fe8da17626d033bf",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-4-indent-first-eof": {
-      "signature": "b23f7efb0a6a04ab23ca08ebf07726c3a81f2cf0ec94bdd2acb2f85a0251224e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-4-indent-first-lf": {
-      "signature": "8e0ac6697b91d6f06a448f9546e6c9346524f0bff99afdae2f112d5ef0180a24",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-4-chomp-first-eof": {
-      "signature": "e60414dc7e77055dd8e7dd0f807046d1d572cfa376fc7dfbefbeaadf54f2c30a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-4-chomp-first-lf": {
-      "signature": "c80fc7e6b007cf4bb718f392505c8fdb152ab6077f9928407460198d05080edb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-5-indent-first-eof": {
-      "signature": "61e895da1cc48046f1a4d89dd2c07056c9850f908bf61b220e03420f57877823",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-5-indent-first-lf": {
-      "signature": "34defb16f10431a51093e3c0fcbdb049b29fd4bc1f4a778a2c60d8a6df171ba6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-5-chomp-first-eof": {
-      "signature": "5889961f949851742178a73d9408f47a8b9ca6bbe1347cd75cd26bbb36e80d17",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-5-chomp-first-lf": {
-      "signature": "09360ea57bb838a62b3f1ad8eb9953cef8cafc65ae6990fdfdb38f8377e7460e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-6-indent-first-eof": {
-      "signature": "3f37284a392e93b93d0da46f32ed60a3401fa994d11770d24c3c28bced7c2562",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-6-indent-first-lf": {
-      "signature": "e73f6447f506575a40169fc511af636bb741fe3d95d61473b3b25ae0d5c05160",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-6-chomp-first-eof": {
-      "signature": "5349b0780a26f662b226c379eaeb9249c5c0751e8cbc68a8c70679b7a87a70fb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-6-chomp-first-lf": {
-      "signature": "0527e69ea27aefa8a8d18ff129dc97d39e68063de77219c8d0f65689b4a0be8d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-7-indent-first-eof": {
-      "signature": "9b5e63a82ece28f6c0e78452eceff35fc75f83638d4375b249197caf7454eaf9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-7-indent-first-lf": {
-      "signature": "9cfc935e0a062ff0a314e4214727b27879c4c3deeea5a80b16acc852ee4a4caa",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-7-chomp-first-eof": {
-      "signature": "24125ff1716ee48d60b272b4bc79563c03eed8bae597e5957d4234a1626ba400",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-7-chomp-first-lf": {
-      "signature": "cc929e2ceec25328108d36195b51d522aba9364ecdc3a73ef4e48487b71fe567",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-8-indent-first-eof": {
-      "signature": "a489a9cb233cdc112ddf4a28e5c21f2cb8c6320a2e90a8856798d4ccc5256f35",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-8-indent-first-lf": {
-      "signature": "3123d0fd4c889d13de0902137fb5fec642d0570a70599a2ff4d07768cea9fcfe",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-8-chomp-first-eof": {
-      "signature": "14eccef822bd653c9e5dafe46f56e130aec74321e5fbdbc730bcafe0715f9792",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-8-chomp-first-lf": {
-      "signature": "b29be71d3287a75d2c82528fe6d3f0a9dbbf429f0b0b4e5ee0109673597ee05d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-9-indent-first-eof": {
-      "signature": "9af5375f22079a14f45bb60cec4ffd722a6651d43e8ff0158a67c68097cb22e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-9-indent-first-lf": {
-      "signature": "ea9880e870fd52a3c50308dde7287fab0eb26adc378869055ffb95ae6ef494d5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-9-chomp-first-eof": {
-      "signature": "28d36259eca350e8a8a2c3b111ec1876364f712476bcd0a2317a977bb0375ca9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-124-+-9-chomp-first-lf": {
-      "signature": "8b96990f2c9d288a52fefd4b77d8d5092267b259392331659841baa96cb434d2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-1-indent-first-eof": {
-      "signature": "5373359069063d9e70a41b3a2fba5565bb84056be1821a7a2546b13b1859cfd1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-1-indent-first-lf": {
-      "signature": "370be698d5be3d7267cf283af6d073596f82bd088574c68c7ee00303316be10b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-1-chomp-first-eof": {
-      "signature": "5373359069063d9e70a41b3a2fba5565bb84056be1821a7a2546b13b1859cfd1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-1-chomp-first-lf": {
-      "signature": "370be698d5be3d7267cf283af6d073596f82bd088574c68c7ee00303316be10b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-2-indent-first-eof": {
-      "signature": "343778c6c41cf27c4a4174e2ac173bc9c1f69f0dfd074840ddbdb6153cbdaa05",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-2-indent-first-lf": {
-      "signature": "17717ce225d0069364b94ca1cc0bfa166ef549bfca79cfbccba37703f12cef7e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-2-chomp-first-eof": {
-      "signature": "343778c6c41cf27c4a4174e2ac173bc9c1f69f0dfd074840ddbdb6153cbdaa05",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-2-chomp-first-lf": {
-      "signature": "17717ce225d0069364b94ca1cc0bfa166ef549bfca79cfbccba37703f12cef7e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-3-indent-first-eof": {
-      "signature": "40d2f99b58600b8ba69d826b8b95477cdf57446e44aaccc461522533ae8822fe",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-3-indent-first-lf": {
-      "signature": "6ea5ef8f3d9a6a266704b85d6a4be2cdfc278361711c30617b4e8038e7883fd1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-3-chomp-first-eof": {
-      "signature": "40d2f99b58600b8ba69d826b8b95477cdf57446e44aaccc461522533ae8822fe",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-3-chomp-first-lf": {
-      "signature": "6ea5ef8f3d9a6a266704b85d6a4be2cdfc278361711c30617b4e8038e7883fd1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-4-indent-first-eof": {
-      "signature": "e3952a23585005becd9827963cbfd5fee99fc33e4242f946b4d2b222c85cd200",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-4-indent-first-lf": {
-      "signature": "249a3471c780da3eac0ead3f42cff450aea976911635f260bcfe98c1c1e7e581",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-4-chomp-first-eof": {
-      "signature": "e3952a23585005becd9827963cbfd5fee99fc33e4242f946b4d2b222c85cd200",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-4-chomp-first-lf": {
-      "signature": "249a3471c780da3eac0ead3f42cff450aea976911635f260bcfe98c1c1e7e581",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-5-indent-first-eof": {
-      "signature": "6a008cb2d5e0d16a38e02fc0eabf91b7ee955fa2263568a5af35c3e30f943930",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-5-indent-first-lf": {
-      "signature": "85cfdf2fe389fc00aefb09f3c75b40bee367e076e23e184680df09d08dc10e97",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-5-chomp-first-eof": {
-      "signature": "6a008cb2d5e0d16a38e02fc0eabf91b7ee955fa2263568a5af35c3e30f943930",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-5-chomp-first-lf": {
-      "signature": "85cfdf2fe389fc00aefb09f3c75b40bee367e076e23e184680df09d08dc10e97",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-6-indent-first-eof": {
-      "signature": "46fcbb547a9180fcaf821b7bb3e603f4bcee32d73fb23b88e131a7cf39abf9ec",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-6-indent-first-lf": {
-      "signature": "00b6f743ba92f755b6a28b4a9c6bda9b2d2160646c9c7ef23f90ca5cdf32cfed",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-6-chomp-first-eof": {
-      "signature": "46fcbb547a9180fcaf821b7bb3e603f4bcee32d73fb23b88e131a7cf39abf9ec",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-6-chomp-first-lf": {
-      "signature": "00b6f743ba92f755b6a28b4a9c6bda9b2d2160646c9c7ef23f90ca5cdf32cfed",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-7-indent-first-eof": {
-      "signature": "46714905117d39453165fdf6a64fcc765c07e82c451d898e9a721c8117d693e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-7-indent-first-lf": {
-      "signature": "0edb63fae732620fe0abb04d39f4b0b9fcd6d831e90ab42bca91d48b3232a24c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-7-chomp-first-eof": {
-      "signature": "46714905117d39453165fdf6a64fcc765c07e82c451d898e9a721c8117d693e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-7-chomp-first-lf": {
-      "signature": "0edb63fae732620fe0abb04d39f4b0b9fcd6d831e90ab42bca91d48b3232a24c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-8-indent-first-eof": {
-      "signature": "3b238f85ded79c92b52eb84d1886fa7f38d45bc49dbb42a66603e3ff3df3f49a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-8-indent-first-lf": {
-      "signature": "b8b1e7af8087b1716042dab29020c5bb6a8866ee26f9eb8d89be4423d0374cad",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-8-chomp-first-eof": {
-      "signature": "3b238f85ded79c92b52eb84d1886fa7f38d45bc49dbb42a66603e3ff3df3f49a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-8-chomp-first-lf": {
-      "signature": "b8b1e7af8087b1716042dab29020c5bb6a8866ee26f9eb8d89be4423d0374cad",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-9-indent-first-eof": {
-      "signature": "858466482a870e32f408508af248f6f953b80d1c2b1556dee1a1381d56810fa2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-9-indent-first-lf": {
-      "signature": "19e2064fd57c7bd7dd3d98cb617a68fe47981cbc30bae7c59d9dac8ac542297e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-9-chomp-first-eof": {
-      "signature": "858466482a870e32f408508af248f6f953b80d1c2b1556dee1a1381d56810fa2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-clip-9-chomp-first-lf": {
-      "signature": "19e2064fd57c7bd7dd3d98cb617a68fe47981cbc30bae7c59d9dac8ac542297e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---1-indent-first-eof": {
-      "signature": "507fba4706d48a5b90161472796092e96f6b3ede2803a0faebbaca9b90279906",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---1-indent-first-lf": {
-      "signature": "a8e5124d1c0b63978b05b02748592d1243a6fee7ec3427a0cea8d6d013f19a59",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---1-chomp-first-eof": {
-      "signature": "fcc3fa3b676f5d51ed304b6853704219f061aad4e65145b0cf2932772a043d4e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---1-chomp-first-lf": {
-      "signature": "b05e943deaa5a6296b1cccb75327809181177016b54fabbb73d3ed261e3e371a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---2-indent-first-eof": {
-      "signature": "3ba97b09b99535e4dbd5569861ffe10da4c245b7ce5ee69b27c9fe636c0dc872",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---2-indent-first-lf": {
-      "signature": "292b33973bea8e33ec4fa39cc175df2d56a88418e09d7d17b5b438856231ef89",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---2-chomp-first-eof": {
-      "signature": "910b6cfdb36d4529b3d4d4aad4e3154a9badb97b568cff5c0c6445f00ce09638",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---2-chomp-first-lf": {
-      "signature": "f001e209fee7bf3e6ac0bdf437b8782a2aed42670642d4f7502dee59f6010fdc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---3-indent-first-eof": {
-      "signature": "99502ba07a4a341327ab449eaba8154514a41e54f1b284bfefe190fff04292dc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---3-indent-first-lf": {
-      "signature": "db20476550ed2e9a4d9595592ee6d65b9faa9cfb3a40cf346fd0df03594bd9aa",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---3-chomp-first-eof": {
-      "signature": "917f01120a424da12dbdf6c92640c0564ef48d4de3ed02999e43d4276cdbc51f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---3-chomp-first-lf": {
-      "signature": "cd1eff235fc0b6183ba376aceffab14d01c281b12621cc1087b8889f0504ccee",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---4-indent-first-eof": {
-      "signature": "07dbc3922c453dcd01825bb3f6f0a0dfccd40e43349b372e84d4a64a2a0cfa59",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---4-indent-first-lf": {
-      "signature": "72df8db30ba92f910139fad4412603dd25c3ab2527418929b588992ac407d3f5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---4-chomp-first-eof": {
-      "signature": "69cc56277ee040ff5ef11988589913348fc26076934a8003b5fa589af47bff1f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---4-chomp-first-lf": {
-      "signature": "092604bcf932cc82e5834034066523fab8c6594bcb2a27fd68e47357f7842047",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---5-indent-first-eof": {
-      "signature": "4d0f5d6ae1436570f711fd68cd155288be84e0649a54d37fe8adcc0934d6c95c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---5-indent-first-lf": {
-      "signature": "5f9c7620f88b4ae93af5eca873d310adcfb76dc11a2f0d1c7fcdeeef2cbe18f7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---5-chomp-first-eof": {
-      "signature": "7f0c633fc558c4969b427d86c3bb0265d71e09a549d4ef9d9eaa1faf8dca6aa5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---5-chomp-first-lf": {
-      "signature": "76a616c599e37a019af36d51ff405265f66da78f3dab1e1989058490947cf88d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---6-indent-first-eof": {
-      "signature": "ee9078f12c7eefc8d14829df900fa9880c8c7224dcfb8f93dbcbd7e53356014b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---6-indent-first-lf": {
-      "signature": "4fff6b40f1f1d4f9761dc985077d7f1cffa8c775d2e2daec7a6860a525203184",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---6-chomp-first-eof": {
-      "signature": "54e31c78ce2d15c1eef4f10ce617992062267a31bbb59ada50223592cf099474",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---6-chomp-first-lf": {
-      "signature": "82884c4e46c754aa09e4ce12a4afc5d15ba1a4459d4b507fd591f56b505e8ce2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---7-indent-first-eof": {
-      "signature": "4bf4f62a81fa974171153fb59eb07736e2427542c8280448d0e1ee630427c6dd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---7-indent-first-lf": {
-      "signature": "c79e5945a9bce28ad0e561c41cff23c8b2fd1562c7b6e4586ba3a1e5a6738f71",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---7-chomp-first-eof": {
-      "signature": "4d387d3114746eb0ab7caf1277aa11cca5d378d8c2cdb62d9ccf77d767ef7899",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---7-chomp-first-lf": {
-      "signature": "f8faf2c66a45062657ea63bf120d44dce9183e3b444e7dc0cea3607ea09f4ca7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---8-indent-first-eof": {
-      "signature": "3e9962064df957f556606a8c995e44e0c890c36e7da789394af7e7ff3655f3bc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---8-indent-first-lf": {
-      "signature": "a100214080f22fbeb420e9f0f68d1abb5925e000134f680c48040b92c961557b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---8-chomp-first-eof": {
-      "signature": "93a0f6c3d84643a5920882fe45761ffd8702a215caf109a600e8b3e3780f1b26",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---8-chomp-first-lf": {
-      "signature": "618759497a76dae5633cf18c689f6be66051bf95c704d5c9be6861ba519c45a8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---9-indent-first-eof": {
-      "signature": "44be64f1479a3ec69cf03b011561744a7509440a266de05581ed9b6d9451b43f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---9-indent-first-lf": {
-      "signature": "6df38339c6ed706fd6c8c84bc6432614d7675f132fa889b58241415f0a18100e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---9-chomp-first-eof": {
-      "signature": "b38623f76a49f3d2ddb6a2fa7e43d77381d78a1b1a35a17f55a05056b17707db",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62---9-chomp-first-lf": {
-      "signature": "b2272394a71524130ca401a32d189e24f95a6f978531dc88e74212d6c8a222f9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-1-indent-first-eof": {
-      "signature": "61435052c595e2558a6e2bab393ef097e2233b72d786ca9e1cae47855acd96a8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-1-indent-first-lf": {
-      "signature": "d940c2a75e53f492b3dda6d2a3366be0ffe357ee289c46792078a3ee9854f0e6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-1-chomp-first-eof": {
-      "signature": "263f2eedd0970c0d9b8fead6e2f21a290f7c33f55cd60dc361c5517c6ce2a727",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-1-chomp-first-lf": {
-      "signature": "beb8b7e81ecd44c90487cc2003d111b7c808a73f0c43d80a2ae932f0346203b5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-2-indent-first-eof": {
-      "signature": "d3d66dbc5b101a4348a1f0b21f12893cb9a52fee9c81786c0907248cc334f516",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-2-indent-first-lf": {
-      "signature": "e867fc2ed39ebc9b2f1436be9dbd809c5a56a1b01ca427cff197040af4d0b0fc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-2-chomp-first-eof": {
-      "signature": "42fedc7d3f7f277d714ad909f6caf906b5573fe9097e4b347e3432730c065b8f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-2-chomp-first-lf": {
-      "signature": "365b67b2e91c5b4198e6d45471638af0bb100f3808c4ba6254ee2612d65a98fd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-3-indent-first-eof": {
-      "signature": "0dcbd964add507ed8ee9d3acc00291058594f0009b5b3cecd644e305e35749e3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-3-indent-first-lf": {
-      "signature": "72162069afb8a8a2043d684db690ccfdf55503dbf5e30513164e6f2f3d05cb45",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-3-chomp-first-eof": {
-      "signature": "0dbc5dddfe631310aec644d0c314b2ac414437b937f98e3cebecb0769e0b60d1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-3-chomp-first-lf": {
-      "signature": "4a86be4d4f51c269bec81b5c9856b3a96ad09ad72cad65135f775a7ad458c6d4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-4-indent-first-eof": {
-      "signature": "eaa3efd4f8de13292c1347024efa3663efbc941ffd677b79b69c3ba7938d6357",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-4-indent-first-lf": {
-      "signature": "2e4ffd4f5e727699769a4a24c17cfa0cd343b538927044c901e728b4988e1590",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-4-chomp-first-eof": {
-      "signature": "c6a8da69285229cd10c9ef2ea80dca97cc6117551f847e322161f223109da438",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-4-chomp-first-lf": {
-      "signature": "a0f6414316a4fdd5ed36c4dda1580440a30cf3abc14a1762c7008f15463d985f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-5-indent-first-eof": {
-      "signature": "efde52d611c9866104d3387e37337d82967f939d9defce969fd6ebc5ee025783",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-5-indent-first-lf": {
-      "signature": "ae01c7f2bfb5fabb9824d3b4d2cca1eec1b4fcee8ab1af03c985be31046e5fe9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-5-chomp-first-eof": {
-      "signature": "ff590b521d22bdce551efe05c84e683d23c7d3d9e3aed3843d198faf1bcffd08",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-5-chomp-first-lf": {
-      "signature": "d6f32a0eba7357c343ef2f7ad900c1874e13b6d9d6dbba57a8cf10eadfbed2cb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-6-indent-first-eof": {
-      "signature": "e26daf624238a29ed9990573062c6079ab445a3a7ef6928fe4b486e5c6b5747b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-6-indent-first-lf": {
-      "signature": "b24263c66683c0f8fd9de2b8b43355e43cb4198f446f52ea19473a7e1e269170",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-6-chomp-first-eof": {
-      "signature": "a48895e2c96b23fa34ea6183fe6d464b4ae4a7e76ccf76b413d7e8fef8f516fa",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-6-chomp-first-lf": {
-      "signature": "3f9a298cc82f035b6df0e83b3f10be5443a3fc43a1d4358c48c3084720080fe4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-7-indent-first-eof": {
-      "signature": "8fba2bf5fb32ff9fb852eaeb1a2b8dcbbaae20b6a33b8223d019ef5f50cbcbd8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-7-indent-first-lf": {
-      "signature": "046c17ad1d386410e282c7a3136786848aeec730de6ff489c7db67e16a5b389c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-7-chomp-first-eof": {
-      "signature": "aa10a329b734b3f184e42d4a95d8df983d3e8a567dd991fd1a26454a616ef2b8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-7-chomp-first-lf": {
-      "signature": "15431a7684ba255a3a96eb77e08c13cc8653c3de8241a1f2993bebe3d3b11114",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-8-indent-first-eof": {
-      "signature": "0a93a1a7cca2e31a2ec3f1c5e8bf9bfe39af0c43a6c6c2f84c940c6580072a84",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-8-indent-first-lf": {
-      "signature": "fc09985632b663b6a76d5b6eae87cde84164c747352e68b3937fc9c0a35a29d0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-8-chomp-first-eof": {
-      "signature": "1c364704c0f155ad7c7bafb7bd7963044d4f50f9839f27de6f30c3d144ed40d4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-8-chomp-first-lf": {
-      "signature": "c20d71d9bb4c6db09343f7f5aaa94c5e3d3f1f77dca2cdde5474448888ab674e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-9-indent-first-eof": {
-      "signature": "60fd0bd0a0f3ab94853089e21f1fb31affe83b4e20764214dcaf93be872a524a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-9-indent-first-lf": {
-      "signature": "82dfb257823120cb4103f97b6c69493a8140f68e6a5628a306c0a06d3da85451",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-9-chomp-first-eof": {
-      "signature": "ee63d96850b07d97d1113cbb9c27d8afe0f0af733e206a715572a70546fa53c6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/explicit-62-+-9-chomp-first-lf": {
-      "signature": "374ec2903d0682f75d7efdd9ec7bc8f2aaa21d6c5533b7250b0cb149f3b0678a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\n'-False": {
-      "signature": "627999ebaa1cbd05954772887ccdfcb5a6ec8328ce2758fd84948b4dcee1b109",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\n'-True": {
-      "signature": "c27d9bd0e3622e1baa099e0c68fef9e7734fd0b85fe9b34cac6ab805b12a2925",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\r\\n'-False": {
-      "signature": "b55d9622e6790efc8f5041a5e79ea678c306278c3460919ea06958de15494122",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\r\\n'-True": {
-      "signature": "7c54cbdf1bef5f6969f75c4fb5a4f4fc50773dc029c730dcfe5e99bc712c32cc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\r'-False": {
-      "signature": "a065ac7f505d3432e6db06d50fd6ca8e512df5dd86817189cfdb321737f7ed54",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-clip-'\\r'-True": {
-      "signature": "b37068cc510676f260ed4b7e8677b204539d52894b85454db695683ce8e05d15",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\n'-False": {
-      "signature": "50df70504de848ef0a6bcc94e776ffc94fcf4f3f20c5a15915379564a3ded11c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\n'-True": {
-      "signature": "56a6d65109abe64a39d326fb3d95ec71d262bc9acbede72aa52fb34ca71248d8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\r\\n'-False": {
-      "signature": "0fe7cf36b75c00a7b36827094a12e01f4352f52ba2ae1abf58c21b177af166ac",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\r\\n'-True": {
-      "signature": "749125af67fdcec8cf9e90ba3795242aabefeb12dce7ff0395498b4c9499225c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\r'-False": {
-      "signature": "93f2f9790570789008ab7375f78d90250b1f5c222352682cb6f0c7f42c8d445f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124---'\\r'-True": {
-      "signature": "66c099241014301e2c9c5f78291e2a96700acb5642ae53cfdd8d51ff0a25175d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\n'-False": {
-      "signature": "5c858400ad493ee30b63909334b35e15c0991e9bc406736b9afb7bbe19feddf8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\n'-True": {
-      "signature": "902645fb17ca86f6c51119ebe70e4c5fbb7a7bd1f5607c002dff48a8a6e75cdf",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\r\\n'-False": {
-      "signature": "5bac4e4d82b3b5116f2b9f1e1c34f9ce5f251af53b91c76e67bd320bbc1b0261",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\r\\n'-True": {
-      "signature": "58f095406b1e30519165f5044d37f6dfd2bd0713ef006c528ae0cd89fef8c487",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\r'-False": {
-      "signature": "2b60d6fb29f2acd8b3038f2090ce4d1c499d763562b5bda495e430013d9228a0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-124-+-'\\r'-True": {
-      "signature": "e8a97d187ae69693391436d4aca961d0efdd54db8f6d34130527b16e39436838",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\n'-False": {
-      "signature": "ff66d40bb1c85509b227fbba93da027c3ed049f11b68ba03f2643464f05b703b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\n'-True": {
-      "signature": "645e1567a3e7d0a34d49ac53839bfd8533fdeab38ed81c87d36b1588905a1ac5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\r\\n'-False": {
-      "signature": "fd1131a017309ee56565497b6984b6b87ff3bcbf80caf9be9620465492332525",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\r\\n'-True": {
-      "signature": "6808c80baffaf75a56d51bf6e72efc84f1f557e4c83cce693e39240cfc1eed4e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\r'-False": {
-      "signature": "af84acee72b78802a6e63ddb91dbf06fc001c6abcb014052897deb1750165060",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-clip-'\\r'-True": {
-      "signature": "21da5891df739e2f3e5eb5d0fc073f57c9b3a6374558525f767da20be8409302",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\n'-False": {
-      "signature": "78fdb98dd40ba8b13b70df8f8beaf65d17b735efd2867975cd4b911980122dbb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\n'-True": {
-      "signature": "ade08d88035bf604ade27abacd0216a8bef92dbe86efa2abcdeab646c606c6d2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\r\\n'-False": {
-      "signature": "3a48d7be1c772787e8622676d77d61714fe037a7c2aafa3bde17a7908c04529c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\r\\n'-True": {
-      "signature": "d4880619447d4346531448a53e0c199b9b0d152c292469e09472be1c7325eb7b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\r'-False": {
-      "signature": "664b1ecb4c9a76fd0cad577415dcc1a6f658e0d0cb7a8070a6e2af4ca5c0ed17",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62---'\\r'-True": {
-      "signature": "9c1be57fae1ac83038a36bd80fe2339135e3cdc8fcf6be754f21247560da2be1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\n'-False": {
-      "signature": "d9a51980f5ad69b77df3af72fc3f91fdabd88630c38ba83de724279f9aa6caa5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\n'-True": {
-      "signature": "660aa0768aaf2b5028cba7410b134513b0fec5774204e548fafe45f50069931c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\r\\n'-False": {
-      "signature": "b757f5623db18962f77af4b1d697810b3074f464c12ce3ea935101dd41e5d104",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\r\\n'-True": {
-      "signature": "3e3ceac5fb7a2ff95d88468fc1aeda10e665354b170873e93055dbb83840608c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\r'-False": {
-      "signature": "3373e2ddafd1a0aa9489586fda0646655f75efb4539ff5eb1297d7525fe9527e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/auto-62-+-'\\r'-True": {
-      "signature": "aea8ac2ea19298345049e40db6442e578588f78ad1f9a46c19756a4f1449659d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-empty": {
-      "signature": "71a1b819af8ba51cf97ddf4487c625593a17c55a198309022a8ba242a39632d9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-blank": {
-      "signature": "5e41e66afebf6caf891daa48ada748370a8b581991c37c6e17ebcdd42281a556",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-two-blank": {
-      "signature": "65978dcb0530f17c2143204e52f31a0b620a850fce179f7bcb70efb841618131",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-paragraph": {
-      "signature": "c39f64f55a2023c96977fd1088888874e84be777614f1a8f56078eaf247360f3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-leading-blank": {
-      "signature": "5043bb3a0e4d4741f9ca9b0671704833f2eacce286fa5cf4f40590be1c5b5e0a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-more-indented": {
-      "signature": "a0bd4a39e83d808ecff84f307d11e2b4abc5633425af47ce2cf89e44e52911ba",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-trailing-spaces": {
-      "signature": "72e69f22ba1253bc657bcf8efed2eeda87737d3f493b6523863bb8105fefb010",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-literal-tab": {
-      "signature": "012ca61502d8a6910b0a2b3d8dd62c6a089fb8a5fbecc44728d4326110e27eba",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-literal-markers": {
-      "signature": "84ab847c8a542004656ed89657aefbb7e94e21cd853a67b87e74107474320ab1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-blank-between-indented": {
-      "signature": "a4d0803db953ed3d173c8d5fbb7f85c5a65472ce873381a1bea576b9437a6445",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-root": {
-      "signature": "c67e578c400b530ade76c000e115390a186bc7f5f42d93cdda65975d7cf851f7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-root-zero-indent": {
-      "signature": "03b5843e255e5f142ea4f658e46f9c7d6d2c15bd9fc3f744f1d9ae3518b6eeee",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-sequence": {
-      "signature": "c6f36e984b2de3766efb2d5687278cd6001b429bdbdd5ec97c20a00cec60e23b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-nested-mapping": {
-      "signature": "72085a400d83f4ef65ff5681dea30879af946ed3e6219ab947b92210b3c0b7c0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-compact-mapping": {
-      "signature": "0e3b5c25d1d52190cc19e24c06bda86737037ea305f45cdaf1baa495063d4c20",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-clip-spaced-compact": {
-      "signature": "04e8be38e11575385eb566fcfb8c1fc05672099650447d5ffd0fe89a1c26cd60",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---empty": {
-      "signature": "c47c12eef11839af549aa5be923027ee151b1f4398f8959a6785f62f548795cb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---blank": {
-      "signature": "f4e41ec701ebaa2ab90f5bc3b2068875f96a962662f041f4aed65ddb046d60d2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---two-blank": {
-      "signature": "4823c06c4745e3d666969f10b98d56dd2a98313f9e70285ab91548db3a3a0781",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---paragraph": {
-      "signature": "882610fa8b754313b83af834a50cc14b708fe39923b715839c9428ede33140e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---leading-blank": {
-      "signature": "c58f7ac35cc96aa2ae0704a4ff6102bc8e0494b08c1235b6f89ad44a9e33c27f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---more-indented": {
-      "signature": "bfff56e30fc4c23aea8824211757345d94f6e2950659e2ece60920cdaaa4c692",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---trailing-spaces": {
-      "signature": "e7e42b03c2dd8c7946766cc912cda54872143335ec989a78a8fc656d53258a40",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---literal-tab": {
-      "signature": "7f7659545e5100bc660868291f8dea0158abb02e9e1a13feccd437505aea35d0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---literal-markers": {
-      "signature": "41b3434ebdbcff813688a9bf90629e06b920a7e9203614f6111613982aef4886",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---blank-between-indented": {
-      "signature": "97f37e4294f51be1f6468f92f573f59b7bc03405f0fff997e9cea251c098c53e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---root": {
-      "signature": "bb47dac85b238def71f01d5477af490de9b72814f898492b86d5cb28cfb8d8d0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---root-zero-indent": {
-      "signature": "b682363de5e6a3c97fe7e13e648dc8116e2425698053d2c5421165956e92daa7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---sequence": {
-      "signature": "7fd34d122e120d7f9a6b5542e81920bb1468d3a09e177a3b86f134f1b8fe9fa8",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---nested-mapping": {
-      "signature": "e5e661f521b4850708d86cd4ad400e3f7d92bd47d2c214abe087398f0c64124e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---compact-mapping": {
-      "signature": "0cba783fc28820833a9082cd53f9634012cecc5fce36741c9502f932b95dd8c7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124---spaced-compact": {
-      "signature": "5662eb8c142647a43835c1efd2daf3e1a514d9002a9f68c2210072f88a849161",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-empty": {
-      "signature": "dd3e3d27e6391c19b6b73ccc65e6b3cc7db58560d181d08938fbbe7dbd0079ef",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-blank": {
-      "signature": "8bf8d8d0c0753d50e1bd7b5cd4ba01ed27801ccd3ec8cc2153e33e0559327c71",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-two-blank": {
-      "signature": "2cc7adc6e59359d600991382f8e28c3f2282f968961a3910a2d78a315d0ee7a6",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-paragraph": {
-      "signature": "166e2033083c9d83fc02abdbcba7bd54e1a85ebd16100108597cbe0e1a6919bf",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-leading-blank": {
-      "signature": "1897aaa9b2d8c7d343335d1feafe3f9cf30dc18fa01d156e689221258a69179d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-more-indented": {
-      "signature": "68afc14fa606da8baababc9da3321c330487b2cbb2876abe3bffb055a1e4a7dd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-trailing-spaces": {
-      "signature": "48dcb04a6b36fbf6da9cb61ec7917df5ddfb754a9477dcd5a389eab0816df617",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-literal-tab": {
-      "signature": "9f8772432a0fe0ed7edabf31510b0489efb7d1a61f4d78b2f94169fda0a939e3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-literal-markers": {
-      "signature": "285ab223cdf665bb0c4926a55864cc49c90e5191e14a9b82d6a5c0e092cf308b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-blank-between-indented": {
-      "signature": "b4f84f196dbe03b4969261a2fc2ade19dd9b6fb223ee2e0008685bb3a16ea910",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-root": {
-      "signature": "035ca815283a3ac96d8fb13b61f3b6a63951765b82a16a871d13e64cb1380977",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-root-zero-indent": {
-      "signature": "e01b641dc39085b0a3e6d066387d961caff3fd56ec0bcaafebb0aeccc5ac42b2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-sequence": {
-      "signature": "dbeefb48f7333a53b1fe0a7696263fdbdc27e17ec048ba30fd37102e98ee4cf3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-nested-mapping": {
-      "signature": "d89213a8ae1fe4385a8f95aa38f7f43c210fb63886681777c9d49f95a7ced364",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-compact-mapping": {
-      "signature": "f744faf9388b6936a1e8a8c163d070091077c5b60e610bdfc3386608aee00b0f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/124-+-spaced-compact": {
-      "signature": "152698ff25d865505444e94c1f6eb2d5c650f8b3bffcc1b565d79e02e6073f0e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-empty": {
-      "signature": "4670db7c5a402dc8d0b7ee5fbd35fea0e139f53492963143ab7228cd6954d1b1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-blank": {
-      "signature": "d88657c7e7f8cbcc08e82d1e62434a642193a7fec66ad7395bf1d8333504c66d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-two-blank": {
-      "signature": "295d8c0fa52249aff9307343cd90a9c797d0c2cdf94ae79c2727be15d0462207",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-paragraph": {
-      "signature": "23ccc929a457975be30ca71a6c74f73ce57b61e2c677c4b74cd348439196cb98",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-leading-blank": {
-      "signature": "5eeb774d321dd1720a891a33e8c6a700ea0e3c8f836902bc4f79c9a1495d20e4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-more-indented": {
-      "signature": "f9d882e8e1e7d0fea2ddb92d34a5766ff9b3897ae8e1c343fb743a5088df8fac",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-trailing-spaces": {
-      "signature": "d7f7714b16b2062acbb4823c71b6591f7dd4ac39c8127822d60ff30e8a42a8e0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-literal-tab": {
-      "signature": "186e9a9abf9939b50df13850cf9c68fe354b1ab3013243ec78f889bdfd6e6150",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-literal-markers": {
-      "signature": "13657f59561629ad597803a077d419cb66ad6087463cdec1637b1173cd72c904",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-blank-between-indented": {
-      "signature": "eacdfcb14638e872212a0446fbdd9f68858d1ee5c802b5b71a6901dbfe709b0f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-root": {
-      "signature": "83f29065facef1ddaa0afbc15bd1ffae20f1d890ae7c3a364a71cdff0da76285",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-root-zero-indent": {
-      "signature": "cf57b4f598a0e34d2daf0c9b2122a9b554cd79690160a97935697d38f9097fa4",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-sequence": {
-      "signature": "808c00a0c354d14acd16b4eb75809c9a86f5acb79d020ff5a584ce2e01364674",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-nested-mapping": {
-      "signature": "bae17db28eb0fe7a03d76c95a2d564cfebf7e667d31e2e9af98f60d79f05a1fd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-compact-mapping": {
-      "signature": "da1ae0a3dfb24ff077d380a23ff49178f4c25f7e0203538932194ba1b6d69918",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-clip-spaced-compact": {
-      "signature": "e20435b2bc2d218e0e13c32255dd51a412ebc143a9cb385960b90080a6937218",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---empty": {
-      "signature": "cb051c68bad6aea00a226d0e857d1972cd28f4ccc58b6843f88d5b8661b21090",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---blank": {
-      "signature": "a873083854f601f9b09955a3d84179a973301f8cb2617512e50470bd04b8e6cd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---two-blank": {
-      "signature": "ded72ed0cf967737099889748592f0dd058738ffb4abaed57f22ed768fa1fd10",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---paragraph": {
-      "signature": "96be925b4dffe4c0a14f556d4fb774706cd80518252205c7fca80c202e329a31",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---leading-blank": {
-      "signature": "eb3c02e200f06336daa22eba8ece2cac56e0988d4a28a2f4398c12162b039182",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---more-indented": {
-      "signature": "fb95fdcebde5b4da3c90b0385732a5b260dc1b6b22204114be5a3cb0ece4d973",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---trailing-spaces": {
-      "signature": "b478548fd92733ac5609621ff2a46e4ab79dc3058a64b671c2a732efe145d8ba",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---literal-tab": {
-      "signature": "0283b7c9a9153572432fe4f5b002a96701604bf91a088d31297e0cf34471ee1c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---literal-markers": {
-      "signature": "fcf0da4e8e1062ed088701db369f3ad57ff2d55135b459235daf146b8f4fb7da",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---blank-between-indented": {
-      "signature": "43745369b26c82d6735f7f55cfb6cf88dc561d851c6bcebc3e44ac987592636a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---root": {
-      "signature": "4fa24ba7b93bcc4099954651116f8c5ac0b9eeae334f5f32db8957346195409e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---root-zero-indent": {
-      "signature": "205f8eded324f37163460c759ad30723b17d063842d589ff25fb3d0a0fd176e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---sequence": {
-      "signature": "71da484a2cb53fa5e513ba0af08a46fc6c06a39d1949e2791cf67b0464ef6f37",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---nested-mapping": {
-      "signature": "77c4a5c7b9a5021b703c490e332e1e498ff43d8fe69c7fe0fe259bc4d1674dee",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---compact-mapping": {
-      "signature": "ecaee5574dee7d89c59d0741d959758094600529dcee65f3d91d0dc9b2958c68",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62---spaced-compact": {
-      "signature": "154f31248425a04a8427af1902547560e1e7ce4ab8619461d239aa8b03e580fd",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-empty": {
-      "signature": "4328da11079342d0e28b6644ba378a9adc89feb94aa91387427a662458adcaea",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-blank": {
-      "signature": "c0f3e4328d1ded5e67f4c066fe6777f2dd53374633dea8563fb233c48e8c144c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-two-blank": {
-      "signature": "cb410f3edeb5c3c53e841e1318f487f37950b2696eaa07aabe4e8d0a4b11dca0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-paragraph": {
-      "signature": "1fe7d8fbb74d10e4f040e00ace3382aa2bd38984e763a09398febe0477f2de17",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-leading-blank": {
-      "signature": "3426f5a4b162ea5b61b8a120dd63ccd01f6b3d9dc35b1a563a48d0239ecd52e0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-more-indented": {
-      "signature": "53255d19d81f7ad2ed7b37031adf20d3061908f64b2addae741548b4d84daeef",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-trailing-spaces": {
-      "signature": "0c191c9f20db9af6f009ed99f44ce61b7a089f6a8f59fdcdf4e7050f5c22a122",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-literal-tab": {
-      "signature": "de642e3e88ace8f3887de1ded58c73b86b5e864f47c80d406b4883c399e39b2e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-literal-markers": {
-      "signature": "17dfd05357a73c1f4be88bbbbdc9ee556bb51797ece84fcdbe38d181a9d815f0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-blank-between-indented": {
-      "signature": "714440e9eee900e65639dee9f79e80d2811c986ef6fdbb09e38c4fd78747d624",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-root": {
-      "signature": "a5c9572d7c203d6d050cc515fcb7949289b196754057f75fc22aa25e510d7c1b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-root-zero-indent": {
-      "signature": "bbd8bcca4b1a0ec3b36dd797bee724e7678523bd4ac077a3b560ddd37f110599",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-sequence": {
-      "signature": "56b8f0aae5130144971425c97da96a7ef42d55d049f65a80bcbbf29560b5e452",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-nested-mapping": {
-      "signature": "b2040b6b610e03f11ce91eda800f0926efb4e825de5d87181f606a5325417b77",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-compact-mapping": {
-      "signature": "d5c19a2b06e92dabf5a3ae2b930c3566933450954a90de2b9f06705d03b815e9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "block/62-+-spaced-compact": {
-      "signature": "3fe8d9aa9fbf5125d506f6390966c423307f74ed4b91cb0a2cc9425f6ed75956",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
     "core/multiline-plain": {
       "signature": "a82d1498258c746b47ea0ad2008a127c2202f7495feb901964d5f78f96b417dc",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "core/multiline-double": {
       "signature": "2c73160a7aafb90c61a5bd3509efe626966d93ec8e1c870134fd4db27eeeaa2b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/unicode-escape": {
-      "signature": "8ff4aaf26ca7ac73ed0642e9e7de0b53aab334b52ba078e0defbbc1fc1a3472d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "core/quoted-flow-key": {
       "signature": "42f319b92029af3e67bcadbc10b46841c833751d6450c1fcb31139b9bbee4501",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
     },
     "core/trailing-flow-comma": {
       "signature": "1cd05b1d490890e57b950cb06c67a55de8a39b628e8b58e556fbf0e183a294a3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/indentless-sequence": {
-      "signature": "b10aefaec55419d9569e89e395621d59e4761ac4e7ed67471a077eeee82f1983",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
     },
     "core/empty-key": {
       "signature": "35de773a948cd25696684da9ec67d2d9bac4507c371b0acada0b56953c29adac",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
     },
     "core/typed-keys": {
       "signature": "2024595dd258c72c9d855cc1682875e6212c401ac968c4796cd8ee014fb54e8a",
       "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "By design: mapping keys are their source text (Str), not core-schema typed values."
     },
     "core/duplicate-typed-key": {
       "signature": "df6ba61accee8e3077dcd494f54bff5aa10246193a8d9d6b7df19e0e2d23b882",
       "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/hex-octal": {
-      "signature": "27cf67ddce184d9a44542da304cb55a97edd11d4be2d6241651d71fe1d2fcfdb",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/nonfinite": {
-      "signature": "9b18aee984e758f732eade0ee9d898c6cad729decf847124a189fd47fc6918c6",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/mixed-bool": {
-      "signature": "f704246a55e4e3b44fc05a5cf2c34174cc3120d511381ae9a4d9ac2574e72b27",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/bad-float-as-string": {
-      "signature": "ed917cc13ba99b93ef3d7835a20fff5e72445285411763113950e04a381c0807",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "By design: mapping keys are their source text (Str), not core-schema typed values."
     },
     "core/overflow": {
       "signature": "e645b8458b91e416ac9a85d84ecd4b085bdf5a61f3067dc2db028333e43dc74f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: integer `9223372036854775808` is outside the supported I64 range"
     },
     "core/directives": {
       "signature": "29e938feb4a32043e956ea7df648e546d82cd963449d326f750bf6fe4cba1881",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "core/tag": {
       "signature": "5ea625ae9b9e522286b1d5c6fc3e272f44f245b987331fdcba092f8c5b8e8bc3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "core/custom-tag": {
       "signature": "4695d364251c58e6082019718c031bca55821862da1700a36a6a3b8c4cdc65d3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "core/alias": {
       "signature": "4ea4aee99a520334ffb3690397ecea70a30a2cdd58e167e30aa75dae3f23407a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "core/cycle": {
       "signature": "9277da5569b0e85a526d84759f555f399b1465fe5beb07672cd886751f54d8c1",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "core/complex-key": {
       "signature": "29a92104cbc1734bebdec16f2c83a889b2a67f336dfff566029be9d119929c6c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "core/stream": {
       "signature": "33929e00bd8b56addaff72c60ec2c4ae83a3fa10db9b91de6958e551ab9730de",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/bom": {
-      "signature": "99a98308f0c414d3bd754097c7b7993853ba6c788dae9eb26f6dedbaea019620",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/nul": {
-      "signature": "270ae4d4836f33985d8032f88f24ad5a432119e1a72ec9dfd58f2233eb1f9894",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "core/closing-bracket": {
-      "signature": "647c8cad412b602af9fba32b1a363b110caf5484c6d2870898caac6d4ac203e0",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "limits/block-depth-100": {
       "signature": "84c094607df768cacd377de57ded6460112b40df4d0d7ea2908b7a895b13d5db",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
     },
     "limits/block-depth-101": {
       "signature": "ffbadd05f3a86e64ca86419a98772a29a706772add5a531b31206a0f9eb524b8",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "limits/long-literal": {
-      "signature": "8a826f443d1a4a7392f60fc555bbd6d826643860454f6c8bfb180387d704ece0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "limits/repeated-blocks": {
-      "signature": "fc8f9e6aac40fbe45b6d2b9f8d88864d9e5de8e3aec032606d934fea320dc159",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
     },
     "suite/26DV": {
       "signature": "36fc6965c9d37e265cc9e31bbdaf8bc79fed8e11a6fb15e7485bd8621b67190d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/27NA": {
       "signature": "35da1bc43c4c99363989fb47d693e8a0b410248a107de40e912e78ca25d44e8c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
     },
     "suite/2AUY": {
       "signature": "e55b4ec88e7798369cae0525208815e4e3cec1864bdc8f9377e00976d9866f34",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/2EBW": {
-      "signature": "cf96d9cebac2589e3edbad6ebeba70cd00f3d7e021c73ee3c8fef2d721b104fb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/2G84/00": {
-      "signature": "c2beccdd2844201a4039200f106669204de889a4801a6a772de198999a5c8a85",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/2G84/01": {
-      "signature": "5d6223c94ebe6500bf7de8a155a584c9447453f167bf01ca7daeb37c86d669c5",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/2G84/02": {
-      "signature": "4a89438fea57b8557aa1190ba9f4e9a7b713321c66aa5e713a986fd868847c18",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/2G84/03": {
-      "signature": "4727b53d7edac316425ded88e9e983f8ccbf6199a3fe9f631f54d3775d06a4ca",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
     },
     "suite/2LFX": {
       "signature": "6d3c4cb8b1d3e19181a58a78fbf916a1dbcf2012457392a722e41acf0141d3a3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/2SXE": {
-      "signature": "73bf9647767142dd7d6698f166ee5b8fb1bb10fd409c7f1ba07085b3136866a4",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "signature": "8ae371584367b1f74bc0cf2616e6363834862bb9eb901f6f490a2f91d197bb68",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/2XXW": {
-      "signature": "06513327cdc53a69567b07d71bd4b3223fbca74fa910a62c608109da2dc69b7a",
+      "signature": "88668e1f30c97f64168139e0bcd4df4b1ef39f741c709d22629d0496b772f2a8",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/33X3": {
       "signature": "ddee331797dcb9e907dc49dcc8b351b816a716ef8e631f1a1a9f7e2a0b11adb9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/35KP": {
-      "signature": "eaf50b41a56a9dd039f98db59d84545b1433eb617ee2c59709605ae2d41af6fc",
+      "signature": "4ce77e0976afe0065759f3c10af866a6ae039a8d870ceb0c435799a6f2b4f3e5",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/36F6": {
       "signature": "eca370c4635002513091521cbf17084faaab0dfa3a78f8d65af65696d7367d11",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/3ALJ": {
-      "signature": "4e587646497518a44a332a1df2435f26969fc670adc4a4d352c32e1bef95ce7a",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/3GZX": {
       "signature": "ea5267cb8cd6aca6af0077b77fe5944657ffbf39c09f185989401ae1e96d5456",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/3MYT": {
       "signature": "27bfe5b628aaba9f9475c4c505f86d7ec27b3704fcb64139f23fd6431382d2dc",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/3R3P": {
       "signature": "f2dd44ee0b0520b5da5097292a2c8cd36e86ff177d48b02f40d93d5e19ce1897",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/3RLN/00": {
       "signature": "f0bcb0f378f5923d107ac2218efe4720d981b6b21a5fe5f2df1b1d19bf3f4fb3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/3RLN/01": {
       "signature": "984aaa6b9eaccd5e7b46e41d4f68b24fdb35a42829502efa441d2e6f9ef46a8b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/3RLN/02": {
-      "signature": "995d1c3c1eeda58b3f689e975a71127a753d52554536107ae1e5f1825dce9457",
+      "signature": "61f6ddb4825a92f7b1d59c156702002dcea8eb856e64abecf4a1b14acba0fec2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/3RLN/03": {
       "signature": "90a595099ae23cd1e12e474068a90ad83d5ac871fd4c0709dce30efbd4064b75",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/3RLN/04": {
       "signature": "6df9bc35fa7c7baf6b6c9ff53f08b3a34c3c611f8b28e9e7e3cb7cd273e036de",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/3RLN/05": {
-      "signature": "23c61f1f58d3ed9fe873a8d586d740a4f8f05f8b689c5e348a5d1b24c575f505",
+      "signature": "a1b8409723021bf13b7a329ec3c6e843611f5d04004a980b1aff4daa3a296b74",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/3UYS": {
-      "signature": "d5aa9c0d9554e20dbbb2d861a5386f9a607199b1fe7204bdcb1c070b9dd811ce",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/4ABK": {
       "signature": "aab485edeba33e43531af9e2fa374199ee7ee99c59beedd56c9ab8585076b3af",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/4CQQ": {
       "signature": "fd638a935b5f4b034822848d61ffbd38271b48c37c62fb974938b7c18fc1487b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/4FJ6": {
       "signature": "0138d1dbdee0749de841a8abe5b84953a954a9d7dc4959d4821fb8a3d79ff083",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/4MUZ/00": {
       "signature": "bd981384372e783c9e2abcd6d75f53f427a6c961edc9a6e0b310540f233625ef",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/4MUZ/01": {
       "signature": "23b464d31517639d6a159a50bd1dff5d6218394b7b0a816cfb079e4e535f4e22",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/4MUZ/02": {
       "signature": "7805896d96e29fc00917e86e49131d9627215d2a3a99a36566c6eec6045a4d3d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/4Q9F": {
-      "signature": "df6e462dfeedbde975451bcf988238bbbb78f18faede37e64c2ac925dae8b602",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/4QFQ": {
-      "signature": "a764a24d9ef4bb962d6e222162b4cee345938401b2b2d88e9bfb0cd19c236287",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/4RWC": {
       "signature": "70081ab4aa312645370c36cfce9879b9030a1333532d1b1626056a9eb1c1ecbf",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/4WA9": {
-      "signature": "356c9533b9014adcfe9b329c6bd56e87fd0f25e368e63e91aae585dfe97536d2",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
     },
     "suite/4ZYM": {
-      "signature": "4b00a0de1bee4740cd8ef4ca678bed93440818436e64bc6d8c3858846fccf7cf",
+      "signature": "db51908514be797169bc2b283c9861c5f41d83aa196ba6f75e3f3edef47de322",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/52DL": {
       "signature": "fb8b3e8078dae7f09873c0ab6afc4590d581a32401c164101d71d430a4ca0add",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/565N": {
       "signature": "8448fb63ef41bdb88dc54e8c958a10563b6f3f0a2edc0c758e12915350ebde9d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/57H4": {
       "signature": "f5a385335e25cc693620d826488ba4d7b124c5f27d28f33285d4467a9457f60b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/5BVJ": {
-      "signature": "52d0f3d81be4b3746b56aebdb5c533aeb831c179ed33fe280d27b4c805d350fe",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/5C5M": {
       "signature": "42304c6a57c71518b5de8efe2003bc4a408999b07a597c24c7a7a2e39d062a0e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
     },
     "suite/5GBF": {
-      "signature": "eb0fc3a919bdba23136fbed95c790f4b8a5537a88ee5fb106b9d93ef5d17968a",
+      "signature": "b98c1b0da9a69b1a899dbf74b8ec426331209200777750e44042bb82d2b20d39",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/5KJE": {
       "signature": "af0d0da9a203a0143a7182d9a3308381821aca76d5809e73ea9b4f7709db4bd0",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
     },
     "suite/5MUD": {
       "signature": "294b89568851d0787a8a6ad5bba92f703ceb2ed93ac57778f0ca15c77b925761",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/5T43": {
       "signature": "fa86b482c8da4164bf6075d33793908f0b146a1369d9d7a8f79597e960349af6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
     },
     "suite/5TYM": {
       "signature": "1edc2ce2747e6037bd823aad420c410536e3a882e1319192c82e3aac12a9e6ce",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/5WE3": {
       "signature": "4edc4ff412e6ad27dfa3bd4c5cf4ac335e3a321aae92c2d363bdf6f21c33710a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/652Z": {
       "signature": "5099dc86f009ece7c87049180f46145fd728bbe9194999b042ea6ec2e71303bf",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/6BCT": {
-      "signature": "89c51ac37204b17c2bad937a45aa832e3e43955edbcfa08718de9d7b88acec4d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/6BFJ": {
       "signature": "49d19708d51efaaf388fc608d4cd0747f2957c372518d50f2abc64aea6a2ea81",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/6CA3": {
       "signature": "913dbf8d93483191b036f1ce479c7e2947a76df60a525202f59eee69154a17c1",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
     },
     "suite/6CK3": {
       "signature": "ee6d2d5b5c5caa4d87966f7a4bb88d1fa960e91b45ae89be361dccbb23a42426",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/6FWR": {
-      "signature": "ecd92e911fb9e4fcccd8d71dfd5acafe8ed95206e18111eeec855912f975549f",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/6HB6": {
-      "signature": "a4294115dcb70ac5dbfdd90f4d463b9cdf1bd48eca4f58cfdc04fbbf119f49c0",
+      "signature": "3c4b936e966caf52ae7251ef7c5da640b5dbb4f78f9ce0e4cdd83b3785c8ce22",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/6JQW": {
-      "signature": "b2f0ea21bf914be5e9c36a0aa2bb71cdfa63431d10cc393d038cbd8ff702d7e5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/6JWB": {
       "signature": "85f840488f838e536621defa5365279d5e1257909b153f5988948643e3078ca5",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/6KGN": {
       "signature": "da3705b51f1a70463de4a2c6cbaa8e594b03c83b19ed68174812d82c5511e38b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/6LVF": {
       "signature": "04d00bf083a0e07288a0eaa74b3efc4b68f92bb9d6b2500cc7b0967c6259c1ee",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
     },
     "suite/6M2F": {
       "signature": "a255b05aa148d79262ab1b4a9e623012912c5bd4f36a1812d0d8b5132a3881ec",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/6PBE": {
       "signature": "667fb518cb846c9b21485e15a57654dc5de4a013f55a91cd5e6804e151da747d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/6VJK": {
-      "signature": "f920ccc19851bd5e49136c4ebc1bfa23cbcc401a16066378792a9e5f25ac4edb",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/6WLZ": {
       "signature": "95f6d16e5a2bab24d461b6ec96f8eda64b23742245c6fca00f45a521797399c9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/6WPF": {
       "signature": "48451fcab44873f51b637f3d04a2e333599f2ff1c41cedacf4ffbc183cfa55df",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/6XDY": {
       "signature": "8ad5675c9ec26f8c46792da1d97b69265d9b45e563e101f902e260288b97c421",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/6ZKB": {
       "signature": "4b8c1f464a7e25c5d6bde15f04d207cf15eac9ab6b3d1a7db947f503069911e8",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/735Y": {
-      "signature": "373980241685f6f3f642adb96f83f18fae7ca8cc73129b9910b3c9f1aa660527",
+      "signature": "4ce4424c30b5d1261e60f195f25a8865081a269ac6ee74a469149bf401d1ec18",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/74H7": {
-      "signature": "e14c5416005d20d1226a137777c006d8d1ebc6ac9bbb60795079779ebd1114e3",
+      "signature": "fb4b0da1bbecdf7514d12205c755fb4196671c80eedf4d036061d2838f95c9cd",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/753E": {
-      "signature": "53fd98fcdd614401f7bd47bf1fe42e604868260b489a341b00fe338763e6580c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/7A4E": {
-      "signature": "954478fc0136689517743aef94739c3b69cf7c31a2c1697d0d66d6c7a7e1e98d",
+      "signature": "a6cee8fea612b49d82820af85a378b93ff0dc95dd0f8316d158280165e133e18",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/7BMT": {
       "signature": "2b677edda80d26bc1b77b12a335f78b395a57894dd331bed92c08fe4e436a487",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/7BUB": {
       "signature": "dc585503eaff6b5e168cb668db8dec431b03f3b0c2f3c2bd20c0e11378935461",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/7FWL": {
-      "signature": "5969131408ce10b41adc2c4d65b7e6991ae413e8d1b32165cf51ff7391f0e370",
+      "signature": "1636c2bd64a9f318632220e6b1f5d81085b7e64ec75ac527d083c418b720430c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/7T8X": {
-      "signature": "927df1689e7f9304f8c840c37b0f091cf813aeb503bdf337324c7b693ce80efe",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/7TMG": {
       "signature": "464eee568c7894518c65a9824af702f05101ef4b1eaaa526d72b64e1e75d8c7d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/7W2P": {
       "signature": "f73d918676f3a1ea9ff93a7e365ad3997a592668eb54dddf8154c31f1d95bf51",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/7Z25": {
       "signature": "a1c61f751b361f579fd4198bc97ab8539b9a90b102590fc1ad13f6a600bcb287",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/7ZZ5": {
-      "signature": "f6ebe4e3d68a1330d0e16f65b13cd5b96494d6f2caf971296a74383c12ff38b1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/82AN": {
       "signature": "26b7fa3eaf907dcaf7db345f64ed669fcb17ebcc0ebe7b72eee4ad359f501de6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/87E4": {
       "signature": "4b60890139c0172dd179475f1d35b536321ad7a51ece160e87d89f2affe5ae97",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/8KB6": {
       "signature": "d99d76167bcc82703893615b3aed6e0ef005c4026971e1b04fcda4abeacbf13d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
     },
     "suite/8MK2": {
       "signature": "22fc6d9d3e8adc66dec40d303afeef767be4f05fa84b8566cbe1c324250888f8",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/8UDB": {
       "signature": "9b17b569457638c01b742ec1d7d5f7b2280798f2b08f73d9ef4f9073ac89c85a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/8XYN": {
       "signature": "aeee6f37e3d7f96855c5a4b88915e6e388b95a331bba99ac8e4175c18026a2e9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/93JH": {
       "signature": "e1ba93d000405ff3d6dcae23694ede4fd8bd0f4ec5d1b80901ccab1ec04e4044",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/93WF": {
-      "signature": "ff833249fae645023c36e8633f00bcce782f2bb37ef529e5bbfc8caa9a52bfc3",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/96L6": {
-      "signature": "887793abbbca2498a8f3f47edfc49b83172a54db32d9aa721e04b218ff7e3f1e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/96NN/00": {
-      "signature": "83ff0597a63a169f1fd75c68460ac4808777ac73243e029a74760279d856da65",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/96NN/01": {
-      "signature": "f4583b3a4cfaf72f50968224461a62181aa90f590bdfb9b77608b644730ddd95",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
     },
     "suite/9BXH": {
       "signature": "7b1ccd9049e3857d270cefde9494b2ca9c5999d99d7896517ee106d3d4aa259f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
     },
     "suite/9DXL": {
       "signature": "51f6d679d6b9a2e3c5f6fc1f6e4b64e097fca7694f79e357caf5ae72789a812d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/9KAX": {
       "signature": "bf850bd0ad8c2d5a8b2d58f9083ad6920a40218e3c5e15de368b0e613ad33e08",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/9MMW": {
-      "signature": "58e49f5959382764ac87d95f7ba558c842357cec26e19838f3986507d4e5b1ae",
+      "signature": "9a8daa60cbdb76e8d1bbb91d0e30c34976243c915ceacae0003a886c8ebdb903",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: a mapping value is not allowed here; quote the scalar if it contains \": \""
     },
     "suite/9MQT/00": {
-      "signature": "b784904b30007277140a9dc2313a4bcfeed06cf21ad0ea94dad9104e45703be0",
+      "signature": "ea22ea907018b14b7ad7acc863a3d1860a875a931c99177ce511b3eeb268036f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/9SA2": {
       "signature": "239226552ba0c9b39e23b1a35dca8079dd0dd273a6da96971665ff942fc83316",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/9TFX": {
       "signature": "6cc91345cbe989272538e5f8adbe66fb9ec03bf4b97826db4135a216875d980f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/9WXW": {
       "signature": "6f62abb67ddf86bd4fd79bd9e871c6f8e9b7ac31cda3cb36a69eda35a9a0c3fd",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/9YRD": {
       "signature": "e5d67cda818e308fd6ac9b58cdd00f6b248378817b93a9f66ae3122c3cb1f7b6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/A2M4": {
       "signature": "ab39e81f65d0a2173c58cc4492da94ebc916c2d018766e726117d4204c6b7cc9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/A6F9": {
-      "signature": "d16596046609c3537fcd5b6f19e34d30d033f2f67bdc7b2c01938da1c3969155",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/A984": {
       "signature": "87925415fb5b9da8f830ede850c40eaab0dd5e8efcadb620a8de88a012574dd9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/AB8U": {
       "signature": "b750b5bc080daecc9e02c410416135f6cdb91eef5b84cb0e73e1be81d18091b6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/AZ63": {
-      "signature": "d8dac073ec5b3bc12fb114ed451d73e5a0ff9339cd401412b681bd79b1f30f1c",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/AZW3": {
-      "signature": "97405faa316260dde252af6af9fb226a265630881c0eae606ba5dd8f9da3e424",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/B3HG": {
-      "signature": "e383b59a054ad29ca797139316f72acaaf338230fae915b209cbeddc252e2b63",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a sequence value"
     },
     "suite/BEC7": {
       "signature": "a8da4cef7b18a896a98b38156f93178642e68ef74b126caec71b724c10bd0d0c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/BU8L": {
       "signature": "c3d542f394a2b631050aafca4ec4cae773cc19e0ad191fcb307e9d6b50d11976",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/C2DT": {
       "signature": "7d6df95d5ca6ed22da9bd9559da1086bff875641bedea2d8bd3f026fdc338312",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/C4HZ": {
-      "signature": "26c9cf55f1b74486ccd9e03fd4ec58fd4916cde4fa4748643e141cfe5e841213",
+      "signature": "f881f3f1c9bd40301ce777bbb9dba3a0a91234c8688f448aa4788f31ae766ec1",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: a plain mapping key cannot start with `%`"
     },
     "suite/CC74": {
       "signature": "994fe3b5688a8060f533030a0161b34987f9e8ea9ee0c7ff5de39238f94261f6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/CFD4": {
-      "signature": "f1211d1a71ae00fc936e48202613b841268d3228979b12deae33e83725428bba",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "signature": "2e8ea3ec64a3ea1f252af9a1c6d169fb7fda0113b64a8774eb8b26c6ef98c008",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: a plain scalar cannot start with an indicator followed by white space"
     },
     "suite/CN3R": {
       "signature": "0ddce59eaa8bd1e009dc69aff0894f3164dfcece8e8619360e0ed81a669cb451",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/CT4Q": {
       "signature": "6e999380876568f48f19d1efc366149c8018478cdb27dad7bfcd19773fc6bd35",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/CUP7": {
       "signature": "0427ecd4aae365beee14261fb96e8b4b6c5a3f7a9f190f229ad21bf1159ebeb6",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/CXX2": {
-      "signature": "38a12e7ad3cc2f0b7f3f7655229fc0a8a98882528ae51d05abcac8cbfce8f2ee",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/D83L": {
-      "signature": "d1bb0cc5e4ab227ab8eddeb47fd19a2c274bcf2748004051ad0e10be2283f4e0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/DBG4": {
       "signature": "c28806ebb1db218592cbb682617ae4f97726e8f353f36adf5e84423a8333dc4d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/DE56/00": {
       "signature": "3051c6878df2d13c11023db4888487296eeea0f031e23fe8291723ddac576478",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DE56/01": {
       "signature": "74641e394004b519c14c116400837e7aff9758f2c65695ed21b082d13606511d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DE56/02": {
       "signature": "397a983d18bd7d5f542f2a03aaca86397ffb0b3ddfa3e8275bc27f3acc919e60",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DE56/03": {
       "signature": "1bb6aa13d41caad0b39206a553989e80b7082ca77695f54f2446a9de089ae575",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DE56/04": {
       "signature": "4ba83fa53a12caf2f7cdb234964ce4588fd11759db586a842cecc531948949fa",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DE56/05": {
       "signature": "d50906a818f027ed8da1ec47fac5820c8d57838fb4080ebcc8c0b995dfa7b062",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DFF7": {
       "signature": "54dc84b2c03a293e81202820131a55cdcd847055c3f3e917a24cef39d9bdf75b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/DK3J": {
-      "signature": "7486f6c6de4ba558b70af694130233ceefa55d070a2623ca14d83dc9fd4c1ed7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/DK95/00": {
       "signature": "2829861bd50c7a4015bea81dd60e628e16b9faf9858ff03185a10c0bf1893e42",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
     },
     "suite/DK95/02": {
-      "signature": "c27619148851e1257c333ef63cff8040753eabdfdc697ac5ab8d7507007b4d90",
+      "signature": "a420fc4d65ff76761128e81a7eea95a7de078623ab9152e80587869cea184501",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/DK95/03": {
-      "signature": "03e836dbf909621fba00481794389b2a0d642711e2da64a20ae2b94e03e3fcef",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/DK95/04": {
-      "signature": "f97f5bb5db556b27e2fc77159324b44346ebfd15f29e7b50de08634f0fb8c84d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/DK95/05": {
-      "signature": "a43eb88de2eb97439e674afe01a0f7cb16be0510768d056adc2dac960739e516",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/DK95/07": {
-      "signature": "a679cf125ab5ecdcbae1f1534b734f8793ad4c87e57866c4eea850c3099e8e05",
+      "signature": "3c4b9a0e995fdcd8eccd8b6ca48180676c44e7718cb9a36fcc6bf1a3a6b4a6be",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/DK95/08": {
-      "signature": "d58aacb8a52efc7d1ac14607ba307fe7822fb8aeb85fffec5f050d7a0d84b6a0",
+      "signature": "a3db21d11b7ab23372bc32907b582e7a7304f92e43f6cb1770d84d5308f90c8d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/DWX9": {
-      "signature": "1f0c2b7ae5541a44551f3af8171f91c3deab33a90b180dd7670f7bdd8dd6ee3e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/E76Z": {
-      "signature": "72b62e774f795164cf74b86724603986ec5d38b616eef36c0c895f851c67488c",
+      "signature": "f82d1c35f0a79314918eea18569a512f9a491d8ce274ea1949a7e3a8ef587e3f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/EHF6": {
       "signature": "0d2b9644046f1f291f8c4b61b653859f562b4c3b883c3d6dbf7c12f95baff8d5",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/EX5H": {
       "signature": "12580c6f49fb8954f3f8df0f417f348dc761a889d9e6fd49a134c8a8aa9f6eac",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/EXG3": {
       "signature": "b2e7c70a512e3588d27d2d47601164a96973ce16b47b63fbd598bbbeb05edb22",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/F2C7": {
       "signature": "a52c0bc45305f1eb3b9eba9bb260bff250461467cc85e2bab1c340bf1d9e391a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/F6MC": {
-      "signature": "55d5ae9a642c850fa0c933c76f8b315ab48d06448f406bb5e0b29fad5a579d6e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/F8F9": {
-      "signature": "427be0103e9a33103c400050b977995040434bb10a83711ff6d68dff9b1c3736",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
     },
     "suite/FBC9": {
       "signature": "e5deb62833217d63308648bb37f1a3d1ca3f856d0dd8535b5a0c9fef0679b416",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/FH7J": {
       "signature": "3b58d86f533d4aea56377b2a408d6ca7f57dc13028ebdd65817026bdd2baf014",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/FP8R": {
-      "signature": "5f2833279d7f7801b30509301a7d85b501020a2aab4203631d9fcbc9bfc7e47e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/FRK4": {
       "signature": "71baaa55b5d654e695204ebdf7e86988dd6ad3a401c7f64528af44def72e5358",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/FTA2": {
-      "signature": "bb7c7e2886c158e643e2de6910c1807b7e1003c274d94f575ac3f29859a51b27",
+      "signature": "eeef9f5226c3e65dad67e9e2819ca81cf362d697cfb4c8b834b7d3bf6cf4558b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/G4RS": {
-      "signature": "2a20ebab5630edd1a3c91b29115bf2808518f28311cce94a3f74da7a3b782266",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/G5U8": {
-      "signature": "d7bd6dcab8e091a7b54469a48b9ff3418da85874f8209c475d1f68e178fedc12",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/G992": {
-      "signature": "0d329973cb9eabfcb6771bde7fab09567bf05058f8ffad1c7e0cc0646eb45547",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/GH63": {
       "signature": "145544392bd1ffc4295c5bd1a38d02a7ed9a3178ae50517b1aa2cd9d3610c4c9",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/H2RW": {
-      "signature": "4d91c74dc0b57d37d5d3fb3377b7284543d9e36ed4bdebfafdefc9ba526d08d1",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/HM87/01": {
-      "signature": "208bf8bc9fbaea93088ca7eef423e73c569517b17f8f73efa57d31137fce9bea",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/HMK4": {
-      "signature": "ee660549b42e75140438d14df75aea9605f8630bf3ec8b99b56aa83c482a2271",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/HMQ5": {
-      "signature": "aa3443d3f4b84ca3656da5bc69e2d5b2731569a2ccf4e350f2fdf8169ddb44f7",
+      "signature": "e41ad029fcf7d59b4f361feb3b23815d8284787261498948499359ce76cc33d2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/HS5T": {
-      "signature": "9943dac21f2e1e171a3255faf86297dc841d1eb7c8ba3e33da6863981db98b20",
+      "signature": "794b79586222a5e359ae00fabd8b6f71b359dc9929c32fe0f74a1e4707d3bad5",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/J3BT": {
-      "signature": "fa332d5c6af004b7f8763afbfc8ee91193f890fdc3f828082ab31670d0f6bcfc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/J7PZ": {
-      "signature": "99f691dccfa6b75017a4d9bfd2148cc8e7453af67bbea79164a19bfeacf39797",
+      "signature": "641f3667b88fe69e2f8b3df68ce6f891e865b32d38c839450a7a604f1c01b26c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/JEF9/00": {
-      "signature": "a36fe7e70c3daff090cb3e306384f7d01d2cfe54e7871cd34a40f0b5ff8237c0",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/JEF9/01": {
-      "signature": "068ed6cf902a1d148cb9939e08d1eb3572d87ca6454b58fb185e158d35a8b145",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/JEF9/02": {
-      "signature": "3d561b4f07fecc3e9b01e98fcd532df3b6539995993279fad3b144752b84e26b",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/JHB9": {
       "signature": "d082d81932aebacf65027eeb008fb9a2ce4af42c20e1c2c9a407032eeaccf1a3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/JS2J": {
       "signature": "350c6e9adf0abf1314ce6cd859598cc54dc11ceaa218f31d55a59fe927f6f47a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/JTV5": {
       "signature": "539c72bfe675de59a9ccc76359a0ce017393913d2fdbae0c608972b35913c690",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/K3WX": {
       "signature": "1b7f4feee3f997ba913de443cebe88a98e1f3d4c95d8b037be0c3e8fd66c1086",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/K527": {
-      "signature": "140631e44fef5dc968c75048d0933691e0ffb85cf9bb7e63fe1a34d1a48e117d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/K54U": {
-      "signature": "4a183d11aa8ab5b2fdd586a22188e1bb0a04176fec50d5d74a50f6325f059ade",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/K858": {
-      "signature": "e084fac7e8a683c9a9d780ef3543e6fcc280aba154250ce34ea0ec347d6a46f9",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/KH5V/01": {
-      "signature": "46d94407f5b4d9647e2b0039ae9cf7d9068679a2fab519e4616f60c9ebaf21cf",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/KK5P": {
       "signature": "d448a182fe1c9652e9fa838bd743794ccf476bf757bd00a919e018f2c533c83f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/KSS4": {
-      "signature": "b47026d9b5da1fdba5920f41b42e4dd9225db16efbf048429977e90042e8ac42",
+      "signature": "1b07f71c04864f42e7c884943bca7b9a699ec252c2ec940008b5a888745e8f96",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/L24T/00": {
-      "signature": "6d8d0c25e34bc6b3e7b127e9022dcdcae6e7c78e925a59eead373248ca070011",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/L24T/01": {
-      "signature": "212d2eb49ea5c91a02f2ffe38bf8871a14da1fefffc06a856bb87be5688a0f6e",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/L383": {
       "signature": "9930114dceb3fcb77450f4befdff4530bf16ffd8e2451bb8566fb885d554fd0b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/L94M": {
       "signature": "361296ef0122f963b1dd6ef019f6f47497e74f390b4b340dbfc65e85dc97feca",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/L9U5": {
       "signature": "093cc69c3f2009f66603bb6317663e208f17a7556c2b35a6d420d82337db6933",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/LE5A": {
       "signature": "af74f85642ea04597759e7a01b5299de48b35078ec2296a57254fdb39ca62415",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/LP6E": {
       "signature": "6673dab46794c2eb2e5035b7a5f093ff8ef95d7409eb45fe03f7dbe08a60f897",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/LQZ7": {
       "signature": "6d88a58e312985ea66037378351fe9c1bf6a3fd3e7b664fccc1489f4bfe6c3ba",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/LX3P": {
       "signature": "646be79b825d6edfa5904c861d6cc03aabf923dc43019814ab23c24b4af54718",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/M29M": {
-      "signature": "44043b0b9e8ecc8f40a922c2d31e3f11ce4ff4751f9420881bc6c857b9c5f546",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/M2N8/00": {
       "signature": "98e0aa63749d316c357e5852e136dc514c37755d43d4a36b2c0d8e6c984aac4a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/M2N8/01": {
       "signature": "f1b671b127a52ed374dce02f3bb417175e992a7c10966494f1d7823cc17f9319",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/M5C3": {
-      "signature": "1d7992400c79d252bd5d4d451f204500886ad568d942e8552d6a1f0b95dc4791",
+      "signature": "6f37e1d45a20e76a03f1f0e0cac898ec546f4b4f9e33fd45dd38bd07ba0065d2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/M5DY": {
       "signature": "b0e3abf9dd4c8f067831d38a461a99ddd42f9cd706d68911de04e337ed0ed3ba",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/M6YH": {
-      "signature": "cf98bcc7297598f04226755e47e98fc7e4f4e78c1d2fc0cdb946d48558878bf5",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/M7A3": {
       "signature": "57d673325bd30f22ae0a5a67287f28b81ad56769241ae0f902dd4fefeb69e45e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/M7NX": {
       "signature": "8eb907d3ee430a15f38b6913aa93b807c8a1eb78406bfc6a3a275ad64a1a19fd",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/M9B4": {
-      "signature": "f50eae0198116fdc5ce6eb8b9044de4dc6afc0ad1bb1e4cc64ad011f67c00914",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/MJS9": {
-      "signature": "a6719825977e6062169fe68d1df66df6f2b86e6db242f16919d69c3e2dd8f110",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/MUS6/02": {
       "signature": "9f007cf8321fad9cec38e11ccbe8878fba41506a4ef6e1d2de2e0bd124e12eca",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/MUS6/03": {
       "signature": "3f2c160648f7ac7067a4d5a1dfd69392f09a0bfcc54687c5b8d2cc968e9f3333",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/MUS6/04": {
       "signature": "b6c69c1c78746c82fdf6075d1ae578b66a3c38c0853ec46fca68cfb7bf1d13eb",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/MUS6/05": {
       "signature": "3c087b872fb4d719073682b5fcfa80cde6408f095086fb452532da98ba19f07b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/MUS6/06": {
       "signature": "7d35c0ff13e332adbfda8ae8fb5449547b11cad079ddd851883730597bdb2672",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/MYW6": {
-      "signature": "e01e8bb1c637af62456d9004d95197ebe768bb73d167a48de5d30d7987d57efc",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/MZX3": {
-      "signature": "ab8025fa2bd525db1fa805344d12ace5f5bf97dacf2135391345904e32c0f17d",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/NAT4": {
       "signature": "e48da154c8a1f1c80699935e2037fe77fab1a6fe4e06b8d0186abd5b4726d372",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
     },
     "suite/NB6Z": {
-      "signature": "92c914d9d3700e0c6596fd6b0811622f937155213db5d3f47dc00a6ec5280398",
+      "signature": "2996c8c1d7a7d7203b1a043715d984e80990c43bdab6b9ade4158aae36614dcc",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value"
     },
     "suite/NHX8": {
       "signature": "a8c6024e35e817e61cdcf39c07b4ddeb4732ae14364d949ca7c68b89e8e14305",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
     },
     "suite/NJ66": {
       "signature": "8d2c0ca3cb8bc44848086d8e9138e8dcb1fc306a23fc9e37f63a90ca80ce4fbe",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/NKF9": {
       "signature": "e19e81540da9acbe7f520cd960e550dd53c11cc8025942132aab9f08dcf5f841",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/NP9H": {
       "signature": "de82d8091595e38186daf58b1903a05a042d896d855a2ac2133f8f0fea1d61b3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/P2AD": {
-      "signature": "2fdd29f35f6dea2a43ad439fbc592722bfb133596f35a8b0039a839de6e00480",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/P76L": {
       "signature": "053d4f76fe505fbb24ab7ad03d8d9306c6798a1e08179fdf48d01aeb9e657edf",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/PRH3": {
-      "signature": "388c280eb092e340d1c02cdf809c0dc17ac54ff8efbaea0014897804f68e44d4",
+      "signature": "dba4089ea0892606ed8a0122e3749a284db820a4b8c78d4a232bcbebfa9ce77b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
     },
     "suite/PUW8": {
       "signature": "b0b1977b13545d48e51640284e49b2472c5f848d3ff91396abfdb028357ef291",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/PW8X": {
       "signature": "111197bd6e812d0f889544142e6d65fb5b3511204e6d8bc00c391bd1e9c8c74c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/Q5MG": {
       "signature": "a067a9f83b0f60cab19206339073486b8d412d6643f2ed73ce4b27dac8973a1b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
     },
     "suite/Q8AD": {
       "signature": "6ac2dc55d3f269bddfe66fa61553a47818a14a73cf70b72bee1ad78a59a2fd3c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/Q9WF": {
       "signature": "0a546755a394da3eb1532c65fcda75dbec1898bf7b77a647bac387a9c9ba11bb",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/QF4Y": {
       "signature": "bc412a9fe82b3401e1fb8423620f4542a2a2f476b442542845c26587af61ff7d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/R4YG": {
-      "signature": "716d59ee03d61c15606e0348e03f3dfeb0fbd2568523b66dd2ab47b7b49f4404",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/RLU9": {
-      "signature": "4cbb9d3c1c628dbb016a9e09353779652d5bb3d055cb12ebd181d2e255f31409",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/RR7F": {
       "signature": "34edb53209fe0c1c649d3ec2065da63e8d4e1d0ba158d2a0224b9a4ead4aba1e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/RTP8": {
       "signature": "9fe6e78e18da999da63879fa704525290135688d2720a569e4eade291a37b3f2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/RZP5": {
       "signature": "7843865ae8190d769729e61b42a2d4a75d09200afe247607be1a2aceb24ba82f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/RZT7": {
       "signature": "2d63419568e09514398a86c741cea1ce29273bb03ddfa2b5a129235acc95578b",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/S3PD": {
       "signature": "da9690ca358ef2bf1120cff538cf00992c1144e2ef8ff346c56bcbdde4264d4c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
     },
     "suite/S4JQ": {
       "signature": "236f0d3a9dc7aaf3649f92aec6e7a81db2bae9c8a016fb4ec6cbc1b02d2c4f55",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/S9E8": {
-      "signature": "eb73494f3ccdc614f6c8ae9c1401477948e7ea261856e13842555d1e2e16e489",
+      "signature": "5810e33c88b02cf7cb739fd1e1a38b2a0c0b4632a1a2705306131b83ca32cf0f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/SBG9": {
       "signature": "ce6213624b03746724753c95430b829cc5472a23748ef4e8e7f26fcdff30e8a3",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/SKE5": {
       "signature": "80ba648dcc2218b5af745ccad347e66764fe0d968bbbff9ec7de6b55e682f57d",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/SM9W/01": {
       "signature": "20544a087937189165a00d0bfd5e0d4edded3bc1d805690ffb7b7cfe35e12af2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/T26H": {
-      "signature": "5628fccde2dd248966ffa8828a0bbcbd03561b760d5648b3a9be7a60929e4024",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
     },
     "suite/T4YY": {
       "signature": "de60161081eb41fe289bde3bfc620a06ef3d601774fc0ef318b448bc81f32a72",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/T5N4": {
-      "signature": "c84ba90576aa2ad0bee855f96ea662b1351b9ff7815001e663702e0b7ee208f7",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
     },
     "suite/TL85": {
-      "signature": "d37cf3b256a4a25bf6283e866ebfee1de192d8ea7f9719031752de7d8bad0962",
+      "signature": "3d1015e03f4ae8c493feb3fc40ebae6d906d56989df03ca15d44c3bf9d986465",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/TS54": {
-      "signature": "33071858cbb26d386e03635e700d1650b89e6af80f8145bd198397f99cc735be",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/U3C3": {
       "signature": "7d6678e6c1ee977c7291a27eb421125480a9b13cee2b79b4b2e8036e0e02e355",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/U3XV": {
       "signature": "3671c9f6b6542ca7ed779cb92a26a81d105d5ce6e049b5d2154390a88be58112",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/U9NS": {
       "signature": "ad8590671f3cfdd52a49886214fe5388083a4fb7749e26b84fb34dbf7d341c91",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/UDR7": {
       "signature": "f9ce5fd10c0f4946b7f2e547ee3102056e1cb67405deb73105569db3fc23902e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
     },
     "suite/UGM3": {
-      "signature": "399f83c7dd3b986222f78b6937448aa949b88d29e076b38d19221c3e91df0b2b",
+      "signature": "c01144ae589c855a05243bf906f9f9c4d252438481e558d8e3674da9edce912c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/UKK6/00": {
       "signature": "8bbc046e471e953af03c7df4305ade6bc4fd4e8c223aa50733bd3610542693af",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
     },
     "suite/UKK6/02": {
       "signature": "dc7878b679b2e755f7d1f6743e36a6d04fdedcb8f8817d2349a5720f7c601e4e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/UT92": {
       "signature": "623c5e2a4aa85dbfd4bce4ad7ac2045f00a49720de9254c9e2ab762bc8573b7a",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/UV7Q": {
       "signature": "a98c0b386512f7167346f5e584c139134fcf76954026b217e3511f45f132a152",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
     },
     "suite/V55R": {
       "signature": "656671491d7f997d134e7999ed5847cb2d913f5e82ec24072388da5d3f0b3da0",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/V9D5": {
       "signature": "edcb065e6f6f011a00d0b0dbe918d5681ee1fd87b61968a2e33bdddcecb27501",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/VJP3/01": {
       "signature": "b3fa0dd258227abd5f16e58d2b4256e0e5038c883e5ed7d15bb1733e01f243f4",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/W42U": {
-      "signature": "f1cd4915094e7138312745c9cba7a3c1b32783339f2b95d2b4167004e01d0625",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/W4TN": {
       "signature": "e93db4022c12ccbe7162e7d353e62e1927cf11d9b97e78a7d28066148a98ed3f",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/W5VH": {
       "signature": "6efcc3d1949e6fd7b79d2e7a47a0794dc799c4dbb628854d42fdbf0d02180626",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/WZ62": {
       "signature": "1de5adcb3b90e69287ae7f13435e29f7da926cc2dc16c3283ef28ac9bb1e7543",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/X8DW": {
       "signature": "8881d3d67d172d4de97c3422a25abceb2e56a69ecb35896d9ccb709b43ae4acf",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
     },
     "suite/XLQ9": {
       "signature": "4d76c9748938d85d9777976583aae934c92854b22319a032b7f267328ece47c4",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     },
     "suite/XV9V": {
       "signature": "9b9a6c601541ea0ec908eda687d8a3bf88450a08646707ed7a050f2fa459b54c",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/XW4D": {
       "signature": "bbdc4d555ed5300c4a69e065794387f9bc2b463b13701f3290aa555312c26386",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
     },
     "suite/Y2GN": {
       "signature": "8700309e4c48b6b3e588ec871adf66bb9467fa5d17d5d8004879ad56b69b0aec",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/Y79Y/001": {
-      "signature": "5bb71a1dad5126a0f23e8017ecf3758aa44e4a8fe42a97bbff04f0e7a7c17033",
-      "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/Y79Y/002": {
-      "signature": "948ec583294ace6b584df72afc011af3ac73150ce111f15680fd6ad8308089f6",
+      "signature": "d584b34aaf150dff604465ac0ff18478908587757a71cfaa599b5a1b08d3b6a2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/Y79Y/004": {
-      "signature": "f30b9b6656e51cacde4f6c1e54490c10085ba93d2c7eb0bc5e0298377b9e51b6",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/Y79Y/005": {
-      "signature": "6b959294ebbcb2924854b54c1c31859e35e480042e85164b06b3d42c5fdd8a61",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/Y79Y/010": {
-      "signature": "5e77180298f7bc139fb1c61a865a0cb3e62a9fb80a784714b732df2051475264",
-      "kind": "wrong_value",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/YJV2": {
-      "signature": "768d834894493fe9257a997703acd7bfa368bd87d1570ea1dd6df818e7537426",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/Z67P": {
-      "signature": "9f868700c9063205bd10a07b837aeb9106d30ca79d750364fce4a9c741722f95",
+      "signature": "04be6a48e6e0291527bfec562ff8aa436cdbf87dea991dab24d985b4680507a4",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/Z9M4": {
       "signature": "d5a854e0f27b8737262542a45ecd74b45c1c198500f7e04c8ef977b7d84b9fcf",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
-    },
-    "suite/ZCZ6": {
-      "signature": "8bcb58828b79daddc65541596c64756360e94cfa5f834213c21c1e5244dc35a3",
-      "kind": "invalid_acceptance",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
     },
     "suite/ZF4X": {
       "signature": "77ea7dc68cda2d78e8ef07a51d7165efc24988e00d90875c1169f29441d3482e",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/ZH7C": {
-      "signature": "729f7012d81f30d4919634de828b8050cded432ac8cc2df574f4d80c145911ed",
+      "signature": "6e1e844fbd7dff78db49ad9aadd9220fc54d045a655f70daab1f20291c3385f7",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
     },
     "suite/ZK9H": {
       "signature": "def6767c9a99fd83e63e01028bf06392fc94f5652a9f2ad2a4dfb871d9cee5b2",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
     },
     "suite/ZWK4": {
       "signature": "066ced62da9f3ea26c779d365bb27814815a6ee6141f0dc5c2f1c75a3ed1ccae",
       "kind": "valid_rejection",
-      "reason": "Reproduced conformance gap; see scripts/yaml/REVIEW-80.md."
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
     }
   }
 }
