@@ -3,11 +3,229 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#yaml]
-= YAML
+= Read YAML configuration and frontmatter
 
-Content in progress.
+This chapter shows how to read a YAML configuration file or the frontmatter
+at the top of a Markdown post into a Roc value, pull settings out of it, and
+report mistakes with a line and column. It is for Roc programmers who have
+added `parser` to their app's dependencies and know the YAML they want to
+read.
+
+The parser handles the YAML that configuration files and frontmatter use in
+practice, and rejects the rest with an error instead of guessing. If your
+files use anchors, tags or several documents in one file, read
+<<yaml-unsupported,what is rejected>> first.
+
+Every example on this page comes from
+link:{src}/docs/examples/yaml-guide.roc[`docs/examples/yaml-guide.roc`],
+which CI runs, and imports `parser.Yaml`.
+
+== Parse a document and read settings
+
+`Yaml.parse_str` takes the whole document and returns a `Yaml` value:
+
+[source,roc]
+----
+Yaml := [
+    Null,
+    Bool(Bool),
+    Int(I64),
+    Float(F64),
+    String(Str),
+    Sequence(List(Yaml)),
+    Mapping(List({ key : Str, value : Yaml })),
+]
+----
+
+A mapping keeps its entries in source order. The module has no lookup
+function, so write a small one and match on the variant you expect. This
+configuration, held in a Roc multi-line string (each `\\` starts one line of
+the file):
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=config,indent=0]
+----
+
+is read by:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=navigate,indent=0]
+----
+
+`summarize(config_text)` returns:
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=1]
+----
+
+Empty input, or a document holding only comments, parses as `Null`.
+
+== Read Markdown frontmatter
+
+Frontmatter is a YAML document between two `---` lines at the start of a
+Markdown file. Split the text at the closing `---` and parse the first part.
+The parser accepts the opening `---` (and a closing `...`) as document
+markers, so you do not need to strip them:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=frontmatter,indent=0]
+----
+
+For `"---\ntitle: Hello\ntags: [roc, yaml]\n---\n# Hello\n"`, printing
+`Yaml.to_inspect(meta)` and then the body gives:
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=2..3]
+----
+
+== How plain values are typed
+
+An unquoted value is resolved with the YAML 1.2 core schema. Anything that
+matches none of these forms is a `String`:
+
+[cols="1,2"]
+|===
+|Written as |Becomes
+
+|`~`, `null`, `Null`, `NULL`, or nothing
+|`Null`
+
+|`true`, `True`, `TRUE`, `false`, `False`, `FALSE`
+|`Bool`
+
+|Decimal digits with an optional sign; unsigned `0x` hexadecimal or `0o` octal
+|`Int` (an `I64`; a value outside its range is an error)
+
+|Decimal with a fraction or exponent; `.inf`, `-.inf`, `.nan` in the three
+letter cases
+|`Float`
+|===
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=scalars-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=5]
+----
+
+The last four values show what stays a string: a version number such as
+`1.2.3`, a number with `_` separators, anything in quotes, and dates (YAML 1.2
+has no timestamp type). `tRUE` and `0X1` are strings too, because the core
+schema allows only the spellings in the table. Quote a value whenever it must
+stay a string.
+
+== Write multi-line text
+
+Use a block scalar for text that spans lines. `|` (literal) keeps line
+breaks; `>` (folded) joins lines with spaces and keeps a blank line as a
+paragraph break. A chomping indicator controls the final line break: none
+keeps one, `-` removes it, and `+` keeps every trailing blank line. A digit
+sets the content indentation, so the text can start with spaces:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=block-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=6..12]
+----
+
+== Write lists
+
+A sequence item may start with a mapping on the same line as its `-`
+(compact), may hold another sequence the same way, and may sit at the same
+indentation as its parent key (indentless):
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=sequences-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=13]
+----
+
+Short lists and mappings can also use flow style on one line, as in
+`ports: [80, 443]` or `labels: { tier: web }`.
+
+== Quote strings
+
+A single-quoted string has no escapes except `''` for one quote. A
+double-quoted string supports every YAML 1.2 escape, including `\t`, `\n`,
+`\xXX`, `\uXXXX` and `\UXXXXXXXX`. A `#` inside quotes is text; outside quotes
+and after a space it starts a comment:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=quoted-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=14..15]
+----
+
+[#yaml-unsupported]
+== What is rejected
+
+The following are outside the supported subset. Each one is a `YamlError`,
+never a silently different value:
+
+* anchors (`&name`), aliases (`*name`) and tags (`!!str`);
+* directives (`%YAML`) and complex keys (`? key`);
+* more than one document in a file;
+* a flow collection (`[...]` or `{...}`) that continues onto another line;
+* a quoted or plain string that continues onto another line (use a block
+  scalar instead);
+* tabs used for indentation;
+* duplicate keys in one mapping;
+* nesting deeper than 100 levels, counting flow collections;
+* integers outside the `I64` range;
+* control characters other than tab and line breaks.
+
+Mapping keys are kept as their source text, not resolved like values. `1` and
+`01` are different keys, and `true` is the string key `"true"`.
+
+== Show where an error is
+
+`YamlError` carries a one-based `line` and `column` and a message:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=16..21]
+----
+
+For the full module interface, see the
+link:{api}Yaml[Yaml API reference].

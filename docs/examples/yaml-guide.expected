@@ -1,0 +1,21 @@
+web: 3 replicas, owners Ada and Grace
+Mapping([{ key: "title", value: String("Hello") }, { key: "tags", value: Sequence([String("roc"), String("yaml")]) }])
+# Hello
+
+Sequence([Null, Null, Bool(True), Bool(False), Int(42), Int(-7), Int(31), Int(15), Float(1.5), Float(6.02e23), Float(inf), Float(-inf), Float(nan), String("1.2.3"), String("1_000"), String("true"), String("2026-10-01")])
+Mapping([{ key: "literal", value: String("line one
+line two
+") }, { key: "folded", value: String("joined into one line
+new paragraph
+") }, { key: "stripped", value: String("no final newline") }, { key: "kept", value: String("trailing blank lines kept
+
+") }, { key: "indented", value: String("  starts with two spaces") }])
+Mapping([{ key: "steps", value: Sequence([Mapping([{ key: "run", value: String("build") }, { key: "name", value: String("compile") }]), Sequence([String("nested"), String("compact")])]) }])
+Mapping([{ key: "single", value: String("it's # not a comment") }, { key: "plain", value: String("text") }])
+Mapping([{ key: "double", value: String("tab	here, é, A") }])
+line 2, column 1: tabs may not be used for YAML indentation
+line 1, column 6: anchors, aliases, and tags are not supported by this YAML subset
+line 2, column 1: multiple YAML documents are not supported
+line 2, column 1: duplicate mapping key `name`
+line 1, column 6: unterminated flow collection
+Mapping([{ key: "1", value: String("one") }, { key: "01", value: String("zero-one") }])
