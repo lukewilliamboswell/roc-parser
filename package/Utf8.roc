@@ -83,22 +83,23 @@ Utf8 :: [].{
 	## ```
 	codeunit_satisfies : (U8 -> Bool) -> Parser(Bytes, U8)
 	codeunit_satisfies = |check| {
+		# Messages are built once, here, not on every failure: failures are
+		# frequent (every losing alternative) and building text allocates.
+		empty_message = "expected a codeunit satisfying a condition, but input was empty."
+		message = "expected a codeunit satisfying a condition"
 		Parser.custom(
 			|input| {
 				{ before: start, others: input_rest } = input.split_at(1)
 
 				match start.get(0) {
 					Err(OutOfBounds) =>
-						Err(ParseError({ message: "expected a codeunit satisfying a condition, but input was empty.", offset: 0 }))
+						Err(ParseError({ message: empty_message, offset: 0 }))
 
 					Ok(start_codeunit) => {
 						if check(start_codeunit) {
 							Ok({ value: start_codeunit, rest: input_rest })
 						} else {
-							other_char = str_from_codeunit(start_codeunit)
-							input_str = excerpt(input)
-
-							Err(ParseError({ message: "expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`", offset: 0 }))
+							Err(ParseError({ message, offset: 0 }))
 						}
 					}
 				}
@@ -119,17 +120,19 @@ Utf8 :: [].{
 	## ```
 	codeunit : U8 -> Parser(Bytes, U8)
 	codeunit = |expected_code_unit| {
+		message = "expected char `${str_from_codeunit(expected_code_unit)}`"
+		empty_message = "${message} but input was empty."
 		Parser.custom(
 			|input| {
 				match input {
 					[] =>
-						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but input was empty.", offset: 0 }))
+						Err(ParseError({ message: empty_message, offset: 0 }))
 
 					[first, .. as others] if first == expected_code_unit =>
 						Ok({ value: expected_code_unit, rest: others })
 
-					[first, ..] =>
-						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`", offset: 0 }))
+					_ =>
+						Err(ParseError({ message, offset: 0 }))
 				}
 			},
 		)
@@ -140,6 +143,7 @@ Utf8 :: [].{
 	utf8 = |expected_string| {
 		# Implemented manually instead of a sequence of codeunits
 		# because of efficiency and better error messages
+		message = "expected string `${str_from_utf8(expected_string)}`"
 		Parser.custom(
 			|input| {
 				{ before: start, others: input_rest } = input.split_at(expected_string.len())
@@ -147,11 +151,7 @@ Utf8 :: [].{
 				if start == expected_string {
 					Ok({ value: expected_string, rest: input_rest })
 				} else {
-					error_string = str_from_utf8(expected_string)
-					other_string = str_from_utf8(start)
-					input_string = excerpt(input)
-
-					Err(ParseError({ message: "expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}", offset: 0 }))
+					Err(ParseError({ message, offset: 0 }))
 				}
 			},
 		)
@@ -244,27 +244,33 @@ Utf8 :: [].{
 	## expect Utf8.parse_str(Utf8.digits, "not a digit").is_err()
 	## ```
 	digits : Parser(Bytes, U64)
-	digits =
-		Parser.one_or_more(digit)
-			.map(
-				|ds| {
-					ds.fold(
-						Ok(0),
-						|result, d| {
-							match result {
-								Err(problem) => Err(problem)
-								Ok(sum) =>
-									if sum > (18446744073709551615 - d) / 10 {
-										Err("Integer is too large for U64")
-									} else {
-										Ok(sum * 10 + d)
-									}
-							}
-						},
-					)
-				},
-			)
-			.flatten()
+	digits = Parser.custom(
+		|input| {
+			var $i = 0
+			var $sum = 0
+			while $i < input.len() {
+				d = input.get($i) ?? 0
+				if d < '0' or d > '9' {
+					break
+				}
+				value = (d - '0').to_u64()
+				if $sum > (18446744073709551615 - value) / 10 {
+					return Err(ParseError({ message: "Integer is too large for U64", offset: 0 }))
+				}
+				$sum = $sum * 10 + value
+				$i = $i + 1
+			}
+			if $i == 0 {
+				if input.is_empty() {
+					Err(ParseError({ message: "Expected a digit from 0-9 but input was empty.", offset: 0 }))
+				} else {
+					Err(ParseError({ message: "Not a digit", offset: 0 }))
+				}
+			} else {
+				Ok({ value: $sum, rest: input.drop_first($i) })
+			}
+		},
+	)
 
 	## A set of byte values, for finding or skipping runs of bytes 16 at a time.
 	##
@@ -893,8 +899,8 @@ expect {
 	}
 }
 
-# Leftover input reports the failure that stopped the parser there.
-expect Utf8.parse_str(Utf8.digits, "12 ") == Err(ParseError({ message: "Not a digit", offset: 2 }))
+# Leftover input after a number is reported where the number stopped.
+expect Utf8.parse_str(Utf8.digits, "12 ") == Err(ParseError({ message: "unexpected input", offset: 2 }))
 
 # ParseError composes with `?` in a function that returns other errors too.
 expect {

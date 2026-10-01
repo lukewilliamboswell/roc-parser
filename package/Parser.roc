@@ -537,6 +537,27 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 			},
 		}
 	}
+
+	## Run a parser and return the input it consumed, instead of its value.
+	##
+	## The result is a slice of the input, not a copy, so recognising a token
+	## with small parsers and keeping its text costs no allocation.
+	##
+	## ```roc
+	## identifier = Parser.span(Utf8.codeunit('$').skip(Parser.chomp_while(|b| b >= 'a' and b <= 'z')))
+	## expect Utf8.parse_str(identifier, "$abc") == Ok("$abc".to_utf8())
+	## ```
+	span : Parser(List(item), a) -> Parser(List(item), List(item))
+	span = |parser| {
+		{
+			fun: |input| {
+				match step(parser, input) {
+					Ok({ value: _, rest, furthest }) => Ok({ value: input.sublist({ start: 0, len: input.len() - rest.len() }), rest, furthest })
+					Err(failure) => Err(failure)
+				}
+			},
+		}
+	}
 }
 
 # A failure, positioned by how much input was left when it happened, so that
@@ -663,4 +684,10 @@ expect {
 		},
 	)
 	Parser.parse(Parser.many(word("a")), words) == Err(ParseError({ message: "expected a", offset: 2 }))
+}
+
+# span returns exactly the consumed prefix.
+expect {
+	input = "ab;cd".to_utf8()
+	Parser.run(Parser.span(Parser.chomp_while(|b| b != ';')), input) == Ok({ value: "ab".to_utf8(), rest: ";cd".to_utf8() })
 }
