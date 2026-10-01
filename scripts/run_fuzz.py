@@ -67,7 +67,7 @@ TARGETS = dict(
         target("markdown-refdefs", max_input_size=256),
         target("markdown-inline", "markdown-inline", "raw", "markdown-inline"),
         target("markdown-inline-ast", max_input_size=1024),
-        target("markdown-inline-pathological", max_input_size=64, timeout=10),
+        target("markdown-inline-pathological", "markdown-inline-pathological", "raw", max_input_size=64, timeout=10),
         target("yaml", "yaml", "fuzz-str", "yaml"),
         target("yaml-raw", "yaml", "raw", "yaml"),
         target("yaml-roundtrip", max_input_size=512, timeout=10),

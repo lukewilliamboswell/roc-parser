@@ -100,23 +100,38 @@ test = |input| {
 	}
 }
 
+## Count every node with an explicit stack: the parser bounds nesting at
+## 1,000 levels, but the harness should not rely on the stack to walk a tree.
 count_nodes : List(Markdown.Inline) -> U64
 count_nodes = |nodes| {
-	nodes.fold(
-		0,
-		|sum, node| {
-			inner =
-				match node {
-					Strong(children) => count_nodes(children)
-					Emphasis(children) => count_nodes(children)
-					Strikethrough(children) => count_nodes(children)
-					Link({ label, .. }) => count_nodes(label)
-					Image({ alt, .. }) => count_nodes(alt)
-					_ => 0
+	var $pending = [nodes]
+	var $count = 0
+	while !$pending.is_empty() {
+		level = $pending.last() ?? []
+		$pending = $pending.drop_last(1)
+		for node in level {
+			$count = $count + 1
+			match node {
+				Strong(children) => {
+					$pending = $pending.append(children)
 				}
-			sum + 1 + inner
-		},
-	)
+				Emphasis(children) => {
+					$pending = $pending.append(children)
+				}
+				Strikethrough(children) => {
+					$pending = $pending.append(children)
+				}
+				Link({ label, .. }) => {
+					$pending = $pending.append(label)
+				}
+				Image({ alt, .. }) => {
+					$pending = $pending.append(alt)
+				}
+				_ => {}
+			}
+		}
+	}
+	$count
 }
 
 target = Fuzz.target_with({
