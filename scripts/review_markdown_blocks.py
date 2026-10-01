@@ -397,6 +397,83 @@ def check(args, executable: Path) -> int:
     return int(bool(failures))
 
 
+TASK_MARKERS = {"[ ]": "unchecked", "[x]": "checked", "[X]": "checked"}
+
+
+def gfm_tasks(blocks: list) -> list:
+    """cmark-gfm 0.29.0.gfm.13 recognises a task list marker only when the
+    item's list marker is the first thing on the line (its scanner starts at
+    column 0), so `- - [x] a` and `> - [x] a` get no task there. GFM's rule is
+    that the marker begins the item's first paragraph, which the module and
+    the generators follow. This rewrites the oracle's tree to that rule: an
+    item without a task whose first paragraph starts with a marker and a space
+    or tab becomes a task item without the marker."""
+    out = []
+    for block in blocks:
+        if block[0] == "list":
+            items = []
+            for task, children in block[3]:
+                children = gfm_tasks(children)
+                if task == "none" and children and children[0][0] == "paragraph" and children[0][1] and children[0][1][0][0] == "text":
+                    text = children[0][1][0][1]
+                    if text[:3] in TASK_MARKERS and text[3:4] in (" ", "\t"):
+                        task = TASK_MARKERS[text[:3]]
+                        rest = normalize_inlines([["text", text[3:].lstrip(" \t")]] + children[0][1][1:])
+                        children = ([["paragraph", rest]] if rest else []) + children[1:]
+                items.append([task, children])
+            block = ["list", block[1], block[2], items]
+        elif block[0] == "blockquote":
+            block = ["blockquote", gfm_tasks(block[1])]
+        out.append(block)
+    return out
+
+
+def erase_tightness(blocks: list) -> list:
+    """cmark-gfm 0.29.0.gfm.13 does not count a blank line after a thematic
+    break inside a list item: `- ***\n\n- b` comes out tight, although the
+    items are separated by a blank line (CommonMark 5.3; commonmark.js and
+    markdown-it agree it is loose). This projection drops tightness so a
+    crosscheck can attribute such disagreements to that quirk."""
+    out = []
+    for block in blocks:
+        if block[0] == "list":
+            block = ["list", block[1], None, [[task, erase_tightness(children)] for task, children in block[3]]]
+        elif block[0] == "blockquote":
+            block = ["blockquote", erase_tightness(block[1])]
+        out.append(block)
+    return out
+
+
+def has_break_in_list(blocks: list, in_list: bool = False) -> bool:
+    for block in blocks:
+        if block[0] == "hr" and in_list:
+            return True
+        if block[0] == "list" and any(has_break_in_list(children, True) for _, children in block[3]):
+            return True
+        if block[0] == "blockquote" and has_break_in_list(block[1], in_list):
+            return True
+    return False
+
+
+def oracle_quirk(expected: list, actual: list) -> str | None:
+    """Name the documented cmark-gfm quirk that explains a disagreement."""
+    tasks = gfm_tasks(actual)
+    if classify(expected, tasks) == "pass":
+        return "oracle_task_quirk"
+    if has_break_in_list(actual) and classify(erase_tightness(expected), erase_tightness(tasks)) == "pass":
+        return "oracle_break_tightness_quirk"
+    return None
+
+
+def first_difference(left, right, path="$"):
+    if type(left) is not type(right) or not isinstance(left, list) or len(left) != len(right):
+        return path, left, right
+    for index, (a, b) in enumerate(zip(left, right)):
+        if a != b:
+            return first_difference(a, b, path + "[" + str(index) + "]")
+    return None
+
+
 def crosscheck(args) -> int:
     """Each ``show`` output is one JSON object {"markdown", "expected"} where
     expected is the generator's own block tree in the probe's JSON shape."""
@@ -416,12 +493,18 @@ def crosscheck(args) -> int:
             continue
         expected = normalize(case["expected"])
         result = oracle(case["markdown"])
-        kind = "oracle_failure" if result["status"] != "ok" else classify(expected, result["value"])
+        if result["status"] != "ok":
+            kind = "oracle_failure"
+        else:
+            kind = classify(expected, result["value"])
+            if kind != "pass":
+                kind = oracle_quirk(expected, result["value"]) or kind
         counts[kind] += 1
-        if kind != "pass" and len(examples) < args.examples:
-            examples.append({"file": path.name, "kind": kind, "markdown": case["markdown"], "generator": expected, "oracle": result.get("value")})
+        if not kind.startswith(("pass", "oracle_")) and len(examples) < args.examples:
+            where = first_difference(expected, result.get("value"))
+            examples.append({"file": path.name, "kind": kind, "markdown": case["markdown"], "difference": {"path": where[0], "generator": where[1], "oracle": where[2]} if where else None})
     print(json.dumps({"counts": dict(counts), "examples": examples}, ensure_ascii=False, indent=1))
-    return int(any(kind not in ("pass", "rejected") for kind in counts))
+    return int(any(not kind.startswith(("pass", "rejected", "oracle_")) for kind in counts))
 
 
 def main(argv=None) -> int:
