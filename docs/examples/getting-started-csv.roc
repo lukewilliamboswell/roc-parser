@@ -23,7 +23,7 @@ planets = |text| CSV.parse(text)
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
-		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} moons"), "\n")
+		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if p.moons == 1 "moon" else "moons"}"), "\n")
 		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${error.message}"
 		Err(MissingRequiredField(name)) => "no ${name} column"
 	}

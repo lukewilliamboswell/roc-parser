@@ -243,9 +243,8 @@ cases, and compares the value with ruamel.yaml's pure-Python parser. Of the
 
 Two of the 206 rejections, `limits/flow-depth-100` and `limits/flow-depth-512`,
 come from the 100-level nesting limit, which now also applies to flow
-collections. At the measured commit they are not yet in
-`scripts/yaml/known-failures.json`, so `review_yaml.py check` reports them as
-new failures. The 58 oracle disagreements are cases where ruamel.yaml differs
+collections; `scripts/yaml/known-failures.json` records them with that reason.
+The 58 oracle disagreements are cases where ruamel.yaml differs
 from the test suite's expected result; the suite wins.
 
 Limitations: besides the features above, integers must fit in `I64`, tabs may

@@ -92,10 +92,10 @@ roc-parser is a good fit when:
 
 * *Documents are up to a few megabytes.* Configuration files, front matter,
   READMEs, SVG icons, CSV exports and API messages parse in microseconds to a
-  few milliseconds, and a 1 MiB YAML, XML or Markdown document in 20, 10
+  few milliseconds, and a 1 MiB YAML, XML or Markdown document in 20, 9
   or 32 ms.
 * *You parse at start-up or per request.* An HTTP head parses in 1.5–2 µs;
-  a 4 KiB YAML configuration in under 0.2 ms.
+  a 4 KiB YAML configuration in under 0.1 ms.
 * *You want a pure-Roc package*, typed errors with line and
   column, strict input checking, and no native code or FFI.
 * *Your alternative is an interpreted parser*: roc-parser is 10–60 times
@@ -130,7 +130,9 @@ failure. That work has found and fixed quadratic cases:
 * YAML's nesting limit, extended to flow collections (`08cc39b`).
 
 Throughput is now flat from 4 KiB to 1 MiB for every format: 51–55 MB/s for
-generated YAML, 99–112 MB/s for generated XML and 33–34 MB/s for Markdown.
+generated YAML, 120–135 MB/s for generated XML and 30–34 MB/s for Markdown.
+(The summary table's rates are geometric means that also include the small
+sample documents, so they differ slightly from these generated-document ranges.)
 
 Limits that bound the work on hostile input:
 
