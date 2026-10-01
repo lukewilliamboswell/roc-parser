@@ -57,7 +57,7 @@ csv_message = |source| {
 http_message : Str -> Str
 http_message = |source| {
 	match Utf8.parse_str(HTTP.request, source) {
-		Ok(request) => "request for ${request.uri}"
+		Ok(request) => "request for ${request.target}"
 		Err(ParseError({ message, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${message}"
 	}
 }

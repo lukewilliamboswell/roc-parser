@@ -25,7 +25,7 @@ row = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CS
 http_target : Str -> Str
 http_target = |text| {
 	match Utf8.parse_str(HTTP.request, text) {
-		Ok(req) => req.uri
+		Ok(req) => req.target
 		Err(_) => "invalid request"
 	}
 }
