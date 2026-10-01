@@ -223,9 +223,16 @@ Framing : [Length(U64), Chunked, Unframed]
 # that produced it was given.
 Failure : HTTP.Error
 
-# A parsed field and the byte offset of its line, so that framing errors can
-# point at the field that caused them.
-Field : { header : HTTP.Header, offset : U64 }
+# The value of a field that decides the framing or the Host check, with the
+# byte offset of its line so that errors can point at it. Only these fields
+# are recorded beside the headers, so the common case allocates nothing extra.
+Field : { kind : FieldKind, value : Bytes, offset : U64 }
+
+FieldKind : [Host, TransferEncoding, ContentLength]
+
+# The parsed field lines of a head: every header, the fields that matter for
+# framing, and the bytes after the empty line.
+Head : { headers : List(HTTP.Header), fields : List(Field), rest : Bytes }
 
 fail : U64, Str -> Try(a, Failure)
 fail = |offset, message| Err({ offset, message })
@@ -251,9 +258,9 @@ read_request : Bytes -> Try({ value : HTTP.Request, rest : Bytes }, Failure)
 read_request = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_request_line(line)?
-	head = parse_fields(rest, line.len() + 2, [])?
+	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
 	version = start.version
-	hosts = values_named(head.fields, "host")
+	hosts = values_named(head.fields, Host)
 	if hosts.len() > 1 {
 		fail((hosts.get(1) ?? { value: [], offset: 0 }).offset, "more than one Host field")
 	} else if hosts.is_empty() and at_least_1_1(version) {
@@ -265,7 +272,7 @@ read_request = |input| {
 				Unframed => take_body(Length(0), head.rest, body_start)?
 				other => take_body(other, head.rest, body_start)?
 			}
-		Ok({ value: { method: start.method, target: start.target, version, headers: head.fields.map(|f| f.header), body: framed.body }, rest: framed.rest })
+		Ok({ value: { method: start.method, target: start.target, version, headers: head.headers, body: framed.body }, rest: framed.rest })
 	}
 }
 
@@ -273,7 +280,7 @@ read_response : Bytes -> Try({ value : HTTP.Response, rest : Bytes }, Failure)
 read_response = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_status_line(line)?
-	head = parse_fields(rest, line.len() + 2, [])?
+	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
 	version = start.version
 	body_framing = framing(head.fields, version)?
 	code = start.status_code
@@ -284,7 +291,7 @@ read_response = |input| {
 		} else {
 			take_body(body_framing, head.rest, input.len() - head.rest.len())?
 		}
-	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.fields.map(|f| f.header), body: framed.body }, rest: framed.rest })
+	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.headers, body: framed.body }, rest: framed.rest })
 }
 
 at_least_1_1 : HTTP.Version -> Bool
@@ -404,19 +411,57 @@ parse_status_line = |line| {
 
 # Field lines up to and including the empty line that ends them. `base` is
 # the offset of `bytes` in the message, recorded with each field.
-parse_fields : Bytes, U64, List(Field) -> Try({ fields : List(Field), rest : Bytes }, Failure)
-parse_fields = |bytes, base, fields| {
+parse_fields : Bytes, U64, Head -> Try(Head, Failure)
+parse_fields = |bytes, base, head| {
 	{ line, rest } = shift(take_line(bytes), base)?
 	if line.is_empty() {
-		Ok({ fields, rest })
+		Ok({ headers: head.headers, fields: head.fields, rest })
 	} else {
-		header = shift(parse_field_line(line), base)?
-		parse_fields(rest, base + line.len() + 2, fields.append({ header, offset: base }))
+		parsed = shift(parse_field_line(line), base)?
+		fields =
+			match parsed.kind {
+				Ok(kind) => head.fields.append({ kind, value: parsed.value, offset: base })
+				Err(_) => head.fields
+			}
+		parse_fields(rest, base + line.len() + 2, { headers: head.headers.append(parsed.header), fields, rest: [] })
+	}
+}
+
+# Which of the fields the parser itself looks at, if any, compared
+# case-insensitively without allocating.
+field_kind : Bytes -> Try(FieldKind, [Other])
+field_kind = |name| {
+	if ascii_eq_lower(name, "host") {
+		Ok(Host)
+	} else if ascii_eq_lower(name, "content-length") {
+		Ok(ContentLength)
+	} else if ascii_eq_lower(name, "transfer-encoding") {
+		Ok(TransferEncoding)
+	} else {
+		Err(Other)
+	}
+}
+
+# Whether `bytes` equals the lowercase ASCII `wanted`, ignoring ASCII case.
+ascii_eq_lower : Bytes, Str -> Bool
+ascii_eq_lower = |bytes, wanted| {
+	if bytes.len() != wanted.count_utf8_bytes().to_u64() {
+		False
+	} else {
+		var $index = 0
+		var $equal = True
+		for expected in wanted.to_utf8() {
+			if to_lower(bytes.get($index) ?? 0) != expected {
+				$equal = False
+			}
+			$index = $index + 1
+		}
+		$equal
 	}
 }
 
 # field-line = field-name ":" OWS field-value OWS
-parse_field_line : Bytes -> Try(HTTP.Header, Failure)
+parse_field_line : Bytes -> Try({ header : HTTP.Header, kind : Try(FieldKind, [Other]), value : Bytes }, Failure)
 parse_field_line = |line| {
 	name_len = prefix_len(line, is_tchar)
 	match line.drop_first(name_len) {
@@ -429,7 +474,7 @@ parse_field_line = |line| {
 			if valid_len == value.len() {
 				name = Str.from_utf8(line.sublist({ start: 0, len: name_len })) ?? ""
 				match Str.from_utf8(value) {
-					Ok(text) => Ok({ name, value: text })
+					Ok(text) => Ok({ header: { name, value: text }, kind: field_kind(line.sublist({ start: 0, len: name_len })), value })
 					Err(_) => fail(value_start, "field value is not valid UTF-8")
 				}
 			} else {
@@ -442,14 +487,13 @@ parse_field_line = |line| {
 
 # The values of every field with this (lowercase) name, with the offsets of
 # their lines.
-values_named : List(Field), Str -> List({ value : Bytes, offset : U64 })
+values_named : List(Field), FieldKind -> List({ value : Bytes, offset : U64 })
 values_named = |fields, wanted| {
-	target = wanted.to_utf8()
 	fields.fold(
 		[],
-		|found, { header, offset }| {
-			if header.name.to_utf8().map(to_lower) == target {
-				found.append({ value: header.value.to_utf8(), offset })
+		|found, { kind, value, offset }| {
+			if kind == wanted {
+				found.append({ value, offset })
 			} else {
 				found
 			}
@@ -480,13 +524,13 @@ elements = |bytes| {
 # Failures point at the field line responsible.
 framing : List(Field), HTTP.Version -> Try(Framing, Failure)
 framing = |fields, version| {
-	transfer_encodings = values_named(fields, "transfer-encoding")
-	content_lengths = values_named(fields, "content-length")
+	transfer_encodings = values_named(fields, TransferEncoding)
+	content_lengths = values_named(fields, ContentLength)
 	match (transfer_encodings.first(), content_lengths.first()) {
 		(Ok(te), Ok(cl)) =>
-			# RFC 9112 6.1 allows a recipient to process Transfer-Encoding over
-			# Content-Length, but a message with both "ought to be handled as an
-			# error"; llhttp rejects it by default, as does this parser.
+		# RFC 9112 6.1 allows a recipient to process Transfer-Encoding over
+		# Content-Length, but a message with both "ought to be handled as an
+		# error"; llhttp rejects it by default, as does this parser.
 			fail(if te.offset > cl.offset te.offset else cl.offset, "both Transfer-Encoding and Content-Length")
 		(Ok(te), Err(_)) => {
 			codings =
@@ -552,7 +596,7 @@ decode_chunked = |bytes, base, body| {
 	size = shift(parse_chunk_header(line), base)?
 	data_start = base + line.len() + 2
 	if size == 0 {
-		trailers = parse_fields(rest, data_start, [])?
+		trailers = parse_fields(rest, data_start, { headers: [], fields: [], rest: [] })?
 		Ok({ body, rest: trailers.rest })
 	} else if size > rest.len() {
 		fail(data_start + rest.len(), "chunk is longer than the remaining input")
@@ -713,7 +757,6 @@ is_tchar = |byte| {
 			or is_digit(byte)
 				or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
-
 
 parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParseError({ message : Str, offset : U64 })])
 parse = |parser, text| Utf8.parse_str(parser, text)
