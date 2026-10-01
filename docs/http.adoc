@@ -1,13 +1,228 @@
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
-// does when browsed on GitHub.
+// Defined by index.adoc; repeated so the chapter renders on its own.
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#http]
-= HTTP/1.1
+= HTTP messages
 
-Content in progress.
+This chapter shows how to parse raw HTTP/1.x bytes into Roc records: a request
+or response line, its header fields, and its body. It is a set of how-to guides
+for readers who know basic Roc and are handling bytes from a socket, a test
+fixture or a capture file. By the end you can read requests and responses,
+decode chunked bodies, split pipelined messages, and know which inputs the
+parser refuses and why.
+
+The `HTTP` module follows the message syntax of RFC 9112 and the field syntax
+of RFC 9110. It parses messages; it does not open connections or send
+anything.
+
+[WARNING]
+====
+The parser has no size limits. It holds the whole message in memory and will
+read a `Content-Length` of any size the input contains. Before you call it on
+network input, bound the number of bytes you read.
+====
+
+== Parse a request
+
+Parse a request with `HTTP.request`. `String.parse_str` takes a `Str`; use
+`String.parse_utf8` for a `List(U8)` from a socket. Both fail with
+`ParsingIncomplete` if bytes remain after the message (see
+<<http-pipelined,Read pipelined messages>>).
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=request,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+method: Post
+uri: /notes
+version: 1.1
+content type: Some("text/plain")
+body: hello
+----
+
+A request is a record with these fields:
+
+* `method`: one of `Get`, `Head`, `Post`, `Put`, `Delete`, `Connect`,
+  `Options`, `Trace` or `Patch`. Method names are case-sensitive, and any other
+  method is rejected.
+* `uri`: the request target exactly as sent, such as `/notes?id=1`.
+* `http_version`: `{ major, minor }`.
+* `headers`: a `List(Header)` in the order received, where each element is
+  `Header(name, value)`.
+* `body`: the body bytes as a `List(U8)`.
+
+=== Read header fields
+
+Header names keep the case they were sent in, but HTTP field names are
+case-insensitive. Compare them in lowercase. Values have surrounding spaces
+and tabs removed. A field that appears more than once appears in `headers`
+once per occurrence.
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=header,indent=0]
+----
+
+== Parse a response
+
+Parse a response with `HTTP.response`. `status_code` is a `U16` and `status`
+is the reason phrase, which may be empty:
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=response,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+status: 404 Not Found
+body: Not here.
+----
+
+[#http-framing]
+== Understand how the body is found
+
+The headers decide where the body ends (RFC 9112 section 6.3). The parser
+applies these rules in order:
+
+. A response with a `1xx`, `204` or `304` status has no body.
+. `Transfer-Encoding: chunked` means the body is a series of chunks, which the
+  parser decodes into one `body`.
+. `Content-Length: n` means the body is exactly `n` bytes. If the input has
+  fewer, parsing fails.
+. With neither field, a request has no body, and a response's body runs to the
+  end of the input, because the server marks the end by closing the
+  connection.
+
+[WARNING]
+====
+A response to a `HEAD` request, and a `2xx` response to a `CONNECT` request,
+also has no body, but the parser cannot see the request that the response
+answers. If you parse such a response as-is, rule 3 or 4 reads the following
+bytes as its body. Handle those responses yourself: for example, stop after the
+blank line that ends the header fields.
+====
+
+=== Decode a chunked body
+
+Chunk extensions (`;name=value` after a chunk size) and trailer fields (fields
+after the final `0` chunk) are checked for valid syntax and then discarded.
+Only the decoded content is kept.
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=chunked,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+decoded body: Wikipedia 
+----
+
+[#http-pipelined]
+== Read pipelined messages
+
+A client may send several requests on one connection without waiting for
+responses. Each parse consumes exactly one message. To keep the bytes that
+follow it, use `String.parse_utf8_partial`, which returns the message as `val`
+and the unread bytes as `input`. Parse `input` again for the next message:
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=pipelined,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+first: /a, second: /b, left over: 0 bytes
+----
+
+`parse_utf8_partial` fails only with `ParsingFailure`, so the example maps that
+one error into its own tag before using `?`.
+
+A response with no framing fields reads to the end of the input, so it is
+always the last message in a buffer.
+
+[#http-security]
+== Rejected messages and request smuggling
+
+_Request smuggling_ happens when two programs, such as a proxy and your
+server, disagree about where one message ends and the next begins. An attacker
+can then hide a second request inside the first one's body. To avoid this, the
+parser rejects any message whose framing it would otherwise have to guess.
+
+[IMPORTANT]
+====
+A rejected message is not safe to recover from. Do not retry it with a
+"cleaned-up" copy, and do not keep reading the same connection: close it. If a
+proxy in front of your server accepts a message this parser rejects, the two
+disagree about framing.
+====
+
+The parser rejects a message that has any of the following:
+
+* Both `Transfer-Encoding` and `Content-Length`.
+* More than one `Content-Length` value, unless every value is identical, or a
+  value that is not plain decimal digits (for example `+4`), or a value with
+  more than 19 significant digits.
+* Any transfer coding other than exactly one `chunked`, such as
+  `chunked, gzip`, `gzip`, or `chunked` given twice.
+* `Transfer-Encoding` in an HTTP/1.0 message.
+* Whitespace between a field name and its colon, as in `Transfer-Encoding :`.
+* Obsolete line folding (a field line that starts with a space or tab).
+* A line ending other than CRLF: a bare CR or a bare LF anywhere in the head
+  or in chunk framing.
+* Control characters in a field value or reason phrase, or a field value that
+  is not valid UTF-8.
+* In an HTTP/1.1 request, a missing `Host` field; in any request, more than
+  one `Host` field.
+* A malformed chunk size, such as `5 ` with a trailing space, or one with more than 15 significant hexadecimal digits.
+
+The status line has rules of its own: the status code is exactly three digits
+and at least `100`, and the space before the reason phrase may be left out
+when the phrase is empty.
+
+The failure message says which rule was broken:
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=rejected,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+rejected: invalid HTTP request: both Transfer-Encoding and Content-Length
+----
+
+The `fuzz/http-smuggling.roc` fuzz target generates messages built from these
+constructs and checks that each one is rejected; see
+{src}/fuzz/README.md[the fuzzing guide].
+
+== Out of scope
+
+* Bodies of responses to `HEAD` and `CONNECT`, which need the request; see
+  <<http-framing,Understand how the body is found>>.
+* Chunk extensions and trailer fields, which are validated and dropped.
+* Content codings such as gzip, and any `Transfer-Encoding` other than
+  `chunked`, which is rejected rather than decoded.
+* HTTP/2 and HTTP/3, which are binary protocols.
+* Size limits and timeouts, which the caller must enforce.
+
+The {api}[API reference] lists the `HTTP` types and parsers.

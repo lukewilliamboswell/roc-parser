@@ -1,0 +1,10 @@
+method: Post
+uri: /notes
+version: 1.1
+content type: Some("text/plain")
+body: hello
+status: 404 Not Found
+body: Not here.
+decoded body: Wikipedia 
+first: /a, second: /b, left over: 0 bytes
+rejected: invalid HTTP request: both Transfer-Encoding and Content-Length
