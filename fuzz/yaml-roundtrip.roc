@@ -310,10 +310,7 @@ emit_literal = |start, text, base_indent, explicit_ok| {
 	content_lines = body.keep_if(|line| !line.is_empty())
 	first_content = content_lines.first() ?? ""
 	needs_explicit = Str.starts_with(first_content, " ") or Str.starts_with(first_content, "\t")
-	# Tabs in leading whitespace are content, but the parser reads them as indentation.
-	tab_led = body.any(leading_tab)
-	blank_spaces = body.any(|line| !line.is_empty() and line.to_utf8().all(|b| b == ' ' or b == '\t'))
-	if needs_escapes(text) or bytes.contains('\r') or !bytes.contains('\n') or body.is_empty() or (needs_explicit and !explicit_ok) or (!known_gaps and (tab_led or blank_spaces)) {
+	if needs_escapes(text) or bytes.contains('\r') or !bytes.contains('\n') or body.is_empty() or (needs_explicit and !explicit_ok) {
 		Err(Unsupported)
 	} else {
 		indent_choice = pick(start, 3)
@@ -341,18 +338,6 @@ emit_literal = |start, text, base_indent, explicit_ok| {
 		blanks = List.repeat("", extra_blank)
 		Ok({ text: Str.join_with([header].concat(lines).concat(blanks), "\n"), cur: extra_choice.cur })
 	}
-}
-
-leading_tab : Str -> Bool
-leading_tab = |line| {
-	var $index = 0
-	var $found = Bool.False
-	bytes = line.to_utf8()
-	while $index < bytes.len() and !$found and ((bytes.get($index) ?? 'x') == ' ' or (bytes.get($index) ?? 'x') == '\t') {
-		$found = (bytes.get($index) ?? 'x') == '\t'
-		$index = $index + 1
-	}
-	$found
 }
 
 count_trailing_empty : List(Str) -> U64
@@ -579,9 +564,7 @@ generate = |bytes| {
 			}
 		}
 	prefix = if marker.n % 2 == 1 "---\n" else ""
-	# Keep-chomped block scalars at end of input gain an extra newline.
-	ends_block = body.block_scalar and !known_gaps
-	suffix = if marker.n >= 2 or ends_block "\n...\n" else "\n"
+	suffix = if marker.n >= 2 "\n...\n" else "\n"
 	{ yaml: "${prefix}${body.text}${suffix}", expected: body.value }
 }
 

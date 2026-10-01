@@ -42,6 +42,9 @@ Yaml := [
 		match lines {
 			[] => Ok(Null)
 
+			[first, ..] if first.tab =>
+				fail(first.number, first.indent + 1, "tabs may not be used for YAML indentation")
+
 			[first, ..] if first.indent != 0 =>
 				fail(first.number, 1, "the document root must not be indented")
 
@@ -63,7 +66,10 @@ Yaml := [
 	to_inspect = |value| inspect_yaml(value)
 }
 
-Line : { content : String.Utf8, indent : U64, number : U64 }
+## `terminated` is false only for a final line without a line break. `tab`
+## marks a tab right after the indentation, which is an error only where the
+## line is block structure rather than block scalar content.
+Line : { content : String.Utf8, indent : U64, number : U64, terminated : Bool, tab : Bool }
 
 ParseResult : { val : Yaml, input : List(Line) }
 
@@ -92,6 +98,8 @@ parse_node = |lines, indent, depth, raw_lines| {
 		match lines {
 			[] => fail(1, 1, "expected a YAML value")
 
+			[first, ..] if first.tab => fail(first.number, first.indent + 1, "tabs may not be used for YAML indentation")
+
 			[first, ..] if first.indent != indent =>
 				fail(first.number, first.indent + 1, "unexpected indentation")
 
@@ -103,7 +111,9 @@ parse_node = |lines, indent, depth, raw_lines| {
 					Ok(_) => parse_mapping(lines, indent, depth, raw_lines)
 					Err(_) => {
 						if starts_block_scalar(first.content) {
-							block = parse_block_scalar(lines.drop_first(1), raw_lines, first.content, first.number, first.indent + 1, first.indent)?
+							# At the document root (indentation -1) content may start in column 0.
+							min_indent = if depth == 0 and first.indent == 0 0 else first.indent + 1
+							block = parse_block_scalar(lines.drop_first(1), raw_lines, first.content, first.number, first.indent + 1, min_indent)?
 							Ok({ val: block.value, input: block.input })
 						} else {
 							value = parse_inline_value(first.content, first.number, first.indent + 1)?
@@ -125,6 +135,8 @@ parse_mapping_help : List(Line), U64, U64, List(Line), List({ key : Str, value :
 parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 	match lines {
 		[] => Ok({ val: Mapping(entries), input: [] })
+
+		[line, ..] if line.tab => fail(line.number, line.indent + 1, "tabs may not be used for YAML indentation")
 
 		[line, ..] if line.indent < indent =>
 			Ok({ val: Mapping(entries), input: lines })
@@ -155,7 +167,7 @@ parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 								parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value: Null }))
 							}
 					} else if starts_block_scalar(parts.value) {
-						block = parse_block_scalar(rest, raw_lines, parts.value, line.number, line.indent + parts.value_column, line.indent)?
+						block = parse_block_scalar(rest, raw_lines, parts.value, line.number, line.indent + parts.value_column, line.indent + 1)?
 						parse_mapping_help(block.input, indent, depth, raw_lines, entries.append({ key, value: block.value }))
 					} else {
 						value = parse_inline_value(parts.value, line.number, line.indent + parts.value_column)?
@@ -176,6 +188,8 @@ parse_sequence_help : List(Line), U64, U64, List(Line), List(Yaml) -> Try(ParseR
 parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 	match lines {
 		[] => Ok({ val: Sequence(values), input: [] })
+
+		[line, ..] if line.tab => fail(line.number, line.indent + 1, "tabs may not be used for YAML indentation")
 
 		[line, ..] if line.indent < indent =>
 			Ok({ val: Sequence(values), input: lines })
@@ -202,14 +216,14 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 			} else {
 				match split_mapping_entry(payload) {
 					Ok(_) => {
-						virtual = { content: payload, indent: indent + 2, number: line.number }
+						virtual = { content: payload, indent: indent + 2, number: line.number, terminated: line.terminated, tab: Bool.False }
 						child = parse_node(List.prepend(rest, virtual), indent + 2, depth + 1, raw_lines)?
 						parse_sequence_help(child.input, indent, depth, raw_lines, values.append(child.val))
 					}
 
 					Err(_) => {
 						if starts_block_scalar(payload) {
-							block = parse_block_scalar(rest, raw_lines, payload, line.number, line.indent + 3, line.indent)?
+							block = parse_block_scalar(rest, raw_lines, payload, line.number, line.indent + 3, line.indent + 1)?
 							parse_sequence_help(block.input, indent, depth, raw_lines, values.append(block.value))
 						} else {
 							value = parse_inline_value(payload, line.number, line.indent + 3)?
@@ -231,11 +245,11 @@ starts_block_scalar = |bytes| {
 }
 
 parse_block_scalar : List(Line), List(Line), String.Utf8, U64, U64, U64 -> Try(BlockScalarResult, [YamlError(Yaml.Error)])
-parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, base_indent| {
+parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, min_indent| {
 	header = parse_block_header(header_bytes, line, column)?
 	raw_tail = drop_lines_before_number(raw_lines, line + 1)
-	collected = collect_block_lines(raw_tail, base_indent, header.indent, PendingIndent, [], line)?
-	body = render_block_scalar(collected.lines, header.style, header.chomp)
+	collected = collect_block_lines(raw_tail, min_indent, header.indent, line)?
+	body = render_block_scalar(collected.lines, collected.terminated, header.style, header.chomp)
 	input = drop_consumed_lines(clean_rest, collected.consumed_through)
 
 	Ok({ value: String(String.str_from_utf8(body)), input })
@@ -320,81 +334,153 @@ block_indent_from_digit = |digit| {
 	}
 }
 
-collect_block_lines : List(Line), U64, BlockIndent, ContentIndent, List(String.Utf8), U64 -> Try({ lines : List(String.Utf8), consumed_through : U64 }, [YamlError(Yaml.Error)])
-collect_block_lines = |raw_lines, base_indent, block_indent, content_indent, out, consumed_through| {
-	match raw_lines {
-		[] => Ok({ lines: out, consumed_through })
+## Collect a block scalar's lines without their content indentation (YAML 1.2
+## 8.1.1), following the yaml-test-suite reference behaviour. Lines of spaces
+## are empty (`[]`), keeping any spaces beyond the content indentation as
+## text. Content must be indented at least `min_indent` spaces: one more than
+## the parent node, or zero for a scalar at the document root. `terminated`
+## says whether the last content line ended with a line break.
+collect_block_lines : List(Line), U64, BlockIndent, U64 -> Try({ lines : List(String.Utf8), consumed_through : U64, terminated : Bool }, [YamlError(Yaml.Error)])
+collect_block_lines = |raw_lines, min_indent, block_indent, header_line| {
+	var $content_indent =
+		match block_indent {
+			ExplicitIndent(offset) => FixedIndent(min_indent + offset - 1)
+			AutoIndent => PendingIndent
+		}
+	var $lines = []
+	var $consumed_through = header_line
+	var $terminated = Bool.True
+	var $leading_spaces = 0
+	var $leading_line = header_line
+	var $done = Bool.False
+	var $remaining = raw_lines
 
-		[line, .. as rest] => {
-			indent = count_indent(line.content, 0, line.number)?
-			without_indent = line.content.drop_first(indent)
+	while !$done {
+		match $remaining {
+			[] => {
+				$done = Bool.True
+			}
 
-			if trim_spaces(without_indent).is_empty() {
-				collect_block_lines(rest, base_indent, block_indent, content_indent, out.append([]), line.number)
-			} else if indent <= base_indent {
-				Ok({ lines: out, consumed_through })
-			} else {
-				required_indent =
-					match block_indent {
-						ExplicitIndent(offset) => base_indent + offset
+			[line, .. as rest] => {
+				spaces = count_spaces(line.content, 0)
+				after_spaces = line.content.drop_first(spaces)
+				white_only = trim_spaces(after_spaces).is_empty()
 
-						AutoIndent =>
-							match content_indent {
-								PendingIndent => indent
-								FixedIndent(value) => value
-							}
-					}
-
-				if indent < required_indent {
-					Ok({ lines: out, consumed_through })
-				} else {
-					stripped = line.content.drop_first(required_indent)
-
-					next_content_indent =
-						match block_indent {
-							AutoIndent =>
-								match content_indent {
-									PendingIndent => FixedIndent(required_indent)
-									FixedIndent(_) => content_indent
-								}
-
-							ExplicitIndent(_) => content_indent
+				if after_spaces.is_empty() {
+					# An empty line, even a final one without a line break.
+					text =
+						match $content_indent {
+							FixedIndent(width) if spaces > width => line.content.drop_first(width)
+							_ => []
 						}
 
-					collect_block_lines(rest, base_indent, block_indent, next_content_indent, out.append(stripped), line.number)
+					# Before the indentation is detected, remember the deepest empty line.
+					if $content_indent == PendingIndent and spaces > $leading_spaces {
+						$leading_spaces = spaces
+						$leading_line = line.number
+					}
+
+					$lines = $lines.append(text)
+					$consumed_through = line.number
+					$terminated = Bool.True
+					$remaining = rest
+				} else if spaces < min_indent or is_document_marker(line.content) {
+					if white_only {
+						# Only a tab can follow; it would be indentation.
+						return fail(line.number, spaces + 1, "tabs may not be used for YAML indentation")
+					}
+
+					$done = Bool.True
+				} else {
+					required =
+						match $content_indent {
+							FixedIndent(width) => width
+							PendingIndent => spaces
+						}
+
+					if spaces < required and white_only {
+						$lines = $lines.append([])
+						$consumed_through = line.number
+						$terminated = Bool.True
+						$remaining = rest
+					} else if spaces < required {
+						$done = Bool.True
+					} else {
+						$content_indent = FixedIndent(required)
+						$lines = $lines.append(line.content.drop_first(required))
+						$consumed_through = line.number
+						# Trailing white space at the end of input still ends its line.
+						$terminated = line.terminated or white_only
+						$remaining = rest
+					}
 				}
 			}
 		}
 	}
+
+	match $content_indent {
+		FixedIndent(width) if $leading_spaces > width and block_indent == AutoIndent =>
+			fail($leading_line, width + 1, "leading empty lines of a block scalar must not be indented more than its content")
+
+		_ => Ok({ lines: $lines, consumed_through: $consumed_through, terminated: $terminated })
+	}
 }
 
-render_block_scalar : List(String.Utf8), BlockStyle, BlockChomp -> String.Utf8
-render_block_scalar = |lines, style, chomp| {
-	body =
-		match style {
-			LiteralBlock => join_block_lines(lines)
-			FoldedBlock => fold_block_lines(lines)
+## "---" or "..." at the start of a line, alone or followed by white space.
+is_document_marker : String.Utf8 -> Bool
+is_document_marker = |bytes| {
+	match bytes {
+		['-', '-', '-'] | ['.', '.', '.'] => Bool.True
+		['-', '-', '-', ' ', ..] | ['-', '-', '-', '\t', ..] | ['.', '.', '.', ' ', ..] | ['.', '.', '.', '\t', ..] => Bool.True
+		_ => Bool.False
+	}
+}
+
+count_spaces : String.Utf8, U64 -> U64
+count_spaces = |bytes, count| {
+	match bytes {
+		[' ', .. as rest] => count_spaces(rest, count + 1)
+		_ => count
+	}
+}
+
+## Apply the block style and chomping indicator (YAML 1.2 8.1.1.2). Content
+## runs through the last non-empty line; later empty lines are trailing.
+render_block_scalar : List(String.Utf8), Bool, BlockStyle, BlockChomp -> String.Utf8
+render_block_scalar = |lines, terminated, style, chomp| {
+	content_len = last_content_index(lines, 0, 0)
+	content = lines.sublist({ start: 0, len: content_len })
+	trailing = lines.len() - content_len
+
+	if content_len == 0 {
+		match chomp {
+			KeepChomp => List.repeat('\n', trailing)
+			_ => []
 		}
-
-	with_terminal_newline =
-		if lines.is_empty() {
-			[]
-		} else {
-			body.append('\n')
-		}
-
-	match chomp {
-		KeepChomp => with_terminal_newline
-
-		StripChomp => trim_end_newlines(with_terminal_newline)
-
-		ClipChomp => {
-			if with_terminal_newline.is_empty() {
-				[]
-			} else {
-				trim_end_newlines(with_terminal_newline).append('\n')
+	} else {
+		body =
+			match style {
+				LiteralBlock => join_block_lines(content)
+				FoldedBlock => fold_block_lines(content)
 			}
+
+		# The last content line has a break unless it ended the input.
+		final_break = trailing > 0 or terminated
+
+		match chomp {
+			StripChomp => body
+			ClipChomp => if final_break body.append('\n') else body
+			KeepChomp => append_bytes(if final_break body.append('\n') else body, List.repeat('\n', trailing))
 		}
+	}
+}
+
+last_content_index : List(String.Utf8), U64, U64 -> U64
+last_content_index = |lines, index, last| {
+	match lines.get(index) {
+		Err(_) => last
+		Ok(line) if line.is_empty() => last_content_index(lines, index + 1, last)
+		Ok(_) => last_content_index(lines, index + 1, index + 1)
 	}
 }
 
@@ -414,43 +500,40 @@ join_block_lines_help = |lines, out| {
 	}
 }
 
+## Fold lines (YAML 1.2 8.1.3, 6.5): a break between two text lines that do not
+## start with white space becomes a space, or is dropped when empty lines
+## follow it; breaks next to more-indented lines are kept.
 fold_block_lines : List(String.Utf8) -> String.Utf8
 fold_block_lines = |lines| {
-	match lines {
-		[] => []
-		[first, .. as rest] => fold_block_lines_help(rest, first, first)
-	}
-}
+	var $out = []
+	var $previous = Err(NoLine)
+	var $empties = 0
 
-fold_block_lines_help : List(String.Utf8), String.Utf8, String.Utf8 -> String.Utf8
-fold_block_lines_help = |lines, previous, out| {
-	match lines {
-		[] => out
+	var $index = 0
 
-		[current, .. as rest] => {
+	while $index < lines.len() {
+		line = lines.get($index) ?? []
+		$index = $index + 1
+
+		if line.is_empty() {
+			$empties = $empties + 1
+		} else {
 			separator =
-				if previous.is_empty() or current.is_empty() or starts_with_space(previous) or starts_with_space(current) {
-					'\n'
-				} else {
-					' '
+				match $previous {
+					Err(_) => List.repeat('\n', $empties)
+					Ok(before) if !starts_with_space(before) and !starts_with_space(line) =>
+						if $empties == 0 [' '] else List.repeat('\n', $empties)
+
+					Ok(_) => List.repeat('\n', $empties + 1)
 				}
 
-			next_out = append_bytes(out.append(separator), current)
-			fold_block_lines_help(rest, current, next_out)
+			$out = append_bytes(append_bytes($out, separator), line)
+			$previous = Ok(line)
+			$empties = 0
 		}
 	}
-}
 
-trim_end_newlines : String.Utf8 -> String.Utf8
-trim_end_newlines = |bytes| trim_end_newlines_help(bytes, [], [])
-
-trim_end_newlines_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
-trim_end_newlines_help = |bytes, out, pending| {
-	match bytes {
-		[] => out
-		['\n', .. as rest] => trim_end_newlines_help(rest, out, pending.append('\n'))
-		[first, .. as rest] => trim_end_newlines_help(rest, append_bytes(out, pending).append(first), [])
-	}
+	$out
 }
 
 drop_lines_before_number : List(Line), U64 -> List(Line)
@@ -771,13 +854,15 @@ clean_lines = |lines, out| {
 		[] => Ok(out)
 
 		[line, .. as rest] => {
-			indent = count_indent(line.content, 0, line.number)?
-			content = trim_end_spaces(strip_comment(line.content.drop_first(indent), NoQuote, Bool.False, Bool.True, []))
+			indent = count_spaces(line.content, 0)
+			after_indent = line.content.drop_first(indent)
+			content = trim_end_spaces(strip_comment(after_indent, NoQuote, Bool.False, Bool.True, []))
+			tab = after_indent.first() == Ok('\t')
 
 			if content.is_empty() {
 				clean_lines(rest, out)
 			} else {
-				clean_lines(rest, out.append({ content, indent, number: line.number }))
+				clean_lines(rest, out.append({ content, indent, number: line.number, terminated: line.terminated, tab }))
 			}
 		}
 	}
@@ -805,19 +890,12 @@ remove_document_end = |lines, out| {
 split_lines : String.Utf8, U64, String.Utf8, List(Line) -> List(Line)
 split_lines = |input, number, current, lines| {
 	match input {
-		[] => lines.append({ content: current, indent: 0, number })
-		['\r', '\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number }))
-		['\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number }))
+		# A line break ends a line; it does not start an empty final one.
+		[] if current.is_empty() and !lines.is_empty() => lines
+		[] => lines.append({ content: current, indent: 0, number, terminated: Bool.False, tab: Bool.False })
+		['\r', '\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: Bool.True, tab: Bool.False }))
+		['\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: Bool.True, tab: Bool.False }))
 		[first, .. as rest] => split_lines(rest, number, current.append(first), lines)
-	}
-}
-
-count_indent : String.Utf8, U64, U64 -> Try(U64, [YamlError(Yaml.Error)])
-count_indent = |bytes, count, line| {
-	match bytes {
-		[' ', .. as rest] => count_indent(rest, count + 1, line)
-		['\t', ..] => fail(line, count + 1, "tabs may not be used for YAML indentation")
-		_ => Ok(count)
 	}
 }
 
@@ -1262,9 +1340,75 @@ expect {
 	actual
 		== Mapping([
 			{ key: "description", value: String("first line\nsecond line\n") },
-			{ key: "summary", value: String("one two\n") },
+			{ key: "summary", value: String("one two") },
 		])
 }
+
+## A block scalar's final line without a line break gets no newline, even when kept.
+expect {
+	clip = Yaml.parse_str("a: |\n  x")?
+	keep = Yaml.parse_str("a: |+\n  x")?
+	clip == Mapping([{ key: "a", value: String("x") }]) and keep == clip
+}
+
+## Keep chomping at the end of input keeps exactly the trailing line breaks.
+expect {
+	actual = Yaml.parse_str("a: |+\n  x\n\n")?
+	actual == Mapping([{ key: "a", value: String("x\n\n") }])
+}
+
+## Block scalars without content lines are empty unless kept.
+expect {
+	clip = Yaml.parse_str("a: |\n\n")?
+	keep = Yaml.parse_str("a: |+\n\n\n")?
+	clip == Mapping([{ key: "a", value: String("") }]) and keep == Mapping([{ key: "a", value: String("\n\n") }])
+}
+
+## Tabs after the indentation are block scalar content, not indentation.
+expect {
+	actual = Yaml.parse_str("a: |\n  x\n  \ty\n")?
+	actual == Mapping([{ key: "a", value: String("x\n\ty\n") }])
+}
+
+## Whitespace beyond the content indentation on an otherwise empty line is content.
+expect {
+	actual = Yaml.parse_str("a: |\n  x\n   \t\n  y\n")?
+	actual == Mapping([{ key: "a", value: String("x\n \t\ny\n") }])
+}
+
+## Folding drops the line break before empty lines between text lines.
+expect {
+	actual = Yaml.parse_str("a: >\n  a\n\n\n  b\n")?
+	actual == Mapping([{ key: "a", value: String("a\n\nb\n") }])
+}
+
+## Final whitespace without a line break still ends its line (yaml-test-suite JEF9, L24T).
+expect {
+	keep = Yaml.parse_str("- |+\n   ")?
+	clip = Yaml.parse_str("foo: |\n  x\n   ")?
+	keep == Sequence([String("\n")]) and clip == Mapping([{ key: "foo", value: String("x\n \n") }])
+}
+
+## Spaces and a tab form a content line that sets the indentation (R4YG, Y79Y).
+expect {
+	actual = Yaml.parse_str("foo: |\n \t\nbar: 1\n")?
+	actual == Mapping([{ key: "foo", value: String("\t\n") }, { key: "bar", value: Int(1) }])
+}
+
+## A tab-only line cannot end a block scalar (Y79Y).
+expect Yaml.parse_str("foo: |\n\t\nbar: 1\n").is_err()
+
+## Block scalars at the document root may start in column 0, until a document marker.
+expect {
+	actual = Yaml.parse_str("|\na\n...\n")?
+	actual == String("a\n")
+}
+
+## A tab before a document marker is not a document marker.
+expect Yaml.parse_str("\t---\na: 1").is_err()
+
+## Leading empty lines may not be indented more than detected block content.
+expect Yaml.parse_str("a: |\n    \n  x\n").is_err()
 
 ## Chomping indicators are supported for block scalars.
 expect {
@@ -1274,7 +1418,7 @@ expect {
 
 ## Block scalar content keeps blank lines and # characters literally.
 expect {
-	actual = Yaml.parse_str("text: |\n  # not a comment\n\n  after")?
+	actual = Yaml.parse_str("text: |\n  # not a comment\n\n  after\n")?
 	actual == Mapping([{ key: "text", value: String("# not a comment\n\nafter\n") }])
 }
 
@@ -1291,7 +1435,7 @@ expect {
 
 ## Folded blocks preserve line breaks around indented continuation lines.
 expect {
-	actual = Yaml.parse_str("text: >\n  intro\n    code\n  outro")?
+	actual = Yaml.parse_str("text: >\n  intro\n    code\n  outro\n")?
 	actual == Mapping([{ key: "text", value: String("intro\n  code\noutro\n") }])
 }
 

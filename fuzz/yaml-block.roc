@@ -11,19 +11,13 @@ import parser.Yaml
 ## its content lines. The expected string is computed from the YAML 1.2 rules
 ## (8.1.1.2 chomping, 8.1.3 folding), independently of the parser.
 
-## Set to Bool.True to also generate inputs the parser is known to get wrong
-## (see fuzz/README.md "Known YAML gaps"). Off by default so campaigns can
-## explore past them.
-known_gaps : Bool
-known_gaps = Bool.False
-
 Style : [Literal, Folded]
 
 Chomp : [Clip, Strip, Keep]
 
 Context : [Root, MapValue, SeqItem, CompactMap, NestedMap]
 
-Ending : [Eof, Sibling, CommentThenSibling, DocumentEnd]
+Ending : [Eof, EofNoBreak, Sibling, CommentThenSibling, DocumentEnd]
 
 Input : {
 	yaml : Str,
@@ -82,8 +76,8 @@ fold = |lines| {
 
 ## The scalar's value from its content lines (ending with a non-empty line, or
 ## empty) and the number of trailing empty lines.
-expected_value : Style, Chomp, List(Str), U64 -> Str
-expected_value = |style, chomp, lines, trailing| {
+expected_value : Style, Chomp, List(Str), U64, Bool -> Str
+expected_value = |style, chomp, lines, trailing, final_break| {
 	if lines.is_empty() {
 		match chomp {
 			Keep => Str.join_with(List.repeat("\n", trailing), "")
@@ -95,63 +89,13 @@ expected_value = |style, chomp, lines, trailing| {
 				Literal => Str.join_with(lines, "\n")
 				Folded => fold(lines)
 			}
+		breaks = if final_break trailing + 1 else 0
 		match chomp {
 			Strip => body
-			Clip => Str.concat(body, "\n")
-			Keep => Str.concat(body, Str.join_with(List.repeat("\n", trailing + 1), ""))
+			Clip => if final_break Str.concat(body, "\n") else body
+			Keep => Str.concat(body, Str.join_with(List.repeat("\n", breaks), ""))
 		}
 	}
-}
-
-leading_tab : Str -> Bool
-leading_tab = |line| {
-	var $index = 0
-	var $found = Bool.False
-	bytes = line.to_utf8()
-	while $index < bytes.len() and ((bytes.get($index) ?? 'x') == ' ' or (bytes.get($index) ?? 'x') == '\t') {
-		if (bytes.get($index) ?? 'x') == '\t' {
-			$found = Bool.True
-		}
-		$index = $index + 1
-	}
-	$found
-}
-
-only_white : Str -> Bool
-only_white = |line| !line.is_empty() and line.to_utf8().all(|b| b == ' ' or b == '\t')
-
-## A run of empty lines between two non-spaced lines in a folded scalar.
-folded_empty_run : List(Str) -> Bool
-folded_empty_run = |lines| {
-	var $previous_normal = Bool.False
-	var $empties = 0
-	var $found = Bool.False
-	var $index = 0
-	while $index < lines.len() {
-		line = lines.get($index) ?? ""
-		if line.is_empty() {
-			$empties = $empties + 1
-		} else {
-			normal = !starts_white(line)
-			if $previous_normal and normal and $empties > 0 {
-				$found = Bool.True
-			}
-			$previous_normal = normal
-			$empties = 0
-		}
-		$index = $index + 1
-	}
-	$found
-}
-
-## Inputs that exercise the known gaps listed in fuzz/README.md.
-hits_known_gap : Input -> Bool
-hits_known_gap = |input| {
-	input.lines.any(leading_tab)
-	or input.lines.any(only_white)
-	or (input.style == Folded and folded_empty_run(input.lines))
-	or (input.chomp == Keep and input.ending == Eof)
-	or (input.chomp == Clip and input.lines.is_empty())
 }
 
 generate : List(U8) -> Input
@@ -174,8 +118,9 @@ generate = |bytes| {
 			_ => NestedMap
 		}
 	ending =
-		match setup % 4 {
+		match setup % 5 {
 			0 => Eof
+			4 => EofNoBreak
 			1 => if context == Root DocumentEnd else Sibling
 			2 => if context == Root DocumentEnd else CommentThenSibling
 			_ => DocumentEnd
@@ -224,14 +169,21 @@ generate = |bytes| {
 	indicator = if explicit offset.to_str() else ""
 	header = if indicator_first "${style_char}${indicator}${chomp_char}" else "${style_char}${chomp_char}${indicator}"
 	body_lines = content.map(|line| if line.is_empty() (if empty_pad pad else "") else Str.concat(pad, line))
-	blank_lines = List.repeat(if empty_pad pad else "", trailing_total)
+	blank_lines = List.repeat(if empty_pad pad else "", if ending == EofNoBreak 0 else trailing_total)
 	block = Str.join_with([header].concat(body_lines).concat(blank_lines), "\n")
 
-	value = String(expected_value(style, chomp, content, trailing_total))
+	# Without a final line break the last content line has none to chomp, and
+	# trailing empty lines cannot follow it. White space alone still ends its
+	# line at the end of input (yaml-test-suite L24T, JEF9).
+	last_white = (content.last() ?? "x").to_utf8().all(|b| b == ' ' or b == '\t')
+	no_break = ending == EofNoBreak and !last_white
+	trailing_kept = if ending == EofNoBreak 0 else trailing_total
+	value = String(expected_value(style, chomp, content, trailing_kept, !no_break))
 	sibling_indent = spaces(base)
 	tail =
 		match ending {
 			Eof => "\n"
+			EofNoBreak => ""
 			DocumentEnd => "\n...\n"
 			Sibling => "\n${sibling_indent}next: 1\n"
 			CommentThenSibling => "\n# comment\n${sibling_indent}next: 1\n"
@@ -268,13 +220,9 @@ last_non_empty = |lines| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	if !known_gaps and hits_known_gap(input) {
-		Fuzz.reject
-	} else {
-		match Yaml.parse_str(input.yaml) {
-			Ok(actual) if actual == input.expected => Fuzz.keep
-			actual => crash "block scalar mismatch\n--- yaml ---\n${input.yaml}\n--- expected ---\n${Yaml.to_inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
-		}
+	match Yaml.parse_str(input.yaml) {
+		Ok(actual) if actual == input.expected => Fuzz.keep
+		actual => crash "block scalar mismatch\n--- yaml ---\n${input.yaml}\n--- expected ---\n${Yaml.to_inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
 	}
 }
 
