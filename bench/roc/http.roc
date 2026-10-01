@@ -5,25 +5,24 @@ app [main!] {
 
 import cli.OsStr
 import parser.HTTP
-import parser.Utf8
 import Bench
 
-## Benchmark driver: one message through HTTP.response when it starts with
-## `HTTP/`, otherwise HTTP.request.
+## Benchmark driver: one message through HTTP.parse_response when it starts
+## with `HTTP/`, otherwise HTTP.parse_request; bytes left over are an error.
 main! : List(OsStr) => Try({}, _)
 main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
 	if input.starts_with("HTTP/") {
-		match Utf8.parse_str(HTTP.response, input) {
-			Ok(response) => Ok(response.headers.len() + response.body.len() + response.status_code.to_u64())
-			Err(_) => Err(1)
+		match HTTP.parse_response(input.to_utf8()) {
+			Ok({ response, rest: [] }) => Ok(response.headers.len() + response.body.len() + response.status_code.to_u64())
+			_ => Err(1)
 		}
 	} else {
-		match Utf8.parse_str(HTTP.request, input) {
-			Ok(request) => Ok(request.headers.len() + request.body.len() + request.uri.count_utf8_bytes().to_u64())
-			Err(_) => Err(1)
+		match HTTP.parse_request(input.to_utf8()) {
+			Ok({ request, rest: [] }) => Ok(request.headers.len() + request.body.len() + request.target.count_utf8_bytes().to_u64())
+			_ => Err(1)
 		}
 	}
 }

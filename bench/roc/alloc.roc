@@ -34,9 +34,9 @@ parse = |format, input| {
 		"markdown" => Utf8.parse_str(Markdown.all, input).is_ok()
 		"http" =>
 			if input.starts_with("HTTP/") {
-				Utf8.parse_str(HTTP.response, input).is_ok()
+				HTTP.parse_response(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
 			} else {
-				Utf8.parse_str(HTTP.request, input).is_ok()
+				HTTP.parse_request(input.to_utf8()).map_ok(|r| r.rest) == Ok([])
 			}
 		_ => Bool.False
 	}
