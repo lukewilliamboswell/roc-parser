@@ -38,12 +38,21 @@ the existing formats are listed in <<property-testing>>.
   the error type. This comment becomes the module's page in the API reference.
 . Give every exposed value a `##` doc comment with its purpose and, where it
   helps, a short `expect` example.
-. Expose the module in `package/main.roc`, and add it to `TEST_MODULES` in
-  `scripts/all_tests.py` so its tests run on their own as well as through the
-  package.
-. Follow the naming of the existing modules: a `parse_str : Str -> Try(...)`
-  entry point that reports where the input went wrong, plus `Parser` values
-  for callers who compose parsers.
+. Expose the module in `package/main.roc`. `roc test package/main.roc`,
+  which `scripts/all_tests.py` runs, then runs its tests with the rest.
+. Make it a type module and follow the conventions of the existing ones:
+** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
+   `Toml.Error` is a record with a `message` and the most precise location
+   the format has (`line` and `column` for a text format);
+** `Toml.parser : Parser(Utf8.Bytes, Toml)` for callers who compose
+   parsers, failing with `ParseError({ message, offset })`;
+** `Try(a, [Missing])` for every optional value, and methods in the
+   `.{ }` block, called in method-call style in examples;
+** no public function that can crash, on any input.
+. If records are a natural target, also implement a format for
+  type-directed decoding, as `CSV.Format` and `Yaml.Format` do, and expose
+  `Toml.decode` with a `Parseable` where-clause alias. The parsers chapter of
+  the Roc language reference lists the methods a format provides.
 
 Prefer a scanner over the input bytes for document-level parsing, with an
 explicit stack for nesting. The combinator style is convenient for small
