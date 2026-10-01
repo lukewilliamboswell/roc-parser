@@ -192,7 +192,7 @@ parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 			Ok({ val: Mapping(entries), input: lines })
 
 		[line, ..] if line.indent > indent =>
-			fail(line.number, line.indent + 1, "unexpected indentation after a mapping value")
+			fail(line.number, line.indent + 1, "unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)")
 
 		[line, ..] if is_sequence_line(line.content) =>
 			Ok({ val: Mapping(entries), input: lines })
@@ -877,11 +877,39 @@ parse_key = |raw, line, column| {
 
 parse_single_quoted : String.Utf8, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
-	if bytes.len() < 2 or bytes.get(bytes.len() - 1) != Ok('\'') {
-		fail(line, column, "unterminated single-quoted string")
-	} else {
-		inner = bytes.sublist({ start: 1, len: bytes.len() - 2 })
-		unescape_single(inner, [], line, column).map_ok(String.str_from_utf8)
+	inner = quoted_inner(bytes, '\'', line, column)?
+	unescape_single(inner, [], line, column).map_ok(String.str_from_utf8)
+}
+
+## The text between a scalar's opening quote and its real closing quote, which
+## must end the scalar. In single quotes '' is an escaped quote; in double
+## quotes a backslash escapes the next byte.
+quoted_inner : String.Utf8, U8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+quoted_inner = |bytes, quote, line, column| {
+	var $index = 1
+	var $close = Err(Unterminated)
+
+	while $index < bytes.len() and $close == Err(Unterminated) {
+		byte = bytes.get($index) ?? 0
+		next = bytes.get($index + 1) ?? 0
+
+		if quote == '"' and byte == '\\' {
+			$index = $index + 2
+		} else if quote == '\'' and byte == '\'' and next == '\'' {
+			$index = $index + 2
+		} else if byte == quote {
+			$close = Ok($index)
+		} else {
+			$index = $index + 1
+		}
+	}
+
+	kind = if quote == '"' "double" else "single"
+
+	match $close {
+		Err(_) => fail(line, column, "unterminated ${kind}-quoted string")
+		Ok(close) if close + 1 != bytes.len() => fail(line, column, "unexpected text after the closing quote of a ${kind}-quoted string")
+		Ok(close) => Ok(bytes.sublist({ start: 1, len: close - 1 }))
 	}
 }
 
@@ -897,12 +925,8 @@ unescape_single = |bytes, out, line, column| {
 
 parse_double_quoted : String.Utf8, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
-	if bytes.len() < 2 or bytes.get(bytes.len() - 1) != Ok('"') {
-		fail(line, column, "unterminated double-quoted string")
-	} else {
-		inner = bytes.sublist({ start: 1, len: bytes.len() - 2 })
-		unescape_double(inner, [], line, column).map_ok(String.str_from_utf8)
-	}
+	inner = quoted_inner(bytes, '"', line, column)?
+	unescape_double(inner, [], line, column).map_ok(String.str_from_utf8)
 }
 
 unescape_double : String.Utf8, String.Utf8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
@@ -1029,6 +1053,9 @@ prepare_lines = |raw_lines| {
 
 	without_start =
 		match clean {
+			[first, ..] if first.indent == 0 and first.content.first() == Ok('%') =>
+				return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
+
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
 			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(String.str_from_utf8(first.content), "---") => {
 				# "--- node": the root node starts on the marker line (YAML 1.2 9.1.4).
@@ -1354,6 +1381,14 @@ append_bytes = |left, right| {
 fail : U64, U64, Str -> Try(_, [YamlError(Yaml.Error)])
 fail = |line, column, message| Err(YamlError({ line, column, message }))
 
+when_error : Try(Yaml, [YamlError(Yaml.Error)]) -> Str
+when_error = |result| {
+	match result {
+		Ok(_) => ""
+		Err(YamlError(error)) => error.message
+	}
+}
+
 inspect_yaml : Yaml -> Str
 inspect_yaml = |value| {
 	match value {
@@ -1559,6 +1594,22 @@ expect {
 	deep = Str.concat(Str.repeat("[", 150), Str.repeat("]", 150))
 	shallow = Str.concat(Str.repeat("[", 50), Str.repeat("]", 50))
 	Yaml.parse_str(deep).is_err() and Yaml.parse_str(shallow).is_ok() and Yaml.parse_str(Str.concat("a:\n  b: ", deep)).is_err()
+}
+
+## A quoted scalar ends at its real closing quote; anything after it is an error.
+expect {
+	stray = Yaml.parse_str("v: \"a\\\\\"\"")
+	trailing = Yaml.parse_str("v: \"a\" x")
+	single = Yaml.parse_str("v: 'it''s'")?
+	message = |result| when_error(result)
+	stray.is_err() and message(trailing) == "unexpected text after the closing quote of a double-quoted string" and single == Mapping([{ key: "v", value: String("it's") }])
+}
+
+## Errors name the unsupported feature rather than a symptom.
+expect {
+	directive = when_error(Yaml.parse_str("%YAML 1.2\n---\na: 1\n"))
+	continued = when_error(Yaml.parse_str("a: one\n  two\n"))
+	directive == "YAML directives are not supported by this YAML subset" and Str.contains(continued, "multi-line plain scalars")
 }
 
 ## Syntax errors report their source location.
