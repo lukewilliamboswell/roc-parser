@@ -1,0 +1,17 @@
+order_id,created_at,customer,email,country,items,subtotal,tax,total,status,notes
+100231,2026-03-01T09:14:22Z,Ada Lovelace,ada@example.com,GB,3,42.50,4.25,46.75,shipped,
+100232,2026-03-01T09:20:05Z,"Hopper, Grace",grace@example.com,US,1,12.00,0.96,12.96,paid,"Gift wrap, please"
+100233,2026-03-01T10:02:47Z,Alan Turing,alan@example.com,GB,5,118.20,11.82,130.02,shipped,"Leave with ""Bletchley"" reception"
+100234,2026-03-01T11:45:10Z,Katherine Johnson,kj@example.com,US,2,30.00,2.40,32.40,refunded,"Duplicate order
+refunded by support"
+100235,2026-03-02T08:00:00Z,Edsger Dijkstra,ewd@example.com,NL,7,203.15,42.66,245.81,paid,
+100236,2026-03-02T08:31:59Z,Barbara Liskov,liskov@example.com,US,1,9.99,0.80,10.79,cancelled,Customer request
+100237,2026-03-02T12:12:12Z,Donald Knuth,knuth@example.com,US,4,64.00,5.12,69.12,shipped,"Pays by cheque; $2.56 per error"
+100238,2026-03-03T07:05:44Z,Margaret Hamilton,mh@example.com,US,2,25.50,2.04,27.54,paid,
+100239,2026-03-03T15:48:03Z,Tim Berners-Lee,tbl@example.com,GB,1,15.00,3.00,18.00,shipped,
+100240,2026-03-04T10:10:10Z,Radia Perlman,radia@example.com,US,3,57.75,4.62,62.37,paid,"Spanning, tree"
+100241,2026-03-04T18:22:31Z,Ken Thompson,ken@example.com,US,6,99.00,7.92,106.92,shipped,
+100242,2026-03-05T09:00:01Z,Frances Allen,fran@example.com,US,2,40.00,3.20,43.20,paid,
+100243,2026-03-05T13:37:00Z,José Valim,jose@example.com,BR,1,19.90,3.58,23.48,paid,Ünïcödé note ✓
+100244,2026-03-06T06:30:15Z,Yukihiro Matsumoto,matz@example.com,JP,4,80.00,8.00,88.00,shipped,
+100245,2026-03-06T21:59:59Z,Guido van Rossum,guido@example.com,NL,2,33.30,7.00,40.30,shipped,

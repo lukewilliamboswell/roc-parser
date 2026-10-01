@@ -1,0 +1,168 @@
+name: Property quality tests
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      nightly_validation:
+        description: "Validate a nightly candidate without publishing or deploying"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # roc-fuzz 0.4.2 needs a newer compiler than .roc-version, which waits on
+  # basic-cli for the examples. Return to .roc-version once it reaches this.
+  QUALITY_ROC_NIGHTLY: nightly-2026-09-29-7f11a82
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ (github.event_name == 'pull_request' || inputs.nightly_validation) }}
+
+jobs:
+  fuzz:
+    name: Quality ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every target registered in scripts/run_fuzz.py.
+        target:
+          - markdown-document
+          - markdown-inline
+          - markdown-inline-ast
+          - markdown-inline-pathological
+          - yaml
+          - yaml-raw
+          - yaml-roundtrip
+          - yaml-block
+          - xml
+          - xml-raw
+          - xml-roundtrip
+          - xml-malformed
+          - csv
+          - csv-raw
+          - csv-roundtrip
+          - csv-decode
+          - http-request
+          - http-response
+          - http-raw
+          - http-roundtrip
+          - http-smuggling
+          - parser-combinators
+          - string-primitives
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read Roc version
+        id: roc-version
+        # Nightly validation tests the candidate in .roc-version instead of the pin.
+        run: python3 scripts/workflow_helpers.py roc-version --pinned "$QUALITY_ROC_NIGHTLY" --nightly-validation "${{ inputs.nightly_validation || false }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+
+      - name: Restore scheduled corpus
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}
+          key: fuzz-${{ runner.os }}-${{ matrix.target }}-${{ steps.roc-version.outputs.nightly-tag }}-${{ hashFiles('fuzz/**') }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ runner.os }}-${{ matrix.target }}-${{ steps.roc-version.outputs.nightly-tag }}-
+
+      - name: Run pull-request smoke campaign
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
+        run: python3 scripts/run_fuzz.py smoke "${{ matrix.target }}"
+
+      - name: Run scheduled campaign
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        run: python3 scripts/run_fuzz.py campaign "${{ matrix.target }}" --seconds 600
+
+      - name: Upload failure reproducer
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-failure-${{ matrix.target }}
+          path: |
+            .roc-parser-tmp/fuzz/bin/${{ matrix.target }}
+            .roc-parser-tmp/fuzz/corpus/${{ matrix.target }}/
+            .roc-parser-tmp/fuzz/runs/${{ matrix.target }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+  conformance:
+    name: Conformance ${{ matrix.format }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each format is checked against a pinned reference implementation.
+          - format: yaml
+            requirements: scripts/yaml/requirements.txt
+            command: python scripts/review_yaml.py check --baseline scripts/yaml/known-failures.json
+          - format: yaml-robustness
+            requirements: scripts/yaml/requirements.txt
+            command: python scripts/review_yaml.py campaign --smoke
+          - format: xml
+            command: python scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+          - format: csv
+            command: python scripts/review_csv.py
+          - format: http
+            requirements: scripts/http/requirements.txt
+            command: python scripts/review_http.py
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install review compiler
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.QUALITY_ROC_NIGHTLY }}
+      - name: Create oracle environment
+        run: python3 -m venv /tmp/roc-parser-oracle
+      - name: Install pinned oracle
+        if: matrix.requirements
+        run: /tmp/roc-parser-oracle/bin/python -m pip install --no-deps -r "${{ matrix.requirements }}"
+      - name: Check conformance baseline
+        env:
+          PATH_PREFIX: /tmp/roc-parser-oracle/bin
+        run: PATH="$PATH_PREFIX:$PATH" ${{ matrix.command }}
+      - name: Upload review evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conformance-evidence-${{ matrix.format }}
+          path: .roc-parser-tmp/
+          if-no-files-found: warn
+          retention-days: 14
+
+  property-quality:
+    name: property-quality
+    if: always()
+    needs: [fuzz, conformance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require successful fuzzing
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.fuzz.result }}"
+      - name: Require conformance checks
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.conformance.result }}"
