@@ -2330,14 +2330,11 @@ is_special_byte = |byte| {
 	}
 }
 
+special_bytes : Utf8.ByteClass
+special_bytes = Utf8.ByteClass.from_predicate(is_special_byte)
+
 find_special_byte : List(U8), U64 -> U64
-find_special_byte = |input, from| {
-	var $index = from
-	while $index < input.len() and !is_special_byte(byte_at(input, $index)) {
-		$index = $index + 1
-	}
-	$index
-}
+find_special_byte = |input, from| Utf8.find_any(input, from, special_bytes)
 
 flush_chars : List(InlineItem), List(U8) -> List(InlineItem)
 flush_chars = |items, text| {
