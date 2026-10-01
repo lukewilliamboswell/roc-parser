@@ -48,20 +48,46 @@ followed by punctuation, is preceded by whitespace or punctuation;
 _right-flanking_ is the mirror image. So `*foo*` is emphasis but `* foo *` is
 not.
 
+[[glossary-format]]Format::
+In type-directed decoding, a type whose methods (`parse_str`,
+`parse_record_field`, `parse_list_start` and so on) read one value at a time
+from the input. `CSV.Format` and `Yaml.Format` are formats; you use them
+through `CSV.parse` and `Yaml.decode` and never name them. See
+<<glossary-parser-for,`parser_for`>>.
+
 [[glossary-framing]]Framing (HTTP)::
 How the receiver finds where a message body ends: by `Transfer-Encoding:
 chunked`, by `Content-Length`, or, for a response with neither, by the end of
 the connection. See <<glossary-smuggling,smuggling>>.
 
+[[glossary-furthest-failure]]Furthest failure::
+Of all the failures seen while parsing, the one that read furthest into the
+input, including failures that an alternative or a repetition recovered
+from. The runners report it as `ParseError({ message, offset })`, so the
+error points at the bad element and not at the input left over after it.
+
 [[glossary-input]]Input::
 The data a parser reads, given by the first type parameter of
 `Parser(input, a)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
-record decoding it is a `CSV.CSVRecord`, a list of fields.
+record decoding it is a `CSV.Record`, a list of fields.
 
 [[glossary-known-failure]]Known failure::
 A conformance case where the library and the oracle disagree on purpose,
 listed with its reason in a `known-failures.json` file. See
 <<conformance,Conformance>>.
+
+[[glossary-method]]Method::
+A function that belongs to a type, defined in the `.{ }` block after the type
+declaration and called with a dot on a value: `parser.keep(field)` calls
+`Parser.keep(parser, field)`. This manual writes calls in that method-call
+style. The compiler finds the method from the value's type, which is
+<<glossary-static-dispatch,static dispatch>>.
+
+[[glossary-opaque-nominal-type]]Opaque nominal type::
+A nominal type declared with `::`, whose backing representation is hidden
+outside its module, so values can only be built and read through its
+methods. `Parser(input, a)` is one. A nominal type declared with `:=`, such
+as `Yaml` or `Markdown`, shows its tags, so you can match on them.
 
 [[glossary-oracle]]Oracle::
 A trusted reference implementation whose results a test compares with the
@@ -69,10 +95,23 @@ library's, such as Python's `csv` module for CSV or expat for XML. When the
 oracle is itself wrong, the specification decides. See
 <<conformance,Conformance>>.
 
+[[glossary-parseable]]`Parseable`::
+A where-clause alias, `row.Parseable(errs)`, that `CSV.parse` and the other
+decoding functions use to say "a type that this format can decode" without
+naming the format's internal state type. You rarely write it yourself.
+
 [[glossary-parser]]Parser::
 A value of type `Parser(input, a)`: a description of how to read an `a` from
 the start of an input. Running it returns the value and the unconsumed input,
 or a `ParseError` with a message and an offset.
+
+[[glossary-parser-for]]`parser_for`::
+The method the compiler derives for records, tuples, lists and the builtin
+scalar types, which reads a value of that type with a given
+<<glossary-format,format>>. It is how `CSV.parse` and `Yaml.decode` decode
+into the type your annotation names. A field of type `Try(a, [Missing])` is
+optional; a required field that is absent fails with
+`MissingRequiredField(name)`, which the compiler adds to the error type.
 
 [[glossary-parsing-incomplete]]Parsing incomplete::
 The parser succeeded but did not consume the whole input. Functions such as
@@ -99,9 +138,31 @@ message whose framing could be read two ways.
 A line break inside a paragraph that is not a hard break. HTML renders it as a
 space; this library keeps it as `\n` in the `Text` node.
 
+[[glossary-static-dispatch]]Static dispatch::
+Choosing which function a method call runs from the type of the value, at
+compile time. It is how `value.to_inspect()` finds the `Yaml` version for a
+`Yaml` value, and how `CSV.parse` finds the `parser_for` of your row type.
+
+[[glossary-try]]`Try`::
+Roc's builtin type for a result that may fail: `Try(ok, err)` is `Ok(value)`
+or `Err(problem)`. Every fallible function in this package returns one. An
+optional value is `Try(a, [Missing])`.
+
+[[glossary-type-module]]Type module::
+A module named after the one type it defines, with that type's methods in
+the `.{ }` block of its declaration. `Parser`, `Yaml`, `Xml` and `Markdown`
+are type modules. `Utf8`, `CSV` and `HTTP` define their type as `[]`, an
+empty tag union, because they group functions and nested types rather than
+values of their own.
+
 [[glossary-well-formed]]Well-formed (XML)::
 Following the syntax rules of XML 1.0: one root element, properly nested and
 matching tags, quoted and unique attributes, and only declared entities.
 Well-formedness says nothing about which elements are allowed; that is
 _validity_, which needs a schema or DTD and which this package does not
 check.
+
+[[glossary-where-clause]]Where clause::
+The part of a type annotation that lists the methods a type variable must
+have, such as `where [input.len : input -> U64]` on `Parser.many`, which needs
+only the length of its input to detect progress.

@@ -39,8 +39,8 @@ a failure too.
 what is left. Use these to read one message from a stream that holds several.
 
 |`Parser.parse(p, input)`, `Parser.run(p, input)`
-|Run a parser whose input is not text, such as the `CSV.CSVRecord` that
-record parsers read.
+|Run a parser whose input is not text, such as the `CSV.Record` that
+record parsers read. Call them as methods: `p.parse(input)`.
 |===
 
 == Reading text
@@ -252,15 +252,16 @@ This has three consequences:
   such as "is a letter" written for ASCII never matches the bytes of `é`. A
   predicate such as `|b| b != '"'` is safe, because no byte of a multi-byte
   character is below 128.
-* `Str.from_utf8_lossy` crashes on bytes that are not valid UTF-8. That
-  cannot happen for a slice of a valid `Str` cut at ASCII bytes, as in this
-  manual's examples. If your parser can stop in the middle of a character,
-  convert with `Str.from_utf8` and handle its error instead.
+* `Str.from_utf8_lossy` replaces bytes that are not valid UTF-8 with
+  U+FFFD. That cannot happen for a slice of a valid `Str` cut at ASCII bytes,
+  as in this manual's examples. If your parser can stop in the middle of a
+  character and you need to know, convert with `Str.from_utf8` and handle its
+  error instead.
 
 == Parsers over other input
 
 `Parser(input, a)` works for any input type, not only bytes. The `CSV`
-module's record parsers read a `CSV.CSVRecord`, a list of fields, and
+module's record parsers read a `CSV.Record`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
 parser for your own input type, use `Parser.custom` with a
 function from input to `Ok({ value, rest })` or
