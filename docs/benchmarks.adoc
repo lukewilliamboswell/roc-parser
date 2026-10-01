@@ -132,8 +132,7 @@ $ .roc-parser-tmp/bench/full/bin/roc-yaml 100 < .roc-parser-tmp/bench/full/corpu
 link:{src}/bench/roc[`bench/roc/`] holds one driver per format, each a few
 lines calling the format's public entry point: `CSV.parse_str` with
 `Parser.many(CSV.field(CSV.string))`, `Yaml.parse_str`, `Xml.parse_str`,
-`String.parse_str` with `Markdown.all`, and `String.parse_str` with
-`HTTP.request` or `HTTP.response`. The timing loop is shared in
+`Markdown.parse_str`, and `HTTP.parse_request` or `HTTP.parse_response`. The timing loop is shared in
 `bench/roc/Bench.roc`. The harness builds each driver with
 `roc build --opt=speed`; never benchmark `roc dev` or an unoptimised build,
 which is many times slower.

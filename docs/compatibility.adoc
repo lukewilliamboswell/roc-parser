@@ -79,45 +79,54 @@ roc-parser, so applications need not add it themselves.
 
 == Changes in 2.0.0 at a glance
 
-Version 2.0.0 reworks every format parser to follow its specification and
-checks each one against a reference implementation (see
-<<conformance,Conformance>>). Many inputs now parse differently, so read the
-release notes on the {repo}/releases[releases page] before upgrading. In
-summary:
+Version 2.0.0 changes the API of every module and reworks every format parser
+to follow its specification, checked against a reference implementation (see
+<<conformance,Conformance>>). Code written for 1.x does not compile without
+changes, and many inputs now parse differently. The
+{src}/docs/releases/2.0.0.md[2.0.0 release notes] start with an upgrade guide that
+maps each old name to its replacement. In summary:
 
 [cols="1,4",options="header"]
 |===
 |Module |What changed
 
 |`Parser`, `Utf8`
-|`many` and `sep_by` stop when an element consumes no input instead of
-looping forever. Failure messages quote only a short prefix of the remaining
-input. `Utf8.digits` rejects values too large for `U64`.
+|The text parsers live in the `Utf8` module. Runners report the furthest failure as
+`ParseError({ message, offset })`, and partial runners return
+`{ value, rest }`. `maybe` returns `Try(a, [Missing])`. Several functions
+were renamed or removed, and
+`many` and `sep_by` stop when an element consumes no input instead of
+looping forever.
 
 |`CSV`
-|Parses RFC 4180: an optional final line break, lone CR line breaks, and any
-UTF-8 in fields. `CSV.u64` and `CSV.f64` read data such as `+5` and `1e-3`
-rather than Roc literal syntax.
+|`CSV.parse` decodes rows into records by header name. `CSV.Record` replaces
+the opaque record types, and every failure is
+`InvalidCsv({ record, field, line, column, message })`. Parses RFC 4180, with
+an optional final line break, lone CR line breaks and any UTF-8 in fields.
 
 |`HTTP`
-|Parses HTTP/1.1 per RFC 9112: decodes chunked bodies and rejects messages
-with ambiguous framing (both `Content-Length` and `Transfer-Encoding`, line
-folding, bare LF and similar). Requests that were accepted before may now fail.
+|`parse_request`, `parse_response` and `parse_requests` take bytes and fail
+with `InvalidHttp({ offset, message })`. Headers are `{ name, value }`
+records with a case-insensitive `HTTP.header` lookup, `Version` replaces
+`HttpVersion`, and `Method` gains `Extension(name)`. Parses HTTP/1.1 per
+RFC 9112 and rejects messages with ambiguous framing.
 
 |`Markdown`
-|Rebuilt on the CommonMark 0.31.2 parsing strategy, with GFM tables, task
-lists, strikethrough and extended autolinks. The tree types are unchanged, but
-many inputs now produce a different tree, and `Markdown.link` and
-`Markdown.image` accept titles and angle-bracket destinations. Adds the
+|`Markdown.parse_str` and `parse_inlines` return the tree directly, and the
+legacy single-construct parsers, the placeholder variant and the debug
+printers are gone. Rebuilt on the CommonMark 0.31.2 parsing strategy,
+with GFM tables, task lists, strikethrough and extended autolinks. Adds the
 roc-lang/unicode dependency.
 
 |`Xml`
-|Checks XML 1.0 well-formedness and adds `Xml.parse_str`, which reports the
-line and column of an error. Documents with a document type declaration are
-rejected.
+|`Xml.parse_str` reports `InvalidXml({ line, column, message })`, `parser`
+replaces `xml_parser`, elements are records, and optional parts of the
+declaration are `Try(_, [Missing])`. Checks XML 1.0 well-formedness and
+rejects documents with a document type declaration.
 
 |`Yaml`
-|Resolves plain scalars with the YAML 1.2 core schema, supports block scalars,
-compact and indentless sequences and all double-quoted escapes, and rejects
-unsupported features, such as anchors, instead of misreading them.
+|`Yaml.decode` reads a document into a record. Text scalars are `Text`, errors are `InvalidYaml`, and helpers such as `get_path` and
+`as_str` walk the tree. Resolves plain scalars with the YAML 1.2 core schema
+and rejects unsupported features, such as anchors, instead of misreading
+them.
 |===
