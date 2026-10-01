@@ -9,7 +9,7 @@ import parser.Xml
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and:
 ## - errors point at a real one-based line and byte column with a message;
-## - Xml.xml_parser agrees with Xml.parse_str;
+## - Xml.parser agrees with Xml.parse_str;
 ## - LF, CRLF, and CR line endings give the same result (XML 1.0 2.11);
 ## - a leading comment line gives the same tree, with errors one line lower.
 ##
@@ -17,7 +17,7 @@ import parser.Xml
 ## (deep nesting, many attributes, long text or references) whose size comes
 ## from the next bytes; it must parse to the expected shape within --timeout.
 
-Parsed : Try(Xml, [XmlError(Xml.Error)])
+Parsed : Try(Xml, [InvalidXml(Xml.Error)])
 
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
@@ -67,7 +67,7 @@ check_location : List(U8), Parsed -> {}
 check_location = |bytes, result| {
 	match result {
 		Ok(_) => {}
-		Err(XmlError(error)) => {
+		Err(InvalidXml(error)) => {
 			if error.line == 0 or error.column == 0 {
 				crash "XML error locations must be one-based: ${show(result)}"
 			}
@@ -88,21 +88,48 @@ check_location = |bytes, result| {
 
 check_combinator : Str, Parsed -> {}
 check_combinator = |input, result| {
-	combinator = Utf8.parse_str(Xml.xml_parser, input)
+	combinator = Utf8.parse_str(Xml.parser, input)
 	consistent =
 		match (result, combinator) {
 			(Ok(tree), Ok(other)) => tree == other
-			(Err(XmlError(error)), Err(ParseError({ message, offset: _ }))) =>
+			(Err(InvalidXml(error)), Err(ParseError({ message, offset }))) => {
+				location = line_column(input.to_utf8(), offset)
+				same_place = location.line == error.line and location.column == error.column
 				if message == "unexpected input" {
-					error.message == "unexpected content after the root element"
+					same_place and error.message == "unexpected content after the root element"
 				} else {
-					message == "${error.line.to_str()}:${error.column.to_str()}: ${error.message}"
+					same_place and message == error.message
 				}
-			_ => Bool.False
+			}
+			_ => False
 		}
 	if !consistent {
-		crash "Xml.xml_parser disagrees with Xml.parse_str\nparse_str: ${show(result)}\nxml_parser: ${Str.inspect(combinator)}"
+		crash "Xml.parser disagrees with Xml.parse_str\nparse_str: ${show(result)}\nparser: ${Str.inspect(combinator)}"
 	}
+}
+
+## One-based line and byte column of a byte offset, counting `\r\n`, `\r`
+## and `\n` as line ends, as Xml.Error does.
+line_column : List(U8), U64 -> { line : U64, column : U64 }
+line_column = |bytes, offset| {
+	var $line = 1
+	var $line_start = 0
+	var $index = 0
+	while $index < offset and $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		if byte == '\n' {
+			$line = $line + 1
+			$line_start = $index + 1
+		} else if byte == '\r' {
+			if $index + 1 < offset and bytes.get($index + 1) == Ok('\n') {
+				$index = $index + 1
+			}
+			$line = $line + 1
+			$line_start = $index + 1
+		}
+		$index = $index + 1
+	}
+	{ line: $line, column: offset - $line_start + 1 }
 }
 
 check_line_ends : Str, Parsed, Str -> {}
@@ -119,9 +146,9 @@ check_leading_comment = |input, result| {
 	consistent =
 		match (result, commented) {
 			(Ok(plain), Ok(with_comment)) => plain == with_comment
-			(Err(XmlError(plain)), Err(XmlError(with_comment))) =>
+			(Err(InvalidXml(plain)), Err(InvalidXml(with_comment))) =>
 				plain.line + 1 == with_comment.line and plain.column == with_comment.column and plain.message == with_comment.message
-			_ => Bool.False
+			_ => False
 		}
 	if !consistent {
 		crash "a leading comment changed the result\nplain:     ${show(result)}\ncommented: ${show(commented)}"
@@ -132,7 +159,7 @@ show : Parsed -> Str
 show = |result| {
 	match result {
 		Ok(xml) => Str.inspect(xml)
-		Err(XmlError(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 
@@ -170,7 +197,7 @@ pathological = |bytes| {
 				Ok(xml) => {
 					count =
 						match xml.root {
-							Element(_, parsed, []) => parsed.len()
+							Element({ name: _, attributes: parsed, children: [] }) => parsed.len()
 							_ => 0
 						}
 					if count != size {
@@ -188,7 +215,7 @@ pathological = |bytes| {
 			# Long text made of references.
 			input = "<t>${Str.repeat("&amp;&#x41;&lt;", size)}</t>"
 			expected = Str.repeat("&A<", size)
-			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element("t", [], [Text(expected)])) {
+			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
 				crash "${size.to_str()} references parsed wrongly"
 			}
 		}
@@ -196,7 +223,7 @@ pathological = |bytes| {
 			# Many siblings interleaved with comments and CDATA, merging into one text.
 			input = "<t>${Str.repeat("a<!--c-->b<![CDATA[c]]><?p?>", size)}</t>"
 			expected = Str.repeat("abc", size)
-			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element("t", [], [Text(expected)])) {
+			if Xml.parse_str(input).map_ok(|xml| xml.root) != Ok(Element({ name: "t", attributes: [], children: [Text(expected)] })) {
 				crash "${size.to_str()} merged text pieces parsed wrongly"
 			}
 		}
@@ -204,7 +231,7 @@ pathological = |bytes| {
 			# Unclosed deep nesting must fail at the end of input, not crash.
 			input = Str.repeat("<a>", size)
 			match Xml.parse_str(input) {
-				Err(XmlError(error)) if error.line == 1 and error.column == Str.count_utf8_bytes(input) + 1 => {}
+				Err(InvalidXml(error)) if error.line == 1 and error.column == Str.count_utf8_bytes(input) + 1 => {}
 				other => crash "unclosed nesting of ${size.to_str()} gave ${show(other)}"
 			}
 		}
@@ -221,20 +248,20 @@ nesting_depth = |result| {
 		Ok(xml) => {
 			var $node = xml.root
 			var $depth = 0
-			var $done = Bool.False
+			var $done = False
 			var $answer = Err(Unexpected)
 			while !$done {
 				match $node {
-					Element("a", [], [child]) => {
+					Element({ name: "a", attributes: [], children: [child] }) => {
 						$depth = $depth + 1
 						$node = child
 					}
 					Text("x") => {
 						$answer = Ok($depth)
-						$done = Bool.True
+						$done = True
 					}
 					_ => {
-						$done = Bool.True
+						$done = True
 					}
 				}
 			}

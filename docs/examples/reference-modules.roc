@@ -35,7 +35,7 @@ xml_root : Str -> Str
 xml_root = |text| {
 	match Xml.parse_str(text) {
 		Ok(doc) => Str.inspect(doc.root)
-		Err(XmlError(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+		Err(InvalidXml(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
 	}
 }
 

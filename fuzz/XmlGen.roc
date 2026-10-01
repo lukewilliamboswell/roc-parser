@@ -86,7 +86,7 @@ XmlGen := {}.{
 				.append(Mark(EpilogSlot))
 				.concat(epilog.pieces)
 				.append(Mark(EndSlot))
-		{ pieces, expected: { xml_declaration: declaration.value, root: root.node } }
+		{ pieces, expected: { declaration: declaration.value, root: root.node } }
 	}
 
 	## Show a document the way review_xml.py's corpus mode reads it.
@@ -143,36 +143,36 @@ element_names = ["a", "b", "x1", "h1", "ns:tag", "_u", "données", "Ω", "x.y-z"
 attribute_names : List(Str)
 attribute_names = ["id", "class", "x:y", "b", "é", "data-1", "_", "xml:lang", "xmlns"]
 
-gen_declaration : Cur -> { pieces : List(Piece), value : [Given(Xml.Declaration), Missing], cur : Cur }
+gen_declaration : Cur -> { pieces : List(Piece), value : Try(Xml.Declaration, [Missing]), cur : Cur }
 gen_declaration = |start| {
 	kind = pick(start, 4)
 	bom = pick(kind.cur, 4)
 	bom_text = if bom.n == 0 "\u(FEFF)" else ""
 	if kind.n == 0 {
-		{ pieces: [Lit(bom_text)], value: Missing, cur: bom.cur }
+		{ pieces: [Lit(bom_text)], value: Err(Missing), cur: bom.cur }
 	} else {
 		quote = choose(bom.cur, ["\"", "'"])
 		eq = choose(quote.cur, ["=", " = ", "\t=\n"])
-		version = pick(eq.cur, 3)
-		after_dot = [0, 1, 9].get(version.n) ?? 0
+		version = pick(eq.cur, 4)
+		minor = [0, 1, 9, 10].get(version.n) ?? 0
 		encoding = choose(version.cur, ["", "UTF-8", "utf-8", "Utf-8", "ISO-8859-1", "x_y.z-1"])
 		standalone = choose(encoding.cur, ["", "yes", "no"])
 		trailing = choose(standalone.cur, ["", " ", "\n"])
 		q = quote.s
 		encoding_text = if encoding.s.is_empty() "" else " encoding${eq.s}${q}${encoding.s}${q}"
 		standalone_text = if standalone.s.is_empty() "" else " standalone${eq.s}${q}${standalone.s}${q}"
-		text = "${bom_text}<?xml version${eq.s}${q}1.${after_dot.to_str()}${q}${encoding_text}${standalone_text}${trailing.s}?>"
+		text = "${bom_text}<?xml version${eq.s}${q}1.${minor.to_str()}${q}${encoding_text}${standalone_text}${trailing.s}?>"
 		encoding_value =
 			if encoding.s.is_empty() {
-				Missing
+				Err(Missing)
 			} else if ascii_lower(encoding.s) == "utf-8" {
-				Given(Utf8Encoding)
+				Ok(Utf8Encoding)
 			} else {
-				Given(OtherEncoding(encoding.s))
+				Ok(OtherEncoding(encoding.s))
 			}
 		{
 			pieces: [Lit(text)],
-			value: Given({ version: Xml.Version.new(after_dot), encoding: encoding_value }),
+			value: Ok({ version: { major: 1, minor }, encoding: encoding_value }),
 			cur: trailing.cur,
 		}
 	}
@@ -209,7 +209,7 @@ gen_misc = |start| {
 ## Comment text never contains "--" or ends with "-" (XML 1.0 [15]).
 gen_comment : Cur -> { pieces : List(Piece), cur : Cur }
 gen_comment = |start| {
-	body = gen_raw(start, Bool.True)
+	body = gen_raw(start, True)
 	{ pieces: [Lit("<!--"), Mark(CommentSlot), Lit("${body.s}-->")], cur: body.cur }
 }
 
@@ -223,7 +223,7 @@ gen_pi = |start| {
 		0 => { pieces: [Lit("<?${target.s}?>")], cur: form.cur }
 		_ => {
 			space = choose(form.cur, [" ", "\n", "\t  "])
-			body = gen_raw(space.cur, Bool.False)
+			body = gen_raw(space.cur, False)
 			{ pieces: [Lit("<?${target.s}${space.s}${body.s}?>")], cur: body.cur }
 		}
 	}
@@ -274,8 +274,8 @@ char_refs = |codes, style| {
 				match style % 4 {
 					0 => "&#${code.to_str()};"
 					1 => "&#000${code.to_str()};"
-					2 => "&#x${hex_digits(code, Bool.False)};"
-					_ => "&#x${hex_digits(code, Bool.True)};"
+					2 => "&#x${hex_digits(code, False)};"
+					_ => "&#x${hex_digits(code, True)};"
 				}
 			Str.concat(text, ref)
 		},
@@ -299,7 +299,7 @@ entity_for = |text| {
 Raw : { cr : Bool, brackets : U64 }
 
 fresh_raw : Raw
-fresh_raw = { cr: Bool.False, brackets: 0 }
+fresh_raw = { cr: False, brackets: 0 }
 
 after_literal : Raw, Str -> Raw
 after_literal = |raw, text| {
@@ -381,7 +381,7 @@ gen_attribute_value = |start, quote| {
 	var $cur = count.cur
 	var $text = ""
 	var $value = ""
-	var $cr = Bool.False
+	var $cr = False
 	var $index = 0
 	while $index < count.n {
 		chosen = pick($cur, text_alphabet.len())
@@ -389,7 +389,7 @@ gen_attribute_value = |start, quote| {
 		$cur = style.cur
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [0x61] }
 		forbidden = char.text == "<" or char.text == "&" or char.text == quote or ($cr and Str.starts_with(char.text, "\n"))
-		$cr = Bool.False
+		$cr = False
 		if style.n <= 2 and !forbidden {
 			$text = Str.concat($text, char.text)
 			$cr = Str.ends_with(char.text, "\r")
@@ -456,7 +456,7 @@ gen_element = |start, depth| {
 	if child_count.n == 0 {
 		form = pick($cur, 2)
 		if form.n == 0 {
-			return { pieces: $pieces.append(Lit("/>")), node: Element(name.s, $attributes, []), cur: form.cur }
+			return { pieces: $pieces.append(Lit("/>")), node: Element({ name: name.s, attributes: $attributes, children: [] }), cur: form.cur }
 		}
 		$cur = form.cur
 	}
@@ -501,7 +501,7 @@ gen_element = |start, depth| {
 	}
 	end_space = choose($cur, ["", "", " ", "\n"])
 	$pieces = $pieces.append(Mark(TextSlot)).append(EndTag({ name: name.s, space: end_space.s }))
-	{ pieces: $pieces, node: Element(name.s, $attributes, $children), cur: end_space.cur }
+	{ pieces: $pieces, node: Element({ name: name.s, attributes: $attributes, children: $children }), cur: end_space.cur }
 }
 
 hex_byte : U8 -> Str

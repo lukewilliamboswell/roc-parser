@@ -15,14 +15,14 @@ parse : Str -> Try(U64, U64)
 parse = |input| {
 	match Xml.parse_str(input) {
 		Ok(xml) => Ok(consume(xml.root))
-		Err(XmlError(error)) => Err(error.line + error.column)
+		Err(InvalidXml(error)) => Err(error.line + error.column)
 	}
 }
 
 consume : Xml.Node -> U64
 consume = |node| match node {
 	Text(text) => text.count_utf8_bytes().to_u64() + 1
-	Element(name, attributes, children) => {
+	Element({ name, attributes, children }) => {
 		attrs = attributes.fold(0, |total, attr| total + attr.name.count_utf8_bytes().to_u64() + attr.value.count_utf8_bytes().to_u64())
 		children.fold(name.count_utf8_bytes().to_u64() + attrs, |total, child| total + consume(child))
 	}

@@ -20,8 +20,8 @@ main! = |_| {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
 			match Xml.parse_str(input) {
-				Ok(xml) => Stdout.line!("{\"status\":\"ok\",\"declaration\":${encode_declaration(xml.xml_declaration)},\"root\":${encode(xml.root)}}")?
-				Err(XmlError(error)) =>
+				Ok(xml) => Stdout.line!("{\"status\":\"ok\",\"declaration\":${encode_declaration(xml.declaration)},\"root\":${encode(xml.root)}}")?
+				Err(InvalidXml(error)) =>
 					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(error.message)}}")?
 			}
 		}
@@ -29,16 +29,16 @@ main! = |_| {
 	Ok({})
 }
 
-encode_declaration : [Given(Xml.Declaration), Missing] -> Str
+encode_declaration : Try(Xml.Declaration, [Missing]) -> Str
 encode_declaration = |declaration| {
 	match declaration {
-		Missing => "null"
-		Given(given) => {
+		Err(Missing) => "null"
+		Ok(given) => {
 			encoding =
 				match given.encoding {
-					Missing => "null"
-					Given(Utf8Encoding) => "\"utf-8\""
-					Given(OtherEncoding(name)) => json_string(name)
+					Err(Missing) => "null"
+					Ok(Utf8Encoding) => "\"utf-8\""
+					Ok(OtherEncoding(name)) => json_string(name)
 				}
 			"{\"encoding\":${encoding}}"
 		}
@@ -49,9 +49,9 @@ encode : Xml.Node -> Str
 encode = |node| {
 	match node {
 		Text(text) => "[\"text\",${json_string(text)}]"
-		Element(name, attributes, children) => {
-			attrs = attributes.map(|attribute| "[${json_string(attribute.name)},${json_string(attribute.value)}]") |> Str.join_with(",")
-			"[\"element\",${json_string(name)},[${attrs}],[${children.map(encode) |> Str.join_with(",")}]]"
+		Element({ name, attributes, children }) => {
+			attrs = Str.join_with(attributes.map(|attribute| "[${json_string(attribute.name)},${json_string(attribute.value)}]"), ",")
+			"[\"element\",${json_string(name)},[${attrs}],[${Str.join_with(children.map(encode), ",")}]]"
 		}
 	}
 }

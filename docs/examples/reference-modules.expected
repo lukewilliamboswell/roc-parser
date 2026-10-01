@@ -1,7 +1,7 @@
 Ok((3, 4))
 Ok([{ age: 36, name: "Ada" }, { age: 41, name: "Alan" }])
 /index.html
-Element("greeting", [{ name: "lang", value: "en" }], [Text("hi")])
+Element({ attributes: [{ name: "lang", value: "en" }], children: [Text("hi")], name: "greeting" })
 1:7: end tag </a> does not match start tag <b>
 Mapping([{ key: "title", value: String("Notes") }, { key: "draft", value: Bool(False) }])
 Heading({ level: One, content: [Text("Title")] })

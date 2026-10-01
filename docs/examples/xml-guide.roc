@@ -19,50 +19,10 @@ feed_text =
 # end::document[]
 
 # tag::walk[]
-## The value of the attribute called `name`, if the element has one.
-attribute : List(Xml.Attribute), Str -> Try(Str, [NotFound])
-attribute = |attributes, name| {
-	match attributes.find_first(|attr| attr.name == name) {
-		Ok(attr) => Ok(attr.value)
-		Err(_) => Err(NotFound)
-	}
-}
-
-## All text directly or indirectly inside a node, joined in document order.
-text_of : Xml.Node -> Str
-text_of = |node| {
-	match node {
-		Text(text) => text
-		Element(_, _, children) => children.map(text_of) |> Str.join_with("")
-	}
-}
-
-## The child elements of `node` called `name`.
-children_named : Xml.Node, Str -> List(Xml.Node)
-children_named = |node, name| {
-	match node {
-		Element(_, _, children) =>
-			children.keep_if(
-				|child| {
-					match child {
-						Element(child_name, _, _) => child_name == name
-						Text(_) => Bool.False
-					}
-				},
-			)
-
-		Text(_) => []
-	}
-}
-
 describe_entry : Xml.Node -> Str
 describe_entry = |entry| {
-	id =
-		match entry {
-			Element(_, attributes, _) => attribute(attributes, "id") ?? "?"
-			Text(_) => "?"
-		}
-	titles = children_named(entry, "title").map(text_of) |> Str.join_with("")
+	id = entry.attribute("id") ?? "?"
+	titles = Str.join_with(entry.children_named("title").map(|title| title.text()), "")
 
 	"entry ${id}: ${titles}"
 }
@@ -74,7 +34,7 @@ check : Str -> Str
 check = |text| {
 	match Xml.parse_str(text) {
 		Ok(_) => "well-formed"
-		Err(XmlError({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
 	}
 }
 
@@ -85,11 +45,11 @@ print_feed! = |text| {
 	# tag::parse[]
 	match Xml.parse_str(text) {
 		Ok(xml) =>
-			for entry in children_named(xml.root, "entry") {
+			for entry in xml.root.children_named("entry") {
 				Stdout.line!(describe_entry(entry))?
 			}
 
-		Err(XmlError(problem)) => Stdout.line!("invalid XML: ${problem.message}")?
+		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${problem.message}")?
 	}
 	# end::parse[]
 	Ok({})

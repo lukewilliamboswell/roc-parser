@@ -9,7 +9,7 @@ import parser.Xml
 
 test : Str -> Fuzz.Outcome
 test = |input| {
-	match Utf8.parse_str(Xml.xml_parser, input) {
+	match Utf8.parse_str(Xml.parser, input) {
 		Ok(_) => Fuzz.keep
 		Err(_) => Fuzz.keep
 	}

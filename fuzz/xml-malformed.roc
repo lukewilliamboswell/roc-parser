@@ -11,7 +11,7 @@ import XmlGen
 ## Not-well-formed property: take a well-formed generated document (see
 ## XmlGen), apply one well-formedness violation at a known place, and require
 ## Xml.parse_str to reject it with an error at that place. Each mutation names
-## the XML 1.0 (5th ed.) production or constraint it breaks. Xml.xml_parser
+## the XML 1.0 (5th ed.) production or constraint it breaks. Xml.parser
 ## must reject it too (or stop before the violation, leaving input over).
 
 Mutation : {
@@ -115,7 +115,7 @@ insert = |pieces, located, insertion, which| {
 		|entry| {
 			match entry.piece {
 				Mark(slot) => slot == insertion.slot
-				_ => Bool.False
+				_ => False
 			}
 		},
 	)
@@ -140,8 +140,8 @@ rename_end_tag = |pieces, located, which| {
 	tags = located.keep_if(
 		|entry| {
 			match entry.piece {
-				EndTag(_) => Bool.True
-				_ => Bool.False
+				EndTag(_) => True
+				_ => False
 			}
 		},
 	)
@@ -186,7 +186,7 @@ test : Mutation -> Fuzz.Outcome
 test = |mutation| {
 	match Xml.parse_str(mutation.xml) {
 		Ok(_) => crash "accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
-		Err(XmlError(error)) => {
+		Err(InvalidXml(error)) => {
 			low = XmlGen.line_column(mutation.xml, mutation.low)
 			high = XmlGen.line_column(mutation.xml, mutation.high)
 			at = { line: error.line, column: error.column }
@@ -196,8 +196,8 @@ test = |mutation| {
 			}
 		}
 	}
-	if Utf8.parse_str(Xml.xml_parser, mutation.xml).is_ok() {
-		crash "Xml.xml_parser accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
+	if Utf8.parse_str(Xml.parser, mutation.xml).is_ok() {
+		crash "Xml.parser accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
 	}
 	Fuzz.keep
 }

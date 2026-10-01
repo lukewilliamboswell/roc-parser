@@ -23,14 +23,29 @@ import Utf8
 ## `svg:path` is kept as written. Input is already decoded text, so a declared
 ## encoding is reported but not used to decode.
 ##
+## Read a document with [Xml.parse_str], then walk it with pattern matching or
+## the [Xml.Node] helpers `name`, `attribute`, `children_named` and `text`:
+##
+## ```roc
+## expect {
+##     xml = Xml.parse_str("<feed><title>News</title><link href='/a'/></feed>")?
+##     titles = xml.root.children_named("title").map(|title| title.text())
+##     links = xml.root.children_named("link").map(|link| link.attribute("href"))
+##     titles == ["News"] and links == [Ok("/a")]
+## }
+## ```
+##
 ## Originally written by [Johannes Maas](https://github.com/j-maas).
 Xml := {
-	xml_declaration : [Given(Xml.Declaration), Missing],
+	declaration : Try(Xml.Declaration, [Missing]),
 	root : Xml.Node,
 }.{
 
 	## Compare two XML documents structurally (declaration and tree).
 	is_eq : _
+
+	## Hash an XML document, so documents can be `Dict` keys and `Set` members.
+	to_hash : _
 
 	## An XML attribute name and decoded value.
 	##
@@ -46,40 +61,136 @@ Xml := {
 		OtherEncoding(Str),
 	]
 
-	## Version and optional encoding from an XML declaration.
+	## Version and optional encoding from an XML declaration. An absent
+	## encoding is `Err(Missing)`.
 	Declaration : {
 		version : Version,
-		encoding : [Given(TextEncoding), Missing],
+		encoding : Try(TextEncoding, [Missing]),
 	}
 
-	## An XML 1.x version, storing the number after `1.`.
-	Version :: {
-		after_dot : U8,
-	}.{
-
-		## Compare two XML versions.
-		is_eq : _
-
-		## Construct an XML 1.x version from the number after `1.`.
-		new : U8 -> Version
-		new = |after_dot| {
-			{ after_dot }
-		}
-	}
+	## An XML version from the declaration, such as `{ major: 1, minor: 0 }`
+	## for `version="1.0"`. Only `1.x` versions are accepted, so `major` is
+	## always `1`.
+	Version : { major : U64, minor : U64 }
 
 	## An XML element or text node.
 	##
-	## `Element(name, attributes, children)` holds the children in document
-	## order. `Text(str)` is decoded character data; adjacent text, CDATA and
-	## references are merged into one `Text`, and whitespace-only text between
-	## elements is kept.
+	## An `Element` holds its `name` as written, its `attributes` in source
+	## order, and its `children` in document order. `Text(str)` is decoded
+	## character data; adjacent text, CDATA and references are merged into one
+	## `Text`, and whitespace-only text between elements is kept.
 	Node := [
-		Element(Str, List({ name : Str, value : Str }), List(Node)),
+		Element({ name : Str, attributes : List(Xml.Attribute), children : List(Node) }),
 		Text(Str),
 	].{
 
 		## Compare two XML nodes structurally.
 		is_eq : _
+
+		## Hash an XML node, so nodes can be `Dict` keys and `Set` members.
+		to_hash : _
+
+		## The name of an element, or `Err(NotAnElement)` for a text node.
+		##
+		## ```roc
+		## expect Xml.parse_str("<svg:rect/>").map_ok(|xml| xml.root.name()) == Ok(Ok("svg:rect"))
+		## ```
+		name : Node -> Try(Str, [NotAnElement])
+		name = |node| {
+			match node {
+				Element(element) => Ok(element.name)
+				Text(_) => Err(NotAnElement)
+			}
+		}
+
+		## The value of the element's attribute with this exact name, or
+		## `Err(Missing)` when there is none or the node is text.
+		##
+		## ```roc
+		## expect {
+		##     root = Xml.parse_str("<a href='/x'/>")?.root
+		##     root.attribute("href") == Ok("/x") and root.attribute("title") == Err(Missing)
+		## }
+		## ```
+		attribute : Node, Str -> Try(Str, [Missing])
+		attribute = |node, attribute_name| {
+			match node {
+				Element(element) =>
+					match element.attributes.find_first(|attr| attr.name == attribute_name) {
+						Ok(attr) => Ok(attr.value)
+						Err(_) => Err(Missing)
+					}
+
+				Text(_) => Err(Missing)
+			}
+		}
+
+		## The element's direct child elements with this exact name, in
+		## document order. Empty for a text node.
+		##
+		## ```roc
+		## expect {
+		##     root = Xml.parse_str("<list><item>1</item><other/><item>2</item></list>")?.root
+		##     root.children_named("item").map(|item| item.text()) == ["1", "2"]
+		## }
+		## ```
+		children_named : Node, Str -> List(Node)
+		children_named = |node, child_name| {
+			match node {
+				Element(element) =>
+					element.children.keep_if(
+						|child| {
+							match child {
+								Element(child_element) => child_element.name == child_name
+								Text(_) => False
+							}
+						},
+					)
+
+				Text(_) => []
+			}
+		}
+
+		## All character data in the node and its descendants, concatenated in
+		## document order (like the DOM's `textContent`).
+		##
+		## ```roc
+		## expect Xml.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()) == Ok("Hello, world!")
+		## ```
+		text : Node -> Str
+		text = |node| {
+			# An explicit work list keeps deep trees from exhausting the call stack.
+			var $out = []
+			var $pending = [node]
+			while !$pending.is_empty() {
+				match $pending.last() {
+					Ok(Text(str)) => {
+						$out = $out.concat(str.to_utf8())
+						$pending = $pending.drop_last(1)
+					}
+
+					Ok(Element(element)) => {
+						$pending = $pending.drop_last(1)
+						var $index = element.children.len()
+						while $index > 0 {
+							$index = $index - 1
+							match element.children.get($index) {
+								Ok(child) => {
+									$pending = $pending.append(child)
+								}
+
+								Err(_) => {}
+							}
+						}
+					}
+
+					Err(_) => {
+						$pending = []
+					}
+				}
+			}
+			Str.from_utf8($out) ?? ""
+		}
 	}
 
 	## Location and explanation of malformed XML. Lines and columns are
@@ -94,16 +205,11 @@ Xml := {
 	## A leading byte order mark is accepted.
 	##
 	## ```roc
-	## expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element("a", [], [Text("x & y")]))
+	## expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
 	##
-	## expect {
-	##     match Xml.parse_str("<a>&nbsp;</a>") {
-	##         Err(XmlError({ line, column, message: _ })) => line == 1 and column == 4
-	##         Ok(_) => Bool.False
-	##     }
-	## }
+	## expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, message: "undeclared entity &nbsp;" }))
 	## ```
-	parse_str : Str -> Try(Xml, [XmlError(Error)])
+	parse_str : Str -> Try(Xml, [InvalidXml(Error)])
 	parse_str = |input| {
 		bytes = input.to_utf8()
 		match parse_document(bytes) {
@@ -111,33 +217,34 @@ Xml := {
 				if pos == bytes.len() {
 					Ok(val)
 				} else {
-					Err(XmlError(locate(bytes, pos, "unexpected content after the root element")))
+					Err(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
 				}
 
-			Err(XmlFail(failure)) => Err(XmlError(locate(bytes, failure.offset, failure.message)))
+			Err(XmlFail(failure)) => Err(InvalidXml(locate(bytes, failure.offset, failure.message)))
 		}
 	}
 
 	## Parse one XML document, including an optional declaration and any
-	## trailing comments, processing instructions, and whitespace. Input left
-	## after that is returned to the caller. Failures read `line:column: message`.
+	## trailing comments, processing instructions and whitespace, and leave
+	## the input after that for the next parser.
 	##
-	## Use this to embed an XML document in a larger parser; otherwise prefer
-	## `parse_str`, which reports a structured `Error`.
+	## A failure is `ParseError({ message, offset })` with the same message
+	## [Xml.parse_str] reports and the byte offset of the problem. Use this to
+	## embed an XML document in a larger parser; otherwise prefer
+	## [Xml.parse_str], which reports a line and column.
 	##
 	## ```roc
-	## expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
+	## expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ message: "end tag </b> does not match start tag <a>", offset: 3 }))
+	##
+	## expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
 	## ```
-	xml_parser : Parser(Utf8.Bytes, Xml)
-	xml_parser =
+	parser : Parser(Utf8.Bytes, Xml)
+	parser =
 		Parser.custom(
 			|input| {
 				match parse_document(input) {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
-					Err(XmlFail(failure)) => {
-						error = locate(input, failure.offset, failure.message)
-						Err(ParseError({ message: "${error.line.to_str()}:${error.column.to_str()}: ${error.message}", offset: failure.offset }))
-					}
+					Err(XmlFail(failure)) => Err(ParseError({ message: failure.message, offset: failure.offset }))
 				}
 			},
 		)
@@ -147,11 +254,12 @@ Failure : { offset : U64, message : Str }
 
 Parsed(a) : Try({ val : a, pos : U64 }, [XmlFail(Failure)])
 
-Frame : {
+## An element whose end tag has not been read yet. Its children so far are
+## the entries of the shared node list from `first_child` on.
+Open : {
 	name : Str,
 	attributes : List(Xml.Attribute),
-	children : List(Xml.Node),
-	text : List(U8),
+	first_child : U64,
 }
 
 StartTag : {
@@ -190,10 +298,10 @@ locate = |bytes, offset, message| {
 parse_document : List(U8) -> Parsed(Xml)
 parse_document = |bytes| {
 	var $pos = if starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF]) 3 else 0
-	var $declaration = Missing
+	var $declaration = Err(Missing)
 	if starts_with_at(bytes, $pos, "<?xml".to_utf8()) and is_space_at(bytes, $pos + 5) {
 		parsed = parse_xml_declaration(bytes, $pos)?
-		$declaration = Given(parsed.val)
+		$declaration = Ok(parsed.val)
 		$pos = parsed.pos
 	}
 	$pos = skip_misc(bytes, $pos)?
@@ -209,7 +317,7 @@ parse_document = |bytes| {
 	}
 	root = parse_element(bytes, $pos)?
 	end = skip_misc(bytes, root.pos)?
-	Ok({ val: { xml_declaration: $declaration, root: root.val }, pos: end })
+	Ok({ val: { declaration: $declaration, root: root.val }, pos: end })
 }
 
 # See https://www.w3.org/TR/xml/#NT-XMLDecl
@@ -227,23 +335,22 @@ parse_xml_declaration = |bytes, start| {
 	if !starts_with_at(bytes, $pos + 1, "1.".to_utf8()) or !is_digit_at(bytes, $pos + 3) {
 		return fail($pos + 1, "expected an XML version of the form 1.x")
 	}
-	var $after_dot = 0
+	var $minor = 0
 	$pos = $pos + 3
 	while is_digit_at(bytes, $pos) {
-		next_value = $after_dot * 10 + U8.to_u64((bytes.get($pos) ?? '0') - '0')
-		$after_dot = if next_value > 1000 1000 else next_value
+		if $minor >= 100_000_000_000_000_000 {
+			return fail(start, "the XML version number is too large")
+		}
+		$minor = $minor * 10 + U8.to_u64((bytes.get($pos) ?? '0') - '0')
 		$pos = $pos + 1
 	}
 	if bytes.get($pos) != Ok(version_quote) {
 		return fail($pos, "expected the XML version to end with a matching quote")
 	}
-	version = match U64.to_u8_try($after_dot) {
-		Ok(digit) => Xml.Version.new(digit)
-		Err(_) => return fail(start, "XML versions above 1.255 are not supported")
-	}
+	version = { major: 1, minor: $minor }
 	$pos = $pos + 1
 
-	var $encoding = Missing
+	var $encoding = Err(Missing)
 	after_version = skip_space(bytes, $pos)
 	$pos = after_version
 	if starts_with_at(bytes, $pos, "encoding".to_utf8()) {
@@ -269,9 +376,9 @@ parse_xml_declaration = |bytes, start| {
 		name = bytes.sublist({ start: name_start, len: $pos - name_start })
 		$encoding =
 			if ascii_lowercase(name) == "utf-8".to_utf8() {
-				Given(Utf8Encoding)
+				Ok(Utf8Encoding)
 			} else {
-				Given(OtherEncoding(Str.from_utf8(name) ?? ""))
+				Ok(OtherEncoding(Str.from_utf8(name) ?? ""))
 			}
 		$pos = skip_space(bytes, $pos + 1)
 	}
@@ -329,7 +436,7 @@ skip_eq = |bytes, start| {
 skip_misc : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
 skip_misc = |bytes, start| {
 	var $pos = start
-	var $done = Bool.False
+	var $done = False
 	while !$done {
 		if is_space_at(bytes, $pos) {
 			$pos = $pos + 1
@@ -338,7 +445,7 @@ skip_misc = |bytes, start| {
 		} else if starts_with_at(bytes, $pos, "<?".to_utf8()) {
 			$pos = skip_processing_instruction(bytes, $pos)?
 		} else {
-			$done = Bool.True
+			$done = True
 		}
 	}
 	Ok($pos)
@@ -416,51 +523,69 @@ parse_cdata = |bytes, start, text| {
 # See https://www.w3.org/TR/xml/#NT-element
 #
 # Elements are parsed with an explicit stack so deep nesting cannot exhaust
-# the call stack.
+# the call stack. The children of every open element live in one flat
+# `$nodes` list (each `Open` frame remembers where its children start), and
+# the text being collected lives in `$text`. Both are plain variables that
+# nothing else refers to, so appending updates them in place; an element's
+# children are copied out once, when its end tag is read. Keeping each
+# element's children inside its stack frame instead made every append to a
+# parent copy the whole child list, which was quadratic in the number of
+# siblings.
 parse_element : List(U8), U64 -> Parsed(Xml.Node)
 parse_element = |bytes, start| {
 	first = parse_start_tag(bytes, start)?
 	if first.empty {
-		return Ok({ val: Element(first.name, first.attributes, []), pos: first.pos })
+		return Ok({ val: Element({ name: first.name, attributes: first.attributes, children: [] }), pos: first.pos })
 	}
-	var $stack = []
-	var $current = { name: first.name, attributes: first.attributes, children: [], text: [] }
+	var $open = []
+	var $name = first.name
+	var $attributes = first.attributes
+	var $first_child = 0
+	var $nodes = []
+	var $text = []
 	var $pos = first.pos
-	while Bool.True {
+	while True {
 		byte =
 			match bytes.get($pos) {
 				Ok(b) => b
-				Err(_) => return fail($pos, "expected </${$current.name}> before the end of the document")
+				Err(_) => return fail($pos, "expected </${$name}> before the end of the document")
 			}
 		if byte == '<' {
 			next = bytes.get($pos + 1) ?? 0
 			if next == '/' {
-				name =
+				end_name =
 					match parse_name(bytes, $pos + 2) {
 						Ok(parsed) => parsed
 						Err(_) => return fail($pos + 2, "expected an element name in the end tag")
 					}
-				if name.val != $current.name {
-					return fail($pos, "end tag </${name.val}> does not match start tag <${$current.name}>")
+				if end_name.val != $name {
+					return fail($pos, "end tag </${end_name.val}> does not match start tag <${$name}>")
 				}
-				close = skip_space(bytes, name.pos)
+				close = skip_space(bytes, end_name.pos)
 				if bytes.get(close) != Ok('>') {
 					return fail(close, "expected '>' to close the end tag")
 				}
 				$pos = close + 1
-				node = Element($current.name, $current.attributes, flush_text($current.children, $current.text))
-				match $stack.last() {
+				if !$text.is_empty() {
+					$nodes = $nodes.append(text_node($text))
+					$text = []
+				}
+				node = Element({ name: $name, attributes: $attributes, children: copy_from($nodes, $first_child) })
+				match $open.last() {
 					Err(_) => return Ok({ val: node, pos: $pos })
 					Ok(parent) => {
-						$stack = $stack.drop_last(1)
-						$current = { name: parent.name, attributes: parent.attributes, children: flush_text(parent.children, parent.text).append(node), text: [] }
+						$open = $open.drop_last(1)
+						$nodes = truncate($nodes, $first_child).append(node)
+						$name = parent.name
+						$attributes = parent.attributes
+						$first_child = parent.first_child
 					}
 				}
 			} else if starts_with_at(bytes, $pos, "<!--".to_utf8()) {
 				$pos = skip_comment(bytes, $pos)?
 			} else if starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
-				parsed = parse_cdata(bytes, $pos, $current.text)?
-				$current = { ..$current, text: parsed.val }
+				parsed = parse_cdata(bytes, $pos, $text)?
+				$text = parsed.val
 				$pos = parsed.pos
 			} else if next == '?' {
 				$pos = skip_processing_instruction(bytes, $pos)?
@@ -469,41 +594,71 @@ parse_element = |bytes, start| {
 			} else {
 				tag = parse_start_tag(bytes, $pos)?
 				$pos = tag.pos
+				if !$text.is_empty() {
+					$nodes = $nodes.append(text_node($text))
+					$text = []
+				}
 				if tag.empty {
-					$current = { ..$current, children: flush_text($current.children, $current.text).append(Element(tag.name, tag.attributes, [])), text: [] }
+					$nodes = $nodes.append(Element({ name: tag.name, attributes: tag.attributes, children: [] }))
 				} else {
-					$stack = $stack.append($current)
-					$current = { name: tag.name, attributes: tag.attributes, children: [], text: [] }
+					$open = $open.append({ name: $name, attributes: $attributes, first_child: $first_child })
+					$name = tag.name
+					$attributes = tag.attributes
+					$first_child = $nodes.len()
 				}
 			}
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
-			$current = { ..$current, text: $current.text.concat(reference.val) }
+			$text = $text.concat(reference.val)
 			$pos = reference.pos
 		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
 			return fail($pos, "']]>' is not allowed in character data")
 		} else if byte == '\r' {
-			$current = { ..$current, text: $current.text.append('\n') }
+			$text = $text.append('\n')
 			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
 		} else if byte >= 0x20 and byte < 0x80 {
-			$current = { ..$current, text: $current.text.append(byte) }
+			$text = $text.append(byte)
 			$pos = $pos + 1
 		} else {
 			next = check_char(bytes, $pos)?
-			$current = { ..$current, text: $current.text.concat(bytes.sublist({ start: $pos, len: next - $pos })) }
+			$text = $text.concat(bytes.sublist({ start: $pos, len: next - $pos }))
 			$pos = next
 		}
 	}
 	crash "unreachable: the element loop only exits by returning"
 }
 
-flush_text : List(Xml.Node), List(U8) -> List(Xml.Node)
-flush_text = |children, text| {
-	if text.is_empty() {
-		children
-	} else {
-		children.append(Text(Str.from_utf8(text) ?? ""))
+text_node : List(U8) -> Xml.Node
+text_node = |text| Text(Str.from_utf8(text) ?? "")
+
+## A fresh copy of the nodes from `start` on, so the shared list stays
+## uniquely referenced.
+copy_from : List(Xml.Node), U64 -> List(Xml.Node)
+copy_from = |nodes, start| {
+	var $out = List.with_capacity(nodes.len() - start)
+	var $index = start
+	while $index < nodes.len() {
+		match nodes.get($index) {
+			Ok(node) => {
+				$out = $out.append(node)
+			}
+
+			Err(_) => {}
+		}
+		$index = $index + 1
 	}
+	$out
+}
+
+## Drop the nodes from `len` on, one at a time from the end so the list
+## keeps its allocation.
+truncate : List(Xml.Node), U64 -> List(Xml.Node)
+truncate = |nodes, len| {
+	var $out = nodes
+	while $out.len() > len {
+		$out = $out.drop_last(1)
+	}
+	$out
 }
 
 # See https://www.w3.org/TR/xml/#NT-STag and https://www.w3.org/TR/xml/#NT-EmptyElemTag
@@ -518,14 +673,14 @@ parse_start_tag = |bytes, start| {
 	# A set keeps the Unique Att Spec check linear in the attribute count.
 	var $seen = Set.empty()
 	var $pos = name.pos
-	while Bool.True {
+	while True {
 		before_space = $pos
 		$pos = skip_space(bytes, $pos)
 		if bytes.get($pos) == Ok('>') {
-			return Ok({ name: name.val, attributes: $attributes, empty: Bool.False, pos: $pos + 1 })
+			return Ok({ name: name.val, attributes: $attributes, empty: False, pos: $pos + 1 })
 		}
 		if starts_with_at(bytes, $pos, "/>".to_utf8()) {
-			return Ok({ name: name.val, attributes: $attributes, empty: Bool.True, pos: $pos + 2 })
+			return Ok({ name: name.val, attributes: $attributes, empty: True, pos: $pos + 2 })
 		}
 		if $pos >= bytes.len() {
 			return fail($pos, "expected '>' to close the start tag <${name.val}>")
@@ -618,7 +773,7 @@ parse_char_reference : List(U8), U64, U64, U32 -> Parsed(List(U8))
 parse_char_reference = |bytes, start, digits_start, base| {
 	var $code = 0
 	var $pos = digits_start
-	var $done = Bool.False
+	var $done = False
 	while !$done {
 		digit = digit_value(bytes.get($pos) ?? 0)
 		if digit < base {
@@ -626,7 +781,7 @@ parse_char_reference = |bytes, start, digits_start, base| {
 			$code = if next_code > 0x110000 0x110000 else next_code
 			$pos = $pos + 1
 		} else {
-			$done = Bool.True
+			$done = True
 		}
 	}
 	if $pos == digits_start {
@@ -663,13 +818,13 @@ parse_name = |bytes, start| {
 		return Err(NotAName)
 	}
 	var $pos = start + first.len
-	var $done = Bool.False
+	var $done = False
 	while !$done {
 		scalar = decode_scalar(bytes, $pos) ?? { code: 0, len: 0 }
 		if is_name_char(scalar.code) {
 			$pos = $pos + scalar.len
 		} else {
-			$done = Bool.True
+			$done = True
 		}
 	}
 	Ok({ val: Str.from_utf8(bytes.sublist({ start, len: $pos - start })) ?? "", pos: $pos })
@@ -801,7 +956,7 @@ is_space_at : List(U8), U64 -> Bool
 is_space_at = |bytes, pos| {
 	match bytes.get(pos) {
 		Ok(byte) => is_space(byte)
-		Err(_) => Bool.False
+		Err(_) => False
 	}
 }
 
@@ -809,7 +964,7 @@ is_digit_at : List(U8), U64 -> Bool
 is_digit_at = |bytes, pos| {
 	match bytes.get(pos) {
 		Ok(byte) => byte >= '0' and byte <= '9'
-		Err(_) => Bool.False
+		Err(_) => False
 	}
 }
 
@@ -823,17 +978,20 @@ is_encoding_char = |c| is_alphabetical(c) or (c >= '0' and c <= '9') or c == '.'
 ascii_lowercase : List(U8) -> List(U8)
 ascii_lowercase = |bytes| bytes.map(|c| if c >= 'A' and c <= 'Z' c + 32 else c)
 
-v1_dot0 : Xml.Version
-v1_dot0 = Xml.Version.new(0)
+v1_0 : Xml.Version
+v1_0 = { major: 1, minor: 0 }
 
-root_of : Str -> Try(Xml.Node, [XmlError(Xml.Error)])
+element : Str, List(Xml.Attribute), List(Xml.Node) -> Xml.Node
+element = |name, attributes, children| Element({ name, attributes, children })
+
+root_of : Str -> Try(Xml.Node, [InvalidXml(Xml.Error)])
 root_of = |input| Xml.parse_str(input).map_ok(|xml| xml.root)
 
 error_at : Str -> Try({ line : U64, column : U64 }, [Parsed])
 error_at = |input| {
 	match Xml.parse_str(input) {
 		Ok(_) => Err(Parsed)
-		Err(XmlError(error)) => Ok({ line: error.line, column: error.column })
+		Err(InvalidXml(error)) => Ok({ line: error.line, column: error.column })
 	}
 }
 
@@ -843,58 +1001,55 @@ test_xml =
 	\\    <element arg=\"value\" />
 	\\</root>
 
-## Full XML parsing captures the declaration and root element.
+# Full XML parsing captures the declaration and root element.
 expect {
-	result = Utf8.parse_str(Xml.xml_parser, test_xml)?
+	result = Utf8.parse_str(Xml.parser, test_xml)?
 
 	result
 		== {
-			xml_declaration: Given({
-				version: v1_dot0,
-				encoding: Given(Utf8Encoding),
+			declaration: Ok({
+				version: v1_0,
+				encoding: Ok(Utf8Encoding),
 			}),
-			root: Element(
+			root: element(
 				"root",
 				[],
 				[
 					Text("\n    "),
-					Element(
-						"element",
-						[{ name: "arg", value: "value" }],
-						[],
-					),
+					element("element", [{ name: "arg", value: "value" }], []),
 					Text("\n"),
 				],
 			),
 		}
 }
 
-## XML parsing accepts documents without a prolog.
+# XML parsing accepts documents without a prolog.
 expect {
-	result = Utf8.parse_str(Xml.xml_parser, "<element />")?
-
-	result
-		== {
-			xml_declaration: Missing,
-			root: Element("element", [], []),
-		}
+	result = Utf8.parse_str(Xml.parser, "<element />")?
+	result == { declaration: Err(Missing), root: element("element", [], []) }
 }
 
-## Empty elements can omit whitespace before the self-closing marker.
-expect root_of("<element/>") == Ok(Element("element", [], []))
+# A declaration without an encoding reports it as missing, and versions
+# keep every digit after the dot.
+expect Xml.parse_str("<?xml version='1.10'?><a/>").map_ok(|xml| xml.declaration) == Ok(Ok({ version: { major: 1, minor: 10 }, encoding: Err(Missing) }))
+expect Xml.parse_str("<?xml version='1.0' encoding='latin1'?><a/>").map_ok(|xml| xml.declaration) == Ok(Ok({ version: v1_0, encoding: Ok(OtherEncoding("latin1")) }))
+expect error_at("<?xml version='1.99999999999999999999'?><a/>") == Ok({ line: 1, column: 1 })
 
-## Empty elements can carry attributes.
-expect root_of("<element arg=\"value\"/>") == Ok(Element("element", [{ name: "arg", value: "value" }], []))
+# Empty elements can omit whitespace before the self-closing marker.
+expect root_of("<element/>") == Ok(element("element", [], []))
 
-## Explicit start and end tags can represent an empty element.
-expect root_of("<element></element>") == Ok(Element("element", [], []))
+# Empty elements can carry attributes.
+expect root_of("<element arg=\"value\"/>") == Ok(element("element", [{ name: "arg", value: "value" }], []))
 
-## Elements can parse multiple attributes and text content.
+# Explicit start and end tags can represent an empty element.
+expect root_of("<element></element>") == Ok(element("element", [], []))
+
+# Elements can parse multiple attributes and text content.
 expect {
 	result = root_of("<element firstArg=\"one\" secondArg='two'>text content</element>")
 	result
 		== Ok(
-			Element(
+			element(
 				"element",
 				[
 					{ name: "firstArg", value: "one" },
@@ -905,22 +1060,25 @@ expect {
 		)
 }
 
-## CDATA sections parse into text nodes.
-expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(Element("element", [], [Text("<literal />")]))
+# CDATA sections parse into text nodes.
+expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(element("element", [], [Text("<literal />")]))
 
-## Partial CDATA closing text is preserved until the real close marker.
-expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(Element("element", [], [Text("this is ]] not ]> the end")]))
+# Partial CDATA closing text is preserved until the real close marker.
+expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(element("element", [], [Text("this is ]] not ]> the end")]))
 
-## Nested elements preserve attributes on parent and child nodes.
+# Nested elements preserve attributes on parent and child nodes.
 expect {
 	result = root_of("<parent argParent=\"outer\"><child argChild=\"inner\" /></parent>")
-	result == Ok(Element("parent", [{ name: "argParent", value: "outer" }], [Element("child", [{ name: "argChild", value: "inner" }], [])]))
+	result == Ok(element("parent", [{ name: "argParent", value: "outer" }], [element("child", [{ name: "argChild", value: "inner" }], [])]))
 }
 
-## Nested element parsing preserves whitespace text nodes.
-expect root_of("<parent>\n    <child />\n</parent>") == Ok(Element("parent", [], [Text("\n    "), Element("child", [], []), Text("\n")]))
+# Nested element parsing preserves whitespace text nodes.
+expect root_of("<parent>\n    <child />\n</parent>") == Ok(element("parent", [], [Text("\n    "), element("child", [], []), Text("\n")]))
 
-## Elements can parse a diverse set of child nodes.
+# Siblings and nested children end up under the right parents.
+expect root_of("<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>") == Ok(element("a", [], [Text("1"), element("b", [], [Text("2"), element("c", [], []), Text("3")]), Text("4"), element("d", [], [element("e", [], [Text("5")])]), Text("6")]))
+
+# Elements can parse a diverse set of child nodes.
 expect {
 	result = root_of(
 		\\<feed xmlns="http://www.w3.org/2005/Atom">
@@ -933,14 +1091,14 @@ expect {
 
 	result
 		== Ok(
-			Element(
+			element(
 				"feed",
 				[{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
 				[
 					Text("\n    "),
-					Element("title", [], [Text("Atom Feed")]),
+					element("title", [], [Text("Atom Feed")]),
 					Text("\n    "),
-					Element(
+					element(
 						"link",
 						[
 							{ name: "rel", value: "self" },
@@ -950,122 +1108,195 @@ expect {
 						[],
 					),
 					Text("\n    "),
-					Element("updated", [], [Text("2024-02-23T20:38:24Z")]),
+					element("updated", [], [Text("2024-02-23T20:38:24Z")]),
 					Text("\n"),
 				],
 			),
 		)
 }
 
-## Full XML parsing ignores trailing whitespace after the root, and matches
-## encoding names case-insensitively (XML 1.0 section 4.3.3).
+# Full XML parsing ignores trailing whitespace after the root, and matches
+# encoding names case-insensitively (XML 1.0 section 4.3.3).
 expect {
 	result = Xml.parse_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><Example></Example></root>\n")
 	result
 		== Ok({
-			xml_declaration: Given({ version: v1_dot0, encoding: Given(Utf8Encoding) }),
-			root: Element("root", [], [Element("Example", [], [])]),
+			declaration: Ok({ version: v1_0, encoding: Ok(Utf8Encoding) }),
+			root: element("root", [], [element("Example", [], [])]),
 		})
 }
 
-## Malformed input ending in a multibyte scalar returns an error instead of crashing
-## while rendering a parser failure from a mid-scalar byte position.
-expect Utf8.parse_str(Xml.xml_parser, "<ӿ").is_err()
+# Malformed input ending in a multibyte scalar returns an error instead of crashing
+# while rendering a parser failure from a mid-scalar byte position.
+expect Utf8.parse_str(Xml.parser, "<ӿ").is_err()
 
-## End tags must match their start tag (WFC: Element Type Match).
+# End tags must match their start tag (WFC: Element Type Match).
 expect error_at("<a><b></a></b>") == Ok({ line: 1, column: 7 })
 
-## Names may contain digits and non-ASCII letters.
-expect root_of("<h1 données-2='x'>é</h1>") == Ok(Element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
+# Names may contain digits and non-ASCII letters.
+expect root_of("<h1 données-2='x'>é</h1>") == Ok(element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
 
-## Predefined entity and character references are replaced in text and attributes.
-expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(Element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
+# Predefined entity and character references are replaced in text and attributes.
+expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
 
-## Undeclared entities, bare ampersands, and references to illegal characters are errors.
+# Undeclared entities, bare ampersands, and references to illegal characters are errors.
 expect error_at("<a>&nbsp;</a>") == Ok({ line: 1, column: 4 })
 expect error_at("<a>AT&T</a>") == Ok({ line: 1, column: 8 })
 expect error_at("<a>&#0;</a>").is_ok()
 expect error_at("<a>&#xD800;</a>").is_ok()
 expect error_at("<a>&#99999999999999999999;</a>").is_ok()
 
-## '<' is not allowed in attribute values, and attributes need quotes,
-## separating whitespace, and unique names.
+# '<' is not allowed in attribute values, and attributes need quotes,
+# separating whitespace, and unique names.
 expect error_at("<a b='<'/>") == Ok({ line: 1, column: 7 })
 expect error_at("<a b=c/>") == Ok({ line: 1, column: 6 })
 expect error_at("<a b='1'c='2'/>") == Ok({ line: 1, column: 9 })
 expect error_at("<a b='1' b='2'/>") == Ok({ line: 1, column: 10 })
 
-## Attribute values are normalised: literal whitespace becomes a space, while
-## character references keep the character they name.
-expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(Element("a", [{ name: "b", value: "x y z \n\t" }], []))
+# Attribute values are normalised: literal whitespace becomes a space, while
+# character references keep the character they name.
+expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(element("a", [{ name: "b", value: "x y z \n\t" }], []))
 
-## Line endings in content are normalised to LF (XML 1.0 section 2.11).
-expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(Element("a", [], [Text("1\n2\n3\n")]))
+# Line endings in content are normalised to LF (XML 1.0 section 2.11).
+expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(element("a", [], [Text("1\n2\n3\n")]))
 
-## Comments and processing instructions are accepted everywhere Misc is
-## allowed, and text on both sides of them is merged.
+# Comments and processing instructions are accepted everywhere Misc is
+# allowed, and text on both sides of them is merged.
 expect {
 	result = Xml.parse_str("<!-- c --><?pi data?>\n<a>x<!-- y -->z<?p?><![CDATA[w]]>&amp;</a><!---->\n<?q ?>")
-	result.map_ok(|xml| xml.root) == Ok(Element("a", [], [Text("xzw&")]))
+	result.map_ok(|xml| xml.root) == Ok(element("a", [], [Text("xzw&")]))
 }
 
-## Comments may not contain '--', and PI targets may not be 'xml'.
+# Comments may not contain '--', and PI targets may not be 'xml'.
 expect error_at("<a><!-- a -- b --></a>") == Ok({ line: 1, column: 11 })
 expect error_at("<a><!-- a ---></a>") == Ok({ line: 1, column: 11 })
 expect error_at("<a/>\n<?xml version='1.0'?>") == Ok({ line: 2, column: 1 })
 expect error_at("<a><?XmL x?></a>") == Ok({ line: 1, column: 6 })
 
-## ']]>' is not allowed in character data, and control characters are not XML characters.
+# ']]>' is not allowed in character data, and control characters are not XML characters.
 expect error_at("<a>]]></a>") == Ok({ line: 1, column: 4 })
 expect error_at("<a>\u(1)</a>") == Ok({ line: 1, column: 4 })
 expect error_at("<a>\u(FFFE)</a>") == Ok({ line: 1, column: 4 })
 
-## Exactly one root element is required.
+# Exactly one root element is required.
 expect error_at("") == Ok({ line: 1, column: 1 })
 expect error_at("<a/><b/>") == Ok({ line: 1, column: 5 })
 expect error_at("<a/>text") == Ok({ line: 1, column: 5 })
 expect error_at("<a>") == Ok({ line: 1, column: 4 })
 
-## Document type declarations are outside the supported subset.
+# Document type declarations are outside the supported subset.
 expect error_at("<!DOCTYPE a><a/>") == Ok({ line: 1, column: 1 })
 
-## The XML declaration accepts standalone, requires whitespace between its
-## parts, and must be first.
+# The XML declaration accepts standalone, requires whitespace between its
+# parts, and must be first.
 expect Xml.parse_str("<?xml version='1.0' standalone='yes'?><a/>").is_ok()
 expect error_at("<?xml version='1.0'encoding='UTF-8'?><a/>") == Ok({ line: 1, column: 20 })
 expect error_at(" <?xml version='1.0'?><a/>") == Ok({ line: 1, column: 2 })
 expect error_at("<?xml version='2.0'?><a/>") == Ok({ line: 1, column: 16 })
 
-## A byte order mark may start the document.
+# A byte order mark may start the document.
 expect Xml.parse_str("\u(FEFF)<a/>").is_ok()
 
-## Error lines count CRLF, CR, and LF line endings.
+# Error lines count CRLF, CR, and LF line endings.
 expect error_at("<a>\r\n\r\n<b>\r</a>") == Ok({ line: 4, column: 1 })
 
-## Deep nesting does not exhaust the call stack.
+# Deep nesting does not exhaust the call stack, in the parser or in `text`.
 expect {
 	depth = 20000
-	input = Str.concat(Str.repeat("<a>", depth), Str.repeat("</a>", depth))
-	Xml.parse_str(input).is_ok()
+	input = Str.concat(Str.repeat("<a>", depth), Str.concat("x", Str.repeat("</a>", depth)))
+	Xml.parse_str(input).map_ok(|xml| xml.root.text()) == Ok("x")
 }
 
-## The parser combinator reports leftover input after the document.
-expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
+# Many siblings are parsed in linear time (each append updates in place).
+expect {
+	count = 50000
+	parsed = Xml.parse_str("<r>${Str.repeat("<i>x</i>", count)}</r>")
+	match parsed {
+		Ok(xml) => xml.root.children_named("i").len() == count
+		Err(_) => False
+	}
+}
 
-## Duplicate attribute detection stays fast with many attributes.
+# The parser combinator reports leftover input after the document.
+expect Utf8.parse_str(Xml.parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
+
+# The parser combinator reports structured failures with a byte offset.
+expect Utf8.parse_str(Xml.parser, "<a></b>") == Err(ParseError({ message: "end tag </b> does not match start tag <a>", offset: 3 }))
+
+# The parser leaves the input after the document for the next parser.
+expect Utf8.parse_str_partial(Xml.parser, "<a/>\n<!-- c -->rest").map_ok(|{ value: _, rest }| rest) == Ok("rest")
+
+# Duplicate attribute detection stays fast with many attributes.
 expect {
 	count = 20000
-	attributes = List.repeat(0, count).map_with_index(|_, index| " a${index.to_str()}=''") |> Str.join_with("")
+	attributes = Str.join_with(List.repeat(0, count).map_with_index(|_, index| " a${index.to_str()}=''"), "")
 	parsed = Xml.parse_str("<e${attributes}/>")
 	duplicate = Xml.parse_str("<e${attributes} a${(count - 1).to_str()}=''/>")
 	parsed.is_ok() and duplicate.is_err()
 }
 
-## Parse examples in the module docs: text references and error positions.
-expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element("a", [], [Text("x & y")]))
+# Node helpers: name, attribute, children_named and text.
 expect {
-	match Xml.parse_str("<a>&nbsp;</a>") {
-		Err(XmlError({ line, column, message: _ })) => line == 1 and column == 4
-		Ok(_) => Bool.False
+	match Xml.parse_str("<p id='x'>Hi <b>there</b><b/>!</p>") {
+		Ok(xml) => {
+			root = xml.root
+			leaf : Xml.Node
+			leaf = Text("t")
+			root.name() == Ok("p")
+				and root.attribute("id") == Ok("x")
+				and root.attribute("class") == Err(Missing)
+				and root.children_named("b").len() == 2
+				and root.children_named("i") == []
+				and root.text() == "Hi there!"
+				and leaf.name() == Err(NotAnElement)
+				and leaf.attribute("id") == Err(Missing)
+				and leaf.children_named("b") == []
+				and leaf.text() == "t"
+		}
+
+		Err(_) => False
 	}
 }
+
+# Equal trees hash equally, so documents work as Set members and Dict keys.
+expect {
+	one = Xml.parse_str("<a b='1'>x</a>")
+	two = Xml.parse_str("<a b='1'>x</a>")
+	match (one, two) {
+		(Ok(first), Ok(second)) => Set.from_list([first, second]).len() == 1 and Set.from_list([first.root, second.root, Text("y")]).len() == 2
+		_ => False
+	}
+}
+
+# Doc examples: module header.
+expect {
+	match Xml.parse_str("<feed><title>News</title><link href='/a'/></feed>") {
+		Ok(xml) => {
+			titles = xml.root.children_named("title").map(|title| title.text())
+			links = xml.root.children_named("link").map(|link| link.attribute("href"))
+			titles == ["News"] and links == [Ok("/a")]
+		}
+
+		Err(_) => False
+	}
+}
+
+# Doc examples: Node helpers.
+expect Xml.parse_str("<svg:rect/>").map_ok(|xml| xml.root.name()) == Ok(Ok("svg:rect"))
+expect {
+	match Xml.parse_str("<a href='/x'/>") {
+		Ok(xml) => xml.root.attribute("href") == Ok("/x") and xml.root.attribute("title") == Err(Missing)
+		Err(_) => False
+	}
+}
+expect {
+	match Xml.parse_str("<list><item>1</item><other/><item>2</item></list>") {
+		Ok(xml) => xml.root.children_named("item").map(|item| item.text()) == ["1", "2"]
+		Err(_) => False
+	}
+}
+expect Xml.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()) == Ok("Hello, world!")
+
+# Doc examples: parse_str and parser.
+expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
+expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, message: "undeclared entity &nbsp;" }))

@@ -28,7 +28,7 @@ expected_html =
 main! : List(OsStr) => Try({}, _)
 main! = |_args| {
 	result =
-		Utf8.parse_str(Xml.xml_parser, svg_input)
+		Utf8.parse_str(Xml.parser, svg_input)
 			.map_ok(
 				|xml| {
 					html_to_roc_dsl(svg_to_html(xml.root), "", 0)
@@ -52,7 +52,7 @@ main! = |_args| {
 svg_to_html : Xml.Node -> Html.Node
 svg_to_html = |xml| {
 	match xml {
-		Element(name, attrs, children) => {
+		Element({ name, attributes: attrs, children }) => {
 			(Html.element(name))(
 				attrs.map(xml_to_html_attribute),
 				children.map(svg_to_html),
