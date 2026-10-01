@@ -1,25 +1,22 @@
-// Release notes are written in Markdown, one file per version
-// (docs/releases/<version>.md). The release workflow publishes that file as
-// the GitHub release page (`scripts/release_helpers.py make-release-notes`),
-// so the manual links to it rather than restating it.
-
-// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// Defined by index.adoc; repeated so the page renders on its own, as it
 // does when browsed on GitHub.
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
-:api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
-[#release-notes]
-= Release history
+[#releases]
+= Release notes
 
-Each release's notes are on its {repo}/releases[GitHub release page], and
-their source is in {tree}/docs/releases[`docs/releases/`].
+Each release has a notes file in `docs/releases/`, written in Markdown so the
+release workflow can publish it unchanged as the GitHub release description.
+The notes start with the upgrade impact: every change your code or data might
+notice.
 
-* {repo}/releases/tag/2.0.0[2.0.0] ({src}/docs/releases/2.0.0.md[source])
+* {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes] (not yet
+  released): CommonMark and GFM Markdown, strict RFC 9112 HTTP, XML 1.0
+  well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and property tests
+  and conformance reviews for every format.
 
-Each release also carries this manual as a PDF and as a zipped website, and
-the API reference as a zipped website, so the documentation for an earlier
-release stays available after this site moves on.
+Earlier releases are described on the
+{repo}/releases[roc-parser GitHub releases page].
