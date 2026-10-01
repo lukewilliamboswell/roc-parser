@@ -12,8 +12,8 @@ This chapter shows how to parse raw HTTP/1.x bytes into Roc records: a request
 or response line, its header fields, and its body. It is a set of how-to guides
 for readers who know basic Roc and are handling bytes from a socket, a test
 fixture or a capture file. By the end you can read requests and responses,
-decode chunked bodies, split pipelined messages, and know which inputs the
-parser refuses and why.
+decode chunked bodies, split pipelined messages, embed the parsers in a larger
+grammar, and know which inputs the parser refuses and why.
 
 The `HTTP` module follows the message syntax of RFC 9112 and the field syntax
 of RFC 9110. It parses messages; it does not open connections or send
@@ -28,10 +28,9 @@ network input, bound the number of bytes you read.
 
 == Parse a request
 
-Parse a request with `HTTP.request`. `Utf8.parse_str` takes a `Str`; use
-`Utf8.parse_bytes` for a `List(U8)` from a socket. Both fail with
-`unexpected input` if bytes remain after the message (see
-<<http-pipelined,Read pipelined messages>>).
+Parse a request with `HTTP.parse_request`. It takes the raw bytes as a
+`List(U8)` (use `Str.to_utf8` for a `Str`) and returns the `request` and the
+`rest` of the bytes after it:
 
 [source,roc]
 ----
@@ -42,40 +41,69 @@ Output:
 
 [source,text]
 ----
-method: Post
-uri: /notes
+method: POST
+target: /notes
 version: 1.1
-content type: Some("text/plain")
 body: hello
 ----
 
 A request is a record with these fields:
 
-* `method`: one of `Get`, `Head`, `Post`, `Put`, `Delete`, `Connect`,
-  `Options`, `Trace` or `Patch`. Method names are case-sensitive, and any other
-  method is rejected.
-* `uri`: the request target exactly as sent, such as `/notes?id=1`.
-* `http_version`: `{ major, minor }`.
-* `headers`: a `List(Header)` in the order received, where each element is
-  `Header(name, value)`.
+* `method`: a `Method`, one of `Get`, `Head`, `Post`, `Put`, `Delete`,
+  `Connect`, `Options`, `Trace` or `Patch`, or `Extension(name)` for any other
+  method token, such as `PURGE`. Method names are case-sensitive, so `get` is
+  `Extension("get")`.
+* `target`: the request target exactly as sent, such as `/notes?id=1`.
+* `version`: a `Version`, `{ major, minor }`.
+* `headers`: a `List(Header)` in the order received, where each `Header` is
+  `{ name, value }`.
 * `body`: the body bytes as a `List(U8)`.
+
+Turning a `Method` back into its name covers every case with one
+`Extension` branch:
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=method,indent=0]
+----
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=extension,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+method: Extension("PURGE")
+----
 
 === Read header fields
 
-Header names keep the case they were sent in, but HTTP field names are
-case-insensitive. Compare them in lowercase. Values have surrounding spaces
-and tabs removed. A field that appears more than once appears in `headers`
-once per occurrence.
+Look a field up with `HTTP.header`, which compares names case-insensitively
+(HTTP field names are) and returns the first match, or `Err(Missing)`:
 
 [source,roc]
 ----
 include::examples/http-messages.roc[tag=header,indent=0]
 ----
 
+Output:
+
+[source,text]
+----
+content type: text/plain, accept: none
+----
+
+Header names keep the case they were sent in. Values have surrounding spaces
+and tabs removed. A field that appears more than once appears in `headers`
+once per occurrence, so walk `headers` yourself to see every value.
+
 == Parse a response
 
-Parse a response with `HTTP.response`. `status_code` is a `U16` and `status`
-is the reason phrase, which may be empty:
+Parse a response with `HTTP.parse_response`. `status_code` is a `U16` and
+`reason` is the reason phrase, which may be empty:
 
 [source,roc]
 ----
@@ -136,9 +164,10 @@ decoded body: Wikipedia
 == Read pipelined messages
 
 A client may send several requests on one connection without waiting for
-responses. Each parse consumes exactly one message. To keep the bytes that
-follow it, use `Utf8.parse_bytes_partial`, which returns the message as `value`
-and the unread bytes as `rest`. Parse `rest` again for the next message:
+responses. `HTTP.parse_request` consumes exactly one message and returns the
+bytes that follow it as `rest`; parse `rest` again for the next message. To
+read a whole buffer of requests at once, use `HTTP.parse_requests`, which
+fails unless the buffer ends exactly at the end of a request:
 
 [source,roc]
 ----
@@ -150,13 +179,39 @@ Output:
 [source,text]
 ----
 first: /a, second: /b, left over: 0 bytes
+targets: /a, /b
 ----
-
-`parse_bytes_partial` fails only with `ParseError`, an open tag, so `?` passes
-it straight up to `main!`.
 
 A response with no framing fields reads to the end of the input, so it is
 always the last message in a buffer.
+
+[#http-embedded]
+== Use the parsers inside a larger grammar
+
+`HTTP.request` and `HTTP.response` are the same parsers as a
+`Parser(Utf8.Bytes, _)`, for when a message is one part of a larger format. They
+leave the bytes after the message for the next parser:
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=embedded,indent=0]
+----
+
+[source,roc]
+----
+include::examples/http-messages.roc[tag=embedded-use,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+health check: /health
+----
+
+They fail with `ParseError({ message, offset })`. The message starts with
+`invalid HTTP request:` or `invalid HTTP response:`, and the offset is where
+the problem is, counted from the start of the whole input.
 
 [#http-security]
 == Rejected messages and request smuggling
@@ -197,7 +252,11 @@ The status line has rules of its own: the status code is exactly three digits
 and at least `100`, and the space before the reason phrase may be left out
 when the phrase is empty.
 
-The failure message says which rule was broken:
+`parse_request` and `parse_response` fail with `InvalidHttp(Error)`, where an
+`Error` is `{ offset, message }`: the message says which rule was broken and
+the offset is the byte where the problem is. A framing error points at the
+start of the field line responsible; a missing `Host` field is reported at
+offset 0, the start of the message.
 
 [source,roc]
 ----
@@ -208,7 +267,7 @@ Output:
 
 [source,text]
 ----
-rejected: invalid HTTP request: both Transfer-Encoding and Content-Length
+rejected at byte 55: both Transfer-Encoding and Content-Length
 ----
 
 The `fuzz/http-smuggling.roc` fuzz target generates messages built from these
