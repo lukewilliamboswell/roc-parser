@@ -140,6 +140,31 @@ class Reports(unittest.TestCase):
         self.assertIn("Skipped: go", text)
         json.dumps(report)
 
+    def test_environment_outside_blueprint(self):
+        env = bench.environment({"PATH": ""}, Path("/nonexistent/Blueprint.lock"))
+        self.assertFalse(env["blueprint"])
+        self.assertNotIn("lock", env)
+        self.assertEqual(bench.describe_environment(env), "outside blueprint")
+
+    def test_environment_inside_blueprint_records_lock(self):
+        lock = {"nodes": {"root": {"inputs": {"nixpkgs": "nixpkgs", "overlay0": "overlay0"}},
+                          "nixpkgs": {"locked": {"owner": "NixOS", "repo": "nixpkgs", "rev": "b4fd65b198c5aa"}},
+                          "overlay0": {"locked": {"owner": "roc-lang", "repo": "roc-overlay", "rev": "76befb4facc5"}}},
+                "root": "root", "version": 7}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Blueprint.lock"
+            path.write_text(json.dumps(lock))
+            env = bench.environment({"ROC_PARSER_BLUEPRINT": "1", "PATH": ""}, path)
+            broken = bench.environment({"ROC_PARSER_BLUEPRINT": "1", "PATH": ""}, Path(tmp) / "missing.lock")
+        self.assertTrue(env["blueprint"])
+        self.assertEqual(env["lock"]["inputs"]["overlay0"], "roc-lang/roc-overlay@76befb4facc5")
+        self.assertEqual(len(env["lock"]["sha256"]), 64)
+        text = bench.describe_environment(env)
+        self.assertIn("Blueprint.lock sha256", text)
+        self.assertIn("overlay0 76befb4facc5", text)
+        self.assertIn("error", broken["lock"])
+        self.assertIn("unreadable", bench.describe_environment(broken))
+
     def test_corpus_only_writes_manifest_with_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(bench.main(["--quick", "--corpus-only", "--output-dir", tmp, "--formats", "csv"]), 0)

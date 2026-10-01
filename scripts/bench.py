@@ -378,7 +378,10 @@ class Builder:
             # Outside the checkout: repository policy rejects Python files
             # anywhere but scripts/, and a venv is full of them.
             cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-            venv = cache / "roc-parser" / "bench-venv"
+            # One venv per interpreter, so a blueprint (Nix) run and a plain
+            # run never share packages built for another Python.
+            key = hashlib.sha256(str(Path(sys.executable).resolve()).encode()).hexdigest()[:12]
+            venv = cache / "roc-parser" / f"bench-venv-{key}"
             python = str(venv / "bin" / "python")
             if not Path(python).exists():
                 if not self.run("python-venv", [sys.executable, "-m", "venv", str(venv)]):
@@ -575,6 +578,7 @@ def markdown_report(report: dict) -> str:
     lines = [f"# roc-parser benchmarks: {meta['label']}", "",
              f"- Date: {meta['date']}", f"- Machine: {meta['machine']['description']}",
              f"- OS: {meta['machine']['os']}", f"- Roc: {meta['versions'].get('roc', '?')}",
+             f"- Environment: {describe_environment(meta.get('environment'))}",
              f"- roc-parser commit: {meta['git']['commit']}{' (dirty)' if meta['git']['dirty'] else ''}",
              f"- Mode: {'quick' if meta['quick'] else 'full'}, {meta['repetitions']} batches of about "
              f"{meta['target_ms']} ms after a warmup batch", ""]
@@ -616,6 +620,38 @@ def machine() -> dict:
     return {"description": f"{cpu} ({os.cpu_count()} CPUs, {platform.machine()})",
             "cpu": cpu, "cpus": os.cpu_count(), "arch": platform.machine(),
             "os": platform.platform(), "python": platform.python_version()}
+
+
+BLUEPRINT_ENV = "ROC_PARSER_BLUEPRINT"
+
+
+def environment(env: dict[str, str] | None = None, lock: Path = ROOT / "Blueprint.lock") -> dict:
+    """Where the toolchains came from: a blueprint shell (Blueprint.roc sets
+    ROC_PARSER_BLUEPRINT=1), the Blueprint.lock that pinned it, and tool paths."""
+    env = os.environ if env is None else env
+    info: dict = {"blueprint": env.get(BLUEPRINT_ENV) == "1",
+                  "tools": {t: shutil.which(t, path=env.get("PATH")) for t in ("roc", "go", "cargo", "rustc", "python3")}}
+    if info["blueprint"]:
+        try:
+            data = lock.read_bytes()
+            nodes = json.loads(data)["nodes"]
+            inputs = {name: nodes[node]["locked"] for name, node in nodes["root"]["inputs"].items()}
+            info["lock"] = {"path": lock.name, "sha256": hashlib.sha256(data).hexdigest(),
+                            "inputs": {name: f"{v.get('owner')}/{v.get('repo')}@{v.get('rev')}"
+                                       for name, v in inputs.items()}}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            info["lock"] = {"path": lock.name, "error": str(error)}
+    return info
+
+
+def describe_environment(env: dict | None) -> str:
+    if not env or not env.get("blueprint"):
+        return "outside blueprint"
+    lock = env.get("lock", {})
+    if "sha256" not in lock:
+        return f"blueprint, {lock.get('path', 'no lock')} unreadable"
+    pins = ", ".join(f"{k} {v.rsplit('@', 1)[-1][:12]}" for k, v in sorted(lock["inputs"].items()))
+    return f"blueprint, {lock['path']} sha256 {lock['sha256'][:12]} ({pins})"
 
 
 def git_state() -> dict:
@@ -699,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
     metadata = {
         "schema": SCHEMA_VERSION, "label": args.label, "quick": args.quick,
         "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "machine": machine(), "git": git_state(), "versions": builder.versions,
+        "machine": machine(), "git": git_state(), "environment": environment(), "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
         "implementations": [{"id": i.id, "format": i.format, "notes": i.notes} for i in impls],
         "corpus": manifest,
