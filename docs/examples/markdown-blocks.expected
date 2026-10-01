@@ -1,0 +1,11 @@
+Heading({ level: One, content: [Text("Shopping")] })
+Paragraph([Text("Buy these "), Emphasis([Text("today")]), Text(":")])
+ListBlock({ kind: Unordered, loose: False, items: [{ blocks: [Paragraph([Text("apples")])], task: Checked }, { blocks: [Paragraph([Text("pears")])], task: Unchecked }] })
+Blockquote([Paragraph([Text("Quoted")])])
+Code({ info: "roc", pre: "main = 1
+" })
+Table({ header: [[Text("Item")], [Text("Qty")]], align: [Left, Right], rows: [[[Text("pear")], [Text("2")]]] })
+ThematicBreak
+HtmlBlock("<div>raw</div>
+")
+ListBlock({ kind: Ordered({ start: 3 }), loose: True, items: [{ blocks: [Paragraph([Text("first")])], task: NoTask }, { blocks: [Paragraph([Text("second")])], task: NoTask }] })

@@ -1,0 +1,5 @@
+raw: "title: Hello
+draft: false
+"
+meta: Mapping([{ key: "title", value: String("Hello") }, { key: "draft", value: Bool(False) }])
+body blocks: 2
