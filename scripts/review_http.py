@@ -121,11 +121,30 @@ def collect(conn: h11.Connection, data: bytes, request: bool) -> dict[str, Any]:
     return out
 
 
+def h11_normalized_headers(headers: list[list[str]]) -> list[list[str]]:
+    """Apply h11's own rewriting of framing fields (it keeps one Content-Length
+    with a single value and lowercases Transfer-Encoding) so only semantic
+    differences are reported."""
+    out, seen_length = [], False
+    for name, value in headers:
+        lower = name.lower()
+        if lower == "content-length":
+            if seen_length:
+                continue
+            seen_length = True
+            value = value.split(",")[0].strip(" \t")
+        elif lower == "transfer-encoding":
+            value = value.lower()
+        out.append([name, value])
+    return out
+
+
 def compare(mine: dict[str, Any], oracle: dict[str, Any]) -> bool:
     if mine["status"] != oracle["status"]:
         return False
     if mine["status"] != "ok":
         return True
+    mine = dict(mine, headers=h11_normalized_headers(mine["headers"]))
     return all(mine.get(key) == value for key, value in oracle.items())
 
 
