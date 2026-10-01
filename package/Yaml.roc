@@ -771,7 +771,7 @@ decode_integer = |cursor, type_name, from_str, from_u128| {
 			Err(NotInteger)
 		} else if is_decimal_integer(bytes) {
 			unsigned = match bytes {
-				['+', .. as rest] => Str.from_utf8_lossy(rest)
+				['+', .. as rest] => bytes_to_str(rest)
 				_ => scalar.text
 			}
 			from_str(unsigned).map_err(|_| OutOfRange)
@@ -885,7 +885,7 @@ camel_case = |name| {
 			$upper = False
 		}
 	}
-	Str.from_utf8_lossy($out)
+	bytes_to_str($out)
 }
 
 ## The byte offset of a one-based line and (byte) column in `bytes`. A byte
@@ -1205,7 +1205,7 @@ parse_block_scalar = |rest, raw_lines, header_bytes, line, column, min_indent| {
 		$input = advance($input)
 	}
 
-	Ok({ node: Node.{ line, column, kind: Quoted(Str.from_utf8_lossy(body)) }, input: $input })
+	Ok({ node: Node.{ line, column, kind: Quoted(bytes_to_str(body)) }, input: $input })
 }
 
 parse_block_header : Utf8.Bytes, U64, U64 -> Try(BlockHeader, [InvalidYaml(Yaml.Error)])
@@ -1517,7 +1517,7 @@ parse_inline_value = |raw, line, column, depth| {
 			fail(line, column, "complex mapping keys are not supported by this YAML subset")
 
 		[first, ..] if first == ']' or first == '}' or first == ',' or first == '@' or first == '`' =>
-			fail(line, column, "a plain scalar cannot start with `${Str.from_utf8_lossy([first])}`")
+			fail(line, column, "a plain scalar cannot start with `${bytes_to_str([first])}`")
 
 		['-'] | ['-', ' ', ..] | ['-', '\t', ..] | [':'] | [':', ' ', ..] | [':', '\t', ..] =>
 			fail(line, column, "a plain scalar cannot start with an indicator followed by white space")
@@ -1531,7 +1531,7 @@ parse_inline_value = |raw, line, column, depth| {
 		_ if contains_mapping_indicator(bytes) =>
 			fail(line, column, "a mapping value is not allowed here; quote the scalar if it contains \": \"")
 
-		_ => Ok(Node.{ line, column, kind: Plain(Str.from_utf8_lossy(bytes)) })
+		_ => Ok(Node.{ line, column, kind: Plain(bytes_to_str(bytes)) })
 	}
 }
 
@@ -1550,7 +1550,7 @@ contains_mapping_indicator = |bytes| {
 ## that matches none of its forms is a string.
 resolve_plain : Utf8.Bytes, U64, U64 -> Try(Yaml, [InvalidYaml(Yaml.Error)])
 resolve_plain = |bytes, line, column| {
-	text = Str.from_utf8_lossy(bytes)
+	text = bytes_to_str(bytes)
 
 	if ["", "null", "Null", "NULL", "~"].contains(text) {
 		Ok(Null)
@@ -1657,9 +1657,9 @@ core_float_text = |bytes| {
 	is_float = has_point or !exponent.is_empty()
 
 	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if whole.is_empty() "0" else Str.from_utf8_lossy(whole)
-		fraction_text = if fraction.is_empty() "0" else Str.from_utf8_lossy(fraction)
-		exponent_text = if exponent.is_empty() "" else Str.from_utf8_lossy(exponent)
+		whole_text = if whole.is_empty() "0" else bytes_to_str(whole)
+		fraction_text = if fraction.is_empty() "0" else bytes_to_str(fraction)
+		exponent_text = if exponent.is_empty() "" else bytes_to_str(exponent)
 		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
 	} else {
 		Err(NotFloat)
@@ -1728,15 +1728,15 @@ parse_key = |raw, line, column| {
 		# Like a value, and like a first line before any `---`, `%` reads as a directive.
 		['%', ..] => fail(line, column, "YAML directives are not supported by this YAML subset")
 		[first, ..] if first == '|' or first == '>' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
-			fail(line, column, "a plain mapping key cannot start with `${Str.from_utf8_lossy([first])}`")
-		_ => Ok(Str.from_utf8_lossy(bytes))
+			fail(line, column, "a plain mapping key cannot start with `${bytes_to_str([first])}`")
+		_ => Ok(bytes_to_str(bytes))
 	}
 }
 
 parse_single_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '\'', line, column)?
-	unescape_single(inner, [], line, column).map_ok(Str.from_utf8_lossy)
+	unescape_single(inner, [], line, column).map_ok(bytes_to_str)
 }
 
 ## The text between a scalar's opening quote and its real closing quote, which
@@ -1784,7 +1784,7 @@ unescape_single = |bytes, out, line, column| {
 parse_double_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '"', line, column)?
-	unescape_double(inner, [], line, column).map_ok(Str.from_utf8_lossy)
+	unescape_double(inner, [], line, column).map_ok(bytes_to_str)
 }
 
 unescape_double : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
@@ -1915,7 +1915,7 @@ prepare_lines = |raw_lines| {
 				return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
 
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
-			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(Str.from_utf8_lossy(first.content), "---") => {
+			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(bytes_to_str(first.content), "---") => {
 				# "--- node": the root node starts on the marker line (YAML 1.2 9.1.4).
 				node = trim_spaces(first.content.drop_first(3))
 				column = first.content.len() - node.len() + 1
@@ -2091,6 +2091,12 @@ scalar_can_start = |prefix, in_flow| {
 
 	$answer ?? False
 }
+
+## Text from bytes of the input. The input is a `Str`, so its bytes are valid
+## UTF-8 and `Str.from_utf8` shares them without copying, where
+## `Str.from_utf8_lossy` decodes twice and allocates.
+bytes_to_str : Utf8.Bytes -> Str
+bytes_to_str = |bytes| Str.from_utf8(bytes) ?? Str.from_utf8_lossy(bytes)
 
 is_white : U8 -> Bool
 is_white = |byte| byte == ' ' or byte == '\t'
@@ -2358,7 +2364,7 @@ inspect_text = |text| {
 		}
 	}
 
-	Str.from_utf8_lossy($out.append('"'))
+	bytes_to_str($out.append('"'))
 }
 
 code_point_escape : U32 -> Utf8.Bytes
