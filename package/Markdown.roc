@@ -565,7 +565,7 @@ take_frontmatter = |lines| {
 		match lines.drop_first(1).find_first_index(|line| line == "---".to_utf8()) {
 			Ok(index) => {
 				raw = lines.sublist({ start: 1, len: index }).fold([], |acc, line| acc.concat(line).append('\n'))
-				{ frontmatter: Ok(Str.from_utf8_lossy(raw)), lines: lines.drop_first(index + 2) }
+				{ frontmatter: Ok(bytes_to_str(raw)), lines: lines.drop_first(index + 2) }
 			}
 
 			Err(_) =>
@@ -1070,7 +1070,7 @@ has_gap = |spans| {
 }
 
 placeholder : Utf8.Bytes -> List(Markdown.Inline)
-placeholder = |raw| [Text(Str.from_utf8_lossy(raw))]
+placeholder = |raw| [Text(bytes_to_str(raw))]
 
 ## The events for a closed leaf block with these lines.
 finish_leaf : Open, List(Utf8.Bytes) -> List(Event)
@@ -1085,18 +1085,18 @@ finish_leaf = |open, lines| {
 		}
 
 		FencedBlock(fence) =>
-			[Leaf(Code({ info: fence.info, pre: Str.from_utf8_lossy(join_lines_with_newlines(lines)) }), span)]
+			[Leaf(Code({ info: fence.info, pre: bytes_to_str(join_lines_with_newlines(lines)) }), span)]
 
 		IndentedBlock => {
 			var $lines = lines
 			while bytes_are_blank($lines.last() ?? [0]) {
 				$lines = $lines.drop_last(1)
 			}
-			[Leaf(Code({ info: "", pre: Str.from_utf8_lossy(join_lines_with_newlines($lines)) }), span)]
+			[Leaf(Code({ info: "", pre: bytes_to_str(join_lines_with_newlines($lines)) }), span)]
 		}
 
 		HtmlBlockOpen(_) =>
-			[Leaf(HtmlBlock(Str.from_utf8_lossy(join_lines_with_newlines(lines))), span)]
+			[Leaf(HtmlBlock(bytes_to_str(join_lines_with_newlines(lines))), span)]
 
 		TableBlock(table) => {
 			columns = table.align.len()
@@ -2069,7 +2069,7 @@ scan_inlines = |input, refs| {
 			match find_closing_ticks(ticks, run_end, count) {
 				Ok(close) => {
 					content = normalize_code_span(input.sublist({ start: run_end, len: close - run_end }))
-					$items = flush_chars($items, $text).append(Node(InlineCode(Str.from_utf8_lossy(content))))
+					$items = flush_chars($items, $text).append(Node(InlineCode(bytes_to_str(content))))
 					$text = []
 					$pos = close + count
 				}
@@ -2167,7 +2167,7 @@ scan_inlines = |input, refs| {
 					match html.end {
 						Ok(end) => {
 							raw = input.sublist({ start: $pos, len: end - $pos })
-							$items = flush_chars($items, $text).append(Node(HtmlInline(Str.from_utf8_lossy(raw))))
+							$items = flush_chars($items, $text).append(Node(HtmlInline(bytes_to_str(raw))))
 							$text = []
 							$pos = end
 						}
@@ -2196,7 +2196,7 @@ scan_inlines = |input, refs| {
 			match match_www_autolink(input, $pos) {
 				Ok(end) => {
 					raw = input.sublist({ start: $pos, len: end - $pos })
-					label = Str.from_utf8_lossy(raw)
+					label = bytes_to_str(raw)
 					node = Link({ label: [Text(label)], target: { href: Str.concat("http://", label), title: Err(Missing) } })
 					$items = flush_chars($items, $text).append(Nested(node, 1))
 					$text = []
@@ -2212,7 +2212,7 @@ scan_inlines = |input, refs| {
 			match match_url_autolink(input, $pos, $text.len()) {
 				Ok(found) => {
 					raw = input.sublist({ start: $pos - found.rewind, len: found.end - ($pos - found.rewind) })
-					url = Str.from_utf8_lossy(raw)
+					url = bytes_to_str(raw)
 					node = Link({ label: [Text(url)], target: { href: url, title: Err(Missing) } })
 					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Nested(node, 1))
 					$text = []
@@ -2497,7 +2497,7 @@ process_emphasis = |items, cap| {
 	for item in items {
 		match item {
 			Chars(bytes) => {
-				$out = $out.append(Text(Str.from_utf8_lossy(bytes)))
+				$out = $out.append(Text(bytes_to_str(bytes)))
 				$depths = $depths.append(0)
 			}
 
@@ -2604,7 +2604,7 @@ fill_placeholders = |out, openers| {
 }
 
 delimiter_text : U8, U64 -> Markdown.Inline
-delimiter_text = |char, count| Text(Str.from_utf8_lossy(List.repeat(char, count)))
+delimiter_text = |char, count| Text(bytes_to_str(List.repeat(char, count)))
 
 find_opener : List(EmphOpener), List(U64), InlineDelim -> Try(U64, [NotFound])
 find_opener = |stack, bottoms, closer| {
@@ -2843,7 +2843,7 @@ unescape_link_text = |bytes| {
 			$index = $index + 1
 		}
 	}
-	Str.from_utf8_lossy($out)
+	bytes_to_str($out)
 }
 
 ## Decode entity references only (autolinks keep backslashes literally).
@@ -2870,7 +2870,7 @@ unescape_entities = |bytes| {
 			$index = $index + 1
 		}
 	}
-	Str.from_utf8_lossy($out)
+	bytes_to_str($out)
 }
 
 ## ---------------------------------------------------------------------------
@@ -3722,10 +3722,10 @@ autolink_email_text = |text| {
 						Found => {
 							at_index = $start + $offset + $max_rewind
 							link_start = at_index - $rewind
-							email = Str.from_utf8_lossy(data.sublist({ start: link_start, len: $link_end + $rewind }))
+							email = bytes_to_str(data.sublist({ start: link_start, len: $link_end + $rewind }))
 							href = if $auto_mailto Str.concat("mailto:", email) else email
 							before = data.sublist({ start: $start, len: link_start - $start })
-							$out = $out.append(Text(Str.from_utf8_lossy(before))).append(Link({ label: [Text(email)], target: { href, title: Err(Missing) } }))
+							$out = $out.append(Text(bytes_to_str(before))).append(Link({ label: [Text(email)], target: { href, title: Err(Missing) } }))
 							consumed = $offset + $max_rewind + $link_end
 							$start = $start + consumed
 							$remaining = $remaining - consumed
@@ -3737,7 +3737,7 @@ autolink_email_text = |text| {
 		}
 	}
 	rest = data.sublist({ start: $start, len: $remaining })
-	merge_text_nodes($out.append(Text(Str.from_utf8_lossy(rest))))
+	merge_text_nodes($out.append(Text(bytes_to_str(rest))))
 }
 
 gfm_validate_protocol : List(U8), List(U8), U64, U64, U64 -> Bool
@@ -3832,7 +3832,7 @@ is_space_or_tab_at = |bytes, index| {
 ## trailing whitespace, and collapse internal whitespace runs to one space.
 normalize_reference_label : Utf8.Bytes -> Str
 normalize_reference_label = |label| {
-	source = Str.from_utf8_lossy(label)
+	source = bytes_to_str(label)
 	folded =
 		match Case.fold(source, Case.full, Case.unlimited_limits) {
 			Ok(result) => Case.result_text(result)
@@ -3851,7 +3851,7 @@ normalize_reference_label = |label| {
 			$out = $out.append(byte)
 		}
 	}
-	Str.from_utf8_lossy($out)
+	bytes_to_str($out)
 }
 
 lower_ascii_byte : U8 -> U8
@@ -4515,3 +4515,8 @@ innermost = |blocks| {
 		_ => blocks
 	}
 }
+
+## Str.from_utf8_lossy is about 10x slower than Str.from_utf8 on valid input
+## (roc#11966), and Markdown input is almost always valid UTF-8.
+bytes_to_str : Utf8.Bytes -> Str
+bytes_to_str = |bytes| Str.from_utf8(bytes) ?? Str.from_utf8_lossy(bytes)
