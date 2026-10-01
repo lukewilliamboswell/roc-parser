@@ -333,7 +333,12 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## A parser which runs the element parser *zero* or more times on the input,
 	## returning a list containing all the parsed elements.
-	many : Parser(input, a) -> Parser(input, List(a))
+	##
+	## Repetition stops at the first element that fails, or that succeeds
+	## without consuming any input; that element's value is not included.
+	## (Without this rule, a parser such as `chomp_while` or `maybe(p)` that can
+	## succeed on empty input would repeat forever.)
+	many : Parser(input, a) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	many = |parser| {
 		build_primitive_parser(
 			|input| {
@@ -346,7 +351,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## returning a list containing all the parsed elements.
 	##
 	## Also see [Parser.many].
-	one_or_more : Parser(input, a) -> Parser(input, List(a))
+	one_or_more : Parser(input, a) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	one_or_more = |parser| {
 		const(
 			|val| {
@@ -385,7 +390,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## Parse one or more values separated by `separator`.
 	## The separators are consumed and omitted from the result.
-	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a))
+	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	sep_by1 = |parser, separator| {
 		parser_followed_by_sep =
 			const(
@@ -418,7 +423,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##
 	## expect String.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 	## ```
-	sep_by : Parser(input, a), Parser(input, sep) -> Parser(input, List(a))
+	sep_by : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	sep_by = |parser, separator| {
 		parser
 			.sep_by1(separator)
@@ -605,7 +610,7 @@ and_then = |first_parser, build_next_parser| {
 	Parser.build_primitive_parser(fun)
 }
 
-many_impl : Parser(input, a), List(a), input -> Parser.ParseResult(input, List(a))
+many_impl : Parser(input, a), List(a), input -> Parser.ParseResult(input, List(a)) where [input.is_eq : input, input -> Bool]
 many_impl = |parser, vals, input| {
 	result = Parser.parse_partial(parser, input)
 
@@ -614,7 +619,12 @@ many_impl = |parser, vals, input| {
 			Ok({ val: vals, input: input })
 
 		Ok({ val: val, input: input_rest }) =>
-			many_impl(parser, vals.append(val), input_rest)
+			if input_rest == input {
+				# No progress: repeating would loop forever on the same input.
+				Ok({ val: vals, input: input })
+			} else {
+				many_impl(parser, vals.append(val), input_rest)
+			}
 		}
 }
 
@@ -639,4 +649,17 @@ expect {
 	}
 	result = Parser.parse_partial(Parser.chomp_while(not_eol), input)?
 	result == { val: ['a', 's'], input: ['\n', 'd', 'f'] }
+}
+
+## Repeating a parser that succeeds without consuming input terminates.
+expect {
+	result = Parser.parse_partial(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
+	result == { val: [['a', 'a']], input: ['b'] }
+}
+
+## Separated repetition stops when separator and element consume nothing.
+expect {
+	empty = Parser.chomp_while(|b| b == 'z')
+	result = Parser.parse_partial(Parser.sep_by(empty, empty), "x".to_utf8())?
+	result == { val: [[]], input: ['x'] }
 }
