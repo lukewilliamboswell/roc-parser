@@ -672,7 +672,9 @@ parse_start_tag = |bytes, start| {
 			Err(_) => return fail(start + 1, "expected an element name after '<'")
 		}
 	var $attributes = []
-	# A set keeps the Unique Att Spec check linear in the attribute count.
+	# The Unique Att Spec check scans the few attributes most elements have,
+	# and switches to a set once there are many, so it stays linear without
+	# hashing every name of every element.
 	var $seen = Set.empty()
 	var $pos = name.pos
 	while True {
@@ -695,19 +697,35 @@ parse_start_tag = |bytes, start| {
 				Ok(parsed) => parsed
 				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
 			}
-		if $seen.contains(attribute_name.val) {
+		duplicate =
+			if $attributes.len() <= small_attribute_count {
+				$attributes.any(|attribute| attribute.name == attribute_name.val)
+			} else {
+				$seen.contains(attribute_name.val)
+			}
+		if duplicate {
 			return fail($pos, "duplicate attribute ${attribute_name.val}")
 		}
 		$pos = skip_eq(bytes, attribute_name.pos)?
 		value = parse_attribute_value(bytes, $pos)?
 		$attributes = $attributes.append({ name: attribute_name.val, value: value.val })
-		$seen = $seen.insert(attribute_name.val)
+		if $attributes.len() > small_attribute_count {
+			$seen =
+				if $seen.is_empty() {
+					Set.from_list($attributes.map(|attribute| attribute.name))
+				} else {
+					$seen.insert(attribute_name.val)
+				}
+		}
 		$pos = value.pos
 	}
 	crash "unreachable: the start tag loop only exits by returning"
 }
 
 # Up to this many attributes, duplicates are found by scanning the list.
+small_attribute_count : U64
+small_attribute_count = 16
+
 # See https://www.w3.org/TR/xml/#NT-AttValue and https://www.w3.org/TR/xml/#AVNormalize
 parse_attribute_value : List(U8), U64 -> Parsed(Str)
 parse_attribute_value = |bytes, start| {
