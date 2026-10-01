@@ -1569,7 +1569,7 @@ parse_fence_open = |rest| {
 	fence_char = rest.first() ?? 0
 	fence_len = count_leading_byte(rest, fence_char, 0)
 	info = trim_spaces(drop_n(rest, fence_len))
-	if fence_len < 3 or (fence_char == '`' and info.contains('`')) {
+	if fence_len < 3 or (fence_char == '`' and has_any(info, backtick)) {
 		Err(NotFound)
 	} else {
 		Ok({ fence_char, fence_len, fence_offset: 0, info: unescape_link_text(info) })
@@ -1735,7 +1735,7 @@ html_block_ends = |html_type, rest| {
 		1 => ["</pre>", "</script>", "</style>", "</textarea>"].any(|end| contains_bytes(lower, end.to_utf8()))
 		2 => contains_bytes(rest, "-->".to_utf8())
 		3 => contains_bytes(rest, "?>".to_utf8())
-		4 => rest.contains('>')
+		4 => has_any(rest, greater_than)
 		5 => contains_bytes(rest, "]]>".to_utf8())
 		_ => False
 	}
@@ -1818,7 +1818,7 @@ table_cell = |body, start, end, escaped| {
 parse_table_delimiter_row : Utf8.Bytes -> Try(List(Markdown.Alignment), [NotFound])
 parse_table_delimiter_row = |rest| {
 	# Most lines fail on their first byte, so test the bytes before the `-`.
-	if rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) or !rest.contains('-') {
+	if rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) or !has_any(rest, dash) {
 		return Err(NotFound)
 	}
 	cells = split_table_row(rest)
@@ -2023,22 +2023,50 @@ parse_inlines_with_refs = |refs, input| {
 ## whitespace.
 prepare_inline_input : List(U8) -> List(U8)
 prepare_inline_input = |input| {
-	var $out = List.with_capacity(input.len())
-	var $line_start = True
-	for byte in input {
-		if $line_start and (byte == ' ' or byte == '\t') {
-			{}
-		} else if $out.is_empty() and (byte == '\n' or byte == '\r') {
-			{}
-		} else if byte == 0 {
-			$out = $out.concat([0xEF, 0xBF, 0xBD])
-			$line_start = False
+	len = input.len()
+	var $out = List.with_capacity(len)
+	var $pos = 0
+	while $pos < len {
+		# Each step starts a line: skip its indentation, then copy up to and
+		# including its line ending in one piece.
+		start = Utf8.skip_class(input, $pos, line_spaces)
+		if $out.is_empty() and is_line_ending(byte_at(input, start)) and start < len {
+			# Leading blank lines are dropped.
+			$pos = start + 1
 		} else {
-			$out = $out.append(byte)
-			$line_start = byte == '\n' or byte == '\r'
+			line_end = Utf8.find_line_end(input, start)
+			end = if line_end < len line_end + 1 else len
+			$out = append_without_nul($out, input.sublist({ start, len: end - start }))
+			$pos = end
 		}
 	}
 	trim_trailing_whitespace($out)
+}
+
+is_line_ending : U8 -> Bool
+is_line_ending = |byte| byte == '\n' or byte == '\r'
+
+## `List.contains` on bytes is several times slower than a ByteClass scan.
+has_any : List(U8), Utf8.ByteClass -> Bool
+has_any = |bytes, class| Utf8.find_any(bytes, 0, class) < bytes.len()
+
+dash : Utf8.ByteClass
+dash = Utf8.ByteClass.from_bytes(['-'])
+
+greater_than : Utf8.ByteClass
+greater_than = Utf8.ByteClass.from_bytes(['>'])
+
+nul : Utf8.ByteClass
+nul = Utf8.ByteClass.from_bytes([0])
+
+## Append bytes with U+0000 replaced by U+FFFD.
+append_without_nul : List(U8), List(U8) -> List(U8)
+append_without_nul = |out, piece| {
+	if Utf8.find_any(piece, 0, nul) < piece.len() {
+		piece.fold(out, |acc, b| if b == 0 acc.concat([0xEF, 0xBF, 0xBD]) else acc.append(b))
+	} else {
+		out.concat(piece)
+	}
 }
 
 trim_trailing_whitespace : List(U8) -> List(U8)
@@ -2286,8 +2314,11 @@ scan_inlines = |input, refs| {
 
 	nodes = process_emphasis(flush_chars($items, $text), max_inline_nesting).nodes
 	# GFM email autolinks need an `@` in the text.
-	if input.contains('@') autolink_emails_in(nodes) else nodes
+	if Utf8.find_any(input, 0, at_sign) < len autolink_emails_in(nodes) else nodes
 }
+
+at_sign : Utf8.ByteClass
+at_sign = Utf8.ByteClass.from_bytes(['@'])
 
 ## Bytes that may start an inline construct (cmark's SPECIAL_CHARS plus the
 ## extension triggers `~`, `w` and `:`).
