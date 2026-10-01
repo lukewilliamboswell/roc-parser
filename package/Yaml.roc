@@ -902,30 +902,61 @@ split_lines = |input, number, current, lines| {
 }
 
 strip_comment : String.Utf8, Quote, Bool, Bool, String.Utf8 -> String.Utf8
-strip_comment = |bytes, quote, escaped, separated, out| {
+strip_comment = |bytes, quote, escaped, separated, out| strip_comment_help(bytes, quote, escaped, separated, 0, out)
+
+strip_comment_help : String.Utf8, Quote, Bool, Bool, U64, String.Utf8 -> String.Utf8
+strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
 	match bytes {
 		[] => out
 
 		[first, ..] if first == '#' and quote == NoQuote and separated => out
 
 		['\\', .. as rest] if quote == DoubleQuote and !escaped =>
-			strip_comment(rest, quote, Bool.True, Bool.False, out.append('\\'))
+			strip_comment_help(rest, quote, Bool.True, Bool.False, depth, out.append('\\'))
 
-		['"', .. as rest] if quote == NoQuote =>
-			strip_comment(rest, DoubleQuote, Bool.False, Bool.False, out.append('"'))
+		['"', .. as rest] if quote == NoQuote and scalar_can_start(out, depth > 0) =>
+			strip_comment_help(rest, DoubleQuote, Bool.False, Bool.False, depth, out.append('"'))
 
 		['"', .. as rest] if quote == DoubleQuote and !escaped =>
-			strip_comment(rest, NoQuote, Bool.False, Bool.False, out.append('"'))
+			strip_comment_help(rest, NoQuote, Bool.False, Bool.False, depth, out.append('"'))
 
-		['\'', .. as rest] if quote == NoQuote =>
-			strip_comment(rest, SingleQuote, Bool.False, Bool.False, out.append('\''))
+		['\'', .. as rest] if quote == NoQuote and scalar_can_start(out, depth > 0) =>
+			strip_comment_help(rest, SingleQuote, Bool.False, Bool.False, depth, out.append('\''))
+
+		['\'', '\'', .. as rest] if quote == SingleQuote =>
+			strip_comment_help(rest, quote, Bool.False, Bool.False, depth, out.concat(['\'', '\'']))
 
 		['\'', .. as rest] if quote == SingleQuote =>
-			strip_comment(rest, NoQuote, Bool.False, Bool.False, out.append('\''))
+			strip_comment_help(rest, NoQuote, Bool.False, Bool.False, depth, out.append('\''))
+
+		[open, .. as rest] if (open == '[' or open == '{') and quote == NoQuote and (depth > 0 or scalar_can_start(out, Bool.False)) =>
+			strip_comment_help(rest, quote, Bool.False, Bool.False, depth + 1, out.append(open))
+
+		[close, .. as rest] if (close == ']' or close == '}') and quote == NoQuote and depth > 0 =>
+			strip_comment_help(rest, quote, Bool.False, Bool.False, depth - 1, out.append(close))
 
 		[first, .. as rest] =>
-			strip_comment(rest, quote, Bool.False, first == ' ' or first == '\t', out.append(first))
+			strip_comment_help(rest, quote, Bool.False, first == ' ' or first == '\t', depth, out.append(first))
 		}
+}
+
+## Whether a scalar or flow collection may start after `prefix`: at the start,
+## or after white space following an indicator (":", "-", "?", or "," "[" "{"
+## inside a flow collection), or directly after "[", "{" or "," in a flow
+## collection. Elsewhere quotes and brackets are ordinary plain scalar text.
+scalar_can_start : String.Utf8, Bool -> Bool
+scalar_can_start = |prefix, in_flow| {
+	match prefix.last() {
+		Err(_) => Bool.True
+		Ok(previous) if in_flow and (previous == '[' or previous == '{' or previous == ',') => Bool.True
+		Ok(previous) if previous == ' ' or previous == '\t' =>
+			match trim_end_spaces(prefix).last() {
+				Err(_) => Bool.True
+				Ok(indicator) => indicator == ':' or indicator == '-' or indicator == '?' or (in_flow and (indicator == ',' or indicator == '[' or indicator == '{'))
+			}
+
+		_ => Bool.False
+	}
 }
 
 split_mapping_entry : String.Utf8 -> Try({ key : String.Utf8, value : String.Utf8, value_column : U64 }, [NotFound])
@@ -935,30 +966,36 @@ split_mapping_entry = |bytes| {
 
 find_mapping_colon : String.Utf8, String.Utf8, Quote, Bool, U64, U64, U64 -> Try({ key : String.Utf8, value : String.Utf8, value_column : U64 }, [NotFound])
 find_mapping_colon = |all, bytes, quote, escaped, square_depth, curly_depth, index| {
+	in_flow = square_depth > 0 or curly_depth > 0
+	can_start = |_| scalar_can_start(all.sublist({ start: 0, len: index }), in_flow)
+
 	match bytes {
 		[] => Err(NotFound)
 
-		[':', .. as rest] if quote == NoQuote and square_depth == 0 and curly_depth == 0 and (rest.is_empty() or starts_with_space(rest)) =>
+		[':', .. as rest] if quote == NoQuote and !in_flow and (rest.is_empty() or starts_with_space(rest)) =>
 			Ok({ key: all.sublist({ start: 0, len: index }), value: trim_start_spaces(rest), value_column: index + 2 })
 
 		['\\', .. as rest] if quote == DoubleQuote and !escaped =>
 			find_mapping_colon(all, rest, quote, Bool.True, square_depth, curly_depth, index + 1)
 
-		['"', .. as rest] if quote == NoQuote =>
+		['"', .. as rest] if quote == NoQuote and can_start({}) =>
 			find_mapping_colon(all, rest, DoubleQuote, Bool.False, square_depth, curly_depth, index + 1)
 
 		['"', .. as rest] if quote == DoubleQuote and !escaped =>
 			find_mapping_colon(all, rest, NoQuote, Bool.False, square_depth, curly_depth, index + 1)
 
-		['\'', .. as rest] if quote == NoQuote =>
+		['\'', .. as rest] if quote == NoQuote and can_start({}) =>
 			find_mapping_colon(all, rest, SingleQuote, Bool.False, square_depth, curly_depth, index + 1)
+
+		['\'', '\'', .. as rest] if quote == SingleQuote =>
+			find_mapping_colon(all, rest, quote, Bool.False, square_depth, curly_depth, index + 2)
 
 		['\'', .. as rest] if quote == SingleQuote =>
 			find_mapping_colon(all, rest, NoQuote, Bool.False, square_depth, curly_depth, index + 1)
 
-		['[', .. as rest] if quote == NoQuote => find_mapping_colon(all, rest, quote, Bool.False, square_depth + 1, curly_depth, index + 1)
+		['[', .. as rest] if quote == NoQuote and (in_flow or can_start({})) => find_mapping_colon(all, rest, quote, Bool.False, square_depth + 1, curly_depth, index + 1)
 		[']', .. as rest] if quote == NoQuote and square_depth > 0 => find_mapping_colon(all, rest, quote, Bool.False, square_depth - 1, curly_depth, index + 1)
-		['{', .. as rest] if quote == NoQuote => find_mapping_colon(all, rest, quote, Bool.False, square_depth, curly_depth + 1, index + 1)
+		['{', .. as rest] if quote == NoQuote and (in_flow or can_start({})) => find_mapping_colon(all, rest, quote, Bool.False, square_depth, curly_depth + 1, index + 1)
 		['}', .. as rest] if quote == NoQuote and curly_depth > 0 => find_mapping_colon(all, rest, quote, Bool.False, square_depth, curly_depth - 1, index + 1)
 
 		[_, .. as rest] => find_mapping_colon(all, rest, quote, Bool.False, square_depth, curly_depth, index + 1)
@@ -987,9 +1024,10 @@ split_flow_items_help = |bytes, current, items, quote, escaped, square_depth, cu
 		}
 
 		['\\', .. as rest] if quote == DoubleQuote and !escaped => split_flow_items_help(rest, current.append('\\'), items, quote, Bool.True, square_depth, curly_depth, line, column)
-		['"', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('"'), items, DoubleQuote, Bool.False, square_depth, curly_depth, line, column)
+		['"', .. as rest] if quote == NoQuote and scalar_can_start(current, Bool.True) => split_flow_items_help(rest, current.append('"'), items, DoubleQuote, Bool.False, square_depth, curly_depth, line, column)
 		['"', .. as rest] if quote == DoubleQuote and !escaped => split_flow_items_help(rest, current.append('"'), items, NoQuote, Bool.False, square_depth, curly_depth, line, column)
-		['\'', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('\''), items, SingleQuote, Bool.False, square_depth, curly_depth, line, column)
+		['\'', .. as rest] if quote == NoQuote and scalar_can_start(current, Bool.True) => split_flow_items_help(rest, current.append('\''), items, SingleQuote, Bool.False, square_depth, curly_depth, line, column)
+		['\'', '\'', .. as rest] if quote == SingleQuote => split_flow_items_help(rest, current.concat(['\'', '\'']), items, quote, Bool.False, square_depth, curly_depth, line, column)
 		['\'', .. as rest] if quote == SingleQuote => split_flow_items_help(rest, current.append('\''), items, NoQuote, Bool.False, square_depth, curly_depth, line, column)
 		['[', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('['), items, quote, Bool.False, square_depth + 1, curly_depth, line, column)
 		[']', ..] if quote == NoQuote and square_depth == 0 => fail(line, column, "unexpected closing bracket in flow collection")
@@ -1417,6 +1455,18 @@ expect {
 expect {
 	actual = Yaml.parse_str("-   value: |2\n      a\n    next: done\n")?
 	actual == Sequence([Mapping([{ key: "value", value: String("a\n") }, { key: "next", value: String("done") }])])
+}
+
+## Quotes and brackets inside plain scalars are ordinary text.
+expect {
+	actual = Yaml.parse_str("k: it's # comment\nit's: \"q\" # c\na[b: x]{\nlist: [a, 'b''c', \"d, e\"]\n")?
+	actual
+	== Mapping([
+		{ key: "k", value: String("it's") },
+		{ key: "it's", value: String("q") },
+		{ key: "a[b", value: String("x]{") },
+		{ key: "list", value: Sequence([String("a"), String("b'c"), String("d, e")]) },
+	])
 }
 
 ## A tab before a document marker is not a document marker.

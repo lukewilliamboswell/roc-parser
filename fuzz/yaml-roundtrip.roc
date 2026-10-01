@@ -140,9 +140,8 @@ plain_safe = |text, flow| {
 	last = bytes.last() ?? ' '
 	indicator = ['-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`', ' ', '\t']
 	flow_bad = flow and (bytes.contains(',') or bytes.contains('[') or bytes.contains(']') or bytes.contains('{') or bytes.contains('}'))
-	# Quotes and brackets inside plain scalars confuse the parser's comment and
-	# key scanners; float-looking strings that F64.from_str rejects fail.
-	gap_bad = !known_gaps and (bytes.contains('\'') or bytes.contains('"') or bytes.contains('[') or bytes.contains(']') or bytes.contains('{') or bytes.contains('}') or float_lookalike(bytes))
+	# Float-looking strings that F64.from_str rejects fail.
+	gap_bad = !known_gaps and float_lookalike(bytes)
 	!bytes.is_empty()
 	and !indicator.contains(first)
 	and last != ' '
