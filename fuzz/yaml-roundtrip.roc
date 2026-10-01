@@ -15,12 +15,6 @@ import parser.Yaml
 ## and every emission choice follows the YAML 1.2 core schema rather than the
 ## parser's own rules.
 
-## Set to Bool.True to also emit constructs the parser is known to get wrong
-## (see fuzz/README.md "Known YAML gaps"). Off by default so campaigns can
-## explore past them.
-known_gaps : Bool
-known_gaps = Bool.False
-
 Cur : { bytes : List(U8), pos : U64 }
 
 Out : { value : Yaml, text : Str, cur : Cur, block_scalar : Bool }
@@ -153,6 +147,8 @@ plain_safe = |text, flow| {
 	and !contains(text, "\t#")
 	and !flow_bad
 	and !resolves_non_string(text)
+	# At the start of a line these are document markers.
+	and !(Str.starts_with(text, "---") or Str.starts_with(text, "..."))
 }
 
 escape_utf8 : Str -> Str
@@ -441,11 +437,18 @@ gen_block_value = |start, indent, depth, in_sequence| {
 			}
 		}
 		3 if depth > 0 => {
-			sequence = gen_block_sequence(kind.cur, child, depth - 1)
+			form = pick(kind.cur, 3)
+			# Mapping values may hold an "indentless" sequence at the key's column.
+			indentless = !in_sequence and form.n == 1
+			column = if indentless indent else child
+			sequence = gen_block_sequence(form.cur, column, depth - 1)
 			if sequence.items_text.is_empty() {
 				{ value: Sequence([]), text: " []", cur: sequence.cur, block_scalar: Bool.False }
+			} else if in_sequence and form.n == 2 {
+				# Compact form: "- - item" with later items at indent + 2.
+				{ value: sequence.value, text: " ${Str.join_with(sequence.items_text, "\n${spaces(child)}")}", cur: sequence.cur, block_scalar: sequence.block_scalar }
 			} else {
-				{ value: sequence.value, text: "\n${spaces(child)}${Str.join_with(sequence.items_text, "\n${spaces(child)}")}", cur: sequence.cur, block_scalar: sequence.block_scalar }
+				{ value: sequence.value, text: "\n${spaces(column)}${Str.join_with(sequence.items_text, "\n${spaces(column)}")}", cur: sequence.cur, block_scalar: sequence.block_scalar }
 			}
 		}
 		4 if depth > 0 => {

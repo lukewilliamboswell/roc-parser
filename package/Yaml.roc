@@ -163,6 +163,12 @@ parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 								parse_mapping_help(child.input, indent, depth, raw_lines, entries.append({ key, value: child.val }))
 							}
 
+							# A sequence may sit at its key's indentation (YAML 1.2 8.2.1).
+							[next, ..] if next.indent == indent and is_sequence_line(next.content) => {
+								child = parse_sequence(rest, indent, depth + 1, raw_lines)?
+								parse_mapping_help(child.input, indent, depth, raw_lines, entries.append({ key, value: child.val }))
+							}
+
 							_ =>
 								parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value: Null }))
 							}
@@ -216,7 +222,7 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 						parse_sequence_help(rest, indent, depth, raw_lines, values.append(Null))
 					}
 			} else {
-				match split_mapping_entry(payload) {
+				match (if is_sequence_line(payload) Ok({}) else split_mapping_entry(payload).map_ok(|_| {})) {
 					Ok(_) => {
 						virtual = { content: payload, indent: payload_indent, number: line.number, terminated: line.terminated, tab: Bool.False }
 						child = parse_node(List.prepend(rest, virtual), payload_indent, depth + 1, raw_lines)?
@@ -1393,6 +1399,22 @@ expect {
 		Ok(Float(value)) => F64.is_nan(value)
 		_ => Bool.False
 	}
+}
+
+## Sequence entries may be compact nested sequences.
+expect {
+	actual = Yaml.parse_str("- - a\n  - b\n- - - c\n")?
+	actual == Sequence([Sequence([String("a"), String("b")]), Sequence([Sequence([String("c")])])])
+}
+
+## Mapping values may be sequences at the key's own indentation.
+expect {
+	actual = Yaml.parse_str("steps:\n- run: a\n  name: x\n- b\nnext: 1\n")?
+	actual
+	== Mapping([
+		{ key: "steps", value: Sequence([Mapping([{ key: "run", value: String("a") }, { key: "name", value: String("x") }]), String("b")]) },
+		{ key: "next", value: Int(1) },
+	])
 }
 
 ## Syntax errors report their source location.
