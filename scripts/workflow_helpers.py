@@ -16,9 +16,7 @@ except ImportError:
 
 
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-SKIPPED_EXAMPLES = {
-    "xml-svg.roc": "missing migrated roc-html dependency",
-}
+SKIPPED_EXAMPLES: dict[str, str] = {}
 
 
 def append_github_output(path: Path, name: str, value: str) -> None:

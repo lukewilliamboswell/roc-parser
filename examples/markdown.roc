@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
 	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
 }
 
@@ -91,7 +91,7 @@ render_content = |nodes, buf| {
 
 		[TODO(line), .. as rest] =>
 			render_content(rest, buf.concat("TODO: ${line}\n"))
-		}
+	}
 }
 
 render_list_items : List({ task : Markdown.TaskState, blocks : List(Markdown.Markdown) }), Str -> Str
@@ -102,7 +102,7 @@ render_list_items = |items, buf| {
 
 		[item, .. as rest] =>
 			render_list_items(rest, buf.concat("- ${item.task.to_str()}\n").concat(render_content(item.blocks, "")))
-		}
+	}
 }
 
 render_alignments : List(Markdown.Alignment) -> Str
@@ -152,7 +152,7 @@ join_strs_help = |items, separator, acc| {
 
 		[item, .. as rest] =>
 			join_strs_help(rest, separator, acc.concat(separator).concat(item))
-		}
+	}
 }
 
 render_inlines : List(Markdown.Inline), Str -> Str
@@ -187,5 +187,5 @@ render_inlines = |inlines, buf| {
 
 		[HtmlInline(raw), .. as rest] =>
 			render_inlines(rest, buf.concat(raw))
-		}
+	}
 }

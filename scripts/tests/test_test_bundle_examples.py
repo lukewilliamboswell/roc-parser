@@ -20,7 +20,7 @@ class TestBundleExamplesScriptTests(unittest.TestCase):
             self.assertEqual(examples, [example])
             self.assertIn(published, example.read_text(encoding="utf-8"))
 
-    def test_copy_examples_rewrites_url_and_skips_known_example(self) -> None:
+    def test_copy_examples_rewrites_url_for_every_example(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / "source"
@@ -36,7 +36,7 @@ class TestBundleExamplesScriptTests(unittest.TestCase):
                 source_dir=source,
             )
 
-            self.assertEqual([path.name for path in examples], ["example.roc"])
+            self.assertEqual([path.name for path in examples], ["example.roc", "xml-svg.roc"])
             rewritten = (target / "examples" / "example.roc").read_text(encoding="utf-8")
             self.assertIn('parser: "http://127.0.0.1:1234/bundle.tar.zst"', rewritten)
 

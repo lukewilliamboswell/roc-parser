@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
 	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
 }
 
@@ -93,5 +93,5 @@ enumerate = |elements| {
 			[last]
 				.prepend(inits |> Str.join_with(", "))
 				|> Str.join_with(" and ")
-		}
+	}
 }

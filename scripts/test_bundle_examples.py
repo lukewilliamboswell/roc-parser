@@ -21,9 +21,7 @@ except ImportError:
 
 
 PACKAGE_DEPENDENCY_RE = re.compile(r'(?m)^(\s*parser:\s*)"[^"]+"')
-SKIPPED_EXAMPLES = {
-    "xml-svg.roc": "missing migrated roc-html dependency",
-}
+SKIPPED_EXAMPLES: dict[str, str] = {}
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
