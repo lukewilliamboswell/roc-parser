@@ -19,38 +19,79 @@ ROOT = Path(__file__).resolve().parents[1]
 FUZZ_ROOT = ROOT / "fuzz"
 WORK_ROOT = ROOT / ".roc-parser-tmp" / "fuzz"
 ROC_FUZZ_RELEASE = {
-    "version": "0.3.0",
-    "commit": "ec137edcf0fa2530e3dbb175fec4ddff5281cc6d",
-    "bundle": "FTcKnkDxL1ZXfKsxeLmNKZ6XKnuKDd47Gv79ThxLYSfw.tar.zst",
-    "sha256": "f9be31a5d7f0ba2e7e13ec804e6827513af9e9e548137d780a904fdbb5793ee5",
+    "version": "0.4.2",
+    "commit": "b37bb7dc0b6aa44390d4bfa84978404e94cec885",
+    "bundle": "9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+    "sha256": "60d45f07a51515f2a49eadcf2163fb9c2801df5341c8b8685f81581010c7dd2c",
 }
+
+# How reviewed JSON seeds become corpus entries:
+# "fuzz-str" targets decode their input with Fuzz.str, "raw" targets read the
+# UTF-8 bytes directly, and structured generators (None) start from an empty
+# corpus because their bytes are choices rather than text.
+SeedEncoding = str | None
 
 
 @dataclass(frozen=True)
 class TargetConfig:
     source: Path
-    seeds: Path
-    dictionary: Path
+    seeds: Path | None
+    seed_encoding: SeedEncoding
+    dictionary: Path | None
+    max_input_size: int = 4096
+    timeout: int = 5
 
 
-TARGET_ORDER = (
-    "markdown-document",
-    "markdown-inline",
-    "yaml",
-    "xml",
-    "csv",
-    "http-request",
-    "http-response",
+def target(
+    name: str,
+    seeds: str | None = None,
+    encoding: SeedEncoding = None,
+    dictionary: str | None = None,
+    max_input_size: int = 4096,
+    timeout: int = 5,
+) -> tuple[str, TargetConfig]:
+    return name, TargetConfig(
+        source=FUZZ_ROOT / f"{name}.roc",
+        seeds=FUZZ_ROOT / "seeds" / f"{seeds}.json" if seeds else None,
+        seed_encoding=encoding,
+        dictionary=FUZZ_ROOT / "dictionaries" / f"{dictionary}.dict" if dictionary else None,
+        max_input_size=max_input_size,
+        timeout=timeout,
+    )
+
+
+TARGETS = dict(
+    [
+        target("markdown-document", "markdown-document", "raw", "markdown-document"),
+        target("markdown-blocks", max_input_size=1024),
+        target("markdown-refdefs", max_input_size=256),
+        target("markdown-inline", "markdown-inline", "raw", "markdown-inline"),
+        target("markdown-inline-ast", max_input_size=1024),
+        target("markdown-inline-pathological", "markdown-inline-pathological", "raw", max_input_size=64, timeout=10),
+        target("yaml", "yaml", "fuzz-str", "yaml"),
+        target("yaml-raw", "yaml", "raw", "yaml"),
+        target("yaml-roundtrip", max_input_size=512, timeout=10),
+        target("yaml-block", max_input_size=64),
+        target("xml", "xml", "fuzz-str", "xml"),
+        target("xml-raw", "xml", "raw", "xml", timeout=10),
+        target("xml-roundtrip", max_input_size=1024),
+        target("xml-malformed", max_input_size=1024),
+        target("csv", "csv", "fuzz-str", "csv"),
+        target("csv-raw", "csv", "raw", "csv", timeout=10),
+        target("csv-roundtrip", timeout=10),
+        target("csv-decode", timeout=10),
+        target("http-request", "http-request", "fuzz-str", "http-request", timeout=10),
+        target("http-response", "http-response", "fuzz-str", "http-response", timeout=10),
+        target("http-raw", "http-request", "raw", "http-raw", max_input_size=65536, timeout=10),
+        target("http-roundtrip", timeout=10),
+        target("http-smuggling", timeout=10),
+        target("parser-combinators", max_input_size=256),
+        target("string-primitives", max_input_size=256, timeout=10),
+        target("byte-scan", max_input_size=256, timeout=10),
+    ]
 )
 
-TARGETS = {
-    name: TargetConfig(
-        source=FUZZ_ROOT / f"{name}.roc",
-        seeds=FUZZ_ROOT / "seeds" / f"{name}.json",
-        dictionary=FUZZ_ROOT / "dictionaries" / f"{name}.dict",
-    )
-    for name in TARGET_ORDER
-}
+TARGET_ORDER = tuple(TARGETS)
 
 
 def encode_fuzz_str(value: str) -> bytes:
@@ -85,8 +126,11 @@ def prepare_corpus(target_name: str, corpus_dir: Path | None = None) -> Path:
     destination = corpus_dir or WORK_ROOT / "corpus" / target_name
     destination.mkdir(parents=True, exist_ok=True)
 
+    if config.seeds is None:
+        return destination
+
     for value in load_seed_values(config.seeds):
-        raw = encode_fuzz_str(value)
+        raw = encode_fuzz_str(value) if config.seed_encoding == "fuzz-str" else value.encode("utf-8")
         digest = hashlib.sha256(raw).hexdigest()
         seed_path = destination / f"seed-{digest}"
         if not seed_path.exists():
@@ -225,18 +269,19 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
     for target_name in target_names:
         config = TARGETS[target_name]
         corpus = prepare_corpus(target_name)
-        if not config.dictionary.is_file():
+        if config.dictionary is not None and not config.dictionary.is_file():
             raise ValueError(f"missing fuzz dictionary: {config.dictionary}")
 
         options = [
             "run",
             str(corpus),
-            f"--max-input-size={args.max_input_size}",
-            f"--timeout={args.timeout}",
+            f"--max-input-size={args.max_input_size or config.max_input_size}",
+            f"--timeout={args.timeout or config.timeout}",
             f"--memory-limit={args.memory_limit}",
-            f"--dictionary={config.dictionary}",
             "--print-final-stats",
         ]
+        if config.dictionary is not None:
+            options.append(f"--dictionary={config.dictionary}")
         if args.command == "smoke":
             options.append(f"--runs={args.runs}")
         else:
@@ -310,8 +355,10 @@ def add_build_options(parser: argparse.ArgumentParser) -> None:
 
 
 def add_limits(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--max-input-size", type=positive_int, default=4096)
-    parser.add_argument("--timeout", type=positive_int, default=5)
+    parser.add_argument(
+        "--max-input-size", type=positive_int, help="override the target's input size bound"
+    )
+    parser.add_argument("--timeout", type=positive_int, help="override the target's per-input timeout")
     parser.add_argument("--memory-limit", type=positive_int, default=2048)
 
 

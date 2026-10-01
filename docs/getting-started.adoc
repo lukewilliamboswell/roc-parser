@@ -1,0 +1,146 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#getting-started]
+= Getting started
+
+In this chapter you add roc-parser to a Roc app and use it to read three lines
+of CSV into typed records. At the end the app prints one line per record. You
+need a terminal, an internet connection, and a little Roc: how to write a
+function, a record, and a `match`.
+
+== Before you start
+
+You need:
+
+* The Roc compiler, as a recent _nightly_ build. Roc is still changing, so
+  each roc-parser release is tested with one specific nightly, which its
+  release notes name. Download that build from the
+  https://github.com/roc-lang/nightlies/releases[Roc nightlies page] and put
+  the `roc` executable on your `PATH`.
+* A platform for your app. The examples in this manual use
+  https://github.com/roc-lang/basic-cli[basic-cli] 0.23.0, which provides
+  `main!` and printing to the terminal. roc-parser itself is pure Roc and
+  works with any platform.
+
+Check the compiler:
+
+[source,sh]
+----
+roc version
+----
+
+It prints the name of the nightly build, which should match the one in the
+release notes:
+
+[source,text]
+----
+Roc compiler version nightly-<date>-<commit>
+----
+
+== Add the package
+
+A Roc app names each package it uses by URL in its header. The compiler
+downloads the package the first time it builds the app and checks it against
+the hash in the URL.
+
+. Open the {repo}/releases[roc-parser releases page] and choose the newest
+  release.
+. Under *Assets*, find the file ending in `.tar.zst`. Copy its link: it has
+  the form
+  `+https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst+`.
+. Put that link in your app's header under a short name. This manual uses
+  `parser`.
+
+Create a file named `main.roc` with this header, replacing the `parser` URL
+with the one you copied:
+
+[source,roc]
+----
+app [main!] {
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst",
+}
+----
+
+The examples in this manual are tested against the package source in the
+repository, so their headers say `parser: "../../package/main.roc"` instead.
+Everything else in them is the same.
+
+For complete programs to start from, download
+`roc-parser-examples-<version>.zip` from the same release. Its apps are already
+pinned to that release; unzip it and follow the `README.md` inside, which runs
+them with `roc <name>.roc` from its `examples/` directory.
+
+== Read CSV into records
+
+Add the rest of the program below the header:
+
+[source,roc]
+----
+include::examples/getting-started-csv.roc[tag=body,indent=0]
+----
+
+Run it:
+
+[source,sh]
+----
+roc main.roc
+----
+
+Output:
+
+[source,text]
+----
+include::examples/getting-started-csv.expected[]
+----
+
+The first run takes longer while the compiler downloads the platform and the
+package.
+
+== What the program does
+
+`import parser.CSV` makes the `CSV` module from the package named `parser`
+available.
+
+`Planet` is the record type each row becomes. The first line of the input is
+a header row, and each field of `Planet` reads the column with the same name.
+
+`planets` calls `CSV.parse`, which splits the text into rows and decodes each
+row into a record. `CSV.parse` does not take the row type as an argument: the
+compiler infers it from the type annotation on `planets`, and finds the
+decoding code through the static dispatch method `parser_for`, which every
+record type has. Change the annotation and the same call decodes a different
+record.
+
+The result is `Ok` with a list of `Planet` records, or `Err` with one of two
+tags:
+
+* `InvalidCsv(error)` when the text is not valid CSV or a cell does not fit
+  its field. `error` says which record and field failed, where it starts in
+  the text, and why.
+* `MissingRequiredField(name)` when the header has no column for a field.
+  The compiler adds this tag to the error type of every type-directed
+  decoder, so the annotation must name it.
+
+`describe` handles all three cases with a `match`. Nothing is printed until
+every row has been read successfully.
+
+To see the error path, change `Mars,2` to `Mars,two` and run the program
+again. It prints a message that names line 4 and quotes `two`. Rename the `moons`
+column and it prints `no moons column`. <<errors>> shows how to report every
+kind of failure, and <<csv>> shows optional columns, empty cells and
+hand-built row parsers that match columns by position.
+
+== Next steps
+
+* <<combinator-primer>> teaches the building blocks by writing a parser for a
+  small settings format.
+* The format chapters show how to read CSV, YAML, XML, Markdown and HTTP.
+* <<custom-format>> shows how to build and test a parser for a format of your
+  own.

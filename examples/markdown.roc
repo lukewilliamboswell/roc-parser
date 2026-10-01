@@ -1,11 +1,10 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "../package/main.roc",
 }
 
 import cli.OsStr
 import cli.Stdout
-import parser.String
 import parser.Markdown
 
 content =
@@ -43,16 +42,7 @@ content =
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	markdown_input = args.get(1).map_ok(OsStr.display) ?? content
-	parsed =
-		String.parse_str(Markdown.all, markdown_input)
-			.map_ok(
-				|nodes| {
-					render_content(nodes, "")
-				},
-			)
-			?? "PARSING ERROR"
-
-	Stdout.line!(parsed)?
+	Stdout.line!(render_content(Markdown.parse_str(markdown_input), ""))?
 	Ok({})
 }
 
@@ -86,12 +76,9 @@ render_content = |nodes, buf| {
 		[HtmlBlock(raw), .. as rest] =>
 			render_content(rest, buf.concat("HTML: ${Str.inspect(raw)}\n"))
 
-		[Frontmatter({ raw }), .. as rest] =>
+		[Frontmatter(raw), .. as rest] =>
 			render_content(rest, buf.concat("FRONTMATTER: ${Str.inspect(raw)}\n"))
-
-		[TODO(line), .. as rest] =>
-			render_content(rest, buf.concat("TODO: ${line}\n"))
-		}
+	}
 }
 
 render_list_items : List({ task : Markdown.TaskState, blocks : List(Markdown.Markdown) }), Str -> Str
@@ -102,7 +89,7 @@ render_list_items = |items, buf| {
 
 		[item, .. as rest] =>
 			render_list_items(rest, buf.concat("- ${item.task.to_str()}\n").concat(render_content(item.blocks, "")))
-		}
+	}
 }
 
 render_alignments : List(Markdown.Alignment) -> Str
@@ -152,7 +139,7 @@ join_strs_help = |items, separator, acc| {
 
 		[item, .. as rest] =>
 			join_strs_help(rest, separator, acc.concat(separator).concat(item))
-		}
+	}
 }
 
 render_inlines : List(Markdown.Inline), Str -> Str
@@ -187,5 +174,5 @@ render_inlines = |inlines, buf| {
 
 		[HtmlInline(raw), .. as rest] =>
 			render_inlines(rest, buf.concat(raw))
-		}
+	}
 }

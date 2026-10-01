@@ -6,5 +6,10 @@
   "\"escaped \"\"quote\"\"\",plain,\"comma,inside\"",
   "first,,third",
   "\"multiline\nfield\",value",
-  "\"unterminated,field"
+  "\"unterminated,field",
+  "name,age\r\nAda,36\r\n\r\n",
+  "a,b\n1,2,3\n",
+  "\"closed\"text,x",
+  "\u0001é,x\n\"é\",1\n",
+  "\u0001id,éé\n7,\"é\"\n"
 ]

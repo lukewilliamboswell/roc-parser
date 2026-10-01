@@ -1,23 +1,24 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.3.0/FTcKnkDxL1ZXfKsxeLmNKZ6XKnuKDd47Gv79ThxLYSfw.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
 	parser: "../package/main.roc",
 }
 
 import fuzz.Fuzz
-import parser.HTTP
-import parser.String
+import HttpCheck
 
+## Arbitrary text must parse or fail cleanly as a response, and every parsed
+## response must satisfy the invariants in fuzz/HttpCheck.roc. Uses Fuzz.str,
+## encoded identically in roc-fuzz 0.3.0 and 0.4.2, so the reviewed seeds in
+## fuzz/seeds/http-response.json still apply.
 test : Str -> Fuzz.Outcome
 test = |input| {
-	match String.parse_str(HTTP.response, input) {
-		Ok(_) => Fuzz.keep
-		Err(_) => Fuzz.keep
-	}
+	HttpCheck.check_response(input.to_utf8())
+	Fuzz.keep
 }
 
 target = Fuzz.target_with({
 	name: "http-response",
 	generator: Fuzz.str,
 	test,
-	show: |input| Str.inspect(input),
+	show: |input| HttpCheck.show(input.to_utf8()),
 })

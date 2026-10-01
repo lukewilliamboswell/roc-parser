@@ -1,0 +1,174 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#xml]
+= Read XML documents
+
+This chapter shows how to parse an XML document into a tree, find elements,
+attributes and text in it, and report malformed input with a line and column.
+It is for Roc programmers who have added `parser` to their app's dependencies
+and need data out of XML such as feeds, SVG files or configuration.
+
+The parser checks that a document is well-formed according to XML 1.0 and
+gives you the tree after the usual XML clean-up: references replaced by their
+text, line endings normalised, comments dropped. It does not validate against
+a schema or DTD, and it rejects documents that contain a `<!DOCTYPE>`; see
+<<xml-unsupported,what is not supported>> before using it on documents from
+other tools.
+
+Every example on this page comes from
+link:{src}/docs/examples/xml-guide.roc[`docs/examples/xml-guide.roc`], which
+CI runs, and imports `parser.Xml`.
+
+== Parse a document and find elements
+
+`Xml.parse_str` takes the whole document and returns an `Xml` record with
+the document's `root` element and its `declaration`. Each node in the tree
+is one of:
+
+[source,roc]
+----
+Node := [
+    Element({ name : Str, attributes : List(Attribute), children : List(Node) }),
+    Text(Str),
+]
+----
+
+An `Element` holds its name, its attributes in source order, and its
+children. There is no query language, but `Xml.Node` has four helpers for
+the common lookups, and you can pattern match on the tree for anything else:
+
+* `node.name()` is `Ok(name)` for an element and `Err(NotAnElement)` for text.
+* `node.attribute(name)` is the attribute's value, or `Err(Missing)`.
+* `node.children_named(name)` lists the direct child elements with that name.
+* `node.text()` joins all text inside the node, like the DOM's `textContent`.
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=walk,indent=0]
+----
+
+Given this document:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=document,indent=0]
+----
+
+parse it and describe each `entry` element under the root:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=parse,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=1..2]
+----
+
+The whitespace between elements is kept as `Text` nodes; `children_named`
+skips them because it only returns elements. `&amp;`, the CDATA section and the
+character reference `&#x1F600;` have already been turned into ordinary text.
+
+== What the tree contains
+
+The tree is what an XML processor reports, not the literal source:
+
+* The five predefined entities `&lt;` `&gt;` `&amp;` `&apos;` `&quot;` and
+  decimal (`&#65;`) or hexadecimal (`&#x42;`) character references are
+  replaced by their characters, in text and in attribute values.
+* CDATA sections become text, and adjacent text, including text on both
+  sides of a comment, is merged into one `Text` node.
+* Line endings (`\r\n` and lone `\r`) become `\n`.
+* In attribute values, tabs and line breaks become spaces.
+* Comments and processing instructions are checked and then dropped.
+* The XML declaration is available as `declaration`: `Ok({ version,
+  encoding })` or `Err(Missing)`. The version is a record such as
+  `{ major: 1, minor: 0 }`, and the encoding is `Err(Missing)` when the
+  declaration does not name one.
+
+This document has every one of these in a single element:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=normalise-run,indent=0]
+----
+
+Printing the root with `Str.inspect` gives:
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=3..4]
+----
+
+== Report malformed input
+
+When a document is not well-formed, `Xml.parse_str` returns
+`InvalidXml({ line, column, message })`. Lines and columns are one-based, and
+columns count UTF-8 bytes, so a column after non-ASCII text is larger than the
+number of characters a user sees.
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=5..9]
+----
+
+If you are combining XML with other parsers, `Xml.parser` is the same
+parser as a `Parser(Utf8.Bytes, Xml)`. It leaves any input after the document
+for the next parser. Its failures are `ParseError({ message, offset })`, with
+the same message as `Xml.parse_str` and the byte offset of the problem.
+
+[#xml-unsupported]
+== What is not supported
+
+These limits are by design:
+
+Document type declarations:: A `<!DOCTYPE ...>` is rejected. As a result only
+the five predefined entities exist, and any other reference, such as
+`&nbsp;`, is an error. Replace HTML entities with character references
+(`&#160;`) before parsing.
+Namespaces:: Names are kept exactly as written. `svg:path` is an element
+named `"svg:path"`, and `xmlns` declarations are ordinary attributes; prefixes
+are not resolved to URIs.
+Declared encodings:: The input is a Roc `Str`, which is already UTF-8. An
+`encoding="..."` in the declaration is reported in `declaration` but not
+used. Convert other encodings to UTF-8 before parsing.
+Validation:: Only well-formedness is checked. Required elements, attribute
+types and schemas are not.
+
+For the full module interface, see the link:{api}Xml[Xml API reference].
+
+[#xml-performance]
+== Performance
+
+`Xml.parse_str` builds the tree at about 120–135 MB/s on an Apple M2, and the
+rate stays flat from 4 KiB to 1 MiB documents: the parser is linear in the
+input size. On the generated documents that is about 2.2 times as fast as
+Go's `encoding/xml`, and 1.4–2 times slower than Rust's quick-xml and
+roxmltree. Character data and attribute values are found 16 bytes at a time
+with SIMD, the input is validated as UTF-8 once, and names, text and
+attribute values with nothing to unescape are slices of the input string,
+so they keep the input alive.
+Elements are parsed with an explicit stack, so 5,000 levels of nesting are
+safe, and duplicate-attribute checks are linear: an element with 5,000
+attributes parses 19 times faster than with the Rust libraries. See
+<<performance>> for the measurements and caveats.

@@ -1,0 +1,329 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#yaml]
+= Read YAML configuration and frontmatter
+
+This chapter shows how to read a YAML configuration file or the frontmatter
+at the top of a Markdown post into a Roc value, pull settings out of it, and
+report mistakes with a line and column. It is for Roc programmers who have
+added `parser` to their app's dependencies and know the YAML they want to
+read.
+
+The parser handles the YAML that configuration files and frontmatter use in
+practice, and rejects the rest with an error instead of guessing. If your
+files use anchors, tags or several documents in one file, read
+<<yaml-unsupported,what is rejected>> first.
+
+Every example on this page comes from
+link:{src}/docs/examples/yaml-guide.roc[`docs/examples/yaml-guide.roc`],
+which CI runs, and imports `parser.Yaml`.
+
+== Decode a document into a record
+
+`Yaml.decode` reads a document straight into your own Roc type. You do not
+pass the type: it is inferred from how the result is used, usually from a
+type annotation. This configuration, held in a Roc multi-line string (each
+`\\` starts one line of the file):
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=config,indent=0]
+----
+
+is read by:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=navigate,indent=0]
+----
+
+`summarize(config_text)` returns:
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=1]
+----
+
+The rules that map YAML onto Roc types:
+
+* A mapping decodes into a record, matching keys to field names, or into a
+  `Dict` with `Str` or integer keys. Keys the record does not have are
+  skipped.
+* A sequence decodes into a `List`, or into a tuple when it has exactly as
+  many items as the tuple.
+* A plain (unquoted) scalar is resolved for the type that reads it, with the
+  YAML 1.2 core schema (see <<yaml-scalars,how plain values are typed>>).
+  A `Str` field takes any scalar except a null, so `version: 1.10` gives
+  `"1.10"` rather than a float; a `U8` field takes `0x1F`; a `Bool` field
+  takes `true` or `FALSE`, but not the string `"true"`.
+* A tag union without payloads, such as `[Debug, Info]`, takes the tag's name.
+* A null (`~`, `null` or an empty value) decodes as an empty list, dict or
+  record, and as `Err(Null)` in a `Try(_, [Null])` field.
+* A `Try(_, [Missing])` field is `Err(Missing)` when its key is absent, like
+  `email` for Grace above.
+
+A value of the wrong shape or out of range fails with `InvalidYaml` at that
+value's line and column, the same error invalid YAML gives. A required field
+whose key is absent fails with `MissingRequiredField(name)`. Your code does
+not declare that tag: the compiler adds it to the error type of every decoder
+of a record with required fields, so name it in the annotation:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=decode-errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=18..20]
+----
+
+=== Other key spellings and unknown keys
+
+`Yaml.decoder` builds a decoder with other conventions. `keys` says how YAML
+spells Roc's `snake_case` field names: `SnakeCase` (as written), `KebabCase`
+(`user-id`) or `CamelCase` (`userId`). `unknown_keys: Reject` turns a key the
+record does not have into an `InvalidYaml` error, which catches typos in
+hand-written configuration:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=strict,indent=0]
+----
+
+Build the decoder once, as a top-level constant, and call it for each
+document. To write your own generic function over decodable types, require
+`a.Yaml.Parseable(errors)` in its `where` clause, the way `Yaml.decode` does.
+
+== Explore a document as a tree
+
+When the shape is not known in advance, `Yaml.parse_str` returns a `Yaml`
+tree:
+
+[source,roc]
+----
+Yaml := [
+    Null,
+    Bool(Bool),
+    Int(I64),
+    Float(F64),
+    Text(Str),
+    Sequence(List(Yaml)),
+    Mapping(List({ key : Str, value : Yaml })),
+]
+----
+
+A mapping keeps its entries in source order. `get` looks up a key, `at` an
+index, and `get_path` follows several of them, using decimal strings such as
+`"0"` for sequence indexes. Each returns `Err(Missing)` when there is nothing
+there. `as_str`, `as_i64`, `as_bool` and `as_list` unwrap one variant or
+return `Err(WrongType)`:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=tree,indent=0]
+----
+
+For `config_text`, and then for `"owners: []"`:
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=16..17]
+----
+
+Empty input, or a document holding only comments, parses as `Null`. To
+combine YAML with other parsers, `Yaml.parser` is a `Parser(Utf8.Bytes, Yaml)`
+that reads the rest of its input; its `ParseError` offset is the byte offset
+of the error's line and column.
+
+== Read Markdown frontmatter
+
+Frontmatter is a YAML document between two `---` lines at the start of a
+Markdown file. Split the text at the closing `---` and parse the first part.
+The parser accepts the opening `---` (and a closing `...`) as document
+markers, so you do not need to strip them:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=frontmatter,indent=0]
+----
+
+For `"---\ntitle: Hello\ntags: [roc, yaml]\n---\n# Hello\n"`, printing
+`Yaml.to_inspect(meta)` and then the body gives:
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=2..3]
+----
+
+`Yaml.decode` works on the same text when you know the frontmatter's fields.
+
+[#yaml-scalars]
+== How plain values are typed
+
+In a `Yaml` tree, an unquoted value is resolved with the YAML 1.2 core
+schema. Anything that matches none of these forms is `Text`:
+
+[cols="1,2"]
+|===
+|Written as |Becomes
+
+|`~`, `null`, `Null`, `NULL`, or nothing
+|`Null`
+
+|`true`, `True`, `TRUE`, `false`, `False`, `FALSE`
+|`Bool`
+
+|Decimal digits with an optional sign; unsigned `0x` hexadecimal or `0o` octal
+|`Int` (an `I64`; a value outside its range is an error)
+
+|Decimal with a fraction or exponent; `.inf`, `-.inf`, `.nan` in the three
+letter cases
+|`Float`
+|===
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=scalars-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=5]
+----
+
+The last four values show what stays text: a version number such as `1.2.3`,
+a number with `_` separators, anything in quotes, and dates (YAML 1.2 has no
+timestamp type). `tRUE` and `0X1` are text too, because the core schema
+allows only the spellings in the table. In a tree, quote a value whenever it
+must stay text; `Yaml.decode` reads any non-null plain scalar into a `Str`
+field as written.
+
+`Yaml.to_inspect` prints a tree in Roc notation, escaping line breaks, tabs
+and other control characters so each value stays on one line.
+
+== Write multi-line text
+
+Use a block scalar for text that spans lines. `|` (literal) keeps line
+breaks; `>` (folded) joins lines with spaces and keeps a blank line as a
+paragraph break. A chomping indicator controls the final line break: none
+keeps one, `-` removes it, and `+` keeps every trailing blank line. A digit
+sets the content indentation, so the text can start with spaces:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=block-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=6]
+----
+
+== Write lists
+
+A sequence item may start with a mapping on the same line as its `-`
+(compact), may hold another sequence the same way, and may sit at the same
+indentation as its parent key (indentless):
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=sequences-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=7]
+----
+
+Short lists and mappings can also use flow style on one line, as in
+`ports: [80, 443]` or `labels: { tier: web }`.
+
+== Quote strings
+
+A single-quoted string has no escapes except `''` for one quote. A
+double-quoted string supports every YAML 1.2 escape, including `\t`, `\n`,
+`\xXX`, `\uXXXX` and `\UXXXXXXXX`. A `#` inside quotes is text; outside quotes
+and after a space it starts a comment:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=quoted-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=8..9]
+----
+
+[#yaml-unsupported]
+== What is rejected
+
+The following are outside the supported subset. Each one is an
+`InvalidYaml` error, never a silently different value:
+
+* anchors (`&name`), aliases (`*name`) and tags (`!!str`);
+* directives (`%YAML`) and complex keys (`? key`);
+* more than one document in a file;
+* a flow collection (`[...]` or `{...}`) that continues onto another line;
+* a quoted or plain string that continues onto another line (use a block
+  scalar instead);
+* tabs used for indentation;
+* duplicate keys in one mapping;
+* nesting deeper than 100 levels, counting flow collections;
+* in a `Yaml` tree, integers outside the `I64` range (decode them into a
+  wider type such as `U64`, `I128` or `Str` instead);
+* control characters other than tab and line breaks.
+
+Mapping keys are kept as their source text, not resolved like values. `1` and
+`01` are different keys, and `true` is the string key `"true"`.
+
+== Show where an error is
+
+`InvalidYaml` carries a `Yaml.Error` record: a one-based `line` and `column`
+and a message. Columns count bytes from the start of the line:
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/yaml-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-guide.expected[lines=10..15]
+----
+
+For the full module interface, see the
+link:{api}Yaml[Yaml API reference].
+
+[#yaml-performance]
+== Performance
+
+Parsing takes time linear in the size of the document, at about 51–55 MB/s on
+an Apple M2 from 4 KiB to 1 MiB: a 4 KiB configuration in under 0.1 ms and a
+1 MiB one in about 20 ms. That is about as fast as yaml-rust2 (Rust), 1.6
+times faster than serde_yaml, 2.6 times faster than Go's yaml.v3 and seven
+times faster than PyYAML with libyaml. Nesting is limited to 100 levels. Decoding
+into a record builds the same document first, then walks it once. See
+<<performance>> for the measurements and the comparison with other
+libraries.

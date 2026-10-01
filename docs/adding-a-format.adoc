@@ -1,0 +1,165 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+endif::[]
+
+[#adding-a-format]
+= Add a format module
+
+This how-to is for contributors who want to add a ready-made parser for a new
+text format, alongside `CSV`, `Xml`, `Yaml`, `Markdown` and `HTTP`. It assumes
+<<contributing>> and <<property-testing>>, and that you have opened an issue to
+agree that the format belongs in the package. When you finish, the new module
+has the same evidence behind it as the existing ones: tests, a review against a
+mature implementation, property tests in CI, and a chapter in this manual.
+
+The steps use a hypothetical format called `Toml` as the example. Follow them
+in order: each step relies on the one before.
+
+== 1. Decide what you support
+
+Write down, before any code, which specification and version the module
+follows, and which parts of it the module supports. Every existing module
+supports a documented subset and rejects the rest with an error, rather than
+misreading it. For example `Xml` rejects a DOCTYPE, and `Yaml` rejects
+multi-line flow collections. A rejected input is a clear limit; a misread one
+is a bug that nobody notices.
+
+Pick the oracle now too: a widely used implementation that you can pin to an
+exact version and call from Python, such as `tomllib` for TOML. The oracles of
+the existing formats are listed in <<property-testing>>.
+
+== 2. Create the module
+
+. Add `package/Toml.roc`. Start it with a `##` doc comment that names the
+  specification, lists what is supported and what is rejected, and describes
+  the error type. This comment becomes the module's page in the API reference.
+. Give every exposed value a `##` doc comment with its purpose and, where it
+  helps, a short `expect` example.
+. Expose the module in `package/main.roc`. `roc test package/main.roc`,
+  which `scripts/all_tests.py` runs, then runs its tests with the rest.
+. Make it a type module and follow the conventions of the existing ones:
+** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
+   `Toml.Error` is a record with a `message` and the most precise location
+   the format has (`line` and `column` for a text format);
+** `Toml.parser : Parser(Utf8.Bytes, Toml)` for callers who compose
+   parsers, failing with `ParseError({ message, offset })`;
+** `Try(a, [Missing])` for every optional value, and methods in the
+   `.{ }` block, called in method-call style in examples;
+** no public function that can crash, on any input.
+. If records are a natural target, also implement a format for
+  type-directed decoding, as `CSV.Format` and `Yaml.Format` do, and expose
+  `Toml.decode` with a `Parseable` where-clause alias. The parsers chapter of
+  the Roc language reference lists the methods a format provides.
+
+Prefer a scanner over the input bytes for document-level parsing, with an
+explicit stack for nesting. The combinator style is convenient for small
+grammars, but every rewritten module (CSV, XML, HTTP, Markdown) moved to
+scanners to stay linear in the input size and to avoid deep recursion.
+
+== 3. Write the tests
+
+Put `expect` tests next to the code they cover. For every rule, test an input
+that is accepted, one that is rejected, and the boundary between them. Add a
+test for each limit you chose in step 1. Run them:
+
+[source,bash]
+----
+$ROC test package/Toml.roc
+$ROC test package/main.roc
+----
+
+== 4. Add a probe and a review script
+
+A conformance review runs the same inputs through your module and the oracle
+and compares the results. It needs three pieces under `scripts/toml/`, modelled
+on `scripts/csv/`, the smallest of the existing reviews:
+
+`probe.roc`:: A basic-cli app that reads one document on standard input and
+prints one JSON line: the parsed value or an error. Use the public API only.
+`cases.json`:: Hand-written cases with a `name` and an `input`, one for each
+rule and each known edge case. Add the specification's own examples or test
+suite if there is one, pinned by URL and SHA-256 as `scripts/review_xml.py`
+does for the W3C suite.
+`known-failures.json`:: The baseline. It starts empty; every entry added later
+needs a reason (see <<property-testing>>).
+
+Then add `scripts/review_toml.py`. It builds the probe with `$ROC` (falling
+back to `roc` on `PATH`), runs every case through the probe and the oracle,
+converts both results to the same shape, and exits non-zero on any
+disagreement that is not in the baseline. Report baseline entries that now
+pass as stale. If the oracle is a third-party package, pin it, and all of its
+dependencies, in `scripts/toml/requirements.txt` so that
+`pip install --no-deps -r` installs exactly the reviewed versions.
+
+Run it, fix the parser until it passes, and add a unit test under
+`scripts/tests/` for any logic in the script that is not a direct call to the
+oracle.
+
+== 5. Add property-test targets
+
+Add at least two targets under `fuzz/`, as described in <<property-testing>>:
+
+`toml-raw.roc`:: Raw bytes. Check that the parser never crashes, that errors
+point inside the input, and the metamorphic relations that hold for the format,
+such as line-ending equivalence. Bound pathological shapes with the runner's
+`--timeout`.
+`toml-roundtrip.roc`:: A structured generator. Build a value and a way of
+writing it from the bytes, build the expected result from the specification
+without calling the parser, and require the parser to return exactly that
+value.
+
+Check the generator against the oracle on a corpus before you trust it: add a
+`corpus` mode to the review script, like `review_xml.py corpus`.
+
+== 6. Register the targets
+
+. Add each target to `TARGETS` in `scripts/run_fuzz.py`, with its seed
+  encoding (`raw` for raw bytes, none for a structured target), seeds,
+  dictionary, input size and timeout.
+. Add reviewable seeds in `fuzz/seeds/toml.json` and syntax tokens in
+  `fuzz/dictionaries/toml.dict` for the raw target.
+. Add each target to the `target` matrix of the `fuzz` job in
+  `.github/workflows/fuzz.yml`, and the review to the `conformance` matrix with
+  its `requirements` file and command.
+
+`scripts/tests/test_run_fuzz.py` fails if a `fuzz/*.roc` file is not
+registered, or if the workflow matrix and the registry disagree. Check that
+and run the new targets:
+
+[source,bash]
+----
+python3 -m unittest discover -s scripts/tests -p "test_*.py"
+python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
+----
+
+== 7. Document the module
+
+. Add a chapter `docs/toml.adoc` that shows how to parse a document, how to
+  handle errors, and what is and is not supported. Include it from the manual's
+  index with `leveloffset=+1`, like the other format chapters.
+. Make every code example in the chapter a complete program that
+  `scripts/check_doc_examples.py` compiles and runs, so it cannot drift from
+  the API.
+. Add the module to the release notes for the next version in
+  `docs/releases/`.
+
+Build and check the documentation:
+
+[source,bash]
+----
+python3 scripts/build_docs.py --check
+python3 scripts/check_doc_examples.py
+python3 scripts/build_manual.py
+----
+
+== Checklist
+
+* [ ] Supported subset and oracle written down in the module doc comment
+* [ ] Module exposed in `package/main.roc` and listed in `scripts/all_tests.py`
+* [ ] `expect` tests for accepted, rejected and boundary inputs
+* [ ] Probe, cases, review script and empty baseline under `scripts/`
+* [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and `fuzz.yml`
+* [ ] Chapter with tested examples, and a release notes entry

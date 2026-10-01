@@ -11,19 +11,22 @@ import subprocess
 import sys
 import tempfile
 import threading
+import zipfile
 from pathlib import Path
 from typing import Sequence
 
 try:
     from ._common import ROOT, display_command, roc_command
+    from . import release_helpers, workflow_helpers
 except ImportError:
     from _common import ROOT, display_command, roc_command
+    import release_helpers
+    import workflow_helpers
 
 
-PACKAGE_DEPENDENCY_RE = re.compile(r'(?m)^(\s*parser:\s*)"[^"]+"')
-SKIPPED_EXAMPLES = {
-    "xml-svg.roc": "missing migrated roc-html dependency",
-}
+# The archive tested locally is labelled with this placeholder version.
+LOCAL_RELEASE_TAG = "local"
+SKIPPED_EXAMPLES: dict[str, str] = {}
 
 
 def run(command: Sequence[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -73,35 +76,30 @@ def start_server(directory: Path) -> tuple[http.server.ThreadingHTTPServer, str]
     return server, f"http://127.0.0.1:{port}"
 
 
-def copy_examples_with_bundle_url(
-    examples_dir: Path,
-    bundle_url: str,
-    *,
-    source_dir: Path = ROOT / "examples",
-) -> list[Path]:
-    target_dir = examples_dir / "examples"
-    shutil.copytree(source_dir, target_dir)
+def package_and_extract(target: Path, bundle_url: str, *, source_dir: Path = ROOT / "examples") -> list[Path]:
+    """Package the examples exactly as a release does, pinned to `bundle_url`,
+    unzip the archive under `target`, and return its example apps."""
+    try:
+        archive = release_helpers.package_examples(
+            source_dir, bundle_url, LOCAL_RELEASE_TAG, target / f"roc-parser-examples-{LOCAL_RELEASE_TAG}.zip"
+        )
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from error
+    with zipfile.ZipFile(archive) as bundle:
+        bundle.extractall(target)
+    examples_dir = target / archive.stem / "examples"
+    return select_examples(sorted(examples_dir.glob("*.roc")))
 
-    examples: list[Path] = []
-    for example in sorted(target_dir.glob("*.roc")):
+
+def select_examples(paths: Sequence[Path]) -> list[Path]:
+    examples = []
+    for example in paths:
         if example.name in SKIPPED_EXAMPLES:
             print(f"Skipping {example.name}: {SKIPPED_EXAMPLES[example.name]}.")
             continue
-
-        source = example.read_text(encoding="utf-8")
-        rewritten, count = PACKAGE_DEPENDENCY_RE.subn(
-            lambda match: f'{match.group(1)}"{bundle_url}"',
-            source,
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(
-                f"{example.name} does not declare the expected parser package dependency"
-            )
-
-        example.write_text(rewritten, encoding="utf-8")
         examples.append(example)
-
+    if not examples:
+        raise SystemExit("No examples found")
     return examples
 
 
@@ -125,20 +123,23 @@ def build_and_run_examples(examples: Sequence[Path], build_dir: Path, roc: str) 
         run([str(output)])
 
 
-def committed_examples(source_dir: Path = ROOT / "examples") -> list[Path]:
-    examples = []
-    for example in sorted(source_dir.glob("*.roc")):
-        if example.name in SKIPPED_EXAMPLES:
-            print(f"Skipping {example.name}: {SKIPPED_EXAMPLES[example.name]}.")
-            continue
-        examples.append(example)
-    if not examples:
-        raise SystemExit("No published examples found")
-    return examples
+def checkout_examples(source_dir: Path = ROOT / "examples") -> list[Path]:
+    """The examples in the checkout, which must use the checkout's package."""
+    try:
+        workflow_helpers.validate_examples(source_dir)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    return select_examples(sorted(source_dir.glob("*.roc")))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=(
+            "By default, package the examples as a release does, pinned to a locally "
+            "served bundle, and check and run the archive's apps. With --checkout, "
+            "check and run the examples in place against the checkout's package."
+        )
+    )
     parser.add_argument(
         "--bundle-path",
         type=Path,
@@ -150,14 +151,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Skip compiled example execution",
     )
     parser.add_argument(
-        "--published",
+        "--checkout",
         action="store_true",
-        help="Test committed examples against their unchanged released dependency URLs",
+        help="Test the examples in the checkout against the checkout's package (../package/main.roc)",
     )
     args = parser.parse_args(argv)
 
-    if args.published and args.bundle_path is not None:
-        parser.error("--published cannot be combined with --bundle-path")
+    if args.checkout and args.bundle_path is not None:
+        parser.error("--checkout cannot be combined with --bundle-path")
 
     default_tmp = ROOT / ".roc-parser-tmp"
     tmp_parent = Path(os.environ.get("ROC_PARSER_TMPDIR", default_tmp)).resolve()
@@ -168,9 +169,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         tmp_dir = Path(tmp)
         build_dir = tmp_dir / "build"
 
-        if args.published:
-            examples = committed_examples()
-            print("Testing committed examples with released dependencies")
+        if args.checkout:
+            examples = checkout_examples()
+            print("Testing the checkout's examples against the checkout's package")
             run_example_checks(examples, roc)
             run_example_apps(examples, roc)
             if not args.skip_build_run:
@@ -178,7 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         bundle_dir = tmp_dir / "bundle"
-        examples_dir = tmp_dir / "rewritten"
+        examples_dir = tmp_dir / "archive"
 
         bundle_dir.mkdir()
         examples_dir.mkdir()
@@ -196,9 +197,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         server, base_url = start_server(bundle_dir)
         try:
             bundle_url = f"{base_url}/{bundle_path.name}"
-            examples = copy_examples_with_bundle_url(examples_dir, bundle_url)
+            examples = package_and_extract(examples_dir, bundle_url)
 
-            print(f"Testing examples with bundled package: {bundle_url}")
+            print(f"Testing the packaged examples archive against {bundle_url}")
             run_example_checks(examples, roc)
             run_example_apps(examples, roc)
 

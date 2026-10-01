@@ -1,0 +1,164 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#overview]
+= What roc-parser is
+
+roc-parser turns text into typed https://www.roc-lang.org/[Roc] values. You
+give it a string, such as the contents of a CSV file, a YAML configuration, or
+an HTTP request, and it gives back either a Roc value you can use directly or
+an error that says what was wrong with the input.
+
+It is written in pure Roc, so it works with any platform, and it comes in two
+layers:
+
+* Ready-made parsers for common formats. You call one function and get a
+  document tree, or, for CSV and YAML, your own record type: the compiler
+  infers the type from your annotation and decodes straight into it.
+* The small building blocks those parsers are made from, called _parser
+  combinators_. You use them to read a format of your own, from a one-line
+  `key=value` setting to a complete file format.
+
+This manual is for Roc programmers. You do not need to know anything about
+parsing theory.
+
+== The problem it solves
+
+Most programs start by reading text that someone else wrote. Splitting a line
+on commas, or matching it with a regular expression, works until the input
+contains a quoted comma, a missing field, or a value of the wrong kind. Then
+the code either crashes, silently produces wrong data, or grows a pile of
+special cases.
+
+A parser describes the shape of valid input once, as a Roc value, and checks
+every input against it. With roc-parser:
+
+* The result is typed. A CSV row becomes `{ name : Str, moons : U64 }`, not a
+  list of strings you still have to convert.
+* Invalid input is an `Err` value, never a crash. The ready-made parsers
+  follow their published specifications, including the awkward corners, and
+  report where the problem is.
+* A parser is built from smaller parsers, so each piece can be tested on its
+  own with `expect`.
+
+Compared with a regular expression, a combinator parser is longer to write
+for a one-off match, but it can describe nested structure (a regular
+expression cannot match balanced brackets), it produces a value rather than
+a list of captured substrings, and it reads as ordinary Roc code.
+
+== What a first success looks like
+
+This program decodes a CSV file with a header row into typed records and
+prints them.
+<<getting-started>> walks through it.
+
+[source,roc]
+----
+include::examples/getting-started-csv.roc[tag=body,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+include::examples/getting-started-csv.expected[]
+----
+
+== Supported formats
+
+Each module follows a published specification. Where a module implements only
+part of one, its chapter says which part, and input outside that part is
+rejected with an error rather than misread.
+
+[cols="1,2,3",options="header"]
+|===
+|Module |Reads |Specification
+
+|`CSV`
+|Comma-separated rows decoded into your own record type
+|https://www.rfc-editor.org/rfc/rfc4180[RFC 4180], with the usual relaxations
+(any line ending, rows of different lengths)
+
+|`Yaml`
+|Configuration files and Markdown frontmatter, as a tree or your own record type
+|A documented subset of https://yaml.org/spec/1.2.2/[YAML 1.2]: one document,
+no anchors, aliases or tags
+
+|`Xml`
+|A whole XML document as a tree
+|https://www.w3.org/TR/xml/[XML 1.0 (Fifth Edition)] well-formedness, without
+document type declarations or namespaces
+
+|`Markdown`
+|A Markdown document as a syntax tree
+|https://spec.commonmark.org/0.31.2/[CommonMark 0.31.2] with
+https://github.github.com/gfm/[GitHub Flavored Markdown] tables, task lists
+and strikethrough
+
+|`HTTP`
+|One HTTP/1.x request or response
+|https://www.rfc-editor.org/rfc/rfc9112[RFC 9112] message syntax and
+https://www.rfc-editor.org/rfc/rfc9110[RFC 9110] field syntax
+
+|`Parser`, `Utf8`
+|Anything you describe with combinators
+|Not applicable
+|===
+
+The format chapters describe each module's exact behaviour. The
+{api}[API reference] lists every public function.
+
+== How the pieces fit together
+
+A combinator is a function that takes parsers and returns a new parser. The
+`Utf8` module provides parsers for the smallest pieces of text, such as one
+byte, a digit, or an exact word. The `Parser` module combines them: one after
+another, one of several alternatives, repeated, or with the result
+transformed. Each format module also exposes its parser as a `Parser` value,
+so your own parsers and the library's can be mixed.
+
+[mermaid]
+....
+---
+title: Small parsers combine into larger ones
+---
+flowchart LR
+    Pieces["Utf8 parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
+    Combine --> Yours["Your parser<br/>for your format"]
+    Combine --> Formats["Format parsers:<br/>CSV, HTTP, Markdown"]
+    Yours --> Value["Typed Roc value<br/>or an error"]
+    Formats --> Value
+....
+
+<<combinator-primer>> teaches the combinators by building a small parser one
+step at a time.
+
+== When to choose something else
+
+roc-parser fits programs that read text formats of moderate size completely
+into memory and want typed results with clear errors. Consider something else
+when:
+
+* You need full YAML, with anchors, aliases, tags or several documents in one
+  stream, or XML with document type declarations, namespaces or schema
+  validation. These modules reject such input on purpose.
+* You need to parse a stream incrementally as it arrives, such as a very large
+  log file or a network connection. Every parser here works on a complete
+  input held in memory.
+* You want to render Markdown to HTML or serialize values back to text. The
+  modules read formats; they do not write them.
+* You need JSON, TOML, or another format this package does not include. You
+  can write it with the combinators, but a dedicated package may already
+  exist.
+
+== Stability
+
+roc-parser tracks recent nightly builds of the Roc compiler. Because Roc is
+still changing, the package's API may change between releases. Each release
+names the compiler build it was tested with, and the release notes describe
+any changes you need to make when upgrading.

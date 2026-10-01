@@ -38,16 +38,46 @@ class SeedCorpusTests(unittest.TestCase):
     def test_all_reviewable_seed_files_are_valid(self) -> None:
         for target_name in run_fuzz.TARGET_ORDER:
             config = run_fuzz.TARGETS[target_name]
+            if config.seeds is None:
+                continue
             values = run_fuzz.load_seed_values(config.seeds)
             self.assertGreater(len(values), 0, target_name)
-            for value in values:
-                run_fuzz.encode_fuzz_str(value)
+            if config.seed_encoding == "fuzz-str":
+                for value in values:
+                    run_fuzz.encode_fuzz_str(value)
 
     def test_all_target_inputs_exist(self) -> None:
-        for config in run_fuzz.TARGETS.values():
+        for name, config in run_fuzz.TARGETS.items():
             self.assertTrue(config.source.is_file(), config.source)
-            self.assertTrue(config.seeds.is_file(), config.seeds)
-            self.assertTrue(config.dictionary.is_file(), config.dictionary)
+            if config.seeds is not None:
+                self.assertTrue(config.seeds.is_file(), config.seeds)
+                self.assertIn(config.seed_encoding, ("fuzz-str", "raw"), name)
+            if config.dictionary is not None:
+                self.assertTrue(config.dictionary.is_file(), config.dictionary)
+
+    def test_every_fuzz_target_is_registered(self) -> None:
+        # Shared generator modules and the allocation diagnostic are not campaigns.
+        not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc"}
+        sources = {path.stem for path in run_fuzz.FUZZ_ROOT.glob("*.roc")} - not_targets
+        self.assertEqual(sources, set(run_fuzz.TARGET_ORDER))
+
+    def test_workflow_matrix_lists_every_target(self) -> None:
+        workflow = (run_fuzz.ROOT / ".github" / "workflows" / "fuzz.yml").read_text(encoding="utf-8")
+        matrix = workflow.split("        target:\n", 1)[1].split("    steps:", 1)[0]
+        listed = [line.strip()[2:] for line in matrix.splitlines() if line.strip().startswith("- ")]
+        self.assertEqual(listed, list(run_fuzz.TARGET_ORDER))
+
+    def test_raw_seeds_are_plain_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            corpus = run_fuzz.prepare_corpus("yaml-raw", Path(directory) / "corpus")
+            contents = {path.read_bytes() for path in corpus.iterdir()}
+            values = run_fuzz.load_seed_values(run_fuzz.TARGETS["yaml-raw"].seeds)
+            self.assertEqual(contents, {value.encode("utf-8") for value in values})
+
+    def test_structured_targets_start_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            corpus = run_fuzz.prepare_corpus("yaml-roundtrip", Path(directory) / "corpus")
+            self.assertEqual(list(corpus.iterdir()), [])
 
     def test_load_seed_values_rejects_non_string_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

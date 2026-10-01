@@ -1,0 +1,22 @@
+{
+  "req/value-invalid-utf8": "Field values are Str, so non-UTF-8 obs-text is rejected rather than decoded lossily (h11 keeps raw bytes).",
+  "req/obs-fold": "RFC 9112 5.2 lets a server reject obs-fold with 400; this parser always rejects it (h11 unfolds it).",
+  "req/value-ctl": "RFC 9110 5.5 field-value excludes CTLs; h11 only rejects NUL and whitespace controls. llhttp also rejects.",
+  "req/value-del": "RFC 9110 5.5: DEL (0x7F) is not VCHAR or obs-text; h11 accepts it.",
+  "req/lf-line-endings": "RFC 9112 2.2 only MAY accept bare LF; this parser requires CRLF (llhttp rejects bare LF by default; h11 accepts).",
+  "req/lf-final": "As req/lf-line-endings: the empty line ending the head must be CRLF.",
+  "req/chunked-ext-bws": "RFC 9112 7.1.1 allows BWS around ';' and '=' in chunk extensions; h11 does not.",
+  "req/chunked-trailing-space": "RFC 9112 7.1 chunk-size line has no trailing whitespace; h11 tolerates trailing OWS.",
+  "req/chunked-ext-no-name": "RFC 9112 7.1.1 requires a token after ';'; h11 accepts any chunk-ext text.",
+  "req/chunked-ext-bad-quote": "RFC 9112 7.1.1 chunk-ext-val is token / quoted-string; h11 accepts any text.",
+  "req/chunked-trailer-obs-fold": "Trailer fields follow field-line syntax; obs-fold is rejected as in the header section.",
+  "req/te-cl": "RFC 9112 6.3 says a message with both ought to be handled as an error; llhttp rejects it by default, h11 lets Transfer-Encoding win.",
+  "req/cl-te": "As req/te-cl.",
+  "req/te-http10": "RFC 9112 6.1: Transfer-Encoding in an HTTP/1.0 message means the framing is faulty; h11 decodes it.",
+  "res/reason-ctl": "RFC 9112 4 reason-phrase is HTAB / SP / VCHAR / obs-text; h11 accepts other controls.",
+  "res/te-cl": "As req/te-cl.",
+  "res/obs-fold": "As req/obs-fold.",
+  "res/lf-endings": "As req/lf-line-endings.",
+  "res/101-unsolicited": "h11 rejects a 101 the client did not ask for (connection state); as a message parser this library returns it with no body (RFC 9112 6.3 item 1).",
+  "res/chunked-ext-bws": "As req/chunked-ext-bws."
+}

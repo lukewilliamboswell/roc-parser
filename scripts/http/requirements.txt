@@ -1,0 +1,2 @@
+# The oracle is the pure-Python h11 parser; pin it so verdicts are reproducible.
+h11==0.16.0

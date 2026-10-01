@@ -1,0 +1,23 @@
+Emphasis([Text("em")])
+Text(" ")
+Strong([Text("strong")])
+Text(" ")
+Strikethrough([Text("gone")])
+Text(" ")
+InlineCode("x + 1")
+Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Ok("Home") } })
+Text(" and ")
+Image({ alt: [Text("a cat")], target: { href: "cat.png", title: Err(Missing) } })
+Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: Err(Missing) } })
+Text(" ")
+Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: Err(Missing) } })
+Text(" ")
+Link({ label: [Text("me@example.com")], target: { href: "mailto:me@example.com", title: Err(Missing) } })
+Text("one
+two")
+HardBreak
+Text("three")
+--
+Paragraph([Text("See "), Link({ label: [Text("the guide")], target: { href: "https://example.com/guide", title: Ok("The guide") } }), Text(" and "), Image({ alt: [Text("logo")], target: { href: "/logo.png", title: Err(Missing) } }), Text(".")])
+--
+Text("See [the guide][guide].")

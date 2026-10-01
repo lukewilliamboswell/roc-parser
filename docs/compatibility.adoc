@@ -1,0 +1,128 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#compatibility]
+= Compatibility
+
+This chapter is for readers choosing a release, upgrading, or matching a Roc
+compiler to the package. It states which compiler each release is built
+for, what a version number promises, where the package runs, and what changed
+in 2.0.0.
+
+== Roc compiler
+
+Roc has no stable release yet, and its compiler changes the language and
+standard library often. Each roc-parser release is therefore built and tested
+with one Roc nightly:
+
+* `.roc-version` at the repository root names the nightly for the package,
+  its tests, the examples, the property tests, the conformance reviews and the
+  benchmarks, for example `nightly-2026-09-29-7f11a82`.
+* An automated workflow proposes an update to a newer nightly when one is
+  published, and merges it only when the tests pass with it.
+
+Use the nightly named by the release you depend on. A newer nightly often
+works, but a compiler change can break the build without any change to this
+package; the release notes say when a migration changed the package's API.
+
+[source,sh]
+----
+cat .roc-version
+----
+
+== Version numbers
+
+Releases follow https://semver.org/[semantic versioning]:
+
+* A patch release (such as 1.0.2) fixes bugs without changing the API.
+* A minor release (such as 1.2.0) adds API without removing or changing it.
+* A major release (such as 2.0.0) may remove or change API, or change what an
+  existing function accepts or returns.
+
+For a parser, which inputs it accepts and the values it produces matter as
+much as its type signatures. Read the release notes for behaviour changes
+even when the API is unchanged.
+
+Roc packages are fetched by URL, so a release is a bundle URL whose name is
+the hash of its content. Copy it from the {repo}/releases[GitHub releases page];
+each release also publishes an SBOM and signed provenance.
+
+== Platforms
+
+The package is plain Roc with no platform-specific code: it does no input or
+output, so it works with any Roc platform, on any system where that platform
+and the pinned compiler run. CI builds and tests it on Linux x86-64, and the
+conformance results in <<conformance,Conformance>> were measured on macOS with
+Apple silicon.
+
+== Dependencies
+
+The package depends on one other package:
+
+[cols="1,1,3",options="header"]
+|===
+|Package |Version |Used for
+|https://github.com/roc-lang/unicode[roc-lang/unicode] |4.2.0 |Unicode case folding, general categories and scalar handling in the Markdown module
+|===
+
+`package/main.roc` names its release URL. Roc fetches it when it fetches
+roc-parser, so applications need not add it themselves.
+
+== Changes in 2.0.0 at a glance
+
+Version 2.0.0 changes the API of every module and reworks every format parser
+to follow its specification, checked against a reference implementation (see
+<<conformance,Conformance>>). Code written for 1.x does not compile without
+changes, and many inputs now parse differently. The
+{src}/docs/releases/2.0.0.md[2.0.0 release notes] start with an upgrade guide that
+maps each old name to its replacement. In summary:
+
+[cols="1,4",options="header"]
+|===
+|Module |What changed
+
+|`Parser`, `Utf8`
+|The text parsers live in the `Utf8` module. Runners report the furthest failure as
+`ParseError({ message, offset })`, and partial runners return
+`{ value, rest }`. `maybe` returns `Try(a, [Missing])`. Several functions
+were renamed or removed, and
+`many` and `sep_by` stop when an element consumes no input instead of
+looping forever.
+
+|`CSV`
+|`CSV.parse` decodes rows into records by header name. `CSV.Record` replaces
+the opaque record types, and every failure is
+`InvalidCsv({ record, field, line, column, message })`. Parses RFC 4180, with
+an optional final line break, lone CR line breaks and any UTF-8 in fields.
+
+|`HTTP`
+|`parse_request`, `parse_response` and `parse_requests` take bytes and fail
+with `InvalidHttp({ offset, message })`. Headers are `{ name, value }`
+records with a case-insensitive `HTTP.header` lookup, `Version` is now
+`{ major, minor }`, and `Method` gains `Extension(name)`. Parses HTTP/1.1 per
+RFC 9112 and rejects messages with ambiguous framing.
+
+|`Markdown`
+|`Markdown.parse_str` and `parse_inlines` return the tree directly, and the
+legacy single-construct parsers, the placeholder variant and the debug
+printers are gone. Rebuilt on the CommonMark 0.31.2 parsing strategy,
+with GFM tables, task lists, strikethrough and extended autolinks. Adds the
+roc-lang/unicode dependency.
+
+|`Xml`
+|`Xml.parse_str` reports `InvalidXml({ line, column, message })`, `Xml.parser`
+embeds the parser, elements are records, and optional parts of the
+declaration are `Try(_, [Missing])`. Checks XML 1.0 well-formedness and
+rejects documents with a document type declaration.
+
+|`Yaml`
+|`Yaml.decode` reads a document into a record. Text scalars are `Text`, errors are `InvalidYaml`, and helpers such as `get_path` and
+`as_str` walk the tree. Resolves plain scalars with the YAML 1.2 core schema
+and rejects unsupported features, such as anchors, instead of misreading
+them.
+|===

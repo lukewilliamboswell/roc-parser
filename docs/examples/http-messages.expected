@@ -1,0 +1,13 @@
+method: POST
+target: /notes
+version: 1.1
+body: hello
+content type: text/plain, accept: none
+method: Extension("PURGE")
+status: 404 Not Found
+body: Not here.
+decoded body: Wikipedia 
+first: /a, second: /b, left over: 0 bytes
+targets: /a, /b
+health check: /health
+rejected at byte 55: both Transfer-Encoding and Content-Length

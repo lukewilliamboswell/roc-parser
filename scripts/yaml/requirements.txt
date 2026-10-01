@@ -1,0 +1,2 @@
+# The oracle uses only the pure Python parser; no native extension is required.
+ruamel.yaml==0.18.16

@@ -1,0 +1,20 @@
+web: 3 replicas, owners Ada and Grace
+Mapping([{ key: "title", value: Text("Hello") }, { key: "tags", value: Sequence([Text("roc"), Text("yaml")]) }])
+# Hello
+
+Sequence([Null, Null, Bool(True), Bool(False), Int(42), Int(-7), Int(31), Int(15), Float(1.5), Float(6.02e23), Float(inf), Float(-inf), Float(nan), Text("1.2.3"), Text("1_000"), Text("true"), Text("2026-10-01")])
+Mapping([{ key: "literal", value: Text("line one\nline two\n") }, { key: "folded", value: Text("joined into one line\nnew paragraph\n") }, { key: "stripped", value: Text("no final newline") }, { key: "kept", value: Text("trailing blank lines kept\n\n") }, { key: "indented", value: Text("  starts with two spaces") }])
+Mapping([{ key: "steps", value: Sequence([Mapping([{ key: "run", value: Text("build") }, { key: "name", value: Text("compile") }]), Sequence([Text("nested"), Text("compact")])]) }])
+Mapping([{ key: "single", value: Text("it's # not a comment") }, { key: "plain", value: Text("text") }])
+Mapping([{ key: "double", value: Text("tab\there, é, A") }])
+line 2, column 1: tabs may not be used for YAML indentation
+line 1, column 7: anchors, aliases, and tags are not supported by this YAML subset
+line 2, column 1: multiple YAML documents are not supported
+line 2, column 1: duplicate mapping key `name`
+line 1, column 7: unterminated flow collection
+Mapping([{ key: "1", value: Text("one") }, { key: "01", value: Text("zero-one") }])
+Ok("Ada")
+Err(Missing)
+Err(InvalidYaml({ column: 11, line: 2, message: "integer `300` is outside the range of U8" }))
+Err(InvalidYaml({ column: 8, line: 3, message: "expected a boolean, found `no`" }))
+Err(MissingRequiredField("owners"))

@@ -1,0 +1,377 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#background]
+= Where the design comes from
+
+roc-parser is not a new idea. Parser combinators have been studied and used
+for fifty years, and almost every choice in the `Parser` and `Utf8` modules
+repeats, adapts or deliberately declines something from that history. This
+chapter traces those ideas to their sources, so you can see why the library
+behaves as it does and where it differs from the libraries you may already
+know. It assumes you have read <<combinator-primer>>; you do not need it to
+use the package.
+
+The examples come from
+`{src}/docs/examples/background-lineage.roc[background-lineage.roc]`; every
+`expect` in it passes.
+
+== A parser is a function
+
+The founding idea is that a parser is an ordinary function: it takes the
+input, reads something from the front of it, and returns what it read
+together with the input that is left. Because parsers are values, functions
+that take parsers and return new parsers (the _combinators_) can express
+sequencing, choice and repetition directly, so the parser has the shape of
+the grammar it reads.
+
+William Burge described such a set of combinators in his 1975 book
+_Recursive Programming Techniques_. Philip Wadler's 1985 paper
+"How to replace failure by a list of successes" showed how a lazy functional
+language can represent a parser's possible outcomes as a list: an empty list
+is failure, and several elements are the several ways the input could be
+read. Graham Hutton's 1992 paper "Higher-order functions for parsing" turned
+these ideas into a complete, teachable library and became the standard
+reference.
+
+roc-parser keeps the function and drops the list. A `Parser(input, a)` wraps
+a function from `input` to a `Try` holding either the value and the rest of
+the input, `{ value, rest }`, or a `ParseError` with a message and an offset.
+`Parser.custom` takes such a function directly, so you can always step
+outside the combinators, and `Parser.run` runs a parser and returns the same
+shape:
+
+[source,roc]
+----
+include::examples/background-lineage.roc[tag=monadic,indent=0]
+----
+
+A parser returns one result, not a list. Wadler's list of successes allows
+ambiguous grammars, where one input has several readings, but the formats this
+package reads are designed to have exactly one reading. A single result is
+cheaper, and it gives one clear place to put an error.
+
+== Sequencing: monads and applicatives
+
+Running one parser and then another needs a way to combine their results.
+Hutton and Erik Meijer's "Monadic parser combinators" (1996) and the shorter
+"Monadic parsing in Haskell" (1998) observed that parsers form a _monad_: the
+sequencing operation, usually called `bind` or `and_then`, passes the value
+from the first parser to a function that chooses the second. That is what
+`counted` above does with `and_then`: the length it reads decides how many
+bytes the next parser takes.
+
+Most of a grammar does not need that power. In "Applicative programming with
+effects" (2008), Conor McBride and Ross Paterson named the weaker
+_applicative_ interface: a pure value lifted into the parser, and a way to
+apply a parser of functions to a parser of arguments. Their paper points to
+parsing as a case where monads are more than you need, citing S. Doaitse
+Swierstra and Luc Duponcheel's 1996 combinators, whose structure is known
+before any input is read. Applicative parsers cannot make the grammar depend
+on earlier values, and in return they read as a description of the input.
+
+`Parser.const` with `keep` and `skip` is exactly that applicative interface,
+with the names Evan Czaplicki's
+https://package.elm-lang.org/packages/elm/parser/latest/[elm/parser] gave its
+pipeline operators: `|=` keeps a result and `|.` ignores one. You list the
+pieces of the input in order, and the curried constructor receives the ones
+you keep:
+
+[source,roc]
+----
+include::examples/background-lineage.roc[tag=applicative,indent=0]
+----
+
+roc-parser builds `map` and `keep` on this same application step, and also
+offers the monadic `and_then` method for the cases that need it, such as
+`counted`. Prefer `keep` and `skip` when the grammar allows: a parser that
+uses only them can be read top to bottom as a description of its input.
+
+== Choice and backtracking
+
+A choice between alternatives must decide what happens when the first one
+fails after reading part of the input. The libraries in this lineage give
+three answers.
+
+Full backtracking:: The next alternative starts again from the original
+input. Wadler's lists and Hutton's combinators work this way, and so does
+Bryan O'Sullivan's
+https://hackage.haskell.org/package/attoparsec[attoparsec], which keeps the
+whole input so that it can backtrack arbitrarily.
+Committed choice:: Daan Leijen and Erik Meijer's Parsec (2001) tries the
+second alternative only if the first failed _without consuming input_. Their
+paper gives two reasons: naive backtracking holds on to the input and leaks
+space, and when the first alternative has already read part of the input, its
+failure is usually the error worth reporting. When you do want to backtrack,
+you wrap the first alternative in `try`. Elm's parser takes the same default
+for the same reason, with `backtrackable` in place of `try`; its README uses
+the input `[ 1, 23zm5, 3 ]`, where the useful error is at the `z`, not at
+the `[`.
+Ordered choice:: Bryan Ford's _parsing expression grammars_ (PEGs, 2004)
+define choice as prioritized: `A / B` tries `A`, and tries `B` from the same
+position only if `A` fails. Once `A` succeeds, `B` is never considered, even
+if the rest of the parse then fails.
+
+roc-parser's `Parser.alt` and `Parser.one_of` are PEG ordered choice. A
+failed alternative is always retried from the original input, so there is no
+`try`, and the first success wins:
+
+[source,roc]
+----
+include::examples/background-lineage.roc[tag=ordered,indent=0]
+----
+
+The trade-offs follow from the history. Without a commit point, you never
+have to decide where to put `try`, and a grammar reads the same as its PEG.
+The costs are the ones Parsec was designed to avoid: a grammar whose
+alternatives share long prefixes re-reads them, and without help a failure
+deep inside an early alternative would be replaced by the failures of the
+later ones. The furthest-failure rule described below provides that help,
+and <<combinators>> shows how to order alternatives so that re-reading rarely
+matters.
+
+== Repetition that always ends
+
+PEG repetition is greedy: `e*` matches as many `e` as it can and never gives
+any back. `Parser.many`, `one_or_more` and `sep_by` behave the same way, which
+is why a failed element ends the repetition rather than the parse.
+
+Repeating a parser that can succeed without reading anything, such as
+`chomp_while` or `maybe(p)`, would loop forever. Parsec refuses at run time,
+with the error "combinator 'many' is applied to a parser that accepts an
+empty string". roc-parser instead stops the repetition at the first element
+that makes no progress, and returns what it has collected. The check compares
+input lengths, so it costs O(1) per element and needs only the `len` method
+from the input type, which the `where` clause on `many` states. A Roc program
+should not crash on its input, so a well-defined result is better than an
+error that only appears for some inputs.
+
+== Error reporting
+
+The early papers say little about errors. Parsec made them a design goal:
+on failure it reports the position and the set of things that would have
+been accepted there. Mark Karpov's
+https://hackage.haskell.org/package/megaparsec[megaparsec], a fork of Parsec,
+keeps that and, when it merges the errors of two branches, prefers the one
+that got further into the input. Elm's parser adds _context_: a parser can
+say "I am reading a list", so the error can name what was being read and not
+just the row and column, which the Elm compiler uses for its error messages.
+
+roc-parser adopts megaparsec's rule. Parsers track the _furthest failure_,
+the failure that read furthest into the input, and every runner reports it
+as `ParseError({ message, offset })`, where `offset` is a byte offset. A
+repetition that stops at a bad element remembers that element's failure, so
+if the parse then fails, the error points at the bad element rather than at
+the input left over after the repetition:
+
+[source,roc]
+----
+include::examples/background-lineage.roc[tag=furthest,indent=0]
+----
+
+The alternative that got furthest is almost always the one the author of the
+input meant, so this recovers most of the precision of committed choice while
+keeping ordered choice. `ParseError` is an open tag union, so `?` passes it
+through a function that returns other errors too.
+
+The format modules go further on their own: `Yaml` and `Xml` report line
+and column, `CSV` the record and field, and `HTTP` the byte offset, each in an
+error tag named after the format. <<errors>> shows how to present them.
+
+== Bytes, not characters
+
+Haskell's early combinator libraries read lists of characters. The libraries
+built for speed read bytes: attoparsec has a `ByteString` interface, and
+Geoffroy Couprie's https://docs.rs/nom[nom] for Rust describes itself as
+"byte-oriented" and "zero-copy". The Roc language reference gives the same
+advice for Roc: in
+{langref}/strings.md[the strings chapter of the language reference], it
+recommends working in UTF-8 bytes when implementing a parser.
+
+So the input type of the text parsers, `Utf8.Bytes`, is `List(U8)`, and
+`'a'` is a byte. Every format in this
+package is defined over ASCII delimiters, which in UTF-8 are single bytes that
+never appear inside a multi-byte character, so reading bytes is both correct
+and fast. Text is turned back into `Str` only once a whole field has been
+read.
+
+== Recursion and laziness
+
+A grammar for nested data refers to itself: a list contains values, and a
+value can be a list. In Haskell this costs nothing, because laziness delays
+building a parser until it is used. Roc evaluates eagerly, so a parser that
+refers to itself would be built forever. `Parser.lazy` takes a function that
+builds the parser and calls it only when the parser runs, exactly as
+elm/parser's `lazy : (() -> Parser a) -> Parser a` does for eager Elm.
+<<combinators>> shows it in use.
+
+Left recursion, where a rule starts with itself (`expr = expr "-" term`), is
+a different problem. A top-down parser calls the rule again before reading
+anything and never stops. Ford's PEG paper notes that left recursion is not
+available in PEGs. Research has since shown how to support it in combinators,
+for example Richard Frost, Rahmatullah Hafiz and Paul Callaghan's 2008
+"Parser combinators for ambiguous left-recursive grammars", and Joshua
+Barretto's https://docs.rs/chumsky[chumsky] for Rust offers left recursion
+and memoization as opt-in features. roc-parser supports neither. Write the
+repetition explicitly instead: a `term` followed by `many` of `"-" term`.
+
+== Packrat parsing and performance
+
+Backtracking can re-run the same parser at the same position many times, and
+in the worst case the time grows exponentially with the input. Ford's
+_packrat parsing_ (2002) fixes this by memoizing every rule's result at every
+position, which guarantees linear time at the cost of memory proportional to
+the input times the number of rules.
+
+roc-parser does not memoize. For the formats it targets, careful ordering of
+alternatives keeps backtracking shallow, and memoization would cost memory on
+every input to protect against grammars that are rare in practice. Where
+speed matters most, the package goes further: <<adding-a-format>> explains
+that the CSV, XML, HTTP and Markdown modules moved their document-level
+parsing from combinators to byte scanners with an explicit stack, to stay
+linear in the input size and avoid deep recursion. Combinators remain the
+interface for composing them and for writing your own parsers.
+
+== Combinators and parser generators
+
+The other tradition is the parser _generator_. Stephen C. Johnson's yacc
+(1975) reads a grammar file and generates an LALR(1) parser; Terence Parr's
+https://www.antlr.org/[ANTLR] (described by Parr and Russell Quong in 1995)
+generates LL(k) parsers, with its later versions using more powerful
+strategies. A generator analyses the whole grammar before any input is read,
+so it can report ambiguities and conflicts at build time, it accepts
+left-recursive rules, and the parsers it generates are fast.
+
+Combinators trade that analysis for being ordinary code. The grammar is
+written in the host language, can be tested piece by piece with `expect`,
+uses the host's types, and needs no build step. You can add a combinator of
+your own whenever the grammar needs one, such as a parser whose next step
+depends on a value already read. <<choosing-an-approach>> covers when that
+trade is worth making.
+
+== Testing against the specification
+
+The newest layer in this lineage is testing. Koen Claessen and John Hughes's
+QuickCheck (2000) introduced property-based testing: state a property that
+should hold for every input, and let the tool generate inputs to try to break
+it. roc-parser's quality process follows that approach. Fuzz targets check
+properties such as "parsing never crashes", and review scripts compare every
+format with a mature independent implementation, its _oracle_, on generated
+and conformance-suite inputs. <<property-testing>> describes the process.
+
+== How roc-parser compares
+
+[cols="2,2,3",options="header"]
+|===
+|Idea |Source |roc-parser
+
+|Parser as a function returning the rest of the input
+|Burge 1975, Wadler 1985, Hutton 1992
+|Yes, with one result instead of a list of successes
+
+|Applicative sequencing
+|Swierstra and Duponcheel 1996, McBride and Paterson 2008, elm/parser
+|`const`, `keep` and `skip`
+
+|Monadic sequencing
+|Hutton and Meijer 1996 and 1998
+|`and_then`, and `custom` for anything else
+
+|Choice
+|Parsec 2001 (committed, with `try`); Ford 2004 (ordered)
+|Ordered choice that always backtracks; no `try`
+
+|Repetition of empty-matching parsers
+|Parsec raises an error
+|Stops at the first element that makes no progress
+
+|Error reporting
+|Parsec, megaparsec (longest match), elm/parser (context)
+|Furthest failure with a byte offset; line and column in the formats
+
+|Input type
+|attoparsec, nom (bytes)
+|UTF-8 bytes, as the Roc language reference recommends
+
+|Memoization, left recursion
+|Ford 2002; Frost, Hafiz and Callaghan 2008; chumsky
+|Not supported; write repetition explicitly
+
+|Quality
+|Claessen and Hughes 2000
+|Fuzzing, property tests and oracle comparisons
+|===
+
+== Further reading
+
+Burge, W. H. (1975). _Recursive Programming Techniques_. Addison-Wesley. https://openlibrary.org/works/OL7015039W[Open Library record]::
+The first published set of parsing combinators, in a book about programming
+with recursion and higher-order functions. Out of print.
+
+Wadler, P. (1985). How to replace failure by a list of successes. _Functional Programming Languages and Computer Architecture_, LNCS 201, 113–128. https://doi.org/10.1007/3-540-15975-4_33[doi:10.1007/3-540-15975-4_33]::
+Represents failure and backtracking with lazy lists of results; the
+technique behind the first functional parser libraries.
+
+Hutton, G. (1992). Higher-order functions for parsing. _Journal of Functional Programming_, 2(3), 323–343. https://doi.org/10.1017/S0956796800000411[doi:10.1017/S0956796800000411]::
+The classic introduction to combinator parsing, building sequencing, choice
+and repetition from a handful of primitives.
+
+Hutton, G., and Meijer, E. (1996). _Monadic parser combinators_. Technical report NOTTCS-TR-96-4, University of Nottingham. https://people.cs.nott.ac.uk/pszgmh/monparsing.pdf[PDF on Graham Hutton's site]::
+A long tutorial that recasts combinator parsing in monadic style; its
+introduction surveys the earlier work.
+
+Hutton, G., and Meijer, E. (1998). Monadic parsing in Haskell. _Journal of Functional Programming_, 8(4), 437–444. https://doi.org/10.1017/S0956796898003050[doi:10.1017/S0956796898003050]::
+The short, widely taught version of the same ideas.
+
+Swierstra, S. D., and Duponcheel, L. (1996). Deterministic, error-correcting combinator parsers. _Advanced Functional Programming_, LNCS 1129, 184–207. https://doi.org/10.1007/3-540-61628-4_7[doi:10.1007/3-540-61628-4_7]::
+Non-monadic combinators whose fixed structure allows analysis and error
+correction; the early example of applicative parsing.
+
+Leijen, D., and Meijer, E. (2001). _Parsec: Direct style monadic parser combinators for the real world_. Technical report UU-CS-2001-27, Utrecht University. https://www.microsoft.com/en-us/research/publication/parsec-direct-style-monadic-parser-combinators-for-the-real-world/[Microsoft Research publication page]::
+Committed choice, `try`, and error messages that name the position and the
+expected input. The library is on Hackage as
+https://hackage.haskell.org/package/parsec[parsec].
+
+McBride, C., and Paterson, R. (2008). Applicative programming with effects. _Journal of Functional Programming_, 18(1), 1–13. https://doi.org/10.1017/S0956796807006326[doi:10.1017/S0956796807006326]::
+Defines applicative functors and names parsing as a case that needs less than
+a monad; the theory behind `keep` and `skip`.
+
+Ford, B. (2002). Packrat parsing: simple, powerful, lazy, linear time. _Proceedings of the Seventh ACM SIGPLAN International Conference on Functional Programming (ICFP)_, 36–47. https://doi.org/10.1145/581478.581483[doi:10.1145/581478.581483]::
+Memoizes a backtracking parser to guarantee linear time.
+
+Ford, B. (2004). Parsing expression grammars: a recognition-based syntactic foundation. _Proceedings of the 31st ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (POPL)_, 111–122. https://doi.org/10.1145/964001.964011[doi:10.1145/964001.964011]::
+Prioritized choice and greedy repetition as a grammar formalism; the closest
+formal model of roc-parser's `one_of` and `many`.
+
+Frost, R. A., Hafiz, R., and Callaghan, P. (2008). Parser combinators for ambiguous left-recursive grammars. _Practical Aspects of Declarative Languages (PADL)_, LNCS 4902, 167–181. https://doi.org/10.1007/978-3-540-77442-6_12[doi:10.1007/978-3-540-77442-6_12]::
+One way to support left recursion in combinators, the feature roc-parser
+leaves out.
+
+Claessen, K., and Hughes, J. (2000). QuickCheck: a lightweight tool for random testing of Haskell programs. _Proceedings of the Fifth ACM SIGPLAN International Conference on Functional Programming (ICFP)_, 268–279. https://doi.org/10.1145/351240.351266[doi:10.1145/351240.351266]::
+Property-based testing, the basis of this package's fuzz and property tests.
+
+Johnson, S. C. (1975). _Yacc: Yet Another Compiler-Compiler_. Bell Laboratories. https://www.cs.utexas.edu/~novak/yaccpaper.htm[Online copy]::
+The parser generator that set the pattern for grammar files compiled to
+LALR(1) tables.
+
+Parr, T. J., and Quong, R. W. (1995). ANTLR: A predicated-LL(k) parser generator. _Software: Practice and Experience_, 25(7), 789–810. https://doi.org/10.1002/spe.4380250705[doi:10.1002/spe.4380250705]::
+The first journal description of ANTLR, a widely used LL parser generator.
+
+Libraries::
+* https://package.elm-lang.org/packages/elm/parser/latest/[elm/parser]
+  by Evan Czaplicki: parser pipelines (`|=` and `|.`), no backtracking by
+  default, and context in error messages. Roc is, in the words of its
+  https://www.roc-lang.org/faq[FAQ], "a direct descendant of Elm".
+* https://hackage.haskell.org/package/megaparsec[megaparsec]: Parsec's
+  successor, with typed errors and longest-match error merging.
+* https://hackage.haskell.org/package/attoparsec[attoparsec]: fast parsing
+  of bytes and text with arbitrary backtracking and incremental input.
+* https://docs.rs/nom[nom], https://docs.rs/winnow[winnow] (a fork of nom)
+  and https://docs.rs/chumsky[chumsky]: Rust combinator libraries. nom is
+  byte-oriented and zero-copy, winnow is a fork of nom that keeps the
+  fundamentals in one crate, and chumsky focuses on error recovery.

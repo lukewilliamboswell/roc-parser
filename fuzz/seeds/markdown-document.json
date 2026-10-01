@@ -6,5 +6,13 @@
   "| Name | Count |\n| :--- | ---: |\n| Roc | 1 |\n",
   "> quoted paragraph\n\n<div>raw html</div>\n",
   "[roc]: https://roc-lang.org \"Roc\"\n\nRead [Roc][roc].\n",
-  "# unclosed **emphasis and [link](target\n"
+  "# unclosed **emphasis and [link](target\n",
+  "> lazy\ncontinuation\n- item\n\n  second paragraph\n- [ ] task\n",
+  "-\tfoo\n\n\t\tbar\n>\t\tcode\n *\t*\t*\n",
+  "1. one\n2) two\n\n    indented\n\n10. ten\n",
+  "Setext\n===\n\n  ~~~ info `x`\n code\n  ~~~~\n\n```\nunclosed\n",
+  "<!-- comment\n\n-->\n<?pi ?>\n<!DOCTYPE x>\n<![CDATA[ a ]]>\n</textarea>\n\n<pre>\n\n</pre>\n",
+  "[a\nb]: <url with space> 'multi\nline'\n[A B]: /second\n\n[a b]\n",
+  "a | b\n-|:-:\n1\n2 | 3 | 4\n> quote\n",
+  "line one\r\nline two\rline three\u0000\n"
 ]

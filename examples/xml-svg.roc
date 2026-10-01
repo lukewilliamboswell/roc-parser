@@ -1,11 +1,11 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "../package/main.roc",
 }
 
 import cli.OsStr
 import cli.Stdout
-import parser.String
+import parser.Utf8
 import parser.Xml
 
 svg_input =
@@ -28,7 +28,7 @@ expected_html =
 main! : List(OsStr) => Try({}, _)
 main! = |_args| {
 	result =
-		String.parse_str(Xml.xml_parser, svg_input)
+		Utf8.parse_str(Xml.parser, svg_input)
 			.map_ok(
 				|xml| {
 					html_to_roc_dsl(svg_to_html(xml.root), "", 0)
@@ -44,7 +44,7 @@ main! = |_args| {
 
 		Err(_) =>
 			Stdout.line!("Failed while parsing SVG")?
-		}
+	}
 
 	Ok({})
 }
@@ -52,7 +52,7 @@ main! = |_args| {
 svg_to_html : Xml.Node -> Html.Node
 svg_to_html = |xml| {
 	match xml {
-		Element(name, attrs, children) => {
+		Element({ name, attributes: attrs, children }) => {
 			(Html.element(name))(
 				attrs.map(xml_to_html_attribute),
 				children.map(svg_to_html),
@@ -241,7 +241,7 @@ node_size = |node| {
 
 		Element(_, size, _, _) =>
 			size
-		}
+	}
 }
 
 Attribute := [Attribute(Str, Str)].{

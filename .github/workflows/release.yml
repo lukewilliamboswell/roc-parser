@@ -68,6 +68,9 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p "test_*.py"
       - name: Validate package
         run: python3 scripts/all_tests.py
+      # The API audit: every exposed module and entry has a doc comment.
+      - name: Check the API reference
+        run: python3 scripts/build_docs.py --check
       - name: Resolve previous release
         if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
         id: previous
@@ -91,6 +94,25 @@ jobs:
         with:
           bundle_glob: dist/*.tar.zst
           test_os_json: '["ubuntu-latest"]'
+      # Dry-run cover for the documentation assets the publish job attaches:
+      # the manual (HTML and PDF) and the `roc docs` API reference, built
+      # exactly as the publish job builds them, then thrown away.
+      - name: Check the documentation assets can be built
+        run: python3 scripts/release_helpers.py package-docs --release-version dry-run --output-dir .release/docs-dry-run
+      - name: Discard the documentation dry run
+        run: rm -rf .release/docs-dry-run
+      # The examples in the repository use the package source; the archive a
+      # release attaches pins them to the release bundle's URL. Build that
+      # archive from this bundle's metadata so a broken example header is found
+      # here, not mid-release. (The test-bundles job runs the archive's apps.)
+      - name: Check the examples archive can be built
+        env:
+          RELEASE_VERSION: ${{ steps.validate.outputs.release_version || 'dry-run' }}
+        run: python3 scripts/release_helpers.py package-examples --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --output .release/examples-dry-run.zip
+      - name: Validate the examples archive
+        run: python3 scripts/workflow_helpers.py validate-examples --archive .release/examples-dry-run.zip
+      - name: Discard the examples dry run
+        run: rm -f .release/examples-dry-run.zip
       - name: Upload release bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -136,7 +158,9 @@ jobs:
         with:
           name: release-bundles
           path: .release/test-bundles
-      - name: Test release bundle
+      # Packages the examples archive pinned to this bundle (served locally),
+      # then checks, runs and builds the archive's apps.
+      - name: Test release bundle and examples archive
         uses: roc-lang/release-package/actions/test-bundle@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           test_bundle_command: python3 scripts/test_bundle_examples.py --bundle-path
@@ -183,12 +207,13 @@ jobs:
         with:
           name: release-metadata
           path: .release
+      # Notes come from docs/releases/<version>.md, followed by the package
+      # URL, any `roc bump` API changes and links to this release's docs.
       - name: Make release notes
-        uses: roc-lang/release-package/actions/make-release-notes@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          release_version: ${{ needs.build.outputs.release_version }}
-          docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
-          github_token: ${{ github.token }}
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          DOCS_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --bump-output .release/bump-output.txt --output-file .release/release-notes.md --docs-url "$DOCS_URL" --notes-dir docs/releases
       - name: Generate release SBOM
         id: security
         env:
@@ -211,27 +236,6 @@ jobs:
           SBOM_BUNDLE: ${{ steps.sbom-attestation.outputs.bundle-path }}
           ATTESTATION_PATH: ${{ steps.security.outputs.attestation-path }}
         run: python3 scripts/release_security_assets.py combine-attestations --provenance-bundle "$PROVENANCE_BUNDLE" --sbom-bundle "$SBOM_BUNDLE" --output "$ATTESTATION_PATH"
-      - name: Publish release
-        uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          release_version: ${{ needs.build.outputs.release_version }}
-          additional_assets: |
-            ${{ steps.security.outputs.sbom-path }}
-            ${{ steps.security.outputs.attestation-path }}
-          github_token: ${{ github.token }}
-
-  prepare-docs:
-    name: Prepare versioned docs
-    needs: [build, publish-release]
-    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Read Roc version
         id: roc-version
         run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
@@ -240,71 +244,79 @@ jobs:
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
-      - name: Download release metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-metadata
-          path: .release
-      - name: Resolve release bundle URL
-        id: bundle-url
+      # Every release carries its own documentation: the manual as a static
+      # site and as a PDF, and the `roc docs` API reference. Pages serves the
+      # latest; these keep each release's copy with the release.
+      - name: Package documentation
         env:
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/workflow_helpers.py bundle-url --metadata .release/release-bundles.json --repository "$GITHUB_REPOSITORY" --version "$RELEASE_VERSION" --github-output "$GITHUB_OUTPUT"
-      - name: Update example package URLs
-        env:
-          BUNDLE_URL: ${{ steps.bundle-url.outputs.bundle-url }}
-        run: python3 scripts/update_example_urls.py --bundle-url "$BUNDLE_URL"
-      - name: Validate updated examples
-        run: python3 scripts/workflow_helpers.py validate-examples
-      - name: Snapshot existing docs
-        uses: roc-lang/release-package/actions/docs-snapshot@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-      - name: Generate docs
-        env:
           DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
-        run: python3 scripts/generate_docs.py --docs-root www --skip-index
-      - name: Update docs index
-        uses: roc-lang/release-package/actions/docs-index@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-          docs_version: ${{ needs.build.outputs.docs_version }}
-      - name: Validate docs
-        uses: roc-lang/release-package/actions/docs-validate@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          docs_root: www
-          docs_version: ${{ needs.build.outputs.docs_version }}
-      - name: Create signed release follow-up commit
-        id: follow-up
+        run: python3 scripts/release_helpers.py package-docs --release-version "$RELEASE_VERSION" --docs-version "$DOCS_VERSION" --output-dir .release
+      # The examples, with their parser dependency pinned to this release's
+      # bundle; the repository's copies use the package source instead.
+      - name: Package examples
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/github_signed_commit.py --repository "$GITHUB_REPOSITORY" --branch "release-followup/$RELEASE_VERSION" --message "Update docs and examples for $RELEASE_VERSION" --path examples --path www --github-output "$GITHUB_OUTPUT"
-      - name: Open or update release follow-up PR
-        if: steps.follow-up.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-        run: python3 scripts/github_pull_request.py --repository "$GITHUB_REPOSITORY" --head "release-followup/$RELEASE_VERSION" --base "$GITHUB_REF_NAME" --title "Update docs and examples for $RELEASE_VERSION" --body "Updates versioned documentation and example package URLs for release $RELEASE_VERSION. The commit was automatically signed by GitHub."
-      - name: Setup Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        run: python3 scripts/release_helpers.py package-examples --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --output-dir .release
+      - name: Publish release
+        uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
-          path: www
+          release_version: ${{ needs.build.outputs.release_version }}
+          additional_assets: |
+            ${{ steps.security.outputs.sbom-path }}
+            ${{ steps.security.outputs.attestation-path }}
+            .release/roc-parser-manual-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-parser-manual-${{ needs.build.outputs.release_version }}.pdf
+            .release/roc-parser-api-docs-${{ needs.build.outputs.release_version }}.zip
+            .release/roc-parser-examples-${{ needs.build.outputs.release_version }}.zip
+          github_token: ${{ github.token }}
 
-  deploy-pages:
-    name: Deploy versioned docs
-    needs: prepare-docs
+  publish-docs:
+    name: Publish the docs
+    needs: [build, publish-release]
     if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      # Pages shows the current release only: the manual at the root and the
+      # API reference under api/. Each release carries its own copy of both as
+      # attached assets (package-docs), so nothing old accumulates here.
+      - name: Build the API reference
+        env:
+          DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
+        run: python3 scripts/build_docs.py --docs-root .docs-api --version "$DOCS_VERSION"
+      - name: Build the manual
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: python3 scripts/build_manual.py --pdf --docs-version "$RELEASE_VERSION" --output .docs-out
+      - name: Assemble the site
+        env:
+          DOCS_VERSION: ${{ needs.build.outputs.docs_version }}
+        run: python3 scripts/release_helpers.py assemble-pages --manual .docs-out/site --api ".docs-api/$DOCS_VERSION" --repo "$GITHUB_REPOSITORY" --output .pages
+      - name: Setup Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: .pages
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

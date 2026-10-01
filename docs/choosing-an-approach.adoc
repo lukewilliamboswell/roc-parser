@@ -1,0 +1,254 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+:langref: https://github.com/roc-lang/roc/blob/main/docs/langref
+endif::[]
+
+[#choosing-an-approach]
+= Choosing how to read your input
+
+Roc gives you four ways to turn text into values, and roc-parser provides two
+of them. This chapter helps you pick one before you write any code. In short:
+
+. *Decode into your own type* when the input is a standard format and you
+  already know the shape you want. The record type is the specification, and
+  there is almost no code to write.
+. *Read a document tree* with one of roc-parser's format modules when you do
+  not know the shape in advance, or you need what a record would throw away.
+. *Build a parser with combinators* when the format is your own, or you need
+  control over exactly what is accepted and what the errors say.
+. *Use no parser at all* when a `Str` function does the job, or when the
+  input is too large or too hot for any of these.
+
+The examples come from
+`{src}/docs/examples/choosing-approaches.roc[choosing-approaches.roc]`;
+every `expect` in it passes.
+
+== Decode into your own type
+
+Roc has type-directed decoding built in. A _format_ (such as the builtin
+`Json`) knows how to read strings, numbers, lists and records. Your _type_
+knows which of those it is made of. The compiler combines the two, so the
+annotation alone decides what is accepted:
+
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=decode,indent=0]
+----
+
+The {langref}/parsers.md[parsers chapter of the language reference] describes
+the mechanism. Every type has a `parser_for` method, which the compiler
+derives for records, lists and tuples, and a format is a type module whose
+methods read one value at a time. Static dispatch joins the two. A field of type `Try(_, [Missing])` is
+optional, a missing required field is reported by name, and when the parser
+is a top-level constant it is assembled at compile time.
+
+Choose this when:
+
+* the input is a format with a `parser_for` implementation, and
+* the mapping from the format to your type is the obvious one: object keys
+  are field names, arrays are lists, and so on.
+
+roc-parser's `CSV` and `Yaml` modules are formats for this mechanism.
+`CSV.parse` reads a file with a header row into a list of records, matching
+columns to fields by name, and `Yaml.decode` reads a document into a record.
+Neither takes the type as an argument: the annotation chooses it. A required
+field with no column or key fails with `MissingRequiredField(name)`, a tag
+the compiler adds to the error type, so the annotation names it alongside
+the format's own error:
+
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=decode-formats,indent=0]
+----
+
+Its limits come from the same design. The format decides the representation,
+so you cannot ask it to accept `yes` as a boolean or to read a date in your
+own layout. Where a wrong value is depends on the format: `CSV.parse` reports
+the record, field, line and column, and `Yaml.decode` the line and column. And the type must be known when you compile.
+
+== Read a document tree
+
+roc-parser's `Yaml`, `Xml` and `Markdown` modules read a whole document into a
+tree that mirrors the format, and `HTTP` reads a message into a record of its
+parts. You then walk the tree with pattern matching, or with the tree
+methods such as `get_path` and `as_i64` on a `Yaml` value and `attribute`
+and `children_named` on an `Xml.Node`:
+
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=tree,indent=0]
+----
+
+Choose this when:
+
+* the shape is not known in advance: any key may appear, keys vary between
+  files, or you are writing a tool that works on every document, such as a
+  linter or a converter;
+* you need what a record type cannot hold: the order of mapping keys, the
+  mix of text and child elements in XML, or the block structure of a
+  Markdown document;
+* you want a precise error with a line and column from a parser that follows
+  the format's specification, and you check the content yourself afterwards.
+  The format modules drop comments, so a tool that must preserve them needs a
+  parser of its own.
+
+The cost is code: you write the walk, and a missing or mistyped key is
+something you check, not something the type system checks for you. The
+format chapters (<<yaml>>, <<xml>>, <<markdown>> and <<http>>) show helper
+functions that keep the walk short.
+
+== Build a parser with combinators
+
+When no format module reads your input, write a parser from the `Parser` and
+`Utf8` combinators. A parser is a value made of smaller parsers, so the
+code has the shape of the grammar:
+
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=combinators,indent=0]
+----
+
+Choose this when:
+
+* the format is your own or a legacy one: a log line, a configuration
+  dialect, a wire protocol, or a small language such as a query or a
+  template;
+* the grammar is defined by more than a record shape: alternatives, nesting,
+  repetition with separators, or a part whose length is given earlier in the
+  input;
+* you want to reject invalid values while parsing, so that a port of
+  `70000` or a date of `2026-02-30` fails at the right place with your own
+  message;
+* you want to read only the start of the input and keep the rest, such as one
+  message from a buffer that holds several (`Utf8.parse_str_partial`).
+
+Combinators are also how you extend a format module. `CSV.record` and
+`CSV.field` are combinators, every format module has a `parser` value to
+embed, and you can mix `Utf8` parsers into any parser of your own. A
+combinator parser's failure is the furthest failure, with a byte offset. <<combinator-primer>> teaches the method and <<custom-format>>
+applies it to a real format.
+
+== Use no parser at all
+
+Parser combinators are not always the right tool, and roc-parser's own
+format modules show where the line falls.
+
+The input has no structure worth a grammar:: One separator, no quoting and
+no nesting is a job for `Str.split_on`, `Str.trim` and friends. A parser
+would be longer and no clearer:
++
+[source,roc]
+----
+include::examples/choosing-approaches.roc[tag=split,indent=0]
+----
+
+The input is very large or arrives as a stream:: Every parser in this
+package reads a complete input held in memory, and the result holds copies of
+the text it read. For a multi-gigabyte log or a network connection, read and
+process one record at a time with a hand-written loop over the bytes, or use a
+streaming library.
+
+The parser is on a hot path:: Each combinator adds a function call and an
+intermediate `Try`. That is cheap for configuration files and messages, but
+<<adding-a-format>> records that the CSV, XML, HTTP and Markdown modules
+moved their document-level parsing to byte scanners with an explicit stack,
+to stay linear and avoid deep recursion. Do the same when profiling shows the
+parser matters. <<performance>> compares the built-in parsers with Go, Rust
+and Python libraries.
+
+The grammar is ambiguous or left-recursive:: Combinators take the first
+alternative that succeeds and cannot handle a rule that starts with itself,
+such as `expr = expr "-" term`. A large grammar written for a parser
+generator, such as an existing yacc or ANTLR grammar, is often better served
+by a generator, which checks the grammar for conflicts before any input is
+read. <<background>> explains these limits.
+
+== Decision table
+
+[cols="2,1,1,1,1",options="header"]
+|===
+|You need |Decode into a type |Document tree |Combinators |No parser
+
+|A standard format (CSV, YAML) into known records, with little code
+|Best
+|Possible
+|Possible
+|No
+
+|Any keys or structure, discovered at run time
+|No
+|Best
+|Possible
+|No
+
+|Mapping key order or XML mixed content kept
+|No
+|Yes
+|Yes
+|No
+
+|Line and column in errors
+|Yes for `CSV` and `Yaml`
+|Yes
+|A byte offset
+|No
+
+|Your own or a legacy format, a protocol or a small language
+|No
+|No
+|Best
+|If trivial
+
+|Values validated while parsing, with your own messages
+|No
+|Afterwards
+|Best
+|By hand
+
+|Read one message and keep the rest
+|No
+|`HTTP.parse_request` returns the `rest`
+|Yes
+|By hand
+
+|Very large or streaming input, or a hot path
+|No
+|No
+|No
+|Best
+
+|Ambiguous or left-recursive grammar
+|No
+|No
+|No
+|Use a parser generator
+|===
+
+== Decision flow
+
+The same choice as a sequence of questions:
+
+[mermaid]
+....
+---
+title: Choosing how to read your input
+---
+flowchart TD
+    Start([Text to read]) --> Simple{"One separator,<br/>no quoting or nesting?"}
+    Simple -- yes --> Str["Use Str functions"]
+    Simple -- no --> Huge{"Too large to hold in memory,<br/>or a measured hot path?"}
+    Huge -- yes --> Scan["Hand-written byte scanner<br/>or streaming library"]
+    Huge -- no --> Known{"Standard format with a<br/>parser_for, into a known type?"}
+    Known -- yes --> Decode["Decode into your type"]
+    Known -- no --> Module{"A roc-parser format module<br/>reads it?"}
+    Module -- yes --> Tree["Read a document tree"]
+    Module -- no --> Combine["Build a parser<br/>with combinators"]
+....
+
+The questions are ordered from least code to most. You can also combine
+answers: read a Markdown file as a tree, read its frontmatter as a YAML tree,
+and parse one custom field inside it with a combinator.

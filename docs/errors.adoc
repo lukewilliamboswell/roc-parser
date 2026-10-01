@@ -1,0 +1,162 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#errors]
+= Report parse errors
+
+This guide shows what each module returns when its input is invalid, and how
+to turn that into a message a person can act on. The format parsers report
+invalid input as an `Err` value rather than crashing, and the repository's
+fuzz tests check that they do.
+
+The examples come from
+`{src}/docs/examples/errors-report.roc[errors-report.roc]`, whose complete
+output is checked in as
+`{src}/docs/examples/errors-report.expected[errors-report.expected]`.
+
+== Summary
+
+Every format type module reports invalid input with one tag named after the
+format, carrying a record with a `message` and the most precise location the
+format has. Combinator runners report the furthest failure.
+
+[cols="1,2,2",options="header"]
+|===
+|Function |Error |What it tells you
+
+|`Yaml.parse_str`, `Yaml.decode`
+|`InvalidYaml({ line, column, message })`
+|Where the problem is and what it is. Columns count bytes.
+
+|`Xml.parse_str`
+|`InvalidXml({ line, column, message })`
+|Where the problem is and what it is. Columns count bytes.
+
+|`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
+|`InvalidCsv({ record, field, line, column, message })`
+|The record and field that failed, where they start in the text, and why:
+bad CSV syntax, a field your parser rejected, or a row of the wrong width.
+
+|`CSV.parse`, `Yaml.decode`
+|`MissingRequiredField(name)`
+|A record field that is not a `Try(_, [Missing])` had no column or key.
+
+|`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.parse_requests`
+|`InvalidHttp({ offset, message })`
+|Why the message was rejected, and the byte offset of the problem.
+
+|`Markdown.parse_str`
+|None
+|Every input is a Markdown document, so parsing cannot fail.
+
+|Your own parsers, run with `Utf8.parse_str` or `Parser.parse`
+|`ParseError({ message, offset })`
+|The furthest failure, or `unexpected input` where input was left over,
+with its byte offset.
+|===
+
+All of these are open tag unions, so `?` passes them through a function such
+as `main!` that returns other errors too, without `map_err`.
+
+== YAML and XML: show the location
+
+Both report one-based line and column numbers. Print them in the
+`file:line:column: message` form that editors and terminals recognise, so a
+user can jump straight to the problem:
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=located,indent=0]
+----
+
+For the inputs `"name: demo\nport: [8080\n"` and
+`"<feed>\n  <entry></feed>"` these print:
+
+[source,text]
+----
+config.yaml:2:7: unterminated flow collection
+feed.xml:2:10: end tag </feed> does not match start tag <entry>
+----
+
+YAML input outside the supported subset, such as an anchor or a tag, is
+reported the same way, with a message that names the feature. Tell users
+which subset you accept so that the message makes sense to them.
+
+== CSV: report the record and field
+
+Every CSV failure is `InvalidCsv` with the same record, whether the text is
+not valid CSV, a field does not match your parser, or a row has the wrong
+number of fields. The `record` and `field` numbers are one-based and suit a
+spreadsheet user; `line` and `column` point into the text, where the field
+starts:
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=csv,indent=0]
+----
+
+For an unterminated quote (`pears,"2`), a non-number in a number column
+(`pears,many`), and a row with an extra column (`apples,3,red`), these print:
+
+[source,text]
+----
+line 2, column 7 (record 2, field 2): unterminated quoted field
+line 2, column 7 (record 2, field 2): expected a U64, found `many`
+line 1, column 10 (record 1, field 3): the record has 3 fields, but the parser read only 2
+----
+
+The messages quote a short excerpt of the field, so a huge or binary field
+cannot flood a log. `CSV.parse` reports the same `InvalidCsv` errors, and
+adds `MissingRequiredField(name)` when the header has no column for a
+required record field (see <<csv>>).
+
+== HTTP: reject the message
+
+The HTTP parsers reject anything ambiguous, because a server and a proxy that
+disagree about where a message ends can be exploited. Treat every
+`InvalidHttp` error as a `400 Bad Request` and close the connection; do not try
+to repair the message.
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=http,indent=0]
+----
+
+For an HTTP/1.1 request without a `Host` field this prints:
+
+[source,text]
+----
+400 Bad Request (byte 0): an HTTP/1.1 request needs a Host field
+----
+
+The message is meant for your logs. It may quote the client's input, so
+think before sending it back in a response.
+
+`HTTP.parse_request` returns the bytes after the message as `rest`, which
+is the next pipelined message, if any. `HTTP.parse_requests` reads a whole
+pipeline and fails if it does not end exactly at the end of a message.
+
+== Your own parsers: say where and what
+
+`Utf8.parse_str` returns the furthest failure: the one that read furthest
+into the input, even when a repetition stopped at it or an alternative
+recovered from it (see <<combinators>>). Its `offset` is a byte offset. Three
+habits give users better messages:
+
+* Validate values with `.map(...).flatten()` and a message written for the
+  user, such as `"no such time"`, instead of relying on the generic failure
+  from a low-level parser.
+* For line-based formats, parse line by line and report the line number, as
+  <<custom-format>> does.
+* For other formats, turn the `offset` into a position: count the line
+  breaks before it to get a line number, and show the input from there as
+  context.
+
+Keep the raw failure message for logs and tests. It describes the parser,
+not the user's input, so it is rarely the best thing to show a user on its
+own.

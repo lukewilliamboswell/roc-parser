@@ -1,0 +1,13 @@
+<h1>Release notes</h1>
+<p>Version <strong>2</strong> is out. Read the <a href="/changes" title="All changes">changelog</a>.</p>
+<h2>Fixed</h2>
+<ul>
+<li>Faster <code>parse</code></li>
+<li>Safer <b>HTML</b> &amp; entities</li>
+</ul>
+<h2>Known issues</h2>
+<p>None.</p>
+--- contents ---
+- Release notes
+  - Fixed
+  - Known issues

@@ -1,19 +1,19 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "../package/main.roc",
 }
 
 import cli.OsStr
 import cli.Stdout
 import cli.Stderr
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
-	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(multiple_numbers.many(), input)
+	result : Try(List(List(U64)), [ParseError({ message : Str, offset : U64 })])
+	result = Utf8.parse_str(multiple_numbers.many(), input)
 
 	match result.map_ok(largest) {
 		Ok(count) => Stdout.line!("The largest sum is ${count.to_str()}")?
@@ -26,12 +26,12 @@ main! = |args| {
 single_number : Parser(List(U8), U64)
 single_number =
 	Parser.const(|n| n)
-		.keep(String.digits)
-		.skip(String.string("\n"))
+		.keep(Utf8.digits)
+		.skip(Utf8.string("\n"))
 
 ## A number parser consumes one newline-terminated number.
 expect {
-	actual = String.parse_str(single_number, "1000\n")?
+	actual = Utf8.parse_str(single_number, "1000\n")?
 	actual == 1000
 }
 
@@ -40,11 +40,11 @@ multiple_numbers : Parser(List(U8), List(U64))
 multiple_numbers =
 	Parser.const(|ns| ns)
 		.keep(single_number.many())
-		.skip(String.string("\n"))
+		.skip(Utf8.string("\n"))
 
 ## A list parser consumes numbers until the blank line terminator.
 expect {
-	actual = String.parse_str(multiple_numbers, "1000\n2000\n3000\n\n")?
+	actual = Utf8.parse_str(multiple_numbers, "1000\n2000\n3000\n\n")?
 	actual == [1000, 2000, 3000]
 }
 

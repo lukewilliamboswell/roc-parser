@@ -15,10 +15,11 @@ class AllTestsScriptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "could not extract"):
             all_tests.extract_bundle_path("bundle complete\n")
 
-    def test_http_remains_excluded_from_test_modules(self) -> None:
-        self.assertNotIn("HTTP", all_tests.TEST_MODULES)
-        self.assertEqual(all_tests.TEST_MODULES[0:2], ("Parser", "CSV"))
-
+    def test_package_tests_run_through_main(self) -> None:
+        # Modules import package dependencies, which resolve only through main.roc.
+        source = Path(all_tests.__file__).read_text(encoding="utf-8")
+        self.assertIn('[roc, "test", "package/main.roc"]', source)
+        self.assertNotIn("TEST_MODULES", source)
 
 if __name__ == "__main__":
     unittest.main()

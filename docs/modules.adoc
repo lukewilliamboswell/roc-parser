@@ -1,0 +1,245 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#modules]
+= Modules
+
+This chapter is a map of the package for readers who know some Roc and want
+to find the right module and entry point for an input format. It says what each
+module is for, which types and functions you start from, and how the modules
+fit together. The {api}[API reference] has the full signature and
+documentation of every type and function, generated from the source.
+
+== The modules at a glance
+
+The package exposes seven modules. Two are general-purpose building blocks; the
+other five are ready-made parsers for one format each.
+
+[cols="1,3,3",options="header"]
+|===
+|Module |Use it to |Start from
+
+|{api}Parser/[`Parser`]
+|Combine small parsers into larger ones, for any input type
+|`Parser.const`, `keep`, `skip`, `map`, `one_of`, `many`, `sep_by`
+
+|{api}Utf8/[`Utf8`]
+|Parse text: match bytes, strings and digits, and run a parser on a `Str`
+|`Utf8.parse_str`, `string`, `codeunit`, `digits`
+
+|{api}CSV/[`CSV`]
+|Read comma-separated values, raw or decoded into your own record type
+|`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
+
+|{api}HTTP/[`HTTP`]
+|Read one HTTP/1.1 request or response message, including its body
+|`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.header`
+
+|{api}Markdown/[`Markdown`]
+|Turn CommonMark and GitHub Flavored Markdown into a syntax tree
+|`Markdown.parse_str`, `Markdown.parse_inlines`
+
+|{api}Xml/[`Xml`]
+|Check that an XML document is well-formed and read it as a tree
+|`Xml.parse_str`, `Xml.Node.attribute`, `Xml.Node.children_named`
+
+|{api}Yaml/[`Yaml`]
+|Read a YAML configuration file or Markdown frontmatter
+|`Yaml.decode`, `Yaml.parse_str`, `Yaml.get_path`
+|===
+
+== How the modules fit together
+
+A `Parser(input, a)` is a value that describes how to read an `a` from the
+start of an `input`. Running it returns the value and the input it did not
+consume, or a `ParseError` with a message and an offset. `Parser` provides the combinators that
+build parsers from parsers; `Utf8` provides the parsers that read text, with
+`Utf8.Bytes` (a `List(U8)`) as the input type.
+
+Each format type module follows the same conventions:
+
+* `parse_str` (or, for CSV, `parse`) reads a whole document and returns
+  `Ok(value)` or an error tag named after the format: `InvalidCsv`,
+  `InvalidHttp`, `InvalidXml` or `InvalidYaml`. The tag carries a record with
+  a `message` and the most precise location the format has. Markdown has no
+  syntax errors, so `Markdown.parse_str` returns the tree directly.
+* `parser` (and, for HTTP, `request` and `response`) is the same parser as a
+  `Parser(Utf8.Bytes, ...)` value, for embedding in a larger parser. Its
+  failures are `ParseError({ message, offset })`.
+* `CSV.parse` and `Yaml.decode` decode straight into your own record type
+  through the static dispatch method `parser_for`; the compiler infers the
+  type from how you use the result.
+* Optional values are `Try(a, [Missing])`.
+
+The following program uses one entry point from each module. It is
+`docs/examples/reference-modules.roc` in the repository, and CI runs it.
+
+[source,roc]
+----
+include::examples/reference-modules.roc[tag=entry-points]
+----
+
+Running it prints one line per call (the Markdown result prints two lines,
+one per block):
+
+[source,text]
+----
+include::examples/reference-modules.expected[]
+----
+
+== Parser
+
+`Parser` is the combinator library. Use it when you are writing a parser for a
+format this package does not cover, or extending one of the format parsers.
+
+* `Parser(input, a)` is an opaque nominal type, and `ParseResult(input, a)`,
+  `Try({ value, rest }, [ParseError({ message, offset })])`, is what one step
+  of parsing returns.
+* Build values with `const` and feed it parsed arguments with `keep`; read and
+  discard syntax with `skip`.
+* Choose between alternatives with `alt` and `one_of`. Each alternative starts
+  from the same input, so a failed alternative never consumes anything.
+* Repeat with `many`, `one_or_more`, `sep_by` and `sep_by_one_or_more`. Repetition stops
+  when an element fails or consumes nothing.
+* Convert results with `map`, `map2`, `map3` and `flatten`, and choose the
+  next parser from a value with `and_then`. `maybe` makes a parser optional,
+  returning `Try(a, [Missing])`.
+* Run a parser with `parse` (whole input) or `run` (leaving the
+  rest). For text, prefer the `Utf8` functions below.
+* `custom` turns your own function into a parser when no
+  combinator fits; `lazy` defers building a parser for recursive grammars.
+
+== Utf8
+
+`Utf8` holds the text parsers and the functions that run a parser on text.
+
+* `Utf8.parse_str` runs a parser on a whole `Str` and reports leftover text
+  as a `ParseError`. `parse_str_partial`, `parse_bytes` and
+  `parse_bytes_partial` cover partial input and byte input.
+* `codeunit`, `codeunit_satisfies`, `any_codeunit`, `utf8` and `string` match
+  bytes and literal text. `digit` and `digits` read unsigned decimal numbers.
+* `rest` and `rest_str` consume the rest of the input.
+
+The parsers work on bytes, not characters: `codeunit('é')` is not possible,
+because `é` is two bytes in UTF-8. Use `string("é")` instead.
+
+== CSV
+
+`CSV` reads RFC 4180 comma-separated values; the module documentation lists the
+exact dialect.
+
+* `CSV.parse` decodes a file with a header row into a list of records. Each
+  record field reads the column with the same name, a `Try(a, [Missing])`
+  field is optional, and a required field without a column fails with
+  `MissingRequiredField(name)`. `CSV.parse_normalized` matches headers such as
+  `First Name` to `first_name`, and `CSV.parse_headerless` decodes rows into
+  tuples.
+* `CSV.parse_with` matches columns by position instead, with a record parser
+  you build from `CSV.record`, `CSV.field` and `.keep(...)`. Field parsers
+  `CSV.string`, `CSV.u64` and `CSV.f64` are provided, and any
+  `Parser(Utf8.Bytes, a)` works.
+* `CSV.parse_records` returns the raw records, each a `CSV.Record` (a
+  `List(List(U8))`), when rows differ in shape or you want to inspect them
+  first. `CSV.split_header` separates the header row, and `CSV.decode` runs a
+  record parser over them later.
+
+Every failure is `InvalidCsv` with the record, field, line and column.
+
+== HTTP
+
+`HTTP` reads one HTTP/1.1 (or HTTP/1.0) message: start line, header fields and
+body.
+
+* `HTTP.parse_request` and `HTTP.parse_response` take bytes and return the
+  message and the `rest`, which is the next pipelined message, if any.
+  `HTTP.parse_requests` reads a whole pipeline. Failures are
+  `InvalidHttp({ offset, message })`.
+* `Request` and `Response` are records. `Header` is `{ name, value }`, and
+  `HTTP.header(headers, name)` looks a field up case-insensitively. `Method`
+  has a tag for each standard method and `Extension(name)` for any other
+  token; `Version` is `{ major, minor }`.
+* `HTTP.request` and `HTTP.response` are the same parsers for embedding.
+
+The parser decodes chunked bodies and rejects any message whose length is
+ambiguous, which is what protects a proxy from request smuggling. It does not
+open connections, send messages, or know which request a response answers; see
+<<conformance,Conformance>> for what that means for HEAD and CONNECT.
+
+== Markdown
+
+`Markdown` turns CommonMark 0.31.2 text, with the GitHub Flavored Markdown
+tables, task lists, strikethrough and extended autolinks, into a tree of
+`Markdown` blocks and `Markdown.Inline` nodes.
+
+* `Markdown.parse_str` parses a whole document into `List(Markdown)`.
+  Markdown has no syntax errors, so it accepts every input.
+* `Markdown.parse_inlines` parses inline content only, such as a single line
+  of text.
+* A leading block between `---` lines becomes a `Frontmatter(text)` block;
+  `Markdown.frontmatter(blocks)` returns its text, which you can pass to
+  `Yaml.decode` or `Yaml.parse_str`.
+* `Markdown.parser` and `Markdown.inline_parser` are the same parsers for
+  embedding.
+* `Str.inspect` prints a tree for tests and debugging, and every tree type
+  has `is_eq` and `to_hash`.
+
+The module does not render HTML; walk the tree to produce your own output.
+Raw HTML and link destinations pass through unfiltered, so sanitize them
+before you render untrusted input (see <<markdown>>).
+
+== Xml
+
+`Xml` checks XML 1.0 well-formedness and returns the document as a tree of
+`Xml.Node` values (`Element({ name, attributes, children })` and `Text`).
+
+* `Xml.parse_str` returns an `Xml` record with the
+  `declaration : Try(Declaration, [Missing])` and the `root` element, or
+  `InvalidXml({ line, column, message })`.
+* The node methods `name`, `attribute`, `children_named` and `text` read the
+  tree: `root.attribute("href")` is `Try(Str, [Missing])`.
+* `Xml.parser` is the same parser for use inside a larger parser.
+
+Documents with a `<!DOCTYPE>` declaration are rejected, namespaces are not
+interpreted, and comments and processing instructions are checked and then
+dropped.
+
+== Yaml
+
+`Yaml` reads a practical subset of YAML 1.2 aimed at configuration files and
+Markdown frontmatter.
+
+* `Yaml.decode` reads a document straight into your own record, list, dict
+  or tuple type. `Try(a, [Missing])` fields are optional, and a missing
+  required key fails with `MissingRequiredField(name)`. `Yaml.decoder` takes
+  options for kebab-case or camelCase keys and for rejecting unknown keys.
+* `Yaml.parse_str` returns a `Yaml` tree (`Null`, `Bool`, `Int`, `Float`,
+  `Text`, `Sequence` or `Mapping`). The methods `get`, `at`, `get_path`,
+  `as_str`, `as_i64`, `as_bool` and `as_list` walk it.
+* Both fail with `InvalidYaml({ line, column, message })`. `Yaml.parser` is
+  the tree parser for embedding.
+
+Anchors, aliases, tags, directives, complex keys, multi-line flow collections,
+multi-line plain or quoted scalars and multi-document streams are rejected
+rather than misread. Nesting is limited to 100 levels.
+
+== Choosing between modules
+
+[cols="2,3",options="header"]
+|===
+|If your input is |Use
+|A small text format of your own, such as a command or a log line |`Parser` with `Utf8`
+|A spreadsheet export or other comma-separated data |`CSV`
+|Raw bytes of an HTTP/1.1 message from a socket or a capture |`HTTP`
+|Documentation, notes or a README |`Markdown`
+|A configuration file, or the frontmatter of a Markdown file |`Yaml`
+|An XML document without a document type declaration, such as SVG or a feed |`Xml`
+|JSON, TOML, or YAML that uses anchors or several documents |Another package: these modules do not support them
+|===
+
+<<conformance,Conformance>> lists, for each format, the specification it
+follows, how that is checked, and the known gaps.

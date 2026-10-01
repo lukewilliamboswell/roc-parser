@@ -1,0 +1,192 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#combinator-primer]
+= Your first parser
+
+In this tutorial you write a parser for a small settings format, one line per
+setting:
+
+[source,text]
+----
+name="demo"
+port=8080
+debug=true
+----
+
+By the end you have a parser that turns that text into a list of typed
+records, and you know how to read its errors. Along the way you meet the
+combinators that every parser in this package is built from.
+
+You need the setup from <<getting-started>>. Each step is a complete program
+in the repository's `docs/examples` directory; the step's heading names the
+file. Run a step with `roc <file>` and its tests with `roc test <file>`.
+
+== Step 1: read a key
+
+`{src}/docs/examples/combinator-primer-step1.roc[combinator-primer-step1.roc]`
+
+A key is one or more lowercase letters or underscores. Start with a parser
+for one such byte, repeat it, and turn the bytes into a `Str`:
+
+[source,roc]
+----
+include::examples/combinator-primer-step1.roc[tag=key,indent=0]
+----
+
+Three ideas appear here:
+
+* A `Parser(Utf8.Bytes, Str)` reads from UTF-8 bytes (`Utf8.Bytes` is
+  `List(U8)`) and produces a `Str`. Every parser has an input type and a
+  result type.
+* `Utf8.codeunit_satisfies(is_key_byte)` reads one byte if `is_key_byte`
+  accepts it, and fails otherwise.
+* `.one_or_more()` repeats a parser until it fails and collects the results
+  in a list. `.map(f)` transforms the result with an ordinary function; here
+  `Str.from_utf8_lossy` turns the bytes into a `Str`.
+
+`Utf8.parse_str` runs a parser on a whole string. These tests pass:
+
+[source,roc]
+----
+include::examples/combinator-primer-step1.roc[tag=expects,indent=0]
+----
+
+The second fails because `N` is not a lowercase letter, so not even one key
+byte can be read.
+
+== Step 2: read a whole setting
+
+`{src}/docs/examples/combinator-primer-step2.roc[combinator-primer-step2.roc]`
+
+A setting is a key, an `=`, and a value. For now, the value is everything up
+to the end of the line:
+
+[source,roc]
+----
+include::examples/combinator-primer-step2.roc[tag=entry,indent=0]
+----
+
+This is the pattern for reading things in sequence:
+
+. `Parser.const(f)` is a parser that reads nothing and produces `f`, the
+  function that builds the result. `f` takes its arguments one at a time
+  (`|k| |v| ...`), because they arrive one at a time.
+. `.keep(p)` runs `p` next and passes its result to the function.
+. `.skip(p)` runs `p` next and throws its result away. The `=` must be there,
+  but you do not need it in the record.
+
+`Parser.chomp_while(pred)` reads bytes while `pred` accepts them. It always
+succeeds, even when it reads nothing, which is why `"empty="` gives an empty
+value:
+
+[source,roc]
+----
+include::examples/combinator-primer-step2.roc[tag=expects,indent=0]
+----
+
+Running the step prints:
+
+[source,text]
+----
+include::examples/combinator-primer-step2.expected[]
+----
+
+== Step 3: choose between kinds of value
+
+`{src}/docs/examples/combinator-primer-step3.roc[combinator-primer-step3.roc]`
+
+A value is a number, `true` or `false`, or text in double quotes. Write one
+parser for each kind, then try them in order with `Parser.one_of`:
+
+[source,roc]
+----
+include::examples/combinator-primer-step3.roc[tag=value,indent=0]
+----
+
+`Parser.one_of` tries each parser on the same input and returns the first
+success. If one fails part-way through, the next one starts again from the
+beginning, so `text` does not see input already examined by `number` or
+`flag`.
+
+`Utf8.digits` reads a whole number as a `U64`, and `Utf8.string("true")`
+reads exactly that text. `.between(open, close)` reads `open`, the parser,
+and `close`, and keeps only the middle result.
+
+[source,roc]
+----
+include::examples/combinator-primer-step3.roc[tag=expects,indent=0]
+----
+
+The `entry` parser from step 2 now uses this `value`. Running the step prints:
+
+[source,text]
+----
+include::examples/combinator-primer-step3.expected[]
+----
+
+== Step 4: read every line, and read the errors
+
+`{src}/docs/examples/combinator-primer-step4.roc[combinator-primer-step4.roc]`
+
+A settings file is entries separated by line breaks. `sep_by` reads that
+shape and drops the separators:
+
+[source,roc]
+----
+include::examples/combinator-primer-step4.roc[tag=config,indent=0]
+----
+
+[source,roc]
+----
+include::examples/combinator-primer-step4.roc[tag=expects,indent=0]
+----
+
+`Utf8.parse_str` returns one of three results, and a real program should
+handle each:
+
+[source,roc]
+----
+include::examples/combinator-primer-step4.roc[tag=report,indent=0]
+----
+
+Output:
+
+[source,text]
+----
+include::examples/combinator-primer-step4.expected[]
+----
+
+Each line of output shows one outcome:
+
+. The whole input matched: `Ok`.
+. `port=eighty` is not a valid entry, so `sep_by` stopped after the first
+  entry and did not reach the end of the input. `parse_str` reports the
+  furthest failure instead: none of the value parsers accepted `eighty`, at
+  byte 17.
+. The trailing line break is a separator with no entry after it, so the
+  parse fails at the end of the input, where a key was expected. Real files
+  often end with a line break; <<custom-format>> shows one way to accept it.
+. Parsing a single bad entry directly gives the same failure, at byte 5.
+
+The second line is worth remembering. A repetition such as `sep_by` or `many`
+stops at the first element it cannot read, but that element's failure is
+kept, so a mistake in the middle of a file is reported where it is.
+<<errors>> explains how to get better messages.
+
+== What you have learned
+
+* A parser has an input type and a result type, and `Utf8.parse_str` runs
+  one on a whole string.
+* `Parser.const(f).keep(a).skip(b).keep(c)` reads things in sequence.
+* `.map(f)` transforms a result; `Parser.one_of` chooses between
+  alternatives; `one_or_more`, `many` and `sep_by` repeat.
+* A parse ends in `Ok` or a `ParseError` with a message and a byte `offset`.
+
+<<combinators>> covers the remaining combinators and the rules for
+alternatives and repetition in more depth.

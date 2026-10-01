@@ -27,14 +27,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Every target registered in scripts/run_fuzz.py.
         target:
           - markdown-document
+          - markdown-blocks
+          - markdown-refdefs
           - markdown-inline
+          - markdown-inline-ast
+          - markdown-inline-pathological
           - yaml
+          - yaml-raw
+          - yaml-roundtrip
+          - yaml-block
           - xml
+          - xml-raw
+          - xml-roundtrip
+          - xml-malformed
           - csv
+          - csv-raw
+          - csv-roundtrip
+          - csv-decode
           - http-request
           - http-response
+          - http-raw
+          - http-roundtrip
+          - http-smuggling
+          - parser-combinators
+          - string-primitives
+          - byte-scan
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,10 +99,69 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  conformance:
+    name: Conformance ${{ matrix.format }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each format is checked against a pinned reference implementation.
+          - format: yaml
+            requirements: scripts/yaml/requirements.txt
+            command: python scripts/review_yaml.py check --baseline scripts/yaml/known-failures.json
+          - format: yaml-robustness
+            requirements: scripts/yaml/requirements.txt
+            command: python scripts/review_yaml.py campaign --smoke
+          - format: markdown-inline
+            requirements: scripts/markdown/requirements.txt
+            command: python scripts/review_markdown.py check
+          - format: markdown-blocks
+            requirements: scripts/markdown/requirements.txt
+            command: python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
+          - format: xml
+            command: python scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+          - format: csv
+            command: python scripts/review_csv.py
+          - format: http
+            requirements: scripts/http/requirements.txt
+            command: python scripts/review_http.py
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install review compiler
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Create oracle environment
+        run: python3 -m venv /tmp/roc-parser-oracle
+      - name: Install pinned oracle
+        if: matrix.requirements
+        run: /tmp/roc-parser-oracle/bin/python -m pip install --no-deps -r "${{ matrix.requirements }}"
+      - name: Check conformance baseline
+        env:
+          PATH_PREFIX: /tmp/roc-parser-oracle/bin
+        run: PATH="$PATH_PREFIX:$PATH" ${{ matrix.command }}
+      - name: Upload review evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: conformance-evidence-${{ matrix.format }}
+          path: .roc-parser-tmp/
+          if-no-files-found: warn
+          retention-days: 14
+
   property-quality:
     name: property-quality
     if: always()
-    needs: fuzz
+    needs: [fuzz, conformance]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper
@@ -91,3 +170,5 @@ jobs:
           persist-credentials: false
       - name: Require successful fuzzing
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.fuzz.result }}"
+      - name: Require conformance checks
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.conformance.result }}"

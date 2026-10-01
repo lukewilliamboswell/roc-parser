@@ -1,19 +1,19 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.22.0/F1JVZPYfWP71s8vk6tHcV1Qx1Ef6CZkwswGoCn8VHZmL.tar.zst",
-	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/1.2.0/GzeZxk7V7GHFa42qhgzd8gUgX6cEyY3NmrwmDfsuskNd.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "../package/main.roc",
 }
 
 import cli.OsStr
 import cli.Stderr
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "AAAiBByAABBwBtCCCiAyArBBx"
-	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(letter_parser.many(), input)
+	result : Try(List(Letter), [ParseError({ message : Str, offset : U64 })])
+	result = Utf8.parse_str(letter_parser.many(), input)
 
 	match result.map_ok(count_letter_as) {
 		Ok(count) => Stdout.line!("I counted ${count.to_str()} letter A's!")?
@@ -38,12 +38,12 @@ count_letter_as = |letters|
 
 # Build a custom parser to convert utf8 input into Letter tags
 letter_parser : Parser(List(U8), Letter)
-letter_parser = Parser.build_primitive_parser(
+letter_parser = Parser.custom(
 	|input| {
-		val_result : Try(Letter, [ParsingFailure(Str)])
+		val_result : Try(Letter, [ParseError({ message : Str, offset : U64 })])
 		val_result =
 			match input {
-				[] => Err(ParsingFailure("Nothing to parse"))
+				[] => Err(ParseError({ message: "Nothing to parse", offset: 0 }))
 				['A', ..] => Ok(A)
 				['B', ..] => Ok(B)
 				['C', ..] => Ok(C)
@@ -51,7 +51,7 @@ letter_parser = Parser.build_primitive_parser(
 			}
 
 		val_result
-			.map_ok(|val| { val, input: input.drop_first(1) })
+			.map_ok(|val| { value: val, rest: input.drop_first(1) })
 	},
 )
 
@@ -60,7 +60,7 @@ letter_parser = Parser.build_primitive_parser(
 expect {
 	input = "B"
 	parser = letter_parser
-	result = parser |> String.parse_str(input)?
+	result = parser |> Utf8.parse_str(input)?
 	result == B
 }
 
@@ -69,6 +69,6 @@ expect {
 expect {
 	input = "BCXA"
 	parser = letter_parser.many()
-	result = parser |> String.parse_str(input)?
+	result = parser |> Utf8.parse_str(input)?
 	result == [B, C, Other, A]
 }

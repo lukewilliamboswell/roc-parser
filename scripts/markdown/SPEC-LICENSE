@@ -1,0 +1,12 @@
+scripts/markdown/spec-inline.json is derived from the CommonMark Spec 0.31.2
+(https://spec.commonmark.org/0.31.2/), Copyright (C) John MacFarlane,
+licensed under the Creative Commons Attribution-ShareAlike 4.0 International
+license (https://creativecommons.org/licenses/by-sa/4.0/).
+
+scripts/markdown/gfm-extensions.json is derived from the GitHub Flavored
+Markdown Spec 0.29-gfm (https://github.github.com/gfm/, cmark-gfm
+test/spec.txt), which is based on the CommonMark Spec and is licensed under the
+same Creative Commons Attribution-ShareAlike 4.0 International license.
+
+Only the example inputs and expected outputs of the inline sections are
+included, unmodified apart from replacing the spec's tab marker with a tab.

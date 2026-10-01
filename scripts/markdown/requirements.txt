@@ -1,0 +1,10 @@
+# Oracles for scripts/review_markdown.py; install into an external venv.
+# cmarkgfm bundles cmark-gfm 0.29.0.gfm.13, the reference implementation of
+# CommonMark plus the GFM extensions this library claims (strikethrough,
+# extended autolinks). markdown-it-py 4.0.0 implements CommonMark 0.31.2 and is
+# used only to adjudicate where cmark-gfm still follows older spec versions.
+cmarkgfm==2025.10.22
+cffi==2.1.1
+pycparser==3.0
+markdown-it-py==4.0.0
+mdurl==0.1.2

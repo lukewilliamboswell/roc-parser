@@ -1,0 +1,303 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+endif::[]
+
+[#property-testing]
+= Property tests and conformance reviews
+
+This chapter is for contributors who change a parser and need to know whether
+the change is correct. The first half explains how roc-parser checks its
+parsers beyond the `expect` tests: property tests driven by a fuzzer, and
+reviews against a mature reference implementation. The second half is a set of
+how-to sections: run the targets, reproduce and minimise a failure, turn it
+into a regression, and update a conformance baseline.
+
+It assumes the setup in <<contributing>>, including the Roc nightly pinned
+in `.roc-version`. Every command below uses that compiler:
+
+[source,bash]
+----
+export ROC=/path/to/quality_nightly/roc
+----
+
+== Why property tests
+
+An `expect` test checks one input that somebody thought of. Parsers fail on the
+inputs nobody thought of: a carriage return on its own, a quote in the middle
+of a field, 100,000 nested brackets. A property test states something that must
+hold for _every_ input, and a fuzzer searches for an input where it does not.
+
+The fuzzer is https://github.com/lukewilliamboswell/roc-fuzz[roc-fuzz], a Roc
+platform that embeds libFuzzer. It is coverage guided: it keeps inputs that
+reach new code and mutates them further, so it finds deep paths far faster than
+random input would. The targets are library quality tests, not a security
+programme, and they run on every pull request and nightly in CI.
+
+A failing property is a bug in the parser, or occasionally in the property.
+Either way the outcome is a fix: see <<property-testing-fix-the-cause>>.
+
+== Three kinds of target
+
+Each file `fuzz/<target>.roc` is one roc-fuzz app. They come in three kinds,
+which differ in what the fuzzer's bytes mean and therefore in what the target
+can check.
+
+Raw targets (`xml-raw`, `yaml-raw`, `csv-raw`, `http-raw`, `markdown-inline`,
+`markdown-document`, `string-primitives`):: The bytes are the input document,
+often invalid UTF-8. Nothing is known about the expected result, so the target
+checks properties that hold for any document: the parser does not crash or
+hang, an error points inside the input, LF/CRLF/CR line endings give the same
+result, appending a final line break changes nothing, and the result survives
+re-serialisation. These are called _metamorphic relations_: they relate two
+runs of the parser instead of comparing one run with a known answer. Many raw
+targets also switch to a pathological generator (deep nesting, thousands of
+attributes, long delimiter runs) when the input starts with a marker byte, so
+that the per-input `--timeout` catches quadratic behaviour.
+
+Structured targets (`csv-roundtrip`, `csv-decode`, `xml-roundtrip`,
+`xml-malformed`, `yaml-roundtrip`, `yaml-block`, `http-roundtrip`,
+`http-smuggling`, `markdown-inline-ast`, `markdown-blocks`, `markdown-refdefs`,
+`parser-combinators`):: The bytes are _choices_. A generator reads them to
+build a value (a table, an XML tree, an HTTP message, a Markdown syntax tree)
+and a way to write it down, and builds the expected parse alongside the text
+from the specification, never by calling the parser. The target then requires
+the parser to return exactly that value. Mutating generators such as
+`xml-malformed` and `http-smuggling` instead inject one known violation into a
+valid document and require the parser to reject it. `parser-combinators`
+builds a random combinator expression and compares the real parser with a
+small reference interpreter of the documented semantics.
+
+Seeded targets (`csv`, `xml`, `yaml`, `http-request`, `http-response`):: The
+original targets read a string through roc-fuzz's `Fuzz.str` generator. They
+start from reviewable seeds in `fuzz/seeds/<name>.json`, which the runner
+encodes for `Fuzz.str` at run time, and use the token lists in
+`fuzz/dictionaries/` to mutate towards real syntax. Seed strings are limited to
+255 UTF-8 bytes by that encoding.
+
+Raw targets also take seeds and a dictionary, written as plain text. Structured
+targets start from an empty corpus, because their bytes are not text.
+
+== Oracles
+
+A property test can only be as good as its expected answer. Structured targets
+build that answer from the specification, but a generator can share a
+misunderstanding with the parser. So each format is also compared with a
+mature, independent implementation, its _oracle_, pinned to an exact version:
+
+[cols="1,2,2",options="header"]
+|===
+|Format |Oracle |Specification and suite
+|CSV |Python's `csv` module in strict mode |RFC 4180, plus the documented dialect
+|XML |expat (Python's `pyexpat`) |XML 1.0 5th edition, W3C XML Conformance Test Suite 2013-09-23
+|YAML |ruamel.yaml |YAML 1.2, the yaml-test-suite
+|HTTP |h11 |RFC 9112 and RFC 9110; cases pin where RFC 9112 is stricter than h11
+|Markdown |cmark-gfm 0.29.0.gfm.13 (via `cmarkgfm`), with markdown-it-py to adjudicate |CommonMark 0.31.2 spec examples and GFM extensions
+|===
+
+Oracles have bugs too. When roc-parser and the oracle disagree, the review
+reports it, and a person decides which one the specification supports. Known
+oracle quirks are named in the review scripts and in the baselines, with the
+section of the specification that settles them.
+
+== Run the property tests
+
+Run every target for a short, iteration-bounded smoke test. This is what CI
+runs on a pull request:
+
+[source,bash]
+----
+python3 scripts/run_fuzz.py smoke all
+----
+
+Run one or more targets by name, and lower the iteration count for a quick
+check while you work:
+
+[source,bash]
+----
+python3 scripts/run_fuzz.py smoke csv --runs 200
+----
+
+The last lines of the output are libFuzzer's statistics:
+
+[source,text]
+----
+Done 200 runs in 0 second(s)
+stat::number_of_executed_units: 200
+stat::average_exec_per_sec:     0
+stat::new_units_added:          39
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              25
+----
+
+Run a longer, time-bounded campaign on the target closest to your change. CI
+runs a 600-second campaign for every target each night:
+
+[source,bash]
+----
+python3 scripts/run_fuzz.py campaign markdown-inline-ast --seconds 600
+----
+
+`--max-input-size`, `--timeout` and `--memory-limit` override a target's
+registered bounds, and `--no-build` reuses the binary from the last run.
+
+The runner keeps everything under `.roc-parser-tmp/fuzz/`:
+
+* `bin/<target>`: the built target;
+* `corpus/<target>/`: the working corpus, which grows across runs;
+* `runs/<target>/`: runner metadata, and the inputs of any failure.
+
+== Reproduce and minimise a failure
+
+A failing run prints the path of its metadata and of the saved input. In CI,
+the `fuzz-failure-<target>` artifact holds the binary, the corpus and the run
+directory. Use the same target name for every step.
+
+. Show the input as the target decodes it. For a structured target this is the
+generated document and its expected value:
++
+[source,bash]
+----
+python3 scripts/run_fuzz.py show csv-roundtrip INPUT --no-build
+----
+. Replay it to confirm that it still fails:
++
+[source,bash]
+----
+python3 scripts/run_fuzz.py replay csv-roundtrip INPUT --no-build
+----
+. Minimise it into a smaller input that fails the same way:
++
+[source,bash]
+----
+python3 scripts/run_fuzz.py minimize csv-roundtrip INPUT OUTPUT --no-build
+----
+
+`INPUT` can be any file, including one from the corpus. Showing a corpus entry
+of the seeded `csv` target prints the string it decodes to:
+
+[source,bash]
+----
+python3 scripts/run_fuzz.py show csv .roc-parser-tmp/fuzz/corpus/csv/13d7ab0a19cc0856931196f0e8bac548e045234b --no-build
+----
+
+Output (the last line):
+
+[source,text]
+----
+"a"
+----
+
+Replaying a saved input creates a `.roc-fuzz/` directory, which Git ignores.
+
+== Add a regression
+
+Once you understand the minimised input:
+
+. Write the smallest `expect` in the module that fails for the same reason, and
+  fix the parser until it passes. The `expect` is the regression; it runs in
+  every build.
+. For a seeded or raw target, add the readable input to
+  `fuzz/seeds/<name>.json` so the fuzzer starts near the bug in future runs.
+. If the generator of a structured target avoided the input's shape, remove
+  that restriction so the target covers it from now on.
+. Keep the raw minimised input and the target binary outside the repository
+  when exact reproduction of a historical failure matters.
+
+[#property-testing-fix-the-cause]
+== Fix the cause, do not gate it
+
+When a property fails, change the parser, not the test. Do not add a condition
+to a target that skips the failing shape, a known-gaps flag, or a baseline
+entry, to make CI green. A gate hides the bug from every later run, and the
+fuzzer will not tell you when it comes back.
+
+There are two legitimate exceptions, and both need a written reason:
+
+* the input is outside the subset the module documents as supported (for
+  example a DOCTYPE in XML, or multi-line flow collections in YAML); and
+* the oracle is wrong and the specification says so.
+
+Several gates that once existed were removed by fixing the parser, which is
+how the targets found the CSV final-record bug, the YAML block scalar
+chomping bugs and the quadratic Markdown inline cases.
+
+== Run a conformance review
+
+Each format has a review script that runs a small probe app,
+`scripts/<format>/probe.roc`, which prints the parser's result as JSON, and
+compares it with the oracle. Install the pinned oracle into a virtual
+environment first:
+
+[source,bash]
+----
+python3 -m venv .venv
+.venv/bin/python -m pip install --no-deps -r scripts/yaml/requirements.txt
+----
+
+`scripts/http/`, `scripts/markdown/` and `scripts/yaml/` each have a
+`requirements.txt` with every dependency pinned, so `--no-deps` installs
+exactly the reviewed versions; CSV and XML use the Python standard library. Then run the
+same checks as the `Conformance` jobs in CI:
+
+[source,bash]
+----
+.venv/bin/python scripts/review_yaml.py check --baseline scripts/yaml/known-failures.json
+.venv/bin/python scripts/review_yaml.py campaign --smoke
+python3 scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+python3 scripts/review_csv.py
+.venv/bin/python scripts/review_http.py
+----
+
+The CSV review runs the hand-written cases, 2000 seeded random inputs and,
+with `--corpus DIR`, a fuzz corpus. Its last line summarises the run:
+
+[source,text]
+----
+cases=2035 unexpected=0 known=0 fixed_known=0
+----
+
+The Markdown reviews compare against the CommonMark spec examples and
+cmark-gfm:
+
+[source,bash]
+----
+.venv/bin/python -m pip install --no-deps -r scripts/markdown/requirements.txt
+.venv/bin/python scripts/review_markdown.py check
+.venv/bin/python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
+----
+
+Several scripts can also check a structured target's generator against the
+oracle, which is how a generator's own mistakes are caught: `review_xml.py
+corpus <target> <corpus>`, `review_http.py --corpus DIR --fuzz-show BINARY`,
+`review_markdown.py generated BINARY CORPUS` and
+`review_markdown_blocks.py crosscheck BINARY CORPUS`.
+
+== Known-failures baselines
+
+Each format keeps a baseline at `scripts/<format>/known-failures.json` (for
+Markdown blocks, `scripts/markdown/blocks/known-failures.json`): the
+cases where roc-parser and the oracle are allowed to disagree. Every entry
+carries a reason, of one of these kinds:
+
+* the input is valid but outside the documented subset;
+* the oracle is wrong, citing the specification (for example, expat does not
+  check `VersionNum`); or
+* a documented design decision (for example, YAML mapping keys are their
+  source text).
+
+A review fails when a case disagrees and is not in the baseline, and reports
+any baseline entry that now passes as stale. When your change makes a known
+failure pass, remove the entry. When it introduces a new disagreement, fix the
+parser; add an entry only for one of the reasons above. `review_yaml.py` and
+`review_markdown_blocks.py` can rewrite the baseline with
+`--record-known-failures PATH`; review the diff entry by entry before you
+commit it.
+
+== OpenSSF Scorecard
+
+The OpenSSF Scorecard _Fuzzing_ check detects OSS-Fuzz, ClusterFuzzLite and a
+few language-specific frameworks, but not Roc targets. A low Fuzzing score is a
+detection gap, not evidence that these campaigns did not run.

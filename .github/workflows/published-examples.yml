@@ -1,4 +1,4 @@
-name: Published example compatibility
+name: Example compatibility
 
 on:
   pull_request:
@@ -18,7 +18,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The job keeps its name: the repository ruleset requires `published-examples`.
+  # It checks that the examples in the checkout use the checkout's package
+  # (../package/main.roc), and checks, runs and builds them against it. The
+  # release archive, pinned to the bundle URL, is tested by tests and release.
   published-examples:
+    name: published-examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,5 +40,8 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
 
-      - name: Test committed examples against released dependencies
-        run: python3 scripts/test_bundle_examples.py --published
+      - name: Check the examples use the package source
+        run: python3 scripts/workflow_helpers.py validate-examples
+
+      - name: Test the examples against the checkout's package
+        run: python3 scripts/test_bundle_examples.py --checkout

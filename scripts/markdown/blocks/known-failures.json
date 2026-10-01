@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "roc": "Roc compiler version nightly-2026-09-29-7f11a82",
+    "python": "3.14.3",
+    "oracle": {
+      "package": "cmarkgfm 2025.10.22",
+      "cmark_gfm": "0.29.0.gfm.13",
+      "extensions": [
+        "table",
+        "tasklist",
+        "strikethrough"
+      ]
+    },
+    "spec": {
+      "version": "0.31.2",
+      "sha256": "d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20"
+    },
+    "markdown_sha256": "bfe6f3f4a19b5b487d87f6de906cfa3ad73fdf2a104dfabd6b5c6258a41c643a",
+    "source_revision": "7afc7413563eb8dcaa8bc6c5eb94f527f483ca7e"
+  },
+  "failures": {
+    "spec/028": {
+      "signature": "fb29376901e1939c6fa5453fcaa50f05d50bf26f4a7bd82197425794556e06d6",
+      "kind": "wrong_text",
+      "reason": "Oracle predates 0.31.2: cmark-gfm 0.29 decodes 8-digit numeric references (&#87654321;); the spec allows at most 7 digits."
+    },
+    "spec/354": {
+      "signature": "1eaf2e798ec5c455067deae14c6a638cc3f9c9116205719dcd4924ad51c00887",
+      "kind": "wrong_text",
+      "reason": "Oracle predates 0.31.2: cmark-gfm 0.29 does not count Unicode symbols (S*) as punctuation for emphasis flanking."
+    },
+    "spec/602": {
+      "signature": "a31a1a05e6448859f3a6ee93cb573a64cbf2e76102a727e12ce857ae17cabe49",
+      "kind": "wrong_inline",
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
+    },
+    "spec/606": {
+      "signature": "f8490cf7578b1ed8a604a4286396313810c7fd17869f307bf0cf1417b1994046",
+      "kind": "wrong_inline",
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
+    },
+    "spec/608": {
+      "signature": "3a99175dd9461f1ed91bd46467a36f4efe0ec37768442907493b60178c732faf",
+      "kind": "wrong_inline",
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
+    },
+    "spec/611": {
+      "signature": "cfde3f9b9be39e7a2baeaee2661e9b6b2d5b6fb8b297535247c288381cfd27a2",
+      "kind": "wrong_inline",
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
+    },
+    "spec/612": {
+      "signature": "3a2cbf279895d44ea89d93d90189449c09d2544680868fd150db3fc32b366ad4",
+      "kind": "wrong_inline",
+      "reason": "The module implements GFM extended autolinks (inline); this block review runs cmark-gfm without the autolink extension, so the example's text differs by design."
+    }
+  }
+}

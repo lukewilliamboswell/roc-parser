@@ -1,0 +1,211 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#contributing]
+= Contributing to roc-parser
+
+This chapter is for people who want to change roc-parser: fix a bug, improve a
+format parser, or improve this manual. It assumes you can read Roc and use Git
+and Python 3. When you finish it you will have a working checkout, know which
+checks CI runs, and know what a pull request needs before it can be merged.
+
+Related chapters: <<property-testing>> explains the fuzz targets and
+conformance reviews, <<adding-a-format>> walks through adding a new format
+module, and <<maintaining>> covers compiler updates and releases.
+
+== Report a problem or propose a change
+
+Report bugs and propose changes in the {repo}/issues[roc-parser issue tracker].
+For a parsing bug, include the roc-parser release or commit, the output of
+`roc version`, and the smallest input that shows the problem. For a change to a
+public API or to the syntax a format accepts, open an issue first so the shape
+can be agreed before you write the code.
+
+Do not report a suspected vulnerability in a public issue. Follow the private
+process in {src}/SECURITY.md[the security policy] instead.
+
+== Development setup
+
+Install:
+
+* the Roc nightly named in {src}/.roc-version[`.roc-version`], for example
+  `nightly-2026-09-29-7f11a82`;
+* Python 3, for the test, review and release scripts;
+* Docker, to build this manual locally (see <<contributing-docs>>).
+
+The scripts find the compiler through the `ROC` environment variable and fall
+back to `roc` on `PATH`. Point `ROC` at the nightly you installed:
+
+[source,bash]
+----
+export ROC=/path/to/roc_nightly/roc
+$ROC version
+----
+
+Output:
+
+[source,text]
+----
+Roc compiler version nightly-2026-09-29-7f11a82
+----
+
+With Nix, `blueprint shell` provides this exact nightly together with Go, Rust
+and Python, on Linux and on Apple silicon Macs; see <<benchmarks-blueprint>>.
+
+`.roc-version` is the only compiler pin; `Blueprint.roc` mirrors it, and a test
+keeps the two in step. The package, its tests, its examples,
+its releases, the property tests, the conformance reviews and the benchmarks
+all use it, locally and in CI.
+
+== Repository map
+
+[cols="1,3",options="header"]
+|===
+|Path |Purpose
+|`package/` |The library: `Parser`, `Utf8`, and one module per format
+|`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
+|`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
+|`scripts/` |Test, review, fuzz, documentation and release automation, all in Python
+|`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
+|`scripts/tests/` |Unit tests for the scripts, including the repository policy
+|`docs/` |This manual, in AsciiDoc
+|`docs/releases/` |Release notes, one Markdown file per release
+|===
+
+== Run the tests
+
+Each module carries its tests as `expect` blocks next to the code. Run them
+all through the package:
+
+[source,bash]
+----
+$ROC test package/main.roc
+----
+
+Output:
+
+[source,text]
+----
+All (253) tests passed in 535.8 ms.
+----
+
+The number grows as tests are added.
+
+Run the unit tests for the Python scripts. These include the repository policy
+described below:
+
+[source,bash]
+----
+python3 -m unittest discover -s scripts/tests -p "test_*.py"
+----
+
+Run the same validation as the `Tests` workflow. `scripts/all_tests.py` checks
+and tests every module, generates the API documentation, builds a bundle,
+and then packages the examples archive exactly as a release does, pinned to
+that bundle served on localhost, and checks, runs and builds every app in it.
+Its scratch files go under `.roc-parser-tmp/`:
+
+[source,bash]
+----
+python3 scripts/all_tests.py
+----
+
+A quick property-test pass over every fuzz target takes a few minutes (see
+<<property-testing>>):
+
+[source,bash]
+----
+ROC=/path/to/quality_nightly/roc python3 scripts/run_fuzz.py smoke all
+----
+
+=== Repository policy
+
+`scripts/tests/test_repository_policy.py` enforces three rules. A pull request
+that breaks one fails CI:
+
+* Automation is Python under `scripts/`. No shell scripts (`*.sh`) are allowed
+  anywhere, and no `*.py` file may live outside `scripts/`.
+* Every `uses:` in a workflow names an action by its full 40-character commit
+  SHA, not a tag or branch. Local actions (`./...`) are exempt.
+* Workflows do not use the `pull_request_target` or `workflow_run` triggers,
+  and do not contain multi-line `run: |` or `run: >` blocks. Put the logic in a
+  script under `scripts/` and call it on one line.
+
+`scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
+registered in `scripts/run_fuzz.py`, and the CI matrix in `fuzz.yml` to match
+that registry.
+
+[#contributing-docs]
+== Build the documentation
+
+The manual is AsciiDoc under `docs/`, rendered by Asciidoctor in Docker, so
+you need Docker running but no Ruby toolchain. Build the HTML manual:
+
+[source,bash]
+----
+python3 scripts/build_manual.py
+----
+
+Add `--pdf` to also build the PDF, and `--docs-version V` to stamp a version
+other than the development one.
+
+The API reference is generated from the doc comments in `package/` with
+`roc docs`. Build it, or check that it builds without writing anything:
+
+[source,bash]
+----
+python3 scripts/build_docs.py
+python3 scripts/build_docs.py --check
+----
+
+Code examples in the manual are compiled and run, so a changed API breaks the
+build rather than silently leaving a stale example:
+
+[source,bash]
+----
+python3 scripts/check_doc_examples.py
+----
+
+The `Docs` workflow (`.github/workflows/docs.yml`) runs these on pull requests.
+
+When you write a chapter, follow the
+https://github.com/lukewilliamboswell/roc-automation/blob/main/docs/documentation-guide.md[shared documentation guide]:
+give each page one purpose (tutorial, how-to, reference or explanation), name
+the reader and the outcome at the top, label commands and their output
+separately, and put any warning before the step it applies to.
+
+== Before you open a pull request
+
+* Format changed Roc files with `roc fmt path/to/file.roc`, using the compiler
+  pinned in `.roc-version`.
+* Add or update `expect` tests for the accepted input, the rejected input and
+  the boundary cases of the behaviour you changed.
+* When you change parser behaviour, run that format's conformance review and,
+  if the change touches a fuzzed path, a smoke run of its targets
+  (<<property-testing>>). If a fuzz target or review found the bug, add the
+  input as a regression.
+* Fix the cause of a failure. Do not add a gate, a skip or a known-failures
+  entry to make a check pass unless the input is genuinely outside what the
+  module supports, and say why in the entry.
+* Update the doc comments, the manual and the release notes in
+  `docs/releases/` when a public API or the accepted syntax changes.
+* Keep the change focused: no unrelated formatting or refactoring, and no
+  generated files or local build output (`.roc-parser-tmp/`, `.roc-fuzz/`).
+* Sign your commits. The `main` branch requires verified signatures; see
+  https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits[GitHub's guide to signing commits]
+  to set up an SSH or GPG key.
+
+Pull requests need passing CI: `Tests`, `Property quality tests` (smoke runs of
+every target and every format's conformance review) and `Docs`. Human review is
+encouraged; answer review comments before asking for another review after a
+substantial change.
+
+== License
+
+By contributing, you agree that your contribution is licensed under the
+{src}/LICENSE[Universal Permissive License v1.0].

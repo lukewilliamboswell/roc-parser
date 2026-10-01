@@ -1,0 +1,1063 @@
+{
+  "metadata": {
+    "roc": "Roc compiler version nightly-2026-09-29-7f11a82",
+    "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 16.0.0 (clang-1600.0.26.6)]",
+    "oracle": "0.18.16",
+    "parser_root": "/Users/luke/Documents/GitHub/roc-parser",
+    "yaml_sha256": "013ad37178aec90efd2642b7800bfb3e8ddc173a39afb8aff876ae860e00316a",
+    "binary_sha256": "066fbd4a4c7ae4c542cbad5048b456757fb55f04850ae79b19fe5c5ede0f65df",
+    "suite": {
+      "repository": "https://github.com/yaml/yaml-test-suite",
+      "revision": "6ad3d2c62885d82fc349026c136ef560838fdf3d",
+      "branch": "data",
+      "license": "MIT"
+    },
+    "fuzz": {
+      "url": "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+      "sha256": "60d45f07a51515f2a49eadcf2163fb9c2801df5341c8b8685f81581010c7dd2c"
+    },
+    "source_revision": "bebc4b6628515e141e1a1ebdde5254295970de39"
+  },
+  "failures": {
+    "core/multiline-plain": {
+      "signature": "c5e2b61951fda14f59ea755b4ea87c690a4f49e39c14b5dfefc9905f11a6174a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "core/multiline-double": {
+      "signature": "7c3d18c08fa160932140cd0343469563a27e917fd2cce9629e9891bed23a84cd",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "core/quoted-flow-key": {
+      "signature": "42f319b92029af3e67bcadbc10b46841c833751d6450c1fcb31139b9bbee4501",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
+    },
+    "core/trailing-flow-comma": {
+      "signature": "1cd05b1d490890e57b950cb06c67a55de8a39b628e8b58e556fbf0e183a294a3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
+    },
+    "core/empty-key": {
+      "signature": "35de773a948cd25696684da9ec67d2d9bac4507c371b0acada0b56953c29adac",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
+    },
+    "core/typed-keys": {
+      "signature": "2024595dd258c72c9d855cc1682875e6212c401ac968c4796cd8ee014fb54e8a",
+      "kind": "wrong_value",
+      "reason": "By design: mapping keys are their source text (Str), not core-schema typed values."
+    },
+    "core/duplicate-typed-key": {
+      "signature": "df6ba61accee8e3077dcd494f54bff5aa10246193a8d9d6b7df19e0e2d23b882",
+      "kind": "invalid_acceptance",
+      "reason": "By design: mapping keys are their source text (Str), not core-schema typed values."
+    },
+    "core/overflow": {
+      "signature": "7f12f071cba141088f1a9142b0eff59d985a6c12dc3369c417dc3fde672138cd",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: integer `9223372036854775808` is outside the supported I64 range"
+    },
+    "core/directives": {
+      "signature": "c6c1172e31edea806968577641d9c8dbc81b50d0770bf886a0ea552b6b5ba2c8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "core/tag": {
+      "signature": "99b2d460876154adf29518ef0fa2a46570bbd8cf29d1d123423989316620e2dc",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "core/custom-tag": {
+      "signature": "adfe460b47f1f7ea0e1f5b21c9675e3abc1e4d52d2daceef989dded06f29b725",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "core/alias": {
+      "signature": "1b61ebc5195e45460e99f6d0943c3ad7d3c0e52e31ddbc4368d587030b46af54",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "core/cycle": {
+      "signature": "9277da5569b0e85a526d84759f555f399b1465fe5beb07672cd886751f54d8c1",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "core/complex-key": {
+      "signature": "29a92104cbc1734bebdec16f2c83a889b2a67f336dfff566029be9d119929c6c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "core/stream": {
+      "signature": "33929e00bd8b56addaff72c60ec2c4ae83a3fa10db9b91de6958e551ab9730de",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "limits/block-depth-100": {
+      "signature": "84c094607df768cacd377de57ded6460112b40df4d0d7ea2908b7a895b13d5db",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
+    },
+    "limits/block-depth-101": {
+      "signature": "ffbadd05f3a86e64ca86419a98772a29a706772add5a531b31206a0f9eb524b8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
+    },
+    "limits/flow-depth-100": {
+      "signature": "251fb0c89160ff803f42c619719841640394a9be3fdc23284912eb06cb353df1",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
+    },
+    "limits/flow-depth-512": {
+      "signature": "c6a6955574c12818aa1e15f3292c7722b9a3b573cc1aa2f4111def5bd229d50a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML nesting exceeds the supported limit of 100 levels"
+    },
+    "suite/26DV": {
+      "signature": "f8caf7a89aa6be0c9edd0366b389816db629af6f881b511cd1d25e232da9ba5f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/27NA": {
+      "signature": "35da1bc43c4c99363989fb47d693e8a0b410248a107de40e912e78ca25d44e8c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/2AUY": {
+      "signature": "e55b4ec88e7798369cae0525208815e4e3cec1864bdc8f9377e00976d9866f34",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
+    },
+    "suite/2LFX": {
+      "signature": "f751395855f1f95952377e625afac470696211da9e3c27d4d31e9c48ceaa02f5",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/2SXE": {
+      "signature": "8ae371584367b1f74bc0cf2616e6363834862bb9eb901f6f490a2f91d197bb68",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/2XXW": {
+      "signature": "88668e1f30c97f64168139e0bcd4df4b1ef39f741c709d22629d0496b772f2a8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/33X3": {
+      "signature": "ddee331797dcb9e907dc49dcc8b351b816a716ef8e631f1a1a9f7e2a0b11adb9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/35KP": {
+      "signature": "4ce77e0976afe0065759f3c10af866a6ae039a8d870ceb0c435799a6f2b4f3e5",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/36F6": {
+      "signature": "d0062c173c9934f3c3f1fdb213faef7cd89a759f41c48578088a85c5c20b9f06",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/3GZX": {
+      "signature": "d7022f73daee744fc5e1557ce7d7b7c14584524726e23162c768e999ee5d953a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/3MYT": {
+      "signature": "27bfe5b628aaba9f9475c4c505f86d7ec27b3704fcb64139f23fd6431382d2dc",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/3R3P": {
+      "signature": "f2dd44ee0b0520b5da5097292a2c8cd36e86ff177d48b02f40d93d5e19ce1897",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/3RLN/00": {
+      "signature": "f0bcb0f378f5923d107ac2218efe4720d981b6b21a5fe5f2df1b1d19bf3f4fb3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/3RLN/01": {
+      "signature": "984aaa6b9eaccd5e7b46e41d4f68b24fdb35a42829502efa441d2e6f9ef46a8b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/3RLN/02": {
+      "signature": "61f6ddb4825a92f7b1d59c156702002dcea8eb856e64abecf4a1b14acba0fec2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/3RLN/03": {
+      "signature": "90a595099ae23cd1e12e474068a90ad83d5ac871fd4c0709dce30efbd4064b75",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/3RLN/04": {
+      "signature": "6df9bc35fa7c7baf6b6c9ff53f08b3a34c3c611f8b28e9e7e3cb7cd273e036de",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/3RLN/05": {
+      "signature": "a1b8409723021bf13b7a329ec3c6e843611f5d04004a980b1aff4daa3a296b74",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/4ABK": {
+      "signature": "aab485edeba33e43531af9e2fa374199ee7ee99c59beedd56c9ab8585076b3af",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/4CQQ": {
+      "signature": "9cdd4f491ce9adfbcd3f54f1ab3cf2ee15149594e87642ef3b448a716dee0ea9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/4FJ6": {
+      "signature": "0138d1dbdee0749de841a8abe5b84953a954a9d7dc4959d4821fb8a3d79ff083",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/4MUZ/00": {
+      "signature": "bd981384372e783c9e2abcd6d75f53f427a6c961edc9a6e0b310540f233625ef",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/4MUZ/01": {
+      "signature": "23b464d31517639d6a159a50bd1dff5d6218394b7b0a816cfb079e4e535f4e22",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/4MUZ/02": {
+      "signature": "7805896d96e29fc00917e86e49131d9627215d2a3a99a36566c6eec6045a4d3d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/4RWC": {
+      "signature": "70081ab4aa312645370c36cfce9879b9030a1333532d1b1626056a9eb1c1ecbf",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
+    },
+    "suite/4ZYM": {
+      "signature": "ed046a4d07a67ff09bcc494431890d388202394a2b9f6db553a4a21743f2d3f8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/52DL": {
+      "signature": "fb8b3e8078dae7f09873c0ab6afc4590d581a32401c164101d71d430a4ca0add",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/565N": {
+      "signature": "c0cb3b87c1778ea3e838daa83ef09b9451a4982df0463b0b4c5b1b5c502aafa1",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/57H4": {
+      "signature": "2d0d6f93dc9571d0d37559a3011a3d1249bc356ded98c076a834be5cc389af8c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/5C5M": {
+      "signature": "42304c6a57c71518b5de8efe2003bc4a408999b07a597c24c7a7a2e39d062a0e",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
+    },
+    "suite/5GBF": {
+      "signature": "b98c1b0da9a69b1a899dbf74b8ec426331209200777750e44042bb82d2b20d39",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/5KJE": {
+      "signature": "af0d0da9a203a0143a7182d9a3308381821aca76d5809e73ea9b4f7709db4bd0",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
+    },
+    "suite/5MUD": {
+      "signature": "294b89568851d0787a8a6ad5bba92f703ceb2ed93ac57778f0ca15c77b925761",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/5T43": {
+      "signature": "fa86b482c8da4164bf6075d33793908f0b146a1369d9d7a8f79597e960349af6",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
+    },
+    "suite/5TYM": {
+      "signature": "12075fb4131001c2d0dae9b92a01036a3a041e164058906c64862c4aab8346bf",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/5WE3": {
+      "signature": "4edc4ff412e6ad27dfa3bd4c5cf4ac335e3a321aae92c2d363bdf6f21c33710a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/652Z": {
+      "signature": "5099dc86f009ece7c87049180f46145fd728bbe9194999b042ea6ec2e71303bf",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/6BFJ": {
+      "signature": "49d19708d51efaaf388fc608d4cd0747f2957c372518d50f2abc64aea6a2ea81",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/6CA3": {
+      "signature": "913dbf8d93483191b036f1ce479c7e2947a76df60a525202f59eee69154a17c1",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
+    },
+    "suite/6CK3": {
+      "signature": "424051b593f0f93d2bbb4e31c6f202e7cfda533f9f5a4aab5701ae0c8f1a4c7d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/6HB6": {
+      "signature": "0842cd62f9d0db08bcec7624774cb38f5bd667add070ef5ada99dc10a5b250cb",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/6JWB": {
+      "signature": "10db71d37209362440095cef5fcddca09da60f4064f62775c14200ef72b9c2dc",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/6KGN": {
+      "signature": "8a3986c5b70b49f521493f89a474b71b937187d3c81bc9b8b88a02ac4bd2101f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/6LVF": {
+      "signature": "04d00bf083a0e07288a0eaa74b3efc4b68f92bb9d6b2500cc7b0967c6259c1ee",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/6M2F": {
+      "signature": "a255b05aa148d79262ab1b4a9e623012912c5bd4f36a1812d0d8b5132a3881ec",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/6PBE": {
+      "signature": "667fb518cb846c9b21485e15a57654dc5de4a013f55a91cd5e6804e151da747d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/6WLZ": {
+      "signature": "95f6d16e5a2bab24d461b6ec96f8eda64b23742245c6fca00f45a521797399c9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/6WPF": {
+      "signature": "48451fcab44873f51b637f3d04a2e333599f2ff1c41cedacf4ffbc183cfa55df",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/6XDY": {
+      "signature": "8ad5675c9ec26f8c46792da1d97b69265d9b45e563e101f902e260288b97c421",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/6ZKB": {
+      "signature": "4b8c1f464a7e25c5d6bde15f04d207cf15eac9ab6b3d1a7db947f503069911e8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/735Y": {
+      "signature": "4ce4424c30b5d1261e60f195f25a8865081a269ac6ee74a469149bf401d1ec18",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/74H7": {
+      "signature": "fb4b0da1bbecdf7514d12205c755fb4196671c80eedf4d036061d2838f95c9cd",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/7A4E": {
+      "signature": "a6cee8fea612b49d82820af85a378b93ff0dc95dd0f8316d158280165e133e18",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/7BMT": {
+      "signature": "9007e9a7d5c18026fad9498c69ace8f848274e215bbd2207e986d5abfe9dc289",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/7BUB": {
+      "signature": "dc585503eaff6b5e168cb668db8dec431b03f3b0c2f3c2bd20c0e11378935461",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/7FWL": {
+      "signature": "1636c2bd64a9f318632220e6b1f5d81085b7e64ec75ac527d083c418b720430c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/7TMG": {
+      "signature": "464eee568c7894518c65a9824af702f05101ef4b1eaaa526d72b64e1e75d8c7d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/7W2P": {
+      "signature": "f73d918676f3a1ea9ff93a7e365ad3997a592668eb54dddf8154c31f1d95bf51",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/7Z25": {
+      "signature": "a1c61f751b361f579fd4198bc97ab8539b9a90b102590fc1ad13f6a600bcb287",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/82AN": {
+      "signature": "26b7fa3eaf907dcaf7db345f64ed669fcb17ebcc0ebe7b72eee4ad359f501de6",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/87E4": {
+      "signature": "ebc031be51a29a593057e98dbef1f279e6d32816c6c8981110b011a31ee8b906",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/8KB6": {
+      "signature": "d99d76167bcc82703893615b3aed6e0ef005c4026971e1b04fcda4abeacbf13d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
+    },
+    "suite/8MK2": {
+      "signature": "22fc6d9d3e8adc66dec40d303afeef767be4f05fa84b8566cbe1c324250888f8",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/8UDB": {
+      "signature": "9b17b569457638c01b742ec1d7d5f7b2280798f2b08f73d9ef4f9073ac89c85a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/8XYN": {
+      "signature": "aeee6f37e3d7f96855c5a4b88915e6e388b95a331bba99ac8e4175c18026a2e9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/93JH": {
+      "signature": "e1ba93d000405ff3d6dcae23694ede4fd8bd0f4ec5d1b80901ccab1ec04e4044",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
+    },
+    "suite/9BXH": {
+      "signature": "7b1ccd9049e3857d270cefde9494b2ca9c5999d99d7896517ee106d3d4aa259f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: expected a key and value in flow mapping"
+    },
+    "suite/9DXL": {
+      "signature": "51f6d679d6b9a2e3c5f6fc1f6e4b64e097fca7694f79e357caf5ae72789a812d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/9KAX": {
+      "signature": "bf850bd0ad8c2d5a8b2d58f9083ad6920a40218e3c5e15de368b0e613ad33e08",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/9MMW": {
+      "signature": "9a8daa60cbdb76e8d1bbb91d0e30c34976243c915ceacae0003a886c8ebdb903",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: a mapping value is not allowed here; quote the scalar if it contains \": \""
+    },
+    "suite/9MQT/00": {
+      "signature": "ea22ea907018b14b7ad7acc863a3d1860a875a931c99177ce511b3eeb268036f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/9SA2": {
+      "signature": "239226552ba0c9b39e23b1a35dca8079dd0dd273a6da96971665ff942fc83316",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/9TFX": {
+      "signature": "6cc91345cbe989272538e5f8adbe66fb9ec03bf4b97826db4135a216875d980f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/9WXW": {
+      "signature": "6f62abb67ddf86bd4fd79bd9e871c6f8e9b7ac31cda3cb36a69eda35a9a0c3fd",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/9YRD": {
+      "signature": "e5d67cda818e308fd6ac9b58cdd00f6b248378817b93a9f66ae3122c3cb1f7b6",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/A2M4": {
+      "signature": "ab39e81f65d0a2173c58cc4492da94ebc916c2d018766e726117d4204c6b7cc9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/A984": {
+      "signature": "58ab80e310f00d3840aea562dc41c362bb127e82e3ed1f63506440327e34a73f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/AB8U": {
+      "signature": "b750b5bc080daecc9e02c410416135f6cdb91eef5b84cb0e73e1be81d18091b6",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a sequence value"
+    },
+    "suite/BEC7": {
+      "signature": "f411ac9811060dc389e341d396aadbb8389ea7ed58da555b4926d6337a5c2a4f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/BU8L": {
+      "signature": "7107f87c1b17e43259429e4531ed549f8844d121e165aa87fe287c571aef69b2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/C2DT": {
+      "signature": "7d6df95d5ca6ed22da9bd9559da1086bff875641bedea2d8bd3f026fdc338312",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/C4HZ": {
+      "signature": "7218e22c2e258deff27803d82080914c99a3c921086820dd6cfacca1cd36da7f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/CC74": {
+      "signature": "5c71bf0a93b5e61df636c171cd848e18488ffeaffc8198cd68177a16bab313a2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/CFD4": {
+      "signature": "2e8ea3ec64a3ea1f252af9a1c6d169fb7fda0113b64a8774eb8b26c6ef98c008",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: a plain scalar cannot start with an indicator followed by white space"
+    },
+    "suite/CN3R": {
+      "signature": "0ddce59eaa8bd1e009dc69aff0894f3164dfcece8e8619360e0ed81a669cb451",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/CT4Q": {
+      "signature": "6e999380876568f48f19d1efc366149c8018478cdb27dad7bfcd19773fc6bd35",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/CUP7": {
+      "signature": "1d13f5146c8f6189ddf7b87774ee16062d81fcf952c33f06acb11e61991e1e43",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/DBG4": {
+      "signature": "c28806ebb1db218592cbb682617ae4f97726e8f353f36adf5e84423a8333dc4d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/DE56/00": {
+      "signature": "3051c6878df2d13c11023db4888487296eeea0f031e23fe8291723ddac576478",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DE56/01": {
+      "signature": "74641e394004b519c14c116400837e7aff9758f2c65695ed21b082d13606511d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DE56/02": {
+      "signature": "397a983d18bd7d5f542f2a03aaca86397ffb0b3ddfa3e8275bc27f3acc919e60",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DE56/03": {
+      "signature": "1bb6aa13d41caad0b39206a553989e80b7082ca77695f54f2446a9de089ae575",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DE56/04": {
+      "signature": "4ba83fa53a12caf2f7cdb234964ce4588fd11759db586a842cecc531948949fa",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DE56/05": {
+      "signature": "d50906a818f027ed8da1ec47fac5820c8d57838fb4080ebcc8c0b995dfa7b062",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DFF7": {
+      "signature": "54dc84b2c03a293e81202820131a55cdcd847055c3f3e917a24cef39d9bdf75b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/DK95/00": {
+      "signature": "2829861bd50c7a4015bea81dd60e628e16b9faf9858ff03185a10c0bf1893e42",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
+    },
+    "suite/DK95/02": {
+      "signature": "925aa601edb9f2cb5ba43f6a2c581c64ff76ca2df48143701a2ff095a5522cd5",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/DK95/07": {
+      "signature": "4c9a53a2852f9e6929a6eddffae460ae4d74884484954ad42c8034258159c54e",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/DK95/08": {
+      "signature": "64fef7d6fbdc83f265719850bd9ca48ba55cac816e14a3e39ccc253e50e46412",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/E76Z": {
+      "signature": "f82d1c35f0a79314918eea18569a512f9a491d8ce274ea1949a7e3a8ef587e3f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/EHF6": {
+      "signature": "0d2b9644046f1f291f8c4b61b653859f562b4c3b883c3d6dbf7c12f95baff8d5",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/EX5H": {
+      "signature": "12580c6f49fb8954f3f8df0f417f348dc761a889d9e6fd49a134c8a8aa9f6eac",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/EXG3": {
+      "signature": "b2e7c70a512e3588d27d2d47601164a96973ce16b47b63fbd598bbbeb05edb22",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/F2C7": {
+      "signature": "a52c0bc45305f1eb3b9eba9bb260bff250461467cc85e2bab1c340bf1d9e391a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: the document root must not be indented"
+    },
+    "suite/FBC9": {
+      "signature": "de6b580ed9ea920c3148f825dee649a1a4e34cd950d19243f201797bb5117c1a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/FH7J": {
+      "signature": "3b58d86f533d4aea56377b2a408d6ca7f57dc13028ebdd65817026bdd2baf014",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/FRK4": {
+      "signature": "71baaa55b5d654e695204ebdf7e86988dd6ad3a401c7f64528af44def72e5358",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/FTA2": {
+      "signature": "eeef9f5226c3e65dad67e9e2819ca81cf362d697cfb4c8b834b7d3bf6cf4558b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/GH63": {
+      "signature": "145544392bd1ffc4295c5bd1a38d02a7ed9a3178ae50517b1aa2cd9d3610c4c9",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/HMQ5": {
+      "signature": "e41ad029fcf7d59b4f361feb3b23815d8284787261498948499359ce76cc33d2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/HS5T": {
+      "signature": "794b79586222a5e359ae00fabd8b6f71b359dc9929c32fe0f74a1e4707d3bad5",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/J7PZ": {
+      "signature": "641f3667b88fe69e2f8b3df68ce6f891e865b32d38c839450a7a604f1c01b26c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/JHB9": {
+      "signature": "d082d81932aebacf65027eeb008fb9a2ce4af42c20e1c2c9a407032eeaccf1a3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/JS2J": {
+      "signature": "852ad6be67df45d7afc8352d6131224b6755ba2c7a3bc4f5d4506a2c8572655a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/JTV5": {
+      "signature": "539c72bfe675de59a9ccc76359a0ce017393913d2fdbae0c608972b35913c690",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/K3WX": {
+      "signature": "1b7f4feee3f997ba913de443cebe88a98e1f3d4c95d8b037be0c3e8fd66c1086",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/KK5P": {
+      "signature": "d448a182fe1c9652e9fa838bd743794ccf476bf757bd00a919e018f2c533c83f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/KSS4": {
+      "signature": "1b07f71c04864f42e7c884943bca7b9a699ec252c2ec940008b5a888745e8f96",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/L383": {
+      "signature": "9930114dceb3fcb77450f4befdff4530bf16ffd8e2451bb8566fb885d554fd0b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/L94M": {
+      "signature": "361296ef0122f963b1dd6ef019f6f47497e74f390b4b340dbfc65e85dc97feca",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/L9U5": {
+      "signature": "53d49927a651ef29502a6028dc9a7deaafa872fe745e8a2cd94e3cd5c00cf158",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/LE5A": {
+      "signature": "af74f85642ea04597759e7a01b5299de48b35078ec2296a57254fdb39ca62415",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/LP6E": {
+      "signature": "6673dab46794c2eb2e5035b7a5f093ff8ef95d7409eb45fe03f7dbe08a60f897",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/LQZ7": {
+      "signature": "8514f30ccac45686819a343eb8c197a14bd46466f117a836001062a3fb7360d3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/LX3P": {
+      "signature": "646be79b825d6edfa5904c861d6cc03aabf923dc43019814ab23c24b4af54718",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/M2N8/00": {
+      "signature": "98e0aa63749d316c357e5852e136dc514c37755d43d4a36b2c0d8e6c984aac4a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/M2N8/01": {
+      "signature": "f1b671b127a52ed374dce02f3bb417175e992a7c10966494f1d7823cc17f9319",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/M5C3": {
+      "signature": "6f37e1d45a20e76a03f1f0e0cac898ec546f4b4f9e33fd45dd38bd07ba0065d2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/M5DY": {
+      "signature": "b0e3abf9dd4c8f067831d38a461a99ddd42f9cd706d68911de04e337ed0ed3ba",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/M7A3": {
+      "signature": "57d673325bd30f22ae0a5a67287f28b81ad56769241ae0f902dd4fefeb69e45e",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/M7NX": {
+      "signature": "8eb907d3ee430a15f38b6913aa93b807c8a1eb78406bfc6a3a275ad64a1a19fd",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/MUS6/02": {
+      "signature": "0230050b6d19fb311a9a83d58a40d0a4b5e50b89ed9fb921be2c59a4d6255bcb",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/MUS6/03": {
+      "signature": "7eafd32cc9dc84310e7f3fe31f00b328a48c7dfeab1089321ceb03764784e303",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/MUS6/04": {
+      "signature": "ee7dfa9b5a0550b0a01bd87b0beeb73eb8d52c97cbf9e5a9942ac37536446639",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/MUS6/05": {
+      "signature": "e2593df16eb075c7c823d33b436432008d8ceb83a937d7fac00bcd8ab8fd83ed",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/MUS6/06": {
+      "signature": "3573a4dcaaa7ce86229af515a38ac004b201982afc98c5d8bab8c68a0f036aa4",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/NAT4": {
+      "signature": "80f6e0e5cfb24b008d835141eeb20a0f27bcaa38839537d1857c7db141989c1d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
+    },
+    "suite/NB6Z": {
+      "signature": "dc29bac657a8c12498b1cd8293386d3d4dbd539feae34ce84dc1439f4aa7b23b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)"
+    },
+    "suite/NHX8": {
+      "signature": "a8c6024e35e817e61cdcf39c07b4ddeb4732ae14364d949ca7c68b89e8e14305",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
+    },
+    "suite/NJ66": {
+      "signature": "8d2c0ca3cb8bc44848086d8e9138e8dcb1fc306a23fc9e37f63a90ca80ce4fbe",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/NKF9": {
+      "signature": "e19e81540da9acbe7f520cd960e550dd53c11cc8025942132aab9f08dcf5f841",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/NP9H": {
+      "signature": "de82d8091595e38186daf58b1903a05a042d896d855a2ac2133f8f0fea1d61b3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/P76L": {
+      "signature": "cf4b4ffbc9ec07f01e7828027c30cb4d9e278faab1bb8a6bab3c8abccae5355d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/PRH3": {
+      "signature": "dba4089ea0892606ed8a0122e3749a284db820a4b8c78d4a232bcbebfa9ce77b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
+    },
+    "suite/PUW8": {
+      "signature": "b0b1977b13545d48e51640284e49b2472c5f848d3ff91396abfdb028357ef291",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/PW8X": {
+      "signature": "111197bd6e812d0f889544142e6d65fb5b3511204e6d8bc00c391bd1e9c8c74c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/Q5MG": {
+      "signature": "a067a9f83b0f60cab19206339073486b8d412d6643f2ed73ce4b27dac8973a1b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
+    },
+    "suite/Q8AD": {
+      "signature": "6ac2dc55d3f269bddfe66fa61553a47818a14a73cf70b72bee1ad78a59a2fd3c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/Q9WF": {
+      "signature": "0a546755a394da3eb1532c65fcda75dbec1898bf7b77a647bac387a9c9ba11bb",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/QF4Y": {
+      "signature": "bc412a9fe82b3401e1fb8423620f4542a2a2f476b442542845c26587af61ff7d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/RR7F": {
+      "signature": "34edb53209fe0c1c649d3ec2065da63e8d4e1d0ba158d2a0224b9a4ead4aba1e",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/RTP8": {
+      "signature": "c0a67bfc5703de3236bb9c51eade353c7dd0c9d843ffb1905237df1746fb41e1",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/RZP5": {
+      "signature": "6ffe663b875d063928ad7a0fc909f9ebb83eb881f0ba582266c4a4b8cdde027a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/RZT7": {
+      "signature": "2d63419568e09514398a86c741cea1ce29273bb03ddfa2b5a129235acc95578b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/S3PD": {
+      "signature": "da9690ca358ef2bf1120cff538cf00992c1144e2ef8ff346c56bcbdde4264d4c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
+    },
+    "suite/S4JQ": {
+      "signature": "236f0d3a9dc7aaf3649f92aec6e7a81db2bae9c8a016fb4ec6cbc1b02d2c4f55",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/S9E8": {
+      "signature": "5810e33c88b02cf7cb739fd1e1a38b2a0c0b4632a1a2705306131b83ca32cf0f",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/SBG9": {
+      "signature": "ce6213624b03746724753c95430b829cc5472a23748ef4e8e7f26fcdff30e8a3",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/SKE5": {
+      "signature": "80ba648dcc2218b5af745ccad347e66764fe0d968bbbff9ec7de6b55e682f57d",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/SM9W/01": {
+      "signature": "20544a087937189165a00d0bfd5e0d4edded3bc1d805690ffb7b7cfe35e12af2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
+    },
+    "suite/T4YY": {
+      "signature": "de60161081eb41fe289bde3bfc620a06ef3d601774fc0ef318b448bc81f32a72",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated single-quoted string"
+    },
+    "suite/TL85": {
+      "signature": "3d1015e03f4ae8c493feb3fc40ebae6d906d56989df03ca15d44c3bf9d986465",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/U3C3": {
+      "signature": "36db008c3dbcd38c122ef80a1075f68edc16f2281fea045a6fb8a93f0c279a15",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/U3XV": {
+      "signature": "ddae8ca68d3b8dc5ec0f7e503c6549905d7c8b8c17184dce17f7b4db4502d64b",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/U9NS": {
+      "signature": "ad8590671f3cfdd52a49886214fe5388083a4fb7749e26b84fb34dbf7d341c91",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/UDR7": {
+      "signature": "06b791675b70a0c477dd400368d978f8abe273819a2311eb67e68398846326d7",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: flow collections may not contain an empty item"
+    },
+    "suite/UGM3": {
+      "signature": "c01144ae589c855a05243bf906f9f9c4d252438481e558d8e3674da9edce912c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/UKK6/00": {
+      "signature": "8bbc046e471e953af03c7df4305ade6bc4fd4e8c223aa50733bd3610542693af",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: mapping keys must not be empty"
+    },
+    "suite/UKK6/02": {
+      "signature": "dc7878b679b2e755f7d1f6743e36a6d04fdedcb8f8817d2349a5720f7c601e4e",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/UT92": {
+      "signature": "623c5e2a4aa85dbfd4bce4ad7ac2045f00a49720de9254c9e2ab762bc8573b7a",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: multiple YAML documents are not supported"
+    },
+    "suite/UV7Q": {
+      "signature": "a98c0b386512f7167346f5e584c139134fcf76954026b217e3511f45f132a152",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: tabs may not be used for YAML indentation"
+    },
+    "suite/V55R": {
+      "signature": "656671491d7f997d134e7999ed5847cb2d913f5e82ec24072388da5d3f0b3da0",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/V9D5": {
+      "signature": "edcb065e6f6f011a00d0b0dbe918d5681ee1fd87b61968a2e33bdddcecb27501",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/VJP3/01": {
+      "signature": "ceffbded81fdab9ed88b25e18490654703b69bc51db7873770ae16d6d8b72bf7",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/W4TN": {
+      "signature": "471f36fe784d239d44a4ded207aa58a7936ed4c641837ecd164616ea1cc77806",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/W5VH": {
+      "signature": "f6ff57070276cda61a6db1b03c2aee000511b651876e5a277973f90a72c9c2fc",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/WZ62": {
+      "signature": "1de5adcb3b90e69287ae7f13435e29f7da926cc2dc16c3283ef28ac9bb1e7543",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/X8DW": {
+      "signature": "8881d3d67d172d4de97c3422a25abceb2e56a69ecb35896d9ccb709b43ae4acf",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: complex mapping keys are not supported by this YAML subset"
+    },
+    "suite/XLQ9": {
+      "signature": "4d76c9748938d85d9777976583aae934c92854b22319a032b7f267328ece47c4",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    },
+    "suite/XV9V": {
+      "signature": "9b9a6c601541ea0ec908eda687d8a3bf88450a08646707ed7a050f2fa459b54c",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/XW4D": {
+      "signature": "bcba6c2322379a79ee557bfe1cf3292ee7368e6ed86ef826a30c33e505359532",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated double-quoted string"
+    },
+    "suite/Y2GN": {
+      "signature": "7ff2cb008e82ae4f554278a158e70850b9e83980000a45c27573fa9b0cc08ca6",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/Y79Y/002": {
+      "signature": "d584b34aaf150dff604465ac0ff18478908587757a71cfaa599b5a1b08d3b6a2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/Z67P": {
+      "signature": "b3c6e68f4b2a5579449db3b0ca1d13d172789ca6bfd95eff9e057845aaa91212",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/Z9M4": {
+      "signature": "09bddc8e8713a12ae6b5f7c43c0e11f3dc318c3effef5d032a28106af9c6fd67",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: YAML directives are not supported by this YAML subset"
+    },
+    "suite/ZF4X": {
+      "signature": "2020afab2c8c369436703d1cd197dd3e1f48561559307233a0783da0e95e5b52",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/ZH7C": {
+      "signature": "6e1e844fbd7dff78db49ad9aadd9220fc54d045a655f70daab1f20291c3385f7",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: anchors, aliases, and tags are not supported by this YAML subset"
+    },
+    "suite/ZK9H": {
+      "signature": "def6767c9a99fd83e63e01028bf06392fc94f5652a9f2ad2a4dfb871d9cee5b2",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unterminated flow collection"
+    },
+    "suite/ZWK4": {
+      "signature": "066ced62da9f3ea26c779d365bb27814815a6ee6141f0dc5c2f1c75a3ed1ccae",
+      "kind": "valid_rejection",
+      "reason": "Valid YAML outside the supported subset: unexpected content after the document root"
+    }
+  }
+}

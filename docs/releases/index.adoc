@@ -1,0 +1,23 @@
+// Defined by index.adoc; repeated so the page renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+endif::[]
+
+[#releases]
+= Release notes
+
+Each release has a notes file in `docs/releases/`, written in Markdown so the
+release workflow can publish it unchanged as the GitHub release description.
+The notes start with the upgrade impact: every change your code or data might
+notice.
+
+* {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes] (not yet
+  released): a redesigned API with an upgrade guide, type-directed decoding
+  of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
+  HTTP, XML 1.0 well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and
+  property tests and conformance reviews for every format.
+
+Earlier releases are described on the
+{repo}/releases[roc-parser GitHub releases page].

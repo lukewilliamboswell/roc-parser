@@ -1,0 +1,6 @@
+# Python comparators for scripts/bench.py. PyYAML wheels include libyaml, so
+# both the pure-Python and the C loader are measured from this one pin.
+PyYAML==6.0.3
+markdown-it-py==4.0.0
+mdurl==0.1.2
+h11==0.16.0

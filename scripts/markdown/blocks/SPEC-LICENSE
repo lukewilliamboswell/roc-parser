@@ -1,0 +1,7 @@
+spec.json is the example set of the CommonMark Spec, version 0.31.2,
+downloaded unmodified from https://spec.commonmark.org/0.31.2/spec.json
+(sha256 d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20).
+
+Copyright (C) John MacFarlane. The CommonMark Spec is licensed under the
+Creative Commons Attribution-ShareAlike 4.0 International license:
+http://creativecommons.org/licenses/by-sa/4.0/

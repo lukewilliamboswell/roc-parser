@@ -1,0 +1,2138 @@
+[
+ {
+  "example": 12,
+  "section": "Backslash escapes",
+  "markdown": "\\!\\\"\\#\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\_\\`\\{\\|\\}\\~\n",
+  "html": "<p>!&quot;#$%&amp;'()*+,-./:;&lt;=&gt;?@[\\]^_`{|}~</p>\n"
+ },
+ {
+  "example": 13,
+  "section": "Backslash escapes",
+  "markdown": "\\\t\\A\\a\\ \\3\\φ\\«\n",
+  "html": "<p>\\\t\\A\\a\\ \\3\\φ\\«</p>\n"
+ },
+ {
+  "example": 14,
+  "section": "Backslash escapes",
+  "markdown": "\\*not emphasized*\n\\<br/> not a tag\n\\[not a link](/foo)\n\\`not code`\n1\\. not a list\n\\* not a list\n\\# not a heading\n\\[foo]: /url \"not a reference\"\n\\&ouml; not a character entity\n",
+  "html": "<p>*not emphasized*\n&lt;br/&gt; not a tag\n[not a link](/foo)\n`not code`\n1. not a list\n* not a list\n# not a heading\n[foo]: /url &quot;not a reference&quot;\n&amp;ouml; not a character entity</p>\n"
+ },
+ {
+  "example": 15,
+  "section": "Backslash escapes",
+  "markdown": "\\\\*emphasis*\n",
+  "html": "<p>\\<em>emphasis</em></p>\n"
+ },
+ {
+  "example": 16,
+  "section": "Backslash escapes",
+  "markdown": "foo\\\nbar\n",
+  "html": "<p>foo<br />\nbar</p>\n"
+ },
+ {
+  "example": 17,
+  "section": "Backslash escapes",
+  "markdown": "`` \\[\\` ``\n",
+  "html": "<p><code>\\[\\`</code></p>\n"
+ },
+ {
+  "example": 18,
+  "section": "Backslash escapes",
+  "markdown": "    \\[\\]\n",
+  "html": "<pre><code>\\[\\]\n</code></pre>\n"
+ },
+ {
+  "example": 19,
+  "section": "Backslash escapes",
+  "markdown": "~~~\n\\[\\]\n~~~\n",
+  "html": "<pre><code>\\[\\]\n</code></pre>\n"
+ },
+ {
+  "example": 20,
+  "section": "Backslash escapes",
+  "markdown": "<https://example.com?find=\\*>\n",
+  "html": "<p><a href=\"https://example.com?find=%5C*\">https://example.com?find=\\*</a></p>\n"
+ },
+ {
+  "example": 21,
+  "section": "Backslash escapes",
+  "markdown": "<a href=\"/bar\\/)\">\n",
+  "html": "<a href=\"/bar\\/)\">\n"
+ },
+ {
+  "example": 22,
+  "section": "Backslash escapes",
+  "markdown": "[foo](/bar\\* \"ti\\*tle\")\n",
+  "html": "<p><a href=\"/bar*\" title=\"ti*tle\">foo</a></p>\n"
+ },
+ {
+  "example": 23,
+  "section": "Backslash escapes",
+  "markdown": "[foo]\n\n[foo]: /bar\\* \"ti\\*tle\"\n",
+  "html": "<p><a href=\"/bar*\" title=\"ti*tle\">foo</a></p>\n"
+ },
+ {
+  "example": 24,
+  "section": "Backslash escapes",
+  "markdown": "``` foo\\+bar\nfoo\n```\n",
+  "html": "<pre><code class=\"language-foo+bar\">foo\n</code></pre>\n"
+ },
+ {
+  "example": 25,
+  "section": "Entity and numeric character references",
+  "markdown": "&nbsp; &amp; &copy; &AElig; &Dcaron;\n&frac34; &HilbertSpace; &DifferentialD;\n&ClockwiseContourIntegral; &ngE;\n",
+  "html": "<p>  &amp; © Æ Ď\n¾ ℋ ⅆ\n∲ ≧̸</p>\n"
+ },
+ {
+  "example": 26,
+  "section": "Entity and numeric character references",
+  "markdown": "&#35; &#1234; &#992; &#0;\n",
+  "html": "<p># Ӓ Ϡ �</p>\n"
+ },
+ {
+  "example": 27,
+  "section": "Entity and numeric character references",
+  "markdown": "&#X22; &#XD06; &#xcab;\n",
+  "html": "<p>&quot; ആ ಫ</p>\n"
+ },
+ {
+  "example": 28,
+  "section": "Entity and numeric character references",
+  "markdown": "&nbsp &x; &#; &#x;\n&#87654321;\n&#abcdef0;\n&ThisIsNotDefined; &hi?;\n",
+  "html": "<p>&amp;nbsp &amp;x; &amp;#; &amp;#x;\n&amp;#87654321;\n&amp;#abcdef0;\n&amp;ThisIsNotDefined; &amp;hi?;</p>\n"
+ },
+ {
+  "example": 29,
+  "section": "Entity and numeric character references",
+  "markdown": "&copy\n",
+  "html": "<p>&amp;copy</p>\n"
+ },
+ {
+  "example": 30,
+  "section": "Entity and numeric character references",
+  "markdown": "&MadeUpEntity;\n",
+  "html": "<p>&amp;MadeUpEntity;</p>\n"
+ },
+ {
+  "example": 31,
+  "section": "Entity and numeric character references",
+  "markdown": "<a href=\"&ouml;&ouml;.html\">\n",
+  "html": "<a href=\"&ouml;&ouml;.html\">\n"
+ },
+ {
+  "example": 32,
+  "section": "Entity and numeric character references",
+  "markdown": "[foo](/f&ouml;&ouml; \"f&ouml;&ouml;\")\n",
+  "html": "<p><a href=\"/f%C3%B6%C3%B6\" title=\"föö\">foo</a></p>\n"
+ },
+ {
+  "example": 33,
+  "section": "Entity and numeric character references",
+  "markdown": "[foo]\n\n[foo]: /f&ouml;&ouml; \"f&ouml;&ouml;\"\n",
+  "html": "<p><a href=\"/f%C3%B6%C3%B6\" title=\"föö\">foo</a></p>\n"
+ },
+ {
+  "example": 34,
+  "section": "Entity and numeric character references",
+  "markdown": "``` f&ouml;&ouml;\nfoo\n```\n",
+  "html": "<pre><code class=\"language-föö\">foo\n</code></pre>\n"
+ },
+ {
+  "example": 35,
+  "section": "Entity and numeric character references",
+  "markdown": "`f&ouml;&ouml;`\n",
+  "html": "<p><code>f&amp;ouml;&amp;ouml;</code></p>\n"
+ },
+ {
+  "example": 36,
+  "section": "Entity and numeric character references",
+  "markdown": "    f&ouml;f&ouml;\n",
+  "html": "<pre><code>f&amp;ouml;f&amp;ouml;\n</code></pre>\n"
+ },
+ {
+  "example": 37,
+  "section": "Entity and numeric character references",
+  "markdown": "&#42;foo&#42;\n*foo*\n",
+  "html": "<p>*foo*\n<em>foo</em></p>\n"
+ },
+ {
+  "example": 38,
+  "section": "Entity and numeric character references",
+  "markdown": "&#42; foo\n\n* foo\n",
+  "html": "<p>* foo</p>\n<ul>\n<li>foo</li>\n</ul>\n"
+ },
+ {
+  "example": 39,
+  "section": "Entity and numeric character references",
+  "markdown": "foo&#10;&#10;bar\n",
+  "html": "<p>foo\n\nbar</p>\n"
+ },
+ {
+  "example": 40,
+  "section": "Entity and numeric character references",
+  "markdown": "&#9;foo\n",
+  "html": "<p>\tfoo</p>\n"
+ },
+ {
+  "example": 41,
+  "section": "Entity and numeric character references",
+  "markdown": "[a](url &quot;tit&quot;)\n",
+  "html": "<p>[a](url &quot;tit&quot;)</p>\n"
+ },
+ {
+  "example": 327,
+  "section": "Inlines",
+  "markdown": "`hi`lo`\n",
+  "html": "<p><code>hi</code>lo`</p>\n"
+ },
+ {
+  "example": 328,
+  "section": "Code spans",
+  "markdown": "`foo`\n",
+  "html": "<p><code>foo</code></p>\n"
+ },
+ {
+  "example": 329,
+  "section": "Code spans",
+  "markdown": "`` foo ` bar ``\n",
+  "html": "<p><code>foo ` bar</code></p>\n"
+ },
+ {
+  "example": 330,
+  "section": "Code spans",
+  "markdown": "` `` `\n",
+  "html": "<p><code>``</code></p>\n"
+ },
+ {
+  "example": 331,
+  "section": "Code spans",
+  "markdown": "`  ``  `\n",
+  "html": "<p><code> `` </code></p>\n"
+ },
+ {
+  "example": 332,
+  "section": "Code spans",
+  "markdown": "` a`\n",
+  "html": "<p><code> a</code></p>\n"
+ },
+ {
+  "example": 333,
+  "section": "Code spans",
+  "markdown": "` b `\n",
+  "html": "<p><code> b </code></p>\n"
+ },
+ {
+  "example": 334,
+  "section": "Code spans",
+  "markdown": "` `\n`  `\n",
+  "html": "<p><code> </code>\n<code>  </code></p>\n"
+ },
+ {
+  "example": 335,
+  "section": "Code spans",
+  "markdown": "``\nfoo\nbar  \nbaz\n``\n",
+  "html": "<p><code>foo bar   baz</code></p>\n"
+ },
+ {
+  "example": 336,
+  "section": "Code spans",
+  "markdown": "``\nfoo \n``\n",
+  "html": "<p><code>foo </code></p>\n"
+ },
+ {
+  "example": 337,
+  "section": "Code spans",
+  "markdown": "`foo   bar \nbaz`\n",
+  "html": "<p><code>foo   bar  baz</code></p>\n"
+ },
+ {
+  "example": 338,
+  "section": "Code spans",
+  "markdown": "`foo\\`bar`\n",
+  "html": "<p><code>foo\\</code>bar`</p>\n"
+ },
+ {
+  "example": 339,
+  "section": "Code spans",
+  "markdown": "``foo`bar``\n",
+  "html": "<p><code>foo`bar</code></p>\n"
+ },
+ {
+  "example": 340,
+  "section": "Code spans",
+  "markdown": "` foo `` bar `\n",
+  "html": "<p><code>foo `` bar</code></p>\n"
+ },
+ {
+  "example": 341,
+  "section": "Code spans",
+  "markdown": "*foo`*`\n",
+  "html": "<p>*foo<code>*</code></p>\n"
+ },
+ {
+  "example": 342,
+  "section": "Code spans",
+  "markdown": "[not a `link](/foo`)\n",
+  "html": "<p>[not a <code>link](/foo</code>)</p>\n"
+ },
+ {
+  "example": 343,
+  "section": "Code spans",
+  "markdown": "`<a href=\"`\">`\n",
+  "html": "<p><code>&lt;a href=&quot;</code>&quot;&gt;`</p>\n"
+ },
+ {
+  "example": 344,
+  "section": "Code spans",
+  "markdown": "<a href=\"`\">`\n",
+  "html": "<p><a href=\"`\">`</p>\n"
+ },
+ {
+  "example": 345,
+  "section": "Code spans",
+  "markdown": "`<https://foo.bar.`baz>`\n",
+  "html": "<p><code>&lt;https://foo.bar.</code>baz&gt;`</p>\n"
+ },
+ {
+  "example": 346,
+  "section": "Code spans",
+  "markdown": "<https://foo.bar.`baz>`\n",
+  "html": "<p><a href=\"https://foo.bar.%60baz\">https://foo.bar.`baz</a>`</p>\n"
+ },
+ {
+  "example": 347,
+  "section": "Code spans",
+  "markdown": "```foo``\n",
+  "html": "<p>```foo``</p>\n"
+ },
+ {
+  "example": 348,
+  "section": "Code spans",
+  "markdown": "`foo\n",
+  "html": "<p>`foo</p>\n"
+ },
+ {
+  "example": 349,
+  "section": "Code spans",
+  "markdown": "`foo``bar``\n",
+  "html": "<p>`foo<code>bar</code></p>\n"
+ },
+ {
+  "example": 350,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo bar*\n",
+  "html": "<p><em>foo bar</em></p>\n"
+ },
+ {
+  "example": 351,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "a * foo bar*\n",
+  "html": "<p>a * foo bar*</p>\n"
+ },
+ {
+  "example": 352,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "a*\"foo\"*\n",
+  "html": "<p>a*&quot;foo&quot;*</p>\n"
+ },
+ {
+  "example": 353,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "* a *\n",
+  "html": "<p>* a *</p>\n"
+ },
+ {
+  "example": 354,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*$*alpha.\n\n*£*bravo.\n\n*€*charlie.\n",
+  "html": "<p>*$*alpha.</p>\n<p>*£*bravo.</p>\n<p>*€*charlie.</p>\n"
+ },
+ {
+  "example": 355,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo*bar*\n",
+  "html": "<p>foo<em>bar</em></p>\n"
+ },
+ {
+  "example": 356,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "5*6*78\n",
+  "html": "<p>5<em>6</em>78</p>\n"
+ },
+ {
+  "example": 357,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo bar_\n",
+  "html": "<p><em>foo bar</em></p>\n"
+ },
+ {
+  "example": 358,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_ foo bar_\n",
+  "html": "<p>_ foo bar_</p>\n"
+ },
+ {
+  "example": 359,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "a_\"foo\"_\n",
+  "html": "<p>a_&quot;foo&quot;_</p>\n"
+ },
+ {
+  "example": 360,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo_bar_\n",
+  "html": "<p>foo_bar_</p>\n"
+ },
+ {
+  "example": 361,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "5_6_78\n",
+  "html": "<p>5_6_78</p>\n"
+ },
+ {
+  "example": 362,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "пристаням_стремятся_\n",
+  "html": "<p>пристаням_стремятся_</p>\n"
+ },
+ {
+  "example": 363,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "aa_\"bb\"_cc\n",
+  "html": "<p>aa_&quot;bb&quot;_cc</p>\n"
+ },
+ {
+  "example": 364,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo-_(bar)_\n",
+  "html": "<p>foo-<em>(bar)</em></p>\n"
+ },
+ {
+  "example": 365,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo*\n",
+  "html": "<p>_foo*</p>\n"
+ },
+ {
+  "example": 366,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo bar *\n",
+  "html": "<p>*foo bar *</p>\n"
+ },
+ {
+  "example": 367,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo bar\n*\n",
+  "html": "<p>*foo bar\n*</p>\n"
+ },
+ {
+  "example": 368,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*(*foo)\n",
+  "html": "<p>*(*foo)</p>\n"
+ },
+ {
+  "example": 369,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*(*foo*)*\n",
+  "html": "<p><em>(<em>foo</em>)</em></p>\n"
+ },
+ {
+  "example": 370,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo*bar\n",
+  "html": "<p><em>foo</em>bar</p>\n"
+ },
+ {
+  "example": 371,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo bar _\n",
+  "html": "<p>_foo bar _</p>\n"
+ },
+ {
+  "example": 372,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_(_foo)\n",
+  "html": "<p>_(_foo)</p>\n"
+ },
+ {
+  "example": 373,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_(_foo_)_\n",
+  "html": "<p><em>(<em>foo</em>)</em></p>\n"
+ },
+ {
+  "example": 374,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo_bar\n",
+  "html": "<p>_foo_bar</p>\n"
+ },
+ {
+  "example": 375,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_пристаням_стремятся\n",
+  "html": "<p>_пристаням_стремятся</p>\n"
+ },
+ {
+  "example": 376,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo_bar_baz_\n",
+  "html": "<p><em>foo_bar_baz</em></p>\n"
+ },
+ {
+  "example": 377,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_(bar)_.\n",
+  "html": "<p><em>(bar)</em>.</p>\n"
+ },
+ {
+  "example": 378,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo bar**\n",
+  "html": "<p><strong>foo bar</strong></p>\n"
+ },
+ {
+  "example": 379,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "** foo bar**\n",
+  "html": "<p>** foo bar**</p>\n"
+ },
+ {
+  "example": 380,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "a**\"foo\"**\n",
+  "html": "<p>a**&quot;foo&quot;**</p>\n"
+ },
+ {
+  "example": 381,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo**bar**\n",
+  "html": "<p>foo<strong>bar</strong></p>\n"
+ },
+ {
+  "example": 382,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo bar__\n",
+  "html": "<p><strong>foo bar</strong></p>\n"
+ },
+ {
+  "example": 383,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__ foo bar__\n",
+  "html": "<p>__ foo bar__</p>\n"
+ },
+ {
+  "example": 384,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__\nfoo bar__\n",
+  "html": "<p>__\nfoo bar__</p>\n"
+ },
+ {
+  "example": 385,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "a__\"foo\"__\n",
+  "html": "<p>a__&quot;foo&quot;__</p>\n"
+ },
+ {
+  "example": 386,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo__bar__\n",
+  "html": "<p>foo__bar__</p>\n"
+ },
+ {
+  "example": 387,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "5__6__78\n",
+  "html": "<p>5__6__78</p>\n"
+ },
+ {
+  "example": 388,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "пристаням__стремятся__\n",
+  "html": "<p>пристаням__стремятся__</p>\n"
+ },
+ {
+  "example": 389,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo, __bar__, baz__\n",
+  "html": "<p><strong>foo, <strong>bar</strong>, baz</strong></p>\n"
+ },
+ {
+  "example": 390,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo-__(bar)__\n",
+  "html": "<p>foo-<strong>(bar)</strong></p>\n"
+ },
+ {
+  "example": 391,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo bar **\n",
+  "html": "<p>**foo bar **</p>\n"
+ },
+ {
+  "example": 392,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**(**foo)\n",
+  "html": "<p>**(**foo)</p>\n"
+ },
+ {
+  "example": 393,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*(**foo**)*\n",
+  "html": "<p><em>(<strong>foo</strong>)</em></p>\n"
+ },
+ {
+  "example": 394,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**Gomphocarpus (*Gomphocarpus physocarpus*, syn.\n*Asclepias physocarpa*)**\n",
+  "html": "<p><strong>Gomphocarpus (<em>Gomphocarpus physocarpus</em>, syn.\n<em>Asclepias physocarpa</em>)</strong></p>\n"
+ },
+ {
+  "example": 395,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo \"*bar*\" foo**\n",
+  "html": "<p><strong>foo &quot;<em>bar</em>&quot; foo</strong></p>\n"
+ },
+ {
+  "example": 396,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo**bar\n",
+  "html": "<p><strong>foo</strong>bar</p>\n"
+ },
+ {
+  "example": 397,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo bar __\n",
+  "html": "<p>__foo bar __</p>\n"
+ },
+ {
+  "example": 398,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__(__foo)\n",
+  "html": "<p>__(__foo)</p>\n"
+ },
+ {
+  "example": 399,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_(__foo__)_\n",
+  "html": "<p><em>(<strong>foo</strong>)</em></p>\n"
+ },
+ {
+  "example": 400,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo__bar\n",
+  "html": "<p>__foo__bar</p>\n"
+ },
+ {
+  "example": 401,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__пристаням__стремятся\n",
+  "html": "<p>__пристаням__стремятся</p>\n"
+ },
+ {
+  "example": 402,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo__bar__baz__\n",
+  "html": "<p><strong>foo__bar__baz</strong></p>\n"
+ },
+ {
+  "example": 403,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__(bar)__.\n",
+  "html": "<p><strong>(bar)</strong>.</p>\n"
+ },
+ {
+  "example": 404,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo [bar](/url)*\n",
+  "html": "<p><em>foo <a href=\"/url\">bar</a></em></p>\n"
+ },
+ {
+  "example": 405,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo\nbar*\n",
+  "html": "<p><em>foo\nbar</em></p>\n"
+ },
+ {
+  "example": 406,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo __bar__ baz_\n",
+  "html": "<p><em>foo <strong>bar</strong> baz</em></p>\n"
+ },
+ {
+  "example": 407,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo _bar_ baz_\n",
+  "html": "<p><em>foo <em>bar</em> baz</em></p>\n"
+ },
+ {
+  "example": 408,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo_ bar_\n",
+  "html": "<p><em><em>foo</em> bar</em></p>\n"
+ },
+ {
+  "example": 409,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo *bar**\n",
+  "html": "<p><em>foo <em>bar</em></em></p>\n"
+ },
+ {
+  "example": 410,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo **bar** baz*\n",
+  "html": "<p><em>foo <strong>bar</strong> baz</em></p>\n"
+ },
+ {
+  "example": 411,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo**bar**baz*\n",
+  "html": "<p><em>foo<strong>bar</strong>baz</em></p>\n"
+ },
+ {
+  "example": 412,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo**bar*\n",
+  "html": "<p><em>foo**bar</em></p>\n"
+ },
+ {
+  "example": 413,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "***foo** bar*\n",
+  "html": "<p><em><strong>foo</strong> bar</em></p>\n"
+ },
+ {
+  "example": 414,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo **bar***\n",
+  "html": "<p><em>foo <strong>bar</strong></em></p>\n"
+ },
+ {
+  "example": 415,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo**bar***\n",
+  "html": "<p><em>foo<strong>bar</strong></em></p>\n"
+ },
+ {
+  "example": 416,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo***bar***baz\n",
+  "html": "<p>foo<em><strong>bar</strong></em>baz</p>\n"
+ },
+ {
+  "example": 417,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo******bar*********baz\n",
+  "html": "<p>foo<strong><strong><strong>bar</strong></strong></strong>***baz</p>\n"
+ },
+ {
+  "example": 418,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo **bar *baz* bim** bop*\n",
+  "html": "<p><em>foo <strong>bar <em>baz</em> bim</strong> bop</em></p>\n"
+ },
+ {
+  "example": 419,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo [*bar*](/url)*\n",
+  "html": "<p><em>foo <a href=\"/url\"><em>bar</em></a></em></p>\n"
+ },
+ {
+  "example": 420,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "** is not an empty emphasis\n",
+  "html": "<p>** is not an empty emphasis</p>\n"
+ },
+ {
+  "example": 421,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**** is not an empty strong emphasis\n",
+  "html": "<p>**** is not an empty strong emphasis</p>\n"
+ },
+ {
+  "example": 422,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo [bar](/url)**\n",
+  "html": "<p><strong>foo <a href=\"/url\">bar</a></strong></p>\n"
+ },
+ {
+  "example": 423,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo\nbar**\n",
+  "html": "<p><strong>foo\nbar</strong></p>\n"
+ },
+ {
+  "example": 424,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo _bar_ baz__\n",
+  "html": "<p><strong>foo <em>bar</em> baz</strong></p>\n"
+ },
+ {
+  "example": 425,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo __bar__ baz__\n",
+  "html": "<p><strong>foo <strong>bar</strong> baz</strong></p>\n"
+ },
+ {
+  "example": 426,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "____foo__ bar__\n",
+  "html": "<p><strong><strong>foo</strong> bar</strong></p>\n"
+ },
+ {
+  "example": 427,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo **bar****\n",
+  "html": "<p><strong>foo <strong>bar</strong></strong></p>\n"
+ },
+ {
+  "example": 428,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo *bar* baz**\n",
+  "html": "<p><strong>foo <em>bar</em> baz</strong></p>\n"
+ },
+ {
+  "example": 429,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo*bar*baz**\n",
+  "html": "<p><strong>foo<em>bar</em>baz</strong></p>\n"
+ },
+ {
+  "example": 430,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "***foo* bar**\n",
+  "html": "<p><strong><em>foo</em> bar</strong></p>\n"
+ },
+ {
+  "example": 431,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo *bar***\n",
+  "html": "<p><strong>foo <em>bar</em></strong></p>\n"
+ },
+ {
+  "example": 432,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo *bar **baz**\nbim* bop**\n",
+  "html": "<p><strong>foo <em>bar <strong>baz</strong>\nbim</em> bop</strong></p>\n"
+ },
+ {
+  "example": 433,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo [*bar*](/url)**\n",
+  "html": "<p><strong>foo <a href=\"/url\"><em>bar</em></a></strong></p>\n"
+ },
+ {
+  "example": 434,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__ is not an empty emphasis\n",
+  "html": "<p>__ is not an empty emphasis</p>\n"
+ },
+ {
+  "example": 435,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "____ is not an empty strong emphasis\n",
+  "html": "<p>____ is not an empty strong emphasis</p>\n"
+ },
+ {
+  "example": 436,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo ***\n",
+  "html": "<p>foo ***</p>\n"
+ },
+ {
+  "example": 437,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo *\\**\n",
+  "html": "<p>foo <em>*</em></p>\n"
+ },
+ {
+  "example": 438,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo *_*\n",
+  "html": "<p>foo <em>_</em></p>\n"
+ },
+ {
+  "example": 439,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo *****\n",
+  "html": "<p>foo *****</p>\n"
+ },
+ {
+  "example": 440,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo **\\***\n",
+  "html": "<p>foo <strong>*</strong></p>\n"
+ },
+ {
+  "example": 441,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo **_**\n",
+  "html": "<p>foo <strong>_</strong></p>\n"
+ },
+ {
+  "example": 442,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo*\n",
+  "html": "<p>*<em>foo</em></p>\n"
+ },
+ {
+  "example": 443,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo**\n",
+  "html": "<p><em>foo</em>*</p>\n"
+ },
+ {
+  "example": 444,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "***foo**\n",
+  "html": "<p>*<strong>foo</strong></p>\n"
+ },
+ {
+  "example": 445,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "****foo*\n",
+  "html": "<p>***<em>foo</em></p>\n"
+ },
+ {
+  "example": 446,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo***\n",
+  "html": "<p><strong>foo</strong>*</p>\n"
+ },
+ {
+  "example": 447,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo****\n",
+  "html": "<p><em>foo</em>***</p>\n"
+ },
+ {
+  "example": 448,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo ___\n",
+  "html": "<p>foo ___</p>\n"
+ },
+ {
+  "example": 449,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo _\\__\n",
+  "html": "<p>foo <em>_</em></p>\n"
+ },
+ {
+  "example": 450,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo _*_\n",
+  "html": "<p>foo <em>*</em></p>\n"
+ },
+ {
+  "example": 451,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo _____\n",
+  "html": "<p>foo _____</p>\n"
+ },
+ {
+  "example": 452,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo __\\___\n",
+  "html": "<p>foo <strong>_</strong></p>\n"
+ },
+ {
+  "example": 453,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "foo __*__\n",
+  "html": "<p>foo <strong>*</strong></p>\n"
+ },
+ {
+  "example": 454,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo_\n",
+  "html": "<p>_<em>foo</em></p>\n"
+ },
+ {
+  "example": 455,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo__\n",
+  "html": "<p><em>foo</em>_</p>\n"
+ },
+ {
+  "example": 456,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "___foo__\n",
+  "html": "<p>_<strong>foo</strong></p>\n"
+ },
+ {
+  "example": 457,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "____foo_\n",
+  "html": "<p>___<em>foo</em></p>\n"
+ },
+ {
+  "example": 458,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo___\n",
+  "html": "<p><strong>foo</strong>_</p>\n"
+ },
+ {
+  "example": 459,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo____\n",
+  "html": "<p><em>foo</em>___</p>\n"
+ },
+ {
+  "example": 460,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo**\n",
+  "html": "<p><strong>foo</strong></p>\n"
+ },
+ {
+  "example": 461,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*_foo_*\n",
+  "html": "<p><em><em>foo</em></em></p>\n"
+ },
+ {
+  "example": 462,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__foo__\n",
+  "html": "<p><strong>foo</strong></p>\n"
+ },
+ {
+  "example": 463,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_*foo*_\n",
+  "html": "<p><em><em>foo</em></em></p>\n"
+ },
+ {
+  "example": 464,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "****foo****\n",
+  "html": "<p><strong><strong>foo</strong></strong></p>\n"
+ },
+ {
+  "example": 465,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "____foo____\n",
+  "html": "<p><strong><strong>foo</strong></strong></p>\n"
+ },
+ {
+  "example": 466,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "******foo******\n",
+  "html": "<p><strong><strong><strong>foo</strong></strong></strong></p>\n"
+ },
+ {
+  "example": 467,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "***foo***\n",
+  "html": "<p><em><strong>foo</strong></em></p>\n"
+ },
+ {
+  "example": 468,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_____foo_____\n",
+  "html": "<p><em><strong><strong>foo</strong></strong></em></p>\n"
+ },
+ {
+  "example": 469,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo _bar* baz_\n",
+  "html": "<p><em>foo _bar</em> baz_</p>\n"
+ },
+ {
+  "example": 470,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo __bar *baz bim__ bam*\n",
+  "html": "<p><em>foo <strong>bar *baz bim</strong> bam</em></p>\n"
+ },
+ {
+  "example": 471,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**foo **bar baz**\n",
+  "html": "<p>**foo <strong>bar baz</strong></p>\n"
+ },
+ {
+  "example": 472,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*foo *bar baz*\n",
+  "html": "<p>*foo <em>bar baz</em></p>\n"
+ },
+ {
+  "example": 473,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*[bar*](/url)\n",
+  "html": "<p>*<a href=\"/url\">bar*</a></p>\n"
+ },
+ {
+  "example": 474,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_foo [bar_](/url)\n",
+  "html": "<p>_foo <a href=\"/url\">bar_</a></p>\n"
+ },
+ {
+  "example": 475,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*<img src=\"foo\" title=\"*\"/>\n",
+  "html": "<p>*<img src=\"foo\" title=\"*\"/></p>\n"
+ },
+ {
+  "example": 476,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**<a href=\"**\">\n",
+  "html": "<p>**<a href=\"**\"></p>\n"
+ },
+ {
+  "example": 477,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__<a href=\"__\">\n",
+  "html": "<p>__<a href=\"__\"></p>\n"
+ },
+ {
+  "example": 478,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "*a `*`*\n",
+  "html": "<p><em>a <code>*</code></em></p>\n"
+ },
+ {
+  "example": 479,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "_a `_`_\n",
+  "html": "<p><em>a <code>_</code></em></p>\n"
+ },
+ {
+  "example": 480,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "**a<https://foo.bar/?q=**>\n",
+  "html": "<p>**a<a href=\"https://foo.bar/?q=**\">https://foo.bar/?q=**</a></p>\n"
+ },
+ {
+  "example": 481,
+  "section": "Emphasis and strong emphasis",
+  "markdown": "__a<https://foo.bar/?q=__>\n",
+  "html": "<p>__a<a href=\"https://foo.bar/?q=__\">https://foo.bar/?q=__</a></p>\n"
+ },
+ {
+  "example": 482,
+  "section": "Links",
+  "markdown": "[link](/uri \"title\")\n",
+  "html": "<p><a href=\"/uri\" title=\"title\">link</a></p>\n"
+ },
+ {
+  "example": 483,
+  "section": "Links",
+  "markdown": "[link](/uri)\n",
+  "html": "<p><a href=\"/uri\">link</a></p>\n"
+ },
+ {
+  "example": 484,
+  "section": "Links",
+  "markdown": "[](./target.md)\n",
+  "html": "<p><a href=\"./target.md\"></a></p>\n"
+ },
+ {
+  "example": 485,
+  "section": "Links",
+  "markdown": "[link]()\n",
+  "html": "<p><a href=\"\">link</a></p>\n"
+ },
+ {
+  "example": 486,
+  "section": "Links",
+  "markdown": "[link](<>)\n",
+  "html": "<p><a href=\"\">link</a></p>\n"
+ },
+ {
+  "example": 487,
+  "section": "Links",
+  "markdown": "[]()\n",
+  "html": "<p><a href=\"\"></a></p>\n"
+ },
+ {
+  "example": 488,
+  "section": "Links",
+  "markdown": "[link](/my uri)\n",
+  "html": "<p>[link](/my uri)</p>\n"
+ },
+ {
+  "example": 489,
+  "section": "Links",
+  "markdown": "[link](</my uri>)\n",
+  "html": "<p><a href=\"/my%20uri\">link</a></p>\n"
+ },
+ {
+  "example": 490,
+  "section": "Links",
+  "markdown": "[link](foo\nbar)\n",
+  "html": "<p>[link](foo\nbar)</p>\n"
+ },
+ {
+  "example": 491,
+  "section": "Links",
+  "markdown": "[link](<foo\nbar>)\n",
+  "html": "<p>[link](<foo\nbar>)</p>\n"
+ },
+ {
+  "example": 492,
+  "section": "Links",
+  "markdown": "[a](<b)c>)\n",
+  "html": "<p><a href=\"b)c\">a</a></p>\n"
+ },
+ {
+  "example": 493,
+  "section": "Links",
+  "markdown": "[link](<foo\\>)\n",
+  "html": "<p>[link](&lt;foo&gt;)</p>\n"
+ },
+ {
+  "example": 494,
+  "section": "Links",
+  "markdown": "[a](<b)c\n[a](<b)c>\n[a](<b>c)\n",
+  "html": "<p>[a](&lt;b)c\n[a](&lt;b)c&gt;\n[a](<b>c)</p>\n"
+ },
+ {
+  "example": 495,
+  "section": "Links",
+  "markdown": "[link](\\(foo\\))\n",
+  "html": "<p><a href=\"(foo)\">link</a></p>\n"
+ },
+ {
+  "example": 496,
+  "section": "Links",
+  "markdown": "[link](foo(and(bar)))\n",
+  "html": "<p><a href=\"foo(and(bar))\">link</a></p>\n"
+ },
+ {
+  "example": 497,
+  "section": "Links",
+  "markdown": "[link](foo(and(bar))\n",
+  "html": "<p>[link](foo(and(bar))</p>\n"
+ },
+ {
+  "example": 498,
+  "section": "Links",
+  "markdown": "[link](foo\\(and\\(bar\\))\n",
+  "html": "<p><a href=\"foo(and(bar)\">link</a></p>\n"
+ },
+ {
+  "example": 499,
+  "section": "Links",
+  "markdown": "[link](<foo(and(bar)>)\n",
+  "html": "<p><a href=\"foo(and(bar)\">link</a></p>\n"
+ },
+ {
+  "example": 500,
+  "section": "Links",
+  "markdown": "[link](foo\\)\\:)\n",
+  "html": "<p><a href=\"foo):\">link</a></p>\n"
+ },
+ {
+  "example": 501,
+  "section": "Links",
+  "markdown": "[link](#fragment)\n\n[link](https://example.com#fragment)\n\n[link](https://example.com?foo=3#frag)\n",
+  "html": "<p><a href=\"#fragment\">link</a></p>\n<p><a href=\"https://example.com#fragment\">link</a></p>\n<p><a href=\"https://example.com?foo=3#frag\">link</a></p>\n"
+ },
+ {
+  "example": 502,
+  "section": "Links",
+  "markdown": "[link](foo\\bar)\n",
+  "html": "<p><a href=\"foo%5Cbar\">link</a></p>\n"
+ },
+ {
+  "example": 503,
+  "section": "Links",
+  "markdown": "[link](foo%20b&auml;)\n",
+  "html": "<p><a href=\"foo%20b%C3%A4\">link</a></p>\n"
+ },
+ {
+  "example": 504,
+  "section": "Links",
+  "markdown": "[link](\"title\")\n",
+  "html": "<p><a href=\"%22title%22\">link</a></p>\n"
+ },
+ {
+  "example": 505,
+  "section": "Links",
+  "markdown": "[link](/url \"title\")\n[link](/url 'title')\n[link](/url (title))\n",
+  "html": "<p><a href=\"/url\" title=\"title\">link</a>\n<a href=\"/url\" title=\"title\">link</a>\n<a href=\"/url\" title=\"title\">link</a></p>\n"
+ },
+ {
+  "example": 506,
+  "section": "Links",
+  "markdown": "[link](/url \"title \\\"&quot;\")\n",
+  "html": "<p><a href=\"/url\" title=\"title &quot;&quot;\">link</a></p>\n"
+ },
+ {
+  "example": 507,
+  "section": "Links",
+  "markdown": "[link](/url \"title\")\n",
+  "html": "<p><a href=\"/url%C2%A0%22title%22\">link</a></p>\n"
+ },
+ {
+  "example": 508,
+  "section": "Links",
+  "markdown": "[link](/url \"title \"and\" title\")\n",
+  "html": "<p>[link](/url &quot;title &quot;and&quot; title&quot;)</p>\n"
+ },
+ {
+  "example": 509,
+  "section": "Links",
+  "markdown": "[link](/url 'title \"and\" title')\n",
+  "html": "<p><a href=\"/url\" title=\"title &quot;and&quot; title\">link</a></p>\n"
+ },
+ {
+  "example": 510,
+  "section": "Links",
+  "markdown": "[link](   /uri\n  \"title\"  )\n",
+  "html": "<p><a href=\"/uri\" title=\"title\">link</a></p>\n"
+ },
+ {
+  "example": 511,
+  "section": "Links",
+  "markdown": "[link] (/uri)\n",
+  "html": "<p>[link] (/uri)</p>\n"
+ },
+ {
+  "example": 512,
+  "section": "Links",
+  "markdown": "[link [foo [bar]]](/uri)\n",
+  "html": "<p><a href=\"/uri\">link [foo [bar]]</a></p>\n"
+ },
+ {
+  "example": 513,
+  "section": "Links",
+  "markdown": "[link] bar](/uri)\n",
+  "html": "<p>[link] bar](/uri)</p>\n"
+ },
+ {
+  "example": 514,
+  "section": "Links",
+  "markdown": "[link [bar](/uri)\n",
+  "html": "<p>[link <a href=\"/uri\">bar</a></p>\n"
+ },
+ {
+  "example": 515,
+  "section": "Links",
+  "markdown": "[link \\[bar](/uri)\n",
+  "html": "<p><a href=\"/uri\">link [bar</a></p>\n"
+ },
+ {
+  "example": 516,
+  "section": "Links",
+  "markdown": "[link *foo **bar** `#`*](/uri)\n",
+  "html": "<p><a href=\"/uri\">link <em>foo <strong>bar</strong> <code>#</code></em></a></p>\n"
+ },
+ {
+  "example": 517,
+  "section": "Links",
+  "markdown": "[![moon](moon.jpg)](/uri)\n",
+  "html": "<p><a href=\"/uri\"><img src=\"moon.jpg\" alt=\"moon\" /></a></p>\n"
+ },
+ {
+  "example": 518,
+  "section": "Links",
+  "markdown": "[foo [bar](/uri)](/uri)\n",
+  "html": "<p>[foo <a href=\"/uri\">bar</a>](/uri)</p>\n"
+ },
+ {
+  "example": 519,
+  "section": "Links",
+  "markdown": "[foo *[bar [baz](/uri)](/uri)*](/uri)\n",
+  "html": "<p>[foo <em>[bar <a href=\"/uri\">baz</a>](/uri)</em>](/uri)</p>\n"
+ },
+ {
+  "example": 520,
+  "section": "Links",
+  "markdown": "![[[foo](uri1)](uri2)](uri3)\n",
+  "html": "<p><img src=\"uri3\" alt=\"[foo](uri2)\" /></p>\n"
+ },
+ {
+  "example": 521,
+  "section": "Links",
+  "markdown": "*[foo*](/uri)\n",
+  "html": "<p>*<a href=\"/uri\">foo*</a></p>\n"
+ },
+ {
+  "example": 522,
+  "section": "Links",
+  "markdown": "[foo *bar](baz*)\n",
+  "html": "<p><a href=\"baz*\">foo *bar</a></p>\n"
+ },
+ {
+  "example": 523,
+  "section": "Links",
+  "markdown": "*foo [bar* baz]\n",
+  "html": "<p><em>foo [bar</em> baz]</p>\n"
+ },
+ {
+  "example": 524,
+  "section": "Links",
+  "markdown": "[foo <bar attr=\"](baz)\">\n",
+  "html": "<p>[foo <bar attr=\"](baz)\"></p>\n"
+ },
+ {
+  "example": 525,
+  "section": "Links",
+  "markdown": "[foo`](/uri)`\n",
+  "html": "<p>[foo<code>](/uri)</code></p>\n"
+ },
+ {
+  "example": 526,
+  "section": "Links",
+  "markdown": "[foo<https://example.com/?search=](uri)>\n",
+  "html": "<p>[foo<a href=\"https://example.com/?search=%5D(uri)\">https://example.com/?search=](uri)</a></p>\n"
+ },
+ {
+  "example": 527,
+  "section": "Links",
+  "markdown": "[foo][bar]\n\n[bar]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">foo</a></p>\n"
+ },
+ {
+  "example": 528,
+  "section": "Links",
+  "markdown": "[link [foo [bar]]][ref]\n\n[ref]: /uri\n",
+  "html": "<p><a href=\"/uri\">link [foo [bar]]</a></p>\n"
+ },
+ {
+  "example": 529,
+  "section": "Links",
+  "markdown": "[link \\[bar][ref]\n\n[ref]: /uri\n",
+  "html": "<p><a href=\"/uri\">link [bar</a></p>\n"
+ },
+ {
+  "example": 530,
+  "section": "Links",
+  "markdown": "[link *foo **bar** `#`*][ref]\n\n[ref]: /uri\n",
+  "html": "<p><a href=\"/uri\">link <em>foo <strong>bar</strong> <code>#</code></em></a></p>\n"
+ },
+ {
+  "example": 531,
+  "section": "Links",
+  "markdown": "[![moon](moon.jpg)][ref]\n\n[ref]: /uri\n",
+  "html": "<p><a href=\"/uri\"><img src=\"moon.jpg\" alt=\"moon\" /></a></p>\n"
+ },
+ {
+  "example": 532,
+  "section": "Links",
+  "markdown": "[foo [bar](/uri)][ref]\n\n[ref]: /uri\n",
+  "html": "<p>[foo <a href=\"/uri\">bar</a>]<a href=\"/uri\">ref</a></p>\n"
+ },
+ {
+  "example": 533,
+  "section": "Links",
+  "markdown": "[foo *bar [baz][ref]*][ref]\n\n[ref]: /uri\n",
+  "html": "<p>[foo <em>bar <a href=\"/uri\">baz</a></em>]<a href=\"/uri\">ref</a></p>\n"
+ },
+ {
+  "example": 534,
+  "section": "Links",
+  "markdown": "*[foo*][ref]\n\n[ref]: /uri\n",
+  "html": "<p>*<a href=\"/uri\">foo*</a></p>\n"
+ },
+ {
+  "example": 535,
+  "section": "Links",
+  "markdown": "[foo *bar][ref]*\n\n[ref]: /uri\n",
+  "html": "<p><a href=\"/uri\">foo *bar</a>*</p>\n"
+ },
+ {
+  "example": 536,
+  "section": "Links",
+  "markdown": "[foo <bar attr=\"][ref]\">\n\n[ref]: /uri\n",
+  "html": "<p>[foo <bar attr=\"][ref]\"></p>\n"
+ },
+ {
+  "example": 537,
+  "section": "Links",
+  "markdown": "[foo`][ref]`\n\n[ref]: /uri\n",
+  "html": "<p>[foo<code>][ref]</code></p>\n"
+ },
+ {
+  "example": 538,
+  "section": "Links",
+  "markdown": "[foo<https://example.com/?search=][ref]>\n\n[ref]: /uri\n",
+  "html": "<p>[foo<a href=\"https://example.com/?search=%5D%5Bref%5D\">https://example.com/?search=][ref]</a></p>\n"
+ },
+ {
+  "example": 539,
+  "section": "Links",
+  "markdown": "[foo][BaR]\n\n[bar]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">foo</a></p>\n"
+ },
+ {
+  "example": 540,
+  "section": "Links",
+  "markdown": "[ẞ]\n\n[SS]: /url\n",
+  "html": "<p><a href=\"/url\">ẞ</a></p>\n"
+ },
+ {
+  "example": 541,
+  "section": "Links",
+  "markdown": "[Foo\n  bar]: /url\n\n[Baz][Foo bar]\n",
+  "html": "<p><a href=\"/url\">Baz</a></p>\n"
+ },
+ {
+  "example": 542,
+  "section": "Links",
+  "markdown": "[foo] [bar]\n\n[bar]: /url \"title\"\n",
+  "html": "<p>[foo] <a href=\"/url\" title=\"title\">bar</a></p>\n"
+ },
+ {
+  "example": 543,
+  "section": "Links",
+  "markdown": "[foo]\n[bar]\n\n[bar]: /url \"title\"\n",
+  "html": "<p>[foo]\n<a href=\"/url\" title=\"title\">bar</a></p>\n"
+ },
+ {
+  "example": 544,
+  "section": "Links",
+  "markdown": "[foo]: /url1\n\n[foo]: /url2\n\n[bar][foo]\n",
+  "html": "<p><a href=\"/url1\">bar</a></p>\n"
+ },
+ {
+  "example": 545,
+  "section": "Links",
+  "markdown": "[bar][foo\\!]\n\n[foo!]: /url\n",
+  "html": "<p>[bar][foo!]</p>\n"
+ },
+ {
+  "example": 546,
+  "section": "Links",
+  "markdown": "[foo][ref[]\n\n[ref[]: /uri\n",
+  "html": "<p>[foo][ref[]</p>\n<p>[ref[]: /uri</p>\n"
+ },
+ {
+  "example": 547,
+  "section": "Links",
+  "markdown": "[foo][ref[bar]]\n\n[ref[bar]]: /uri\n",
+  "html": "<p>[foo][ref[bar]]</p>\n<p>[ref[bar]]: /uri</p>\n"
+ },
+ {
+  "example": 548,
+  "section": "Links",
+  "markdown": "[[[foo]]]\n\n[[[foo]]]: /url\n",
+  "html": "<p>[[[foo]]]</p>\n<p>[[[foo]]]: /url</p>\n"
+ },
+ {
+  "example": 549,
+  "section": "Links",
+  "markdown": "[foo][ref\\[]\n\n[ref\\[]: /uri\n",
+  "html": "<p><a href=\"/uri\">foo</a></p>\n"
+ },
+ {
+  "example": 550,
+  "section": "Links",
+  "markdown": "[bar\\\\]: /uri\n\n[bar\\\\]\n",
+  "html": "<p><a href=\"/uri\">bar\\</a></p>\n"
+ },
+ {
+  "example": 551,
+  "section": "Links",
+  "markdown": "[]\n\n[]: /uri\n",
+  "html": "<p>[]</p>\n<p>[]: /uri</p>\n"
+ },
+ {
+  "example": 552,
+  "section": "Links",
+  "markdown": "[\n ]\n\n[\n ]: /uri\n",
+  "html": "<p>[\n]</p>\n<p>[\n]: /uri</p>\n"
+ },
+ {
+  "example": 553,
+  "section": "Links",
+  "markdown": "[foo][]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">foo</a></p>\n"
+ },
+ {
+  "example": 554,
+  "section": "Links",
+  "markdown": "[*foo* bar][]\n\n[*foo* bar]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\"><em>foo</em> bar</a></p>\n"
+ },
+ {
+  "example": 555,
+  "section": "Links",
+  "markdown": "[Foo][]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">Foo</a></p>\n"
+ },
+ {
+  "example": 556,
+  "section": "Links",
+  "markdown": "[foo] \n[]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">foo</a>\n[]</p>\n"
+ },
+ {
+  "example": 557,
+  "section": "Links",
+  "markdown": "[foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">foo</a></p>\n"
+ },
+ {
+  "example": 558,
+  "section": "Links",
+  "markdown": "[*foo* bar]\n\n[*foo* bar]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\"><em>foo</em> bar</a></p>\n"
+ },
+ {
+  "example": 559,
+  "section": "Links",
+  "markdown": "[[*foo* bar]]\n\n[*foo* bar]: /url \"title\"\n",
+  "html": "<p>[<a href=\"/url\" title=\"title\"><em>foo</em> bar</a>]</p>\n"
+ },
+ {
+  "example": 560,
+  "section": "Links",
+  "markdown": "[[bar [foo]\n\n[foo]: /url\n",
+  "html": "<p>[[bar <a href=\"/url\">foo</a></p>\n"
+ },
+ {
+  "example": 561,
+  "section": "Links",
+  "markdown": "[Foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><a href=\"/url\" title=\"title\">Foo</a></p>\n"
+ },
+ {
+  "example": 562,
+  "section": "Links",
+  "markdown": "[foo] bar\n\n[foo]: /url\n",
+  "html": "<p><a href=\"/url\">foo</a> bar</p>\n"
+ },
+ {
+  "example": 563,
+  "section": "Links",
+  "markdown": "\\[foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p>[foo]</p>\n"
+ },
+ {
+  "example": 564,
+  "section": "Links",
+  "markdown": "[foo*]: /url\n\n*[foo*]\n",
+  "html": "<p>*<a href=\"/url\">foo*</a></p>\n"
+ },
+ {
+  "example": 565,
+  "section": "Links",
+  "markdown": "[foo][bar]\n\n[foo]: /url1\n[bar]: /url2\n",
+  "html": "<p><a href=\"/url2\">foo</a></p>\n"
+ },
+ {
+  "example": 566,
+  "section": "Links",
+  "markdown": "[foo][]\n\n[foo]: /url1\n",
+  "html": "<p><a href=\"/url1\">foo</a></p>\n"
+ },
+ {
+  "example": 567,
+  "section": "Links",
+  "markdown": "[foo]()\n\n[foo]: /url1\n",
+  "html": "<p><a href=\"\">foo</a></p>\n"
+ },
+ {
+  "example": 568,
+  "section": "Links",
+  "markdown": "[foo](not a link)\n\n[foo]: /url1\n",
+  "html": "<p><a href=\"/url1\">foo</a>(not a link)</p>\n"
+ },
+ {
+  "example": 569,
+  "section": "Links",
+  "markdown": "[foo][bar][baz]\n\n[baz]: /url\n",
+  "html": "<p>[foo]<a href=\"/url\">bar</a></p>\n"
+ },
+ {
+  "example": 570,
+  "section": "Links",
+  "markdown": "[foo][bar][baz]\n\n[baz]: /url1\n[bar]: /url2\n",
+  "html": "<p><a href=\"/url2\">foo</a><a href=\"/url1\">baz</a></p>\n"
+ },
+ {
+  "example": 571,
+  "section": "Links",
+  "markdown": "[foo][bar][baz]\n\n[baz]: /url1\n[foo]: /url2\n",
+  "html": "<p>[foo]<a href=\"/url1\">bar</a></p>\n"
+ },
+ {
+  "example": 572,
+  "section": "Images",
+  "markdown": "![foo](/url \"title\")\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 573,
+  "section": "Images",
+  "markdown": "![foo *bar*]\n\n[foo *bar*]: train.jpg \"train & tracks\"\n",
+  "html": "<p><img src=\"train.jpg\" alt=\"foo bar\" title=\"train &amp; tracks\" /></p>\n"
+ },
+ {
+  "example": 574,
+  "section": "Images",
+  "markdown": "![foo ![bar](/url)](/url2)\n",
+  "html": "<p><img src=\"/url2\" alt=\"foo bar\" /></p>\n"
+ },
+ {
+  "example": 575,
+  "section": "Images",
+  "markdown": "![foo [bar](/url)](/url2)\n",
+  "html": "<p><img src=\"/url2\" alt=\"foo bar\" /></p>\n"
+ },
+ {
+  "example": 576,
+  "section": "Images",
+  "markdown": "![foo *bar*][]\n\n[foo *bar*]: train.jpg \"train & tracks\"\n",
+  "html": "<p><img src=\"train.jpg\" alt=\"foo bar\" title=\"train &amp; tracks\" /></p>\n"
+ },
+ {
+  "example": 577,
+  "section": "Images",
+  "markdown": "![foo *bar*][foobar]\n\n[FOOBAR]: train.jpg \"train & tracks\"\n",
+  "html": "<p><img src=\"train.jpg\" alt=\"foo bar\" title=\"train &amp; tracks\" /></p>\n"
+ },
+ {
+  "example": 578,
+  "section": "Images",
+  "markdown": "![foo](train.jpg)\n",
+  "html": "<p><img src=\"train.jpg\" alt=\"foo\" /></p>\n"
+ },
+ {
+  "example": 579,
+  "section": "Images",
+  "markdown": "My ![foo bar](/path/to/train.jpg  \"title\"   )\n",
+  "html": "<p>My <img src=\"/path/to/train.jpg\" alt=\"foo bar\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 580,
+  "section": "Images",
+  "markdown": "![foo](<url>)\n",
+  "html": "<p><img src=\"url\" alt=\"foo\" /></p>\n"
+ },
+ {
+  "example": 581,
+  "section": "Images",
+  "markdown": "![](/url)\n",
+  "html": "<p><img src=\"/url\" alt=\"\" /></p>\n"
+ },
+ {
+  "example": 582,
+  "section": "Images",
+  "markdown": "![foo][bar]\n\n[bar]: /url\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" /></p>\n"
+ },
+ {
+  "example": 583,
+  "section": "Images",
+  "markdown": "![foo][bar]\n\n[BAR]: /url\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" /></p>\n"
+ },
+ {
+  "example": 584,
+  "section": "Images",
+  "markdown": "![foo][]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 585,
+  "section": "Images",
+  "markdown": "![*foo* bar][]\n\n[*foo* bar]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"foo bar\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 586,
+  "section": "Images",
+  "markdown": "![Foo][]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"Foo\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 587,
+  "section": "Images",
+  "markdown": "![foo] \n[]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" title=\"title\" />\n[]</p>\n"
+ },
+ {
+  "example": 588,
+  "section": "Images",
+  "markdown": "![foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"foo\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 589,
+  "section": "Images",
+  "markdown": "![*foo* bar]\n\n[*foo* bar]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"foo bar\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 590,
+  "section": "Images",
+  "markdown": "![[foo]]\n\n[[foo]]: /url \"title\"\n",
+  "html": "<p>![[foo]]</p>\n<p>[[foo]]: /url &quot;title&quot;</p>\n"
+ },
+ {
+  "example": 591,
+  "section": "Images",
+  "markdown": "![Foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p><img src=\"/url\" alt=\"Foo\" title=\"title\" /></p>\n"
+ },
+ {
+  "example": 592,
+  "section": "Images",
+  "markdown": "!\\[foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p>![foo]</p>\n"
+ },
+ {
+  "example": 593,
+  "section": "Images",
+  "markdown": "\\![foo]\n\n[foo]: /url \"title\"\n",
+  "html": "<p>!<a href=\"/url\" title=\"title\">foo</a></p>\n"
+ },
+ {
+  "example": 594,
+  "section": "Autolinks",
+  "markdown": "<http://foo.bar.baz>\n",
+  "html": "<p><a href=\"http://foo.bar.baz\">http://foo.bar.baz</a></p>\n"
+ },
+ {
+  "example": 595,
+  "section": "Autolinks",
+  "markdown": "<https://foo.bar.baz/test?q=hello&id=22&boolean>\n",
+  "html": "<p><a href=\"https://foo.bar.baz/test?q=hello&amp;id=22&amp;boolean\">https://foo.bar.baz/test?q=hello&amp;id=22&amp;boolean</a></p>\n"
+ },
+ {
+  "example": 596,
+  "section": "Autolinks",
+  "markdown": "<irc://foo.bar:2233/baz>\n",
+  "html": "<p><a href=\"irc://foo.bar:2233/baz\">irc://foo.bar:2233/baz</a></p>\n"
+ },
+ {
+  "example": 597,
+  "section": "Autolinks",
+  "markdown": "<MAILTO:FOO@BAR.BAZ>\n",
+  "html": "<p><a href=\"MAILTO:FOO@BAR.BAZ\">MAILTO:FOO@BAR.BAZ</a></p>\n"
+ },
+ {
+  "example": 598,
+  "section": "Autolinks",
+  "markdown": "<a+b+c:d>\n",
+  "html": "<p><a href=\"a+b+c:d\">a+b+c:d</a></p>\n"
+ },
+ {
+  "example": 599,
+  "section": "Autolinks",
+  "markdown": "<made-up-scheme://foo,bar>\n",
+  "html": "<p><a href=\"made-up-scheme://foo,bar\">made-up-scheme://foo,bar</a></p>\n"
+ },
+ {
+  "example": 600,
+  "section": "Autolinks",
+  "markdown": "<https://../>\n",
+  "html": "<p><a href=\"https://../\">https://../</a></p>\n"
+ },
+ {
+  "example": 601,
+  "section": "Autolinks",
+  "markdown": "<localhost:5001/foo>\n",
+  "html": "<p><a href=\"localhost:5001/foo\">localhost:5001/foo</a></p>\n"
+ },
+ {
+  "example": 602,
+  "section": "Autolinks",
+  "markdown": "<https://foo.bar/baz bim>\n",
+  "html": "<p>&lt;https://foo.bar/baz bim&gt;</p>\n"
+ },
+ {
+  "example": 603,
+  "section": "Autolinks",
+  "markdown": "<https://example.com/\\[\\>\n",
+  "html": "<p><a href=\"https://example.com/%5C%5B%5C\">https://example.com/\\[\\</a></p>\n"
+ },
+ {
+  "example": 604,
+  "section": "Autolinks",
+  "markdown": "<foo@bar.example.com>\n",
+  "html": "<p><a href=\"mailto:foo@bar.example.com\">foo@bar.example.com</a></p>\n"
+ },
+ {
+  "example": 605,
+  "section": "Autolinks",
+  "markdown": "<foo+special@Bar.baz-bar0.com>\n",
+  "html": "<p><a href=\"mailto:foo+special@Bar.baz-bar0.com\">foo+special@Bar.baz-bar0.com</a></p>\n"
+ },
+ {
+  "example": 606,
+  "section": "Autolinks",
+  "markdown": "<foo\\+@bar.example.com>\n",
+  "html": "<p>&lt;foo+@bar.example.com&gt;</p>\n"
+ },
+ {
+  "example": 607,
+  "section": "Autolinks",
+  "markdown": "<>\n",
+  "html": "<p>&lt;&gt;</p>\n"
+ },
+ {
+  "example": 608,
+  "section": "Autolinks",
+  "markdown": "< https://foo.bar >\n",
+  "html": "<p>&lt; https://foo.bar &gt;</p>\n"
+ },
+ {
+  "example": 609,
+  "section": "Autolinks",
+  "markdown": "<m:abc>\n",
+  "html": "<p>&lt;m:abc&gt;</p>\n"
+ },
+ {
+  "example": 610,
+  "section": "Autolinks",
+  "markdown": "<foo.bar.baz>\n",
+  "html": "<p>&lt;foo.bar.baz&gt;</p>\n"
+ },
+ {
+  "example": 611,
+  "section": "Autolinks",
+  "markdown": "https://example.com\n",
+  "html": "<p>https://example.com</p>\n"
+ },
+ {
+  "example": 612,
+  "section": "Autolinks",
+  "markdown": "foo@bar.example.com\n",
+  "html": "<p>foo@bar.example.com</p>\n"
+ },
+ {
+  "example": 613,
+  "section": "Raw HTML",
+  "markdown": "<a><bab><c2c>\n",
+  "html": "<p><a><bab><c2c></p>\n"
+ },
+ {
+  "example": 614,
+  "section": "Raw HTML",
+  "markdown": "<a/><b2/>\n",
+  "html": "<p><a/><b2/></p>\n"
+ },
+ {
+  "example": 615,
+  "section": "Raw HTML",
+  "markdown": "<a  /><b2\ndata=\"foo\" >\n",
+  "html": "<p><a  /><b2\ndata=\"foo\" ></p>\n"
+ },
+ {
+  "example": 616,
+  "section": "Raw HTML",
+  "markdown": "<a foo=\"bar\" bam = 'baz <em>\"</em>'\n_boolean zoop:33=zoop:33 />\n",
+  "html": "<p><a foo=\"bar\" bam = 'baz <em>\"</em>'\n_boolean zoop:33=zoop:33 /></p>\n"
+ },
+ {
+  "example": 617,
+  "section": "Raw HTML",
+  "markdown": "Foo <responsive-image src=\"foo.jpg\" />\n",
+  "html": "<p>Foo <responsive-image src=\"foo.jpg\" /></p>\n"
+ },
+ {
+  "example": 618,
+  "section": "Raw HTML",
+  "markdown": "<33> <__>\n",
+  "html": "<p>&lt;33&gt; &lt;__&gt;</p>\n"
+ },
+ {
+  "example": 619,
+  "section": "Raw HTML",
+  "markdown": "<a h*#ref=\"hi\">\n",
+  "html": "<p>&lt;a h*#ref=&quot;hi&quot;&gt;</p>\n"
+ },
+ {
+  "example": 620,
+  "section": "Raw HTML",
+  "markdown": "<a href=\"hi'> <a href=hi'>\n",
+  "html": "<p>&lt;a href=&quot;hi'&gt; &lt;a href=hi'&gt;</p>\n"
+ },
+ {
+  "example": 621,
+  "section": "Raw HTML",
+  "markdown": "< a><\nfoo><bar/ >\n<foo bar=baz\nbim!bop />\n",
+  "html": "<p>&lt; a&gt;&lt;\nfoo&gt;&lt;bar/ &gt;\n&lt;foo bar=baz\nbim!bop /&gt;</p>\n"
+ },
+ {
+  "example": 622,
+  "section": "Raw HTML",
+  "markdown": "<a href='bar'title=title>\n",
+  "html": "<p>&lt;a href='bar'title=title&gt;</p>\n"
+ },
+ {
+  "example": 623,
+  "section": "Raw HTML",
+  "markdown": "</a></foo >\n",
+  "html": "<p></a></foo ></p>\n"
+ },
+ {
+  "example": 624,
+  "section": "Raw HTML",
+  "markdown": "</a href=\"foo\">\n",
+  "html": "<p>&lt;/a href=&quot;foo&quot;&gt;</p>\n"
+ },
+ {
+  "example": 625,
+  "section": "Raw HTML",
+  "markdown": "foo <!-- this is a --\ncomment - with hyphens -->\n",
+  "html": "<p>foo <!-- this is a --\ncomment - with hyphens --></p>\n"
+ },
+ {
+  "example": 626,
+  "section": "Raw HTML",
+  "markdown": "foo <!--> foo -->\n\nfoo <!---> foo -->\n",
+  "html": "<p>foo <!--> foo --&gt;</p>\n<p>foo <!---> foo --&gt;</p>\n"
+ },
+ {
+  "example": 627,
+  "section": "Raw HTML",
+  "markdown": "foo <?php echo $a; ?>\n",
+  "html": "<p>foo <?php echo $a; ?></p>\n"
+ },
+ {
+  "example": 628,
+  "section": "Raw HTML",
+  "markdown": "foo <!ELEMENT br EMPTY>\n",
+  "html": "<p>foo <!ELEMENT br EMPTY></p>\n"
+ },
+ {
+  "example": 629,
+  "section": "Raw HTML",
+  "markdown": "foo <![CDATA[>&<]]>\n",
+  "html": "<p>foo <![CDATA[>&<]]></p>\n"
+ },
+ {
+  "example": 630,
+  "section": "Raw HTML",
+  "markdown": "foo <a href=\"&ouml;\">\n",
+  "html": "<p>foo <a href=\"&ouml;\"></p>\n"
+ },
+ {
+  "example": 631,
+  "section": "Raw HTML",
+  "markdown": "foo <a href=\"\\*\">\n",
+  "html": "<p>foo <a href=\"\\*\"></p>\n"
+ },
+ {
+  "example": 632,
+  "section": "Raw HTML",
+  "markdown": "<a href=\"\\\"\">\n",
+  "html": "<p>&lt;a href=&quot;&quot;&quot;&gt;</p>\n"
+ },
+ {
+  "example": 633,
+  "section": "Hard line breaks",
+  "markdown": "foo  \nbaz\n",
+  "html": "<p>foo<br />\nbaz</p>\n"
+ },
+ {
+  "example": 634,
+  "section": "Hard line breaks",
+  "markdown": "foo\\\nbaz\n",
+  "html": "<p>foo<br />\nbaz</p>\n"
+ },
+ {
+  "example": 635,
+  "section": "Hard line breaks",
+  "markdown": "foo       \nbaz\n",
+  "html": "<p>foo<br />\nbaz</p>\n"
+ },
+ {
+  "example": 636,
+  "section": "Hard line breaks",
+  "markdown": "foo  \n     bar\n",
+  "html": "<p>foo<br />\nbar</p>\n"
+ },
+ {
+  "example": 637,
+  "section": "Hard line breaks",
+  "markdown": "foo\\\n     bar\n",
+  "html": "<p>foo<br />\nbar</p>\n"
+ },
+ {
+  "example": 638,
+  "section": "Hard line breaks",
+  "markdown": "*foo  \nbar*\n",
+  "html": "<p><em>foo<br />\nbar</em></p>\n"
+ },
+ {
+  "example": 639,
+  "section": "Hard line breaks",
+  "markdown": "*foo\\\nbar*\n",
+  "html": "<p><em>foo<br />\nbar</em></p>\n"
+ },
+ {
+  "example": 640,
+  "section": "Hard line breaks",
+  "markdown": "`code  \nspan`\n",
+  "html": "<p><code>code   span</code></p>\n"
+ },
+ {
+  "example": 641,
+  "section": "Hard line breaks",
+  "markdown": "`code\\\nspan`\n",
+  "html": "<p><code>code\\ span</code></p>\n"
+ },
+ {
+  "example": 642,
+  "section": "Hard line breaks",
+  "markdown": "<a href=\"foo  \nbar\">\n",
+  "html": "<p><a href=\"foo  \nbar\"></p>\n"
+ },
+ {
+  "example": 643,
+  "section": "Hard line breaks",
+  "markdown": "<a href=\"foo\\\nbar\">\n",
+  "html": "<p><a href=\"foo\\\nbar\"></p>\n"
+ },
+ {
+  "example": 644,
+  "section": "Hard line breaks",
+  "markdown": "foo\\\n",
+  "html": "<p>foo\\</p>\n"
+ },
+ {
+  "example": 645,
+  "section": "Hard line breaks",
+  "markdown": "foo  \n",
+  "html": "<p>foo</p>\n"
+ },
+ {
+  "example": 646,
+  "section": "Hard line breaks",
+  "markdown": "### foo\\\n",
+  "html": "<h3>foo\\</h3>\n"
+ },
+ {
+  "example": 647,
+  "section": "Hard line breaks",
+  "markdown": "### foo  \n",
+  "html": "<h3>foo</h3>\n"
+ },
+ {
+  "example": 648,
+  "section": "Soft line breaks",
+  "markdown": "foo\nbaz\n",
+  "html": "<p>foo\nbaz</p>\n"
+ },
+ {
+  "example": 649,
+  "section": "Soft line breaks",
+  "markdown": "foo \n baz\n",
+  "html": "<p>foo\nbaz</p>\n"
+ },
+ {
+  "example": 650,
+  "section": "Textual content",
+  "markdown": "hello $.;'there\n",
+  "html": "<p>hello $.;'there</p>\n"
+ },
+ {
+  "example": 651,
+  "section": "Textual content",
+  "markdown": "Foo χρῆν\n",
+  "html": "<p>Foo χρῆν</p>\n"
+ },
+ {
+  "example": 652,
+  "section": "Textual content",
+  "markdown": "Multiple     spaces\n",
+  "html": "<p>Multiple     spaces</p>\n"
+ }
+]

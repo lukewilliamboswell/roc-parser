@@ -2,51 +2,31 @@
 
 Contributions are welcome through GitHub issues and pull requests. Keep changes
 focused, explain the user-visible effect, and add tests for changed parser
-behavior.
+behaviour. Open an issue first for a change to a public API or to the syntax a
+format accepts.
 
-## Development setup
+The manual describes the whole process:
 
-Use the Roc nightly named in `.roc-version`. To run the same validation used by
-CI, set `ROC` to that compiler and run:
+- [Contributing](docs/contributing.adoc): development setup with the Roc
+  nightly from `.roc-version`, running the tests, the repository policy,
+  building the documentation, and the pull request checklist.
+- [Property tests and conformance reviews](docs/property-testing.adoc): the
+  fuzz targets, the reference implementations each format is compared with,
+  and how to reproduce a failure and add a regression.
+- [Add a format module](docs/adding-a-format.adoc): the steps for a new parser.
+- [Compiler updates, releases and security reports](docs/maintaining.adoc):
+  for maintainers.
+
+The quickest full check before you open a pull request:
 
 ```sh
 ROC=/path/to/roc python3 scripts/all_tests.py
-```
-
-Run the Python unit tests separately with:
-
-```sh
 python3 -m unittest discover -s scripts/tests -p "test_*.py"
 ```
 
-Before opening a pull request:
+Pull requests need passing CI and signed commits.
 
-- format changed Roc files with `roc fmt path/to/file.roc` using the compiler
-  pinned in `.roc-version`;
-- make sure the full test suite passes;
-- add or update tests for success cases, invalid input, and relevant boundary
-  cases;
-- update documentation when a public parser API or supported syntax changes;
-- follow the existing module and public API naming patterns;
-- avoid unrelated formatting or refactoring changes;
-- keep generated artifacts and local build output out of the commit; and
-- sign commits so they satisfy the protected-branch policy.
-
-Pull requests require passing CI. Human reviews are encouraged; address review
-conversations before requesting another review after substantial changes.
-
-## Property-based quality tests
-
-The project uses `roc-fuzz` as a coverage-guided property-testing runner. Run
-every parser quality target with a short bounded campaign:
-
-```sh
-python3 scripts/run_fuzz.py smoke all
-```
-
-Use `campaign`, `show`, `replay`, and `minimize` for longer investigations and
-saved failures. The runner keeps binaries, corpora, and reproduction metadata
-under `.roc-parser-tmp/fuzz/`.
+## License
 
 By contributing, you agree that your contribution is licensed under the
 [Universal Permissive License v1.0](LICENSE).

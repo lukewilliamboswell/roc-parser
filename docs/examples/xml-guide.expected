@@ -1,0 +1,9 @@
+entry 2: Fish & Chips
+entry 1: <Hello> 😀
+Element({ attributes: [{ name: "class", value: "a b" }], children: [Text("x < y AB
+<raw>z"), Element({ attributes: [], children: [], name: "br" })], name: "p" })
+3:1: end tag </a> does not match start tag <b>
+1:4: undeclared entity &nbsp;
+1:10: duplicate attribute x
+1:5: unexpected content after the root element
+1:1: document type declarations are not supported

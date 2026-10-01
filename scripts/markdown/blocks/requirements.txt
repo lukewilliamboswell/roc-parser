@@ -1,0 +1,2 @@
+# Same oracles as the inline review: cmark-gfm 0.29.0.gfm.13 via cmarkgfm.
+-r ../requirements.txt

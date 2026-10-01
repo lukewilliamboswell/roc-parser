@@ -15,14 +15,6 @@ except ImportError:
     from _common import ROOT, report_failure, resolve_command, run_command
 
 
-TEST_MODULES = (
-    "Parser",
-    "CSV",
-    "Markdown",
-    "String",
-    "Xml",
-    "Yaml",
-)
 BUNDLE_PATH_RE = re.compile(r"^Created:\s+(.+\.tar\.zst)\s*$", re.MULTILINE)
 
 
@@ -68,16 +60,11 @@ def main() -> int:
         return status
 
     print("\nRunning package tests...", flush=True)
-    for module in TEST_MODULES:
-        if module == "Markdown":
-            print(
-                "Skipping package/HTTP.roc tests: latest nightly segfaults in the compiler "
-                "while running this module's tests.",
-                flush=True,
-            )
-        status = run_checked([roc, "test", f"package/{module}.roc"], env=env)
-        if status:
-            return status
+    # Testing through main.roc runs every module's expects with the package's
+    # dependencies resolved; a module tested alone cannot import them.
+    status = run_checked([roc, "test", "package/main.roc"], env=env)
+    if status:
+        return status
 
     print("\nGenerating package docs...", flush=True)
     status = run_checked(
@@ -114,7 +101,7 @@ def main() -> int:
         print(f"Error: {error}", file=sys.stderr)
         return 1
 
-    print("\nTesting examples against localhost bundle...", flush=True)
+    print("\nTesting the packaged examples archive against the localhost bundle...", flush=True)
     return run_checked(
         [
             sys.executable,

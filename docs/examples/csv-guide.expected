@@ -1,0 +1,18 @@
+bolt: 250 at 0.15
+nut: 40 at 0.05
+no column named quantity
+line 3, column 1: the record has 2 fields, fewer than the 3 columns
+Ada (no email column, 36, active)
+Alan (no email column, age not given, inactive)
+Ok([("home", -33.87, 151.21), ("work", -33.86, 151.2)])
+name | note
+widget | says "hi", twice
+empty | 
+sku, count; 2 rows
+size | 6" pipe
+count | 
+not valid CSV at 1:6: unterminated quoted field
+empty input: Ok([])
+1 movies
+record 2, field 2 (line 2, column 12): expected a U64, found `soon`
+record 1, field 4 (line 1, column 28): the record has 4 fields, but the parser read only 3
