@@ -1825,13 +1825,26 @@ parse_flow_mapping = |bytes, line, column, depth| {
 			}
 		key = parse_key(split.key, line, column)?
 
-		if $seen.contains(key) {
+		duplicate =
+			if $entries.len() <= small_mapping_size {
+				$entries.any(|entry| entry.key == key)
+			} else {
+				$seen.contains(key)
+			}
+		if duplicate {
 			return fail(line, column, "duplicate mapping key `${key}`")
 		}
 
 		value = parse_inline_value(split.value, line, column, depth + 1)?
-		$seen = $seen.insert(key)
 		$entries = $entries.append({ key, line, column, value })
+		if $entries.len() > small_mapping_size {
+			$seen =
+				if $seen.is_empty() {
+					Set.from_list($entries.map(|entry| entry.key))
+				} else {
+					$seen.insert(key)
+				}
+		}
 	}
 
 	Ok(Node.{ line, column, kind: Map($entries) })
