@@ -72,12 +72,13 @@ oracle is itself wrong, the specification decides. See
 [[glossary-parser]]Parser::
 A value of type `Parser(input, a)`: a description of how to read an `a` from
 the start of an input. Running it returns the value and the unconsumed input,
-or a `ParsingFailure` message.
+or a `ParseError` with a message and an offset.
 
 [[glossary-parsing-incomplete]]Parsing incomplete::
-The `ParsingIncomplete` error: the parser succeeded but did not consume the
-whole input. Functions such as `Utf8.parse_str`, which expect to read
-everything, return it with the leftover input.
+The parser succeeded but did not consume the whole input. Functions such as
+`Utf8.parse_str`, which expect to read everything, report it as a
+`ParseError` at the furthest failure, or as `unexpected input` at the
+leftover.
 
 [[glossary-progress]]Progress::
 See <<glossary-consumption,consumption>>.

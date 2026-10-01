@@ -49,13 +49,13 @@ the record number.
 extra ones.
 
 |`HTTP.request`, `HTTP.response`
-|`ParsingFailure(message)`
+|`ParseError({ message, offset })`
 |Why the message was rejected.
 
 |Your own parsers
-|`ParsingFailure(message)`, `ParsingIncomplete(rest)`
-|The failure message of the parser that failed last, or the input left over
-after a successful parse.
+|`ParseError({ message, offset })`
+|The furthest failure, or `unexpected input` where input was left over,
+with its byte offset.
 |===
 
 == YAML and XML: show the location
@@ -113,7 +113,7 @@ original length minus the length of `rest` is the byte offset. The
 
 The HTTP parsers reject anything ambiguous, because a server and a proxy that
 disagree about where a message ends can be exploited. Treat every
-`ParsingFailure` as a `400 Bad Request` and close the connection; do not try
+`ParseError` as a `400 Bad Request` and close the connection; do not try
 to repair the message.
 
 [source,roc]
@@ -125,32 +125,31 @@ For an HTTP/1.1 request without a `Host` field this prints:
 
 [source,text]
 ----
-400 Bad Request: invalid HTTP request: an HTTP/1.1 request needs a Host field
+400 Bad Request (byte 0): invalid HTTP request: an HTTP/1.1 request needs a Host field
 ----
 
 The message is meant for your logs. It may quote the client's input, so
 think before sending it back in a response.
 
-`ParsingIncomplete` here means the input holds more than one message. Use
-`Utf8.parse_utf8_partial` to read one message and keep the rest for the
-next.
+An `unexpected input` failure here means the input holds more than one
+message. Use `Utf8.parse_bytes_partial` to read one message and keep the rest
+for the next.
 
 == Your own parsers: say where and what
 
-`Utf8.parse_str` returns the message of the parser that failed last. With
-alternatives, that is the last alternative tried, and with repetition, a bad
-element stops the repetition so the error becomes `ParsingIncomplete` (see
-<<combinators>>). Three habits give users better messages:
+`Utf8.parse_str` returns the furthest failure: the one that read furthest
+into the input, even when a repetition stopped at it or an alternative
+recovered from it (see <<combinators>>). Its `offset` is a byte offset. Three
+habits give users better messages:
 
 * Validate values with `.map(...).flatten()` and a message written for the
   user, such as `"no such time"`, instead of relying on the generic failure
   from a low-level parser.
 * For line-based formats, parse line by line and report the line number, as
   <<custom-format>> does.
-* For other formats, turn `ParsingIncomplete(rest)` into a position: the
-  input's length minus the length of `rest` is the offset where parsing
-  stopped. Count the line breaks before it to get a line number, and show
-  the start of `rest` as context.
+* For other formats, turn the `offset` into a position: count the line
+  breaks before it to get a line number, and show the input from there as
+  context.
 
 Keep the raw failure message for logs and tests. It describes the parser,
 not the user's input, so it is rarely the best thing to show a user on its

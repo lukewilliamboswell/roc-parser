@@ -26,7 +26,7 @@ Tree : List(Markdown.Inline)
 
 parse : List(U8) -> Tree
 parse = |bytes| {
-	match Utf8.parse_utf8(Markdown.inlines, bytes) {
+	match Utf8.parse_bytes(Markdown.inlines, bytes) {
 		Ok(nodes) => nodes
 		Err(_) => crash "Markdown.inlines must accept every input: ${Str.inspect(Str.from_utf8_lossy(bytes))}"
 	}

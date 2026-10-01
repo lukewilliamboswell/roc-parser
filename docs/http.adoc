@@ -29,8 +29,8 @@ network input, bound the number of bytes you read.
 == Parse a request
 
 Parse a request with `HTTP.request`. `Utf8.parse_str` takes a `Str`; use
-`Utf8.parse_utf8` for a `List(U8)` from a socket. Both fail with
-`ParsingIncomplete` if bytes remain after the message (see
+`Utf8.parse_bytes` for a `List(U8)` from a socket. Both fail with
+`unexpected input` if bytes remain after the message (see
 <<http-pipelined,Read pipelined messages>>).
 
 [source,roc]
@@ -137,7 +137,7 @@ decoded body: Wikipedia
 
 A client may send several requests on one connection without waiting for
 responses. Each parse consumes exactly one message. To keep the bytes that
-follow it, use `Utf8.parse_utf8_partial`, which returns the message as `value`
+follow it, use `Utf8.parse_bytes_partial`, which returns the message as `value`
 and the unread bytes as `rest`. Parse `rest` again for the next message:
 
 [source,roc]
@@ -152,8 +152,8 @@ Output:
 first: /a, second: /b, left over: 0 bytes
 ----
 
-`parse_utf8_partial` fails only with `ParsingFailure`, so the example maps that
-one error into its own tag before using `?`.
+`parse_bytes_partial` fails only with `ParseError`, an open tag, so `?` passes
+it straight up to `main!`.
 
 A response with no framing fields reads to the end of the input, so it is
 always the last message in a buffer.

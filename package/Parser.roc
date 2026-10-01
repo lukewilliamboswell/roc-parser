@@ -36,7 +36,7 @@
 ##
 ##     match Utf8.parse_str(game, s) {
 ##         Ok(g) => Ok(g)
-##         Err(ParsingFailure(_)) | Err(ParsingIncomplete(_)) => Err(ParsingError)
+##         Err(ParseError(_)) => Err(ParsingError)
 ##     }
 ## }
 ## ```
@@ -44,67 +44,78 @@
 ## Alternatives backtrack: when one alternative of `alt` or `one_of` fails, the
 ## next one is tried on the original input, however much the failed one read.
 ##
-## Opaque type for a parser that will try to parse an `a` from an `input`.
-##
-## As such, a parser can be considered a recipe for a function of the type
-## ```roc
-## input -> Try({val: a, input: input}, [ParsingFailure(Str)])
-## ```
+## Failures report the furthest position any parser reached. When a
+## repetition such as `many` stops at a bad element, or an alternative fails
+## after reading further than the one that succeeded, that failure is kept
+## and reported if the whole parse later fails at or before it.
 ##
 ## The representation is internal and may change to improve efficiency or error messages.
-Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
+Parser(input, a) :: { fun : input -> Step(input, a) }.{
 
-	## The result of parsing part of an input: either a value and the remaining
-	## input, or a `ParsingFailure` message.
-	ParseResult(input, a) : Try({ value : a, rest : input }, [ParsingFailure(Str)])
+	## The result of running a parser on part of an input: the parsed `value`
+	## and the `rest` of the input, or a `ParseError` whose `offset` counts the
+	## input elements (bytes, for UTF-8 input) read before the failure.
+	ParseResult(input, a) : Try({ value : a, rest : input }, [ParseError({ message : Str, offset : U64 })])
 
 	## Write a custom parser without using the provided combinators.
 	##
 	## The function receives the remaining input and returns either the parsed
-	## value with the input it did not consume, or `Err(ParsingFailure(msg))`.
-	build_primitive_parser : (input -> ParseResult(input, a)) -> Parser(input, a)
+	## `value` with the `rest` it did not consume, or
+	## `Err(ParseError({ message, offset }))`, where `offset` is how far into
+	## the given input the failure is (usually `0`).
+	build_primitive_parser : (input -> ParseResult(input, a)) -> Parser(input, a) where [input.len : input -> U64]
 	build_primitive_parser = |fun| {
-		{ fun }
+		{
+			fun: |input| {
+				match fun(input) {
+					Ok({ value, rest }) => Ok({ value, rest, furthest: no_failure })
+					Err(ParseError({ message, offset })) => Err({ message, remaining: minus(input.len(), offset) })
+				}
+			},
+		}
 	}
 
-	## Most general way of running a parser.
-	##
-	## Can be thought of as turning the recipe of a parser into its actual parsing function
-	## and running this function on the given input.
+	## Run a parser on the start of an input, returning the parsed value and
+	## the input it did not consume.
 	##
 	## Most parsers consume part of `input` when they succeed. This allows you to string parsers
 	## together that run one after the other. The part of the input that the first
 	## parser did not consume, is used by the next parser.
-	## This is why a parser returns on success both the resulting value and the leftover part of the input.
 	##
-	## This is mostly useful when creating your own internal parsing building blocks.
-	parse_partial : Parser(input, a), input -> ParseResult(input, a)
-	parse_partial = |{ fun }, input| {
-		fun(input)
+	## On failure, the error is the furthest failure seen, with its `offset`
+	## counted from the start of `input`. This is mostly useful when creating
+	## your own parsing building blocks.
+	parse_partial : Parser(input, a), input -> ParseResult(input, a) where [input.len : input -> U64]
+	parse_partial = |parser, input| {
+		match step(parser, input) {
+			Ok({ value, rest, furthest: _ }) => Ok({ value, rest })
+			Err(failure) => Err(ParseError({ message: failure.message, offset: minus(input.len(), failure.remaining) }))
+		}
 	}
 
 	## Run a parser on the given input, expecting it to consume all of it.
 	##
-	## The `input -> Bool` parameter is used to check whether parsing has 'completed',
-	## i.e. how to determine if all of the input has been consumed.
-	##
-	## For most input types, a parsing run that leaves some unparsed input behind
-	## should be considered an error, so leftover input is reported as
-	## `Err(ParsingIncomplete(leftover))`. For `Str` input use `Utf8.parse_str`,
-	## which supplies the completion check for you.
-	parse : Parser(input, a), input, (input -> Bool) -> Try(a, [ParsingFailure(Str), ParsingIncomplete(input)])
-	parse = |parser, input, is_parsing_completed| {
-		match parser.parse_partial(input) {
-			Ok({ value: val, rest: leftover }) => {
-				if is_parsing_completed(leftover) {
-					Ok(val)
+	## The input type only needs a `len` method, which is used both to detect
+	## leftover input and to turn the furthest failure into an `offset` counted
+	## from the start of `input`. Leftover input is a failure too: if some
+	## parser failed at or beyond the leftover, its message is reported;
+	## otherwise the message is `unexpected input`. For UTF-8 text use
+	## `Utf8.parse_str` or `Utf8.parse_bytes`.
+	parse : Parser(input, a), input -> Try(a, [ParseError({ message : Str, offset : U64 })]) where [input.len : input -> U64]
+	parse = |parser, input| {
+		total = input.len()
+		match step(parser, input) {
+			Ok({ value, rest, furthest }) => {
+				remaining = rest.len()
+				if remaining == 0 {
+					Ok(value)
+				} else if furthest.remaining <= remaining {
+					Err(ParseError({ message: furthest.message, offset: minus(total, furthest.remaining) }))
 				} else {
-					Err(ParsingIncomplete(leftover))
+					Err(ParseError({ message: "unexpected input", offset: minus(total, remaining) }))
 				}
 			}
-			Err(ParsingFailure(msg)) => {
-				Err(ParsingFailure(msg))
-			}
+			Err(failure) => Err(ParseError({ message: failure.message, offset: minus(total, failure.remaining) }))
 		}
 	}
 
@@ -113,13 +124,9 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##
 	## This is mostly useful as a 'base case' if all other parsers
 	## in a `one_of` or `alt` have failed, to provide some more descriptive error message.
-	fail : Str -> Parser(_, _)
-	fail = |msg| {
-		build_primitive_parser(
-			|_input| {
-				Err(ParsingFailure(msg))
-			},
-		)
+	fail : Str -> Parser(input, a) where [input.len : input -> U64]
+	fail = |message| {
+		{ fun: |input| Err({ message, remaining: input.len() }) }
 	}
 
 	## Parser that will always produce the given `a`, without looking at the actual input.
@@ -133,71 +140,42 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## expect Utf8.parse_str(parse_u32, "123") == Ok(123.U32)
 	## ```
 	const : a -> Parser(_, a)
-	const = |val| {
-		build_primitive_parser(
-			|input| {
-				Ok({ value: val, rest: input })
-			},
-		)
+	const = |value| {
+		{ fun: |input| Ok({ value, rest: input, furthest: no_failure }) }
 	}
 
 	## Try the `first` parser and (only) if it fails, try the `second` parser as fallback.
 	##
 	## The `second` parser starts from the same input as `first` (backtracking).
-	## If both fail, the failure message joins both messages with `or`.
+	## If both fail, the failure that reached further is reported; when both
+	## stopped at the same place, the `second` one is.
 	alt : Parser(input, a), Parser(input, a) -> Parser(input, a)
 	alt = |first, second| {
-		build_primitive_parser(
-			|input| {
-				match parse_partial(first, input) {
-					Ok({ value: val, rest: rest }) => Ok({ value: val, rest: rest })
-					Err(ParsingFailure(first_err)) => {
-						match parse_partial(second, input) {
-							Ok({ value: val, rest: rest }) => Ok({ value: val, rest: rest })
-							Err(ParsingFailure(second_err)) => {
-								Err(ParsingFailure("${first_err} or ${second_err}"))
-							}
+		{
+			fun: |input| {
+				match step(first, input) {
+					Ok(ok) => Ok(ok)
+					Err(first_failure) => {
+						match step(second, input) {
+							Ok({ value, rest, furthest }) => Ok({ value, rest, furthest: further(first_failure, furthest) })
+							# Keep one message rather than joining them: failures are
+							# frequent, and building text on every losing branch is
+							# what made combinator-heavy parsers allocate heavily.
+							Err(second_failure) => Err(further(first_failure, second_failure))
 						}
 					}
 				}
 			},
-		)
+		}
 	}
 
 	## Runs a parser building a function, then a parser building a value,
 	## and finally returns the result of calling the function with the value.
 	##
-	## This is useful if you are building up a structure that requires more parameters
-	## than there are variants of `map`, `map2`, `map3` etc. for.
-	##
-	## For instance, the following two are the same:
-	## ```roc
-	## Parser.map3(Utf8.digits, Utf8.digits, Utf8.digits, |x, y, z| Triple(x, y, z))
-	##
-	## Parser.const(|x| |y| |z| Triple(x, y, z))
-	##     .apply(Utf8.digits)
-	##     .apply(Utf8.digits)
-	##     .apply(Utf8.digits)
-	## ```
-	## Indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.
-	##
-	## Currying:
-	## Be aware that when using `apply`, you need to explicitly 'curry' the parameters to the construction function.
-	## This means that instead of writing `|x, y, z| ...`
-	## you'll need to write `|x| |y| |z| ...`.
-	## This is because the parameters of the function will be applied one by one as parsing continues.
+	## This is the same as `keep`.
 	apply : Parser(input, (a -> b)), Parser(input, a) -> Parser(input, b)
 	apply = |fun_parser, val_parser| {
-		combined = |input| {
-			{ value: fun_val, rest: rest } = fun_parser.parse_partial(input)?
-			val_parser.parse_partial(rest)
-				.map_ok(
-					|{ value: val, rest: rest2 }| {
-						{ value: fun_val(val), rest: rest2 }
-					},
-				)
-		}
-		build_primitive_parser(combined)
+		keep(fun_parser, val_parser)
 	}
 
 	## Try a list of parsers in turn, until one of them succeeds.
@@ -215,64 +193,55 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##
 	## expect Utf8.parse_str(color, "green") == Ok(Green)
 	## ```
-	one_of : List(Parser(input, a)) -> Parser(input, a)
+	one_of : List(Parser(input, a)) -> Parser(input, a) where [input.len : input -> U64]
 	one_of = |parsers| {
-		parsers.fold_rev(
-			fail("oneOf: The list of parsers was empty"),
-			|earlier_parser, later_parser| {
-				alt(earlier_parser, later_parser)
-			},
-		)
+		match parsers {
+			[] => fail("oneOf: The list of parsers was empty")
+			[first, .. as others] => others.fold(first, |earlier, later| alt(earlier, later))
+		}
 	}
 
 	## Transforms the result of parsing into something else,
 	## using the given transformation function.
 	map : Parser(input, a), (a -> b) -> Parser(input, b)
-	map = |simple_parser, transform| {
-		const(transform)
-			.apply(simple_parser)
+	map = |parser, transform| {
+		{
+			fun: |input| {
+				match step(parser, input) {
+					Ok({ value, rest, furthest }) => Ok({ value: transform(value), rest, furthest })
+					Err(failure) => Err(failure)
+				}
+			},
+		}
 	}
 
 	## Transforms the result of parsing into something else,
 	## using the given two-parameter transformation function.
 	map2 : Parser(input, a), Parser(input, b), (a, b -> c) -> Parser(input, c)
 	map2 = |parser_a, parser_b, transform| {
-		const(
-			|a| {
-				|b| {
-					transform(a, b)
-				}
-			},
-		)
-			.apply(parser_a)
-			.apply(parser_b)
+		const(|a| |b| transform(a, b))
+			.keep(parser_a)
+			.keep(parser_b)
 	}
 
 	## Transforms the result of parsing into something else,
 	## using the given three-parameter transformation function.
 	##
 	## If you need transformations with more inputs,
-	## take a look at `apply`.
+	## take a look at `keep`.
 	map3 : Parser(input, a), Parser(input, b), Parser(input, c), (a, b, c -> d) -> Parser(input, d)
 	map3 = |parser_a, parser_b, parser_c, transform| {
-		const(
-			|a| {
-				|b| {
-					|c| {
-						transform(a, b, c)
-					}
-				}
-			},
-		)
-			.apply(parser_a)
-			.apply(parser_b)
-			.apply(parser_c)
+		const(|a| |b| |c| transform(a, b, c))
+			.keep(parser_a)
+			.keep(parser_b)
+			.keep(parser_c)
 	}
 
 	## Removes a layer of `Try` from running the parser.
 	##
 	## Use this to map functions that return a `Try` over the parser:
-	## an `Err(msg)` value becomes `Err(ParsingFailure(msg))`.
+	## an `Err(msg)` value becomes a failure with that message, reported where
+	## the inner parser started.
 	##
 	## ```roc
 	## even : Parser(Utf8.Bytes, U64)
@@ -282,21 +251,21 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##         .flatten()
 	##
 	## expect Utf8.parse_str(even, "42") == Ok(42)
-	## expect Utf8.parse_str(even, "7") == Err(ParsingFailure("odd number"))
+	## expect Utf8.parse_str(even, "7") == Err(ParseError({ message: "odd number", offset: 0 }))
 	## ```
-	flatten : Parser(input, Try(a, Str)) -> Parser(input, a)
+	flatten : Parser(input, Try(a, Str)) -> Parser(input, a) where [input.len : input -> U64]
 	flatten = |parser| {
-		build_primitive_parser(
-			|input| {
-				result = parse_partial(parser, input)
-
-				match result {
-					Err(problem) => Err(problem)
-					Ok({ value: Ok(val), rest: input_rest }) => Ok({ value: val, rest: input_rest })
-					Ok({ value: Err(problem), rest: _inputRest }) => Err(ParsingFailure(problem))
+		{
+			fun: |input| {
+				match step(parser, input) {
+					Err(failure) => Err(failure)
+					Ok({ value: Ok(value), rest, furthest }) => Ok({ value, rest, furthest })
+					# The value was read but rejected: report that, not a failure
+					# hidden inside the parser that read it.
+					Ok({ value: Err(message), rest: _, furthest: _ }) => Err({ message, remaining: input.len() })
 				}
 			},
-		)
+		}
 	}
 
 	## Runs a parser lazily.
@@ -310,8 +279,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## workaround because of [roc-lang/roc#10098](https://github.com/roc-lang/roc/issues/10098).
 	lazy : ({} -> Parser(input, a)) -> Parser(input, a)
 	lazy = |thunk| {
-		const({})
-			|> and_then(thunk)
+		{ fun: |input| step(thunk({}), input) }
 	}
 
 	## Make a parser optional.
@@ -321,11 +289,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	maybe : Parser(input, a) -> Parser(input, Try(a, [Nothing]))
 	maybe = |parser| {
 		parser
-			.map(
-				|val| {
-					Ok(val)
-				},
-			)
+			.map(|value| Ok(value))
 			.alt(const(Err(Nothing)))
 	}
 
@@ -335,31 +299,23 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## Repetition stops at the first element that fails, or that succeeds
 	## without consuming any input; that element's value is not included.
 	## (Without this rule, a parser such as `chomp_while` or `maybe(p)` that can
-	## succeed on empty input would repeat forever.)
-	many : Parser(input, a) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
+	## succeed on empty input would repeat forever.) The failure of the element
+	## that stopped the repetition is kept, so if the parse later fails there,
+	## that failure is what gets reported.
+	many : Parser(input, a) -> Parser(input, List(a)) where [input.len : input -> U64]
 	many = |parser| {
-		build_primitive_parser(
-			|input| {
-				many_impl(parser, [], input)
-			},
-		)
+		{ fun: |input| many_help(parser, [], input, input.len(), no_failure) }
 	}
 
 	## A parser which runs the element parser *one* or more times on the input,
 	## returning a list containing all the parsed elements.
 	##
 	## Fails when the first element fails. Also see [Parser.many].
-	one_or_more : Parser(input, a) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
+	one_or_more : Parser(input, a) -> Parser(input, List(a)) where [input.len : input -> U64]
 	one_or_more = |parser| {
-		const(
-			|val| {
-				|vals| {
-					List.prepend(vals, val)
-				}
-			},
-		)
-			.apply(parser)
-			.apply(many(parser))
+		const(|value| |values| values.prepend(value))
+			.keep(parser)
+			.keep(many(parser))
 	}
 
 	## Runs a parser for an 'opening' delimiter, then your main parser, then the 'closing' delimiter,
@@ -372,46 +328,23 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## ```
 	between : Parser(input, a), Parser(input, open), Parser(input, close) -> Parser(input, a)
 	between = |parser, open, close| {
-		const(
-			|_| {
-				|val| {
-					|_| {
-						val
-					}
-				}
-			},
-		)
-			.apply(open)
-			.apply(parser)
-			.apply(close)
+		const(|value| value)
+			.skip(open)
+			.keep(parser)
+			.skip(close)
 	}
 
 	## Parse one or more values separated by `separator`.
 	## The separators are consumed and omitted from the result.
 	##
 	## A trailing separator that is not followed by a value is left unconsumed.
-	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
+	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.len : input -> U64]
 	sep_by1 = |parser, separator| {
-		parser_followed_by_sep =
-			const(
-				|_| {
-					|val| {
-						val
-					}
-				},
-			)
-				.apply(separator)
-				.apply(parser)
+		separated = const(|value| value).skip(separator).keep(parser)
 
-		const(
-			|val| {
-				|vals| {
-					vals.prepend(val)
-				}
-			},
-		)
-			.apply(parser)
-			.apply(many(parser_followed_by_sep))
+		const(|value| |values| values.prepend(value))
+			.keep(parser)
+			.keep(many(separated))
 	}
 
 	## Parse zero or more values separated by `separator`.
@@ -423,7 +356,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##
 	## expect Utf8.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 	## ```
-	sep_by : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
+	sep_by : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.len : input -> U64]
 	sep_by = |parser, separator| {
 		parser
 			.sep_by1(separator)
@@ -435,35 +368,30 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## Useful with `many` to skip a repeated token without collecting values.
 	ignore : Parser(input, a) -> Parser(input, {})
 	ignore = |parser| {
-		parser.map(
-			|_| {
-				{}
-			},
-		)
+		parser.map(|_| {})
 	}
 
 	## Run a parser producing a function, then a parser producing its argument,
 	## and return the function result.
 	##
-	## This is `apply` for pipelines: start with `const(|a| |b| ...)` and add
-	## one `keep` per argument, as in the module example.
+	## Start with `const(|a| |b| ...)` and add one `keep` per argument, as in
+	## the module example. The function must be curried (`|a| |b| ...`, not
+	## `|a, b| ...`), because its arguments are applied one at a time.
 	keep : Parser(input, (a -> b)), Parser(input, a) -> Parser(input, b)
 	keep = |fun_parser, val_parser| {
-		build_primitive_parser(
-			|input| {
-				match parse_partial(fun_parser, input) {
-					Err(msg) => Err(msg)
-					Ok({ value: fun_val, rest: rest }) => {
-						match parse_partial(val_parser, rest) {
-							Err(msg2) => Err(msg2)
-							Ok({ value: val, rest: rest2 }) => {
-								Ok({ value: fun_val(val), rest: rest2 })
-							}
+		{
+			fun: |input| {
+				match step(fun_parser, input) {
+					Err(failure) => Err(failure)
+					Ok({ value: fun_value, rest, furthest }) => {
+						match step(val_parser, rest) {
+							Err(failure) => Err(further(furthest, failure))
+							Ok(next) => Ok({ value: fun_value(next.value), rest: next.rest, furthest: further(furthest, next.furthest) })
 						}
 					}
 				}
 			},
-		)
+		}
 	}
 
 	## Run two parsers in sequence, discarding the second parser's value.
@@ -477,19 +405,19 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## ```
 	skip : Parser(input, a), Parser(input, _) -> Parser(input, a)
 	skip = |fun_parser, skip_parser| {
-		build_primitive_parser(
-			|input| {
-				match parse_partial(fun_parser, input) {
-					Err(msg) => Err(msg)
-					Ok({ value: fun_val, rest: rest }) => {
-						match parse_partial(skip_parser, rest) {
-							Err(msg2) => Err(msg2)
-							Ok({ value: _, rest: rest2 }) => Ok({ value: fun_val, rest: rest2 })
+		{
+			fun: |input| {
+				match step(fun_parser, input) {
+					Err(failure) => Err(failure)
+					Ok({ value, rest, furthest }) => {
+						match step(skip_parser, rest) {
+							Err(failure) => Err(further(furthest, failure))
+							Ok(next) => Ok({ value, rest: next.rest, furthest: further(furthest, next.furthest) })
 						}
 					}
 				}
 			},
-		)
+		}
 	}
 
 	## Match zero or more codeunits until it reaches the given codeunit.
@@ -521,26 +449,19 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## expect Utf8.parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
 	## ```
 	##
-	## Use [Utf8.str_from_utf8] to turn the results into a `Str`.
+	## Use [Str.from_utf8_lossy] to turn the results into a `Str`.
 	##
 	## Also see [Parser.chomp_while].
 	chomp_until : a -> Parser(List(a), List(a)) where [a.is_eq : a, a -> Bool]
 	chomp_until = |char| {
-		build_primitive_parser(
-			|input| {
-				match input.find_first_index(
-					|x| {
-						x == char
-					},
-				) {
-					Ok(index) => {
-						val = input.sublist({ start: 0, len: index })
-						Ok({ value: val, rest: input.drop_first(index) })
-					}
-					Err(_) => Err(ParsingFailure("character not found"))
+		{
+			fun: |input| {
+				match input.find_first_index(|x| x == char) {
+					Ok(index) => Ok({ value: input.sublist({ start: 0, len: index }), rest: input.drop_first(index), furthest: no_failure })
+					Err(_) => Err({ message: "character not found", remaining: input.len() })
 				}
 			},
-		)
+		}
 	}
 
 	## Match zero or more codeunits until the check returns false.
@@ -572,13 +493,13 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## expect Utf8.parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
 	## ```
 	##
-	## Use [Utf8.str_from_utf8] to turn the results into a `Str`.
+	## Use [Str.from_utf8_lossy] to turn the results into a `Str`.
 	##
 	## Also see [Parser.chomp_until].
 	chomp_while : (a -> Bool) -> Parser(List(a), List(a))
 	chomp_while = |check| {
-		build_primitive_parser(
-			|input| {
+		{
+			fun: |input| {
 				index = input.fold_until(
 					0,
 					|i, elem| {
@@ -591,70 +512,110 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 				)
 
 				if index == 0 {
-					Ok({ value: [], rest: input })
+					Ok({ value: [], rest: input, furthest: no_failure })
 				} else {
-					Ok({
-						value: input.sublist({ start: 0, len: index }),
-						rest: input.drop_first(index),
-					})
+					Ok({ value: input.sublist({ start: 0, len: index }), rest: input.drop_first(index), furthest: no_failure })
 				}
 			},
-		)
+		}
 	}
+}
+
+# A failure, positioned by how much input was left when it happened, so that
+# failures can be compared for any input type without keeping the input.
+Failure : { message : Str, remaining : U64 }
+
+# What a parser function returns internally. A success also carries the
+# furthest failure seen while producing it (for example, the element that
+# stopped a `many`), so that a later failure at or before that point can
+# report it instead.
+Step(input, a) : Try({ value : a, rest : input, furthest : Failure }, Failure)
+
+# The `furthest` of a success that saw no failure. Its `remaining` is larger
+# than any real input, so every real failure is further.
+no_failure : Failure
+no_failure = { message: "", remaining: U64.highest }
+
+# The failure that reached further into the input; `b` on a tie, since it
+# happened later.
+further : Failure, Failure -> Failure
+further = |a, b| {
+	if a.remaining < b.remaining {
+		a
+	} else {
+		b
+	}
+}
+
+minus : U64, U64 -> U64
+minus = |a, b| {
+	if a > b {
+		a - b
+	} else {
+		0
+	}
+}
+
+step : Parser(input, a), input -> Step(input, a)
+step = |{ fun }, input| {
+	fun(input)
 }
 
 # Internal utility function. Not exposed to users, since usage is discouraged!
 #
 # Runs `first_parser` and (only) if it succeeds,
-# runs the function `buildNextParser` on its result value.
+# runs the function `build_next_parser` on its result value.
 # This function returns a new parser, which is finally run.
-#
-# `and_then` is usually more flexible than necessary, and less efficient
-# than using `const` with `map` and/or `apply`.
-# Consider using those functions first.
 and_then : Parser(input, a), (a -> Parser(input, b)) -> Parser(input, b)
 and_then = |first_parser, build_next_parser| {
-	fun = |input| {
-		{ value: first_val, rest: rest } = Parser.parse_partial(first_parser, input)?
-		next_parser = build_next_parser(first_val)
-
-		Parser.parse_partial(next_parser, rest)
-	}
-
-	Parser.build_primitive_parser(fun)
-}
-
-many_impl : Parser(input, a), List(a), input -> Parser.ParseResult(input, List(a)) where [input.is_eq : input, input -> Bool]
-many_impl = |parser, vals, input| {
-	result = Parser.parse_partial(parser, input)
-
-	match result {
-		Err(_) =>
-			Ok({ value: vals, rest: input })
-
-		Ok({ value: val, rest: input_rest }) =>
-			if input_rest == input {
-				# No progress: repeating would loop forever on the same input.
-				Ok({ value: vals, rest: input })
-			} else {
-				many_impl(parser, vals.append(val), input_rest)
+	{
+		fun: |input| {
+			match step(first_parser, input) {
+				Err(failure) => Err(failure)
+				Ok({ value, rest, furthest }) => {
+					match step(build_next_parser(value), rest) {
+						Err(failure) => Err(further(furthest, failure))
+						Ok(next) => Ok({ value: next.value, rest: next.rest, furthest: further(furthest, next.furthest) })
+					}
+				}
 			}
+		},
 	}
 }
 
-## Chomping until a newline returns the preceding bytes and leaves the newline.
+# Repeat `parser` from `input`, whose length is `len`, collecting `values`.
+# The no-progress check compares lengths, so each iteration is O(1).
+many_help : Parser(input, a), List(a), input, U64, Failure -> Step(input, List(a)) where [input.len : input -> U64]
+many_help = |parser, values, input, len, furthest| {
+	match step(parser, input) {
+		Err(failure) =>
+			Ok({ value: values, rest: input, furthest: further(furthest, failure) })
+
+		Ok(next) => {
+			next_len = next.rest.len()
+			if next_len == len {
+				# No progress: repeating would loop forever on the same input.
+				Ok({ value: values, rest: input, furthest: further(furthest, next.furthest) })
+			} else {
+				many_help(parser, values.append(next.value), next.rest, next_len, further(furthest, next.furthest))
+			}
+		}
+	}
+}
+
+# Chomping until a newline returns the preceding bytes and leaves the newline.
 expect {
 	input = "# H\nR".to_utf8()
 	result = Parser.parse_partial(Parser.chomp_until('\n'), input)?
 	result == { value: ['#', ' ', 'H'], rest: ['\n', 'R'] }
 }
 
-## Chomping until a missing newline reports a parse error.
+# Chomping until a missing newline reports a parse error.
 expect {
 	Parser.parse_partial(Parser.chomp_until('\n'), []).is_err()
 }
 
-## Chomping while a predicate holds leaves the first non-matching byte.
+# Chomping while a predicate holds leaves the first non-matching byte.
 expect {
 	input : List(U8)
 	input = ['a', 's', '\n', 'd', 'f']
@@ -665,15 +626,45 @@ expect {
 	result == { value: ['a', 's'], rest: ['\n', 'd', 'f'] }
 }
 
-## Repeating a parser that succeeds without consuming input terminates.
+# Repeating a parser that succeeds without consuming input terminates.
 expect {
 	result = Parser.parse_partial(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
 	result == { value: [['a', 'a']], rest: ['b'] }
 }
 
-## Separated repetition stops when separator and element consume nothing.
+# Separated repetition stops when separator and element consume nothing.
 expect {
 	empty = Parser.chomp_while(|b| b == 'z')
 	result = Parser.parse_partial(Parser.sep_by(empty, empty), "x".to_utf8())?
 	result == { value: [[]], rest: ['x'] }
+}
+
+# Parsing works for any input with a `len` method, not only bytes.
+expect {
+	words : List(Str)
+	words = ["a", "b"]
+	word = |w| Parser.build_primitive_parser(
+		|input| {
+			match input {
+				[first, .. as rest] if first == w => Ok({ value: first, rest })
+				_ => Err(ParseError({ message: "expected ${w}", offset: 0 }))
+			}
+		},
+	)
+	Parser.parse(Parser.many(word("a")).skip(word("b")), words) == Ok(["a"])
+}
+
+# Leftover input reports the furthest failure, with its offset.
+expect {
+	words : List(Str)
+	words = ["a", "a", "c"]
+	word = |w| Parser.build_primitive_parser(
+		|input| {
+			match input {
+				[first, .. as rest] if first == w => Ok({ value: first, rest })
+				_ => Err(ParseError({ message: "expected ${w}", offset: 0 }))
+			}
+		},
+	)
+	Parser.parse(Parser.many(word("a")), words) == Err(ParseError({ message: "expected a", offset: 2 }))
 }

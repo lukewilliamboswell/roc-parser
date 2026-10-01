@@ -62,7 +62,7 @@ port =
 		.flatten()
 
 expect Utf8.parse_str(port, "8080") == Ok(8080)
-expect Utf8.parse_str(port, "70000") == Err(ParsingFailure("port 70000 is out of range"))
+expect Utf8.parse_str(port, "70000") == Err(ParseError({ message: "port 70000 is out of range", offset: 0 }))
 # end::flatten[]
 
 # tag::maybe[]

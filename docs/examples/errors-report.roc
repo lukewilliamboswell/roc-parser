@@ -58,8 +58,7 @@ http_message : Str -> Str
 http_message = |source| {
 	match Utf8.parse_str(HTTP.request, source) {
 		Ok(request) => "request for ${request.uri}"
-		Err(ParsingFailure(message)) => "400 Bad Request: ${message}"
-		Err(ParsingIncomplete(_)) => "a second message follows the first"
+		Err(ParseError({ message, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${message}"
 	}
 }
 

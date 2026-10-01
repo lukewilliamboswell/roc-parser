@@ -18,17 +18,17 @@ HttpCheck :: {}.{
 
 	check_request : List(U8) -> {}
 	check_request = |bytes| {
-		match Utf8.parse_utf8_partial(HTTP.request, bytes) {
+		match Utf8.parse_bytes_partial(HTTP.request, bytes) {
 			Err(_) => {}
 			Ok({ value: val, rest: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
-				same_request(Utf8.parse_utf8_partial(HTTP.request, consumed), val, [], "re-parsing the consumed prefix", bytes)
+				same_request(Utf8.parse_bytes_partial(HTTP.request, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
 				canonical = serialize_request(val)
-				same_request(Utf8.parse_utf8_partial(HTTP.request, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
+				same_request(Utf8.parse_bytes_partial(HTTP.request, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
 				junk = "GET / HTTP/1.1\r\n".to_utf8()
-				same_request(Utf8.parse_utf8_partial(HTTP.request, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
-				if Utf8.parse_utf8_partial(HTTP.request, consumed.drop_last(1)).is_ok() {
+				same_request(Utf8.parse_bytes_partial(HTTP.request, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
+				if Utf8.parse_bytes_partial(HTTP.request, consumed.drop_last(1)).is_ok() {
 					crash "dropping the last byte of a request still parsed\n${show(bytes)}"
 				}
 			}
@@ -37,11 +37,11 @@ HttpCheck :: {}.{
 
 	check_response : List(U8) -> {}
 	check_response = |bytes| {
-		match Utf8.parse_utf8_partial(HTTP.response, bytes) {
+		match Utf8.parse_bytes_partial(HTTP.response, bytes) {
 			Err(_) => {}
 			Ok({ value: val, rest: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
-				same_response(Utf8.parse_utf8_partial(HTTP.response, consumed), val, [], "re-parsing the consumed prefix", bytes)
+				same_response(Utf8.parse_bytes_partial(HTTP.response, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
 				if val.status_code < 100 or val.status_code > 999 {
 					crash "status code ${val.status_code.to_str()} is not three digits\n${show(bytes)}"
@@ -50,11 +50,11 @@ HttpCheck :: {}.{
 					crash "control character in reason phrase\n${show(bytes)}"
 				}
 				canonical = serialize_response(val)
-				same_response(Utf8.parse_utf8_partial(HTTP.response, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
+				same_response(Utf8.parse_bytes_partial(HTTP.response, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
 				if response_delimited(val) {
 					junk = "HTTP/1.1 200 OK\r\n".to_utf8()
-					same_response(Utf8.parse_utf8_partial(HTTP.response, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
-					if Utf8.parse_utf8_partial(HTTP.response, consumed.drop_last(1)).is_ok() {
+					same_response(Utf8.parse_bytes_partial(HTTP.response, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
+					if Utf8.parse_bytes_partial(HTTP.response, consumed.drop_last(1)).is_ok() {
 						crash "dropping the last byte of a response still parsed\n${show(bytes)}"
 					}
 				} else if !rest.is_empty() {
@@ -82,7 +82,7 @@ consumed_prefix = |bytes, rest| {
 	bytes.sublist({ start: 0, len: bytes.len() - rest.len() })
 }
 
-same_request : Try({ value : HTTP.Request, rest : List(U8) }, [ParsingFailure(Str)]), HTTP.Request, List(U8), Str, List(U8) -> {}
+same_request : Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), HTTP.Request, List(U8), Str, List(U8) -> {}
 same_request = |actual, expected, rest, what, original| {
 	match actual {
 		Ok({ value: val, rest: input }) if val == expected and input == rest => {}
@@ -90,7 +90,7 @@ same_request = |actual, expected, rest, what, original| {
 	}
 }
 
-same_response : Try({ value : HTTP.Response, rest : List(U8) }, [ParsingFailure(Str)]), HTTP.Response, List(U8), Str, List(U8) -> {}
+same_response : Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), HTTP.Response, List(U8), Str, List(U8) -> {}
 same_response = |actual, expected, rest, what, original| {
 	match actual {
 		Ok({ value: val, rest: input }) if val == expected and input == rest => {}

@@ -12,7 +12,7 @@ import parser.Utf8
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
-	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
+	result : Try(List(List(U64)), [ParseError({ message : Str, offset : U64 })])
 	result = Utf8.parse_str(multiple_numbers.many(), input)
 
 	match result.map_ok(largest) {

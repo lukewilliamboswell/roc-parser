@@ -62,8 +62,7 @@ report : Str -> Str
 report = |source| {
 	match Utf8.parse_str(config, source) {
 		Ok(entries) => "parsed ${entries.len().to_str()} entries"
-		Err(ParsingIncomplete(rest)) => "stopped before: `${rest.replace_each("\n", "\\n")}`"
-		Err(ParsingFailure(message)) => "failed: ${message}"
+		Err(ParseError({ message, offset })) => "failed at byte ${offset.to_str()}: ${message}"
 	}
 }
 
@@ -71,8 +70,7 @@ report_entry : Str -> Str
 report_entry = |source| {
 	match Utf8.parse_str(entry, source) {
 		Ok(_) => "parsed one entry"
-		Err(ParsingIncomplete(rest)) => "stopped before: `${rest}`"
-		Err(ParsingFailure(message)) => "failed: ${message}"
+		Err(ParseError({ message, offset })) => "failed at byte ${offset.to_str()}: ${message}"
 	}
 }
 

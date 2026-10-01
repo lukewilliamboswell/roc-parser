@@ -50,8 +50,9 @@ run = |name, parser, input| {
 			}
 			Ok(input.len() - rest.len())
 		}
-		Err(ParsingFailure(msg)) => {
-			_ = msg.count_utf8_bytes()
+		Err(ParseError({ message, offset })) => {
+			_ = message.count_utf8_bytes()
+			if offset > input.len() crash "${name}: failure offset is beyond the input"
 			Err(Failed)
 		}
 	}
@@ -194,17 +195,15 @@ check_str_front_ends = |case| {
 					if !Str.from_utf8_lossy(val).is_empty() and rest.count_utf8_bytes() > bytes.len() * 3 {
 						crash "parse_str_partial leftover grew"
 					}
-				Err(ParsingFailure(msg)) => {
-					_ = msg.count_utf8_bytes()
+				Err(ParseError({ message, offset: _ })) => {
+					_ = message.count_utf8_bytes()
 				}
 			}
 			match Utf8.parse_str(parser, text) {
 				Ok(_) => {}
-				Err(ParsingFailure(msg)) => {
-					_ = msg.count_utf8_bytes()
-				}
-				Err(ParsingIncomplete(rest)) => {
-					_ = rest.count_utf8_bytes()
+				Err(ParseError({ message, offset })) => {
+					_ = message.count_utf8_bytes()
+					if offset > bytes.len() crash "parse_str failure offset is beyond the input"
 				}
 			}
 			{}

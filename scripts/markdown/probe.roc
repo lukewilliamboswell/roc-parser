@@ -34,17 +34,17 @@ run_case : List(U8), List(U8) -> Str
 run_case = |mode, body| {
 	if mode == "count".to_utf8() {
 		# Timing mode: parse and count nodes without building JSON.
-		match Utf8.parse_utf8(Markdown.inlines, body) {
+		match Utf8.parse_bytes(Markdown.inlines, body) {
 			Ok(nodes) => "{\"status\":\"ok\",\"nodes\":${count_nodes(nodes).to_str()}}"
 			Err(_) => "{\"status\":\"error\"}"
 		}
 	} else if mode == "inline".to_utf8() {
-		match Utf8.parse_utf8(Markdown.inlines, body) {
+		match Utf8.parse_bytes(Markdown.inlines, body) {
 			Ok(nodes) => "{\"status\":\"ok\",\"inlines\":${encode_inlines(nodes)}}"
 			Err(_) => "{\"status\":\"error\"}"
 		}
 	} else {
-		match Utf8.parse_utf8(Markdown.all, body) {
+		match Utf8.parse_bytes(Markdown.all, body) {
 			Ok(blocks) => "{\"status\":\"ok\",\"blocks\":[${blocks.map(encode_block) |> Str.join_with(",")}]}"
 			Err(_) => "{\"status\":\"error\"}"
 		}

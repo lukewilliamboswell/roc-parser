@@ -57,7 +57,7 @@ other five are ready-made parsers for one format each.
 
 A `Parser(input, a)` is a value that describes how to read an `a` from the
 start of an `input`. Running it returns the value and the input it did not
-consume, or a `ParsingFailure` message. `Parser` provides the combinators that
+consume, or a `ParseError` with a message and an offset. `Parser` provides the combinators that
 build parsers from parsers; `Utf8` provides the parsers that read text, with
 `Utf8.Bytes` (a `List(U8)`) as the input type.
 
@@ -110,8 +110,8 @@ format this package does not cover, or extending one of the format parsers.
 `Utf8` holds the text parsers and the functions that run a parser on text.
 
 * `Utf8.parse_str` runs a parser on a whole `Str` and reports leftover text
-  as `ParsingIncomplete`. `parse_str_partial`, `parse_utf8` and
-  `parse_utf8_partial` cover partial input and byte input.
+  as a `ParseError`. `parse_str_partial`, `parse_bytes` and
+  `parse_bytes_partial` cover partial input and byte input.
 * `codeunit`, `codeunit_satisfies`, `any_codeunit`, `utf8` and `string` match
   bytes and literal text. `digit` and `digits` read unsigned decimal numbers.
 * `any_thing` and `any_string` consume the rest of the input.
@@ -141,7 +141,7 @@ it yourself.
 body.
 
 * `HTTP.request` and `HTTP.response` are parsers. With `Utf8.parse_str` they
-  reject trailing data; with `Utf8.parse_utf8_partial` they return the bytes
+  reject trailing data; with `Utf8.parse_bytes_partial` they return the bytes
   of the next pipelined message.
 * `Request` and `Response` are records; `Header`, `Method` and `HttpVersion`
   describe their fields.

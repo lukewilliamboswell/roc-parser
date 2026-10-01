@@ -52,8 +52,8 @@ main! = |_args| {
 	# tag::pipelined[]
 	pipelined = "GET /a HTTP/1.1\r\nHost: example.com\r\n\r\nGET /b HTTP/1.1\r\nHost: example.com\r\n\r\n".to_utf8()
 
-	first = Utf8.parse_utf8_partial(HTTP.request, pipelined).map_err(|ParsingFailure(message)| BadMessage(message))?
-	second = Utf8.parse_utf8_partial(HTTP.request, first.rest).map_err(|ParsingFailure(message)| BadMessage(message))?
+	first = Utf8.parse_bytes_partial(HTTP.request, pipelined)?
+	second = Utf8.parse_bytes_partial(HTTP.request, first.rest)?
 	Stdout.line!("first: ${first.value.uri}, second: ${second.value.uri}, left over: ${second.rest.len().to_str()} bytes")?
 	# end::pipelined[]
 
@@ -62,8 +62,7 @@ main! = |_args| {
 
 	match Utf8.parse_str(HTTP.request, smuggled) {
 		Ok(_) => Stdout.line!("accepted")?
-		Err(ParsingFailure(message)) => Stdout.line!("rejected: ${message}")?
-		Err(ParsingIncomplete(_)) => Stdout.line!("trailing data")?
+		Err(ParseError({ message, offset })) => Stdout.line!("rejected at byte ${offset.to_str()}: ${message}")?
 	}
 	# end::rejected[]
 

@@ -393,29 +393,24 @@ test = |case| {
 	actual =
 		match Parser.parse_partial(parser, case.input) {
 			Ok({ value: val, rest: rest }) => Ok({ val, rest })
-			Err(ParsingFailure(msg)) => {
+			Err(ParseError({ message, offset })) => {
 				# Messages must be renderable without crashing.
-				_ = msg.count_utf8_bytes()
+				_ = message.count_utf8_bytes()
+				if offset > case.input.len() crash "failure offset ${offset.to_str()} is beyond the input"
 				Err(Fail)
 			}
 		}
 	if actual != expected {
 		crash "parse_partial disagrees with model\n  library: ${show_outcome(actual)}\n  model:   ${show_outcome(expected)}"
 	}
-	# Full-input runs agree with the partial run.
-	full_ok =
-		match Utf8.parse_utf8(parser, case.input) {
-			Ok(v) => Ok(v)
-			Err(ParsingIncomplete(rest)) => Err(Incomplete(rest))
-			Err(ParsingFailure(_)) => Err(Failure)
-		}
-	expected_full =
-		match expected {
-			Ok(r) => if r.rest.is_empty() Ok(r.val) else Err(Incomplete(r.rest))
-			Err(_) => Err(Failure)
-		}
-	if full_ok != expected_full {
-		crash "parse_utf8 disagrees with parse_partial"
+	# Full-input runs agree with the partial run. Leftover input fails at or
+	# beyond the point where the partial run stopped (the furthest failure).
+	match (Utf8.parse_bytes(parser, case.input), expected) {
+		(Ok(v), Ok(r)) => if !r.rest.is_empty() or v != r.val crash "parse_bytes Ok differs from model"
+		(Err(ParseError({ offset, message: _ })), Ok(r)) =>
+			if r.rest.is_empty() or offset < case.input.len() - r.rest.len() or offset > case.input.len() crash "parse_bytes leftover offset ${offset.to_str()} differs from model"
+		(Err(ParseError({ offset, message: _ })), Err(_)) => if offset > case.input.len() crash "parse_bytes offset is beyond the input"
+		_ => crash "parse_bytes outcome differs from model"
 	}
 	# Str front ends only when the input is valid UTF-8.
 	match Str.from_utf8(case.input) {
@@ -432,8 +427,8 @@ test = |case| {
 			full = Utf8.parse_str(parser, text)
 			match (full, expected) {
 				(Ok(v), Ok(r)) => if !r.rest.is_empty() or v != r.val crash "parse_str Ok differs from model"
-				(Err(ParsingIncomplete(left)), Ok(r)) => if r.rest.is_empty() or left != Str.from_utf8_lossy(r.rest) crash "parse_str leftover differs from model"
-				(Err(ParsingFailure(_)), Err(_)) => {}
+				(Err(ParseError({ offset, message: _ })), Ok(r)) => if r.rest.is_empty() or offset < case.input.len() - r.rest.len() crash "parse_str leftover differs from model"
+				(Err(ParseError(_)), Err(_)) => {}
 				_ => crash "parse_str outcome differs from model"
 			}
 		}

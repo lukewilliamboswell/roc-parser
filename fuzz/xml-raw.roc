@@ -92,8 +92,12 @@ check_combinator = |input, result| {
 	consistent =
 		match (result, combinator) {
 			(Ok(tree), Ok(other)) => tree == other
-			(Err(XmlError(error)), Err(ParsingIncomplete(_))) => error.message == "unexpected content after the root element"
-			(Err(XmlError(error)), Err(ParsingFailure(message))) => message == "${error.line.to_str()}:${error.column.to_str()}: ${error.message}"
+			(Err(XmlError(error)), Err(ParseError({ message, offset: _ }))) =>
+				if message == "unexpected input" {
+					error.message == "unexpected content after the root element"
+				} else {
+					message == "${error.line.to_str()}:${error.column.to_str()}: ${error.message}"
+				}
 			_ => Bool.False
 		}
 	if !consistent {

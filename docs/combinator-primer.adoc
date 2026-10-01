@@ -166,19 +166,18 @@ Each line of output shows one outcome:
 
 . The whole input matched: `Ok`.
 . `port=eighty` is not a valid entry, so `sep_by` stopped after the first
-  entry. The parser succeeded, but it did not reach the end of the input, so
-  `parse_str` returned `ParsingIncomplete` with the text that was left.
-. The trailing line break is a separator with no entry after it, so it is
-  left over in the same way. Real files often end with a line break;
-  <<custom-format>> shows one way to accept it.
-. Parsing a single bad entry directly gives `ParsingFailure` with a message
-  from the last alternative that was tried: none of the value parsers
-  accepted `eighty`.
+  entry and did not reach the end of the input. `parse_str` reports the
+  furthest failure instead: none of the value parsers accepted `eighty`, at
+  byte 17.
+. The trailing line break is a separator with no entry after it, so the
+  parse fails at the end of the input, where a key was expected. Real files
+  often end with a line break; <<custom-format>> shows one way to accept it.
+. Parsing a single bad entry directly gives the same failure, at byte 5.
 
 The second line is worth remembering. A repetition such as `sep_by` or `many`
-stops quietly at the first element it cannot read, so a mistake in the middle
-of a file usually appears as `ParsingIncomplete` rather than as the precise
-failure. <<errors>> explains how to get better messages.
+stops at the first element it cannot read, but that element's failure is
+kept, so a mistake in the middle of a file is reported where it is.
+<<errors>> explains how to get better messages.
 
 == What you have learned
 
@@ -187,7 +186,7 @@ failure. <<errors>> explains how to get better messages.
 * `Parser.const(f).keep(a).skip(b).keep(c)` reads things in sequence.
 * `.map(f)` transforms a result; `Utf8.one_of` chooses between
   alternatives; `one_or_more`, `many` and `sep_by` repeat.
-* A parse ends in `Ok`, `ParsingFailure`, or `ParsingIncomplete`.
+* A parse ends in `Ok` or a `ParseError` with a message and a byte `offset`.
 
 <<combinators>> covers the remaining combinators and the rules for
 alternatives and repetition in more depth.

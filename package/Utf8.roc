@@ -12,10 +12,9 @@ Utf8 :: [].{
 
 	## Parse a whole `Str` using a [Parser].
 	##
-	## Fails with `ParsingFailure(msg)` when the parser fails, and with
-	## `ParsingIncomplete(leftover)` when it succeeds without consuming the whole
-	## string. A leftover that starts inside a multi-byte character is rendered
-	## with U+FFFD replacement characters rather than crashing.
+	## Fails with `ParseError({ message, offset })`, where `offset` is the byte
+	## offset of the furthest failure. Input left over after the parser
+	## succeeds is a failure too (see [Parser.parse]).
 	##
 	## ```roc
 	## color : Parser(Utf8.Bytes, [Red, Green, Blue])
@@ -28,24 +27,17 @@ Utf8 :: [].{
 	##
 	## expect Utf8.parse_str(color, "green") == Ok(Green)
 	## ```
-	parse_str : Parser(Bytes, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
+	parse_str : Parser(Bytes, a), Str -> Try(a, [ParseError({ message : Str, offset : U64 })])
 	parse_str = |parser, input| {
-		parser
-			|> parse_utf8(str_to_raw(input))
-			.map_err(
-				|problem| {
-					match problem {
-						ParsingFailure(msg) => ParsingFailure(msg)
-						ParsingIncomplete(leftover_raw) => ParsingIncomplete(str_from_utf8_lossy(leftover_raw))
-					}
-				},
-			)
+		parser.parse(input.to_utf8())
 	}
 
 	## Runs a parser against the start of a string, allowing the parser to consume it only partially.
 	##
-	## - If the parser succeeds, returns the resulting value as well as the leftover input.
-	## - If the parser fails, returns `Err(ParsingFailure(msg))`
+	## - If the parser succeeds, returns the resulting `value` and the `rest` of the string.
+	##   A `rest` that starts inside a multi-byte character is rendered with
+	##   U+FFFD replacement characters rather than crashing.
+	## - If the parser fails, returns `Err(ParseError({ message, offset }))`.
 	##
 	## ```roc
 	## at_sign : Parser(Utf8.Bytes, [AtSign])
@@ -54,37 +46,27 @@ Utf8 :: [].{
 	## expect Utf8.parse_str_partial(at_sign, "@").map_ok(|r| r.value) == Ok(AtSign)
 	## expect Utf8.parse_str_partial(at_sign, "$").is_err()
 	## ```
-	parse_str_partial : Parser(Bytes, a), Str -> Try({ value : a, rest : Str }, [ParsingFailure(Str)])
+	parse_str_partial : Parser(Bytes, a), Str -> Try({ value : a, rest : Str }, [ParseError({ message : Str, offset : U64 })])
 	parse_str_partial = |parser, input| {
 		parser
-			|> parse_utf8_partial(str_to_raw(input))
-			.map_ok(
-				|{ value: val, rest: rest_raw }| {
-					{ value: val, rest: str_from_utf8_lossy(rest_raw) }
-				},
-			)
+			.parse_partial(input.to_utf8())
+			.map_ok(|{ value, rest }| { value, rest: str_from_utf8_lossy(rest) })
 	}
 
 	## Runs a parser against UTF-8 bytes, requiring the parser to consume them fully.
 	##
-	## - If the parser succeeds, returns `Ok(a)`
-	## - If the parser fails, returns `Err(ParsingFailure(msg))`
-	## - If the parser succeeds but does not consume all the bytes, returns `Err(ParsingIncomplete(leftover))`
-	parse_utf8 : Parser(Bytes, a), Bytes -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Bytes)])
-	parse_utf8 = |parser, input| {
-		parser.parse(
-			input,
-			|leftover| {
-				leftover.len() == 0
-			},
-		)
+	## Fails with `ParseError({ message, offset })` like [Utf8.parse_str].
+	parse_bytes : Parser(Bytes, a), Bytes -> Try(a, [ParseError({ message : Str, offset : U64 })])
+	parse_bytes = |parser, input| {
+		parser.parse(input)
 	}
 
 	## Runs a parser against the start of UTF-8 bytes, allowing the parser to consume them only partially.
 	##
-	## Returns the parsed value and the remaining bytes, or `Err(ParsingFailure(msg))`.
-	parse_utf8_partial : Parser(Bytes, a), Bytes -> Try({ value : a, rest : Bytes }, [ParsingFailure(Str)])
-	parse_utf8_partial = |parser, input| {
+	## Returns the parsed `value` and the `rest` of the bytes, or
+	## `Err(ParseError({ message, offset }))`.
+	parse_bytes_partial : Parser(Bytes, a), Bytes -> Try({ value : a, rest : Bytes }, [ParseError({ message : Str, offset : U64 })])
+	parse_bytes_partial = |parser, input| {
 		parser.parse_partial(input)
 	}
 
@@ -107,7 +89,7 @@ Utf8 :: [].{
 
 				match start.get(0) {
 					Err(OutOfBounds) =>
-						Err(ParsingFailure("expected a codeunit satisfying a condition, but input was empty."))
+						Err(ParseError({ message: "expected a codeunit satisfying a condition, but input was empty.", offset: 0 }))
 
 					Ok(start_codeunit) => {
 						if check(start_codeunit) {
@@ -116,7 +98,7 @@ Utf8 :: [].{
 							other_char = str_from_codeunit(start_codeunit)
 							input_str = excerpt(input)
 
-							Err(ParsingFailure("expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`"))
+							Err(ParseError({ message: "expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`", offset: 0 }))
 						}
 					}
 				}
@@ -141,13 +123,13 @@ Utf8 :: [].{
 			|input| {
 				match input {
 					[] =>
-						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but input was empty."))
+						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but input was empty.", offset: 0 }))
 
 					[first, .. as rest] if first == expected_code_unit =>
 						Ok({ value: expected_code_unit, rest: rest })
 
 					[first, ..] =>
-						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`"))
+						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`", offset: 0 }))
 				}
 			},
 		)
@@ -169,7 +151,7 @@ Utf8 :: [].{
 					other_string = str_from_utf8_lossy(start)
 					input_string = excerpt(input)
 
-					Err(ParsingFailure("expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}"))
+					Err(ParseError({ message: "expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}", offset: 0 }))
 				}
 			},
 		)
@@ -223,7 +205,7 @@ Utf8 :: [].{
 	## ```roc
 	## expect {
 	##     bytes = "consumes all the input".to_utf8()
-	##     Utf8.any_thing.parse(bytes, List.is_empty) == Ok(bytes)
+	##     Utf8.any_thing.parse(bytes) == Ok(bytes)
 	## }
 	## ```
 	any_thing : Parser(Bytes, Bytes)
@@ -236,7 +218,7 @@ Utf8 :: [].{
 	## Any input parser consumes all bytes.
 	expect {
 		bytes = "consumes all the input".to_utf8()
-		actual = any_thing.parse(bytes, List.is_empty)?
+		actual = any_thing.parse(bytes)?
 		actual == bytes
 	}
 
@@ -249,7 +231,7 @@ Utf8 :: [].{
 					Ok({ value: string_val, rest: [] })
 
 				Err(BadUtf8(_)) =>
-					Err(ParsingFailure("Expected a string field, but its contents cannot be parsed as UTF8."))
+					Err(ParseError({ message: "Expected a string field, but its contents cannot be parsed as UTF8.", offset: 0 }))
 			}
 		},
 	)
@@ -266,13 +248,13 @@ Utf8 :: [].{
 			|input| {
 				match input {
 					[] =>
-						Err(ParsingFailure("Expected a digit from 0-9 but input was empty."))
+						Err(ParseError({ message: "Expected a digit from 0-9 but input was empty.", offset: 0 }))
 
 					[first, .. as rest] if first >= '0' and first <= '9' =>
 						Ok({ value: (first - '0').to_u64(), rest: rest })
 
 					_ =>
-						Err(ParsingFailure("Not a digit"))
+						Err(ParseError({ message: "Not a digit", offset: 0 }))
 				}
 			},
 		)
@@ -330,9 +312,9 @@ Utf8 :: [].{
 		Parser.build_primitive_parser(
 			|input| {
 				parsers.fold_until(
-					Err(ParsingFailure("(no possibilities)")),
+					Err(ParseError({ message: "(no possibilities)", offset: 0 })),
 					|_, parser| {
-						match parse_utf8_partial(parser, input) {
+						match parse_bytes_partial(parser, input) {
 							Ok(val) =>
 								Break(Ok(val))
 
@@ -401,7 +383,7 @@ excerpt = |bytes| {
 expect {
 	long = List.repeat('b', 1000)
 	match Parser.parse_partial(Utf8.codeunit('a'), long) {
-		Err(ParsingFailure(msg)) => msg.count_utf8_bytes() < 200
+		Err(ParseError({ message, offset: _ })) => message.count_utf8_bytes() < 200
 		Ok(_) => Bool.False
 	}
 }
@@ -428,13 +410,7 @@ expect {
 ## Any input parser consumes all bytes and returns them.
 expect {
 	bytes = "consumes all the input".to_utf8()
-	actual = Parser.parse(
-		Utf8.any_thing,
-		bytes,
-		|l| {
-			l.is_empty()
-		},
-	)?
+	actual = Parser.parse(Utf8.any_thing, bytes)?
 	actual == bytes
 }
 
@@ -559,13 +535,8 @@ expect {
 	actual.rest == "�"
 }
 
-## Complete string parsing reports, rather than crashes on, a mid-scalar leftover.
-expect {
-	match Utf8.parse_str(Utf8.any_codeunit, "ӿ") {
-		Err(ParsingIncomplete(leftover)) => leftover == "�"
-		_ => Bool.False
-	}
-}
+## Complete string parsing reports a leftover as unexpected input at its byte offset.
+expect Utf8.parse_str(Utf8.any_codeunit, "ӿ") == Err(ParseError({ message: "unexpected input", offset: 1 }))
 
 Requirement : [Green(U64), Red(U64), Blue(U64)]
 
@@ -601,7 +572,7 @@ parse_game = |s| {
 
 	match Utf8.parse_str(game, s) {
 		Ok(g) => Ok(g)
-		Err(ParsingFailure(_)) | Err(ParsingIncomplete(_)) => Err(ParsingError)
+		Err(ParseError(_)) => Err(ParsingError)
 	}
 }
 
@@ -688,7 +659,7 @@ even =
 expect Utf8.parse_str(even, "42") == Ok(42)
 
 ## Flattening turns an Err value into a parse failure with its message.
-expect Utf8.parse_str(even, "7") == Err(ParsingFailure("odd number"))
+expect Utf8.parse_str(even, "7") == Err(ParseError({ message: "odd number", offset: 0 }))
 
 ## Capturing up to a delimiter returns the bytes before it.
 expect {

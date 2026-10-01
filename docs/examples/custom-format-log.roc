@@ -64,7 +64,7 @@ entry =
 
 # tag::tests[]
 expect Utf8.parse_str(time, "09:05") == Ok({ hour: 9, minute: 5 })
-expect Utf8.parse_str(time, "24:00") == Err(ParsingFailure("no such time"))
+expect Utf8.parse_str(time, "24:00") == Err(ParseError({ message: "no such time", offset: 0 }))
 expect Utf8.parse_str(level, "WARN") == Ok(Warn)
 
 expect
@@ -88,8 +88,7 @@ parse_log = |text| {
 			Ok(e) => {
 				$entries = $entries.append(e)
 			}
-			Err(ParsingFailure(reason)) => return Err({ line: $number, reason })
-			Err(ParsingIncomplete(rest)) => return Err({ line: $number, reason: "unexpected `${rest}`" })
+			Err(ParseError({ message: reason, offset: _ })) => return Err({ line: $number, reason })
 		}
 	}
 	Ok($entries)

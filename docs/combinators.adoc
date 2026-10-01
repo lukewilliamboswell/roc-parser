@@ -27,17 +27,18 @@ every `expect` in them passes.
 |Function |Use it to
 
 |`Utf8.parse_str(p, str)`
-|Parse a whole `Str`. Returns `Ok(value)`, `Err(ParsingFailure(message))`, or
-`Err(ParsingIncomplete(rest))` when input is left over.
+|Parse a whole `Str`. Returns `Ok(value)` or `Err(ParseError({ message, offset }))`,
+where `offset` is the byte offset of the furthest failure. Input left over is
+a failure too.
 
-|`Utf8.parse_utf8(p, bytes)`
+|`Utf8.parse_bytes(p, bytes)`
 |The same for a `List(U8)`.
 
-|`Utf8.parse_str_partial(p, str)`, `Utf8.parse_utf8_partial(p, bytes)`
+|`Utf8.parse_str_partial(p, str)`, `Utf8.parse_bytes_partial(p, bytes)`
 |Parse the start of the input and return `{ value, rest }`, where `rest` is
 what is left. Use these to read one message from a stream that holds several.
 
-|`Parser.parse(p, input, is_done)`, `Parser.parse_partial(p, input)`
+|`Parser.parse(p, input)`, `Parser.parse_partial(p, input)`
 |Run a parser whose input is not text, such as the `CSV.CSVRecord` that
 record parsers read.
 |===
@@ -213,10 +214,10 @@ and leaves its input unread. The repetition itself succeeds:
 include::examples/combinators-behaviour.roc[tag=many-backtracks,indent=0]
 ----
 
-So when you parse a whole input with `Utf8.parse_str`, a bad element in the
-middle of a list shows up as `ParsingIncomplete` with the remaining text,
-rather than as the element's own failure message. <<errors>> shows how to
-turn that into a useful message.
+The failure of the element that stopped the repetition is kept, though. So
+when you parse a whole input with `Utf8.parse_str`, a bad element in the
+middle of a list is reported by its own failure message and offset.
+<<errors>> shows how to turn that into a useful message.
 
 == Recursive structures
 
@@ -264,4 +265,4 @@ module's record parsers read a `CSV.CSVRecord`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
 parser for your own input type, use `Parser.build_primitive_parser` with a
 function from input to `Ok({ value, rest })` or
-`Err(ParsingFailure(message))`.
+`Err(ParseError({ message, offset }))`.

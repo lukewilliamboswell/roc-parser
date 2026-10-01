@@ -36,23 +36,23 @@ test = |input| {
 	match msg.kind {
 		Req(_) => {
 			expected = HttpGen.expected_request(msg)
-			check_request(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes), expected, [])
-			check_request(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes.concat(next_message)), expected, next_message)
-			check_truncated(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes.drop_last(1)).is_ok())
+			check_request(bytes, Utf8.parse_bytes_partial(HTTP.request, bytes), expected, [])
+			check_request(bytes, Utf8.parse_bytes_partial(HTTP.request, bytes.concat(next_message)), expected, next_message)
+			check_truncated(bytes, Utf8.parse_bytes_partial(HTTP.request, bytes.drop_last(1)).is_ok())
 		}
 		Res(_) => {
 			expected = HttpGen.expected_response(msg)
-			check_response(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes), expected, [])
+			check_response(bytes, Utf8.parse_bytes_partial(HTTP.response, bytes), expected, [])
 			if HttpGen.self_delimiting(msg) {
-				check_response(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes.concat(next_message)), expected, next_message)
-				check_truncated(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes.drop_last(1)).is_ok())
+				check_response(bytes, Utf8.parse_bytes_partial(HTTP.response, bytes.concat(next_message)), expected, next_message)
+				check_truncated(bytes, Utf8.parse_bytes_partial(HTTP.response, bytes.drop_last(1)).is_ok())
 			}
 		}
 	}
 	Fuzz.keep
 }
 
-check_request : List(U8), Try({ value : HTTP.Request, rest : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Request, _), List(U8) -> {}
+check_request : List(U8), Try({ value : HTTP.Request, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), Try(HTTP.Request, _), List(U8) -> {}
 check_request = |bytes, actual, expected, rest| {
 	match (actual, expected) {
 		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}
@@ -60,7 +60,7 @@ check_request = |bytes, actual, expected, rest| {
 	}
 }
 
-check_response : List(U8), Try({ value : HTTP.Response, rest : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Response, _), List(U8) -> {}
+check_response : List(U8), Try({ value : HTTP.Response, rest : List(U8) }, [ParseError({ message : Str, offset : U64 })]), Try(HTTP.Response, _), List(U8) -> {}
 check_response = |bytes, actual, expected, rest| {
 	match (actual, expected) {
 		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}

@@ -134,13 +134,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 	## Parsing succeeds only when the record parser consumes every field.
 	parse_csv_record : Parser(CSVRecord, a), CSVRecord -> Try(a, [ParsingFailure(Str), ParsingIncomplete(CSVRecord)])
 	parse_csv_record = |csv_parser, record_fields_list| {
-		Parser.parse(
-			csv_parser,
-			record_fields_list,
-			|leftover| {
-				leftover == []
-			},
-		)
+		run_whole(csv_parser, record_fields_list)
 	}
 
 	## Start a record parser with a curried constructor for the desired value.
@@ -168,10 +162,10 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 			|fields_list| {
 				match fields_list.get(0) {
 					Err(OutOfBounds) =>
-						Err(ParsingFailure("expected another CSV field but there are no more fields in this record"))
+						Err(ParseError({ message: "expected another CSV field but there are no more fields in this record", offset: 0 }))
 
 					Ok(raw_str) => {
-						match Utf8.parse_utf8(field_parser, raw_str) {
+						match run_whole(field_parser, raw_str) {
 							Ok(val) => {
 								Ok({ value: val, rest: fields_list.drop_first(1) })
 							}
@@ -179,7 +173,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 							Err(ParsingFailure(reason)) => {
 								field_str = raw_str |> Utf8.str_from_utf8
 
-								Err(ParsingFailure("Field `${field_str}` could not be parsed. ${reason}"))
+								Err(ParseError({ message: "Field `${field_str}` could not be parsed. ${reason}", offset: 0 }))
 							}
 
 							Err(ParsingIncomplete(reason)) => {
@@ -189,7 +183,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 										.map(Utf8.str_from_utf8)
 										|> Str.join_with(", ")
 
-								Err(ParsingFailure("The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})"))
+								Err(ParseError({ message: "The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})", offset: 0 }))
 							}
 						}
 					}
@@ -255,13 +249,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 	## Use this to inspect rows of varying shape, or to decode later with `parse_csv`.
 	parse_str_to_csv : Str -> Try(CSV, [ParsingFailure(Str), ParsingIncomplete(Utf8.Bytes)])
 	parse_str_to_csv = |input| {
-		Parser.parse(
-			file,
-			input.to_utf8(),
-			|leftover| {
-				leftover == []
-			},
-		)
+		run_whole(file, input.to_utf8())
 	}
 
 	## Parse one CSV row into raw UTF-8 fields.
@@ -270,13 +258,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 	## `ParsingIncomplete`.
 	parse_str_to_csv_record : Str -> Try(CSVRecord, [ParsingFailure(Str), ParsingIncomplete(Utf8.Bytes)])
 	parse_str_to_csv_record = |input| {
-		Parser.parse(
-			csv_record,
-			input.to_utf8(),
-			|leftover| {
-				leftover == []
-			},
-		)
+		run_whole(csv_record, input.to_utf8())
 	}
 
 	## Parse a complete RFC 4180-style CSV file into raw records and fields.
@@ -297,7 +279,7 @@ csv_record = Parser.build_primitive_parser(
 	|bytes| {
 		match scan_record(bytes, 0) {
 			Ok({ fields, next }) => Ok({ value: fields, rest: bytes.drop_first(next) })
-			Err(BadField(at)) => Err(ParsingFailure(bad_field_message(bytes, at)))
+			Err(BadField(at)) => Err(ParseError({ message: bad_field_message(bytes, at), offset: at }))
 		}
 	},
 )
@@ -337,6 +319,16 @@ csv_records = Parser.build_primitive_parser(
 		}
 	},
 )
+
+# Run a parser on a whole input, reporting a failure by its message and a
+# successful parse that leaves input unconsumed by the leftover.
+run_whole : Parser(input, a), input -> Try(a, [ParsingFailure(Str), ParsingIncomplete(input)]) where [input.len : input -> U64]
+run_whole = |parser, input| {
+	match parser.parse_partial(input) {
+		Ok({ value, rest }) => if rest.len() == 0 Ok(value) else Err(ParsingIncomplete(rest))
+		Err(ParseError({ message, offset: _ })) => Err(ParsingFailure(message))
+	}
+}
 
 bad_field_message : Utf8.Bytes, U64 -> Str
 bad_field_message = |bytes, at| {
@@ -485,7 +477,7 @@ decimal_f64 = |text| {
 
 parses_u64 : Str, Try(U64, {}) -> Bool
 parses_u64 = |text, expected| {
-	actual = Utf8.parse_utf8(CSV.u64, text.to_utf8())
+	actual = Utf8.parse_bytes(CSV.u64, text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted
 		(Err(_), Err({})) => Bool.True
@@ -495,7 +487,7 @@ parses_u64 = |text, expected| {
 
 parses_f64 : Str, Try(F64, {}) -> Bool
 parses_f64 = |text, expected| {
-	actual = Utf8.parse_utf8(CSV.f64, text.to_utf8())
+	actual = Utf8.parse_bytes(CSV.f64, text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted or (value.is_nan() and wanted.is_nan())
 		(Err(_), Err({})) => Bool.True

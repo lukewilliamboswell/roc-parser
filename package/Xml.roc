@@ -126,7 +126,7 @@ Xml := {
 	## `parse_str`, which reports a structured `Error`.
 	##
 	## ```roc
-	## expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+	## expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
 	## ```
 	xml_parser : Parser(Utf8.Bytes, Xml)
 	xml_parser =
@@ -136,7 +136,7 @@ Xml := {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
 					Err(XmlFail(failure)) => {
 						error = locate(input, failure.offset, failure.message)
-						Err(ParsingFailure("${error.line.to_str()}:${error.column.to_str()}: ${error.message}"))
+						Err(ParseError({ message: "${error.line.to_str()}:${error.column.to_str()}: ${error.message}", offset: failure.offset }))
 					}
 				}
 			},
@@ -1050,7 +1050,7 @@ expect {
 }
 
 ## The parser combinator reports leftover input after the document.
-expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParseError({ message: "unexpected input", offset: 5 }))
 
 ## Duplicate attribute detection stays fast with many attributes.
 expect {

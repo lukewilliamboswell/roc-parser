@@ -1,5 +1,6 @@
 parsed 3 entries
-stopped before: `\nport=eighty`
-stopped before: `\n`
-failed: expected char `"` but found `e`.
+failed at byte 17: expected char `"` but found `e`.
+ While reading: `eighty`
+failed at byte 12: expected a codeunit satisfying a condition, but input was empty.
+failed at byte 5: expected char `"` but found `e`.
  While reading: `eighty`

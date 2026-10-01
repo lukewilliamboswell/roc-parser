@@ -374,8 +374,8 @@ test = |input| {
 		Ok(mutated) => {
 			accepted =
 				match mutated.kind {
-					Req(_) => Utf8.parse_utf8_partial(HTTP.request, mutated.bytes).map_ok(|r| Str.inspect(r))
-					Res(_) => Utf8.parse_utf8_partial(HTTP.response, mutated.bytes).map_ok(|r| Str.inspect(r))
+					Req(_) => Utf8.parse_bytes_partial(HTTP.request, mutated.bytes).map_ok(|r| Str.inspect(r))
+					Res(_) => Utf8.parse_bytes_partial(HTTP.response, mutated.bytes).map_ok(|r| Str.inspect(r))
 				}
 			match accepted {
 				Err(_) => Fuzz.keep

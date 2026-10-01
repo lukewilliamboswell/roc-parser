@@ -1901,7 +1901,7 @@ parse_inlines_with_refs = |refs, input| {
 ## Parse a link or image that starts at the beginning of `input`, returning the
 ## node and the unconsumed input. Used by the `Markdown.link`/`Markdown.image`
 ## parsers.
-parse_leading_link : Utf8.Bytes, Bool -> Try({ value : Markdown.Inline, rest : Utf8.Bytes }, [ParsingFailure(Str)])
+parse_leading_link : Utf8.Bytes, Bool -> Try({ value : Markdown.Inline, rest : Utf8.Bytes }, [ParseError({ message : Str, offset : U64 })])
 parse_leading_link = |input, image| {
 	opens =
 		if image {
@@ -1911,7 +1911,7 @@ parse_leading_link = |input, image| {
 		}
 
 	if !opens {
-		Err(ParsingFailure(if image "expected ![" else "expected ["))
+		Err(ParseError({ message: if image "expected ![" else "expected [", offset: 0 }))
 	} else {
 		match scan_inlines(input, [], Bool.True).stop {
 			Stopped({ node, end }) => {
@@ -1924,12 +1924,12 @@ parse_leading_link = |input, image| {
 				if matches_kind {
 					Ok({ value: node, rest: input.drop_first(end) })
 				} else {
-					Err(ParsingFailure("expected an inline link"))
+					Err(ParseError({ message: "expected an inline link", offset: 0 }))
 				}
 			}
 
 			_ =>
-				Err(ParsingFailure("expected an inline link"))
+				Err(ParseError({ message: "expected an inline link", offset: 0 }))
 			}
 	}
 }
@@ -4614,7 +4614,7 @@ chomp_until_code_block_end =
 chomp_to_code_block_end_help : { value : Utf8.Bytes, rest : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
 chomp_to_code_block_end_help = |{ value: val, rest: input }| {
 	match input {
-		[] => Err(ParsingFailure("expected ```, ran out of input"))
+		[] => Err(ParseError({ message: "expected ```, ran out of input", offset: 0 }))
 		['`', '`', '`', .. as rest] => Ok({ value: val, rest: rest })
 		[first, .. as rest] => chomp_to_code_block_end_help({ value: val.append(first), rest: rest })
 	}

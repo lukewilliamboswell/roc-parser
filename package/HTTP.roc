@@ -6,7 +6,7 @@ import Utf8
 ##
 ## Each parser consumes exactly one message and leaves any following bytes
 ## (a pipelined message) unconsumed, so `Utf8.parse_str` rejects trailing
-## data while `Utf8.parse_utf8_partial` returns it.
+## data while `Utf8.parse_bytes_partial` returns it.
 ##
 ## Message framing (RFC 9112 section 6.3):
 ## - `Transfer-Encoding: chunked` bodies are decoded; chunk extensions are
@@ -93,7 +93,7 @@ HTTP :: {}.{
 	request =
 		Parser.build_primitive_parser(
 			|input| {
-				parse_request(input).map_err(|message| ParsingFailure("invalid HTTP request: ${message}"))
+				parse_request(input).map_err(|message| ParseError({ message: "invalid HTTP request: ${message}", offset: 0 }))
 			},
 		)
 
@@ -107,7 +107,7 @@ HTTP :: {}.{
 	response =
 		Parser.build_primitive_parser(
 			|input| {
-				parse_response(input).map_err(|message| ParsingFailure("invalid HTTP response: ${message}"))
+				parse_response(input).map_err(|message| ParseError({ message: "invalid HTTP response: ${message}", offset: 0 }))
 			},
 		)
 }
@@ -567,7 +567,7 @@ is_tchar = |byte| {
 				or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
-parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
+parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParseError({ message : Str, offset : U64 })])
 parse = |parser, text| Utf8.parse_str(parser, text)
 
 ## HTTP version parsing captures the major and minor numbers.
@@ -651,7 +651,7 @@ expect {
 
 ## A request without framing fields has no body; what follows is the next message.
 expect {
-	actual = Utf8.parse_utf8_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
+	actual = Utf8.parse_bytes_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
 	actual.value.body == [] and actual.rest == "GET /2".to_utf8()
 }
 
@@ -669,7 +669,7 @@ expect parse(HTTP.response, "HTTP/1.1 65736 OK\r\n\r\n").is_err()
 expect parse(HTTP.response, "HTTP/1.1 204\r\n\r\n").map_ok(|r| r.status) == Ok("")
 
 ## Non-UTF-8 field values are rejected instead of crashing.
-expect Utf8.parse_utf8(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
+expect Utf8.parse_bytes(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
 
 ## Request-smuggling constructs are rejected.
 expect {

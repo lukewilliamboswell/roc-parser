@@ -7,4 +7,4 @@ status: 404 Not Found
 body: Not here.
 decoded body: Wikipedia 
 first: /a, second: /b, left over: 0 bytes
-rejected: invalid HTTP request: both Transfer-Encoding and Content-Length
+rejected at byte 0: invalid HTTP request: both Transfer-Encoding and Content-Length

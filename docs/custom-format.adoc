@@ -89,8 +89,8 @@ each line separately, rather than describing the whole file with `sep_by`.
 You get three benefits:
 
 * You know the line number of every failure.
-* The failure is the line's own error, not `ParsingIncomplete` from a
-  repetition that stopped early.
+* The failure is reported against the line, not as a byte offset into the
+  whole file.
 * Blank lines and a final line break are easy to allow.
 
 [source,roc]
@@ -134,6 +134,5 @@ split the input first. Describe the whole input with one parser instead:
   <<combinators>>.
 * Use `Utf8.parse_str_partial` to read one record at a time when you need
   to know where each record starts.
-* Expect a bad record in the middle to appear as `ParsingIncomplete`. The
-  length of the remaining input tells you how far parsing got, which
-  <<errors>> turns into a line and column.
+* Expect a bad record in the middle to be reported by its own failure,
+  with a byte `offset` that <<errors>> turns into a line and column.
