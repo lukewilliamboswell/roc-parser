@@ -1,21 +1,14 @@
 ## Generic [parser combinators](https://en.wikipedia.org/wiki/Parser_combinator)
 ## for transforming input into structured values.
 ##
-## Example:
-## Parse the following string from `input` into the structured `output` value:
-## ```roc
-## input = "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"
-## output =
-##     {
-##         id: 1,
-##         requirements: [
-##             [Blue(3), Red(4)],
-##             [Red(1), Green(2), Blue(6)],
-##             [Green(2)],
-##         ]
-##     }
-## ```
-## We could do this using the following:
+## A `Parser(input, a)` is a value that describes how to read an `a` from the
+## front of an `input`. Combine small parsers with `keep`, `skip`, `map`,
+## `one_of`, `many` and `sep_by` to build larger ones, then run the result with
+## `String.parse_str` (for `Str`) or `Parser.parse` (for any input type).
+##
+## This parser turns `"Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green"`
+## into `{ id: 1, requirements: [[Blue(3), Red(4)], [Red(1), Green(2), Blue(6)], [Green(2)]] }`
+## (the same code is a test in `String.roc`):
 ## ```roc
 ## Requirement : [Green(U64), Red(U64), Blue(U64)]
 ## RequirementSet : List(Requirement)
@@ -23,24 +16,23 @@
 ##
 ## parse_game : Str -> Try(Game, [ParsingError])
 ## parse_game = |s| {
-##     green = const(|x|Green(x)).keep(digits).skip(string(" green"))
-##     red = const(|x|Red(x)).keep(digits).skip(string(" red"))
-##     blue = const(|x|Blue(x)).keep(digits).skip(string(" blue"))
+##     green = Parser.const(|x| Green(x)).keep(String.digits).skip(String.string(" green"))
+##     red = Parser.const(|x| Red(x)).keep(String.digits).skip(String.string(" red"))
+##     blue = Parser.const(|x| Blue(x)).keep(String.digits).skip(String.string(" blue"))
 ##
 ##     requirement_set : Parser(_, RequirementSet)
-##     requirement_set = one_of([green, red, blue]).sep_by(string(", "))
+##     requirement_set = String.one_of([green, red, blue]).sep_by(String.string(", "))
 ##
 ##     requirements : Parser(_, List(RequirementSet))
-##     requirements = requirement_set.sep_by(string("; "))
+##     requirements = requirement_set.sep_by(String.string("; "))
 ##
 ##     game : Parser(_, Game)
-##     game = {
-##         const(|id| |r| { id, requirements: r })
-##         .skip(string("Game "))
-##         .keep(digits)
-##         .skip(string(": "))
-##         .keep(requirements)
-##     }
+##     game =
+##         Parser.const(|id| |r| { id, requirements: r })
+##             .skip(String.string("Game "))
+##             .keep(String.digits)
+##             .skip(String.string(": "))
+##             .keep(requirements)
 ##
 ##     match String.parse_str(game, s) {
 ##         Ok(g) => Ok(g)
@@ -48,6 +40,9 @@
 ##     }
 ## }
 ## ```
+##
+## Alternatives backtrack: when one alternative of `alt` or `one_of` fails, the
+## next one is tried on the original input, however much the failed one read.
 ##
 ## Opaque type for a parser that will try to parse an `a` from an `input`.
 ##
@@ -64,6 +59,9 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	ParseResult(input, a) : Try({ val : a, input : input }, [ParsingFailure(Str)])
 
 	## Write a custom parser without using the provided combinators.
+	##
+	## The function receives the remaining input and returns either the parsed
+	## value with the input it did not consume, or `Err(ParsingFailure(msg))`.
 	build_primitive_parser : (input -> ParseResult(input, a)) -> Parser(input, a)
 	build_primitive_parser = |fun| {
 		{ fun }
@@ -85,13 +83,15 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 		fun(input)
 	}
 
-	## Runs a parser on the given input, expecting it to fully consume the input
+	## Run a parser on the given input, expecting it to consume all of it.
 	##
 	## The `input -> Bool` parameter is used to check whether parsing has 'completed',
 	## i.e. how to determine if all of the input has been consumed.
 	##
 	## For most input types, a parsing run that leaves some unparsed input behind
-	## should be considered an error.
+	## should be considered an error, so leftover input is reported as
+	## `Err(ParsingIncomplete(leftover))`. For `Str` input use `String.parse_str`,
+	## which supplies the completion check for you.
 	parse : Parser(input, a), input, (input -> Bool) -> Try(a, [ParsingFailure(Str), ParsingIncomplete(input)])
 	parse = |parser, input, is_parsing_completed| {
 		match parser.parse_partial(input) {
@@ -123,14 +123,12 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Parser that will always produce the given `a`, without looking at the actual input.
-	## This is useful as a basic building block, especially in combination with
-	## `map` and `apply`.
+	##
+	## This is the usual start of a pipeline: `const` supplies a (curried)
+	## constructor function and each `keep` feeds it one parsed value.
 	## ```roc
-	## parse_u32 : Parser(List(U8), U32)
-	## parse_u32 = {
-	##     const(U64.to_u32_wrap)  # TODO: U64.to_u32_try would be better?
-	##     .keep(String.digits)
-	## }
+	## parse_u32 : Parser(String.Utf8, U32)
+	## parse_u32 = Parser.const(U64.to_u32_wrap).keep(String.digits)
 	##
 	## expect String.parse_str(parse_u32, "123") == Ok(123.U32)
 	## ```
@@ -144,6 +142,9 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Try the `first` parser and (only) if it fails, try the `second` parser as fallback.
+	##
+	## The `second` parser starts from the same input as `first` (backtracking).
+	## If both fail, the failure message joins both messages with `or`.
 	alt : Parser(input, a), Parser(input, a) -> Parser(input, a)
 	alt = |first, second| {
 		build_primitive_parser(
@@ -171,13 +172,12 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	##
 	## For instance, the following two are the same:
 	## ```roc
-	## const(|x| |y| |z| Triple(x, y, z))
-	## .map3(String.digits, String.digits, String.digits)
+	## Parser.map3(String.digits, String.digits, String.digits, |x, y, z| Triple(x, y, z))
 	##
-	## const(|x| |y| |z| Triple(x, y, z))
-	## .apply(String.digits)
-	## .apply(String.digits)
-	## .apply(String.digits)
+	## Parser.const(|x| |y| |z| Triple(x, y, z))
+	##     .apply(String.digits)
+	##     .apply(String.digits)
+	##     .apply(String.digits)
 	## ```
 	## Indeed, this is how `map`, `map2`, `map3` etc. are implemented under the hood.
 	##
@@ -201,17 +201,17 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Try a list of parsers in turn, until one of them succeeds.
+	##
+	## Each parser starts from the same input. An empty list always fails.
+	## For UTF-8 input, `String.one_of` behaves the same way.
 	## ```roc
-	## color : Parser(Utf8, [Red, Green, Blue])
-	## color = {
-	##     one_of(
-	##         [
-	##             const(Red).skip(string("red")),
-	##             const(Green).skip(string("green")),
-	##             const(Blue).skip(string("blue")),
-	##         ],
-	##     )
-	## }
+	## color : Parser(String.Utf8, [Red, Green, Blue])
+	## color =
+	##     String.one_of([
+	##         Parser.const(Red).skip(String.string("red")),
+	##         Parser.const(Green).skip(String.string("green")),
+	##         Parser.const(Blue).skip(String.string("blue")),
+	##     ])
 	##
 	## expect String.parse_str(color, "green") == Ok(Green)
 	## ```
@@ -269,24 +269,20 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 			.apply(parser_c)
 	}
 
-	## Removes a layer of `Result` from running the parser.
+	## Removes a layer of `Try` from running the parser.
 	##
-	## Use this to map functions that return a result over the parser,
-	## where errors are turned into `ParsingFailure`s.
+	## Use this to map functions that return a `Try` over the parser:
+	## an `Err(msg)` value becomes `Err(ParsingFailure(msg))`.
 	##
 	## ```roc
-	## # Parse a number from a List(U8)
-	## u64 : Parser(Utf8, U64)
-	## u64 =
-	##     string
-	##     .map(
-	##         |val|
-	##             match U64.from_str(val) {
-	##                 Ok(num) => Ok(num)
-	##                 Err(_) => Err("${val} is not a U64."),
-	##             }
-	##     )
-	##     .flatten()
+	## even : Parser(String.Utf8, U64)
+	## even =
+	##     String.digits
+	##         .map(|n| if n % 2 == 0 { Ok(n) } else { Err("odd number") })
+	##         .flatten()
+	##
+	## expect String.parse_str(even, "42") == Ok(42)
+	## expect String.parse_str(even, "7") == Err(ParsingFailure("odd number"))
 	## ```
 	flatten : Parser(input, Try(a, Str)) -> Parser(input, a)
 	flatten = |parser| {
@@ -303,10 +299,10 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 		)
 	}
 
-	## Runs a parser lazily
+	## Runs a parser lazily.
 	##
 	## This is (only) useful when dealing with a recursive structure.
-	## For instance, consider a type `Comment : { message: String, responses: List(Comment) }`.
+	## For instance, consider a type `Comment : { message : Str, responses : List(Comment) }`.
 	## Without `lazy`, you would ask the compiler to build an infinitely deep parser.
 	## (Resulting in a compiler error.)
 	##
@@ -318,8 +314,10 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 			|> and_then(thunk)
 	}
 
-	## A parser that tries to apply the given parser and returns
-	## Err(Nothing) if that parser fails.
+	## Make a parser optional.
+	##
+	## Returns `Ok(value)` when the given parser succeeds, and `Err(Nothing)`
+	## without consuming input when it fails, so the result never fails.
 	maybe : Parser(input, a) -> Parser(input, Try(a, [Nothing]))
 	maybe = |parser| {
 		parser
@@ -350,7 +348,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## A parser which runs the element parser *one* or more times on the input,
 	## returning a list containing all the parsed elements.
 	##
-	## Also see [Parser.many].
+	## Fails when the first element fails. Also see [Parser.many].
 	one_or_more : Parser(input, a) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	one_or_more = |parser| {
 		const(
@@ -370,7 +368,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## Useful to recognize structures surrounded by delimiters (like braces, parentheses, quotes, etc.)
 	##
 	## ```roc
-	## between_braces = |parser| parser.between(scalar('['), scalar(']'))
+	## between_brackets = |parser| parser.between(String.codeunit('['), String.codeunit(']'))
 	## ```
 	between : Parser(input, a), Parser(input, open), Parser(input, close) -> Parser(input, a)
 	between = |parser, open, close| {
@@ -390,6 +388,8 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## Parse one or more values separated by `separator`.
 	## The separators are consumed and omitted from the result.
+	##
+	## A trailing separator that is not followed by a value is left unconsumed.
 	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.is_eq : input, input -> Bool]
 	sep_by1 = |parser, separator| {
 		parser_followed_by_sep =
@@ -418,8 +418,8 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## The separators are consumed and omitted from the result.
 	##
 	## ```roc
-	## parse_numbers : Parser(List(U8), List(U64))
-	## parse_numbers = digits.sep_by(codeunit(','))
+	## parse_numbers : Parser(String.Utf8, List(U64))
+	## parse_numbers = String.digits.sep_by(String.codeunit(','))
 	##
 	## expect String.parse_str(parse_numbers, "1,2,3") == Ok([1, 2, 3])
 	## ```
@@ -431,6 +431,8 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Discard a parser's value while preserving how much input it consumes.
+	##
+	## Useful with `many` to skip a repeated token without collecting values.
 	ignore : Parser(input, a) -> Parser(input, {})
 	ignore = |parser| {
 		parser.map(
@@ -442,6 +444,9 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## Run a parser producing a function, then a parser producing its argument,
 	## and return the function result.
+	##
+	## This is `apply` for pipelines: start with `const(|a| |b| ...)` and add
+	## one `keep` per argument, as in the module example.
 	keep : Parser(input, (a -> b)), Parser(input, a) -> Parser(input, b)
 	keep = |fun_parser, val_parser| {
 		build_primitive_parser(
@@ -462,6 +467,14 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Run two parsers in sequence, discarding the second parser's value.
+	##
+	## Both parsers must succeed, and the input read by the second is consumed.
+	## ```roc
+	## at_sign : Parser(String.Utf8, [AtSign])
+	## at_sign = Parser.const(AtSign).skip(String.codeunit('@'))
+	##
+	## expect String.parse_str(at_sign, "@") == Ok(AtSign)
+	## ```
 	skip : Parser(input, a), Parser(input, _) -> Parser(input, a)
 	skip = |fun_parser, skip_parser| {
 		build_primitive_parser(
@@ -480,17 +493,18 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	}
 
 	## Match zero or more codeunits until it reaches the given codeunit.
-	## The given codeunit is not included in the match.
+	## The given codeunit is not included in the match and is not consumed.
+	## Fails if the codeunit never appears in the remaining input.
 	##
 	## This can be used with [Parser.skip] to ignore text.
 	##
 	## ```roc
-	## ignore_text : Parser(List(U8), U64)
+	## ignore_text : Parser(String.Utf8, U64)
 	## ignore_text =
-	##     const(|d| d)
-	##     .skip(chomp_until(':'))
-	##     .skip(codeunit(':'))
-	##     .keep(digits)
+	##     Parser.const(|d| d)
+	##         .skip(Parser.chomp_until(':'))
+	##         .skip(String.codeunit(':'))
+	##         .keep(String.digits)
 	##
 	## expect String.parse_str(ignore_text, "ignore preceding text:123") == Ok(123)
 	## ```
@@ -498,11 +512,11 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 	##
 	## ```roc
-	## capture_text : Parser(List(U8), List(U8))
+	## capture_text : Parser(String.Utf8, List(U8))
 	## capture_text =
-	##     const(|codeunits| codeunits)
-	##     .keep(chomp_until(':'))
-	##     .skip(codeunit(':'))
+	##     Parser.const(|codeunits| codeunits)
+	##         .keep(Parser.chomp_until(':'))
+	##         .skip(String.codeunit(':'))
 	##
 	## expect String.parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
 	## ```
@@ -531,29 +545,29 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## Match zero or more codeunits until the check returns false.
 	## The codeunit that returned false is not included in the match.
-	## Note: a `chomp_while` parser always succeeds!
+	## Note: a `chomp_while` parser always succeeds, possibly consuming nothing.
 	##
 	## This can be used with [Parser.skip] to ignore text.
 	## This is useful for chomping whitespace or variable names.
 	##
-	## ```
-	## ignore_numbers : Parser(List(U8), Str)
+	## ```roc
+	## ignore_numbers : Parser(String.Utf8, Str)
 	## ignore_numbers =
-	##     const(|str| str)
-	##     .skip(chomp_while(|b| b >= '0' && b <= '9'))
-	##     .keep(string("TEXT"))
+	##     Parser.const(|str| str)
+	##         .skip(Parser.chomp_while(|b| b >= '0' and b <= '9'))
+	##         .keep(String.string("TEXT"))
 	##
 	## expect String.parse_str(ignore_numbers, "0123456789876543210TEXT") == Ok("TEXT")
 	## ```
 	##
 	## This can be used with [Parser.keep] to capture a list of `U8` codeunits.
 	##
-	## ```
-	## capture_numbers : Parser(List(U8), List(U8))
+	## ```roc
+	## capture_numbers : Parser(String.Utf8, List(U8))
 	## capture_numbers =
-	##     const(|codeunits| codeunits)
-	##     .keep(chomp_while(|b| b >= '0' && b <= '9'))
-	##     .skip(string("TEXT"))
+	##     Parser.const(|codeunits| codeunits)
+	##         .keep(Parser.chomp_while(|b| b >= '0' and b <= '9'))
+	##         .skip(String.string("TEXT"))
 	##
 	## expect String.parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
 	## ```
@@ -625,7 +639,7 @@ many_impl = |parser, vals, input| {
 			} else {
 				many_impl(parser, vals.append(val), input_rest)
 			}
-		}
+	}
 }
 
 ## Chomping until a newline returns the preceding bytes and leaves the newline.

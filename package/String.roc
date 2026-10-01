@@ -1,26 +1,32 @@
 import Parser
 
 ## Parsers and helpers specialized to UTF-8 byte lists and Roc `Str` values.
+##
+## Use these with the combinators in [Parser] whenever the input is text.
+## Parsers work on bytes (`Utf8`), so `codeunit` and `digit` match single
+## bytes, and `parse_str` converts a `Str` to bytes and back for you.
 String :: {}.{
 
 	## UTF-8 input represented as a list of bytes.
 	Utf8 : List(U8)
 
-	## Parse a `Str` using a [Parser].
+	## Parse a whole `Str` using a [Parser].
+	##
+	## Fails with `ParsingFailure(msg)` when the parser fails, and with
+	## `ParsingIncomplete(leftover)` when it succeeds without consuming the whole
+	## string. A leftover that starts inside a multi-byte character is rendered
+	## with U+FFFD replacement characters rather than crashing.
 	##
 	## ```roc
-	## color : Parser(Utf8, [Red, Green, Blue])
-	## color = {
-	##     one_of(
-	##         [
-	##             Parser.const(Red).skip(string("red")),
-	##             Parser.const(Green).skip(string("green")),
-	##             Parser.const(Blue).skip(string("blue")),
-	##         ]
-	##     )
-	## }
+	## color : Parser(String.Utf8, [Red, Green, Blue])
+	## color =
+	##     String.one_of([
+	##         Parser.const(Red).skip(String.string("red")),
+	##         Parser.const(Green).skip(String.string("green")),
+	##         Parser.const(Blue).skip(String.string("blue")),
+	##     ])
 	##
-	## expect parse_str(color, "green") == Ok(Green)
+	## expect String.parse_str(color, "green") == Ok(Green)
 	## ```
 	parse_str : Parser(Utf8, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
 	parse_str = |parser, input| {
@@ -39,15 +45,14 @@ String :: {}.{
 	## Runs a parser against the start of a string, allowing the parser to consume it only partially.
 	##
 	## - If the parser succeeds, returns the resulting value as well as the leftover input.
-	## - If the parser fails, returns `Err (ParsingFailure msg)`
+	## - If the parser fails, returns `Err(ParsingFailure(msg))`
 	##
 	## ```roc
-	## at_sign : Parser(Utf8, [AtSign])
-	## at_sign = Parser.const(AtSign).skip(codeunit('@'))
+	## at_sign : Parser(String.Utf8, [AtSign])
+	## at_sign = Parser.const(AtSign).skip(String.codeunit('@'))
 	##
-	## expect parse_str(at_sign, "@") == Ok(AtSign)
-	## expect at_sign->parse_str_partial("@").map_ok(|r| { r.val }) == Ok(AtSign)
-	## expect at_sign->parse_str_partial("$").is_err()
+	## expect String.parse_str_partial(at_sign, "@").map_ok(|r| r.val) == Ok(AtSign)
+	## expect String.parse_str_partial(at_sign, "$").is_err()
 	## ```
 	parse_str_partial : Parser(Utf8, a), Str -> Try({ val : a, input : Str }, [ParsingFailure(Str)])
 	parse_str_partial = |parser, input| {
@@ -60,12 +65,11 @@ String :: {}.{
 			)
 	}
 
-	## Runs a parser against a string, requiring the parser to consume it fully.
+	## Runs a parser against UTF-8 bytes, requiring the parser to consume them fully.
 	##
-	## - If the parser succeeds, returns `Ok a`
-	## - If the parser fails, returns `Err (ParsingFailure Str)`
-	## - If the parser succeeds but does not consume the full string, returns `Err (ParsingIncomplete (List U8))`
-	##
+	## - If the parser succeeds, returns `Ok(a)`
+	## - If the parser fails, returns `Err(ParsingFailure(msg))`
+	## - If the parser succeeds but does not consume all the bytes, returns `Err(ParsingIncomplete(leftover))`
 	parse_utf8 : Parser(Utf8, a), Utf8 -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Utf8)])
 	parse_utf8 = |parser, input| {
 		parser.parse(
@@ -76,7 +80,9 @@ String :: {}.{
 		)
 	}
 
-	## Runs a parser against the start of a list of scalars, allowing the parser to consume it only partially.
+	## Runs a parser against the start of UTF-8 bytes, allowing the parser to consume them only partially.
+	##
+	## Returns the parsed value and the remaining bytes, or `Err(ParsingFailure(msg))`.
 	parse_utf8_partial : Parser(Utf8, a), Utf8 -> Try({ val : a, input : Utf8 }, [ParsingFailure(Str)])
 	parse_utf8_partial = |parser, input| {
 		parser.parse_partial(input)
@@ -84,12 +90,14 @@ String :: {}.{
 
 	## Match one UTF-8 code unit when it satisfies the given predicate.
 	##
+	## Fails on empty input or when the predicate returns `Bool.False`.
+	##
 	## ```roc
 	## is_digit : U8 -> Bool
-	## is_digit = |b| { b >= '0' and b <= '9' }
+	## is_digit = |b| b >= '0' and b <= '9'
 	##
-	## expect codeunit_satisfies->parse_str(is_digit, "0") == Ok('0')
-	## expect codeunit_satisfies->parse_str(is_digit, "*").is_err()
+	## expect String.parse_str(String.codeunit_satisfies(is_digit), "0") == Ok('0')
+	## expect String.parse_str(String.codeunit_satisfies(is_digit), "*").is_err()
 	## ```
 	codeunit_satisfies : (U8 -> Bool) -> Parser(Utf8, U8)
 	codeunit_satisfies = |check| {
@@ -118,12 +126,14 @@ String :: {}.{
 
 	## Match one exact UTF-8 code unit.
 	##
-	## ```roc
-	## at_sign : Parser(Utf8, [AtSign])
-	## at_sign = Parser.const(AtSign).skip(codeunit('@'))
+	## For a character outside ASCII, which is several code units, use `string`.
 	##
-	## expect at_sign->parse_str("@") == Ok(AtSign)
-	## expect at_sign->parse_str_partial("$").is_err()
+	## ```roc
+	## at_sign : Parser(String.Utf8, [AtSign])
+	## at_sign = Parser.const(AtSign).skip(String.codeunit('@'))
+	##
+	## expect String.parse_str(at_sign, "@") == Ok(AtSign)
+	## expect String.parse_str_partial(at_sign, "$").is_err()
 	## ```
 	codeunit : U8 -> Parser(Utf8, U8)
 	codeunit = |expected_code_unit| {
@@ -138,12 +148,12 @@ String :: {}.{
 
 					[first, ..] =>
 						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`"))
-					}
+				}
 			},
 		)
 	}
 
-	## Parse an exact sequence of utf8
+	## Match an exact sequence of UTF-8 bytes and return them.
 	utf8 : List(U8) -> Parser(Utf8, List(U8))
 	utf8 = |expected_string| {
 		# Implemented manually instead of a sequence of codeunits
@@ -165,10 +175,11 @@ String :: {}.{
 		)
 	}
 
-	## Parse the given `Str`
+	## Match the given `Str` exactly (case-sensitive) and return it.
+	##
 	## ```roc
-	## expect string("Foo")->parse_str("Foo") == Ok("Foo")
-	## expect string("Foo")->parse_str("Bar").is_err()
+	## expect String.parse_str(String.string("Foo"), "Foo") == Ok("Foo")
+	## expect String.parse_str(String.string("Foo"), "Bar").is_err()
 	## ```
 	string : Str -> Parser(Utf8, Str)
 	string = |expected_string| {
@@ -182,10 +193,11 @@ String :: {}.{
 			)
 	}
 
-	## Matches any `U8` codeunit
+	## Match any single `U8` code unit; fails only on empty input.
+	##
 	## ```roc
-	## expect parse_str(any_codeunit, "a") == Ok('a')
-	## expect parse_str(any_codeunit, "$") == Ok('$')
+	## expect String.parse_str(String.any_codeunit, "a") == Ok('a')
+	## expect String.parse_str(String.any_codeunit, "$") == Ok('$')
 	## ```
 	any_codeunit : Parser(Utf8, U8)
 	any_codeunit = codeunit_satisfies(
@@ -206,11 +218,12 @@ String :: {}.{
 		actual == 36
 	}
 
-	## Matches any `Utf8` and consumes all the input without fail.
+	## Consume all remaining input and return it as bytes; never fails.
+	##
 	## ```roc
 	## expect {
 	##     bytes = "consumes all the input".to_utf8()
-	##     any_thing.parse(bytes, List.is_empty) == Ok(bytes)
+	##     String.any_thing.parse(bytes, List.is_empty) == Ok(bytes)
 	## }
 	## ```
 	any_thing : Parser(Utf8, Utf8)
@@ -237,15 +250,15 @@ String :: {}.{
 
 				Err(BadUtf8(_)) =>
 					Err(ParsingFailure("Expected a string field, but its contents cannot be parsed as UTF8."))
-				}
+			}
 		},
 	)
 
 	## Parse one ASCII decimal digit into a `U64` from 0 through 9.
 	##
 	## ```roc
-	## expect digit->parse_str("0") == Ok(0)
-	## expect digit->parse_str("not a digit").is_err()
+	## expect String.parse_str(String.digit, "0") == Ok(0)
+	## expect String.parse_str(String.digit, "not a digit").is_err()
 	## ```
 	digit : Parser(Utf8, U64)
 	digit =
@@ -260,14 +273,18 @@ String :: {}.{
 
 					_ =>
 						Err(ParsingFailure("Not a digit"))
-					}
+				}
 			},
 		)
 
-	## Parse a sequence of digits into a `U64`, accepting leading zeroes
+	## Parse one or more ASCII decimal digits into a `U64`, accepting leading zeroes.
+	##
+	## Fails when the input does not start with a digit or the value does not fit
+	## in a `U64`. Signs and decimal points are not accepted.
+	##
 	## ```roc
-	## expect digits->parse_str("0123") == Ok(123)
-	## expect digits->parse_str("not a digit").is_err()
+	## expect String.parse_str(String.digits, "0123") == Ok(123)
+	## expect String.parse_str(String.digits, "not a digit").is_err()
 	## ```
 	digits : Parser(Utf8, U64)
 	digits =
@@ -296,16 +313,17 @@ String :: {}.{
 	##
 	## The first parser which is tried is the one at the front of the list,
 	## and the next one is tried until one succeeds or the end of the list was reached.
-	## ```roc
-	## bool_parser : Parser(Utf8, Bool)
-	## bool_parser = {
-	##     one_of([string("true"), string("false")])
-	##     .map(|x| { x == "true" })
-	## }
+	## Each alternative starts from the same input; an empty list always fails.
 	##
-	## expect bool_parser->parse_str("true") == Ok(Bool.True)
-	## expect bool_parser->parse_str("false") == Ok(Bool.False)
-	## expect bool_parser->parse_str("not a bool").is_err()
+	## ```roc
+	## bool_parser : Parser(String.Utf8, Bool)
+	## bool_parser =
+	##     String.one_of([String.string("true"), String.string("false")])
+	##         .map(|x| x == "true")
+	##
+	## expect String.parse_str(bool_parser, "true") == Ok(Bool.True)
+	## expect String.parse_str(bool_parser, "false") == Ok(Bool.False)
+	## expect String.parse_str(bool_parser, "not a bool").is_err()
 	## ```
 	one_of : List(Parser(Utf8, a)) -> Parser(Utf8, a)
 	one_of = |parsers| {
@@ -320,7 +338,7 @@ String :: {}.{
 
 							Err(problem) =>
 								Continue(Err(problem))
-							}
+						}
 					},
 				)
 			},
@@ -651,3 +669,50 @@ expect {
 
 ## Boolean parser rejects other text.
 expect String.parse_str(bool_parser, "not a bool").is_err()
+
+even : Parser(String.Utf8, U64)
+even =
+	String.digits
+		.map(
+			|n| {
+				if n % 2 == 0 {
+					Ok(n)
+				} else {
+					Err("odd number")
+				}
+			},
+		)
+		.flatten()
+
+## Flattening keeps an Ok value from the mapped function.
+expect String.parse_str(even, "42") == Ok(42)
+
+## Flattening turns an Err value into a parse failure with its message.
+expect String.parse_str(even, "7") == Err(ParsingFailure("odd number"))
+
+## Capturing up to a delimiter returns the bytes before it.
+expect {
+	capture_text = Parser.const(|codeunits| codeunits).keep(Parser.chomp_until(':')).skip(String.codeunit(':'))
+	String.parse_str(capture_text, "Roc:") == Ok(['R', 'o', 'c'])
+}
+
+## Capturing while a predicate holds returns the matching bytes.
+expect {
+	capture_numbers =
+		Parser.const(|codeunits| codeunits)
+			.keep(Parser.chomp_while(|b| b >= '0' and b <= '9'))
+			.skip(String.string("TEXT"))
+	String.parse_str(capture_numbers, "123TEXT") == Ok(['1', '2', '3'])
+}
+
+## Mapping three parsers matches applying a curried constructor three times.
+expect {
+	space = String.codeunit(' ')
+	mapped = Parser.map3(String.digits.skip(space), String.digits.skip(space), String.digits, |x, y, z| Triple(x, y, z))
+	applied =
+		Parser.const(|x| |y| |z| Triple(x, y, z))
+			.apply(String.digits.skip(space))
+			.apply(String.digits.skip(space))
+			.apply(String.digits)
+	String.parse_str(mapped, "1 2 3") == Ok(Triple(1, 2, 3)) and String.parse_str(applied, "1 2 3") == Ok(Triple(1, 2, 3))
+}

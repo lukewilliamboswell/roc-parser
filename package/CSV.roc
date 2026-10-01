@@ -21,6 +21,16 @@ import String
 ##   removed; it is part of the first field.
 ##
 ## The first row is treated as data rather than as headings.
+##
+## Decode typed values by building a record parser with `record`, `field` and
+## `Parser.keep`, then running it with `parse_str`:
+##
+## ```roc
+## user : Parser(CSV.CSVRecord, { name : Str, age : U64 })
+## user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
+##
+## expect CSV.parse_str(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+## ```
 CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Compare two decoded CSV values structurally.
@@ -33,6 +43,11 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	CSVField : String.Utf8
 
 	## Parse CSV text and decode every record with the supplied record parser.
+	##
+	## Returns `SyntaxError(rest)` when the text is not valid CSV (for example an
+	## unterminated quoted field), `ParsingFailure(msg)` naming the record number
+	## when a record does not decode, and `ParsingIncomplete(fields)` when the
+	## record parser leaves fields unused.
 	parse_str : Parser(CSVRecord, a), Str -> Try(List(a), [ParsingFailure(Str), SyntaxError(Str), ParsingIncomplete(CSVRecord)])
 	parse_str = |csv_parser, input| {
 		match parse_str_to_csv(input) {
@@ -65,6 +80,9 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	}
 
 	## Decode every record in an already parsed `CSV` value.
+	##
+	## Stops at the first record that fails; the failure message includes the
+	## 1-based record number and the record's fields.
 	parse_csv : Parser(CSVRecord, a), CSV -> Try(List(a), [ParsingFailure(Str), ParsingIncomplete(CSVRecord)])
 	parse_csv = |csv_parser, { records: csv_data }| {
 		csv_data
@@ -127,11 +145,13 @@ CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Start a record parser with a curried constructor for the desired value.
 	##
+	## Add one `.keep(CSV.field(...))` per column, in column order:
+	##
 	## ```roc
-	## record(|first_name| |last_name| |age| User({ first_name, last_name, age }))
-	## .field(string)
-	## .field(string)
-	## .field(u64)
+	## CSV.record(|first_name| |last_name| |age| User({ first_name, last_name, age }))
+	##     .keep(CSV.field(CSV.string))
+	##     .keep(CSV.field(CSV.string))
+	##     .keep(CSV.field(CSV.u64))
 	## ```
 	record : a -> Parser(CSVRecord, a)
 	record = |f| {
@@ -139,6 +159,9 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	}
 
 	## Consume the next field of a `CSVRecord` using a UTF-8 field parser.
+	##
+	## The field parser must consume the whole field. Fails when the record has
+	## no fields left.
 	field : Parser(String.Utf8, a) -> Parser(CSVRecord, a)
 	field = |field_parser| {
 		Parser.build_primitive_parser(
@@ -175,7 +198,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 		)
 	}
 
-	## Parse one CSV field as a valid UTF-8 string.
+	## Parse one CSV field as a valid UTF-8 string, kept verbatim (no trimming).
 	string : Parser(CSVField, Str)
 	string = String.any_string
 
@@ -227,7 +250,9 @@ CSV :: { records : List(List(String.Utf8)) }.{
 			)
 			.flatten()
 
-	## Parse CSV text into raw records and UTF-8 fields.
+	## Parse CSV text into raw records and UTF-8 fields without decoding them.
+	##
+	## Use this to inspect rows of varying shape, or to decode later with `parse_csv`.
 	parse_str_to_csv : Str -> Try(CSV, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
 	parse_str_to_csv = |input| {
 		Parser.parse(
@@ -240,6 +265,9 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	}
 
 	## Parse one CSV row into raw UTF-8 fields.
+	##
+	## A line break after the row is not consumed, so it is reported as
+	## `ParsingIncomplete`.
 	parse_str_to_csv_record : Str -> Try(CSVRecord, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
 	parse_str_to_csv_record = |input| {
 		Parser.parse(
@@ -252,6 +280,8 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	}
 
 	## Parse a complete RFC 4180-style CSV file into raw records and fields.
+	##
+	## This is the parser behind `parse_str_to_csv`, for use inside larger parsers.
 	file : Parser(String.Utf8, CSV)
 	file =
 		csv_records
@@ -530,4 +560,11 @@ expect {
 		Err(ParsingIncomplete(rest)) => rest == ['\n']
 		_ => Bool.False
 	}
+}
+
+## Typed decoding runs a record parser over every row, as in the module docs.
+expect {
+	user : Parser(CSV.CSVRecord, { name : Str, age : U64 })
+	user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
+	CSV.parse_str(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 }
