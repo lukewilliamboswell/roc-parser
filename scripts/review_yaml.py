@@ -538,6 +538,9 @@ def main(argv=None) -> int:
             operation.add_argument("output", type=Path)
             operation.add_argument("--max-checks", type=int, default=200)
     args = parser.parse_args(argv)
+    # The nesting-limit cases are hundreds of levels deep, and canonicalising
+    # them recurses once per level; older Pythons default to 1000 frames.
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
     args.parser_root = args.parser_root.expanduser().resolve()
     args.output_dir = args.output_dir.expanduser().resolve()
     args.roc = str(Path(args.roc).expanduser().resolve()) if "/" in args.roc else args.roc
