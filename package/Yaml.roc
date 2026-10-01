@@ -969,10 +969,37 @@ drop_byte_order_mark = |bytes| {
 	}
 }
 
+## Bytes that may start an unprintable character: C0 controls other than
+## tab and line breaks, DEL, and the lead bytes of C1 controls and U+FFFE/F.
+maybe_unprintable : Utf8.ByteClass
+maybe_unprintable = Utf8.ByteClass.from_predicate(|b| (b < 0x20 and b != '\t' and b != '\n' and b != '\r') or b == 0x7F or b == 0xC2 or b == 0xEF)
+
+is_unprintable_at : Utf8.Bytes, U64 -> Bool
+is_unprintable_at = |bytes, index| {
+	byte = bytes.get(index) ?? 0
+	next = bytes.get(index + 1) ?? 0
+	after = bytes.get(index + 2) ?? 0
+	control = (byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r') or byte == 0x7F
+	c1 = byte == 0xC2 and next >= 0x80 and next <= 0x9F and next != 0x85
+	non_character = byte == 0xEF and next == 0xBF and (after == 0xBE or after == 0xBF)
+	control or c1 or non_character
+}
+
 ## Reject characters outside YAML 1.2's printable set (5.1): C0 controls other
 ## than tab and line breaks, DEL, C1 controls other than NEL, and U+FFFE/U+FFFF.
 check_printable : Utf8.Bytes -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 check_printable = |bytes| {
+	# Skip to the bytes that can start a problem; the line and column are
+	# only counted when there is one.
+	len = bytes.len()
+	var $at = Utf8.find_any(bytes, 0, maybe_unprintable)
+	while $at < len and !is_unprintable_at(bytes, $at) {
+		$at = Utf8.find_any(bytes, $at + 1, maybe_unprintable)
+	}
+	if $at >= len {
+		return Ok(bytes)
+	}
+
 	var $line = 1
 	var $column = 1
 	var $index = 0
