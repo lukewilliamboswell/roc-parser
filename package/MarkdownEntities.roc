@@ -12,8 +12,12 @@ MarkdownEntities :: [].{
 			middle = ($low + $high) // 2
 			start = (offsets.get(middle) ?? 0).to_u64()
 			match compare_name(name, start) {
-				Before => { $high = middle }
-				After => { $low = middle + 1 }
+				Before => {
+					$high = middle
+				}
+				After => {
+					$low = middle + 1
+				}
 				Same => {
 					$found = Ok(value_at(start + name.len() + 1))
 					$low = $high
