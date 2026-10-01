@@ -312,9 +312,10 @@ The {api}[API reference] lists every type and function in the module.
 [#markdown-performance]
 == Performance
 
-`Markdown.parse_str` parses about 15 MB/s on an Apple M2, building the block
-tree and every inline: a typical README in about 0.25 ms. That is about 5
-times slower than goldmark (Go) and comrak (Rust), 13 times slower than
-pulldown-cmark, and 5 times faster than markdown-it-py. Parsing stays linear
+`Markdown.parse_str` parses about 30 MB/s on an Apple M2, building the block
+tree and every inline: a typical README in about 0.15 ms and a 1 MiB document
+in about 32 ms. That is about 2.7 times slower than goldmark (Go) and comrak
+(Rust), 7 times slower than pulldown-cmark, and 10 times faster than
+markdown-it-py. Parsing stays linear
 on runs of unmatched emphasis and brackets and on deeply nested block quotes
 and lists. See <<performance>> for the measurements and caveats.

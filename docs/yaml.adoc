@@ -319,11 +319,11 @@ link:{api}Yaml[Yaml API reference].
 [#yaml-performance]
 == Performance
 
-Parsing takes time linear in the size of the document, at about 25 MB/s on
-an Apple M2 from 4 KiB to 1 MiB: a 4 KiB configuration in under 0.2 ms and a
-1 MiB one in about 45 ms. That is on par with Go's yaml.v3, 1.5 times slower
-than serde_yaml and 2.2 times slower than yaml-rust2 (Rust), and three times
-faster than PyYAML with libyaml. Nesting is limited to 100 levels. Decoding
+Parsing takes time linear in the size of the document, at about 51–55 MB/s on
+an Apple M2 from 4 KiB to 1 MiB: a 4 KiB configuration in under 0.1 ms and a
+1 MiB one in about 20 ms. That is about as fast as yaml-rust2 (Rust), 1.6
+times faster than serde_yaml, 2.6 times faster than Go's yaml.v3 and seven
+times faster than PyYAML with libyaml. Nesting is limited to 100 levels. Decoding
 into a record builds the same document first, then walks it once. See
 <<performance>> for the measurements and the comparison with other
 libraries.

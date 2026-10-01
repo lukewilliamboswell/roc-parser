@@ -28,8 +28,9 @@ The HTTP row covers the three documents without a body (two sample heads and
 one with 64 header fields).
 
 Measured on 1 October 2026 on an Apple M2 (8 cores, macOS 26.3), roc-parser
-at commit `2138e04` for CSV, XML, YAML and HTTP (after the SIMD and slicing
-work described in <<performance-simd>>) and `9c7b2fd` for Markdown, built with Roc
+at commit `2138e04` for CSV, XML and HTTP (after the SIMD and slicing
+work described in <<performance-simd>>) and `98ff21e` for YAML and Markdown
+(after the tuning described in <<performance-why>>), built with Roc
 `nightly-2026-09-29-7f11a82` and `--opt=speed`, Rust 1.94, Go 1.26.2 and
 Python 3.14 (the Python ratios for CSV, XML and HTTP are scaled from the
 `9c7b2fd` run). Another process was using about three cores during the run, so
@@ -47,10 +48,10 @@ move by tens of percent between machines and runs.
 |csv (C): 0.5x
 
 |YAML
-|25 MB/s
-|yaml-rust2: 2.2x; serde_yaml: 1.5x
-|yaml.v3: 1.0x
-|PyYAML with libyaml: 0.3x; pure Python: 0.04x
+|60 MB/s
+|yaml-rust2: 0.9x; serde_yaml: 0.6x
+|yaml.v3: 0.4x
+|PyYAML with libyaml: 0.14x; pure Python: 0.02x
 
 |XML
 |120 MB/s
@@ -59,10 +60,10 @@ move by tens of percent between machines and runs.
 |ElementTree (expat): 0.3x
 
 |Markdown
-|15 MB/s
-|pulldown-cmark: 14x; comrak: 5.3x
-|goldmark: 5.2x
-|markdown-it-py: 0.2x
+|30 MB/s
+|pulldown-cmark: 7.1x; comrak: 2.7x
+|goldmark: 2.6x
+|markdown-it-py: 0.1x
 
 |HTTP/1.1 (message heads)
 |200–300 MB/s
@@ -72,10 +73,11 @@ move by tens of percent between machines and runs.
 |===
 
 In short: roc-parser matches Rust's csv crate on the generated CSV
-documents, is within a factor of about two of the best Rust library for YAML
-and XML and three for HTTP heads, matches or beats Go's libraries for YAML,
-XML and HTTP, and is faster than every Python parser measured. It is five
-times slower than the Rust and Go Markdown parsers.
+documents and yaml-rust2 on the YAML documents, is within a factor of about
+two of the best Rust library for XML and three for HTTP heads, matches or
+beats Go's libraries for YAML, XML and HTTP, and is faster than every Python
+parser measured. It is about 2.7 times slower than comrak and goldmark for
+Markdown, and 7 times slower than pulldown-cmark.
 Bodies are not in the HTTP row because roc-parser returns a `Content-Length`
 body as a slice of the input without copying it, while the other programs
 copy it, so roc-parser's figures for large bodies are meaninglessly high.
@@ -90,20 +92,21 @@ roc-parser is a good fit when:
 
 * *Documents are up to a few megabytes.* Configuration files, front matter,
   READMEs, SVG icons, CSV exports and API messages parse in microseconds to a
-  few milliseconds, and a 1 MiB YAML or XML document in 45 ms or 10 ms.
+  few milliseconds, and a 1 MiB YAML, XML or Markdown document in 20, 10
+  or 32 ms.
 * *You parse at start-up or per request.* An HTTP head parses in 1.5–2 µs;
   a 4 KiB YAML configuration in under 0.2 ms.
 * *You want a pure-Roc package*, typed errors with line and
   column, strict input checking, and no native code or FFI.
-* *Your alternative is an interpreted parser*: roc-parser is 5–25 times
+* *Your alternative is an interpreted parser*: roc-parser is 10–60 times
   faster than pure-Python YAML, Markdown and HTTP parsers.
 
 Look elsewhere, or measure carefully first, when:
 
 * *Parsing is your bottleneck* at high volume (log pipelines, Markdown
   rendering for a large site, a proxy parsing every request). The best Rust
-  parsers are about 2 times faster for YAML and XML, 3 times for HTTP heads
-  and 5–14 times for Markdown.
+  parsers are about 2 times faster for XML, 3 times for HTTP heads and
+  3–7 times for Markdown; for YAML, yaml-rust2 is about as fast.
 * *Input arrives as a stream or does not fit in memory.* Every roc-parser
   parser needs the complete input, and returns a tree; there is no streaming
   or event interface.
@@ -126,19 +129,23 @@ failure. That work has found and fixed quadratic cases:
 * YAML block scalars, which used to re-scan the document's lines;
 * YAML's nesting limit, extended to flow collections (`08cc39b`).
 
-Throughput is now flat from 4 KiB to 1 MiB for every format: 23–24 MB/s for
-generated YAML, 99–112 MB/s for generated XML and 14–16 MB/s for Markdown.
+Throughput is now flat from 4 KiB to 1 MiB for every format: 51–55 MB/s for
+generated YAML, 99–112 MB/s for generated XML and 33–34 MB/s for Markdown.
 
 Limits that bound the work on hostile input:
 
 * *YAML* rejects nesting deeper than 100 levels, block and flow combined.
   Each level of a flow collection re-scans its contents, so cost grows with
   the square of the flow depth, but the limit keeps it small: 99 nested flow
-  sequences (200 bytes) take 44 µs.
+  sequences (200 bytes) take 39 µs.
 * *XML* parses elements with an explicit stack, so deep nesting (5,000
   levels in the benchmarks) cannot overflow the call stack.
 * *CSV, HTTP and Markdown* scan bytes with explicit state rather than
   recursion. HTTP rejects ambiguous framing; see <<http>>.
+* *Markdown* finds the next non-space byte of a line by scanning, except
+  for lines that start inside more than eight open block quotes and list
+  items, which get a per-line index; so a long run of spaces is scanned at
+  most eight times however deeply the containers nest.
 
 [#performance-memory]
 == Memory behaviour
@@ -149,15 +156,16 @@ Limits that bound the work on hostile input:
   CSV. Rust's tree builders used 8–30 MiB (pulldown-cmark's collected owned events, 270 MiB, are an artefact of the comparison program); Go's and Python's libraries
   were similar to roc-parser.
 * *Text is shared with the input where it can be.* XML text and attribute
-  values with nothing to unescape, YAML scalars and keys, and HTTP field
+  values with nothing to unescape, YAML scalars and keys (quoted ones too,
+  when they hold no escapes), and HTTP field
   values become `Str` values that point into the input's memory rather than
   copies, so the input stays alive as long as any of them does. Values that
   need rewriting (escapes, entities, folded or chomped block scalars) are
   copied. A `Content-Length` body shares the input's memory, and a chunked
   body is assembled once.
 * *Allocation counts are roughly proportional to the number of values*: about
-  one allocation per CSV field, 0.14 per input byte for YAML, 0.1 for XML and
-  0.55 for Markdown. `scripts/bench.py --allocations` reports them for every
+  one allocation per CSV field, 0.06 per input byte for YAML, 0.1 for XML and
+  0.33 for Markdown. `scripts/bench.py --allocations` reports them for every
   document.
 * *Small programs stay small.* A Roc driver parsing an HTTP message peaks at
   1.5 MiB of resident memory, against 17 MiB for the same Go program and
@@ -206,8 +214,12 @@ YAML value twice with `Str.from_utf8_lossy`, a closure and a list slice per
 byte in YAML's mapping scanner, hashing every key into a set even for small
 mappings, and an HTTP field list that was copied and lowercased three times
 per message. Those fixes made YAML three times faster, XML half as fast
-again and HTTP heads 30–40% faster. What remains is mostly design and
-compiler cost:
+again and HTTP heads 30–40% faster. A second YAML pass (matching core-schema
+words directly instead of through list literals, rejecting words before
+slicing them as floats, scanning for unprintable characters 16 bytes at a
+time, and keeping quoted scalars without escapes as slices) made it 2.5
+times faster again, about as fast as yaml-rust2. What remains is mostly
+design and compiler cost:
 
 * *Owned values and a tree.* roc-parser returns a tree of Roc values.
   pulldown-cmark, quick-xml and httparse hand out borrowed slices or events,
@@ -216,16 +228,25 @@ compiler cost:
   reference counting adds an increment and decrement whenever a value is
   shared. Allocation, freeing and reference counting are 20–40% of the time
   in every profile.
-* *Markdown is not yet tuned.* Its profile is dominated by the same
-  patterns that were fixed in the other parsers: copying lines byte by byte
-  to trim trailing spaces, appending lists one byte at a time, and
-  `Str.from_utf8_lossy` for every text node. It is being redesigned and will
-  be tuned with it.
+* *Markdown copies text more than once.* A paragraph's lines are joined,
+  turned into a placeholder `Str`, turned back into bytes, stripped of
+  indentation and then cut into text nodes that are validated again, and
+  the block phase updates a large state record for every line. The October
+  2026 tuning removed the byte-at-a-time copies (trimming trailing spaces by
+  rebuilding the line, appending lists byte by byte, building cells and code
+  spans byte by byte), `Str.from_utf8_lossy` for every text node, a per-line
+  index of every byte's column, `List.take_first` and `drop_first` (see
+  below) and byte loops that `Utf8.find_any` now does 16 bytes at a time,
+  which together made it 2.3 times faster.
 * *Compiler and runtime.* The Roc compiler is young. Measured costs that a
   parser cannot avoid today: a string literal longer than 23 bytes is copied
   to the heap every time it is evaluated, so an error message built on the
   success path costs an allocation; `List.drop_last` followed by `append` can
-  copy the whole list instead of reusing it; and `Str.from_utf8` validates text
+  copy the whole list instead of reusing it, and `List.take_first`,
+  `drop_first` and `drop_last` copy instead of slicing once they have
+  several call sites (roc-lang/roc#11965); a list literal such as
+  `["null", "Null"].contains(text)` is rebuilt on every call; and
+  `Str.from_utf8` validates text
   that came from a `Str` and is known to be valid (XML now avoids this, see
   <<performance-simd>>). The `basic-cli` platform used
   by the drivers also hashes every freed pointer, about 5–10% of the time in
