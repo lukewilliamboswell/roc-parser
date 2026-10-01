@@ -12,7 +12,7 @@ import unicode.Scalar
 ## strikethrough (`~~text~~`) and extended autolinks (`www.example.com`,
 ## `https://example.com` and `me@example.com` without angle brackets). It also
 ## accepts one extension of its own: a frontmatter block between two `---`
-## lines at the very start of a document, kept raw as [Markdown.Frontmatter].
+## lines at the very start of a document, kept raw as `Frontmatter`.
 ##
 ## Markdown has no syntax errors, so parsing never fails: [Markdown.parse_str]
 ## returns `List(Markdown)` directly, and text that looks like broken syntax is
@@ -183,7 +183,7 @@ Markdown := [
 	## Parse a whole Markdown document into its blocks.
 	##
 	## Every input is a document, so this never fails. A leading frontmatter
-	## block becomes the first block, [Markdown.Frontmatter].
+	## block becomes the first block, `Frontmatter`.
 	##
 	## ```roc
 	## expect Markdown.parse_str("# Hi\n\nSome *text*.") == [
