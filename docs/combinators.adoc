@@ -38,7 +38,7 @@ a failure too.
 |Parse the start of the input and return `{ value, rest }`, where `rest` is
 what is left. Use these to read one message from a stream that holds several.
 
-|`Parser.parse(p, input)`, `Parser.parse_partial(p, input)`
+|`Parser.parse(p, input)`, `Parser.run(p, input)`
 |Run a parser whose input is not text, such as the `CSV.CSVRecord` that
 record parsers read.
 |===
@@ -90,7 +90,6 @@ bytes.
 
 |`p.keep(q)`
 |Runs `q` after `p` and passes its result to the function `p` produced.
-`apply` is the same operation under another name.
 
 |`p.skip(q)`
 |Runs `q` after `p` and discards ``q``'s result.
@@ -131,7 +130,7 @@ last parser's message.
 |The same for any input type. On failure, joins all the messages with "or".
 
 |`Parser.maybe(p)`
-|Produces `Ok(value)` if `p` succeeds, or `Err(Nothing)` without reading
+|Produces `Ok(value)` if `p` succeeds, or `Err(Missing)` without reading
 anything if it fails.
 
 |`Parser.fail(message)`
@@ -185,7 +184,7 @@ far.
 |`p.sep_by(sep)`
 |Zero or more results of `p` separated by `sep`. The separators are dropped.
 
-|`p.sep_by1(sep)`
+|`p.sep_by_one_or_more(sep)`
 |The same, requiring at least one.
 |===
 
@@ -263,6 +262,6 @@ This has three consequences:
 `Parser(input, a)` works for any input type, not only bytes. The `CSV`
 module's record parsers read a `CSV.CSVRecord`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
-parser for your own input type, use `Parser.build_primitive_parser` with a
+parser for your own input type, use `Parser.custom` with a
 function from input to `Ok({ value, rest })` or
 `Err(ParseError({ message, offset }))`.

@@ -97,12 +97,12 @@ format this package does not cover, or extending one of the format parsers.
   discard syntax with `skip`.
 * Choose between alternatives with `alt` and `one_of`. Each alternative starts
   from the same input, so a failed alternative never consumes anything.
-* Repeat with `many`, `one_or_more`, `sep_by` and `sep_by1`. Repetition stops
+* Repeat with `many`, `one_or_more`, `sep_by` and `sep_by_one_or_more`. Repetition stops
   when an element fails or consumes nothing.
 * Convert results with `map`, `map2`, `map3`, `apply` and `flatten`.
-* Run a parser with `parse` (whole input) or `parse_partial` (leaving the
+* Run a parser with `parse` (whole input) or `run` (leaving the
   rest). For text, prefer the `Utf8` functions below.
-* `build_primitive_parser` turns your own function into a parser when no
+* `custom` turns your own function into a parser when no
   combinator fits; `lazy` defers building a parser for recursive grammars.
 
 == Utf8

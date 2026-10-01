@@ -38,7 +38,7 @@ count_letter_as = |letters|
 
 # Build a custom parser to convert utf8 input into Letter tags
 letter_parser : Parser(List(U8), Letter)
-letter_parser = Parser.build_primitive_parser(
+letter_parser = Parser.custom(
 	|input| {
 		val_result : Try(Letter, [ParseError({ message : Str, offset : U64 })])
 		val_result =

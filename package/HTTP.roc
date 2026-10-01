@@ -91,7 +91,7 @@ HTTP :: {}.{
 	## ```
 	request : Parser(Utf8.Bytes, Request)
 	request =
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				parse_request(input).map_err(|message| ParseError({ message: "invalid HTTP request: ${message}", offset: 0 }))
 			},
@@ -105,7 +105,7 @@ HTTP :: {}.{
 	## its body.
 	response : Parser(Utf8.Bytes, Response)
 	response =
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				parse_response(input).map_err(|message| ParseError({ message: "invalid HTTP response: ${message}", offset: 0 }))
 			},

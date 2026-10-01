@@ -204,7 +204,7 @@ build = |expr| {
 		ChompWhile(t) => Parser.chomp_while(|b| b < t)
 		ChompUntil(c) => Parser.chomp_until(c)
 		Seq(a, b) => Parser.map2(build(a), build(b), |x, y| x.concat(y))
-		Apply(a, b) => Parser.const(|x| |y| x.concat(y).append('+')).apply(build(a)).apply(build(b))
+		Apply(a, b) => Parser.const(|x| |y| x.concat(y).append('+')).keep(build(a)).keep(build(b))
 		Skip(a, b) => build(a).skip(build(b))
 		Map3(a, b, c) => Parser.map3(build(a), build(b), build(c), |x, y, z| x.append('|').concat(y).append('|').concat(z))
 		Alt(a, b) => Parser.alt(build(a), build(b))
@@ -213,14 +213,14 @@ build = |expr| {
 		Many(a) => Parser.many(build(a)).map(|vs| items(vs, ';'))
 		OneOrMore(a) => Parser.one_or_more(build(a)).map(|vs| items(vs, ';'))
 		SepBy(a, s) => Parser.sep_by(build(a), build(s)).map(|vs| items(vs, ','))
-		SepBy1(a, s) => Parser.sep_by1(build(a), build(s)).map(|vs| items(vs, ','))
+		SepBy1(a, s) => Parser.sep_by_one_or_more(build(a), build(s)).map(|vs| items(vs, ','))
 		Between(a, o, c) => Parser.between(build(a), build(o), build(c))
 		Maybe(a) =>
 			Parser.maybe(build(a)).map(
 				|r| {
 					match r {
 						Ok(v) => v.prepend('J')
-						Err(Nothing) => ['N']
+						Err(Missing) => ['N']
 					}
 				},
 			)
@@ -391,7 +391,7 @@ test = |case| {
 	expected = model(case.expr, case.input)
 	actual : Outcome
 	actual =
-		match Parser.parse_partial(parser, case.input) {
+		match Parser.run(parser, case.input) {
 			Ok({ value: val, rest: rest }) => Ok({ val, rest })
 			Err(ParseError({ message, offset })) => {
 				# Messages must be renderable without crashing.
@@ -401,7 +401,7 @@ test = |case| {
 			}
 		}
 	if actual != expected {
-		crash "parse_partial disagrees with model\n  library: ${show_outcome(actual)}\n  model:   ${show_outcome(expected)}"
+		crash "Parser.run disagrees with model\n  library: ${show_outcome(actual)}\n  model:   ${show_outcome(expected)}"
 	}
 	# Full-input runs agree with the partial run. Leftover input fails at or
 	# beyond the point where the partial run stopped (the furthest failure).

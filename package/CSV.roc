@@ -158,7 +158,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 	## no fields left.
 	field : Parser(Utf8.Bytes, a) -> Parser(CSVRecord, a)
 	field = |field_parser| {
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|fields_list| {
 				match fields_list.get(0) {
 					Err(OutOfBounds) =>
@@ -275,7 +275,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 }
 
 csv_record : Parser(Utf8.Bytes, CSV.CSVRecord)
-csv_record = Parser.build_primitive_parser(
+csv_record = Parser.custom(
 	|bytes| {
 		match scan_record(bytes, 0) {
 			Ok({ fields, next }) => Ok({ value: fields, rest: bytes.drop_first(next) })
@@ -287,7 +287,7 @@ csv_record = Parser.build_primitive_parser(
 ## Parse records until the input ends; on a malformed field, stop and leave the
 ## input from the start of that field unconsumed.
 csv_records : Parser(Utf8.Bytes, List(CSV.CSVRecord))
-csv_records = Parser.build_primitive_parser(
+csv_records = Parser.custom(
 	|bytes| {
 		len = bytes.len()
 		var $records = []
@@ -324,7 +324,7 @@ csv_records = Parser.build_primitive_parser(
 # successful parse that leaves input unconsumed by the leftover.
 run_whole : Parser(input, a), input -> Try(a, [ParsingFailure(Str), ParsingIncomplete(input)]) where [input.len : input -> U64]
 run_whole = |parser, input| {
-	match parser.parse_partial(input) {
+	match parser.run(input) {
 		Ok({ value, rest }) => if rest.len() == 0 Ok(value) else Err(ParsingIncomplete(rest))
 		Err(ParseError({ message, offset: _ })) => Err(ParsingFailure(message))
 	}

@@ -73,7 +73,7 @@ signed =
 		|sign| |n| {
 			match sign {
 				Ok(_) => -(n.to_i64_wrap())
-				Err(Nothing) => n.to_i64_wrap()
+				Err(Missing) => n.to_i64_wrap()
 			}
 		},
 	)

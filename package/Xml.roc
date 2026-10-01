@@ -130,7 +130,7 @@ Xml := {
 	## ```
 	xml_parser : Parser(Utf8.Bytes, Xml)
 	xml_parser =
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				match parse_document(input) {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })

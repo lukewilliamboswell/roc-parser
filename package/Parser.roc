@@ -63,8 +63,8 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## `value` with the `rest` it did not consume, or
 	## `Err(ParseError({ message, offset }))`, where `offset` is how far into
 	## the given input the failure is (usually `0`).
-	build_primitive_parser : (input -> ParseResult(input, a)) -> Parser(input, a) where [input.len : input -> U64]
-	build_primitive_parser = |fun| {
+	custom : (input -> ParseResult(input, a)) -> Parser(input, a) where [input.len : input -> U64]
+	custom = |fun| {
 		{
 			fun: |input| {
 				match fun(input) {
@@ -85,8 +85,8 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## On failure, the error is the furthest failure seen, with its `offset`
 	## counted from the start of `input`. This is mostly useful when creating
 	## your own parsing building blocks.
-	parse_partial : Parser(input, a), input -> ParseResult(input, a) where [input.len : input -> U64]
-	parse_partial = |parser, input| {
+	run : Parser(input, a), input -> ParseResult(input, a) where [input.len : input -> U64]
+	run = |parser, input| {
 		match step(parser, input) {
 			Ok({ value, rest, furthest: _ }) => Ok({ value, rest })
 			Err(failure) => Err(ParseError({ message: failure.message, offset: minus(input.len(), failure.remaining) }))
@@ -169,15 +169,6 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 		}
 	}
 
-	## Runs a parser building a function, then a parser building a value,
-	## and finally returns the result of calling the function with the value.
-	##
-	## This is the same as `keep`.
-	apply : Parser(input, (a -> b)), Parser(input, a) -> Parser(input, b)
-	apply = |fun_parser, val_parser| {
-		keep(fun_parser, val_parser)
-	}
-
 	## Try a list of parsers in turn, until one of them succeeds.
 	##
 	## Each parser starts from the same input. An empty list always fails.
@@ -196,7 +187,7 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	one_of : List(Parser(input, a)) -> Parser(input, a) where [input.len : input -> U64]
 	one_of = |parsers| {
 		match parsers {
-			[] => fail("oneOf: The list of parsers was empty")
+			[] => fail("one_of: the list of parsers was empty")
 			[first, .. as others] => others.fold(first, |earlier, later| alt(earlier, later))
 		}
 	}
@@ -268,6 +259,33 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 		}
 	}
 
+	## Run `first`, then build the next parser from its value and run that.
+	##
+	## Use this when what comes next depends on what was read, such as a
+	## length prefix. When the next parser is fixed, prefer `keep`, `skip`
+	## and `map`, which are simpler and let the parser be built once.
+	##
+	## ```roc
+	## sized : Parser(Utf8.Bytes, List(U8))
+	## sized = Utf8.digit.and_then(|n| Utf8.any_codeunit.many().map(|bytes| bytes.take_first(n)))
+	## ```
+	and_then : Parser(input, a), (a -> Parser(input, b)) -> Parser(input, b)
+	and_then = |first, build_next| {
+		{
+			fun: |input| {
+				match step(first, input) {
+					Err(failure) => Err(failure)
+					Ok({ value, rest, furthest }) => {
+						match step(build_next(value), rest) {
+							Err(failure) => Err(further(furthest, failure))
+							Ok(next) => Ok({ value: next.value, rest: next.rest, furthest: further(furthest, next.furthest) })
+						}
+					}
+				}
+			},
+		}
+	}
+
 	## Runs a parser lazily.
 	##
 	## This is (only) useful when dealing with a recursive structure.
@@ -284,13 +302,13 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 
 	## Make a parser optional.
 	##
-	## Returns `Ok(value)` when the given parser succeeds, and `Err(Nothing)`
+	## Returns `Ok(value)` when the given parser succeeds, and `Err(Missing)`
 	## without consuming input when it fails, so the result never fails.
-	maybe : Parser(input, a) -> Parser(input, Try(a, [Nothing]))
+	maybe : Parser(input, a) -> Parser(input, Try(a, [Missing]))
 	maybe = |parser| {
 		parser
 			.map(|value| Ok(value))
-			.alt(const(Err(Nothing)))
+			.alt(const(Err(Missing)))
 	}
 
 	## A parser which runs the element parser *zero* or more times on the input,
@@ -338,8 +356,8 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## The separators are consumed and omitted from the result.
 	##
 	## A trailing separator that is not followed by a value is left unconsumed.
-	sep_by1 : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.len : input -> U64]
-	sep_by1 = |parser, separator| {
+	sep_by_one_or_more : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.len : input -> U64]
+	sep_by_one_or_more = |parser, separator| {
 		separated = const(|value| value).skip(separator).keep(parser)
 
 		const(|value| |values| values.prepend(value))
@@ -359,7 +377,7 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	sep_by : Parser(input, a), Parser(input, sep) -> Parser(input, List(a)) where [input.len : input -> U64]
 	sep_by = |parser, separator| {
 		parser
-			.sep_by1(separator)
+			.sep_by_one_or_more(separator)
 			.alt(const([]))
 	}
 
@@ -561,28 +579,6 @@ step = |{ fun }, input| {
 	fun(input)
 }
 
-# Internal utility function. Not exposed to users, since usage is discouraged!
-#
-# Runs `first_parser` and (only) if it succeeds,
-# runs the function `build_next_parser` on its result value.
-# This function returns a new parser, which is finally run.
-and_then : Parser(input, a), (a -> Parser(input, b)) -> Parser(input, b)
-and_then = |first_parser, build_next_parser| {
-	{
-		fun: |input| {
-			match step(first_parser, input) {
-				Err(failure) => Err(failure)
-				Ok({ value, rest, furthest }) => {
-					match step(build_next_parser(value), rest) {
-						Err(failure) => Err(further(furthest, failure))
-						Ok(next) => Ok({ value: next.value, rest: next.rest, furthest: further(furthest, next.furthest) })
-					}
-				}
-			}
-		},
-	}
-}
-
 # Repeat `parser` from `input`, whose length is `len`, collecting `values`.
 # The no-progress check compares lengths, so each iteration is O(1).
 many_help : Parser(input, a), List(a), input, U64, Failure -> Step(input, List(a)) where [input.len : input -> U64]
@@ -606,13 +602,13 @@ many_help = |parser, values, input, len, furthest| {
 # Chomping until a newline returns the preceding bytes and leaves the newline.
 expect {
 	input = "# H\nR".to_utf8()
-	result = Parser.parse_partial(Parser.chomp_until('\n'), input)?
+	result = Parser.run(Parser.chomp_until('\n'), input)?
 	result == { value: ['#', ' ', 'H'], rest: ['\n', 'R'] }
 }
 
 # Chomping until a missing newline reports a parse error.
 expect {
-	Parser.parse_partial(Parser.chomp_until('\n'), []).is_err()
+	Parser.run(Parser.chomp_until('\n'), []).is_err()
 }
 
 # Chomping while a predicate holds leaves the first non-matching byte.
@@ -622,20 +618,20 @@ expect {
 	not_eol = |x| {
 		x != '\n'
 	}
-	result = Parser.parse_partial(Parser.chomp_while(not_eol), input)?
+	result = Parser.run(Parser.chomp_while(not_eol), input)?
 	result == { value: ['a', 's'], rest: ['\n', 'd', 'f'] }
 }
 
 # Repeating a parser that succeeds without consuming input terminates.
 expect {
-	result = Parser.parse_partial(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
+	result = Parser.run(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
 	result == { value: [['a', 'a']], rest: ['b'] }
 }
 
 # Separated repetition stops when separator and element consume nothing.
 expect {
 	empty = Parser.chomp_while(|b| b == 'z')
-	result = Parser.parse_partial(Parser.sep_by(empty, empty), "x".to_utf8())?
+	result = Parser.run(Parser.sep_by(empty, empty), "x".to_utf8())?
 	result == { value: [[]], rest: ['x'] }
 }
 
@@ -643,7 +639,7 @@ expect {
 expect {
 	words : List(Str)
 	words = ["a", "b"]
-	word = |w| Parser.build_primitive_parser(
+	word = |w| Parser.custom(
 		|input| {
 			match input {
 				[first, .. as rest] if first == w => Ok({ value: first, rest })
@@ -658,7 +654,7 @@ expect {
 expect {
 	words : List(Str)
 	words = ["a", "a", "c"]
-	word = |w| Parser.build_primitive_parser(
+	word = |w| Parser.custom(
 		|input| {
 			match input {
 				[first, .. as rest] if first == w => Ok({ value: first, rest })

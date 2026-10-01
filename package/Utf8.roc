@@ -49,7 +49,7 @@ Utf8 :: [].{
 	parse_str_partial : Parser(Bytes, a), Str -> Try({ value : a, rest : Str }, [ParseError({ message : Str, offset : U64 })])
 	parse_str_partial = |parser, input| {
 		parser
-			.parse_partial(input.to_utf8())
+			.run(input.to_utf8())
 			.map_ok(|{ value, rest }| { value, rest: str_from_utf8_lossy(rest) })
 	}
 
@@ -67,7 +67,7 @@ Utf8 :: [].{
 	## `Err(ParseError({ message, offset }))`.
 	parse_bytes_partial : Parser(Bytes, a), Bytes -> Try({ value : a, rest : Bytes }, [ParseError({ message : Str, offset : U64 })])
 	parse_bytes_partial = |parser, input| {
-		parser.parse_partial(input)
+		parser.run(input)
 	}
 
 	## Match one UTF-8 code unit when it satisfies the given predicate.
@@ -83,7 +83,7 @@ Utf8 :: [].{
 	## ```
 	codeunit_satisfies : (U8 -> Bool) -> Parser(Bytes, U8)
 	codeunit_satisfies = |check| {
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				{ before: start, others: input_rest } = input.split_at(1)
 
@@ -119,7 +119,7 @@ Utf8 :: [].{
 	## ```
 	codeunit : U8 -> Parser(Bytes, U8)
 	codeunit = |expected_code_unit| {
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				match input {
 					[] =>
@@ -140,7 +140,7 @@ Utf8 :: [].{
 	utf8 = |expected_string| {
 		# Implemented manually instead of a sequence of codeunits
 		# because of efficiency and better error messages
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				{ before: start, others: input_rest } = input.split_at(expected_string.len())
 
@@ -209,7 +209,7 @@ Utf8 :: [].{
 	## }
 	## ```
 	any_thing : Parser(Bytes, Bytes)
-	any_thing = Parser.build_primitive_parser(
+	any_thing = Parser.custom(
 		|input| {
 			Ok({ value: input, rest: [] })
 		},
@@ -224,7 +224,7 @@ Utf8 :: [].{
 
 	## Match all remaining input as a `Str`, failing if the bytes are not valid UTF-8.
 	any_string : Parser(Bytes, Str)
-	any_string = Parser.build_primitive_parser(
+	any_string = Parser.custom(
 		|field_utf8ing| {
 			match Str.from_utf8(field_utf8ing) {
 				Ok(string_val) =>
@@ -244,7 +244,7 @@ Utf8 :: [].{
 	## ```
 	digit : Parser(Bytes, U64)
 	digit =
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				match input {
 					[] =>
@@ -309,7 +309,7 @@ Utf8 :: [].{
 	## ```
 	one_of : List(Parser(Bytes, a)) -> Parser(Bytes, a)
 	one_of = |parsers| {
-		Parser.build_primitive_parser(
+		Parser.custom(
 			|input| {
 				parsers.fold_until(
 					Err(ParseError({ message: "(no possibilities)", offset: 0 })),
@@ -382,7 +382,7 @@ excerpt = |bytes| {
 ## Failure messages quote only a bounded prefix of the remaining input.
 expect {
 	long = List.repeat('b', 1000)
-	match Parser.parse_partial(Utf8.codeunit('a'), long) {
+	match Parser.run(Utf8.codeunit('a'), long) {
 		Err(ParseError({ message, offset: _ })) => message.count_utf8_bytes() < 200
 		Ok(_) => Bool.False
 	}
@@ -682,8 +682,8 @@ expect {
 	mapped = Parser.map3(Utf8.digits.skip(space), Utf8.digits.skip(space), Utf8.digits, |x, y, z| Triple(x, y, z))
 	applied =
 		Parser.const(|x| |y| |z| Triple(x, y, z))
-			.apply(Utf8.digits.skip(space))
-			.apply(Utf8.digits.skip(space))
-			.apply(Utf8.digits)
+			.keep(Utf8.digits.skip(space))
+			.keep(Utf8.digits.skip(space))
+			.keep(Utf8.digits)
 	Utf8.parse_str(mapped, "1 2 3") == Ok(Triple(1, 2, 3)) and Utf8.parse_str(applied, "1 2 3") == Ok(Triple(1, 2, 3))
 }

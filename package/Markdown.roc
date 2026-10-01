@@ -180,11 +180,11 @@ Markdown := [
 
 	## Parse an inline link (`[label](destination "title")`) at the start of the input.
 	link : Parser(Utf8.Bytes, Inline)
-	link = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.False))
+	link = Parser.custom(|input| parse_leading_link(input, Bool.False))
 
 	## Parse an inline image (`![alt](destination "title")`) at the start of the input.
 	image : Parser(Utf8.Bytes, Inline)
-	image = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.True))
+	image = Parser.custom(|input| parse_leading_link(input, Bool.True))
 
 	## Parse a fenced code block delimited by triple backticks.
 	code : Parser(Utf8.Bytes, Markdown)
@@ -454,7 +454,7 @@ StartResult : [NoStart, StartedContainer(BlockState), StartedLeaf(BlockState), L
 
 parse_all : Parser(Utf8.Bytes, List(Markdown))
 parse_all =
-	Parser.build_primitive_parser(
+	Parser.custom(
 		|input| {
 			Ok({ value: parse_document(input), rest: [] })
 		},
@@ -1882,7 +1882,7 @@ InlineStop : [Finished, Stopped({ node : Markdown.Inline, end : U64 }), Failed]
 
 parse_inlines_parser : Parser(Utf8.Bytes, List(Markdown.Inline))
 parse_inlines_parser =
-	Parser.build_primitive_parser(
+	Parser.custom(
 		|input| {
 			Ok({ value: parse_inlines(input), rest: [] })
 		},
@@ -4604,7 +4604,7 @@ expect {
 
 chomp_until_code_block_end : Parser(Utf8.Bytes, Str)
 chomp_until_code_block_end =
-	Parser.build_primitive_parser(
+	Parser.custom(
 		|input| {
 			chomp_to_code_block_end_help({ value: List.with_capacity(1000), rest: input })
 		},
