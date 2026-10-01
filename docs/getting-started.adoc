@@ -101,28 +101,36 @@ package.
 == What the program does
 
 `import parser.CSV` makes the `CSV` module from the package named `parser`
-available. `Parser` is imported too, because the type of `planet` mentions it.
+available.
 
-`Planet` is the record type each row becomes.
+`Planet` is the record type each row becomes. The first line of the input is
+a header row, and each field of `Planet` reads the column with the same name.
 
-`planet` is a _parser_: a value that describes how to read one CSV row. Read
-it from the top:
+`planets` calls `CSV.parse`, which splits the text into rows and decodes each
+row into a record. `CSV.parse` does not take the row type as an argument: the
+compiler infers it from the type annotation on `planets`, and finds the
+decoding code through the static dispatch method `parser_for`, which every
+record type has. Change the annotation and the same call decodes a different
+record.
 
-* `CSV.record(...)` starts a row parser with a function that builds the
-  result. The function takes one argument at a time, `|name| |moons|`,
-  because the fields arrive one at a time.
-* Each `.keep(CSV.field(...))` reads the next field and passes it to that
-  function. `CSV.string` accepts any text; `CSV.u64` accepts only an unsigned
-  whole number.
+The result is `Ok` with a list of `Planet` records, or `Err` with one of two
+tags:
 
-`CSV.parse_str(planet, input)` splits the text into rows and runs `planet` on
-each. It returns `Ok` with a list of `Planet` records, or `Err` if the text is
-not valid CSV or a row does not match. Nothing is printed until every row has
-been read successfully.
+* `InvalidCsv(error)` when the text is not valid CSV or a cell does not fit
+  its field. `error` says which record and field failed, where it starts in
+  the text, and why.
+* `MissingRequiredField(name)` when the header has no column for a field.
+  The compiler adds this tag to the error type of every type-directed
+  decoder, so the annotation must name it.
+
+`describe` handles all three cases with a `match`. Nothing is printed until
+every row has been read successfully.
 
 To see the error path, change `Mars,2` to `Mars,two` and run the program
-again. It prints `The CSV did not match the expected columns`.
-<<errors>> shows how to report exactly which row and field failed.
+again. It prints a message that names line 4 and quotes `two`. Rename the `moons`
+column and it prints `no moons column`. <<errors>> shows how to report every
+kind of failure, and <<csv>> shows optional columns, empty cells and
+hand-built row parsers that match columns by position.
 
 == Next steps
 

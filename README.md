@@ -26,41 +26,39 @@ write formats back out.
 
 Copy the `.tar.zst` link from the newest
 [release](https://github.com/lukewilliamboswell/roc-parser/releases) into your
-app's header, then parse some CSV into records:
+app's header, then decode some CSV into records:
 
 ```roc
 app [main!] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
-    parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst",
 }
 
 import cli.Stdout
 import parser.CSV
-import parser.Parser
 
 Planet : { name : Str, moons : U64 }
 
-planet : Parser(CSV.CSVRecord, Planet)
-planet =
-    CSV.record(|name| |moons| { name, moons })
-        .keep(CSV.field(CSV.string))
-        .keep(CSV.field(CSV.u64))
-
 input =
-    \\Mercury,0
-    \\Earth,1
-    \\Mars,2
+	\\name,moons
+	\\Mercury,0
+	\\Earth,1
+	\\Mars,2
+
+planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+planets = |text| CSV.parse(text)
 
 describe : Str -> Str
 describe = |text| {
-    match CSV.parse_str(planet, text) {
-        Ok(planets) => planets.map(|p| "${p.name}: ${p.moons.to_str()} moons") |> Str.join_with("\n")
-        Err(_) => "The CSV did not match the expected columns"
-    }
+	match planets(text) {
+		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} moons"), "\n")
+		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${error.message}"
+		Err(MissingRequiredField(name)) => "no ${name} column"
+	}
 }
 
 main! = |_args| {
-    Stdout.line!(describe(input))
+	Stdout.line!(describe(input))
 }
 ```
 
