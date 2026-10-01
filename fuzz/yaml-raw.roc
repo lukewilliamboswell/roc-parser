@@ -91,7 +91,8 @@ check_crlf = |input, result| {
 ## extra marker would start a second document.
 check_document_start : List(U8), Str, Parsed -> {}
 check_document_start = |bytes, input, result| {
-	has_marker = Str.starts_with(input, "---") or Str.contains(input, "\n---")
+	# A byte order mark is only one at the very start of the input.
+	has_marker = Str.starts_with(input, "---") or Str.contains(input, "\n---") or Str.starts_with(input, "\u(FEFF)")
 	if !has_marker and !bytes.is_empty() {
 		marked = Yaml.parse_str("---\n${input}")
 		consistent =

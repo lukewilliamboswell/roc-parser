@@ -36,7 +36,8 @@ Yaml := [
 	## ```
 	parse_str : Str -> Try(Yaml, [YamlError(Error)])
 	parse_str = |input| {
-		raw_lines = split_lines(input.to_utf8(), 1, [], [])
+		bytes = check_printable(drop_byte_order_mark(input.to_utf8()))?
+		raw_lines = split_lines(bytes, 1, [], [])
 		lines = prepare_lines(raw_lines)?
 
 		match lines {
@@ -64,6 +65,50 @@ Yaml := [
 	## Render a parsed YAML value in Roc source-like notation for inspection.
 	to_inspect : Yaml -> Str
 	to_inspect = |value| inspect_yaml(value)
+}
+
+drop_byte_order_mark : String.Utf8 -> String.Utf8
+drop_byte_order_mark = |bytes| {
+	match bytes {
+		[0xEF, 0xBB, 0xBF, .. as rest] => rest
+		_ => bytes
+	}
+}
+
+## Reject characters outside YAML 1.2's printable set (5.1): C0 controls other
+## than tab and line breaks, DEL, C1 controls other than NEL, and U+FFFE/U+FFFF.
+check_printable : String.Utf8 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+check_printable = |bytes| {
+	var $line = 1
+	var $column = 1
+	var $index = 0
+	var $problem = Err(NoProblem)
+
+	while $index < bytes.len() and $problem == Err(NoProblem) {
+		byte = bytes.get($index) ?? 0
+		next = bytes.get($index + 1) ?? 0
+		after = bytes.get($index + 2) ?? 0
+		control = (byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r') or byte == 0x7F
+		c1 = byte == 0xC2 and next >= 0x80 and next <= 0x9F and next != 0x85
+		non_character = byte == 0xEF and next == 0xBF and (after == 0xBE or after == 0xBF)
+
+		if control or c1 or non_character {
+			$problem = Ok({ line: $line, column: $column })
+		} else if byte == '\n' or (byte == '\r' and next != '\n') {
+			$line = $line + 1
+			$column = 1
+		} else if byte < 0x80 or byte >= 0xC0 {
+			# Count characters, not continuation bytes.
+			$column = $column + 1
+		}
+
+		$index = $index + 1
+	}
+
+	match $problem {
+		Ok(location) => fail(location.line, location.column, "YAML does not allow this control or non-character code point")
+		Err(_) => Ok(bytes)
+	}
 }
 
 ## `terminated` is false only for a final line without a line break. `tab`
@@ -223,6 +268,10 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 					}
 			} else {
 				match (if is_sequence_line(payload) Ok({}) else split_mapping_entry(payload).map_ok(|_| {})) {
+					# A tab before a compact collection would be part of its indentation.
+					Ok(_) if line.content.drop_first(1).take_first(payload_indent - line.indent - 1 + 1).contains('\t') =>
+						fail(line.number, line.indent + 2, "tabs may not be used for YAML indentation")
+
 					Ok(_) => {
 						virtual = { content: payload, indent: payload_indent, number: line.number, terminated: line.terminated, tab: Bool.False }
 						child = parse_node(List.prepend(rest, virtual), payload_indent, depth + 1, raw_lines)?
@@ -352,7 +401,8 @@ collect_block_lines : List(Line), U64, BlockIndent, U64 -> Try({ lines : List(St
 collect_block_lines = |raw_lines, min_indent, block_indent, header_line| {
 	var $content_indent =
 		match block_indent {
-			ExplicitIndent(offset) => FixedIndent(min_indent + offset - 1)
+			# Like libyaml and ruamel, a root indicator counts from column 0.
+			ExplicitIndent(offset) => FixedIndent((if min_indent == 0 1 else min_indent) + offset - 1)
 			AutoIndent => PendingIndent
 		}
 	var $lines = []
@@ -582,8 +632,14 @@ parse_inline_value = |raw, line, column| {
 		['%', ..] =>
 			fail(line, column, "YAML directives are not supported by this YAML subset")
 
-		['?', ..] =>
+		['?'] | ['?', ' ', ..] | ['?', '\t', ..] =>
 			fail(line, column, "complex mapping keys are not supported by this YAML subset")
+
+		[first, ..] if first == ']' or first == '}' or first == ',' or first == '@' or first == '`' =>
+			fail(line, column, "a plain scalar cannot start with `${String.str_from_utf8([first])}`")
+
+		['-'] | ['-', ' ', ..] | ['-', '\t', ..] | [':'] | [':', ' ', ..] | [':', '\t', ..] =>
+			fail(line, column, "a plain scalar cannot start with an indicator followed by white space")
 
 		['"', ..] =>
 			parse_double_quoted(bytes, line, column).map_ok(|text| String(text))
@@ -591,7 +647,21 @@ parse_inline_value = |raw, line, column| {
 		['\'', ..] =>
 			parse_single_quoted(bytes, line, column).map_ok(|text| String(text))
 
+		_ if contains_mapping_indicator(bytes) =>
+			fail(line, column, "a mapping value is not allowed here; quote the scalar if it contains \": \"")
+
 		_ => parse_plain_scalar(bytes, line, column)
+	}
+}
+
+## ": " or a final ":" inside a plain scalar would start a mapping value.
+contains_mapping_indicator : String.Utf8 -> Bool
+contains_mapping_indicator = |bytes| {
+	match bytes {
+		[] => Bool.False
+		[':'] => Bool.True
+		[':', ' ', ..] | [':', '\t', ..] => Bool.True
+		[_, .. as rest] => contains_mapping_indicator(rest)
 	}
 }
 
@@ -790,7 +860,10 @@ parse_key = |raw, line, column| {
 		[] => fail(line, column, "mapping keys must not be empty")
 		['"', ..] => parse_double_quoted(bytes, line, column)
 		['\'', ..] => parse_single_quoted(bytes, line, column)
-		['[', ..] | ['{', ..] | ['?', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
+		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
+		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
+		[first, ..] if first == '|' or first == '>' or first == '%' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
+			fail(line, column, "a plain mapping key cannot start with `${String.str_from_utf8([first])}`")
 		_ => Ok(String.str_from_utf8(bytes))
 	}
 }
@@ -950,6 +1023,16 @@ prepare_lines = |raw_lines| {
 	without_start =
 		match clean {
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
+			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(String.str_from_utf8(first.content), "---") => {
+				# "--- node": the root node starts on the marker line (YAML 1.2 9.1.4).
+				node = trim_spaces(first.content.drop_first(3))
+				column = first.content.len() - node.len() + 1
+				if is_sequence_line(node) or split_mapping_entry(node).is_ok() {
+					return fail(first.number, column, "a block collection cannot start on the document start line")
+				}
+				List.prepend(rest, { content: node, indent: 0, number: first.number, terminated: first.terminated, tab: Bool.False })
+			}
+
 			_ => clean
 		}
 
@@ -1179,7 +1262,7 @@ is_sequence_line : String.Utf8 -> Bool
 is_sequence_line = |bytes| {
 	match bytes {
 		['-'] => Bool.True
-		['-', ' ', ..] => Bool.True
+		['-', ' ', ..] | ['-', '\t', ..] => Bool.True
 		_ => Bool.False
 	}
 }
@@ -1188,7 +1271,7 @@ sequence_payload : String.Utf8 -> String.Utf8
 sequence_payload = |bytes| {
 	match bytes {
 		['-'] => []
-		['-', ' ', .. as rest] => trim_spaces(rest)
+		['-', ' ', .. as rest] | ['-', '\t', .. as rest] => trim_spaces(rest)
 		_ => bytes
 	}
 }
@@ -1436,6 +1519,32 @@ expect {
 		{ key: "steps", value: Sequence([Mapping([{ key: "run", value: String("a") }, { key: "name", value: String("x") }]), String("b")]) },
 		{ key: "next", value: Int(1) },
 	])
+}
+
+## A byte order mark is not content; control characters are rejected.
+expect {
+	actual = Yaml.parse_str("\u(FEFF)value: one\n")?
+	actual == Mapping([{ key: "value", value: String("one") }]) and Yaml.parse_str("value: a\u(0)b").is_err() and Yaml.parse_str("v: \u(85)").is_ok()
+}
+
+## The root node may start on the document start line, but not a block collection.
+expect {
+	actual = Yaml.parse_str("--- |1-\n x\n")?
+	plain = Yaml.parse_str("---\tscalar\n")?
+	actual == String("x") and plain == String("scalar") and Yaml.parse_str("--- a: b\n").is_err()
+}
+
+## Indicators cannot start plain scalars, and plain scalars cannot hold ": ".
+expect {
+	invalid = ["value: ]", "[-]", "[-, -]", "- [ : empty key ]", "a: b: c: d", "&a: key", "a: -"]
+	valid = Yaml.parse_str("a: ?x\n?y: -z\n")?
+	invalid.all(|text| Yaml.parse_str(text).is_err()) and valid == Mapping([{ key: "a", value: String("?x") }, { key: "?y", value: String("-z") }])
+}
+
+## A tab may separate a sequence dash from a scalar, but not from a nested collection.
+expect {
+	actual = Yaml.parse_str("-\t-1\n")?
+	actual == Sequence([Int(-1)]) and Yaml.parse_str("-\t-\n").is_err() and Yaml.parse_str("- \t-\n").is_err()
 }
 
 ## Syntax errors report their source location.
