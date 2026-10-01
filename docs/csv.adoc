@@ -186,7 +186,7 @@ order. A field parser is any `Parser(Utf8.Bytes, a)`; `CSV.string`,
 include::examples/csv-guide.roc[tag=combinators,indent=0]
 ----
 
-Run it on text with `CSV.parse_str`, or on records you already have with
+Run it on text with `CSV.parse_with`, or on records you already have with
 `CSV.decode`. Columns are matched by position, and the record parser must
 read every field in the row: a row with more fields than `.keep` calls fails,
 and so does a row with fewer.

@@ -8,13 +8,13 @@ import parser.CSV
 import parser.Parser
 import Bench
 
-## Benchmark driver: CSV.parse_str decoding every field to a Str.
+## Benchmark driver: CSV.parse_with decoding every field to a Str.
 main! : List(OsStr) => Try({}, _)
 main! = |args| Bench.run!(args, parse)
 
 parse : Str -> Try(U64, U64)
 parse = |input| {
-	match CSV.parse_str(Parser.many(CSV.field(CSV.string)), input) {
+	match CSV.parse_with(Parser.many(CSV.field(CSV.string)), input) {
 		Ok(rows) => Ok(rows.fold(0, |total, row| row.fold(total + 1, |sum, field| sum + field.count_utf8_bytes().to_u64())))
 		Err(_) => Err(1)
 	}

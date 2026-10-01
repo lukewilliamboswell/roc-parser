@@ -11,7 +11,7 @@ import parser.Parser
 ## values, how each number is spelled, how each field is quoted, and possibly
 ## one defect per row (a malformed number, an extra field, a missing field).
 ##
-## - Positional: CSV.parse_str with the record(...).keep(field(u64))...
+## - Positional: CSV.parse_with with the record(...).keep(field(u64))...
 ##   decoder must return exactly those values, or fail on the first defective
 ##   row with an error naming its record and field.
 ## - By name (parser_for): the same table written with a header row, its
@@ -310,7 +310,7 @@ test : Input -> Fuzz.Outcome
 test = |input| {
 	positional : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	positional =
-		match CSV.parse_str(decoder, input.csv) {
+		match CSV.parse_with(decoder, input.csv) {
 			Ok(rows) => Ok(rows)
 			Err(InvalidCsv(problem)) => Err(InvalidCsv(problem))
 		}

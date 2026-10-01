@@ -34,7 +34,7 @@ other five are ready-made parsers for one format each.
 
 |{api}CSV/[`CSV`]
 |Read comma-separated values, raw or decoded into your own record type
-|`CSV.parse`, `CSV.parse_str`, `CSV.parse_records`
+|`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
 
 |{api}HTTP/[`HTTP`]
 |Read one HTTP/1.1 request or response message, including its body
@@ -139,7 +139,7 @@ exact dialect.
   `MissingRequiredField(name)`. `CSV.parse_normalized` matches headers such as
   `First Name` to `first_name`, and `CSV.parse_headerless` decodes rows into
   tuples.
-* `CSV.parse_str` matches columns by position instead, with a record parser
+* `CSV.parse_with` matches columns by position instead, with a record parser
   you build from `CSV.record`, `CSV.field` and `.keep(...)`. Field parsers
   `CSV.string`, `CSV.u64` and `CSV.f64` are provided, and any
   `Parser(Utf8.Bytes, a)` works.

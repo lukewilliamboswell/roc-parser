@@ -20,7 +20,7 @@ main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	csv_input = args.get(1).map_ok(OsStr.display) ?? input
 
-	match CSV.parse_str(movie_info_parser, csv_input) {
+	match CSV.parse_with(movie_info_parser, csv_input) {
 		Ok(movies) => {
 			movies_string =
 				movies

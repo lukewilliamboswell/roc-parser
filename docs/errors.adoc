@@ -37,7 +37,7 @@ format has. Combinator runners report the furthest failure.
 |`InvalidXml({ line, column, message })`
 |Where the problem is and what it is. Columns count bytes.
 
-|`CSV.parse`, `CSV.parse_str`, `CSV.parse_records`
+|`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
 |`InvalidCsv({ record, field, line, column, message })`
 |The record and field that failed, where they start in the text, and why:
 bad CSV syntax, a field your parser rejected, or a row of the wrong width.

@@ -24,7 +24,7 @@ import Utf8
 ##
 ## - [CSV.parse] decodes rows into records whose field names match the header
 ##   row, with the row type chosen by type inference;
-## - [CSV.parse_str] runs a hand-built record parser (`record`, `field` and
+## - [CSV.parse_with] runs a hand-built record parser (`record`, `field` and
 ##   `Parser.keep`) over every row, matching columns by position;
 ## - [CSV.parse_records] returns the raw fields.
 ##
@@ -111,10 +111,10 @@ CSV :: [].{
 	## user : Parser(CSV.Record, { name : Str, age : U64 })
 	## user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
 	##
-	## expect CSV.parse_str(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+	## expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 	## ```
-	parse_str : Parser(Record, a), Str -> Try(List(a), [InvalidCsv(Error)])
-	parse_str = |record_parser, text| {
+	parse_with : Parser(Record, a), Str -> Try(List(a), [InvalidCsv(Error)])
+	parse_with = |record_parser, text| {
 		bytes = text.to_utf8()
 		match scan_table(bytes) {
 			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
@@ -129,7 +129,7 @@ CSV :: [].{
 
 	## Decode already parsed records with a hand-built record parser.
 	##
-	## Errors are as for [CSV.parse_str], numbered from the first record given,
+	## Errors are as for [CSV.parse_with], numbered from the first record given,
 	## with `line` and `column` set to `0`.
 	decode : Parser(Record, a), List(Record) -> Try(List(a), [InvalidCsv(Error)])
 	decode = |record_parser, records| {
@@ -163,7 +163,7 @@ CSV :: [].{
 	## name : Parser(CSV.Record, Name)
 	## name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.string))
 	##
-	## expect CSV.parse_str(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
+	## expect CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 	## ```
 	record : a -> Parser(Record, a)
 	record = |f| {
@@ -1011,16 +1011,16 @@ expect CSV.split_header([["a".to_utf8()], ["1".to_utf8()]]) == { header: ["a"], 
 user : Parser(CSV.Record, { name : Str, age : U64 })
 user = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.u64))
 
-expect CSV.parse_str(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+expect CSV.parse_with(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 
 # A field that does not decode names its record, field and position.
-expect error_of(CSV.parse_str(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2, field: 2, line: 2, column: 6, message: "expected a U64, found `forty`" })
+expect error_of(CSV.parse_with(user, "Ada,36\nAlan,forty\n")) == Ok({ record: 2, field: 2, line: 2, column: 6, message: "expected a U64, found `forty`" })
 
 # Extra fields are an error carrying the record number.
-expect error_of(CSV.parse_str(user, "Ada,36\n\"Al\nan\",41,x\n")) == Ok({ record: 2, field: 3, line: 3, column: 8, message: "the record has 3 fields, but the parser read only 2" })
+expect error_of(CSV.parse_with(user, "Ada,36\n\"Al\nan\",41,x\n")) == Ok({ record: 2, field: 3, line: 3, column: 8, message: "the record has 3 fields, but the parser read only 2" })
 
 # Too few fields is an error too.
-expect error_of(CSV.parse_str(user, "Ada")) == Ok({ record: 1, field: 2, line: 1, column: 1, message: "expected another field, but the record has no more" })
+expect error_of(CSV.parse_with(user, "Ada")) == Ok({ record: 1, field: 2, line: 1, column: 1, message: "expected another field, but the record has no more" })
 
 # Regression: decoding fields that are not UTF-8 cannot crash, and messages
 # quote a bounded, lossy excerpt.
@@ -1194,7 +1194,7 @@ expect {
 expect {
 	name : Parser(CSV.Record, { first : Str, last : Str })
 	name = CSV.record(|first| |last| { first, last }).keep(CSV.field(CSV.string)).keep(CSV.field(CSV.string))
-	CSV.parse_str(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
+	CSV.parse_with(name, "Ada,Lovelace") == Ok([{ first: "Ada", last: "Lovelace" }])
 }
 
 expect {

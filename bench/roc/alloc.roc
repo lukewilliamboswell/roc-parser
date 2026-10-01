@@ -28,7 +28,7 @@ test! = |bytes| {
 parse : Str, Str -> Str
 parse = |format, input| {
 	accepted = match format {
-		"csv" => CSV.parse_str(Parser.many(CSV.field(CSV.string)), input).is_ok()
+		"csv" => CSV.parse_with(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()
 		"markdown" => Markdown.parse_str(input).len() + 1 > 0

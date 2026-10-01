@@ -123,7 +123,7 @@ movie =
 # tag::errors[]
 describe : Str -> Str
 describe = |text| {
-	match CSV.parse_str(movie, text) {
+	match CSV.parse_with(movie, text) {
 		Ok(movies) => "${movies.len().to_str()} movies"
 		Err(InvalidCsv({ record, field, line, column, message })) =>
 			"record ${record.to_str()}, field ${field.to_str()} (line ${line.to_str()}, column ${column.to_str()}): ${message}"

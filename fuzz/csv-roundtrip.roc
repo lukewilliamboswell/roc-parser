@@ -119,14 +119,14 @@ show_rows = |rows| Str.inspect(rows)
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match CSV.parse_str(all_fields, input.csv) {
+	match CSV.parse_with(all_fields, input.csv) {
 		Ok(rows) if rows == input.expected => {}
 		Ok(rows) => crash "round trip mismatch\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- actual ---\n${show_rows(rows)}"
 		Err(InvalidCsv(problem)) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- error ---\n${Str.inspect(problem)}"
 	}
 	match CSV.parse_records(input.csv) {
 		Ok(records) if records.map(|fields| fields.map(Str.from_utf8_lossy)) == input.expected => {}
-		_ => crash "parse_records disagrees with parse_str\n${Str.inspect(input.csv)}"
+		_ => crash "parse_records disagrees with parse_with\n${Str.inspect(input.csv)}"
 	}
 	Fuzz.keep
 }

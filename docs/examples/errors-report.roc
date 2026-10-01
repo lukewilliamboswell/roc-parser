@@ -42,7 +42,7 @@ row =
 
 csv_message : Str -> Str
 csv_message = |source| {
-	match CSV.parse_str(row, source) {
+	match CSV.parse_with(row, source) {
 		Ok(rows) => "${rows.len().to_str()} rows"
 		Err(InvalidCsv({ line, column, record, field, message })) =>
 			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${message}"
