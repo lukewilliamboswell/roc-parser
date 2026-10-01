@@ -265,6 +265,274 @@ Utf8 :: [].{
 				},
 			)
 			.flatten()
+
+	## A set of byte values, for finding or skipping runs of bytes 16 at a time.
+	##
+	## Build a class once, outside any loop, and reuse it: construction derives
+	## the lookup tables the vector scan uses. Any set of bytes works. A set
+	## whose high-nibble rows have at most eight distinct shapes (every ASCII
+	## class, and most practical ones) is scanned with two table lookups per 16
+	## bytes; other sets fall back to a byte loop.
+	##
+	## ```roc
+	## spaces = Utf8.ByteClass.from_bytes([' ', '\t'])
+	## expect spaces.contains('\t')
+	## expect !spaces.contains('x')
+	## ```
+	ByteClass :: { lo : U8x16, hi : U8x16, a : U8x16, b : U8x16, c : U8x16, members : List(Bool), kind : [Exact, Nibbles, Bytewise] }.{
+
+		## The class holding exactly these bytes.
+		from_bytes : List(U8) -> ByteClass
+		from_bytes = |bytes| {
+			var $members = List.repeat(False, 256)
+			for b in bytes {
+				$members = $members.set(b.to_u64(), True) ?? $members
+			}
+			build_class($members)
+		}
+
+		## The class holding every byte `b` for which `check(b)` is true.
+		from_predicate : (U8 -> Bool) -> ByteClass
+		from_predicate = |check| {
+			var $members = List.with_capacity(256)
+			var $b = 0.U64
+			while $b < 256 {
+				$members = $members.append(check($b.to_u8_wrap()))
+				$b = $b + 1
+			}
+			build_class($members)
+		}
+
+		## The class holding every byte that is not in this one.
+		complement : ByteClass -> ByteClass
+		complement = |class| build_class(class.members.map(|m| !m))
+
+		## Whether the byte is in the class.
+		contains : ByteClass, U8 -> Bool
+		contains = |class, byte| class.members.get(byte.to_u64()) ?? False
+	}
+
+	## The index of the first byte at or after `pos` that is in `class`, or
+	## the length of `bytes` if there is none. Scans 16 bytes at a time.
+	##
+	## ```roc
+	## markup = Utf8.ByteClass.from_bytes(['<', '&'])
+	## expect Utf8.find_any("a&b<c".to_utf8(), 0, markup) == 1
+	## expect Utf8.find_any("abc".to_utf8(), 0, markup) == 3
+	## ```
+	find_any : Bytes, U64, ByteClass -> U64
+	find_any = |bytes, pos, class| scan_class(bytes, pos, class, True)
+
+	## The index of the first byte at or after `pos` that is not in `class`,
+	## or the length of `bytes` if every remaining byte is. Use it to skip a
+	## run of name characters, digits or whitespace.
+	##
+	## ```roc
+	## digits = Utf8.ByteClass.from_predicate(|b| b >= '0' and b <= '9')
+	## expect Utf8.skip_class("123abc".to_utf8(), 0, digits) == 3
+	## ```
+	skip_class : Bytes, U64, ByteClass -> U64
+	skip_class = |bytes, pos, class| scan_class(bytes, pos, class, False)
+
+	## The index of the next `\n` or `\r` at or after `pos`, or the length of
+	## `bytes` if there is none. Scans 16 bytes at a time.
+	##
+	## ```roc
+	## expect Utf8.find_line_end("ab\r\ncd".to_utf8(), 0) == 2
+	## ```
+	find_line_end : Bytes, U64 -> U64
+	find_line_end = |bytes, pos| {
+		cr = U8x16.splat('\r')
+		lf = U8x16.splat('\n')
+		len = bytes.len()
+		var $i = pos
+		var $scanning = True
+		while $scanning {
+			match U8x16.load(bytes, $i) {
+				Ok(v) => {
+					mask = U8x16.to_bitmask(U8x16.bitwise_or(U8x16.eq_lanes(v, cr), U8x16.eq_lanes(v, lf)))
+					if mask != 0 {
+						$i = $i + U16.count_trailing_zero_bits(mask).to_u64()
+						$scanning = False
+					} else {
+						$i = $i + 16
+					}
+				}
+				Err(_) => {
+					$scanning = False
+					while $i < len {
+						c = bytes.get($i) ?? 0
+						if c == '\n' or c == '\r' {
+							break
+						}
+						$i = $i + 1
+					}
+				}
+			}
+		}
+		$i
+	}
+
+	## Consume the longest run of bytes in `class`, possibly empty, and return
+	## it as a slice of the input. It scans 16 bytes at a time, so prefer it to
+	## `Parser.chomp_while` for runs longer than a few bytes.
+	##
+	## ```roc
+	## name_char = Utf8.ByteClass.from_predicate(|b| (b >= 'a' and b <= 'z') or b == '-')
+	## expect Utf8.parse_str_partial(Utf8.span_class(name_char), "foo-bar=1").map_ok(|r| r.rest) == Ok("=1")
+	## ```
+	span_class : ByteClass -> Parser(Bytes, Bytes)
+	span_class = |class| Parser.custom(
+		|input| {
+			n = scan_class(input, 0, class, False)
+			Ok({ value: input.take_first(n), rest: input.drop_first(n) })
+		},
+	)
+}
+
+# Derive nibble lookup tables for a byte set. Byte `b` is in the set exactly
+# when `lo[b & 15] & hi[b >> 4] != 0`. Each distinct non-empty high-nibble row
+# (the set of low nibbles present under that high nibble) gets its own bit, so
+# the tables are exact when there are at most eight distinct rows; otherwise
+# the class scans byte by byte.
+build_class : List(Bool) -> Utf8.ByteClass
+build_class = |members| {
+	var $shapes = []
+	var $hi = []
+	var $h = 0.U64
+	while $h < 16 {
+		var $row = 0.U16
+		var $l = 0.U64
+		while $l < 16 {
+			if members.get($h * 16 + $l) ?? False {
+				$row = $row.bitwise_or(1.U16.shl_wrap($l.to_u8_wrap()))
+			}
+			$l = $l + 1
+		}
+		row = $row
+		if row == 0 {
+			$hi = $hi.append(0.U8)
+		} else {
+			match $shapes.find_first_index(|s| s == row) {
+				Ok(k) => {
+					$hi = $hi.append(1.U8.shl_wrap(k.to_u8_wrap()))
+				}
+				Err(NotFound) => {
+					k = $shapes.len()
+					$shapes = $shapes.append(row)
+					$hi = $hi.append(if k < 8 1.U8.shl_wrap(k.to_u8_wrap()) else 0)
+				}
+			}
+		}
+		$h = $h + 1
+	}
+	shapes = $shapes
+	var $lo = []
+	var $l2 = 0.U64
+	while $l2 < 16 {
+		bit = 1.U16.shl_wrap($l2.to_u8_wrap())
+		var $entry = 0.U8
+		var $k = 0.U64
+		while $k < shapes.len() and $k < 8 {
+			if (shapes.get($k) ?? 0).bitwise_and(bit) != 0 {
+				$entry = $entry.bitwise_or(1.U8.shl_wrap($k.to_u8_wrap()))
+			}
+			$k = $k + 1
+		}
+		$lo = $lo.append($entry)
+		$l2 = $l2 + 1
+	}
+	lo = U8x16.from_list($lo) ?? U8x16.splat(0)
+	hi = U8x16.from_list($hi) ?? U8x16.splat(0)
+	# Sets of one to three bytes compare against those bytes directly, which
+	# is cheaper than two table lookups. Repeat the last byte to fill all three.
+	var $exact = []
+	var $m = 0.U64
+	while $m < 256 {
+		if members.get($m) ?? False {
+			$exact = $exact.append($m.to_u8_wrap())
+		}
+		$m = $m + 1
+	}
+	exact = $exact
+	last = exact.last() ?? 0
+	kind = if exact.len() >= 1 and exact.len() <= 3 Exact else if shapes.len() <= 8 Nibbles else Bytewise
+	{
+		lo,
+		hi,
+		a: U8x16.splat(exact.get(0) ?? last),
+		b: U8x16.splat(exact.get(1) ?? last),
+		c: U8x16.splat(exact.get(2) ?? last),
+		members,
+		kind,
+	}
+}
+
+# The index of the first byte at or after `pos` whose membership in `class`
+# equals `want`, or the length of `bytes`.
+scan_class : Utf8.Bytes, U64, Utf8.ByteClass, Bool -> U64
+scan_class = |bytes, pos, class, want| {
+	len = bytes.len()
+	var $i = pos
+	match class.kind {
+		Exact => {
+			a = class.a
+			b = class.b
+			c = class.c
+			var $scanning = True
+			while $scanning {
+				match U8x16.load(bytes, $i) {
+					Ok(v) => {
+						inside = U8x16.to_bitmask(U8x16.bitwise_or(U8x16.bitwise_or(U8x16.eq_lanes(v, a), U8x16.eq_lanes(v, b)), U8x16.eq_lanes(v, c)))
+						mask = if want inside else inside.bitwise_not()
+						if mask != 0 {
+							$i = $i + U16.count_trailing_zero_bits(mask).to_u64()
+							$scanning = False
+						} else {
+							$i = $i + 16
+						}
+					}
+					Err(_) => {
+						$scanning = False
+					}
+				}
+			}
+		}
+		Nibbles => {
+			lo_table = class.lo
+			hi_table = class.hi
+			nibble = U8x16.splat(15)
+			zero = U8x16.splat(0)
+			var $scanning = True
+			while $scanning {
+				match U8x16.load(bytes, $i) {
+					Ok(v) => {
+						lo = U8x16.table_lookup(lo_table, U8x16.bitwise_and(v, nibble))
+						hi = U8x16.table_lookup(hi_table, U8x16.shr_zf_wrap(v, 4))
+						outside = U8x16.to_bitmask(U8x16.eq_lanes(U8x16.bitwise_and(lo, hi), zero))
+						mask = if want outside.bitwise_not() else outside
+						if mask != 0 {
+							$i = $i + U16.count_trailing_zero_bits(mask).to_u64()
+							$scanning = False
+						} else {
+							$i = $i + 16
+						}
+					}
+					Err(_) => {
+						$scanning = False
+					}
+				}
+			}
+		}
+		Bytewise => {}
+	}
+	while $i < len {
+		if (class.members.get((bytes.get($i) ?? 0).to_u64()) ?? False) == want {
+			break
+		}
+		$i = $i + 1
+	}
+	$i
 }
 
 str_from_codeunit : U8 -> Str
@@ -637,3 +905,75 @@ expect {
 	}
 	both("7") == Ok(7) and both("700") == Err(TooBig) and both("x").is_err()
 }
+
+# Reference scan for the vector primitives: the first index at or after `pos`
+# whose membership equals `want`.
+scan_reference : List(U8), U64, (U8 -> Bool), Bool -> U64
+scan_reference = |bytes, pos, member, want| {
+	var $i = pos
+	while $i < bytes.len() {
+		if member(bytes.get($i) ?? 0) == want {
+			break
+		}
+		$i = $i + 1
+	}
+	$i
+}
+
+every_byte : List(U8)
+every_byte = {
+	var $all = []
+	var $b = 0.U64
+	while $b < 256 {
+		$all = $all.append($b.to_u8_wrap())
+		$b = $b + 1
+	}
+	$all
+}
+
+# Every byte value, at several lane positions of a 16-byte block and in the
+# tail, is classified like the scalar reference, for ASCII, high-byte and
+# more-than-eight-row classes.
+expect {
+	classes = [
+		|b| b == '<' or b == '&',
+		|b| (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '-' or b == '_' or b == '.' or b == ':' or b >= 0x80,
+		|b| b == ' ' or b == '\t' or b == '\n' or b == '\r',
+		|b| b % 3 == 0,
+		|b| b % 16 <= b / 16,
+		|b| b >= 0xC0,
+	]
+	classes.all(
+		|member| {
+			class = Utf8.ByteClass.from_predicate(member)
+			every_byte.all(
+				|byte| {
+					other = if member('a') 0x00 else 'a'
+					filler = if member(other) 0x01 else other
+					run = List.repeat(byte, 37)
+					[0, 5, 15, 16, 31, 40].all(
+						|at| {
+							input = List.repeat(filler, 41).set(at, byte) ?? []
+							Utf8.find_any(input, 0, class) == scan_reference(input, 0, member, True)
+								and Utf8.find_any(input, 3, class) == scan_reference(input, 3, member, True)
+						},
+					)
+						and Utf8.skip_class(run, 0, class) == scan_reference(run, 0, member, False)
+				},
+			)
+		},
+	)
+}
+
+# Sets of up to eight distinct row shapes scan with vectors; others with bytes.
+expect Utf8.ByteClass.from_predicate(|b| b % 3 == 0).kind == Nibbles
+expect Utf8.ByteClass.from_predicate(|b| b % 16 <= b / 16).kind == Bytewise
+expect Utf8.ByteClass.from_bytes(['<', '&']).kind == Exact
+
+expect Utf8.find_line_end(List.repeat('a', 40).append('\n'), 0) == 40
+expect Utf8.find_line_end(List.repeat('a', 40).append('\r'), 7) == 40
+expect Utf8.find_line_end("abc".to_utf8(), 0) == 3
+expect Utf8.find_line_end("abc".to_utf8(), 5) == 5
+expect Utf8.find_any([], 0, Utf8.ByteClass.from_bytes(['x'])) == 0
+expect Utf8.ByteClass.from_bytes(['a']).complement().contains('b')
+expect Utf8.parse_str_partial(Utf8.span_class(Utf8.ByteClass.from_bytes(['a'])), "aaab").map_ok(|r| r.rest) == Ok("b")

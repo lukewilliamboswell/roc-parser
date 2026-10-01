@@ -87,6 +87,7 @@ TARGETS = dict(
         target("http-smuggling", timeout=10),
         target("parser-combinators", max_input_size=256),
         target("string-primitives", max_input_size=256, timeout=10),
+        target("byte-scan", max_input_size=256, timeout=10),
     ]
 )
 
