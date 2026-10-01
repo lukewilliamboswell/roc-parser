@@ -16,20 +16,30 @@ its blocks and inline content, pull out YAML frontmatter, and write a renderer.
 
 The `Markdown` module follows CommonMark 0.31.2 plus the GitHub Flavored
 Markdown (GFM) extensions for tables, task list items, strikethrough and
-extended autolinks.
+extended autolinks. It also reads a leading `---` frontmatter block.
+
+[WARNING]
+====
+Raw HTML in the source passes through unchanged as `HtmlBlock` and
+`HtmlInline` values. The parser does not apply the GFM tagfilter and does not
+check link destinations, so a `javascript:` URL is kept as written. If you
+render Markdown you did not write, sanitise the HTML you produce or drop those
+nodes and unsafe URLs. See <<markdown-render>>.
+====
 
 == Parse a document into blocks
 
-Parse a whole document with `Markdown.all`. It returns a `List(Markdown)`: one
-value per top-level block, in document order.
+Parse a whole document with `Markdown.parse_str`. It returns a
+`List(Markdown)`: one value per top-level block, in document order.
 
 Markdown has no syntax errors. Every input is a valid document, so
-`Markdown.all` always succeeds; text that looks like broken syntax becomes
-ordinary paragraph text.
+`Markdown.parse_str` returns the blocks directly rather than a `Try`; text that
+looks like broken syntax becomes ordinary paragraph text. To use the document
+parser inside your own combinators, `Markdown.parser` is the same parser as a
+`Parser(Utf8.Bytes, List(Markdown))`.
 
 The following app parses a document that uses each kind of block and prints
-each block with `to_debug_str`, a stable debug rendering that is useful when
-you want to see what the parser produced.
+each block with `Str.inspect`, which shows what the parser produced.
 
 [source,roc]
 ----
@@ -83,12 +93,16 @@ The block variants are:
 |`HtmlBlock(raw)`
 |Raw HTML, including its trailing newline, exactly as written.
 
-|`Frontmatter({ raw })`
-|YAML frontmatter; see <<markdown-frontmatter,Read frontmatter>>.
-
-|`TODO(text)`
-|Not produced by `Markdown.all`. Match it with a catch-all branch.
+|`Frontmatter(raw)`
+|The raw text of a leading frontmatter block; only ever the first block. See <<markdown-frontmatter,Read frontmatter>>.
 |===
+
+Block quotes and lists nest at most 1,000 levels deep. Deeper `>` and list
+markers are read as paragraph text, so code that walks the tree recursively
+cannot run out of stack on hostile input.
+
+The syntax tree types support `==` and hashing, so blocks and inlines can be
+`Dict` keys and `Set` elements.
 
 Link reference definitions (`[label]: /url`) do not appear in the tree. The
 parser resolves them into the links that use them.
@@ -97,7 +111,8 @@ parser resolves them into the links that use them.
 
 Inline content is the text inside a paragraph, heading or table cell. When you
 already have a single line or fragment, such as a title from a database, parse
-it directly with `Markdown.inlines`:
+it directly with `Markdown.parse_inlines`, which returns a `List(Inline)`.
+`Markdown.inline_parser` is the same parser for use in combinators.
 
 [source,roc]
 ----
@@ -120,14 +135,14 @@ Text(" ")
 Strikethrough([Text("gone")])
 Text(" ")
 InlineCode("x + 1")
-Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Some("Home") } })
+Link({ label: [Text("Roc")], target: { href: "https://roc-lang.org", title: Ok("Home") } })
 Text(" and ")
-Image({ alt: [Text("a cat")], target: { href: "cat.png", title: None } })
-Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: None } })
+Image({ alt: [Text("a cat")], target: { href: "cat.png", title: Err(Missing) } })
+Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: Err(Missing) } })
 Text(" ")
-Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: None } })
+Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: Err(Missing) } })
 Text(" ")
-Link({ label: [Text("me@example.com")], target: { href: "mailto:me@example.com", title: None } })
+Link({ label: [Text("me@example.com")], target: { href: "mailto:me@example.com", title: Err(Missing) } })
 Text("one
 two")
 HardBreak
@@ -148,13 +163,15 @@ The output shows these rules:
 * Backslash escapes and entity references such as `&amp;` are decoded, so
   `Text` holds the characters the reader sees, not the source.
 * Inline HTML such as `<b>` becomes `HtmlInline(raw)`.
+* A link's `target` is `{ href, title }`, where `title` is `Ok(text)` or
+  `Err(Missing)`.
 
 === Reference links need the whole document
 
 A reference link such as `[the guide][guide]` points to a definition elsewhere
-in the document. `Markdown.inlines` sees only the fragment you give it, so it
-cannot resolve the reference and leaves the brackets as text. Parse the whole
-document with `Markdown.all` instead:
+in the document. `Markdown.parse_inlines` sees only the fragment you give it,
+so it cannot resolve the reference and leaves the brackets as text. Parse the
+whole document with `Markdown.parse_str` instead:
 
 [source,roc]
 ----
@@ -170,7 +187,7 @@ Output:
 
 [source,text]
 ----
-Paragraph([Text("See "), Link({ label: [Text("the guide")], target: { href: "https://example.com/guide", title: Some("The guide") } }), Text(" and "), Image({ alt: [Text("logo")], target: { href: "/logo.png", title: None } }), Text(".")])
+Paragraph([Text("See "), Link({ label: [Text("the guide")], target: { href: "https://example.com/guide", title: Ok("The guide") } }), Text(" and "), Image({ alt: [Text("logo")], target: { href: "/logo.png", title: Err(Missing) } }), Text(".")])
 ----
 
 Reference labels match case-insensitively using Unicode case folding, so
@@ -181,10 +198,11 @@ Reference labels match case-insensitively using Unicode case folding, so
 
 Many static-site tools put metadata at the top of a Markdown file between two
 `---` lines. When the document's first line is exactly `---` and a later line
-is exactly `---`, `Markdown.all` returns the lines between them as the first
-block, `Frontmatter({ raw })`, and parses the rest as Markdown. The parser does
-not interpret `raw`. Pass it to the YAML parser (see <<yaml>>) to read the
-fields:
+is exactly `---`, `Markdown.parse_str` returns the lines between them as the
+first block, `Frontmatter(raw)`, and parses the rest as Markdown.
+`Markdown.frontmatter(blocks)` returns that text, or `Err(Missing)` when the
+document has none. The parser does not interpret the text. Pass it to the YAML
+parser (see <<yaml>>) to read the fields:
 
 [source,roc]
 ----
@@ -201,6 +219,7 @@ include::examples/markdown-frontmatter.expected[]
 Without a closing `---` line, the opening `---` is ordinary Markdown: a
 thematic break, or a Setext heading underline.
 
+[#markdown-render]
 == Walk the tree to produce output
 
 To produce output, write two functions: one that matches each block variant
@@ -281,21 +300,18 @@ attribute.
   paragraphs and attribute escaping.
 * Frontmatter is a convention outside both specifications. Only the
   `---` / `---` form at the very start of the document is recognised.
-* The functions `Markdown.heading`, `Markdown.link`, `Markdown.image` and
-  `Markdown.code` each parse one construct at the start of the input, for use
-  inside your own combinators. They do not share the document parser's
-  context: for example, `Markdown.code` recognises only triple-backtick fences.
-  Use `Markdown.all` for documents.
+* Block quotes and lists nest at most 1,000 levels deep; deeper markers are
+  text. CommonMark sets no limit, so a document nested more deeply than that
+  parses differently from the specification.
 
 The {api}[API reference] lists every type and function in the module.
 
 [#markdown-performance]
 == Performance
 
-`Markdown.all` parses about 16 MB/s on an Apple M2, building the block tree
-and every inline: a typical README in about 0.2 ms. That is about 5 times
-slower than goldmark (Go) and comrak (Rust), 13 times slower than
-pulldown-cmark, and 5 times faster than markdown-it-py. Inline parsing stays
-linear on runs of unmatched emphasis and brackets; very deep block quote
-nesting is quadratic in the depth. See <<performance>> for the measurements
-and caveats.
+`Markdown.parse_str` parses about 15 MB/s on an Apple M2, building the block
+tree and every inline: a typical README in about 0.25 ms. That is about 5
+times slower than goldmark (Go) and comrak (Rust), 13 times slower than
+pulldown-cmark, and 5 times faster than markdown-it-py. Parsing stays linear
+on runs of unmatched emphasis and brackets and on deeply nested block quotes
+and lists. See <<performance>> for the measurements and caveats.
