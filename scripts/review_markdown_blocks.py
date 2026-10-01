@@ -460,8 +460,12 @@ def erase_tightness(blocks: list) -> list:
 
 
 def has_break_in_list(blocks: list, in_list: bool = False) -> bool:
+    """A thematic break, or a table without body rows, inside a list item.
+    cmark-gfm 0.29.0.gfm.13 also reads a list as loose when an item that is
+    not the last one ends with a header-only table (`- a | b\n  -|-\n- c`),
+    with no blank line anywhere; CommonMark 5.3 makes it tight."""
     for block in blocks:
-        if block[0] == "hr" and in_list:
+        if in_list and (block[0] == "hr" or (block[0] == "table" and not block[3])):
             return True
         if block[0] == "list" and any(has_break_in_list(children, True) for _, children in block[3]):
             return True
