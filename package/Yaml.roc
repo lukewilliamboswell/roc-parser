@@ -2,14 +2,19 @@ import String
 
 ## A practical YAML configuration parser.
 ##
-## This module implements a deliberately small YAML 1.2-style subset aimed at
-## configuration files and Markdown frontmatter. It supports a single block
-## document, nested mappings and sequences, flow collections, comments, block
-## scalars, quoted strings, and common null, boolean, integer, and floating-point
-## scalars.
+## This module implements a YAML 1.2 subset aimed at configuration files and
+## Markdown frontmatter. It supports a single document (optionally between
+## `---` and `...` markers), block mappings and sequences (including compact and
+## indentless sequences), single-line flow collections, comments, literal and
+## folded block scalars, single-line quoted scalars with all YAML escapes, and
+## plain scalars resolved with the YAML 1.2 core schema (null, booleans, decimal,
+## octal and hexadecimal integers, floats, `.inf` and `.nan`).
 ##
-## Anchors, aliases, tags, directives, complex keys, and multi-document
-## streams are rejected with a parse error.
+## Mapping keys are their source text, so `1` and `01` are different keys.
+## Nesting is limited to 100 levels. Anchors, aliases, tags, directives,
+## complex keys, multi-line flow collections, multi-line quoted or plain
+## scalars, and multi-document streams are rejected with a parse error rather
+## than misread.
 Yaml := [
 	Null,
 	Bool(Bool),
