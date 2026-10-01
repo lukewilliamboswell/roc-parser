@@ -2,8 +2,10 @@ name: Benchmarks
 
 # The full comparison with Go, Rust and Python runs weekly and on demand; pull
 # requests that touch the parsers get a quick smoke run that fails only when a
-# roc-parser driver crashes, fails to build or times out. See
-# docs/benchmarks.adoc.
+# roc-parser driver crashes, fails to build or times out. Both run through
+# roc-blueprint (Blueprint.roc), so Roc, Go, Rust and Python come from Nix as
+# pinned by Blueprint.lock; the blueprint CLI is roc-blueprint 0.3.0, pinned to
+# its tag's commit. See docs/benchmarks.adoc.
 
 on:
   pull_request:
@@ -12,6 +14,8 @@ on:
       - "bench/**"
       - "scripts/bench.py"
       - "scripts/bench_python.py"
+      - "Blueprint.roc"
+      - "Blueprint.lock"
       - ".github/workflows/bench.yml"
   schedule:
     - cron: "41 4 * * 1"
@@ -35,16 +39,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Read Roc version
-        id: roc-version
-        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
-      - name: Install Roc
-        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
       - name: Run quick benchmarks
-        run: python3 scripts/bench.py --quick --langs roc --timeout 60 --fail-on-error
+        run: nix run github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5 -- run bench-quick -- --langs roc --timeout 60 --fail-on-error
       - name: Upload reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -66,18 +66,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Read Roc version
-        id: roc-version
-        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
-      - name: Install Roc
-        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
-      - name: Show toolchains
-        run: go version && cargo --version && python3 --version
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
       - name: Run the full comparison
-        run: python3 scripts/bench.py --allocations --label ci
+        run: nix run github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5 -- run bench -- --label ci
       - name: Publish the summary
         run: cat .roc-parser-tmp/bench/ci/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reports
