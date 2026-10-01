@@ -2510,7 +2510,7 @@ scan_inline_link_tail = |input, open| {
 		}
 	close = skip_link_space(input, title_end)
 	if byte_at(input, close) == ')' and close < input.len() {
-		Ok({ target: { href: unescape_link_text(dest.raw), title: title_value }, end: close + 1 })
+		Ok({ target: { href: unescape_link_text(trim_cmark_space(dest.raw)), title: title_value }, end: close + 1 })
 	} else {
 		Err(NotFound)
 	}
@@ -2624,7 +2624,7 @@ parse_reference_target = |text| {
 	if dest.end == start {
 		Err(NotFound)
 	} else {
-		href = unescape_link_text(dest.raw)
+		href = unescape_link_text(trim_cmark_space(dest.raw))
 		title_start = skip_link_space(text, dest.end)
 		if skip_spaces_tabs(text, dest.end) >= text.len() {
 			Ok({ href, title: None })
@@ -3958,6 +3958,10 @@ expect inline_test("&amp;ouml;") == [Text("&ouml;")]
 ## Links: destinations, titles, nesting rules and precedence.
 expect inline_test("[a](<b c> \"t\")") == [Link({ label: [Text("a")], target: { href: "b c", title: Some("t") } })]
 expect inline_test("[a](b(c)d)") == [Link({ label: [Text("a")], target: { href: "b(c)d", title: None } })]
+
+## Whitespace around a `<...>` destination is not part of the URL (as in
+## cmark and markdown-it, and WHATWG URL parsing); escaped content is kept.
+expect inline_test("[a](<  b c  >) [d](< \\) >)") == [Link({ label: [Text("a")], target: { href: "b c", title: None } }), Text(" "), Link({ label: [Text("d")], target: { href: ")", title: None } })]
 expect inline_test("[a](/u\\*v &auml;)") == [Text("[a](/u*v ä)")]
 expect inline_test("[a](/u\\*v '&auml;')") == [Link({ label: [Text("a")], target: { href: "/u*v", title: Some("ä") } })]
 expect inline_test("[foo [bar](/u)](/v)") == [Text("[foo "), Link({ label: [Text("bar")], target: { href: "/u", title: None } }), Text("](/v)")]
