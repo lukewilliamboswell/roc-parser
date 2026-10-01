@@ -831,14 +831,14 @@ scan_record = |bytes, start| {
 
 ## Offset of the first `,`, CR or LF at or after `start`, or the input length.
 scan_unquoted : List(U8), U64 -> U64
-scan_unquoted = |bytes, start| {
-	len = bytes.len()
-	var $pos = start
-	while $pos < len and !is_delimiter(bytes.get($pos) ?? 0) {
-		$pos = $pos + 1
-	}
-	$pos
-}
+scan_unquoted = |bytes, start| Utf8.find_any(bytes, start, delimiters)
+
+# Bytes that end an unquoted field, found 16 at a time.
+delimiters : Utf8.ByteClass
+delimiters = Utf8.ByteClass.from_bytes([',', '\r', '\n'])
+
+quote : Utf8.ByteClass
+quote = Utf8.ByteClass.from_bytes(['"'])
 
 is_delimiter : U8 -> Bool
 is_delimiter = |byte| byte == ',' or byte == '\r' or byte == '\n'
@@ -849,14 +849,16 @@ scan_quoted = |bytes, start| {
 	len = bytes.len()
 	var $field = []
 	var $chunk_start = start + 1
-	var $pos = start + 1
+	var $pos = Utf8.find_any(bytes, start + 1, quote)
 	while $pos < len {
 		if bytes.get($pos) == Ok('"') {
-			$field = $field.concat(bytes.sublist({ start: $chunk_start, len: $pos - $chunk_start }))
+			chunk = bytes.sublist({ start: $chunk_start, len: $pos - $chunk_start })
+			# A field with no doubled quotes stays a slice of the input.
+			$field = if $field.is_empty() chunk else $field.concat(chunk)
 			if bytes.get($pos + 1) == Ok('"') {
 				$field = $field.append('"')
-				$pos = $pos + 2
-				$chunk_start = $pos
+				$chunk_start = $pos + 2
+				$pos = Utf8.find_any(bytes, $pos + 2, quote)
 			} else {
 				after = $pos + 1
 				if after >= len or is_delimiter(bytes.get(after) ?? 0) {
@@ -865,7 +867,7 @@ scan_quoted = |bytes, start| {
 				return Err({ at: after, problem: TextAfterQuote })
 			}
 		} else {
-			$pos = $pos + 1
+			$pos = Utf8.find_any(bytes, $pos + 1, quote)
 		}
 	}
 	Err({ at: start, problem: Unterminated })
