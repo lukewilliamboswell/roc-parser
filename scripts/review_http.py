@@ -17,9 +17,12 @@ agree is reported as stale.
     .roc-parser-tmp/http/venv/bin/pip install -r scripts/http/requirements.txt
     .roc-parser-tmp/http/venv/bin/python scripts/review_http.py [--corpus DIR]
 
-`--corpus DIR` additionally cross-checks raw fuzz corpus files (the first
-byte selects the parser: Q request, S response) and prints a disagreement
-summary without consulting the baseline.
+`--corpus DIR` instead cross-checks fuzz corpus files and prints a
+disagreement summary without consulting the baseline. Files are raw bytes
+whose first byte selects the parser (Q request, S response), or, with
+`--fuzz-show BINARY`, generator inputs decoded through the target's `show`
+(the HTTP targets print an exact `hex: Q...` line). Use it to confirm a
+generator's oracle agrees with h11 before trusting it.
 """
 
 from __future__ import annotations
@@ -182,14 +185,28 @@ def review(probe: Path) -> int:
     return 1 if failures or crashes or stale else 0
 
 
-def corpus(probe: Path, directory: Path) -> int:
+def generated_messages(directory: Path, fuzz_binary: Path | None) -> list[tuple[str, bytes]]:
+    """Corpus files are raw bytes with a Q/S mode byte, or, with a fuzz binary,
+    generator inputs whose `show` output ends in an exact `hex: Q...` line."""
+    out = []
+    for path in sorted(directory.iterdir()):
+        if fuzz_binary is None:
+            raw = path.read_bytes()
+        else:
+            shown = subprocess.run([str(fuzz_binary), "show", str(path)], capture_output=True, text=True).stdout
+            lines = [line for line in shown.splitlines() if line.startswith("hex: ")]
+            if not lines:
+                continue
+            raw = lines[-1][5].encode() + bytes.fromhex(lines[-1][6:])
+        if raw and chr(raw[0]) in "QS":
+            out.append((chr(raw[0]), raw[1:]))
+    return out
+
+
+def corpus(probe: Path, directory: Path, fuzz_binary: Path | None) -> int:
     counts: dict[str, int] = {}
     examples: dict[str, bytes] = {}
-    for path in sorted(directory.iterdir()):
-        raw = path.read_bytes()
-        if not raw or chr(raw[0]) not in "QS":
-            continue
-        mode, data = chr(raw[0]), raw[1:]
+    for mode, data in generated_messages(directory, fuzz_binary):
         mine, oracle = run_probe(probe, mode, data), oracle_for(mode, data)
         key = "agree" if compare(mine, oracle) else f"{mode} roc={mine['status']} h11={oracle['status']}"
         counts[key] = counts.get(key, 0) + 1
@@ -203,10 +220,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--roc", type=Path, default=ROC)
     parser.add_argument("--corpus", type=Path)
+    parser.add_argument("--fuzz-show", type=Path, help="fuzz binary whose `show` decodes --corpus files")
     args = parser.parse_args()
     probe = build_probe(args.roc)
     if args.corpus:
-        return corpus(probe, args.corpus)
+        return corpus(probe, args.corpus, args.fuzz_show)
     return review(probe)
 
 
