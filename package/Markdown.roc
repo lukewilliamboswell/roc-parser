@@ -1,5 +1,9 @@
+import MarkdownEntities
 import Parser
 import String
+import unicode.Case
+import unicode.GeneralCategory
+import unicode.Scalar
 
 ## Markdown syntax tree and parsers for documents and inline content.
 ##
@@ -174,61 +178,13 @@ Markdown := [
 			two_line_heading_level_two,
 		])
 
-	## Parse an inline link with a destination in parentheses.
+	## Parse an inline link (`[label](destination "title")`) at the start of the input.
 	link : Parser(String.Utf8, Inline)
-	link =
-		Parser.const(
-			|label| {
-				|target| {
-					Link({ label: parse_inlines(label.to_utf8()), target: parse_link_target(target.to_utf8()) })
-				}
-			},
-		)
-			.skip(String.string("["))
-			.keep(
-				Parser.chomp_while(
-					|b| {
-						b != ']'
-					},
-				).map(String.str_from_utf8),
-			)
-			.skip(String.string("]("))
-			.keep(
-				Parser.chomp_while(
-					|b| {
-						b != ')'
-					},
-				).map(String.str_from_utf8),
-			)
-			.skip(String.codeunit(')'))
+	link = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.False))
 
-	## Parse an inline image with a destination in parentheses.
+	## Parse an inline image (`![alt](destination "title")`) at the start of the input.
 	image : Parser(String.Utf8, Inline)
-	image =
-		Parser.const(
-			|alt| {
-				|target| {
-					Image({ alt: parse_inlines(alt.to_utf8()), target: parse_link_target(target.to_utf8()) })
-				}
-			},
-		)
-			.skip(String.string("!["))
-			.keep(
-				Parser.chomp_while(
-					|b| {
-						b != ']'
-					},
-				).map(String.str_from_utf8),
-			)
-			.skip(String.string("]("))
-			.keep(
-				Parser.chomp_while(
-					|b| {
-						b != ')'
-					},
-				).map(String.str_from_utf8),
-			)
-			.skip(String.codeunit(')'))
+	image = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.True))
 
 	## Parse a fenced code block delimited by triple backticks.
 	code : Parser(String.Utf8, Markdown)
@@ -532,21 +488,21 @@ collect_reference_definitions = |lines, refs, kept| {
 
 parse_reference_definition : String.Utf8 -> Try(ReferenceDefinition, [NotFound])
 parse_reference_definition = |line| {
-	match trim_spaces(line) {
-		['[', .. as rest] => {
-			label = find_sequence(rest, "]:".to_utf8())?
-			target_text = trim_spaces(label.after)
+	trimmed = trim_spaces(line)
+	# The label follows the inline link label rules (no unescaped brackets,
+	# at most 999 characters, not blank) and must be followed by `:`.
+	label = scan_link_label(trimmed, 0)?
+	if label.raw.is_empty() or byte_at(trimmed, label.end) != ':' {
+		Err(NotFound)
+	} else {
+		target_text = trim_spaces(trimmed.drop_first(label.end + 1))
 
-			if target_text.is_empty() {
-				Err(NotFound)
-			} else {
-				Ok({ label: normalize_reference_label(label.before), target: parse_link_target(target_text) })
-			}
-		}
-
-		_ =>
+		if target_text.is_empty() {
 			Err(NotFound)
+		} else {
+			Ok({ label: normalize_reference_label(label.raw), target: parse_reference_target(target_text)? })
 		}
+	}
 }
 
 parse_blocks_from_lines : List(Line), U64, List(ReferenceDefinition) -> Try({ val : List(Markdown), input : List(Line) }, [ParsingFailure(Str)])
@@ -1462,6 +1418,39 @@ contains_unescaped_pipe_help = |bytes, in_code, escaped| {
 		}
 }
 
+## ---------------------------------------------------------------------------
+## Inline parsing.
+##
+## Implements CommonMark 0.31.2 section 6 (backslash escapes, entity and numeric
+## character references, code spans, emphasis via the delimiter-run algorithm
+## of appendix "Process emphasis", links and images including reference links,
+## autolinks, raw HTML, hard and soft line breaks) plus the GFM strikethrough
+## and extended-autolink extensions as implemented by cmark-gfm.
+##
+## Soft line breaks are kept as "\n" inside `Text`; adjacent text is merged.
+## ---------------------------------------------------------------------------
+
+## One piece of scanned inline content before emphasis is resolved.
+InlineItem : [
+	Chars(List(U8)),
+	Node(Markdown.Inline),
+	Delim(InlineDelim),
+]
+
+## A run of `*`, `_` or `~` that may open or close emphasis or strikethrough.
+## `length` is the original run length (used by the "multiple of 3" rule);
+## `count` is how many delimiter characters are still unused.
+InlineDelim : { char : U8, length : U64, count : U64, can_open : Bool, can_close : Bool }
+
+## An entry of the bracket stack: the `[` or `![` item, and the input offset
+## just after the bracket.
+InlineBracket : { item : U64, start : U64, image : Bool, bracket_after : Bool }
+
+## A maximal run of backticks in the input.
+TickRun : { start : U64, len : U64 }
+
+InlineStop : [Finished, Stopped({ node : Markdown.Inline, end : U64 }), Failed]
+
 parse_inlines_parser : Parser(String.Utf8, List(Markdown.Inline))
 parse_inlines_parser =
 	Parser.build_primitive_parser(
@@ -1477,232 +1466,1825 @@ parse_inlines = |input| {
 
 parse_inlines_with_refs : List(ReferenceDefinition), String.Utf8 -> List(Markdown.Inline)
 parse_inlines_with_refs = |refs, input| {
-	parse_inlines_help(refs, input, [], [])
+	scan_inlines(prepare_inline_input(input), refs, Bool.False).nodes
 }
 
-parse_inlines_help : List(ReferenceDefinition), String.Utf8, String.Utf8, List(Markdown.Inline) -> List(Markdown.Inline)
-parse_inlines_help = |refs, input, text, nodes| {
-	match input {
-		[] =>
-			flush_text(text, nodes)
-
-		[' ', ' ', '\n', .. as rest] => {
-			next_nodes = flush_text(text, nodes).append(HardBreak)
-			parse_inlines_help(refs, rest, [], next_nodes)
+## Parse a link or image that starts at the beginning of `input`, returning the
+## node and the unconsumed input. Used by the `Markdown.link`/`Markdown.image`
+## parsers.
+parse_leading_link : String.Utf8, Bool -> Try({ val : Markdown.Inline, input : String.Utf8 }, [ParsingFailure(Str)])
+parse_leading_link = |input, image| {
+	opens =
+		if image {
+			byte_at(input, 0) == '!' and byte_at(input, 1) == '['
+		} else {
+			byte_at(input, 0) == '['
 		}
 
-		['\\', '\n', .. as rest] => {
-			next_nodes = flush_text(text, nodes).append(HardBreak)
-			parse_inlines_help(refs, rest, [], next_nodes)
-		}
-
-		['\\', escaped, .. as rest] if is_escapable_inline_byte(escaped) =>
-			parse_inlines_help(refs, rest, text.append(escaped), nodes)
-
-		['\\', .. as rest] =>
-			parse_inlines_help(refs, rest, text.append('\\'), nodes)
-
-		['!', '[', ..] => {
-			match parse_image_inline(input, refs) {
-				Ok(parsed) =>
-					parse_inlines_help(refs, parsed.input, [], flush_text(text, nodes).append(parsed.val))
-
-				Err(_) =>
-					parse_inlines_help(refs, input.drop_first(1), text.append('!'), nodes)
+	if !opens {
+		Err(ParsingFailure(if image "expected ![" else "expected ["))
+	} else {
+		match scan_inlines(input, [], Bool.True).stop {
+			Stopped({ node, end }) => {
+				matches_kind =
+					match node {
+						Image(_) => image
+						Link(_) => !image
+						_ => Bool.False
+					}
+				if matches_kind {
+					Ok({ val: node, input: input.drop_first(end) })
+				} else {
+					Err(ParsingFailure("expected an inline link"))
 				}
-		}
+			}
 
-		['[', ..] => {
-			match parse_link_inline(input, refs) {
-				Ok(parsed) =>
-					parse_inlines_help(refs, parsed.input, [], flush_text(text, nodes).append(parsed.val))
-
-				Err(_) =>
-					parse_inlines_help(refs, input.drop_first(1), text.append('['), nodes)
-				}
-		}
-
-		['<', ..] => {
-			match parse_angle_inline(input) {
-				Ok(parsed) =>
-					parse_inlines_help(refs, parsed.input, [], flush_text(text, nodes).append(parsed.val))
-
-				Err(_) =>
-					parse_inlines_help(refs, input.drop_first(1), text.append('<'), nodes)
-				}
-		}
-
-		['~', '~', .. as rest] => {
-			match find_unescaped_sequence(rest, "~~".to_utf8()) {
-				Ok(found) => {
-					next_nodes = flush_text(text, nodes).append(Strikethrough(parse_inlines_with_refs(refs, found.before)))
-					parse_inlines_help(refs, found.after, [], next_nodes)
-				}
-
-				Err(_) =>
-					parse_inlines_help(refs, rest, text.append('~').append('~'), nodes)
-				}
-		}
-
-		['*', '*', .. as rest] => {
-			match find_unescaped_sequence(rest, "**".to_utf8()) {
-				Ok(found) => {
-					next_nodes = flush_text(text, nodes).append(Strong(parse_inlines_with_refs(refs, found.before)))
-					parse_inlines_help(refs, found.after, [], next_nodes)
-				}
-
-				Err(_) =>
-					parse_inlines_help(refs, rest, text.append('*').append('*'), nodes)
-				}
-		}
-
-		['*', .. as rest] => {
-			match find_unescaped_sequence(rest, "*".to_utf8()) {
-				Ok(found) => {
-					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines_with_refs(refs, found.before)))
-					parse_inlines_help(refs, found.after, [], next_nodes)
-				}
-
-				Err(_) =>
-					parse_inlines_help(refs, rest, text.append('*'), nodes)
-				}
-		}
-
-		['_', .. as rest] => {
-			match find_unescaped_sequence(rest, "_".to_utf8()) {
-				Ok(found) => {
-					next_nodes = flush_text(text, nodes).append(Emphasis(parse_inlines_with_refs(refs, found.before)))
-					parse_inlines_help(refs, found.after, [], next_nodes)
-				}
-
-				Err(_) =>
-					parse_inlines_help(refs, rest, text.append('_'), nodes)
-				}
-		}
-
-		['`', .. as rest] => {
-			match find_unescaped_sequence(rest, "`".to_utf8()) {
-				Ok(found) => {
-					next_nodes = flush_text(text, nodes).append(InlineCode(String.str_from_utf8(found.before)))
-					parse_inlines_help(refs, found.after, [], next_nodes)
-				}
-
-				Err(_) =>
-					parse_inlines_help(refs, rest, text.append('`'), nodes)
-				}
-		}
-
-		_ if starts_with_bytes(input, "https://".to_utf8()) or starts_with_bytes(input, "http://".to_utf8()) or starts_with_bytes(input, "www.".to_utf8()) => {
-			parsed = parse_bare_url(input)
-			target = { href: String.str_from_utf8(parsed.url), title: None }
-			node = Link({ label: [Text(String.str_from_utf8(parsed.url))], target })
-
-			parse_inlines_help(refs, parsed.input, [], flush_text(text, nodes).append(node))
-		}
-
-		[first, .. as rest] =>
-			parse_inlines_help(refs, rest, text.append(first), nodes)
-		}
+			_ =>
+				Err(ParsingFailure("expected an inline link"))
+			}
+	}
 }
 
-parse_image_inline : String.Utf8, List(ReferenceDefinition) -> Try({ val : Markdown.Inline, input : String.Utf8 }, [NotFound])
-parse_image_inline = |input, refs| {
-	match input {
-		['!', '[', .. as rest] => {
-			label = find_unescaped_sequence(rest, "]".to_utf8())?
-			target = parse_link_or_reference_target(label.after, label.before, refs)?
-
-			Ok({ val: Image({ alt: parse_inlines_with_refs(refs, label.before), target: target.target }), input: target.input })
+## Normalize paragraph content: replace U+0000 with U+FFFD, strip the leading
+## spaces and tabs of every line, and strip trailing whitespace.
+prepare_inline_input : List(U8) -> List(U8)
+prepare_inline_input = |input| {
+	var $out = List.with_capacity(input.len())
+	var $line_start = Bool.True
+	for byte in input {
+		if $line_start and (byte == ' ' or byte == '\t') {
+			{}
+		} else if byte == 0 {
+			$out = $out.concat([0xEF, 0xBF, 0xBD])
+			$line_start = Bool.False
+		} else {
+			$out = $out.append(byte)
+			$line_start = byte == '\n' or byte == '\r'
 		}
+	}
+	trim_trailing_whitespace($out)
+}
+
+trim_trailing_whitespace : List(U8) -> List(U8)
+trim_trailing_whitespace = |bytes| {
+	var $len = bytes.len()
+	while $len > 0 and is_cmark_space(byte_at(bytes, $len - 1)) {
+		$len = $len - 1
+	}
+	bytes.take_first($len)
+}
+
+## Trailing spaces and tabs (and other non-newline ASCII whitespace) before a
+## line ending are not part of the text.
+trim_trailing_line_space : List(U8) -> List(U8)
+trim_trailing_line_space = |bytes| {
+	var $len = bytes.len()
+	while $len > 0 and is_line_space(byte_at(bytes, $len - 1)) {
+		$len = $len - 1
+	}
+	bytes.take_first($len)
+}
+
+is_line_space : U8 -> Bool
+is_line_space = |byte| byte == ' ' or byte == '\t' or byte == 0x0B or byte == 0x0C
+
+## ASCII whitespace as used by cmark (`cmark_isspace`).
+is_cmark_space : U8 -> Bool
+is_cmark_space = |byte| byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r' or byte == 0x0B or byte == 0x0C
+
+byte_at : List(U8), U64 -> U8
+byte_at = |bytes, index| bytes.get(index) ?? 0
+
+## The main inline scanner. With `leading_link`, stop as soon as the bracket at
+## offset 0 is resolved (used to parse a single leading link or image).
+scan_inlines : List(U8), List(ReferenceDefinition), Bool -> { nodes : List(Markdown.Inline), stop : InlineStop }
+scan_inlines = |input, refs, leading_link| {
+	len = input.len()
+	ticks = backtick_runs(input)
+	var $pos = 0
+	var $items = []
+	var $text = []
+	var $brackets = []
+	# Non-image brackets below this stack index are inactive (CommonMark 6.3:
+	# links may not contain other links).
+	var $link_floor = 0
+	# Once a scan for the end of a comment, processing instruction, CDATA
+	# section or declaration fails, later scans would fail too (cmark does the
+	# same to avoid quadratic behaviour).
+	var $html_skip = { comment: Bool.False, pi: Bool.False, cdata: Bool.False, declaration: Bool.False }
+	var $stop = Finished
+	var $running = Bool.True
+
+	while $running and $pos < len {
+		byte = byte_at(input, $pos)
+
+		if byte == '\n' or byte == '\r' {
+			hard = $pos >= 2 and byte_at(input, $pos - 1) == ' ' and byte_at(input, $pos - 2) == ' '
+			$text = trim_trailing_line_space($text)
+			if hard {
+				$items = flush_chars($items, $text).append(Node(HardBreak))
+				$text = []
+			} else {
+				$text = $text.append('\n')
+			}
+			$pos = skip_spaces_tabs(input, skip_line_ending(input, $pos))
+		} else if byte == '\\' {
+			next = byte_at(input, $pos + 1)
+			if $pos + 1 < len and is_ascii_punctuation(next) {
+				$items = flush_chars($items, $text).append(Chars([next]))
+				$text = []
+				$pos = $pos + 2
+			} else if $pos + 1 < len and (next == '\n' or next == '\r') {
+				$items = flush_chars($items, $text).append(Node(HardBreak))
+				$text = []
+				$pos = skip_spaces_tabs(input, skip_line_ending(input, $pos + 1))
+			} else {
+				$text = $text.append('\\')
+				$pos = $pos + 1
+			}
+		} else if byte == '`' {
+			run_end = skip_byte_run(input, $pos, '`')
+			count = run_end - $pos
+			match find_closing_ticks(ticks, run_end, count) {
+				Ok(close) => {
+					content = normalize_code_span(input.sublist({ start: run_end, len: close - run_end }))
+					$items = flush_chars($items, $text).append(Node(InlineCode(Str.from_utf8_lossy(content))))
+					$text = []
+					$pos = close + count
+				}
+
+				Err(_) => {
+					$text = $text.concat(List.repeat('`', count))
+					$pos = run_end
+				}
+			}
+		} else if byte == '*' or byte == '_' or byte == '~' {
+			run_end = skip_byte_run(input, $pos, byte)
+			count = run_end - $pos
+			delim = scan_delimiter_run(input, $pos, run_end, byte)
+			$items = flush_chars($items, $text)
+			$text = []
+			$items =
+				match delim {
+					Ok(d) => $items.append(Delim(d))
+					Err(_) => $items.append(Chars(List.repeat(byte, count)))
+				}
+			$pos = run_end
+		} else if byte == '!' and byte_at(input, $pos + 1) == '[' {
+			$items = flush_chars($items, $text).append(Chars(['!', '[']))
+			$text = []
+			$brackets = push_bracket($brackets, { item: $items.len() - 1, start: $pos + 2, image: Bool.True, bracket_after: Bool.False })
+			$pos = $pos + 2
+		} else if byte == '[' {
+			$items = flush_chars($items, $text).append(Chars(['[']))
+			$text = []
+			$brackets = push_bracket($brackets, { item: $items.len() - 1, start: $pos + 1, image: Bool.False, bracket_after: Bool.False })
+			$pos = $pos + 1
+		} else if byte == ']' {
+			$items = flush_chars($items, $text)
+			$text = []
+			after = $pos + 1
+			match $brackets.last() {
+				Err(_) => {
+					$items = $items.append(Chars([']']))
+					$pos = after
+				}
+
+				Ok(opener) => {
+					depth = $brackets.len() - 1
+					active = opener.image or depth >= $link_floor
+					$brackets = $brackets.drop_last(1)
+					$link_floor = min_u64($link_floor, $brackets.len())
+					resolved =
+						if active {
+							resolve_link(input, after, opener, $pos, refs)
+						} else {
+							Err(NotFound)
+						}
+					match resolved {
+						Ok(found) => {
+							content = $items.drop_first(opener.item + 1)
+							$items = $items.take_first(opener.item)
+							children = process_emphasis(content)
+							node =
+								if opener.image {
+									Image({ alt: children, target: found.target })
+								} else {
+									Link({ label: children, target: found.target })
+								}
+							if !opener.image {
+								$link_floor = $brackets.len()
+							}
+							if leading_link and opener.item == 0 {
+								$stop = Stopped({ node: autolink_emails(node), end: found.end })
+								$running = Bool.False
+							} else {
+								$items = $items.append(Node(node))
+								$pos = found.end
+							}
+						}
+
+						Err(_) => {
+							if leading_link and opener.item == 0 {
+								$stop = Failed
+								$running = Bool.False
+							} else {
+								$items = $items.append(Chars([']']))
+								$pos = after
+							}
+						}
+					}
+				}
+			}
+		} else if byte == '<' {
+			match scan_autolink(input, $pos) {
+				Ok(found) => {
+					$items = flush_chars($items, $text).append(Node(found.node))
+					$text = []
+					$pos = found.end
+				}
+
+				Err(_) => {
+					html = scan_raw_html(input, $pos, $html_skip)
+					$html_skip = html.skip
+					match html.end {
+						Ok(end) => {
+							raw = input.sublist({ start: $pos, len: end - $pos })
+							$items = flush_chars($items, $text).append(Node(HtmlInline(Str.from_utf8_lossy(raw))))
+							$text = []
+							$pos = end
+						}
+
+						Err(_) => {
+							$text = $text.append('<')
+							$pos = $pos + 1
+						}
+					}
+				}
+			}
+		} else if byte == '&' {
+			match scan_entity(input, $pos) {
+				Ok(found) => {
+					$items = flush_chars($items, $text).append(Chars(found.bytes))
+					$text = []
+					$pos = found.end
+				}
+
+				Err(_) => {
+					$text = $text.append('&')
+					$pos = $pos + 1
+				}
+			}
+		} else if byte == 'w' and $brackets.is_empty() {
+			match match_www_autolink(input, $pos) {
+				Ok(end) => {
+					raw = input.sublist({ start: $pos, len: end - $pos })
+					label = Str.from_utf8_lossy(raw)
+					node = Link({ label: [Text(label)], target: { href: Str.concat("http://", label), title: None } })
+					$items = flush_chars($items, $text).append(Node(node))
+					$text = []
+					$pos = end
+				}
+
+				Err(_) => {
+					$text = $text.append('w')
+					$pos = $pos + 1
+				}
+			}
+		} else if byte == ':' and $brackets.is_empty() {
+			match match_url_autolink(input, $pos, $text.len()) {
+				Ok(found) => {
+					raw = input.sublist({ start: $pos - found.rewind, len: found.end - ($pos - found.rewind) })
+					url = Str.from_utf8_lossy(raw)
+					node = Link({ label: [Text(url)], target: { href: url, title: None } })
+					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Node(node))
+					$text = []
+					$pos = found.end
+				}
+
+				Err(_) => {
+					$text = $text.append(':')
+					$pos = $pos + 1
+				}
+			}
+		} else {
+			end = find_special_byte(input, $pos + 1)
+			$text = $text.concat(input.sublist({ start: $pos, len: end - $pos }))
+			$pos = end
+		}
+	}
+
+	match $stop {
+		Finished =>
+			{ nodes: autolink_emails_in(process_emphasis(flush_chars($items, $text))), stop: Finished }
 
 		_ =>
-			Err(NotFound)
+			{ nodes: [], stop: $stop }
 		}
 }
 
-parse_link_inline : String.Utf8, List(ReferenceDefinition) -> Try({ val : Markdown.Inline, input : String.Utf8 }, [NotFound])
-parse_link_inline = |input, refs| {
-	match input {
-		['[', .. as rest] => {
-			label = find_unescaped_sequence(rest, "]".to_utf8())?
-			target = parse_link_or_reference_target(label.after, label.before, refs)?
-
-			Ok({ val: Link({ label: parse_inlines_with_refs(refs, label.before), target: target.target }), input: target.input })
-		}
-
-		_ =>
-			Err(NotFound)
-		}
+## Bytes that may start an inline construct (cmark's SPECIAL_CHARS plus the
+## extension triggers `~`, `w` and `:`).
+is_special_byte : U8 -> Bool
+is_special_byte = |byte| {
+	match byte {
+		'\n' | '\r' | '\\' | '`' | '*' | '_' | '~' | '!' | '[' | ']' | '<' | '&' | 'w' | ':' => Bool.True
+		_ => Bool.False
+	}
 }
 
-parse_link_or_reference_target : String.Utf8, String.Utf8, List(ReferenceDefinition) -> Try({ target : Markdown.LinkTarget, input : String.Utf8 }, [NotFound])
-parse_link_or_reference_target = |input, label, refs| {
-	match input {
-		['(', .. as rest] => {
-			target_text = find_unescaped_sequence(rest, ")".to_utf8())?
-			Ok({ target: parse_link_target(target_text.before), input: target_text.after })
-		}
+find_special_byte : List(U8), U64 -> U64
+find_special_byte = |input, from| {
+	var $index = from
+	while $index < input.len() and !is_special_byte(byte_at(input, $index)) {
+		$index = $index + 1
+	}
+	$index
+}
 
-		['[', ']', .. as rest] => {
-			target = lookup_reference(refs, normalize_reference_label(label))?
-			Ok({ target, input: rest })
-		}
+flush_chars : List(InlineItem), List(U8) -> List(InlineItem)
+flush_chars = |items, text| {
+	if text.is_empty() {
+		items
+	} else {
+		items.append(Chars(text))
+	}
+}
 
-		['[', .. as rest] => {
-			ref_label = find_unescaped_sequence(rest, "]".to_utf8())?
-			target = lookup_reference(refs, normalize_reference_label(ref_label.before))?
-			Ok({ target, input: ref_label.after })
+push_bracket : List(InlineBracket), InlineBracket -> List(InlineBracket)
+push_bracket = |brackets, bracket| {
+	marked =
+		match brackets.last() {
+			Ok(top) => brackets.drop_last(1).append({ ..top, bracket_after: Bool.True })
+			Err(_) => brackets
 		}
+	marked.append(bracket)
+}
 
-		_ => {
-			target = lookup_reference(refs, normalize_reference_label(label))?
-			Ok({ target, input })
+skip_byte_run : List(U8), U64, U8 -> U64
+skip_byte_run = |input, from, expected| {
+	var $index = from
+	while $index < input.len() and byte_at(input, $index) == expected {
+		$index = $index + 1
+	}
+	$index
+}
+
+skip_spaces_tabs : List(U8), U64 -> U64
+skip_spaces_tabs = |input, from| {
+	var $index = from
+	while $index < input.len() and (byte_at(input, $index) == ' ' or byte_at(input, $index) == '\t') {
+		$index = $index + 1
+	}
+	$index
+}
+
+## Skip one line ending (`\n`, `\r\n` or `\r`) at `from`.
+skip_line_ending : List(U8), U64 -> U64
+skip_line_ending = |input, from| {
+	if byte_at(input, from) == '\r' and byte_at(input, from + 1) == '\n' {
+		from + 2
+	} else if from < input.len() and (byte_at(input, from) == '\n' or byte_at(input, from) == '\r') {
+		from + 1
+	} else {
+		from
+	}
+}
+
+is_ascii_punctuation : U8 -> Bool
+is_ascii_punctuation = |byte| {
+	(byte >= 33 and byte <= 47) or (byte >= 58 and byte <= 64) or (byte >= 91 and byte <= 96) or (byte >= 123 and byte <= 126)
+}
+
+min_u64 : U64, U64 -> U64
+min_u64 = |a, b| if a < b a else b
+
+is_ascii_alpha : U8 -> Bool
+is_ascii_alpha = |byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z')
+
+is_ascii_alnum : U8 -> Bool
+is_ascii_alnum = |byte| is_ascii_alpha(byte) or (byte >= '0' and byte <= '9')
+
+## ---------------------------------------------------------------------------
+## Unicode classification (CommonMark 0.31.2 section 2.1).
+## ---------------------------------------------------------------------------
+
+## Decode the UTF-8 scalar starting at `index`; invalid sequences decode to
+## U+FFFD. Returns the scalar and its byte length.
+decode_utf8 : List(U8), U64 -> { scalar : U32, width : U64 }
+decode_utf8 = |bytes, index| {
+	b0 = byte_at(bytes, index).to_u32()
+	invalid = { scalar: 0xFFFD, width: 1 }
+	if index >= bytes.len() {
+		invalid
+	} else if b0 < 0x80 {
+		{ scalar: b0, width: 1 }
+	} else {
+		width =
+			if b0 >= 0xC2 and b0 <= 0xDF {
+				2
+			} else if b0 >= 0xE0 and b0 <= 0xEF {
+				3
+			} else if b0 >= 0xF0 and b0 <= 0xF4 {
+				4
+			} else {
+				0
+			}
+		if width == 0 or index + width > bytes.len() {
+			invalid
+		} else {
+			var $value = if width == 2 b0 - 0xC0 else if width == 3 b0 - 0xE0 else b0 - 0xF0
+			var $ok = Bool.True
+			var $offset = 1
+			while $offset < width {
+				continuation = byte_at(bytes, index + $offset).to_u32()
+				if continuation < 0x80 or continuation > 0xBF {
+					$ok = Bool.False
+				}
+				$value = $value * 64 + (continuation % 64)
+				$offset = $offset + 1
+			}
+			minimum = if width == 2 0x80 else if width == 3 0x800 else 0x10000
+			if !$ok or $value < minimum or $value > 0x10FFFF or ($value >= 0xD800 and $value <= 0xDFFF) {
+				invalid
+			} else {
+				{ scalar: $value, width }
+			}
 		}
 	}
 }
 
-parse_angle_inline : String.Utf8 -> Try({ val : Markdown.Inline, input : String.Utf8 }, [NotFound])
-parse_angle_inline = |input| {
-	match input {
-		['<', .. as rest] => {
-			inside = find_sequence(rest, ">".to_utf8())?
-			inside_str = String.str_from_utf8(inside.before)
+## The scalar that ends just before `index`, or a line feed at the start.
+scalar_before : List(U8), U64 -> U32
+scalar_before = |bytes, index| {
+	if index == 0 {
+		'\n'
+	} else {
+		var $start = index - 1
+		while $start > 0 and index - $start < 4 and byte_at(bytes, $start) >= 0x80 and byte_at(bytes, $start) <= 0xBF {
+			$start = $start - 1
+		}
+		decoded = decode_utf8(bytes, $start)
+		if $start + decoded.width == index {
+			decoded.scalar
+		} else {
+			0xFFFD
+		}
+	}
+}
 
-			if starts_with_bytes(inside.before, "http://".to_utf8()) or starts_with_bytes(inside.before, "https://".to_utf8()) {
-				Ok({ val: Link({ label: [Text(inside_str)], target: { href: inside_str, title: None } }), input: inside.after })
-			} else if is_email_bytes(inside.before) {
-				Ok({ val: Link({ label: [Text(inside_str)], target: { href: "mailto:${inside_str}", title: None } }), input: inside.after })
-			} else {
-				raw = append_bytes("<".to_utf8(), append_bytes(inside.before, ">".to_utf8()))
-				Ok({ val: HtmlInline(String.str_from_utf8(raw)), input: inside.after })
+## The scalar at `index`, or a line feed at the end of input.
+scalar_at : List(U8), U64 -> U32
+scalar_at = |bytes, index| {
+	if index >= bytes.len() {
+		'\n'
+	} else {
+		decode_utf8(bytes, index).scalar
+	}
+}
+
+general_category : U32 -> Try(GeneralCategory.Value, [InvalidScalar])
+general_category = |scalar| {
+	Scalar.from_u32(scalar).map_ok(GeneralCategory.of_scalar)
+}
+
+## Unicode whitespace: Zs, tab, line feed, form feed or carriage return.
+is_unicode_whitespace : U32 -> Bool
+is_unicode_whitespace = |scalar| {
+	if scalar < 128 {
+		scalar == ' ' or scalar == '\t' or scalar == '\n' or scalar == 0x0C or scalar == '\r'
+	} else {
+		match general_category(scalar) {
+			Ok(Zs) => Bool.True
+			_ => Bool.False
+		}
+	}
+}
+
+## Unicode punctuation: general category P or S (CommonMark 0.31.2).
+is_unicode_punctuation : U32 -> Bool
+is_unicode_punctuation = |scalar| {
+	if scalar < 128 {
+		is_ascii_punctuation(scalar.to_u8_wrap())
+	} else {
+		match general_category(scalar) {
+			Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => Bool.True
+			Ok(Sc) | Ok(Sk) | Ok(Sm) | Ok(So) => Bool.True
+			_ => Bool.False
+		}
+	}
+}
+
+## ---------------------------------------------------------------------------
+## Delimiter runs and emphasis (CommonMark 6.2 and appendix A).
+## ---------------------------------------------------------------------------
+
+scan_delimiter_run : List(U8), U64, U64, U8 -> Try(InlineDelim, [NotDelimiter])
+scan_delimiter_run = |input, start, end, char| {
+	before = scalar_before(input, start)
+	after = scalar_at(input, end)
+	before_space = is_unicode_whitespace(before)
+	after_space = is_unicode_whitespace(after)
+	before_punct = is_unicode_punctuation(before)
+	after_punct = is_unicode_punctuation(after)
+	left = !after_space and (!after_punct or before_space or before_punct)
+	right = !before_space and (!before_punct or after_space or after_punct)
+	length = end - start
+	{ can_open, can_close, eligible } =
+		if char == '_' {
+			o = left and (!right or before_punct)
+			c = right and (!left or after_punct)
+			{ can_open: o, can_close: c, eligible: o or c }
+		} else if char == '~' {
+			# GFM strikethrough: runs of one or two tildes that flank text.
+			{ can_open: left, can_close: right, eligible: (left or right) and (length == 1 or length == 2) }
+		} else {
+			{ can_open: left, can_close: right, eligible: left or right }
+		}
+	if eligible {
+		Ok({ char, length, count: length, can_open, can_close })
+	} else {
+		Err(NotDelimiter)
+	}
+}
+
+## Index into the `openers_bottom` table: delimiter character, whether the
+## closer can also open, and the closer's original length modulo 3.
+opener_bottom_key : InlineDelim -> U64
+opener_bottom_key = |delim| {
+	base =
+		if delim.char == '*' {
+			0
+		} else if delim.char == '_' {
+			6
+		} else {
+			12
+		}
+	base + (if delim.can_open 3 else 0) + delim.length % 3
+}
+
+EmphOpener : { delim : InlineDelim, at : U64 }
+
+## Resolve emphasis and strikethrough in a run of scanned items. Unmatched
+## delimiters become text. Delimiter text lives in `out` as placeholder `Text`
+## nodes; `stack` records where each potential opener sits in `out`.
+process_emphasis : List(InlineItem) -> List(Markdown.Inline)
+process_emphasis = |items| {
+	var $out = []
+	var $stack = []
+	var $bottoms = List.repeat(0, 18)
+	for item in items {
+		match item {
+			Chars(bytes) => {
+				$out = $out.append(Text(Str.from_utf8_lossy(bytes)))
+			}
+
+			Node(node) => {
+				$out = $out.append(node)
+			}
+
+			Delim(delim) => {
+				var $closer = delim
+				var $searching = delim.can_close
+				while $searching {
+					match find_opener($stack, $bottoms, $closer) {
+						Err(_) => {
+							$bottoms = $bottoms.set(opener_bottom_key($closer), $stack.len()) ?? $bottoms
+							$searching = Bool.False
+						}
+
+						Ok(index) => {
+							opener = $stack.get(index) ?? { delim: $closer, at: $out.len() }
+							$bottoms = $bottoms.map(|bottom| min_u64(bottom, index))
+							$stack = $stack.take_first(index)
+							if $closer.char == '~' {
+								if opener.delim.count == $closer.count {
+									children = merge_text_nodes($out.drop_first(opener.at + 1))
+									$out = $out.take_first(opener.at).append(Strikethrough(children))
+									$closer = { ..$closer, count: 0 }
+								} else {
+									# cmark-gfm: tilde runs of different lengths do not
+									# pair; both, and the delimiters between them, stay text.
+									$closer = { ..$closer, can_open: Bool.False }
+								}
+								$searching = Bool.False
+							} else {
+								used = if $closer.count >= 2 and opener.delim.count >= 2 2 else 1
+								children = merge_text_nodes($out.drop_first(opener.at + 1))
+								node = if used == 2 Strong(children) else Emphasis(children)
+								remaining = opener.delim.count - used
+								if remaining == 0 {
+									$out = $out.take_first(opener.at).append(node)
+								} else {
+									$out = $out.take_first(opener.at).append(delimiter_text(opener.delim.char, remaining)).append(node)
+									$stack = $stack.append({ delim: { ..opener.delim, count: remaining }, at: opener.at })
+								}
+								$closer = { ..$closer, count: $closer.count - used }
+								$searching = $closer.count > 0
+							}
+						}
+					}
+				}
+				if $closer.count > 0 {
+					if $closer.can_open {
+						$stack = $stack.append({ delim: $closer, at: $out.len() })
+					}
+					$out = $out.append(delimiter_text($closer.char, $closer.count))
+				}
 			}
 		}
+	}
+	merge_text_nodes($out)
+}
 
-		_ =>
+delimiter_text : U8, U64 -> Markdown.Inline
+delimiter_text = |char, count| Text(Str.from_utf8_lossy(List.repeat(char, count)))
+
+find_opener : List(EmphOpener), List(U64), InlineDelim -> Try(U64, [NotFound])
+find_opener = |stack, bottoms, closer| {
+	bottom = bottoms.get(opener_bottom_key(closer)) ?? 0
+	var $index = stack.len()
+	var $found = Err(NotFound)
+	while $index > bottom {
+		$index = $index - 1
+		match stack.get($index) {
+			Ok(entry) => {
+				opener = entry.delim
+				if opener.can_open and opener.char == closer.char {
+					odd_match = (closer.can_open or opener.can_close) and closer.length % 3 != 0 and (opener.length + closer.length) % 3 == 0
+					if !odd_match {
+						$found = Ok($index)
+						$index = bottom
+					}
+				}
+			}
+
+			Err(_) => {}
+		}
+	}
+	$found
+}
+
+## Merge adjacent `Text` nodes and drop empty ones.
+merge_text_nodes : List(Markdown.Inline) -> List(Markdown.Inline)
+merge_text_nodes = |nodes| {
+	var $out = List.with_capacity(nodes.len())
+	for node in nodes {
+		match node {
+			Text(text) if text.is_empty() =>
+				{}
+
+			Text(text) =>
+				match $out.last() {
+					Ok(Text(previous)) => {
+						$out = $out.drop_last(1).append(Text(Str.concat(previous, text)))
+					}
+
+					_ => {
+						$out = $out.append(node)
+					}
+					}
+
+			_ => {
+				$out = $out.append(node)
+			}
+			}
+	}
+	$out
+}
+
+## ---------------------------------------------------------------------------
+## Code spans (CommonMark 6.1).
+## ---------------------------------------------------------------------------
+
+## All maximal backtick runs, sorted by length and then position.
+backtick_runs : List(U8) -> List(TickRun)
+backtick_runs = |input| {
+	var $runs = []
+	var $index = 0
+	while $index < input.len() {
+		if byte_at(input, $index) == '`' {
+			end = skip_byte_run(input, $index, '`')
+			$runs = $runs.append({ start: $index, len: end - $index })
+			$index = end
+		} else {
+			$index = $index + 1
+		}
+	}
+	$runs.sort_with(
+		|a, b| {
+			if a.len < b.len {
+				Before
+			} else if a.len > b.len {
+				After
+			} else if a.start < b.start {
+				Before
+			} else if a.start > b.start {
+				After
+			} else {
+				Same
+			}
+		},
+	)
+}
+
+## The start of the first maximal backtick run of exactly `count` backticks
+## that starts at or after `from`.
+find_closing_ticks : List(TickRun), U64, U64 -> Try(U64, [NotFound])
+find_closing_ticks = |runs, from, count| {
+	# Binary search for the first run not ordered before (count, from).
+	var $low = 0
+	var $high = runs.len()
+	while $low < $high {
+		middle = ($low + $high) // 2
+		run = runs.get(middle) ?? { start: 0, len: 0 }
+		if run.len < count or (run.len == count and run.start < from) {
+			$low = middle + 1
+		} else {
+			$high = middle
+		}
+	}
+	match runs.get($low) {
+		Ok(run) if run.len == count => Ok(run.start)
+		_ => Err(NotFound)
+	}
+}
+
+## Line endings become spaces; one leading and one trailing space are removed
+## when both are present and the content is not only spaces.
+normalize_code_span : List(U8) -> List(U8)
+normalize_code_span = |content| {
+	var $out = List.with_capacity(content.len())
+	var $index = 0
+	while $index < content.len() {
+		byte = byte_at(content, $index)
+		if byte == '\r' and byte_at(content, $index + 1) == '\n' {
+			{}
+		} else if byte == '\r' or byte == '\n' {
+			$out = $out.append(' ')
+		} else {
+			$out = $out.append(byte)
+		}
+		$index = $index + 1
+	}
+	if $out.len() >= 2 and byte_at($out, 0) == ' ' and byte_at($out, $out.len() - 1) == ' ' and $out.any(|b| b != ' ') {
+		$out.sublist({ start: 1, len: $out.len() - 2 })
+	} else {
+		$out
+	}
+}
+
+## ---------------------------------------------------------------------------
+## Entity and numeric character references (CommonMark 6.2... section 2.5).
+## ---------------------------------------------------------------------------
+
+scan_entity : List(U8), U64 -> Try({ bytes : List(U8), end : U64 }, [NotFound])
+scan_entity = |input, start| {
+	if byte_at(input, start + 1) == '#' {
+		hex = byte_at(input, start + 2) == 'x' or byte_at(input, start + 2) == 'X'
+		digits_start = if hex start + 3 else start + 2
+		max_digits = if hex 6 else 7
+		var $index = digits_start
+		var $value = 0
+		while $index < input.len() and $index - digits_start < max_digits and is_reference_digit(byte_at(input, $index), hex) {
+			$value = $value * (if hex 16 else 10) + digit_value(byte_at(input, $index))
+			$index = $index + 1
+		}
+		if $index > digits_start and byte_at(input, $index) == ';' {
+			Ok({ bytes: encode_utf8(sanitize_scalar($value)), end: $index + 1 })
+		} else {
 			Err(NotFound)
 		}
-}
-
-parse_bare_url : String.Utf8 -> { url : String.Utf8, input : String.Utf8 }
-parse_bare_url = |input| {
-	parse_bare_url_help(input, [])
-}
-
-parse_bare_url_help : String.Utf8, String.Utf8 -> { url : String.Utf8, input : String.Utf8 }
-parse_bare_url_help = |input, url| {
-	match input {
-		[] =>
-			{ url, input: [] }
-
-		[first, ..] if first == ' ' or first == '\n' or first == '\t' =>
-			{ url, input }
-
-		[first, ..] if first == ')' or first == ']' =>
-			{ url, input }
-
-		[first, .. as rest] =>
-			parse_bare_url_help(rest, url.append(first))
+	} else {
+		name_start = start + 1
+		var $index = name_start
+		while $index < input.len() and $index - name_start < 32 and is_ascii_alnum(byte_at(input, $index)) {
+			$index = $index + 1
 		}
+		if $index > name_start and byte_at(input, $index) == ';' {
+			name = input.sublist({ start: name_start, len: $index - name_start })
+			match MarkdownEntities.lookup(name) {
+				Ok(value) => Ok({ bytes: value, end: $index + 1 })
+				Err(_) => Err(NotFound)
+			}
+		} else {
+			Err(NotFound)
+		}
+	}
+}
+
+is_reference_digit : U8, Bool -> Bool
+is_reference_digit = |byte, hex| {
+	(byte >= '0' and byte <= '9') or (hex and ((byte >= 'a' and byte <= 'f') or (byte >= 'A' and byte <= 'F')))
+}
+
+digit_value : U8 -> U32
+digit_value = |byte| {
+	if byte >= '0' and byte <= '9' {
+		(byte - '0').to_u32()
+	} else if byte >= 'a' and byte <= 'f' {
+		(byte - 'a').to_u32() + 10
+	} else {
+		(byte - 'A').to_u32() + 10
+	}
+}
+
+## U+0000, surrogates and out-of-range values become U+FFFD.
+sanitize_scalar : U32 -> U32
+sanitize_scalar = |value| {
+	if value == 0 or (value >= 0xD800 and value <= 0xDFFF) or value > 0x10FFFF {
+		0xFFFD
+	} else {
+		value
+	}
+}
+
+encode_utf8 : U32 -> List(U8)
+encode_utf8 = |scalar| {
+	if scalar < 0x80 {
+		[scalar.to_u8_wrap()]
+	} else if scalar < 0x800 {
+		[(0xC0 + scalar // 64).to_u8_wrap(), (0x80 + scalar % 64).to_u8_wrap()]
+	} else if scalar < 0x10000 {
+		[(0xE0 + scalar // 4096).to_u8_wrap(), (0x80 + (scalar // 64) % 64).to_u8_wrap(), (0x80 + scalar % 64).to_u8_wrap()]
+	} else {
+		[(0xF0 + scalar // 262144).to_u8_wrap(), (0x80 + (scalar // 4096) % 64).to_u8_wrap(), (0x80 + (scalar // 64) % 64).to_u8_wrap(), (0x80 + scalar % 64).to_u8_wrap()]
+	}
+}
+
+## Decode backslash escapes and entity references in a link destination or
+## title, in a single left-to-right pass.
+unescape_link_text : List(U8) -> Str
+unescape_link_text = |bytes| {
+	var $out = List.with_capacity(bytes.len())
+	var $index = 0
+	while $index < bytes.len() {
+		byte = byte_at(bytes, $index)
+		if byte == '\\' and is_ascii_punctuation(byte_at(bytes, $index + 1)) and $index + 1 < bytes.len() {
+			$out = $out.append(byte_at(bytes, $index + 1))
+			$index = $index + 2
+		} else if byte == '&' {
+			match scan_entity(bytes, $index) {
+				Ok(found) => {
+					$out = $out.concat(found.bytes)
+					$index = found.end
+				}
+
+				Err(_) => {
+					$out = $out.append('&')
+					$index = $index + 1
+				}
+			}
+		} else {
+			$out = $out.append(byte)
+			$index = $index + 1
+		}
+	}
+	Str.from_utf8_lossy($out)
+}
+
+## Decode entity references only (autolinks keep backslashes literally).
+unescape_entities : List(U8) -> Str
+unescape_entities = |bytes| {
+	var $out = List.with_capacity(bytes.len())
+	var $index = 0
+	while $index < bytes.len() {
+		byte = byte_at(bytes, $index)
+		if byte == '&' {
+			match scan_entity(bytes, $index) {
+				Ok(found) => {
+					$out = $out.concat(found.bytes)
+					$index = found.end
+				}
+
+				Err(_) => {
+					$out = $out.append('&')
+					$index = $index + 1
+				}
+			}
+		} else {
+			$out = $out.append(byte)
+			$index = $index + 1
+		}
+	}
+	Str.from_utf8_lossy($out)
+}
+
+## ---------------------------------------------------------------------------
+## Links and images (CommonMark 6.3 and 6.4).
+## ---------------------------------------------------------------------------
+
+## Decide whether the `]` at `close` (with `after` just past it) closes a link
+## or image: an inline link, then a full, collapsed or shortcut reference.
+resolve_link : List(U8), U64, InlineBracket, U64, List(ReferenceDefinition) -> Try({ target : Markdown.LinkTarget, end : U64 }, [NotFound])
+resolve_link = |input, after, opener, close, refs| {
+	inline =
+		if byte_at(input, after) == '(' {
+			scan_inline_link_tail(input, after)
+		} else {
+			Err(NotFound)
+		}
+	match inline {
+		Ok(found) =>
+			Ok(found)
+
+		Err(_) => {
+			if refs.is_empty() {
+				Err(NotFound)
+			} else {
+				own_label = input.sublist({ start: opener.start, len: close - opener.start })
+				candidate =
+					match scan_link_label(input, after) {
+						Ok(label) if !label.raw.is_empty() => Ok({ label: label.raw, end: label.end })
+						Ok(label) if !opener.bracket_after => Ok({ label: own_label, end: label.end })
+						Ok(_) => Err(NotFound)
+						Err(_) if !opener.bracket_after => Ok({ label: own_label, end: after })
+						Err(_) => Err(NotFound)
+					}
+				match candidate {
+					Ok(found) => {
+						target = lookup_reference(refs, found.label)?
+						Ok({ target, end: found.end })
+					}
+
+					Err(_) =>
+						Err(NotFound)
+					}
+			}
+		}
+	}
+}
+
+lookup_reference : List(ReferenceDefinition), List(U8) -> Try(Markdown.LinkTarget, [NotFound])
+lookup_reference = |refs, raw_label| {
+	if raw_label.is_empty() or raw_label.len() > 1000 {
+		Err(NotFound)
+	} else {
+		label = normalize_reference_label(raw_label)
+		if label.is_empty() {
+			Err(NotFound)
+		} else {
+			match refs.find_first(|ref| ref.label == label) {
+				Ok(ref) => Ok(ref.target)
+				Err(_) => Err(NotFound)
+			}
+		}
+	}
+}
+
+## A link label `[...]` starting at `start`: no unescaped brackets, at most
+## 1000 bytes. The returned label is trimmed.
+scan_link_label : List(U8), U64 -> Try({ raw : List(U8), end : U64 }, [NotFound])
+scan_link_label = |input, start| {
+	if byte_at(input, start) != '[' {
+		Err(NotFound)
+	} else {
+		var $index = start + 1
+		var $result = Err(NotFound)
+		var $scanning = Bool.True
+		while $scanning and $index < input.len() {
+			byte = byte_at(input, $index)
+			if byte == ']' {
+				raw = input.sublist({ start: start + 1, len: $index - start - 1 })
+				$result = Ok({ raw: trim_cmark_space(raw), end: $index + 1 })
+				$scanning = Bool.False
+			} else if byte == '[' {
+				$scanning = Bool.False
+			} else {
+				$index =
+					if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
+						$index + 2
+					} else {
+						$index + 1
+					}
+				if $index - start - 1 > 1000 {
+					$scanning = Bool.False
+				}
+			}
+		}
+		$result
+	}
+}
+
+trim_cmark_space : List(U8) -> List(U8)
+trim_cmark_space = |bytes| {
+	var $start = 0
+	while $start < bytes.len() and is_cmark_space(byte_at(bytes, $start)) {
+		$start = $start + 1
+	}
+	var $end = bytes.len()
+	while $end > $start and is_cmark_space(byte_at(bytes, $end - 1)) {
+		$end = $end - 1
+	}
+	bytes.sublist({ start: $start, len: $end - $start })
+}
+
+## Skip spaces and tabs with at most one line ending among them.
+skip_link_space : List(U8), U64 -> U64
+skip_link_space = |input, from| {
+	first = skip_spaces_tabs(input, from)
+	after_line = skip_line_ending(input, first)
+	if after_line == first {
+		first
+	} else {
+		skip_spaces_tabs(input, after_line)
+	}
+}
+
+## `(destination "title")` after the `]` of an inline link, starting at `(`.
+scan_inline_link_tail : List(U8), U64 -> Try({ target : Markdown.LinkTarget, end : U64 }, [NotFound])
+scan_inline_link_tail = |input, open| {
+	dest_start = skip_link_space(input, open + 1)
+	dest = scan_link_destination(input, dest_start)?
+	title_start = skip_link_space(input, dest.end)
+	title =
+		if title_start == dest.end {
+			Err(NotFound)
+		} else {
+			scan_link_title(input, title_start)
+		}
+	{ title_value, title_end } =
+		match title {
+			Ok(found) => { title_value: Some(unescape_link_text(found.raw)), title_end: found.end }
+			Err(_) => { title_value: None, title_end: dest.end }
+		}
+	close = skip_link_space(input, title_end)
+	if byte_at(input, close) == ')' and close < input.len() {
+		Ok({ target: { href: unescape_link_text(dest.raw), title: title_value }, end: close + 1 })
+	} else {
+		Err(NotFound)
+	}
+}
+
+## A link destination: `<...>` without line endings or unescaped `<`/`>`, or a
+## non-empty run without spaces or ASCII controls whose parentheses balance.
+scan_link_destination : List(U8), U64 -> Try({ raw : List(U8), end : U64 }, [NotFound])
+scan_link_destination = |input, start| {
+	if byte_at(input, start) == '<' {
+		var $index = start + 1
+		var $result = Err(NotFound)
+		var $scanning = Bool.True
+		while $scanning and $index < input.len() {
+			byte = byte_at(input, $index)
+			if byte == '>' {
+				$result = Ok({ raw: input.sublist({ start: start + 1, len: $index - start - 1 }), end: $index + 1 })
+				$scanning = Bool.False
+			} else if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
+				$index = $index + 2
+			} else if byte == '\n' or byte == '\r' or byte == '<' {
+				$scanning = Bool.False
+			} else {
+				$index = $index + 1
+			}
+		}
+		$result
+	} else {
+		var $index = start
+		var $depth = 0
+		var $failed = Bool.False
+		var $scanning = Bool.True
+		while $scanning and $index < input.len() {
+			byte = byte_at(input, $index)
+			if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
+				$index = $index + 2
+			} else if byte == '(' {
+				$depth = $depth + 1
+				$index = $index + 1
+				if $depth > 32 {
+					$failed = Bool.True
+					$scanning = Bool.False
+				}
+			} else if byte == ')' {
+				if $depth == 0 {
+					$scanning = Bool.False
+				} else {
+					$depth = $depth - 1
+					$index = $index + 1
+				}
+			} else if byte <= ' ' or byte == 0x7F {
+				$scanning = Bool.False
+			} else {
+				$index = $index + 1
+			}
+		}
+		if $failed or $depth != 0 {
+			Err(NotFound)
+		} else {
+			Ok({ raw: input.sublist({ start, len: $index - start }), end: $index })
+		}
+	}
+}
+
+## A link title in `"..."`, `'...'` or `(...)`; returns the content between the
+## delimiters.
+scan_link_title : List(U8), U64 -> Try({ raw : List(U8), end : U64 }, [NotFound])
+scan_link_title = |input, start| {
+	open = byte_at(input, start)
+	close =
+		if open == '"' {
+			'"'
+		} else if open == '\'' {
+			'\''
+		} else if open == '(' {
+			')'
+		} else {
+			0
+		}
+	if close == 0 or start >= input.len() {
+		Err(NotFound)
+	} else {
+		var $index = start + 1
+		var $result = Err(NotFound)
+		var $scanning = Bool.True
+		while $scanning and $index < input.len() {
+			byte = byte_at(input, $index)
+			if byte == '\\' and is_ascii_punctuation(byte_at(input, $index + 1)) and $index + 1 < input.len() {
+				$index = $index + 2
+			} else if byte == close {
+				$result = Ok({ raw: input.sublist({ start: start + 1, len: $index - start - 1 }), end: $index + 1 })
+				$scanning = Bool.False
+			} else if open == '(' and byte == '(' {
+				$scanning = Bool.False
+			} else {
+				$index = $index + 1
+			}
+		}
+		$result
+	}
+}
+
+## The destination and optional title of a link reference definition
+## (CommonMark 4.7) given the text after `]:`. The destination must be
+## non-empty unless written `<>`, a title must be separated from it by
+## whitespace, and nothing may follow the title.
+parse_reference_target : List(U8) -> Try(Markdown.LinkTarget, [NotFound])
+parse_reference_target = |text| {
+	start = skip_link_space(text, 0)
+	dest = scan_link_destination(text, start)?
+	if dest.end == start {
+		Err(NotFound)
+	} else {
+		href = unescape_link_text(dest.raw)
+		title_start = skip_link_space(text, dest.end)
+		if skip_spaces_tabs(text, dest.end) >= text.len() {
+			Ok({ href, title: None })
+		} else if title_start == dest.end {
+			Err(NotFound)
+		} else {
+			title = scan_link_title(text, title_start)?
+			if skip_spaces_tabs(text, title.end) >= text.len() {
+				Ok({ href, title: Some(unescape_link_text(title.raw)) })
+			} else {
+				Err(NotFound)
+			}
+		}
+	}
+}
+
+## ---------------------------------------------------------------------------
+## Autolinks (CommonMark 6.5) and raw HTML (CommonMark 6.6).
+## ---------------------------------------------------------------------------
+
+scan_autolink : List(U8), U64 -> Try({ node : Markdown.Inline, end : U64 }, [NotFound])
+scan_autolink = |input, start| {
+	match scan_autolink_uri(input, start + 1) {
+		Ok(end) => {
+			raw = input.sublist({ start: start + 1, len: end - start - 2 })
+			text = unescape_entities(raw)
+			Ok({ node: Link({ label: [Text(text)], target: { href: text, title: None } }), end })
+		}
+
+		Err(_) => {
+			end = scan_autolink_email(input, start + 1)?
+			raw = input.sublist({ start: start + 1, len: end - start - 2 })
+			text = unescape_entities(raw)
+			Ok({ node: Link({ label: [Text(text)], target: { href: Str.concat("mailto:", text), title: None } }), end })
+		}
+	}
+}
+
+## `scheme:rest>` where scheme is 2-32 characters. Returns the offset after `>`.
+scan_autolink_uri : List(U8), U64 -> Try(U64, [NotFound])
+scan_autolink_uri = |input, start| {
+	if !is_ascii_alpha(byte_at(input, start)) {
+		Err(NotFound)
+	} else {
+		var $index = start + 1
+		while $index < input.len() and $index - start < 33 and is_scheme_byte(byte_at(input, $index)) {
+			$index = $index + 1
+		}
+		scheme_len = $index - start
+		if scheme_len < 2 or scheme_len > 32 or byte_at(input, $index) != ':' {
+			Err(NotFound)
+		} else {
+			var $rest = $index + 1
+			while $rest < input.len() and is_uri_byte(byte_at(input, $rest)) {
+				$rest = $rest + 1
+			}
+			if byte_at(input, $rest) == '>' and $rest < input.len() {
+				Ok($rest + 1)
+			} else {
+				Err(NotFound)
+			}
+		}
+	}
+}
+
+is_scheme_byte : U8 -> Bool
+is_scheme_byte = |byte| is_ascii_alnum(byte) or byte == '+' or byte == '.' or byte == '-'
+
+is_uri_byte : U8 -> Bool
+is_uri_byte = |byte| byte > ' ' and byte != '<' and byte != '>' and byte != 0x7F
+
+## `local@domain>` following the HTML5 email grammar used by CommonMark.
+scan_autolink_email : List(U8), U64 -> Try(U64, [NotFound])
+scan_autolink_email = |input, start| {
+	var $index = start
+	while $index < input.len() and is_email_local_byte(byte_at(input, $index)) {
+		$index = $index + 1
+	}
+	if $index == start or byte_at(input, $index) != '@' {
+		Err(NotFound)
+	} else {
+		var $cursor = $index + 1
+		var $result = Err(NotFound)
+		var $scanning = Bool.True
+		while $scanning {
+			label_start = $cursor
+			while $cursor < input.len() and (is_ascii_alnum(byte_at(input, $cursor)) or byte_at(input, $cursor) == '-') {
+				$cursor = $cursor + 1
+			}
+			label_len = $cursor - label_start
+			valid_label = label_len >= 1 and label_len <= 63 and is_ascii_alnum(byte_at(input, label_start)) and is_ascii_alnum(byte_at(input, $cursor - 1))
+			if !valid_label {
+				$scanning = Bool.False
+			} else if byte_at(input, $cursor) == '.' and $cursor < input.len() {
+				$cursor = $cursor + 1
+			} else if byte_at(input, $cursor) == '>' and $cursor < input.len() {
+				$result = Ok($cursor + 1)
+				$scanning = Bool.False
+			} else {
+				$scanning = Bool.False
+			}
+		}
+		$result
+	}
+}
+
+is_email_local_byte : U8 -> Bool
+is_email_local_byte = |byte| {
+	if is_ascii_alnum(byte) {
+		Bool.True
+	} else {
+		match byte {
+			'.' | '!' | '#' | '$' | '%' | '&' | '\'' | '*' | '+' | '/' | '=' | '?' | '^' | '_' | '`' | '{' | '|' | '}' | '~' | '-' => Bool.True
+			_ => Bool.False
+		}
+	}
+}
+
+HtmlSkip : { comment : Bool, pi : Bool, cdata : Bool, declaration : Bool }
+
+## Raw HTML starting at the `<` at `start`; returns the offset just after it.
+scan_raw_html : List(U8), U64, HtmlSkip -> { end : Try(U64, [NotFound]), skip : HtmlSkip }
+scan_raw_html = |input, start, skip| {
+	second = byte_at(input, start + 1)
+	if second == '!' {
+		if byte_at(input, start + 2) == '-' and byte_at(input, start + 3) == '-' {
+			if byte_at(input, start + 4) == '>' {
+				{ end: Ok(start + 5), skip }
+			} else if byte_at(input, start + 4) == '-' and byte_at(input, start + 5) == '>' {
+				{ end: Ok(start + 6), skip }
+			} else if skip.comment {
+				{ end: Err(NotFound), skip }
+			} else {
+				match find_bytes(input, start + 4, "-->".to_utf8()) {
+					Ok(found) => { end: Ok(found + 3), skip }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, comment: Bool.True } }
+				}
+			}
+		} else if starts_with_at(input, start + 2, "[CDATA[".to_utf8()) {
+			if skip.cdata {
+				{ end: Err(NotFound), skip }
+			} else {
+				match find_bytes(input, start + 9, "]]>".to_utf8()) {
+					Ok(found) => { end: Ok(found + 3), skip }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, cdata: Bool.True } }
+				}
+			}
+		} else if is_ascii_alpha(byte_at(input, start + 2)) {
+			if skip.declaration {
+				{ end: Err(NotFound), skip }
+			} else {
+				match find_bytes(input, start + 3, ">".to_utf8()) {
+					Ok(found) => { end: Ok(found + 1), skip }
+					Err(_) => { end: Err(NotFound), skip: { ..skip, declaration: Bool.True } }
+				}
+			}
+		} else {
+			{ end: Err(NotFound), skip }
+		}
+	} else if second == '?' {
+		if skip.pi {
+			{ end: Err(NotFound), skip }
+		} else {
+			match find_bytes(input, start + 2, "?>".to_utf8()) {
+				Ok(found) => { end: Ok(found + 2), skip }
+				Err(_) => { end: Err(NotFound), skip: { ..skip, pi: Bool.True } }
+			}
+		}
+	} else if second == '/' {
+		{ end: scan_closing_tag(input, start + 2), skip }
+	} else {
+		{ end: scan_open_tag(input, start + 1), skip }
+	}
+}
+
+starts_with_at : List(U8), U64, List(U8) -> Bool
+starts_with_at = |input, start, prefix| {
+	input.sublist({ start, len: prefix.len() }) == prefix
+}
+
+find_bytes : List(U8), U64, List(U8) -> Try(U64, [NotFound])
+find_bytes = |input, from, needle| {
+	first = byte_at(needle, 0)
+	var $index = from
+	var $result = Err(NotFound)
+	while $index + needle.len() <= input.len() {
+		if byte_at(input, $index) == first and starts_with_at(input, $index, needle) {
+			$result = Ok($index)
+			$index = input.len()
+		} else {
+			$index = $index + 1
+		}
+	}
+	$result
+}
+
+## Tag name: an ASCII letter followed by letters, digits or `-`.
+scan_tag_name : List(U8), U64 -> Try(U64, [NotFound])
+scan_tag_name = |input, start| {
+	if !is_ascii_alpha(byte_at(input, start)) or start >= input.len() {
+		Err(NotFound)
+	} else {
+		var $index = start + 1
+		while $index < input.len() and (is_ascii_alnum(byte_at(input, $index)) or byte_at(input, $index) == '-') {
+			$index = $index + 1
+		}
+		Ok($index)
+	}
+}
+
+## HTML whitespace: spaces, tabs and at most one line ending.
+skip_html_space : List(U8), U64 -> U64
+skip_html_space = |input, from| {
+	skip_link_space(input, from)
+}
+
+scan_closing_tag : List(U8), U64 -> Try(U64, [NotFound])
+scan_closing_tag = |input, start| {
+	after_name = scan_tag_name(input, start)?
+	close = skip_html_space(input, after_name)
+	if byte_at(input, close) == '>' and close < input.len() {
+		Ok(close + 1)
+	} else {
+		Err(NotFound)
+	}
+}
+
+scan_open_tag : List(U8), U64 -> Try(U64, [NotFound])
+scan_open_tag = |input, start| {
+	var $index = scan_tag_name(input, start)?
+	var $result = Err(NotFound)
+	var $scanning = Bool.True
+	while $scanning {
+		after_space = skip_html_space(input, $index)
+		next = byte_at(input, after_space)
+		if next == '>' and after_space < input.len() {
+			$result = Ok(after_space + 1)
+			$scanning = Bool.False
+		} else if next == '/' and byte_at(input, after_space + 1) == '>' {
+			$result = Ok(after_space + 2)
+			$scanning = Bool.False
+		} else if after_space > $index and is_attribute_name_start(next) {
+			match scan_attribute(input, after_space) {
+				Ok(end) => { $index = end }
+				Err(_) => { $scanning = Bool.False }
+			}
+		} else {
+			$scanning = Bool.False
+		}
+	}
+	$result
+}
+
+is_attribute_name_start : U8 -> Bool
+is_attribute_name_start = |byte| is_ascii_alpha(byte) or byte == '_' or byte == ':'
+
+is_attribute_name_byte : U8 -> Bool
+is_attribute_name_byte = |byte| is_ascii_alnum(byte) or byte == '_' or byte == '.' or byte == ':' or byte == '-'
+
+## An attribute name with an optional value specification.
+scan_attribute : List(U8), U64 -> Try(U64, [NotFound])
+scan_attribute = |input, start| {
+	var $name_end = start + 1
+	while $name_end < input.len() and is_attribute_name_byte(byte_at(input, $name_end)) {
+		$name_end = $name_end + 1
+	}
+	equals = skip_html_space(input, $name_end)
+	if byte_at(input, equals) != '=' {
+		Ok($name_end)
+	} else {
+		value_start = skip_html_space(input, equals + 1)
+		quote = byte_at(input, value_start)
+		if quote == '"' or quote == '\'' {
+			match find_bytes(input, value_start + 1, [quote]) {
+				Ok(close) => Ok(close + 1)
+				Err(_) => Err(NotFound)
+			}
+		} else {
+			var $index = value_start
+			while $index < input.len() and is_unquoted_attribute_byte(byte_at(input, $index)) {
+				$index = $index + 1
+			}
+			if $index == value_start {
+				Err(NotFound)
+			} else {
+				Ok($index)
+			}
+		}
+	}
+}
+
+is_unquoted_attribute_byte : U8 -> Bool
+is_unquoted_attribute_byte = |byte| {
+	match byte {
+		' ' | '\t' | '\n' | '\r' | '"' | '\'' | '=' | '<' | '>' | '`' => Bool.False
+		_ => Bool.True
+	}
+}
+
+## ---------------------------------------------------------------------------
+## GFM extended autolinks (cmark-gfm extensions/autolink.c).
+## ---------------------------------------------------------------------------
+
+## cmark-gfm host characters: not whitespace and not Unicode punctuation
+## (general category P) nor ASCII punctuation.
+is_gfm_host_byte_at : List(U8), U64 -> Bool
+is_gfm_host_byte_at = |input, index| {
+	byte = byte_at(input, index)
+	if byte >= 0x80 and byte <= 0xBF {
+		# A continuation byte does not start a valid scalar.
+		Bool.False
+	} else {
+		decoded = decode_utf8(input, index)
+		if index >= input.len() or (decoded.scalar == 0xFFFD and decoded.width == 1) {
+			Bool.False
+		} else if decoded.scalar < 128 {
+			!is_unicode_whitespace(decoded.scalar) and !is_ascii_punctuation(byte)
+		} else if is_unicode_whitespace(decoded.scalar) {
+			Bool.False
+		} else {
+			match general_category(decoded.scalar) {
+				Ok(Pc) | Ok(Pd) | Ok(Pe) | Ok(Pf) | Ok(Pi) | Ok(Po) | Ok(Ps) => Bool.False
+				_ => Bool.True
+			}
+		}
+	}
+}
+
+## cmark-gfm `check_domain`: returns the offset (relative to `start`) where
+## the domain scan stopped, or 0 when the domain is rejected.
+gfm_check_domain : List(U8), U64, U64, Bool -> U64
+gfm_check_domain = |input, start, size, allow_short| {
+	var $index = 1
+	var $periods = 0
+	var $underscores_previous = 0
+	var $underscores = 0
+	var $scanning = Bool.True
+	while $scanning and $index + 1 < size {
+		if byte_at(input, start + $index) == '\\' and $index + 2 < size {
+			$index = $index + 1
+		}
+		byte = byte_at(input, start + $index)
+		if byte == '_' {
+			$underscores = $underscores + 1
+		} else if byte == '.' {
+			$underscores_previous = $underscores
+			$underscores = 0
+			$periods = $periods + 1
+		} else if !is_gfm_host_byte_at(input, start + $index) and byte != '-' {
+			$scanning = Bool.False
+		}
+		if $scanning {
+			$index = $index + 1
+		}
+	}
+	if ($underscores_previous > 0 or $underscores > 0) and $periods <= 10 {
+		0
+	} else if allow_short {
+		$index
+	} else if $periods > 0 {
+		$index
+	} else {
+		0
+	}
+}
+
+## cmark-gfm `autolink_delim`: trim trailing punctuation, unbalanced `)` and
+## entity-like suffixes from a candidate link `input[start .. start + end]`.
+gfm_autolink_delim : List(U8), U64, U64 -> U64
+gfm_autolink_delim = |input, start, link_end| {
+	var $end = link_end
+	var $opening = 0
+	var $closing = 0
+	var $index = 0
+	while $index < $end {
+		byte = byte_at(input, start + $index)
+		if byte == '<' {
+			$end = $index
+		} else if byte == '(' {
+			$opening = $opening + 1
+			$index = $index + 1
+		} else if byte == ')' {
+			$closing = $closing + 1
+			$index = $index + 1
+		} else {
+			$index = $index + 1
+		}
+	}
+	var $trimming = Bool.True
+	while $trimming and $end > 0 {
+		last = byte_at(input, start + $end - 1)
+		if last == ')' {
+			if $closing <= $opening {
+				$trimming = Bool.False
+			} else {
+				$closing = $closing - 1
+				$end = $end - 1
+			}
+		} else if last == '?' or last == '!' or last == '.' or last == ',' or last == ':' or last == '*' or last == '_' or last == '~' or last == '\'' or last == '"' {
+			$end = $end - 1
+		} else if last == ';' {
+			if $end >= 2 {
+				var $new_end = $end - 2
+				while $new_end > 0 and is_ascii_alpha(byte_at(input, start + $new_end)) {
+					$new_end = $new_end - 1
+				}
+				if $new_end < $end - 2 and byte_at(input, start + $new_end) == '&' {
+					$end = $new_end
+				} else {
+					$end = $end - 1
+				}
+			} else {
+				$end = $end - 1
+			}
+		} else {
+			$trimming = Bool.False
+		}
+	}
+	$end
+}
+
+## Extend a candidate link to the next whitespace or `<`.
+gfm_extend_link : List(U8), U64, U64 -> U64
+gfm_extend_link = |input, start, from| {
+	var $end = from
+	while start + $end < input.len() and !is_cmark_space(byte_at(input, start + $end)) and byte_at(input, start + $end) != '<' {
+		$end = $end + 1
+	}
+	$end
+}
+
+## `www.` autolink at `start`; returns the end offset.
+match_www_autolink : List(U8), U64 -> Try(U64, [NotFound])
+match_www_autolink = |input, start| {
+	before = if start == 0 0 else byte_at(input, start - 1)
+	allowed_before = start == 0 or before == '*' or before == '_' or before == '~' or before == '(' or is_cmark_space(before)
+	size = input.len() - start
+	if !allowed_before or size < 4 or !starts_with_at(input, start, "www.".to_utf8()) {
+		Err(NotFound)
+	} else {
+		domain = gfm_check_domain(input, start, size, Bool.False)
+		if domain == 0 {
+			Err(NotFound)
+		} else {
+			end = gfm_autolink_delim(input, start, gfm_extend_link(input, start, domain))
+			if end == 0 {
+				Err(NotFound)
+			} else {
+				Ok(start + end)
+			}
+		}
+	}
+}
+
+## `scheme://` autolink whose `:` is at `colon`; the scheme letters precede it
+## and are taken back from the pending text. Returns how many bytes to take
+## back and the end offset.
+match_url_autolink : List(U8), U64, U64 -> Try({ rewind : U64, end : U64 }, [NotFound])
+match_url_autolink = |input, colon, pending| {
+	size = input.len() - colon
+	if size < 4 or byte_at(input, colon + 1) != '/' or byte_at(input, colon + 2) != '/' {
+		Err(NotFound)
+	} else {
+		var $rewind = 0
+		while $rewind < colon and is_ascii_alpha(byte_at(input, colon - $rewind - 1)) {
+			$rewind = $rewind + 1
+		}
+		scheme = input.sublist({ start: colon - $rewind, len: $rewind }).map(lower_ascii_byte)
+		known = scheme == "http".to_utf8() or scheme == "https".to_utf8() or scheme == "ftp".to_utf8()
+		if !known or $rewind > pending or !is_gfm_host_byte_at(input, colon + 3) {
+			Err(NotFound)
+		} else {
+			domain = gfm_check_domain(input, colon + 3, size - 3, Bool.True)
+			if domain == 0 {
+				Err(NotFound)
+			} else {
+				end = gfm_autolink_delim(input, colon, gfm_extend_link(input, colon, 3 + domain))
+				if end == 0 {
+					Err(NotFound)
+				} else {
+					Ok({ rewind: $rewind, end: colon + end })
+				}
+			}
+		}
+	}
+}
+
+## Apply GFM email autolinks to every text node outside links.
+autolink_emails_in : List(Markdown.Inline) -> List(Markdown.Inline)
+autolink_emails_in = |nodes| {
+	if !nodes.any(contains_at_sign) {
+		nodes
+	} else {
+		var $out = []
+		for node in nodes {
+			match node {
+				Text(text) => {
+					$out = $out.concat(autolink_email_text(text))
+				}
+
+				_ => {
+					$out = $out.append(autolink_emails(node))
+				}
+				}
+		}
+		merge_text_nodes($out)
+	}
+}
+
+contains_at_sign : Markdown.Inline -> Bool
+contains_at_sign = |node| {
+	match node {
+		Text(text) => Str.contains(text, "@")
+		Strong(children) => children.any(contains_at_sign)
+		Emphasis(children) => children.any(contains_at_sign)
+		Strikethrough(children) => children.any(contains_at_sign)
+		Image({ alt, .. }) => alt.any(contains_at_sign)
+		_ => Bool.False
+	}
+}
+
+autolink_emails : Markdown.Inline -> Markdown.Inline
+autolink_emails = |node| {
+	match node {
+		Strong(children) => Strong(autolink_emails_in(children))
+		Emphasis(children) => Emphasis(autolink_emails_in(children))
+		Strikethrough(children) => Strikethrough(autolink_emails_in(children))
+		Image({ alt, target }) => Image({ alt: autolink_emails_in(alt), target })
+		_ => node
+	}
+}
+
+## cmark-gfm `postprocess_text`: split a text node around email autolinks
+## (`user@example.com`, `mailto:user@example.com`, `xmpp:user@example.com/r`).
+autolink_email_text : Str -> List(Markdown.Inline)
+autolink_email_text = |text| {
+	data = text.to_utf8()
+	var $out = []
+	var $start = 0
+	var $offset = 0
+	var $remaining = data.len()
+	var $running = Bool.True
+	while $running {
+		if $offset >= $remaining {
+			$running = Bool.False
+		} else {
+			match find_bytes(data.take_first($start + $remaining), $start + $offset, ['@']) {
+				Err(_) => {
+					$running = Bool.False
+				}
+
+				Ok(at) => {
+					var $max_rewind = at - ($start + $offset)
+					var $auto_mailto = Bool.True
+					var $is_xmpp = Bool.False
+					var $periods = 0
+					var $rewind = 0
+					var $link_end = 0
+					var $retry = Bool.True
+					var $outcome = Skip(0)
+					while $retry {
+						$retry = Bool.False
+						at_index = $start + $offset + $max_rewind
+						$rewind = 0
+						var $rewinding = Bool.True
+						while $rewinding and $rewind < $max_rewind {
+							c = byte_at(data, at_index - $rewind - 1)
+							if is_ascii_alnum(c) or c == '.' or c == '+' or c == '-' or c == '_' {
+								$rewind = $rewind + 1
+							} else if c == ':' and gfm_validate_protocol("mailto:".to_utf8(), data, at_index, $rewind, $max_rewind) {
+								$auto_mailto = Bool.False
+								$rewind = $rewind + 1
+							} else if c == ':' and gfm_validate_protocol("xmpp:".to_utf8(), data, at_index, $rewind, $max_rewind) {
+								$auto_mailto = Bool.False
+								$is_xmpp = Bool.True
+								$rewind = $rewind + 1
+							} else {
+								$rewinding = Bool.False
+							}
+						}
+						if $rewind == 0 {
+							$outcome = Skip($max_rewind + 1)
+						} else {
+							limit = $remaining - $offset - $max_rewind
+							$link_end = 1
+							var $forward = Bool.True
+							while $forward and $link_end < limit {
+								c = byte_at(data, at_index + $link_end)
+								if is_ascii_alnum(c) {
+									$link_end = $link_end + 1
+								} else if c == '@' {
+									$offset = $offset + $max_rewind + 1
+									$max_rewind = $link_end - 1
+									$retry = Bool.True
+									$forward = Bool.False
+								} else if c == '.' and $link_end < limit - 1 and is_ascii_alnum(byte_at(data, at_index + $link_end + 1)) {
+									$periods = $periods + 1
+									$link_end = $link_end + 1
+								} else if c == '/' and $is_xmpp {
+									$link_end = $link_end + 1
+								} else if c != '-' and c != '_' {
+									$forward = Bool.False
+								} else {
+									$link_end = $link_end + 1
+								}
+							}
+							if !$retry {
+								last = byte_at(data, at_index + $link_end - 1)
+								if $link_end < 2 or $periods == 0 or (!is_ascii_alpha(last) and last != '.') {
+									$outcome = Skip($max_rewind + $link_end)
+								} else {
+									trimmed = gfm_autolink_delim(data, at_index, $link_end)
+									if trimmed == 0 {
+										$outcome = Skip($max_rewind + 1)
+									} else {
+										$link_end = trimmed
+										$outcome = Found
+									}
+								}
+							}
+						}
+					}
+					match $outcome {
+						Skip(amount) => {
+							$offset = $offset + amount
+						}
+
+						Found => {
+							at_index = $start + $offset + $max_rewind
+							link_start = at_index - $rewind
+							email = Str.from_utf8_lossy(data.sublist({ start: link_start, len: $link_end + $rewind }))
+							href = if $auto_mailto Str.concat("mailto:", email) else email
+							before = data.sublist({ start: $start, len: link_start - $start })
+							$out = $out.append(Text(Str.from_utf8_lossy(before))).append(Link({ label: [Text(email)], target: { href, title: None } }))
+							consumed = $offset + $max_rewind + $link_end
+							$start = $start + consumed
+							$remaining = $remaining - consumed
+							$offset = 0
+						}
+					}
+				}
+			}
+		}
+	}
+	rest = data.sublist({ start: $start, len: $remaining })
+	merge_text_nodes($out.append(Text(Str.from_utf8_lossy(rest))))
+}
+
+gfm_validate_protocol : List(U8), List(U8), U64, U64, U64 -> Bool
+gfm_validate_protocol = |protocol, data, at_index, rewind, max_rewind| {
+	len = protocol.len()
+	if len > max_rewind - rewind {
+		Bool.False
+	} else if data.sublist({ start: at_index - rewind - len, len }) != protocol {
+		Bool.False
+	} else if len == max_rewind - rewind {
+		Bool.True
+	} else {
+		!is_ascii_alnum(byte_at(data, at_index - rewind - len - 1))
+	}
 }
 
 parse_link_target : String.Utf8 -> Markdown.LinkTarget
@@ -1720,37 +3302,9 @@ parse_link_target = |raw| {
 	{ href: String.str_from_utf8(parts.first), title }
 }
 
-lookup_reference : List(ReferenceDefinition), Str -> Try(Markdown.LinkTarget, [NotFound])
-lookup_reference = |refs, label| {
-	match refs {
-		[] =>
-			Err(NotFound)
-
-		[ref, ..] if ref.label == label =>
-			Ok(ref.target)
-
-		[_, .. as rest] =>
-			lookup_reference(rest, label)
-		}
-}
-
-flush_text : String.Utf8, List(Markdown.Inline) -> List(Markdown.Inline)
-flush_text = |text, nodes| {
-	if text.is_empty() {
-		nodes
-	} else {
-		nodes.append(Text(String.str_from_utf8(text)))
-	}
-}
-
 find_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
 find_sequence = |input, needle| {
 	find_sequence_help(input, needle, [])
-}
-
-find_unescaped_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
-find_unescaped_sequence = |input, needle| {
-	find_unescaped_sequence_help(input, needle, [])
 }
 
 find_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
@@ -1764,24 +3318,6 @@ find_sequence_help = |input, needle, acc| {
 
 			[first, .. as rest] =>
 				find_sequence_help(rest, needle, acc.append(first))
-			}
-	}
-}
-
-find_unescaped_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
-find_unescaped_sequence_help = |input, needle, acc| {
-	if starts_with_bytes(input, needle) {
-		Ok({ before: acc, after: input.drop_first(needle.len()) })
-	} else {
-		match input {
-			[] =>
-				Err(NotFound)
-
-			['\\', escaped, .. as rest] if is_escapable_inline_byte(escaped) =>
-				find_unescaped_sequence_help(rest, needle, acc.append('\\').append(escaped))
-
-			[first, .. as rest] =>
-				find_unescaped_sequence_help(rest, needle, acc.append(first))
 			}
 	}
 }
@@ -1933,8 +3469,10 @@ join_inline_lines_help = |lines, acc| {
 		[line, .. as rest] if ends_with_hard_break_marker(acc) =>
 			join_inline_lines_help(rest, append_bytes(acc.append('\n'), line))
 
+		# Keep the line ending: the inline parser turns it into a soft break
+		# (CommonMark 6.13) and strips the surrounding spaces.
 		[line, .. as rest] =>
-			join_inline_lines_help(rest, append_bytes(acc.append(' '), line))
+			join_inline_lines_help(rest, append_bytes(acc.append('\n'), line))
 		}
 }
 
@@ -2065,9 +3603,30 @@ strip_wrapping_quotes = |bytes| {
 		}
 }
 
+## Link label matching (CommonMark 4.7): Unicode case fold, strip leading and
+## trailing whitespace, and collapse internal whitespace runs to one space.
 normalize_reference_label : String.Utf8 -> Str
 normalize_reference_label = |label| {
-	String.str_from_utf8(collapse_reference_whitespace(lower_ascii_bytes(trim_spaces(label)), [], Bool.False))
+	source = Str.from_utf8_lossy(label)
+	folded =
+		match Case.fold(source, Case.full, Case.unlimited_limits) {
+			Ok(result) => Case.result_text(result)
+			Err(_) => source
+		}
+	var $out = []
+	var $pending_space = Bool.False
+	for byte in folded.to_utf8() {
+		if is_cmark_space(byte) {
+			$pending_space = Bool.True
+		} else {
+			if $pending_space and !$out.is_empty() {
+				$out = $out.append(' ')
+			}
+			$pending_space = Bool.False
+			$out = $out.append(byte)
+		}
+	}
+	Str.from_utf8_lossy($out)
 }
 
 lower_ascii_bytes : String.Utf8 -> String.Utf8
@@ -2163,40 +3722,6 @@ is_digit_byte = |byte| {
 is_alphabetic_byte : U8 -> Bool
 is_alphabetic_byte = |byte| {
 	(byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z')
-}
-
-is_email_bytes : String.Utf8 -> Bool
-is_email_bytes = |bytes| {
-	contains_byte(bytes, '@') and contains_byte(bytes, '.')
-}
-
-contains_byte : String.Utf8, U8 -> Bool
-contains_byte = |bytes, expected| {
-	match bytes {
-		[] =>
-			Bool.False
-
-		[first, ..] if first == expected =>
-			Bool.True
-
-		[_, .. as rest] =>
-			contains_byte(rest, expected)
-		}
-}
-
-is_escapable_inline_byte : U8 -> Bool
-is_escapable_inline_byte = |byte| {
-	byte == '\\'
-		or byte == '*'
-			or byte == '_'
-				or byte == '`'
-					or byte == '['
-						or byte == ']'
-							or byte == '('
-								or byte == ')'
-									or byte == '!'
-										or byte == '~'
-											or byte == '|'
 }
 
 end_of_line : Parser(String.Utf8, Str)
@@ -2381,7 +3906,7 @@ expect {
 		== [
 			Link({ label: [Text("https://example.com")], target: { href: "https://example.com", title: None } }),
 			Text(" and "),
-			Link({ label: [Text("www.example.com")], target: { href: "www.example.com", title: None } }),
+			Link({ label: [Text("www.example.com")], target: { href: "http://www.example.com", title: None } }),
 		]
 }
 
@@ -2398,6 +3923,87 @@ expect {
 
 	actual == [Text("Hello "), HtmlInline("<span>"), Text("world"), HtmlInline("</span>")]
 }
+
+inline_test : Str -> List(Markdown.Inline)
+inline_test = |text| String.parse_str(Markdown.inlines, text) ?? [Text("<parse error>")]
+
+## Emphasis follows the delimiter-run algorithm (CommonMark 6.2): flanking,
+## intraword underscores, the rule of three and nesting.
+expect inline_test("*foo bar *") == [Text("*foo bar *")]
+expect inline_test("foo_bar_") == [Text("foo_bar_")]
+expect inline_test("*foo**bar**baz*") == [Emphasis([Text("foo"), Strong([Text("bar")]), Text("baz")])]
+expect inline_test("*foo**bar*") == [Emphasis([Text("foo**bar")])]
+expect inline_test("***foo** bar*") == [Emphasis([Strong([Text("foo")]), Text(" bar")])]
+expect inline_test("**foo*") == [Text("*"), Emphasis([Text("foo")])]
+expect inline_test("foo******bar*********baz") == [Text("foo"), Strong([Strong([Strong([Text("bar")])])]), Text("***baz")]
+expect inline_test("*(*foo*)*") == [Emphasis([Text("("), Emphasis([Text("foo")]), Text(")")])]
+
+## Unicode punctuation includes symbols (CommonMark 0.31.2), so a currency sign
+## next to `*` makes the run left-flanking only.
+expect inline_test("*£*bravo.") == [Text("*£*bravo.")]
+expect inline_test("a\u(A0)*b*") == [Text("a\u(A0)"), Emphasis([Text("b")])]
+
+## Code spans take precedence over emphasis and links; backtick runs must match.
+expect inline_test("*a `*` b*") == [Emphasis([Text("a "), InlineCode("*"), Text(" b")])]
+expect inline_test("``foo`bar``") == [InlineCode("foo`bar")]
+expect inline_test("`a``b`` c") == [Text("`a"), InlineCode("b"), Text(" c")]
+expect inline_test("` `` `") == [InlineCode("``")]
+expect inline_test("`foo\nbar`") == [InlineCode("foo bar")]
+
+## Backslash escapes and entity references decode to text.
+expect inline_test("\\*not emphasis\\* \\a") == [Text("*not emphasis* \\a")]
+expect inline_test("&copy; &#35; &#X22; &#0; &nosuch;") == [Text("© # \" \u(FFFD) &nosuch;")]
+expect inline_test("&amp;ouml;") == [Text("&ouml;")]
+
+## Links: destinations, titles, nesting rules and precedence.
+expect inline_test("[a](<b c> \"t\")") == [Link({ label: [Text("a")], target: { href: "b c", title: Some("t") } })]
+expect inline_test("[a](b(c)d)") == [Link({ label: [Text("a")], target: { href: "b(c)d", title: None } })]
+expect inline_test("[a](/u\\*v &auml;)") == [Text("[a](/u*v ä)")]
+expect inline_test("[a](/u\\*v '&auml;')") == [Link({ label: [Text("a")], target: { href: "/u*v", title: Some("ä") } })]
+expect inline_test("[foo [bar](/u)](/v)") == [Text("[foo "), Link({ label: [Text("bar")], target: { href: "/u", title: None } }), Text("](/v)")]
+expect inline_test("![a [b](/u)](/v)") == [Image({ alt: [Text("a "), Link({ label: [Text("b")], target: { href: "/u", title: None } })], target: { href: "/v", title: None } })]
+expect inline_test("*[foo*](/u)") == [Text("*"), Link({ label: [Text("foo*")], target: { href: "/u", title: None } })]
+expect inline_test("[foo`](/u)`") == [Text("[foo"), InlineCode("](/u)")]
+
+## Public link/image parsers consume one leading inline link.
+expect String.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ val: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), input: " rest" })
+expect String.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ val: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), input: "!" })
+expect String.parse_str_partial(Markdown.link, "[a][b]").is_err()
+
+## Reference labels match case-insensitively after Unicode case folding.
+expect {
+	actual = String.parse_str(Markdown.all, "[ẞ]\n\n[SS]: /url")?
+	actual == [Paragraph([Link({ label: [Text("ẞ")], target: { href: "/url", title: None } })])]
+}
+
+## Reference definitions decode escapes and entities and reject bracketed labels.
+expect {
+	actual = String.parse_str(Markdown.all, "[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")?
+	actual == [Paragraph([Link({ label: [Text("foo")], target: { href: "/fö*", title: Some("t*") } })])]
+}
+
+expect {
+	actual = String.parse_str(Markdown.all, "[a[b]\n\n[a[b]: /u")?
+	actual == [Paragraph([Text("[a[b]")]), Paragraph([Text("[a[b]: /u")])]
+}
+
+## Autolinks and raw HTML follow the CommonMark grammars.
+expect inline_test("<http://a.b/c?d=1&amp;e> <a@b.co>") == [Link({ label: [Text("http://a.b/c?d=1&e")], target: { href: "http://a.b/c?d=1&e", title: None } }), Text(" "), Link({ label: [Text("a@b.co")], target: { href: "mailto:a@b.co", title: None } })]
+expect inline_test("<a href=\"x\" b> <!-- c --> <?p?> <!X y> <![CDATA[z]]> </a >") == [HtmlInline("<a href=\"x\" b>"), Text(" "), HtmlInline("<!-- c -->"), Text(" "), HtmlInline("<?p?>"), Text(" "), HtmlInline("<!X y>"), Text(" "), HtmlInline("<![CDATA[z]]>"), Text(" "), HtmlInline("</a >")]
+expect inline_test("<a b='c' d> <1a> <a =b>") == [HtmlInline("<a b='c' d>"), Text(" <1a> <a =b>")]
+
+## Soft and hard line breaks.
+expect inline_test("a  \n   b\\\nc \nd") == [Text("a"), HardBreak, Text("b"), HardBreak, Text("c\nd")]
+expect inline_test("  a  ") == [Text("a")]
+
+## GFM strikethrough pairs runs of equal length (one or two tildes).
+expect inline_test("~~a~~ ~b~ ~~~c~~~") == [Strikethrough([Text("a")]), Text(" "), Strikethrough([Text("b")]), Text(" ~~~c~~~")]
+expect inline_test("~~a~ b~~") == [Text("~~a~ b~~")]
+
+## GFM extended autolinks: www., scheme:// and bare email addresses.
+expect inline_test("see www.a.b/c). and http://x.y/z?") == [Text("see "), Link({ label: [Text("www.a.b/c")], target: { href: "http://www.a.b/c", title: None } }), Text("). and "), Link({ label: [Text("http://x.y/z")], target: { href: "http://x.y/z", title: None } }), Text("?")]
+expect inline_test("mail a.b+c@d.ef.") == [Text("mail "), Link({ label: [Text("a.b+c@d.ef")], target: { href: "mailto:a.b+c@d.ef", title: None } }), Text(".")]
+expect inline_test("[x www.a.b](/u)") == [Link({ label: [Text("x www.a.b")], target: { href: "/u", title: None } })]
 
 ## Reference links resolve using definitions and definitions are omitted from blocks.
 expect {
@@ -2591,7 +4197,7 @@ expect {
 
 	actual = String.parse_str(Markdown.all, text)?
 
-	actual == [Paragraph([Text("Name | Count not a delimiter")])]
+	actual == [Paragraph([Text("Name | Count\nnot a delimiter")])]
 }
 
 ## Raw HTML blocks are preserved without validation.

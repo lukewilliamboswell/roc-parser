@@ -324,6 +324,10 @@ def choose_mode(text: str) -> str | None:
 
 GFM_TRIGGERS = re.compile(r"~|www\.|://|@")
 
+# CommonMark examples whose plain-CommonMark output differs once the GFM
+# extended-autolink extension is enabled (verified against cmark-gfm).
+GFM_SUPERSEDED = {602, 606, 608, 611, 612}
+
 
 def classify(text: str, roc_blocks: list, oracle_blocks: list) -> str:
     if roc_blocks == oracle_blocks:
@@ -355,7 +359,12 @@ def check(args) -> int:
 
     entries = []
     for example in load_json(DATA / "spec-inline.json"):
-        entries.append({"id": f"spec-{example['example']}", "markdown": example["markdown"], "html": example["html"], "section": example["section"]})
+        expected = example["html"]
+        if example["example"] in GFM_SUPERSEDED:
+            # The GFM extended-autolink extension (claimed by the library)
+            # links these; cmark-gfm's output is the reference.
+            expected = cmark_html(example["markdown"])
+        entries.append({"id": f"spec-{example['example']}", "markdown": example["markdown"], "html": expected, "section": example["section"]})
     for example in load_json(DATA / "gfm-extensions.json"):
         entries.append({"id": f"gfm-{example['example']}", "markdown": example["markdown"], "html": example["html"], "section": example["section"]})
     for case in load_json(DATA / "cases.json"):

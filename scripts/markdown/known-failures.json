@@ -1,1 +1,3 @@
-{}
+{
+  "spec-541": "Block structure, not inline: link reference definitions spanning several lines ([Foo\\n  bar]: /url) are not recognised by the line-based definition collector (collect_reference_definitions)."
+}
