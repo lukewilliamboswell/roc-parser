@@ -1058,7 +1058,13 @@ parse_mapping = |start, indent, depth, raw_lines| {
 				key_column = line.indent + 1
 				key = parse_key(parts.key, line.number, key_column)?
 
-				if $seen.contains(key) {
+				duplicate =
+					if $entries.len() <= small_mapping_size {
+						$entries.any(|entry| entry.key == key)
+					} else {
+						$seen.contains(key)
+					}
+				if duplicate {
 					return fail(line.number, key_column, "duplicate mapping key `${key}`")
 				}
 
@@ -1081,8 +1087,15 @@ parse_mapping = |start, indent, depth, raw_lines| {
 						{ node, input: rest }
 					}
 
-				$seen = $seen.insert(key)
 				$entries = $entries.append({ key, line: line.number, column: key_column, value: parsed.node })
+				if $entries.len() > small_mapping_size {
+					$seen =
+						if $seen.is_empty() {
+							Set.from_list($entries.map(|entry| entry.key))
+						} else {
+							$seen.insert(key)
+						}
+				}
 				$input = parsed.input
 			}
 		}
@@ -1090,6 +1103,12 @@ parse_mapping = |start, indent, depth, raw_lines| {
 
 	Ok({ node: Node.{ line: location.line, column: location.column, kind: Map($entries) }, input: $input })
 }
+
+## Up to this many entries, duplicate keys are found by scanning the entries
+## rather than hashing every key; a set takes over for larger mappings so the
+## check stays linear.
+small_mapping_size : U64
+small_mapping_size = 16
 
 MappingParts : { key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }
 
