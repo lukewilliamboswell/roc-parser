@@ -81,7 +81,8 @@ check_location = |bytes, result| {
 check_crlf : Str, Parsed -> {}
 check_crlf = |input, result| {
 	crlf = Yaml.parse_str(Str.replace_each(input, "\n", "\r\n"))
-	if crlf != result {
+	# Compare renderings: NaN floats are never equal to themselves.
+	if show(crlf) != show(result) {
 		crash "CRLF line endings changed the result\nLF:   ${show(result)}\nCRLF: ${show(crlf)}"
 	}
 }
@@ -95,7 +96,7 @@ check_document_start = |bytes, input, result| {
 		marked = Yaml.parse_str("---\n${input}")
 		consistent =
 			match (result, marked) {
-				(Ok(plain), Ok(with_marker)) => plain == with_marker
+				(Ok(plain), Ok(with_marker)) => Yaml.to_inspect(plain) == Yaml.to_inspect(with_marker)
 				(Err(YamlError(plain)), Err(YamlError(with_marker))) => plain.line + 1 == with_marker.line and plain.message == with_marker.message
 				_ => Bool.False
 			}

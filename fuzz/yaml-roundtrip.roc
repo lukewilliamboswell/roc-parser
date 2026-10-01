@@ -118,15 +118,14 @@ split_once = |bytes, is_sep| {
 	$found
 }
 
-lower : Str -> Str
-lower = |text| Str.from_utf8(text.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b)) ?? text
-
 ## Would a plain scalar with this text resolve to something other than a string?
 resolves_non_string : Str -> Bool
 resolves_non_string = |text| {
 	bytes = text.to_utf8()
-	low = lower(text)
-	low == "null" or text == "~" or low == "true" or low == "false" or all_digits(drop_sign(bytes)) or is_core_float(bytes) or (bytes.len() > 0 and text != "~" and ((bytes.get(0) ?? 0) == '.' and (low == ".inf" or low == ".nan")))
+	core_words = ["null", "Null", "NULL", "~", "true", "True", "TRUE", "false", "False", "FALSE", ".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF", "-.inf", "-.Inf", "-.INF", ".nan", ".NaN", ".NAN"]
+	radix = |prefix, ok| Str.starts_with(text, prefix) and bytes.len() > 2 and bytes.drop_first(2).all(ok)
+	is_hex = |b| is_digit(b) or (b >= 'a' and b <= 'f') or (b >= 'A' and b <= 'F')
+	core_words.contains(text) or all_digits(drop_sign(bytes)) or is_core_float(bytes) or radix("0o", |b| b >= '0' and b <= '7') or radix("0x", is_hex)
 }
 
 contains : Str, Str -> Bool
@@ -140,8 +139,7 @@ plain_safe = |text, flow| {
 	last = bytes.last() ?? ' '
 	indicator = ['-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`', ' ', '\t']
 	flow_bad = flow and (bytes.contains(',') or bytes.contains('[') or bytes.contains(']') or bytes.contains('{') or bytes.contains('}'))
-	# Float-looking strings that F64.from_str rejects fail.
-	gap_bad = !known_gaps and float_lookalike(bytes)
+
 	!bytes.is_empty()
 	and !indicator.contains(first)
 	and last != ' '
@@ -154,17 +152,7 @@ plain_safe = |text, flow| {
 	and !contains(text, " #")
 	and !contains(text, "\t#")
 	and !flow_bad
-	and !gap_bad
 	and !resolves_non_string(text)
-}
-
-## Strings the parser's float heuristic grabs: starts with a digit or '.', only
-## float characters, and contains '.', 'e' or 'E'.
-float_lookalike : List(U8) -> Bool
-float_lookalike = |bytes| {
-	body = drop_sign(bytes)
-	first = body.get(0) ?? 'x'
-	(is_digit(first) or first == '.') and bytes.all(|b| is_digit(b) or b == '.' or b == 'e' or b == 'E' or b == '+' or b == '-') and (bytes.contains('.') or bytes.contains('e') or bytes.contains('E'))
 }
 
 escape_utf8 : Str -> Str
@@ -228,6 +216,9 @@ int_texts = [
 	{ text: "-17", value: -17 },
 	{ text: "9223372036854775807", value: 9223372036854775807 },
 	{ text: "-9223372036854775808", value: -9223372036854775808 },
+	{ text: "0x1F", value: 31 },
+	{ text: "0xffffFFFF", value: 4294967295 },
+	{ text: "0o17", value: 15 },
 ]
 
 float_texts : List({ text : Str, value : F64 })
@@ -243,6 +234,9 @@ float_texts = [
 	{ text: "1.", value: 1.0 },
 	{ text: "1.25e2", value: 125.0 },
 	{ text: "-.5", value: -0.5 },
+	{ text: ".inf", value: F64.infinity },
+	{ text: "-.Inf", value: -F64.infinity },
+	{ text: "1e400", value: F64.infinity },
 ]
 
 null_texts : List(Str)

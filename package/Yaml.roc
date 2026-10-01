@@ -589,30 +589,130 @@ parse_inline_value = |raw, line, column| {
 	}
 }
 
+## Resolve a plain scalar with the YAML 1.2 core schema (10.3.2). Anything
+## that matches none of its forms is a string.
 parse_plain_scalar : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_plain_scalar = |bytes, line, column| {
-	lower = lower_ascii(bytes)
 	text = String.str_from_utf8(bytes)
 
-	if lower == "null".to_utf8() or bytes == "~".to_utf8() {
+	if ["null", "Null", "NULL", "~"].contains(text) {
 		Ok(Null)
-	} else if lower == "true".to_utf8() {
+	} else if ["true", "True", "TRUE"].contains(text) {
 		Ok(Bool(Bool.True))
-	} else if lower == "false".to_utf8() {
+	} else if ["false", "False", "FALSE"].contains(text) {
 		Ok(Bool(Bool.False))
 	} else if is_decimal_integer(bytes) {
 		match I64.from_str(text) {
 			Ok(value) => Ok(Int(value))
 			Err(_) => fail(line, column, "integer `${text}` is outside the supported I64 range")
 		}
-	} else if looks_like_float(bytes) {
-		match F64.from_str(text) {
-			Ok(value) => Ok(Float(value))
-			Err(_) => fail(line, column, "invalid floating-point value `${text}`")
-		}
 	} else {
-		Ok(String(text))
+		match bytes {
+			['0', 'o', .. as digits] if !digits.is_empty() and digits.all(|b| b >= '0' and b <= '7') =>
+				radix_integer(digits, 8, text, line, column)
+
+			['0', 'x', .. as digits] if !digits.is_empty() and digits.all(is_hex_digit) =>
+				radix_integer(digits, 16, text, line, column)
+
+			_ =>
+				match special_float(text) {
+					Ok(value) => Ok(Float(value))
+					Err(_) =>
+						match core_float_text(bytes) {
+							Ok(canonical) => Ok(Float(F64.from_str(canonical) ?? (if bytes.first() == Ok('-') -F64.infinity else F64.infinity)))
+							Err(_) => Ok(String(text))
+						}
+				}
+		}
 	}
+}
+
+special_float : Str -> Try(F64, [NotSpecial])
+special_float = |text| {
+	if [".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF"].contains(text) {
+		Ok(F64.infinity)
+	} else if ["-.inf", "-.Inf", "-.INF"].contains(text) {
+		Ok(-F64.infinity)
+	} else if [".nan", ".NaN", ".NAN"].contains(text) {
+		Ok(F64.nan)
+	} else {
+		Err(NotSpecial)
+	}
+}
+
+is_hex_digit : U8 -> Bool
+is_hex_digit = |byte| is_digit(byte) or (byte >= 'a' and byte <= 'f') or (byte >= 'A' and byte <= 'F')
+
+radix_integer : String.Utf8, U64, Str, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+radix_integer = |digits, radix, text, line, column| {
+	value = digits.fold(Ok(0), |acc, byte| {
+		digit =
+			if is_digit(byte) {
+				U8.to_u64(byte - '0')
+			} else if byte >= 'a' {
+				U8.to_u64(byte - 'a' + 10)
+			} else {
+				U8.to_u64(byte - 'A' + 10)
+			}
+
+		match acc {
+			Ok(total) if total <= (9223372036854775807 - digit) // radix => Ok(total * radix + digit)
+			_ => Err(Overflow)
+		}
+	})
+
+	match value {
+		Ok(total) => Ok(Int(U64.to_i64_wrap(total)))
+		Err(_) => fail(line, column, "integer `${text}` is outside the supported I64 range")
+	}
+}
+
+## Match the core schema float form [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
+## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
+core_float_text : String.Utf8 -> Try(Str, [NotFloat])
+core_float_text = |bytes| {
+	{ sign, unsigned } =
+		match bytes {
+			['-', .. as rest] => { sign: "-", unsigned: rest }
+			['+', .. as rest] => { sign: "", unsigned: rest }
+			_ => { sign: "", unsigned: bytes }
+		}
+	mantissa = unsigned.take_first(count_while(unsigned, |b| b != 'e' and b != 'E'))
+	exponent = unsigned.drop_first(mantissa.len())
+	whole = mantissa.take_first(count_while(mantissa, is_digit))
+	after_whole = mantissa.drop_first(whole.len())
+	{ has_point, fraction } =
+		match after_whole {
+			['.', .. as rest] => { has_point: Bool.True, fraction: rest }
+			_ => { has_point: Bool.False, fraction: after_whole }
+		}
+	exponent_digits =
+		match exponent {
+			['e', '+', .. as rest] | ['e', '-', .. as rest] | ['E', '+', .. as rest] | ['E', '-', .. as rest] | ['e', .. as rest] | ['E', .. as rest] => rest
+			_ => []
+		}
+	mantissa_ok = fraction.all(is_digit) and (!whole.is_empty() or (has_point and !fraction.is_empty()))
+	exponent_ok = exponent.is_empty() or (!exponent_digits.is_empty() and exponent_digits.all(is_digit))
+	# A plain integer is not a float; "1." and "1e3" are.
+	is_float = has_point or !exponent.is_empty()
+
+	if mantissa_ok and exponent_ok and is_float {
+		whole_text = if whole.is_empty() "0" else String.str_from_utf8(whole)
+		fraction_text = if fraction.is_empty() "0" else String.str_from_utf8(fraction)
+		exponent_text = if exponent.is_empty() "" else String.str_from_utf8(exponent)
+		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
+	} else {
+		Err(NotFloat)
+	}
+}
+
+count_while : String.Utf8, (U8 -> Bool) -> U64
+count_while = |bytes, keep| {
+	var $count = 0
+	while $count < bytes.len() and keep(bytes.get($count) ?? 0) {
+		$count = $count + 1
+	}
+	$count
 }
 
 parse_flow_sequence : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
@@ -1091,48 +1191,8 @@ all_digits = |bytes| {
 	}
 }
 
-looks_like_float : String.Utf8 -> Bool
-looks_like_float = |bytes| {
-	has_float_marker = contains_byte(bytes, '.') or contains_byte(bytes, 'e') or contains_byte(bytes, 'E')
-	has_digit = bytes_contains_digit(bytes)
-	valid_characters = all_float_characters(bytes)
-
-	match bytes {
-		['+', first, ..] | ['-', first, ..] => has_float_marker and has_digit and valid_characters and (is_digit(first) or first == '.')
-		[first, ..] => has_float_marker and has_digit and valid_characters and (is_digit(first) or first == '.')
-		[] => Bool.False
-	}
-}
-
 is_digit : U8 -> Bool
 is_digit = |byte| byte >= '0' and byte <= '9'
-
-bytes_contains_digit : String.Utf8 -> Bool
-bytes_contains_digit = |bytes| {
-	match bytes {
-		[] => Bool.False
-		[first, ..] if is_digit(first) => Bool.True
-		[_, .. as rest] => bytes_contains_digit(rest)
-	}
-}
-
-all_float_characters : String.Utf8 -> Bool
-all_float_characters = |bytes| {
-	match bytes {
-		[] => Bool.True
-		[first, .. as rest] =>
-			(is_digit(first) or first == '.' or first == 'e' or first == 'E' or first == '+' or first == '-') and all_float_characters(rest)
-		}
-}
-
-contains_byte : String.Utf8, U8 -> Bool
-contains_byte = |bytes, expected| {
-	match bytes {
-		[] => Bool.False
-		[first, ..] if first == expected => Bool.True
-		[_, .. as rest] => contains_byte(rest, expected)
-	}
-}
 
 starts_with_space : String.Utf8 -> Bool
 starts_with_space = |bytes| {
@@ -1171,15 +1231,6 @@ append_bytes = |left, right| {
 	match right {
 		[] => left
 		[first, .. as rest] => append_bytes(left.append(first), rest)
-	}
-}
-
-lower_ascii : String.Utf8 -> String.Utf8
-lower_ascii = |bytes| {
-	match bytes {
-		[] => []
-		[first, .. as rest] if first >= 'A' and first <= 'Z' => List.prepend(lower_ascii(rest), first + 32)
-		[first, .. as rest] => List.prepend(lower_ascii(rest), first)
 	}
 }
 
@@ -1313,6 +1364,35 @@ expect Yaml.parse_str("one: 1\n---\ntwo: 2").is_err()
 expect {
 	actual = Yaml.parse_str("file: .git\nname: release")?
 	actual == Mapping([{ key: "file", value: String(".git") }, { key: "name", value: String("release") }])
+}
+
+## Plain scalars resolve with the YAML 1.2 core schema; everything else is a string.
+expect {
+	actual = Yaml.parse_str("[1.2.3, 1e, nUlL, tRUE, 0x1F, 0o17, 1., .5, -1.5e2, .inf, -.Inf, 1_000, 0X1]")?
+	actual
+	== Sequence([
+		String("1.2.3"),
+		String("1e"),
+		String("nUlL"),
+		String("tRUE"),
+		Int(31),
+		Int(15),
+		Float(1.0),
+		Float(0.5),
+		Float(-150.0),
+		Float(F64.infinity),
+		Float(-F64.infinity),
+		String("1_000"),
+		String("0X1"),
+	])
+}
+
+## Not-a-number resolves to a float.
+expect {
+	match Yaml.parse_str(".nan") {
+		Ok(Float(value)) => F64.is_nan(value)
+		_ => Bool.False
+	}
 }
 
 ## Syntax errors report their source location.
