@@ -3,16 +3,131 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#getting-started]
 = Getting started
 
-Content in progress.
+In this chapter you add roc-parser to a Roc app and use it to read three lines
+of CSV into typed records. At the end the app prints one line per record. You
+need a terminal, an internet connection, and a little Roc: how to write a
+function, a record, and a `match`.
+
+== Before you start
+
+You need:
+
+* The Roc compiler, as a recent _nightly_ build. Roc is still changing, so
+  each roc-parser release is tested with one specific nightly, which its
+  release notes name. Download that build from the
+  https://github.com/roc-lang/nightlies/releases[Roc nightlies page] and put
+  the `roc` executable on your `PATH`.
+* A platform for your app. The examples in this manual use
+  https://github.com/roc-lang/basic-cli[basic-cli] 0.23.0, which provides
+  `main!` and printing to the terminal. roc-parser itself is pure Roc and
+  works with any platform.
+
+Check the compiler:
+
+[source,sh]
+----
+roc version
+----
+
+It prints the name of the nightly build, which should match the one in the
+release notes:
+
+[source,text]
+----
+Roc compiler version nightly-<date>-<commit>
+----
+
+== Add the package
+
+A Roc app names each package it uses by URL in its header. The compiler
+downloads the package the first time it builds the app and checks it against
+the hash in the URL.
+
+. Open the {repo}/releases[roc-parser releases page] and choose the newest
+  release.
+. Under *Assets*, find the file ending in `.tar.zst`. Copy its link: it has
+  the form
+  `+https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst+`.
+. Put that link in your app's header under a short name. This manual uses
+  `parser`.
+
+Create a file named `main.roc` with this header, replacing the `parser` URL
+with the one you copied:
 
 [source,roc]
 ----
-include::examples/hello.roc[tag=parse,indent=0]
+app [main!] {
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst",
+}
 ----
+
+The examples in this manual are tested against the package source in the
+repository, so their headers say `parser: "../../package/main.roc"` instead.
+Everything else in them is the same.
+
+== Read CSV into records
+
+Add the rest of the program below the header:
+
+[source,roc]
+----
+include::examples/getting-started-csv.roc[tag=body,indent=0]
+----
+
+Run it:
+
+[source,sh]
+----
+roc main.roc
+----
+
+Output:
+
+[source,text]
+----
+include::examples/getting-started-csv.expected[]
+----
+
+The first run takes longer while the compiler downloads the platform and the
+package.
+
+== What the program does
+
+`import parser.CSV` makes the `CSV` module from the package named `parser`
+available. `Parser` is imported too, because the type of `planet` mentions it.
+
+`Planet` is the record type each row becomes.
+
+`planet` is a _parser_: a value that describes how to read one CSV row. Read
+it from the top:
+
+* `CSV.record(...)` starts a row parser with a function that builds the
+  result. The function takes one argument at a time, `|name| |moons|`,
+  because the fields arrive one at a time.
+* Each `.keep(CSV.field(...))` reads the next field and passes it to that
+  function. `CSV.string` accepts any text; `CSV.u64` accepts only an unsigned
+  whole number.
+
+`CSV.parse_str(planet, input)` splits the text into rows and runs `planet` on
+each. It returns `Ok` with a list of `Planet` records, or `Err` if the text is
+not valid CSV or a row does not match. Nothing is printed until every row has
+been read successfully.
+
+To see the error path, change `Mars,2` to `Mars,two` and run the program
+again. It prints `The CSV did not match the expected columns`.
+<<errors>> shows how to report exactly which row and field failed.
+
+== Next steps
+
+* <<combinator-primer>> teaches the building blocks by writing a parser for a
+  small settings format.
+* The format chapters show how to read CSV, YAML, XML, Markdown and HTTP.
+* <<custom-format>> shows how to build and test a parser for a format of your
+  own.
