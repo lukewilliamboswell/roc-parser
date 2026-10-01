@@ -894,7 +894,7 @@ split_lines = |input, number, current, lines| {
 		[] if current.is_empty() and !lines.is_empty() => lines
 		[] => lines.append({ content: current, indent: 0, number, terminated: Bool.False, tab: Bool.False })
 		['\r', '\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: Bool.True, tab: Bool.False }))
-		['\n', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: Bool.True, tab: Bool.False }))
+		['\n', .. as rest] | ['\r', .. as rest] => split_lines(rest, number + 1, [], lines.append({ content: current, indent: 0, number, terminated: Bool.True, tab: Bool.False }))
 		[first, .. as rest] => split_lines(rest, number, current.append(first), lines)
 	}
 }
@@ -1402,6 +1402,12 @@ expect Yaml.parse_str("foo: |\n\t\nbar: 1\n").is_err()
 expect {
 	actual = Yaml.parse_str("|\na\n...\n")?
 	actual == String("a\n")
+}
+
+## Lone carriage returns are line breaks.
+expect {
+	actual = Yaml.parse_str("value: |\r  one\r  two\r")?
+	actual == Mapping([{ key: "value", value: String("one\ntwo\n") }])
 }
 
 ## A tab before a document marker is not a document marker.

@@ -30,7 +30,7 @@ test = |bytes| {
 	}
 }
 
-## Line lengths in bytes, splitting on LF and dropping a CR before it.
+## Line lengths in bytes; LF, CRLF and a lone CR each end a line.
 line_lengths : List(U8) -> List(U64)
 line_lengths = |bytes| {
 	var $lengths = []
@@ -39,13 +39,16 @@ line_lengths = |bytes| {
 	var $index = 0
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
-		if byte == '\n' {
-			$lengths = $lengths.append(if $previous_cr $current - 1 else $current)
-			$current = 0
+		if byte == '\n' and $previous_cr {
+			# The CR already ended this line.
 			$previous_cr = Bool.False
+		} else if byte == '\n' or byte == '\r' {
+			$lengths = $lengths.append($current)
+			$current = 0
+			$previous_cr = byte == '\r'
 		} else {
 			$current = $current + 1
-			$previous_cr = byte == '\r'
+			$previous_cr = Bool.False
 		}
 		$index = $index + 1
 	}
