@@ -488,6 +488,8 @@ parse_start_tag = |bytes, start| {
 			Err(_) => return fail(start + 1, "expected an element name after '<'")
 		}
 	var $attributes = []
+	# A set keeps the Unique Att Spec check linear in the attribute count.
+	var $seen = Set.empty()
 	var $pos = name.pos
 	while Bool.True {
 		before_space = $pos
@@ -509,12 +511,13 @@ parse_start_tag = |bytes, start| {
 				Ok(parsed) => parsed
 				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
 			}
-		if $attributes.any(|attribute| attribute.name == attribute_name.val) {
+		if $seen.contains(attribute_name.val) {
 			return fail($pos, "duplicate attribute ${attribute_name.val}")
 		}
 		$pos = skip_eq(bytes, attribute_name.pos)?
 		value = parse_attribute_value(bytes, $pos)?
 		$attributes = $attributes.append({ name: attribute_name.val, value: value.val })
+		$seen = $seen.insert(attribute_name.val)
 		$pos = value.pos
 	}
 	crash "unreachable: the start tag loop only exits by returning"
@@ -1023,3 +1026,12 @@ expect {
 
 ## The parser combinator reports leftover input after the document.
 expect String.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+
+## Duplicate attribute detection stays fast with many attributes.
+expect {
+	count = 20000
+	attributes = List.repeat(0, count).map_with_index(|_, index| " a${index.to_str()}=''") |> Str.join_with("")
+	parsed = Xml.parse_str("<e${attributes}/>")
+	duplicate = Xml.parse_str("<e${attributes} a${(count - 1).to_str()}=''/>")
+	parsed.is_ok() and duplicate.is_err()
+}
