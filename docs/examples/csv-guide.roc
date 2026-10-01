@@ -81,9 +81,7 @@ raw_records : Str -> Str
 raw_records = |text| {
 	match CSV.parse_records(text) {
 		Ok(records) =>
-			records
-				.map(|fields| fields.map(Str.from_utf8_lossy) |> Str.join_with(" | "))
-				|> Str.join_with("\n")
+			Str.join_with(records.map(|fields| Str.join_with(fields.map(Str.from_utf8_lossy), " | ")), "\n")
 
 		Err(InvalidCsv({ message, line, column, record: _, field: _ })) =>
 			"not valid CSV at ${line.to_str()}:${column.to_str()}: ${message}"

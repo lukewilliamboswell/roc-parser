@@ -46,6 +46,16 @@ summarize = |text| {
 
 # end::navigate[]
 
+# tag::strict[]
+decode_strict = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })
+
+load : Str -> Try({ user_id : U64 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+load = |text| decode_strict(text)
+
+# end::strict[]
+expect load("user-id: 7\n") == Ok({ user_id: 7 })
+expect load("user-id: 7\nuser-name: ada\n").is_err()
+
 # tag::tree[]
 ## Explore a document without a record type.
 first_owner : Str -> Try(Str, [InvalidYaml(Yaml.Error), Missing, WrongType])

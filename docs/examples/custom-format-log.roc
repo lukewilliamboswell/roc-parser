@@ -110,8 +110,7 @@ summary : Str -> Str
 summary = |text| {
 	match parse_log(text) {
 		Ok(entries) =>
-			entries.map(|e| "${level_name(e.level)} at ${e.time.hour.to_str()}h: ${e.message}")
-				|> Str.join_with("\n")
+			Str.join_with(entries.map(|e| "${level_name(e.level)} at ${e.time.hour.to_str()}h: ${e.message}"), "\n")
 		Err({ line, reason }) => "line ${line.to_str()}: ${reason}"
 	}
 }

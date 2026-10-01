@@ -96,10 +96,7 @@ hand-written configuration:
 
 [source,roc]
 ----
-decode_strict = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })
-
-load : Str -> Try({ user_id : U64 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-load = |text| decode_strict(text)
+include::examples/yaml-guide.roc[tag=strict,indent=0]
 ----
 
 Build the decoder once, as a top-level constant, and call it for each
