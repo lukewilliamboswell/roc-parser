@@ -1,0 +1,790 @@
+[
+ {
+  "id": "req/minimal",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/all-methods-options",
+  "mode": "Q",
+  "input": "OPTIONS * HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-post",
+  "mode": "Q",
+  "input": "POST /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-put",
+  "mode": "Q",
+  "input": "PUT /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-delete",
+  "mode": "Q",
+  "input": "DELETE /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-head",
+  "mode": "Q",
+  "input": "HEAD /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-trace",
+  "mode": "Q",
+  "input": "TRACE /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-patch",
+  "mode": "Q",
+  "input": "PATCH /x HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/connect-authority",
+  "mode": "Q",
+  "input": "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/absolute-form",
+  "mode": "Q",
+  "input": "GET http://a/b?c HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/http10-no-host",
+  "mode": "Q",
+  "input": "GET / HTTP/1.0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/unknown-method",
+  "mode": "Q",
+  "input": "BREW / HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/lowercase-method",
+  "mode": "Q",
+  "input": "get / HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/double-space",
+  "mode": "Q",
+  "input": "GET  / HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/tab-separator",
+  "mode": "Q",
+  "input": "GET\t/ HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/target-ctl",
+  "mode": "Q",
+  "input": "GET /\u0001 HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/target-del",
+  "mode": "Q",
+  "input": "GET /\u007f HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/target-obs-text",
+  "mode": "Q",
+  "input": "GET /\u00ff HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/version-two-digits",
+  "mode": "Q",
+  "input": "GET / HTTP/1.10\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/version-lowercase",
+  "mode": "Q",
+  "input": "GET / http/1.1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/version-missing-minor",
+  "mode": "Q",
+  "input": "GET / HTTP/1\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/version-overflow",
+  "mode": "Q",
+  "input": "GET / HTTP/1.044444444444444444444\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/trailing-space-line",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1 \r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/http09",
+  "mode": "Q",
+  "input": "GET /\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/leading-crlf",
+  "mode": "Q",
+  "input": "\r\nGET / HTTP/1.1\r\nHost: a\r\n\r\n"
+ },
+ {
+  "id": "req/empty",
+  "mode": "Q",
+  "input": "",
+  "expect": "error"
+ },
+ {
+  "id": "req/no-final-crlf",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/missing-host-11",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/two-hosts",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/two-hosts-10",
+  "mode": "Q",
+  "input": "GET / HTTP/1.0\r\nHost: a\r\nhost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/host-case",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nhOsT: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/ows-variants",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA:b\r\nB: \t c d \t \r\nC:\r\nD: \r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/value-internal-tabs",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\t\tc\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/value-utf8",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: caf\u00c3\u00a9\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/value-invalid-utf8",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: \u00ff\r\n\r\n"
+ },
+ {
+  "id": "req/value-colon",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b:c: d\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/space-before-colon",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA : b\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/tab-before-colon",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA\t: b\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/empty-name",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n: b\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/name-not-token",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA(b): c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/name-utf8",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n\u00c3\u00a9: c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/no-colon",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nAbc\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/obs-fold",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\r\n c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/obs-fold-first",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\n x: y\r\nHost: a\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/value-nul",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\u0000c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/value-ctl",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\u0001c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/value-del",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\u007fc\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/value-bare-cr",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\rc\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/value-bare-lf",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\nA: b\nc\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/lf-line-endings",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\nHost: a\n\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/lf-final",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-body",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nhello",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-zero",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-pipelined",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 2\r\n\r\nhiGET / HTTP/1.1\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/no-length-pipelined",
+  "mode": "Q",
+  "input": "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2 HTTP/1.1\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-short",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 6\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-dup-same",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-list-same",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5, 5\r\n\r\nhello",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-dup-diff",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nContent-Length: 4\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-list-diff",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 4, 5\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-plus",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: +5\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-neg",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: -1\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-hex",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 0x5\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-space-inside",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 1 2\r\n\r\nhello world!",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-empty",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length:\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-huge",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 99999999999999999999999\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-wrap",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 18446744073709551621\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-leading-zeros",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 005\r\n\r\nhello",
+  "expect": "ok"
+ },
+ {
+  "id": "req/cl-trailing-comma",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5,\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-case",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\ntransfer-encoding: ChUnKeD\r\n\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-ext",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b;c\r\nhello\r\n0;x=\"q\\\"s\"\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-ext-bws",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5 ; a = b\r\nhello\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-trailer",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\nX-T: v\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-hex-upper",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\nA\r\n0123456789\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-leading-zeros",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0005\r\nhello\r\n000\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-pipelined",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET / HTTP/1.1\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/chunked-missing-last",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-missing-trailer-crlf",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-bad-size",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\nG\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-negative",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n-1\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-0x",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0x5\r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-size-overflow",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n10000000000000005\r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-data-no-crlf",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-data-too-long",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-lf-size",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-lf-data",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-trailing-space",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5 \r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-ext-no-name",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;\r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-ext-bad-quote",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;a=\"b\r\nhello\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/chunked-trailer-obs-fold",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nA: b\r\n c\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-cl",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-te",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-gzip",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-gzip-chunked",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-chunked-gzip",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked, gzip\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-chunked-twice",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked, chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-two-fields",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-empty-elements",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: , chunked,\r\n\r\n0\r\n\r\n"
+ },
+ {
+  "id": "req/te-xchunked",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: xchunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-chunked-quoted",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: \"chunked\"\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-space-colon",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding : chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-http10",
+  "mode": "Q",
+  "input": "POST / HTTP/1.0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-vtab",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: \u000bchunked\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/te-empty",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding:\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "req/cl-obs-fold",
+  "mode": "Q",
+  "input": "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\n 5\r\n\r\nhello",
+  "expect": "error"
+ },
+ {
+  "id": "res/ok",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi",
+  "expect": "ok"
+ },
+ {
+  "id": "res/no-reason",
+  "mode": "S",
+  "input": "HTTP/1.1 200 \r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/no-reason-no-space",
+  "mode": "S",
+  "input": "HTTP/1.1 200\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/reason-spaces",
+  "mode": "S",
+  "input": "HTTP/1.1 404 Not  Found \t\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/reason-obs-text",
+  "mode": "S",
+  "input": "HTTP/1.1 200 caf\u00c3\u00a9\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/reason-ctl",
+  "mode": "S",
+  "input": "HTTP/1.1 200 O\u0001K\r\nContent-Length: 0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/code-two-digits",
+  "mode": "S",
+  "input": "HTTP/1.1 20 OK\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/code-four-digits",
+  "mode": "S",
+  "input": "HTTP/1.1 2000 OK\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/code-wraps",
+  "mode": "S",
+  "input": "HTTP/1.1 65736 OK\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/code-099",
+  "mode": "S",
+  "input": "HTTP/1.1 099 Odd\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/code-999",
+  "mode": "S",
+  "input": "HTTP/1.1 999 Odd\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/version-10",
+  "mode": "S",
+  "input": "HTTP/1.0 200 OK\r\n\r\nall the rest",
+  "expect": "ok"
+ },
+ {
+  "id": "res/until-close",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\n\r\nall\r\nthe rest",
+  "expect": "ok"
+ },
+ {
+  "id": "res/chunked",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/204-ignores-cl",
+  "mode": "S",
+  "input": "HTTP/1.1 204 No Content\r\nContent-Length: 5\r\n\r\n"
+ },
+ {
+  "id": "res/304-no-body",
+  "mode": "S",
+  "input": "HTTP/1.1 304 Not Modified\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/100-continue",
+  "mode": "S",
+  "input": "HTTP/1.1 100 Continue\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/te-cl",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 2\r\n\r\n0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/cl-dup-diff",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 3\r\n\r\nhi",
+  "expect": "error"
+ },
+ {
+  "id": "res/cl-short",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nhi",
+  "expect": "error"
+ },
+ {
+  "id": "res/te-gzip",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\nxx",
+  "expect": "error"
+ },
+ {
+  "id": "res/obs-fold",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nA: b\r\n c\r\nContent-Length: 0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/space-before-colon",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nA : b\r\nContent-Length: 0\r\n\r\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/lf-endings",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\nContent-Length: 0\n\n",
+  "expect": "error"
+ },
+ {
+  "id": "res/no-host-needed",
+  "mode": "S",
+  "input": "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "res/version-only",
+  "mode": "S",
+  "input": "HTTP/1.1\r\n\r\n",
+  "expect": "error"
+ }
+]
