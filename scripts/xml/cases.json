@@ -1,0 +1,350 @@
+[
+  {
+    "id": "basic/empty-element",
+    "input": "<a/>"
+  },
+  {
+    "id": "basic/declaration",
+    "input": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<a/>"
+  },
+  {
+    "id": "basic/declaration-latin1-name",
+    "input": "<?xml version='1.0' encoding='ISO-8859-1'?><a/>"
+  },
+  {
+    "id": "basic/declaration-no-encoding",
+    "input": "<?xml version='1.0'?><a/>"
+  },
+  {
+    "id": "basic/declaration-trailing-space",
+    "input": "<?xml version='1.0' ?><a/>"
+  },
+  {
+    "id": "basic/bom",
+    "input": "﻿<a/>"
+  },
+  {
+    "id": "names/digits",
+    "input": "<h1><x2.y-z/></h1>"
+  },
+  {
+    "id": "names/non-ascii",
+    "input": "<données été='1'><Ωmega/></données>"
+  },
+  {
+    "id": "names/colon",
+    "input": "<svg:path xlink:href='#a'/>"
+  },
+  {
+    "id": "names/digit-start",
+    "input": "<1a/>"
+  },
+  {
+    "id": "names/dash-start",
+    "input": "<-a/>"
+  },
+  {
+    "id": "tags/mismatch",
+    "input": "<a><b></a></b>"
+  },
+  {
+    "id": "tags/case-mismatch",
+    "input": "<a></A>"
+  },
+  {
+    "id": "tags/end-space",
+    "input": "<a></a  >"
+  },
+  {
+    "id": "tags/unclosed",
+    "input": "<a><b></b>"
+  },
+  {
+    "id": "tags/space-before-name",
+    "input": "< a/>"
+  },
+  {
+    "id": "tags/slash-space",
+    "input": "<a/ >"
+  },
+  {
+    "id": "tags/two-roots",
+    "input": "<a/><b/>"
+  },
+  {
+    "id": "tags/text-after-root",
+    "input": "<a/>x"
+  },
+  {
+    "id": "tags/text-before-root",
+    "input": "x<a/>"
+  },
+  {
+    "id": "tags/empty",
+    "input": ""
+  },
+  {
+    "id": "tags/whitespace-only",
+    "input": " \n"
+  },
+  {
+    "id": "attr/quotes",
+    "input": "<a b=\"'\" c='\"'/>"
+  },
+  {
+    "id": "attr/eq-spaces",
+    "input": "<a b \t= \n'1'/>"
+  },
+  {
+    "id": "attr/no-space-between",
+    "input": "<a b='1'c='2'/>"
+  },
+  {
+    "id": "attr/unquoted",
+    "input": "<a b=1/>"
+  },
+  {
+    "id": "attr/duplicate",
+    "input": "<a b='1' b='2'/>"
+  },
+  {
+    "id": "attr/lt",
+    "input": "<a b='<'/>"
+  },
+  {
+    "id": "attr/gt",
+    "input": "<a b='>'/>"
+  },
+  {
+    "id": "attr/amp-bare",
+    "input": "<a b='&'/>"
+  },
+  {
+    "id": "attr/normalize-whitespace",
+    "input": "<a b='x\ty\nz\r\nw\rv'/>"
+  },
+  {
+    "id": "attr/charref-whitespace",
+    "input": "<a b='&#9;&#10;&#13;&#32;'/>"
+  },
+  {
+    "id": "attr/unterminated",
+    "input": "<a b='1/>"
+  },
+  {
+    "id": "text/entities",
+    "input": "<a>&lt;&gt;&amp;&apos;&quot;</a>"
+  },
+  {
+    "id": "text/charrefs",
+    "input": "<a>&#65;&#x42;&#x1F600;&#0000000067;</a>"
+  },
+  {
+    "id": "text/charref-nul",
+    "input": "<a>&#0;</a>"
+  },
+  {
+    "id": "text/charref-surrogate",
+    "input": "<a>&#xD800;</a>"
+  },
+  {
+    "id": "text/charref-fffe",
+    "input": "<a>&#xFFFE;</a>"
+  },
+  {
+    "id": "text/charref-too-big",
+    "input": "<a>&#x110000;</a>"
+  },
+  {
+    "id": "text/charref-huge",
+    "input": "<a>&#99999999999999999999999;</a>"
+  },
+  {
+    "id": "text/charref-empty",
+    "input": "<a>&#;</a>"
+  },
+  {
+    "id": "text/charref-bad-hex",
+    "input": "<a>&#xG;</a>"
+  },
+  {
+    "id": "text/charref-uppercase-x",
+    "input": "<a>&#X41;</a>"
+  },
+  {
+    "id": "text/undeclared-entity",
+    "input": "<a>&nbsp;</a>"
+  },
+  {
+    "id": "text/bare-amp",
+    "input": "<a>AT&T</a>"
+  },
+  {
+    "id": "text/missing-semicolon",
+    "input": "<a>&amp</a>"
+  },
+  {
+    "id": "text/cdata-end",
+    "input": "<a>]]></a>"
+  },
+  {
+    "id": "text/brackets",
+    "input": "<a>]] ]></a>"
+  },
+  {
+    "id": "text/gt",
+    "input": "<a>></a>"
+  },
+  {
+    "id": "text/control",
+    "input": "<a>\u0001</a>"
+  },
+  {
+    "id": "text/fffe",
+    "input": "<a>￾</a>"
+  },
+  {
+    "id": "text/c1",
+    "input": "<a> </a>"
+  },
+  {
+    "id": "text/crlf",
+    "input": "<a>1\r\n2\r3\n4</a>"
+  },
+  {
+    "id": "text/cr-cr-lf",
+    "input": "<a>\r\r\n</a>"
+  },
+  {
+    "id": "text/merged",
+    "input": "<a>x<!--c-->y<?p?>z<![CDATA[w]]>&amp;</a>"
+  },
+  {
+    "id": "text/whitespace-children",
+    "input": "<a>\n  <b/>\n</a>"
+  },
+  {
+    "id": "cdata/basic",
+    "input": "<a><![CDATA[<&>]]></a>"
+  },
+  {
+    "id": "cdata/brackets",
+    "input": "<a><![CDATA[]]]]></a>"
+  },
+  {
+    "id": "cdata/crlf",
+    "input": "<a><![CDATA[\r\n\r]]></a>"
+  },
+  {
+    "id": "cdata/unterminated",
+    "input": "<a><![CDATA[x</a>"
+  },
+  {
+    "id": "cdata/outside-root",
+    "input": "<![CDATA[x]]><a/>"
+  },
+  {
+    "id": "comment/basic",
+    "input": "<!--x--><a><!-- y --></a><!--z-->"
+  },
+  {
+    "id": "comment/empty",
+    "input": "<a><!----></a>"
+  },
+  {
+    "id": "comment/double-dash",
+    "input": "<a><!-- -- --></a>"
+  },
+  {
+    "id": "comment/triple-dash-end",
+    "input": "<a><!-- ---></a>"
+  },
+  {
+    "id": "comment/unterminated",
+    "input": "<a><!-- </a>"
+  },
+  {
+    "id": "comment/control",
+    "input": "<a><!--\u0002--></a>"
+  },
+  {
+    "id": "pi/basic",
+    "input": "<?pi x?><a><?b?></a><?c   d ?>"
+  },
+  {
+    "id": "pi/xml-target",
+    "input": "<a><?xml version='1.0'?></a>"
+  },
+  {
+    "id": "pi/xml-target-case",
+    "input": "<a><?XML x?></a>"
+  },
+  {
+    "id": "pi/xml-prefix-ok",
+    "input": "<a><?xml-stylesheet href='x'?></a>"
+  },
+  {
+    "id": "pi/no-space",
+    "input": "<a><?pi?x?></a>"
+  },
+  {
+    "id": "pi/no-target",
+    "input": "<a><? x?></a>"
+  },
+  {
+    "id": "pi/unterminated",
+    "input": "<a><?pi x</a>"
+  },
+  {
+    "id": "decl/not-first",
+    "input": " <?xml version='1.0'?><a/>"
+  },
+  {
+    "id": "decl/after-comment",
+    "input": "<!--c--><?xml version='1.0'?><a/>"
+  },
+  {
+    "id": "decl/version-2",
+    "input": "<?xml version='2.0'?><a/>"
+  },
+  {
+    "id": "decl/version-missing",
+    "input": "<?xml encoding='UTF-8'?><a/>"
+  },
+  {
+    "id": "decl/no-space-before-encoding",
+    "input": "<?xml version='1.0'encoding='UTF-8'?><a/>"
+  },
+  {
+    "id": "decl/bad-standalone",
+    "input": "<?xml version='1.0' standalone='maybe'?><a/>"
+  },
+  {
+    "id": "decl/order",
+    "input": "<?xml version='1.0' standalone='yes' encoding='UTF-8'?><a/>"
+  },
+  {
+    "id": "decl/mixed-quotes",
+    "input": "<?xml version='1.0\"?><a/>"
+  },
+  {
+    "id": "decl/encoding-digit",
+    "input": "<?xml version='1.0' encoding='8bit'?><a/>"
+  },
+  {
+    "id": "decl/uppercase",
+    "input": "<?XML version='1.0'?><a/>"
+  },
+  {
+    "id": "doctype/basic",
+    "input": "<!DOCTYPE a><a/>"
+  },
+  {
+    "id": "doctype/inside",
+    "input": "<a><!DOCTYPE a></a>"
+  },
+  {
+    "id": "misc/bang",
+    "input": "<a><!x></a>"
+  }
+]

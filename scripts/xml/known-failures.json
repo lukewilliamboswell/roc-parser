@@ -1,0 +1,21 @@
+{
+  "oracle": {
+    "expat": "expat_2.7.4",
+    "suite": {
+      "url": "https://www.w3.org/XML/Test/xmlts20130923.tar.gz",
+      "sha256": "9b61db9f5dbffa545f4b8d78422167083a8568c59bd1129f94138f936cf6fc1f"
+    }
+  },
+  "failures": {
+    "decl/version-2": {
+      "signature": "a252ab30b4f596df2b9c7973981f1ba071babbeec0b21dbca53f8d7144ef10b7",
+      "kind": "valid_rejection",
+      "reason": "Oracle limitation: expat does not check VersionNum, but XML 1.0 (5th ed.) [26] requires 1.[0-9]+; rejecting 2.0 is correct."
+    },
+    "xmlconf/hst-lhs-007": {
+      "signature": "5c67d41085bcac3f6f6408e32cc831b84ecc319b750b82e36d8b444d7807d205",
+      "kind": "invalid_acceptance",
+      "reason": "By design: Xml.parse_str takes already-decoded text, so a declared encoding is informational and cannot contradict the byte order mark."
+    }
+  }
+}
