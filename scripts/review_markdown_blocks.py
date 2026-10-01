@@ -24,6 +24,7 @@ Subcommands:
   replay      one file
   crosscheck  ``<fuzz-binary> show`` every corpus file of a generator target
               and compare the generator's expectation with the oracle
+  differential  probe and oracle on every file of a raw-text corpus
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -115,12 +117,24 @@ def _tag(element) -> str:
     return element.tag.removeprefix(NS)
 
 
+# cmark's XML renderer writes control characters unescaped, which XML 1.0
+# forbids, and an XML parser would normalise tabs and line endings in
+# attributes. Every C0 control character is moved to a private-use code point
+# before parsing and moved back in each extracted string.
+def _hide_controls(xml: str) -> str:
+    return re.sub(r"[\x00-\x1f]", lambda match: chr(0xF0000 + ord(match[0])), xml)
+
+
+def _t(value: str | None) -> str:
+    return re.sub("[\U000F0000-\U000F001F]", lambda match: chr(ord(match[0]) - 0xF0000), value or "")
+
+
 def _inlines(element) -> list:
     out = []
     for child in element:
         kind = _tag(child)
         if kind == "text":
-            out.append(["text", child.text or ""])
+            out.append(["text", _t(child.text)])
         elif kind == "softbreak":
             # The Roc AST has no soft-break node; the block parser joins
             # paragraph lines with a single space.
@@ -128,9 +142,9 @@ def _inlines(element) -> list:
         elif kind == "linebreak":
             out.append(["br"])
         elif kind == "code":
-            out.append(["code", child.text or ""])
+            out.append(["code", _t(child.text)])
         elif kind == "html_inline":
-            out.append(["html", child.text or ""])
+            out.append(["html", _t(child.text)])
         elif kind == "emph":
             out.append(["emph", _inlines(child)])
         elif kind == "strong":
@@ -138,7 +152,7 @@ def _inlines(element) -> list:
         elif kind == "strikethrough":
             out.append(["del", _inlines(child)])
         elif kind in ("link", "image"):
-            out.append([kind, child.get("destination", ""), child.get("title") or None, _inlines(child)])
+            out.append([kind, _t(child.get("destination")), _t(child.get("title")) or None, _inlines(child)])
         else:
             raise ValueError("unexpected inline node " + kind)
     return out
@@ -165,9 +179,9 @@ def _blocks(element) -> list:
                 items.append([task, _blocks(item)])
             out.append(["list", start, child.get("tight") == "true", items])
         elif kind == "code_block":
-            out.append(["code", child.get("info", ""), child.text or ""])
+            out.append(["code", _t(child.get("info")), _t(child.text)])
         elif kind == "html_block":
-            out.append(["html", child.text or ""])
+            out.append(["html", _t(child.text)])
         elif kind == "thematic_break":
             out.append(["hr"])
         elif kind == "table":
@@ -183,14 +197,15 @@ def _blocks(element) -> list:
 def split_frontmatter(text: str):
     """Mirror of the module's documented extension: a first line that is
     exactly ``---`` and a later line that is exactly ``---`` delimit raw
-    frontmatter, which is not Markdown."""
-    lines = text.splitlines(keepends=True)
-    bare = [line.rstrip("\r\n") for line in lines]
+    frontmatter, which is not Markdown. Lines end at LF, CRLF or CR, and NUL
+    becomes U+FFFD, as everywhere else in the document."""
+    lines = re.findall(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$", text)
+    bare = [re.sub(r"[\r\n]+$", "", line) for line in lines]
     if not bare or bare[0] != "---":
         return None, text
     for index in range(1, len(bare)):
         if bare[index] == "---":
-            raw = "".join(line + "\n" for line in bare[1:index])
+            raw = "".join(line + "\n" for line in bare[1:index]).replace("\0", "\ufffd")
             return raw, "".join(lines[index + 1:])
     return None, text
 
@@ -198,7 +213,7 @@ def split_frontmatter(text: str):
 def oracle(text: str) -> dict:
     try:
         front, body = split_frontmatter(text)
-        blocks = _blocks(ET.fromstring(oracle_xml(body).split("\n", 2)[2]))
+        blocks = _blocks(ET.fromstring(_hide_controls(oracle_xml(body).split("\n", 2)[2].strip())))
         if front is not None:
             blocks.insert(0, ["frontmatter", front])
         return {"status": "ok", "value": normalize(blocks)}
@@ -507,10 +522,42 @@ def crosscheck(args) -> int:
     return int(any(not kind.startswith(("pass", "rejected", "oracle_")) for kind in counts))
 
 
+def differential(args, executable: Path) -> int:
+    """Probe and oracle on every valid UTF-8 file of a raw corpus (for example
+    the markdown-document target's), reporting block-level disagreements
+    first. Inline-only differences are counted, not listed, unless asked."""
+    counts: Counter = Counter()
+    examples: dict[str, list] = {}
+    for path in sorted(Path(args.corpus).iterdir()):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            counts["invalid_utf8"] += 1
+            continue
+        actual = probe(executable, text)
+        expected = oracle(text)
+        if expected["status"] != "ok":
+            kind = "oracle_failure"
+        elif actual["status"] in FATAL:
+            kind = actual["status"]
+        else:
+            kind = classify(actual["value"], expected["value"])
+            if kind != "pass":
+                kind = oracle_quirk(actual["value"], expected["value"]) or kind
+        counts[kind] += 1
+        if kind in args.show and len(examples.setdefault(kind, [])) < args.examples:
+            where = first_difference(actual.get("value"), expected.get("value"))
+            examples[kind].append({"file": path.name, "input": text, "difference": {"path": where[0], "roc": where[1], "oracle": where[2]} if where else actual})
+    print(json.dumps({"counts": dict(counts), "examples": examples}, ensure_ascii=False, indent=1))
+    return int(any(kind in FATAL or kind == "wrong_block" for kind in counts))
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("check", "replay", "crosscheck"):
+    for name in ("check", "replay", "crosscheck", "differential"):
         operation = sub.add_parser(name)
         operation.add_argument("--roc", default=os.environ.get("ROC", "roc"))
         operation.add_argument("--output-dir", type=Path, default=DEFAULT_WORK / name)
@@ -528,6 +575,10 @@ def main(argv=None) -> int:
             operation.add_argument("binary", type=Path)
             operation.add_argument("corpus", type=Path)
             operation.add_argument("--examples", type=int, default=10)
+        if name == "differential":
+            operation.add_argument("corpus", type=Path)
+            operation.add_argument("--examples", type=int, default=10)
+            operation.add_argument("--show", action="append", default=["wrong_block", "crash", "timeout", "error", "protocol_error"])
     args = parser.parse_args(argv)
     args.output_dir = args.output_dir.expanduser().resolve()
     args.roc = str(Path(args.roc).expanduser().resolve()) if "/" in args.roc else args.roc
@@ -539,6 +590,8 @@ def main(argv=None) -> int:
         executable = args.output_dir / "bin" / "probe" if args.no_build else build(args.roc, args.output_dir)
         if args.command == "check":
             return check(args, executable)
+        if args.command == "differential":
+            return differential(args, executable)
         text = args.input.read_bytes().decode("utf-8")
         row = compare({"id": "replay", "input": text}, probe(executable, text), oracle(text))
         print(json.dumps(row, ensure_ascii=False, indent=2))
