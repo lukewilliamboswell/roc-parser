@@ -41,13 +41,17 @@ Writing your own parser:: Read <<combinators>>, <<custom-format>> and
 <<errors>>.
 Looking something up:: <<modules>>, <<conformance>>, <<compatibility>> and
 <<glossary>>.
+Not sure whether you need a parser:: Read <<choosing-an-approach>>.
 Contributing to roc-parser:: Start with <<contributing>>.
+Curious where the design comes from:: Read <<background>>.
 
 = Start here
 
 include::overview.adoc[leveloffset=+1]
 
 include::getting-started.adoc[leveloffset=+1]
+
+include::choosing-an-approach.adoc[leveloffset=+1]
 
 include::combinator-primer.adoc[leveloffset=+1]
 
@@ -88,6 +92,10 @@ include::property-testing.adoc[leveloffset=+1]
 include::adding-a-format.adoc[leveloffset=+1]
 
 include::maintaining.adoc[leveloffset=+1]
+
+= Background
+
+include::background.adoc[leveloffset=+1]
 
 = Release notes
 
