@@ -107,8 +107,8 @@ an optional final line break, lone CR line breaks and any UTF-8 in fields.
 |`HTTP`
 |`parse_request`, `parse_response` and `parse_requests` take bytes and fail
 with `InvalidHttp({ offset, message })`. Headers are `{ name, value }`
-records with a case-insensitive `HTTP.header` lookup, `Version` replaces
-`HttpVersion`, and `Method` gains `Extension(name)`. Parses HTTP/1.1 per
+records with a case-insensitive `HTTP.header` lookup, `Version` is now
+`{ major, minor }`, and `Method` gains `Extension(name)`. Parses HTTP/1.1 per
 RFC 9112 and rejects messages with ambiguous framing.
 
 |`Markdown`
@@ -119,8 +119,8 @@ with GFM tables, task lists, strikethrough and extended autolinks. Adds the
 roc-lang/unicode dependency.
 
 |`Xml`
-|`Xml.parse_str` reports `InvalidXml({ line, column, message })`, `parser`
-replaces `xml_parser`, elements are records, and optional parts of the
+|`Xml.parse_str` reports `InvalidXml({ line, column, message })`, `Xml.parser`
+embeds the parser, elements are records, and optional parts of the
 declaration are `Try(_, [Missing])`. Checks XML 1.0 well-formedness and
 rejects documents with a document type declaration.
 

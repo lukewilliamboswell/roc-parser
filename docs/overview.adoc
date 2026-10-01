@@ -18,7 +18,8 @@ It is written in pure Roc, so it works with any platform, and it comes in two
 layers:
 
 * Ready-made parsers for common formats. You call one function and get a
-  document tree or a list of records.
+  document tree, or, for CSV and YAML, your own record type: the compiler
+  infers the type from your annotation and decodes straight into it.
 * The small building blocks those parsers are made from, called _parser
   combinators_. You use them to read a format of your own, from a one-line
   `key=value` setting to a complete file format.
@@ -52,7 +53,8 @@ a list of captured substrings, and it reads as ordinary Roc code.
 
 == What a first success looks like
 
-This program reads three lines of CSV into typed records and prints them.
+This program decodes a CSV file with a header row into typed records and
+prints them.
 <<getting-started>> walks through it.
 
 [source,roc]
@@ -83,7 +85,7 @@ rejected with an error rather than misread.
 (any line ending, rows of different lengths)
 
 |`Yaml`
-|Configuration files and Markdown frontmatter
+|Configuration files and Markdown frontmatter, as a tree or your own record type
 |A documented subset of https://yaml.org/spec/1.2.2/[YAML 1.2]: one document,
 no anchors, aliases or tags
 
@@ -117,8 +119,8 @@ A combinator is a function that takes parsers and returns a new parser. The
 `Utf8` module provides parsers for the smallest pieces of text, such as one
 byte, a digit, or an exact word. The `Parser` module combines them: one after
 another, one of several alternatives, repeated, or with the result
-transformed. The format modules are built the same way, so your own parsers
-and the library's can be mixed.
+transformed. Each format module also exposes its parser as a `Parser` value,
+so your own parsers and the library's can be mixed.
 
 [mermaid]
 ....
