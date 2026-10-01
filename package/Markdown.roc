@@ -413,7 +413,15 @@ Open : {
 	# trailing blank lines do not).
 	last : U64,
 	has_children : Bool,
+	# How many block quotes and lists enclose this block, itself included.
+	nesting : U64,
 }
+
+## Block quotes and lists nest at most this deep. Deeper `>` and list markers
+## are read as text, so that the tree stays shallow enough for recursive
+## code (including `Str.inspect` and equality) to walk it.
+max_nesting : U64
+max_nesting = 1000
 
 Event : [
 	OpenContainer(OpenKind, U64),
@@ -424,7 +432,11 @@ Event : [
 ]
 
 BlockState : {
+	# The open blocks are the first `depth` entries of `stack`; the entries
+	# after them are stale. Closing a block only lowers `depth`, because a list
+	# that has been shortened is copied by the next append.
 	stack : List(Open),
+	depth : U64,
 	line : Utf8.Bytes,
 	# For each byte offset of the line: the offset of the next byte that is not
 	# a space or tab, and the column of each offset (tab stops of 4). Computed
@@ -450,7 +462,7 @@ Nonspace : { pos : U64, column : U64, indent : U64, blank : Bool }
 
 Continuation : [Matched(BlockState), NotMatched, Consumed(BlockState)]
 
-StartResult : [NoStart, StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
+StartResult : [NoStart(BlockState), StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
 
 parse_all : Parser(Utf8.Bytes, List(Markdown))
 parse_all =
@@ -530,13 +542,14 @@ take_frontmatter = |lines| {
 
 new_open : OpenKind, U64 -> Open
 new_open = |kind, line_number| {
-	{ kind, start: line_number, last: line_number, has_children: Bool.False }
+	{ kind, start: line_number, last: line_number, has_children: False, nesting: 0 }
 }
 
 parse_block_lines : List(Utf8.Bytes) -> List(Event)
 parse_block_lines = |lines| {
 	var $state = {
 		stack: [new_open(DocumentBlock, 0)],
+		depth: 1,
 		line: [],
 		next_nonspace: [],
 		columns: [],
@@ -568,7 +581,7 @@ parse_block_lines = |lines| {
 	}
 	$leaf = if $reset $added else $leaf.concat($added)
 	var $closing = { ..$state, leaf_lines: $leaf, leaf_reset: Bool.False, leaf_added: [], events: [] }
-	while $closing.stack.len() > 1 {
+	while $closing.depth > 1 {
 		$closing = close_tip($closing, $closing.line_number)
 	}
 	$events.concat($closing.events)
@@ -576,10 +589,7 @@ parse_block_lines = |lines| {
 
 tip_kind : BlockState -> OpenKind
 tip_kind = |state| {
-	match state.stack.last() {
-		Ok(open) => open.kind
-		Err(_) => DocumentBlock
-	}
+	tip_open(state).kind
 }
 
 is_paragraph_kind : OpenKind -> Bool
@@ -610,7 +620,7 @@ process_line = |initial| {
 	var $index = 1
 	var $matching = Bool.True
 	var $consumed = Bool.False
-	while $matching and $index < $s.stack.len() {
+	while $matching and $index < $s.depth {
 		open = $s.stack.get($index) ?? new_open(DocumentBlock, 0)
 		match continue_block($s, open, $index) {
 			Matched(next) => {
@@ -635,7 +645,7 @@ process_line = |initial| {
 		return $s
 	}
 
-	$s = { ..$s, all_closed: $container == $s.stack.len() - 1, last_matched: $container }
+	$s = { ..$s, all_closed: $container == $s.depth - 1, last_matched: $container }
 
 	# 2. Try block starts, unless the matched block is a leaf taking raw lines.
 	container_kind = ($s.stack.get($container) ?? new_open(DocumentBlock, 0)).kind
@@ -644,25 +654,25 @@ process_line = |initial| {
 	while $starting {
 		ns = find_nonspace($s)
 		match try_block_starts($s, $container, ns) {
-			NoStart => {
-				$s = advance_to_nonspace($s, ns)
+			NoStart(next) => {
+				$s = advance_to_nonspace(next, ns)
 				$starting = Bool.False
 			}
 
 			StartedContainer(next) => {
 				$s = next
-				$container = next.stack.len() - 1
+				$container = next.depth - 1
 			}
 
 			StopStarts(next) => {
 				$s = advance_to_nonspace(next, find_nonspace(next))
-				$container = next.stack.len() - 1
+				$container = next.depth - 1
 				$starting = Bool.False
 			}
 
 			StartedLeaf(next) => {
 				$s = next
-				$container = next.stack.len() - 1
+				$container = next.depth - 1
 				$starting = Bool.False
 			}
 
@@ -785,7 +795,7 @@ advance_offset = |s, count, columns| {
 
 has_children : BlockState, U64, Open -> Bool
 has_children = |s, index, open| {
-	open.has_children or index + 1 < s.stack.len()
+	open.has_children or index + 1 < s.depth
 }
 
 continue_block : BlockState, Open, U64 -> Continuation
@@ -812,7 +822,7 @@ continue_block = |s, open, index| {
 		FencedBlock(fence) => {
 			rest = s.line.drop_first(ns.pos)
 			if ns.indent <= 3 and is_closing_fence(rest, fence.fence_char, fence.fence_len) {
-				closed = close_tip({ ..s, stack: set_tip_last(s.stack, s.line_number) }, s.line_number)
+				closed = close_tip(set_tip_last(s, s.line_number), s.line_number)
 				Consumed(closed)
 			} else {
 				var $next = s
@@ -866,13 +876,8 @@ skip_quote_marker = |s| {
 	}
 }
 
-set_tip_last : List(Open), U64 -> List(Open)
-set_tip_last = |stack, line_number| {
-	match stack.last() {
-		Ok(open) => stack.drop_last(1).append({ ..open, last: line_number })
-		Err(_) => stack
-	}
-}
+set_tip_last : BlockState, U64 -> BlockState
+set_tip_last = |s, line_number| update_tip(s, |open| { ..open, last: line_number })
 
 ## Close blocks left unmatched by a line that is not a lazy continuation.
 close_unmatched : BlockState -> BlockState
@@ -881,7 +886,7 @@ close_unmatched = |s| {
 		s
 	} else {
 		var $next = s
-		while $next.stack.len() - 1 > s.last_matched {
+		while $next.depth - 1 > s.last_matched {
 			$next = close_tip($next, s.line_number - 1)
 		}
 		{ ..$next, all_closed: Bool.True }
@@ -913,13 +918,13 @@ add_child = |s, kind| {
 	while !can_contain(tip_kind($next), kind) {
 		$next = close_tip($next, $next.line_number - 1)
 	}
-	stack = update_tip($next.stack, |open| { ..open, has_children: Bool.True }).append(new_open(kind, $next.line_number))
+	parent = update_tip($next, |open| { ..open, has_children: True })
 	opened =
 		match kind {
-			QuoteBlock | ListContainer(_) | ItemBlock(_) => $next.events.append(OpenContainer(kind, $next.line_number))
-			_ => $next.events
+			QuoteBlock | ListContainer(_) | ItemBlock(_) => { ..parent, events: parent.events.append(OpenContainer(kind, parent.line_number)) }
+			_ => parent
 		}
-	{ ..$next, stack, events: opened }
+	push_open(opened, new_open(kind, opened.line_number))
 }
 
 ## Attach a block that is complete as soon as it starts (headings, breaks).
@@ -930,16 +935,33 @@ add_closed_child = |s, block| {
 		$next = close_tip($next, $next.line_number - 1)
 	}
 	span = { start: $next.line_number, end: $next.line_number }
-	{ ..$next, stack: update_tip($next.stack, |open| { ..open, has_children: Bool.True }), events: $next.events.append(Leaf(block, span)) }
+	parent = update_tip($next, |open| { ..open, has_children: True })
+	{ ..parent, events: parent.events.append(Leaf(block, span)) }
 }
 
-update_tip : List(Open), (Open -> Open) -> List(Open)
-update_tip = |stack, f| {
-	match stack.last() {
-		Ok(open) => stack.drop_last(1).append(f(open))
-		Err(_) => stack
-	}
+## The innermost open block.
+tip_open : BlockState -> Open
+tip_open = |s| s.stack.get(s.depth - 1) ?? new_open(DocumentBlock, 0)
+
+update_tip : BlockState, (Open -> Open) -> BlockState
+update_tip = |s, f| { ..s, stack: s.stack.update(s.depth - 1, f) ?? s.stack }
+
+push_open : BlockState, Open -> BlockState
+push_open = |s, open_block| {
+	parent = tip_open(s).nesting
+	nesting =
+		match open_block.kind {
+			QuoteBlock | ListContainer(_) => parent + 1
+			_ => parent
+		}
+	open = { ..open_block, nesting }
+	stack = if s.depth < s.stack.len() s.stack.set(s.depth, open) ?? s.stack else s.stack.append(open)
+	{ ..s, stack, depth: s.depth + 1 }
 }
+
+## Forget the innermost open block.
+pop_open : BlockState -> BlockState
+pop_open = |s| { ..s, depth: s.depth - 1 }
 
 ## The rest of the line from the current offset; a partly consumed tab
 ## contributes its remaining columns as spaces.
@@ -956,7 +978,8 @@ add_line_to_tip : BlockState -> BlockState
 add_line_to_tip = |s| {
 	content = line_rest(s)
 	counts = !(is_indented_kind(tip_kind(s)) and bytes_are_blank(content))
-	{ ..s, leaf_added: s.leaf_added.append(content), stack: if counts set_tip_last(s.stack, s.line_number) else s.stack }
+	added = { ..s, leaf_added: s.leaf_added.append(content) }
+	if counts set_tip_last(added, added.line_number) else added
 }
 
 ## The innermost leaf block's lines so far.
@@ -986,20 +1009,13 @@ is_indented_kind = |kind| {
 ## Pop the innermost open block, finish it, and record it.
 close_tip : BlockState, U64 -> BlockState
 close_tip = |s, line_number| {
-	match s.stack.last() {
-		Err(_) => s
-		Ok(open) => {
-			rest = { ..s, stack: s.stack.drop_last(1) }
-			match open.kind {
-				DocumentBlock => s
-				QuoteBlock => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
-				ListContainer(_) => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
-				ItemBlock(_) => { ..rest, events: rest.events.append(CloseContainer(line_number)) }
-				_ => {
-					events = rest.events.concat(finish_leaf(open, tip_lines(s)))
-					reset_leaf({ ..rest, events })
-				}
-			}
+	open = tip_open(s)
+	match open.kind {
+		DocumentBlock => s
+		QuoteBlock | ListContainer(_) | ItemBlock(_) => pop_open({ ..s, events: s.events.append(CloseContainer(line_number)) })
+		_ => {
+			finished = finish_leaf(open, tip_lines(s))
+			reset_leaf(pop_open({ ..s, events: s.events.concat(finished) }))
 		}
 	}
 }
@@ -1209,7 +1225,8 @@ try_block_starts = |s, container, ns| {
 	indented = ns.indent >= 4
 	first = rest.first() ?? 0
 
-	if !indented and first == '>' {
+	nesting = (s.stack.get(container) ?? new_open(DocumentBlock, 0)).nesting
+	if !indented and first == '>' and nesting < max_nesting {
 		started = add_child(close_unmatched(skip_quote_marker(advance_to_nonspace(s, ns))), QuoteBlock)
 		return StartedContainer(started)
 	}
@@ -1245,14 +1262,14 @@ try_block_starts = |s, container, ns| {
 		match setext_level(rest) {
 			Ok(level) => {
 				closed = close_unmatched(s)
-				paragraph = closed.stack.last() ?? new_open(ParagraphBlock, 0)
+				paragraph = tip_open(closed)
 				extracted = extract_reference_definitions(join_with_newlines(tip_lines(closed)), [])
 				definitions = if extracted.refs.is_empty() [] else [Definitions(extracted.refs)]
 				if !extracted.rest.is_empty() {
 					heading = Heading({ level, content: placeholder(trim_end_spaces(extracted.rest)) })
 					span = { start: paragraph.start, end: closed.line_number }
 					events = closed.events.concat(definitions).append(Leaf(heading, span))
-					return LineDone(reset_leaf({ ..closed, stack: closed.stack.drop_last(1), events }))
+					return LineDone(reset_leaf(pop_open({ ..closed, events })))
 				} else {
 					# Only reference definitions: keep the (now empty) paragraph and
 					# let the underline be read as something else.
@@ -1269,7 +1286,8 @@ try_block_starts = |s, container, ns| {
 
 try_after_setext : BlockState, U64, Nonspace -> StartResult
 try_after_setext = |s, container, ns| {
-	container_kind = (s.stack.get(container) ?? new_open(DocumentBlock, 0)).kind
+	container_open = s.stack.get(container) ?? new_open(DocumentBlock, 0)
+	container_kind = container_open.kind
 	rest = s.line.drop_first(ns.pos)
 	indented = ns.indent >= 4
 
@@ -1277,7 +1295,9 @@ try_after_setext = |s, container, ns| {
 		return LineDone(add_closed_child(close_unmatched(s), ThematicBreak))
 	}
 
-	if !indented {
+	# Another item of the matched list does not nest deeper.
+	may_nest = container_open.nesting < max_nesting or is_list_kind(container_kind)
+	if !indented and may_nest {
 		match parse_list_marker(rest, is_paragraph_kind(container_kind)) {
 			Ok(marker) => return start_list_item(s, container_kind, ns, marker)
 			Err(_) => {}
@@ -1296,10 +1316,10 @@ try_after_setext = |s, container, ns| {
 				if !header.is_empty() and header.len() == align.len() {
 					# The paragraph keeps its other lines; its last line is the header.
 					lines = tip_lines(s)
-					before = { ..s, stack: set_tip_last(s.stack, s.line_number - 2), leaf_reset: Bool.True, leaf_added: lines.drop_last(1) }
+					before = { ..set_tip_last(s, s.line_number - 2), leaf_reset: True, leaf_added: lines.drop_last(1) }
 					closed = close_tip(before, s.line_number - 2)
 					table = { ..new_open(TableBlock({ align, header }), s.line_number - 1), last: s.line_number }
-					return LineDone({ ..closed, stack: closed.stack.append(table) })
+					return LineDone(push_open(closed, table))
 				}
 			}
 
@@ -1307,7 +1327,7 @@ try_after_setext = |s, container, ns| {
 		}
 	}
 
-	NoStart
+	NoStart(s)
 }
 
 ListMarker : { info : ListInfo, width : U64 }
@@ -1352,6 +1372,14 @@ start_list_item = |s, container_kind, ns, marker| {
 
 		_ =>
 			StartedContainer(item)
+	}
+}
+
+is_list_kind : OpenKind -> Bool
+is_list_kind = |kind| {
+	match kind {
+		ListContainer(_) => True
+		_ => False
 	}
 }
 
