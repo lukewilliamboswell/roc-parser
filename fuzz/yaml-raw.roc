@@ -1,0 +1,138 @@
+app [target] {
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	parser: "../package/main.roc",
+}
+
+import fuzz.Fuzz
+import parser.Yaml
+
+## Arbitrary UTF-8 must parse or fail cleanly, and:
+## - errors point at a real one-based line and column with a message;
+## - LF and CRLF line endings give the same result;
+## - a leading "---" marker gives the same value, with errors one line lower.
+
+Parsed : Try(Yaml, [YamlError(Yaml.Error)])
+
+## Set to Bool.True to also run inputs the parser is known to crash or diverge
+## on (see fuzz/README.md "Known YAML gaps"). Off by default so campaigns can
+## explore past them.
+known_gaps : Bool
+known_gaps = Bool.False
+
+## A backslash before a multi-byte character aborts while building the
+## "unsupported escape sequence" message.
+escape_before_non_ascii : List(U8) -> Bool
+escape_before_non_ascii = |bytes| {
+	var $found = Bool.False
+	var $index = 0
+	while $index + 1 < bytes.len() and !$found {
+		$found = (bytes.get($index) ?? 0) == '\\' and (bytes.get($index + 1) ?? 0) >= 0x80
+		$index = $index + 1
+	}
+	$found
+}
+
+test : List(U8) -> Fuzz.Outcome
+test = |bytes| {
+	match Str.from_utf8(bytes) {
+		Err(_) => Fuzz.reject
+		Ok(_) if !known_gaps and escape_before_non_ascii(bytes) => Fuzz.reject
+		Ok(input) => {
+			result = Yaml.parse_str(input)
+			check_location(bytes, result)
+			_ = show(result)
+			if !bytes.contains('\r') {
+				check_crlf(input, result)
+				check_document_start(bytes, input, result)
+			}
+			Fuzz.keep
+		}
+	}
+}
+
+## Line lengths in bytes, splitting on LF and dropping a CR before it.
+line_lengths : List(U8) -> List(U64)
+line_lengths = |bytes| {
+	var $lengths = []
+	var $current = 0
+	var $previous_cr = Bool.False
+	var $index = 0
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		if byte == '\n' {
+			$lengths = $lengths.append(if $previous_cr $current - 1 else $current)
+			$current = 0
+			$previous_cr = Bool.False
+		} else {
+			$current = $current + 1
+			$previous_cr = byte == '\r'
+		}
+		$index = $index + 1
+	}
+	$lengths.append($current)
+}
+
+check_location : List(U8), Parsed -> {}
+check_location = |bytes, result| {
+	match result {
+		Ok(_) => {}
+		Err(YamlError(error)) => {
+			lengths = line_lengths(bytes)
+			if error.line == 0 or error.column == 0 {
+				crash "YAML error locations must be one-based: ${show(result)}"
+			}
+			if error.message.is_empty() {
+				crash "YAML errors must explain the problem"
+			}
+			match lengths.get(error.line - 1) {
+				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show(result)}"
+				Ok(length) =>
+					if error.column > length + 1 {
+						crash "error column ${error.column.to_str()} is past the end of line ${error.line.to_str()} (${length.to_str()} bytes): ${show(result)}"
+					}
+			}
+		}
+	}
+}
+
+check_crlf : Str, Parsed -> {}
+check_crlf = |input, result| {
+	crlf = Yaml.parse_str(Str.replace_each(input, "\n", "\r\n"))
+	if crlf != result {
+		crash "CRLF line endings changed the result\nLF:   ${show(result)}\nCRLF: ${show(crlf)}"
+	}
+}
+
+## Skipped when the input already has a line starting with "---", where an
+## extra marker would start a second document.
+check_document_start : List(U8), Str, Parsed -> {}
+check_document_start = |bytes, input, result| {
+	has_marker = Str.starts_with(input, "---") or Str.contains(input, "\n---")
+	if !has_marker and !bytes.is_empty() {
+		marked = Yaml.parse_str("---\n${input}")
+		consistent =
+			match (result, marked) {
+				(Ok(plain), Ok(with_marker)) => plain == with_marker
+				(Err(YamlError(plain)), Err(YamlError(with_marker))) => plain.line + 1 == with_marker.line and plain.message == with_marker.message
+				_ => Bool.False
+			}
+		if !consistent {
+			crash "a leading --- changed the result\nplain:  ${show(result)}\nmarked: ${show(marked)}"
+		}
+	}
+}
+
+show : Parsed -> Str
+show = |result| {
+	match result {
+		Ok(value) => Yaml.to_inspect(value)
+		Err(YamlError(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+	}
+}
+
+target = Fuzz.target_with({
+	name: "yaml-raw",
+	generator: Fuzz.raw_bytes,
+	test,
+	show: |bytes| Str.inspect(Str.from_utf8(bytes)),
+})
