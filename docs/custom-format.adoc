@@ -3,11 +3,137 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#custom-format]
-= Writing a parser for your own format
+= Parse a format of your own
 
-Content in progress.
+This guide shows how to turn a line-based text format into typed Roc values,
+with tests for each part and error messages that name the line at fault. It
+assumes you know the combinators from <<combinator-primer>>.
+
+The running example is an application log with one entry per line:
+
+[source,text]
+----
+08:00 INFO started
+12:30 WARN disk almost full
+----
+
+The finished program is
+`{src}/docs/examples/custom-format-log.roc[custom-format-log.roc]`.
+
+== 1. Write down the result types
+
+Decide what a caller should get back before writing any parser. Use tags for
+fixed sets of words and records for groups of fields:
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=types,indent=0]
+----
+
+== 2. Write one parser per part
+
+Give each part of the line its own parser, named after what it reads. Small
+parsers are easier to test, and their names make the larger parser read like
+the format's description:
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=pieces,indent=0]
+----
+
+Notes on the choices made here:
+
+* `time` checks its value with `.map(...).flatten()`. A rule that the syntax
+  cannot express, such as "hours are below 24", belongs here, so that bad
+  values never reach the rest of your program.
+* `level` lists whole words. If two words shared a prefix, the longer one
+  would have to come first; see <<combinators>>.
+* `message` takes the rest of the input. That is correct only because
+  step 4 hands the parser one line at a time.
+
+== 3. Combine the parts
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=entry,indent=0]
+----
+
+== 4. Test each parser
+
+Put `expect` tests next to the parsers, covering at least one accepted and one
+rejected input for each:
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=tests,indent=0]
+----
+
+Run them:
+
+[source,sh]
+----
+roc test custom-format-log.roc
+----
+
+The compiler reports how many tests passed. A failing test prints the
+expression and the values on each side of `==`.
+
+== 5. Split the input into records yourself
+
+For a format with one record per line, split the text into lines and parse
+each line separately, rather than describing the whole file with `sep_by`.
+You get three benefits:
+
+* You know the line number of every failure.
+* The failure is the line's own error, not `ParsingIncomplete` from a
+  repetition that stopped early.
+* Blank lines and a final line break are easy to allow.
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=file,indent=0]
+----
+
+This splits on `\n` only. If your files can come from Windows, also strip a
+trailing `\r` from each line.
+
+== 6. Use it
+
+[source,roc]
+----
+include::examples/custom-format-log.roc[tag=main,indent=0]
+----
+
+Run the program:
+
+[source,sh]
+----
+roc custom-format-log.roc
+----
+
+Output:
+
+[source,text]
+----
+include::examples/custom-format-log.expected[]
+----
+
+The second log has a blank second line, which is skipped, and a time that
+does not exist on the third line, which is reported with that line number.
+
+== When the format is not line-based
+
+If records can span lines, as in a nested or bracketed format, you cannot
+split the input first. Describe the whole input with one parser instead:
+
+* Use `sep_by` or `many` for lists, and `Parser.lazy` for nesting, as in
+  <<combinators>>.
+* Use `String.parse_str_partial` to read one record at a time when you need
+  to know where each record starts.
+* Expect a bad record in the middle to appear as `ParsingIncomplete`. The
+  length of the remaining input tells you how far parsing got, which
+  <<errors>> turns into a line and column.

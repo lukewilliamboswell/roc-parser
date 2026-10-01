@@ -3,11 +3,155 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#errors]
-= Errors and locations
+= Report parse errors
 
-Content in progress.
+This guide shows what each module returns when its input is invalid, and how
+to turn that into a message a person can act on. The format parsers report
+invalid input as an `Err` value rather than crashing, and the repository's
+fuzz tests check that they do.
+
+The examples come from
+`{src}/docs/examples/errors-report.roc[errors-report.roc]`, whose complete
+output is checked in as
+`{src}/docs/examples/errors-report.expected[errors-report.expected]`.
+
+== Summary
+
+[cols="1,2,2",options="header"]
+|===
+|Module |Error |What it tells you
+
+|`Yaml.parse_str`
+|`YamlError({ line, column, message })`
+|Where the problem is and what it is.
+
+|`Xml.parse_str`
+|`XmlError({ line, column, message })`
+|Where the problem is and what it is. Columns count bytes.
+
+|`CSV.parse_str`
+|`SyntaxError(rest)`
+|The text was not valid CSV. `rest` is the input from the start of the bad
+field.
+
+|
+|`ParsingFailure(message)`
+|A field did not match your record parser. The message names the field and
+the record number.
+
+|
+|`ParsingIncomplete(fields)`
+|A row had more fields than your record parser reads. `fields` are the
+extra ones.
+
+|`HTTP.request`, `HTTP.response`
+|`ParsingFailure(message)`
+|Why the message was rejected.
+
+|Your own parsers
+|`ParsingFailure(message)`, `ParsingIncomplete(rest)`
+|The failure message of the parser that failed last, or the input left over
+after a successful parse.
+|===
+
+== YAML and XML: show the location
+
+Both report one-based line and column numbers. Print them in the
+`file:line:column: message` form that editors and terminals recognise, so a
+user can jump straight to the problem:
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=located,indent=0]
+----
+
+For the inputs `"name: demo\nport: [8080\n"` and
+`"<feed>\n  <entry></feed>"` these print:
+
+[source,text]
+----
+config.yaml:2:6: unterminated flow collection
+feed.xml:2:10: end tag </feed> does not match start tag <entry>
+----
+
+YAML input outside the supported subset, such as an anchor or a tag, is
+reported the same way, with a message that names the feature. Tell users
+which subset you accept so that the message makes sense to them.
+
+== CSV: separate syntax from content
+
+`CSV.parse_str` first checks that the text is CSV and then runs your record
+parser on each row. Its three errors come from those two stages, and each
+deserves a different message:
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=csv,indent=0]
+----
+
+For an unterminated quote (`pears,"2`), a non-number in a number column
+(`pears,many`), and a row with an extra column (`apples,3,red`), these print:
+
+[source,text]
+----
+not valid CSV from here: "2
+a field did not match: Field `many` could not be parsed. many is not a U64.
+While parsing record no. 2: `"pears", "many"`
+a row has 1 extra fields
+----
+
+`SyntaxError` carries the rest of the input rather than a position. To show a
+line number, count the line breaks in the part of the input before it: the
+original length minus the length of `rest` is the byte offset. The
+`ParsingFailure` message already names the record.
+
+== HTTP: reject the message
+
+The HTTP parsers reject anything ambiguous, because a server and a proxy that
+disagree about where a message ends can be exploited. Treat every
+`ParsingFailure` as a `400 Bad Request` and close the connection; do not try
+to repair the message.
+
+[source,roc]
+----
+include::examples/errors-report.roc[tag=http,indent=0]
+----
+
+For an HTTP/1.1 request without a `Host` field this prints:
+
+[source,text]
+----
+400 Bad Request: invalid HTTP request: an HTTP/1.1 request needs a Host field
+----
+
+The message is meant for your logs. It may quote the client's input, so
+think before sending it back in a response.
+
+`ParsingIncomplete` here means the input holds more than one message. Use
+`String.parse_utf8_partial` to read one message and keep the rest for the
+next.
+
+== Your own parsers: say where and what
+
+`String.parse_str` returns the message of the parser that failed last. With
+alternatives, that is the last alternative tried, and with repetition, a bad
+element stops the repetition so the error becomes `ParsingIncomplete` (see
+<<combinators>>). Three habits give users better messages:
+
+* Validate values with `.map(...).flatten()` and a message written for the
+  user, such as `"no such time"`, instead of relying on the generic failure
+  from a low-level parser.
+* For line-based formats, parse line by line and report the line number, as
+  <<custom-format>> does.
+* For other formats, turn `ParsingIncomplete(rest)` into a position: the
+  input's length minus the length of `rest` is the offset where parsing
+  stopped. Count the line breaks before it to get a line number, and show
+  the start of `rest` as context.
+
+Keep the raw failure message for logs and tests. It describes the parser,
+not the user's input, so it is rarely the best thing to show a user on its
+own.

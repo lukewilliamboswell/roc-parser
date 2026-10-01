@@ -3,11 +3,265 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#combinators]
-= Combinators in depth
+= Combinators by task
 
-Content in progress.
+This chapter is for readers who have finished <<combinator-primer>> and are
+writing a parser of their own. It groups the combinators in the `Parser` and
+`String` modules by the job they do, and explains the three rules that most
+often surprise people: how alternatives backtrack, when repetition stops,
+and why parsers read bytes rather than characters. The {api}[API reference]
+has the exact signature of every function.
+
+The examples come from
+`{src}/docs/examples/combinators-behaviour.roc[combinators-behaviour.roc]`;
+every `expect` in them passes.
+
+== Running a parser
+
+[cols="2,3",options="header"]
+|===
+|Function |Use it to
+
+|`String.parse_str(p, str)`
+|Parse a whole `Str`. Returns `Ok(value)`, `Err(ParsingFailure(message))`, or
+`Err(ParsingIncomplete(rest))` when input is left over.
+
+|`String.parse_utf8(p, bytes)`
+|The same for a `List(U8)`.
+
+|`String.parse_str_partial(p, str)`, `String.parse_utf8_partial(p, bytes)`
+|Parse the start of the input and return `{ val, input }`, where `input` is
+what is left. Use these to read one message from a stream that holds several.
+
+|`Parser.parse(p, input, is_done)`, `Parser.parse_partial(p, input)`
+|Run a parser whose input is not text, such as the `CSV.CSVRecord` that
+record parsers read.
+|===
+
+== Reading text
+
+All of these read from `String.Utf8`, which is `List(U8)`.
+
+[cols="2,3",options="header"]
+|===
+|Parser |Reads
+
+|`String.codeunit(b)`
+|Exactly the byte `b`, such as `String.codeunit('=')`.
+
+|`String.codeunit_satisfies(pred)`
+|One byte that `pred` accepts.
+
+|`String.any_codeunit`
+|Any one byte.
+
+|`String.string(s)`, `String.utf8(bytes)`
+|Exactly the given text, returned as a `Str` or as bytes.
+
+|`String.digit`, `String.digits`
+|One ASCII digit, or a run of them, as a `U64`. `digits` fails on a number
+too large for a `U64`.
+
+|`Parser.chomp_while(pred)`
+|Bytes while `pred` accepts them. Always succeeds, possibly reading nothing.
+
+|`Parser.chomp_until(b)`
+|Bytes up to, but not including, the byte `b`. Fails if `b` never appears.
+
+|`String.any_string`, `String.any_thing`
+|All remaining input, as a `Str` (failing if it is not valid UTF-8) or as
+bytes.
+|===
+
+== Sequencing and transforming
+
+[cols="2,3",options="header"]
+|===
+|Combinator |Does
+
+|`Parser.const(v)`
+|Reads nothing and produces `v`. Start a sequence with
+`Parser.const(|a| |b| ...)`.
+
+|`p.keep(q)`
+|Runs `q` after `p` and passes its result to the function `p` produced.
+`apply` is the same operation under another name.
+
+|`p.skip(q)`
+|Runs `q` after `p` and discards `q`'s result.
+
+|`p.map(f)`, `Parser.map2`, `Parser.map3`
+|Transforms one, two or three results with an ordinary function.
+
+|`p.between(open, close)`
+|Reads `open`, `p`, `close` and keeps only `p`'s result.
+
+|`p.ignore()`
+|Keeps the input `p` reads but replaces its result with `{}`.
+
+|`p.flatten()`
+|Turns a parser producing `Try(a, Str)` into one producing `a`, where `Err(msg)`
+becomes a parse failure with that message.
+|===
+
+`flatten` is how you validate a value while parsing. Here a number above
+65535 is rejected with a message of your choosing:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
+----
+
+== Alternatives and optional parts
+
+[cols="2,3",options="header"]
+|===
+|Combinator |Does
+
+|`String.one_of(list)`
+|Tries each parser in order; the first success wins. On failure, reports the
+last parser's message.
+
+|`Parser.one_of(list)`, `Parser.alt(p, q)`
+|The same for any input type. On failure, joins all the messages with "or".
+
+|`Parser.maybe(p)`
+|Produces `Ok(value)` if `p` succeeds, or `Err(Nothing)` without reading
+anything if it fails.
+
+|`Parser.fail(message)`
+|Always fails with `message`. Useful as the last alternative.
+|===
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=maybe,indent=0]
+----
+
+=== Alternatives always backtrack
+
+When an alternative fails, the next one starts from the same position the
+first one started from, however much input the failed one had examined.
+There is no "commit" point, so you never need a `try` wrapper as in some
+other parser libraries:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=backtrack,indent=0]
+----
+
+The cost is that the first success wins, even when a later alternative would
+have read more. Put longer or more specific alternatives first:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=order,indent=0]
+----
+
+With the short keyword first, `"int"` reads as `"in"` and leaves `t` behind.
+
+Backtracking also means a failure deep inside one alternative is replaced by
+the failures of the ones after it. If error messages matter, keep the
+alternatives distinct from their first byte, so that only one of them gets
+far.
+
+== Repetition
+
+[cols="2,3",options="header"]
+|===
+|Combinator |Produces
+
+|`Parser.many(p)`
+|Zero or more results of `p`.
+
+|`Parser.one_or_more(p)`
+|One or more results; fails if the first `p` fails.
+
+|`p.sep_by(sep)`
+|Zero or more results of `p` separated by `sep`. The separators are dropped.
+
+|`p.sep_by1(sep)`
+|The same, requiring at least one.
+|===
+
+These combinators require the input type to support `==`, which every input
+type in this package does. They use it to enforce the next rule.
+
+=== Repetition stops when an element makes no progress
+
+Repetition ends at the first element that fails, or that succeeds without
+reading any input. Without the second condition, repeating a parser that can
+succeed on empty input, such as `chomp_while` or `maybe(p)`, would loop
+forever:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=progress,indent=0]
+----
+
+=== A failed element ends the repetition, not the parse
+
+When an element fails part-way through, repetition ends before that element
+and leaves its input unread. The repetition itself succeeds:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=many-backtracks,indent=0]
+----
+
+So when you parse a whole input with `String.parse_str`, a bad element in the
+middle of a list shows up as `ParsingIncomplete` with the remaining text,
+rather than as the element's own failure message. <<errors>> shows how to
+turn that into a useful message.
+
+== Recursive structures
+
+A parser for a nested format refers to itself. Wrap the self-reference in
+`Parser.lazy` so that it is built only when it is needed:
+
+[source,roc]
+----
+include::examples/combinators-recursion.roc[tag=lazy,indent=0]
+----
+
+Two parsers that refer to each other at the top level currently need a
+lower-level workaround because of a compiler limitation,
+https://github.com/roc-lang/roc/issues/10098[roc-lang/roc#10098]. Keep the
+recursion inside one parser where you can, as here.
+
+== Bytes, not characters
+
+The `String` parsers read UTF-8 _code units_, which are bytes. An ASCII
+character is one byte, but other characters take two to four. `é`, for
+example, is the two bytes `0xC3 0xA9`:
+
+[source,roc]
+----
+include::examples/combinators-behaviour.roc[tag=bytes,indent=0]
+----
+
+This has three consequences:
+
+* `String.string` and `String.codeunit` work for any text, because they
+  compare exact bytes.
+* `codeunit_satisfies` and `chomp_while` see one byte at a time. A predicate
+  such as "is a letter" written for ASCII never matches the bytes of `é`. A
+  predicate such as `|b| b != '"'` is safe, because no byte of a multi-byte
+  character is below 128.
+* `String.str_from_utf8` crashes on bytes that are not valid UTF-8. That
+  cannot happen for a slice of a valid `Str` cut at ASCII bytes, as in this
+  manual's examples. If your parser can stop in the middle of a character,
+  convert with `Str.from_utf8` and handle its error instead.
+
+== Parsers over other input
+
+`Parser(input, a)` works for any input type, not only bytes. The `CSV`
+module's record parsers read a `CSV.CSVRecord`, a list of fields, and
+`CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
+parser for your own input type, use `Parser.build_primitive_parser` with a
+function from input to `Ok({ val, input: rest })` or
+`Err(ParsingFailure(message))`.
