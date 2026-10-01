@@ -5,6 +5,7 @@
     "published-examples.yml",
     "release.yml",
     "fuzz.yml",
-    "codeql.yml"
+    "codeql.yml",
+    "docs.yml"
   ]
 }

@@ -193,13 +193,13 @@ jobs:
         with:
           name: release-metadata
           path: .release
+      # Notes come from docs/releases/<version>.md, followed by the package
+      # URL, any `roc bump` API changes and links to this release's docs.
       - name: Make release notes
-        uses: roc-lang/release-package/actions/make-release-notes@af2f0cd8662874b825ff3917f4286e793ba18c55
-        with:
-          release_version: ${{ needs.build.outputs.release_version }}
-          docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-          release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL" --notes-dir docs/releases
-          github_token: ${{ github.token }}
+        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          DOCS_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles .release/release-bundles.json --bump-output .release/bump-output.txt --output-file .release/release-notes.md --docs-url "$DOCS_URL" --notes-dir docs/releases
       - name: Generate release SBOM
         id: security
         env:
