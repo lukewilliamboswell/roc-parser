@@ -1,0 +1,4 @@
+Ok({ name: "web", port: 8080 })
+Ok(["name", "port", "extra"])
+Ok({ host: "example.com", port: 443 })
+["a", "b", "c"]
