@@ -22,60 +22,44 @@ config_text =
 # end::config[]
 
 # tag::navigate[]
-## Find the value stored under `key` in a mapping.
-get : Yaml, Str -> Try(Yaml, [NotFound(Str)])
-get = |yaml, key| {
-	match yaml {
-		Mapping(entries) =>
-			match entries.find_first(|entry| entry.key == key) {
-				Ok(entry) => Ok(entry.value)
-				Err(_) => Err(NotFound(key))
-			}
+Owner : { name : Str, email : Try(Str, [Missing]) }
 
-		_ => Err(NotFound(key))
-	}
+Config : {
+	name : Str,
+	replicas : U8,
+	debug : Bool,
+	ports : List(U16),
+	owners : List(Owner),
 }
 
-summarize : Str -> Try(Str, [NotFound(Str), WrongType(Str), YamlError(Yaml.Error)])
+## The record type tells `Yaml.decode` what to expect.
+load_config : Str -> Try(Config, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+load_config = |text| Yaml.decode(text)
+
+summarize : Str -> Try(Str, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 summarize = |text| {
-	config = Yaml.parse_str(text)?
+	config = load_config(text)?
+	owner_names = config.owners.map(|owner| owner.name)
 
-	name =
-		match get(config, "name")? {
-			String(s) => s
-			_ => return Err(WrongType("name"))
-		}
-
-	replicas =
-		match get(config, "replicas")? {
-			Int(n) => n
-			_ => return Err(WrongType("replicas"))
-		}
-
-	owners =
-		match get(config, "owners")? {
-			Sequence(items) => items
-			_ => return Err(WrongType("owners"))
-		}
-
-	owner_names =
-		owners.map(
-			|owner| {
-				match get(owner, "name") {
-					Ok(String(s)) => s
-					_ => "?"
-				}
-			},
-		)
-
-	Ok("${name}: ${replicas.to_str()} replicas, owners ${Str.join_with(owner_names, " and ")}")
+	Ok("${config.name}: ${config.replicas.to_str()} replicas, owners ${Str.join_with(owner_names, " and ")}")
 }
 
 # end::navigate[]
 
+# tag::tree[]
+## Explore a document without a record type.
+first_owner : Str -> Try(Str, [InvalidYaml(Yaml.Error), Missing, WrongType])
+first_owner = |text| {
+	config = Yaml.parse_str(text)?
+	name = config.get_path(["owners", "0", "name"])?
+	name.as_str()
+}
+
+# end::tree[]
+
 # tag::frontmatter[]
 ## Split a Markdown file into its YAML frontmatter and body.
-frontmatter : Str -> Try({ meta : Yaml, body : Str }, [NoFrontmatter, YamlError(Yaml.Error)])
+frontmatter : Str -> Try({ meta : Yaml, body : Str }, [NoFrontmatter, InvalidYaml(Yaml.Error)])
 frontmatter = |markdown| {
 	match Str.split_on(markdown, "\n---\n") {
 		[header, .. as rest] if Str.starts_with(header, "---\n") =>
@@ -92,7 +76,7 @@ report : Str -> Str
 report = |text| {
 	match Yaml.parse_str(text) {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(YamlError({ line, column, message })) => "line ${line.to_str()}, column ${column.to_str()}: ${message}"
+		Err(InvalidYaml({ line, column, message })) => "line ${line.to_str()}, column ${column.to_str()}: ${message}"
 	}
 }
 
@@ -193,6 +177,17 @@ main! = |_args| {
 	Stdout.line!(report("list: [1,\n  2]"))?
 	Stdout.line!(report("1: one\n01: zero-one"))?
 	# end::errors-run[]
+
+	# tag::tree-run[]
+	Stdout.line!(Str.inspect(first_owner(config_text)))?
+	Stdout.line!(Str.inspect(first_owner("owners: []")))?
+	# end::tree-run[]
+
+	# tag::decode-errors-run[]
+	Stdout.line!(Str.inspect(load_config("name: web\nreplicas: 300\n")))?
+	Stdout.line!(Str.inspect(load_config("name: web\nreplicas: 3\ndebug: no\n")))?
+	Stdout.line!(Str.inspect(load_config("name: web\nreplicas: 3\ndebug: false\nports: []\n")))?
+	# end::decode-errors-run[]
 
 	Ok({})
 }

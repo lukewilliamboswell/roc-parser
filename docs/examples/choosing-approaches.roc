@@ -22,7 +22,7 @@ expect decode_service("{\"name\": \"web\"}") == Err(MissingRequiredField("port")
 # tag::tree[]
 # (b) A ready-made format parser: read the whole tree, then decide what to
 # do with each key, whatever keys the file happens to contain.
-top_level_keys : Str -> Try(List(Str), [NotAMapping, YamlError(Yaml.Error)])
+top_level_keys : Str -> Try(List(Str), [NotAMapping, InvalidYaml(Yaml.Error)])
 top_level_keys = |text| {
 	match Yaml.parse_str(text)? {
 		Mapping(entries) => Ok(entries.map(|entry| entry.key))

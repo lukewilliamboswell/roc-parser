@@ -1,4 +1,4 @@
-config.yaml:2:6: unterminated flow collection
+config.yaml:2:7: unterminated flow collection
 feed.xml:2:10: end tag </feed> does not match start tag <entry>
 line 2, column 7 (record 2, field 2): unterminated quoted field
 line 2, column 7 (record 2, field 2): expected a U64, found `many`

@@ -43,7 +43,7 @@ yaml_value : Str -> Str
 yaml_value = |text| {
 	match Yaml.parse_str(text) {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(YamlError(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+		Err(InvalidYaml(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
 	}
 }
 
