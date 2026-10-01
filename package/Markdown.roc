@@ -17,7 +17,8 @@ import unicode.Scalar
 ## Markdown has no syntax errors, so parsing never fails: [Markdown.parse_str]
 ## returns `List(Markdown)` directly, and text that looks like broken syntax is
 ## kept as text. Soft line breaks are kept as `"\n"` inside `Text`. Block
-## quotes and lists nest at most 1,000 levels deep; deeper `>` and list markers
+## quotes and lists nest at most 1,000 levels deep, and so do emphasis,
+## strikethrough, links and images; deeper markers, delimiters and brackets
 ## are read as text.
 ##
 ## **Security:** raw HTML passes through unchanged as `HtmlBlock` and
@@ -1927,8 +1928,18 @@ heading_level_from_count = |count| {
 InlineItem : [
 	Chars(List(U8)),
 	Node(Markdown.Inline),
+	# A resolved link or image and its depth (see `max_inline_nesting`).
+	Nested(Markdown.Inline, U64),
 	Delim(InlineDelim),
 ]
+
+## Emphasis, strikethrough, links and images nest at most this deep (a text
+## node has depth 0). Deeper delimiters and brackets are read as text, so
+## that the tree stays shallow enough for recursive code (including
+## `Str.inspect`, equality and the GFM email autolink pass) to walk it
+## without overflowing the stack. Like `max_nesting` for containers.
+max_inline_nesting : U64
+max_inline_nesting = 1000
 
 ## A run of `*`, `_` or `~` that may open or close emphasis or strikethrough.
 ## `length` is the original run length (used by the "multiple of 3" rule);
@@ -1937,8 +1948,9 @@ InlineDelim : { char : U8, length : U64, count : U64, can_open : Bool, can_close
 
 ## An entry of the bracket stack: the `[` or `![` item, the input offset just
 ## after the bracket, and its push sequence number (a later bracket was pushed
-## when the push counter has moved on by more than one).
-InlineBracket : { item : U64, start : U64, image : Bool, sequence : U64 }
+## when the push counter has moved on by more than one), and the greatest
+## depth of the links and images resolved after it.
+InlineBracket : { item : U64, start : U64, image : Bool, sequence : U64, depth : U64 }
 
 ## A maximal run of backticks in the input.
 TickRun : { start : U64, len : U64 }
@@ -2082,13 +2094,13 @@ scan_inlines = |input, refs| {
 		} else if byte == '!' and byte_at(input, $pos + 1) == '[' {
 			$items = flush_chars($items, $text).append(Chars(['!', '[']))
 			$text = []
-			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 2, image: True, sequence: $bracket_pushes })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 2, image: True, sequence: $bracket_pushes, depth: 0 })
 			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 2
 		} else if byte == '[' {
 			$items = flush_chars($items, $text).append(Chars(['[']))
 			$text = []
-			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 1, image: False, sequence: $bracket_pushes })
+			$brackets = $brackets.append({ item: $items.len() - 1, start: $pos + 1, image: False, sequence: $bracket_pushes, depth: 0 })
 			$bracket_pushes = $bracket_pushes + 1
 			$pos = $pos + 1
 		} else if byte == ']' {
@@ -2106,8 +2118,9 @@ scan_inlines = |input, refs| {
 					active = opener.image or depth >= $link_floor
 					$brackets = $brackets.drop_last(1)
 					$link_floor = min_u64($link_floor, $brackets.len())
+					# A link whose content is already as deep as allowed stays text.
 					resolved =
-						if active {
+						if active and opener.depth < max_inline_nesting {
 							resolve_link(input, after, opener, $bracket_pushes > opener.sequence + 1, $pos, refs)
 						} else {
 							Err(NotFound)
@@ -2116,22 +2129,24 @@ scan_inlines = |input, refs| {
 						Ok(found) => {
 							# Consume the content slice before truncating, so the
 							# item list stays uniquely owned and is not copied.
-							children = process_emphasis($items.drop_first(opener.item + 1))
+							content = process_emphasis($items.drop_first(opener.item + 1), max_inline_nesting - 1)
 							$items = $items.take_first(opener.item)
 							node =
 								if opener.image {
-									Image({ alt: children, target: found.target })
+									Image({ alt: content.nodes, target: found.target })
 								} else {
-									Link({ label: children, target: found.target })
+									Link({ label: content.nodes, target: found.target })
 								}
 							if !opener.image {
 								$link_floor = $brackets.len()
 							}
-							$items = $items.append(Node(node))
+							$brackets = raise_bracket_depth($brackets, content.depth + 1)
+							$items = $items.append(Nested(node, content.depth + 1))
 							$pos = found.end
 						}
 
 						Err(_) => {
+							$brackets = raise_bracket_depth($brackets, opener.depth)
 							$items = $items.append(Chars([']']))
 							$pos = after
 						}
@@ -2141,7 +2156,7 @@ scan_inlines = |input, refs| {
 		} else if byte == '<' {
 			match scan_autolink(input, $pos) {
 				Ok(found) => {
-					$items = flush_chars($items, $text).append(Node(found.node))
+					$items = flush_chars($items, $text).append(Nested(found.node, 1))
 					$text = []
 					$pos = found.end
 				}
@@ -2183,7 +2198,7 @@ scan_inlines = |input, refs| {
 					raw = input.sublist({ start: $pos, len: end - $pos })
 					label = Str.from_utf8_lossy(raw)
 					node = Link({ label: [Text(label)], target: { href: Str.concat("http://", label), title: Err(Missing) } })
-					$items = flush_chars($items, $text).append(Node(node))
+					$items = flush_chars($items, $text).append(Nested(node, 1))
 					$text = []
 					$pos = end
 				}
@@ -2199,7 +2214,7 @@ scan_inlines = |input, refs| {
 					raw = input.sublist({ start: $pos - found.rewind, len: found.end - ($pos - found.rewind) })
 					url = Str.from_utf8_lossy(raw)
 					node = Link({ label: [Text(url)], target: { href: url, title: Err(Missing) } })
-					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Node(node))
+					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Nested(node, 1))
 					$text = []
 					$pos = found.end
 				}
@@ -2216,7 +2231,7 @@ scan_inlines = |input, refs| {
 		}
 	}
 
-	nodes = process_emphasis(flush_chars($items, $text))
+	nodes = process_emphasis(flush_chars($items, $text), max_inline_nesting).nodes
 	# GFM email autolinks need an `@` in the text.
 	if input.contains('@') autolink_emails_in(nodes) else nodes
 }
@@ -2458,19 +2473,42 @@ EmphOpener : { delim : InlineDelim, at : U64 }
 ## placeholder `Text` in `out` (at index `at`); its remaining delimiter
 ## characters are written there only when it leaves the stack unmatched, so
 ## partially used runs are not re-rendered on every match.
-process_emphasis : List(InlineItem) -> List(Markdown.Inline)
-process_emphasis = |items| {
+## Record that the innermost open bracket's content holds a node this deep.
+raise_bracket_depth : List(InlineBracket), U64 -> List(InlineBracket)
+raise_bracket_depth = |brackets, depth| {
+	match brackets.last() {
+		Ok(top) if top.depth < depth => brackets.set(brackets.len() - 1, { ..top, depth }) ?? brackets
+		_ => brackets
+	}
+}
+
+## Resolve emphasis and strikethrough, creating no node deeper than `cap`
+## (the delimiters of a deeper pair stay text). Returns the nodes and the
+## greatest depth among them; `$depths` runs parallel to `$out`.
+process_emphasis : List(InlineItem), U64 -> { nodes : List(Markdown.Inline), depth : U64 }
+process_emphasis = |items, cap| {
 	var $out = []
+	var $depths = []
+	# Openers before this index of `$out` enclose a pair found too deep, so
+	# they are too deep as well (the ranges only grow).
+	var $deep_end = 0
 	var $stack = []
 	var $bottoms = List.repeat(0, 18)
 	for item in items {
 		match item {
 			Chars(bytes) => {
 				$out = $out.append(Text(Str.from_utf8_lossy(bytes)))
+				$depths = $depths.append(0)
 			}
 
 			Node(node) => {
 				$out = $out.append(node)
+				$depths = $depths.append(0)
+			}
+
+			Nested(node, depth) => {
+				$out = $out.append(node)
+				$depths = $depths.append(depth)
 			}
 
 			Delim(delim) => {
@@ -2489,10 +2527,23 @@ process_emphasis = |items| {
 							$out = fill_placeholders($out, $stack.drop_first(index + 1))
 							$bottoms = $bottoms.map(|bottom| min_u64(bottom, index))
 							$stack = $stack.take_first(index)
-							if $closer.char == '~' {
+							depth =
+								if opener.at < $deep_end {
+									cap + 1
+								} else {
+									1 + max_depth($depths.drop_first(opener.at + 1))
+								}
+							if depth > cap {
+								$deep_end = opener.at + 1
+								# Too deep: the opener stays text and the closer
+								# looks further down the stack.
+								$out = fill_placeholders($out, [opener])
+								$searching = $closer.char != '~'
+							} else if $closer.char == '~' {
 								if opener.delim.count == $closer.count {
 									children = merge_text_nodes($out.drop_first(opener.at + 1))
 									$out = $out.take_first(opener.at).append(Strikethrough(children))
+									$depths = $depths.take_first(opener.at).append(depth)
 									$closer = { ..$closer, count: 0 }
 								} else {
 									# cmark-gfm: tilde runs of different lengths do not
@@ -2508,8 +2559,10 @@ process_emphasis = |items| {
 								remaining = opener.delim.count - used
 								if remaining == 0 {
 									$out = $out.take_first(opener.at).append(node)
+									$depths = $depths.take_first(opener.at).append(depth)
 								} else {
 									$out = $out.take_first(opener.at).append(Text("")).append(node)
+									$depths = $depths.take_first(opener.at).append(0).append(depth)
 									$stack = $stack.append({ delim: { ..opener.delim, count: remaining }, at: opener.at })
 								}
 								$closer = { ..$closer, count: $closer.count - used }
@@ -2525,12 +2578,16 @@ process_emphasis = |items| {
 					} else {
 						$out = $out.append(delimiter_text($closer.char, $closer.count))
 					}
+					$depths = $depths.append(0)
 				}
 			}
 		}
 	}
-	merge_text_nodes(fill_placeholders($out, $stack))
+	{ nodes: merge_text_nodes(fill_placeholders($out, $stack)), depth: max_depth($depths) }
 }
+
+max_depth : List(U64) -> U64
+max_depth = |depths| depths.fold(0, |a, b| if a > b a else b)
 
 ## Write the remaining delimiter characters of openers leaving the stack.
 fill_placeholders : List(Markdown.Inline), List(EmphOpener) -> List(Markdown.Inline)
@@ -2578,28 +2635,25 @@ find_opener = |stack, bottoms, closer| {
 merge_text_nodes : List(Markdown.Inline) -> List(Markdown.Inline)
 merge_text_nodes = |nodes| {
 	var $out = List.with_capacity(nodes.len())
+	# Adjacent text is gathered here, so a long run of text nodes (as when
+	# delimiters nested too deeply stay text) is joined in linear time.
+	var $pending = ""
 	for node in nodes {
 		match node {
-			Text(text) if text.is_empty() =>
-				{}
-
-			Text(text) =>
-				match $out.last() {
-					Ok(Text(previous)) => {
-						$out = $out.drop_last(1).append(Text(Str.concat(previous, text)))
-					}
-
-					_ => {
-						$out = $out.append(node)
-					}
-				}
+			Text(text) => {
+				$pending = Str.concat($pending, text)
+			}
 
 			_ => {
+				if !$pending.is_empty() {
+					$out = $out.append(Text($pending))
+					$pending = ""
+				}
 				$out = $out.append(node)
 			}
 		}
 	}
-	$out
+	if $pending.is_empty() $out else $out.append(Text($pending))
 }
 
 ## ---------------------------------------------------------------------------
@@ -4062,8 +4116,51 @@ expect inline_test("<a b='c' d> <1a> <a =b>") == [HtmlInline("<a b='c' d>"), Tex
 ## Pathological shapes stay linear: many open brackets, deeply nested images
 # and long delimiter runs that match two characters at a time.
 expect inline_test(Str.repeat("[a", 20000)) == [Text(Str.repeat("[a", 20000))]
-expect inline_test("${Str.repeat("![", 5000)}a${Str.repeat("](u)", 5000)}").len() == 1
-expect inline_test("${Str.repeat("*", 20000)}a${Str.repeat("*", 20000)}").len() == 1
+expect inline_depth(inline_test("${Str.repeat("![", 5000)}a${Str.repeat("](u)", 5000)}")) == max_inline_nesting
+expect inline_depth(inline_test("${Str.repeat("*", 20000)}a${Str.repeat("*", 20000)}")) == max_inline_nesting
+
+## Emphasis, links and images nest at most `max_inline_nesting` deep; deeper
+# delimiters and brackets stay text. The email autolink pass and `==` walk
+# these trees recursively, which overflowed the stack on Linux for inputs
+# like `@![` repeated 8,191 times (fuzz seed "A\n\u001f\u007f").
+expect {
+	nodes = inline_test("${Str.repeat("*a **a ", 4000)}b@c${Str.repeat(" a** a*", 4000)}")
+	inline_depth(nodes) == max_inline_nesting and nodes == nodes
+}
+expect inline_depth(inline_test("${Str.repeat("@![", 3000)}a${Str.repeat("](u)", 3000)}")) == max_inline_nesting
+expect inline_depth(inline_test("${Str.repeat("[*a ", 3000)}${Str.repeat("~b~](u)", 3000)}")) <= max_inline_nesting
+expect {
+	nodes = inline_test("${Str.repeat("*", 999)}a${Str.repeat("*", 999)}")
+	inline_depth(nodes) == 500
+}
+
+## The depth of the deepest node (text has depth 0), without recursion.
+inline_depth : List(Markdown.Inline) -> U64
+inline_depth = |nodes| {
+	var $pending = [{ nodes, depth: 0 }]
+	var $max = 0
+	while !$pending.is_empty() {
+		level = $pending.last() ?? { nodes: [], depth: 0 }
+		$pending = $pending.drop_last(1)
+		for node in level.nodes {
+			children =
+				match node {
+					Strong(inner) => inner
+					Emphasis(inner) => inner
+					Strikethrough(inner) => inner
+					Link({ label, .. }) => label
+					Image({ alt, .. }) => alt
+					_ => []
+				}
+			depth = level.depth + 1
+			if depth > $max and !children.is_empty() {
+				$max = depth
+			}
+			$pending = $pending.append({ nodes: children, depth })
+		}
+	}
+	$max
+}
 
 # Soft and hard line breaks.
 expect inline_test("a  \n   b\\\nc \nd") == [Text("a"), HardBreak, Text("b"), HardBreak, Text("c\nd")]

@@ -98,8 +98,10 @@ The block variants are:
 |===
 
 Block quotes and lists nest at most 1,000 levels deep. Deeper `>` and list
-markers are read as paragraph text, so code that walks the tree recursively
-cannot run out of stack on hostile input.
+markers are read as paragraph text. Emphasis, strikethrough, links and images
+also nest at most 1,000 levels deep (counted separately); the delimiters and
+brackets of deeper ones are read as text. Code that walks the tree
+recursively therefore cannot run out of stack on hostile input.
 
 The syntax tree types support `==` and hashing, so blocks and inlines can be
 `Dict` keys and `Set` elements.
@@ -300,9 +302,10 @@ attribute.
   paragraphs and attribute escaping.
 * Frontmatter is a convention outside both specifications. Only the
   `---` / `---` form at the very start of the document is recognised.
-* Block quotes and lists nest at most 1,000 levels deep; deeper markers are
-  text. CommonMark sets no limit, so a document nested more deeply than that
-  parses differently from the specification.
+* Block quotes and lists nest at most 1,000 levels deep, and so do emphasis,
+  strikethrough, links and images; deeper markers, delimiters and brackets
+  are text. CommonMark sets no limit, so a document nested more deeply than
+  that parses differently from the specification.
 
 The {api}[API reference] lists every type and function in the module.
 
