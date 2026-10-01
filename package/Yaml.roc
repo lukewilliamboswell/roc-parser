@@ -2013,7 +2013,7 @@ split_lines = |input, first_number| {
 			$index = if byte == '\r' and input.get($index + 1) == Ok('\n') $index + 2 else $index + 1
 			$start = $index
 		} else {
-			$index = $index + 1
+			$index = Utf8.find_line_end(input, $index + 1)
 		}
 	}
 	# A line break ends a line; it does not start an empty final one.
