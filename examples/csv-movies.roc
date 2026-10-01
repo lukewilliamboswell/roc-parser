@@ -41,7 +41,7 @@ main! = |args| {
 				ParsingIncomplete(leftover) => {
 					leftover_str =
 						leftover
-							.map(Utf8.str_from_utf8)
+							.map(Str.from_utf8_lossy)
 							.map(|val| "\"${val}\"")
 							|> Str.join_with(", ")
 

@@ -114,8 +114,7 @@ format this package does not cover, or extending one of the format parsers.
   `parse_bytes_partial` cover partial input and byte input.
 * `codeunit`, `codeunit_satisfies`, `any_codeunit`, `utf8` and `string` match
   bytes and literal text. `digit` and `digits` read unsigned decimal numbers.
-* `any_thing` and `any_string` consume the rest of the input.
-* `one_of` is the text version of `Parser.one_of`.
+* `rest` and `rest_str` consume the rest of the input.
 
 The parsers work on bytes, not characters: `codeunit('é')` is not possible,
 because `é` is two bytes in UTF-8. Use `string("é")` instead.

@@ -48,7 +48,7 @@ Three ideas appear here:
   accepts it, and fails otherwise.
 * `.one_or_more()` repeats a parser until it fails and collects the results
   in a list. `.map(f)` transforms the result with an ordinary function; here
-  `Utf8.str_from_utf8` turns the bytes into a `Str`.
+  `Str.from_utf8_lossy` turns the bytes into a `Str`.
 
 `Utf8.parse_str` runs a parser on a whole string. These tests pass:
 
@@ -102,14 +102,14 @@ include::examples/combinator-primer-step2.expected[]
 `{src}/docs/examples/combinator-primer-step3.roc[combinator-primer-step3.roc]`
 
 A value is a number, `true` or `false`, or text in double quotes. Write one
-parser for each kind, then try them in order with `Utf8.one_of`:
+parser for each kind, then try them in order with `Parser.one_of`:
 
 [source,roc]
 ----
 include::examples/combinator-primer-step3.roc[tag=value,indent=0]
 ----
 
-`Utf8.one_of` tries each parser on the same input and returns the first
+`Parser.one_of` tries each parser on the same input and returns the first
 success. If one fails part-way through, the next one starts again from the
 beginning, so `text` does not see input already examined by `number` or
 `flag`.
@@ -184,7 +184,7 @@ kept, so a mistake in the middle of a file is reported where it is.
 * A parser has an input type and a result type, and `Utf8.parse_str` runs
   one on a whole string.
 * `Parser.const(f).keep(a).skip(b).keep(c)` reads things in sequence.
-* `.map(f)` transforms a result; `Utf8.one_of` chooses between
+* `.map(f)` transforms a result; `Parser.one_of` chooses between
   alternatives; `one_or_more`, `many` and `sep_by` repeat.
 * A parse ends in `Ok` or a `ParseError` with a message and a byte `offset`.
 

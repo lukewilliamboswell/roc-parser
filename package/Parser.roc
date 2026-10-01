@@ -21,7 +21,7 @@
 ##     blue = Parser.const(|x| Blue(x)).keep(Utf8.digits).skip(Utf8.string(" blue"))
 ##
 ##     requirement_set : Parser(_, RequirementSet)
-##     requirement_set = Utf8.one_of([green, red, blue]).sep_by(Utf8.string(", "))
+##     requirement_set = Parser.one_of([green, red, blue]).sep_by(Utf8.string(", "))
 ##
 ##     requirements : Parser(_, List(RequirementSet))
 ##     requirements = requirement_set.sep_by(Utf8.string("; "))
@@ -172,11 +172,11 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## Try a list of parsers in turn, until one of them succeeds.
 	##
 	## Each parser starts from the same input. An empty list always fails.
-	## For UTF-8 input, `Utf8.one_of` behaves the same way.
+	## For UTF-8 input, `Parser.one_of` behaves the same way.
 	## ```roc
 	## color : Parser(Utf8.Bytes, [Red, Green, Blue])
 	## color =
-	##     Utf8.one_of([
+	##     Parser.one_of([
 	##         Parser.const(Red).skip(Utf8.string("red")),
 	##         Parser.const(Green).skip(Utf8.string("green")),
 	##         Parser.const(Blue).skip(Utf8.string("blue")),

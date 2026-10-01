@@ -19,7 +19,7 @@ Utf8 :: [].{
 	## ```roc
 	## color : Parser(Utf8.Bytes, [Red, Green, Blue])
 	## color =
-	##     Utf8.one_of([
+	##     Parser.one_of([
 	##         Parser.const(Red).skip(Utf8.string("red")),
 	##         Parser.const(Green).skip(Utf8.string("green")),
 	##         Parser.const(Blue).skip(Utf8.string("blue")),
@@ -50,7 +50,7 @@ Utf8 :: [].{
 	parse_str_partial = |parser, input| {
 		parser
 			.run(input.to_utf8())
-			.map_ok(|{ value, rest }| { value, rest: str_from_utf8_lossy(rest) })
+			.map_ok(|{ value, rest: remaining }| { value, rest: str_from_utf8(remaining) })
 	}
 
 	## Runs a parser against UTF-8 bytes, requiring the parser to consume them fully.
@@ -125,8 +125,8 @@ Utf8 :: [].{
 					[] =>
 						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but input was empty.", offset: 0 }))
 
-					[first, .. as rest] if first == expected_code_unit =>
-						Ok({ value: expected_code_unit, rest: rest })
+					[first, .. as others] if first == expected_code_unit =>
+						Ok({ value: expected_code_unit, rest: others })
 
 					[first, ..] =>
 						Err(ParseError({ message: "expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`", offset: 0 }))
@@ -147,8 +147,8 @@ Utf8 :: [].{
 				if start == expected_string {
 					Ok({ value: expected_string, rest: input_rest })
 				} else {
-					error_string = str_from_utf8_lossy(expected_string)
-					other_string = str_from_utf8_lossy(start)
+					error_string = str_from_utf8(expected_string)
+					other_string = str_from_utf8(start)
 					input_string = excerpt(input)
 
 					Err(ParseError({ message: "expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}", offset: 0 }))
@@ -165,9 +165,7 @@ Utf8 :: [].{
 	## ```
 	string : Str -> Parser(Bytes, Str)
 	string = |expected_string| {
-		expected_string
-			|> str_to_raw
-			|> utf8
+		utf8(expected_string.to_utf8())
 			.map(
 				|_val| {
 					expected_string
@@ -200,16 +198,16 @@ Utf8 :: [].{
 		actual == 36
 	}
 
-	## Consume all remaining input and return it as bytes; never fails.
+	## Consume the rest of the input and return it as bytes; never fails.
 	##
 	## ```roc
 	## expect {
 	##     bytes = "consumes all the input".to_utf8()
-	##     Utf8.any_thing.parse(bytes) == Ok(bytes)
+	##     Utf8.rest.parse(bytes) == Ok(bytes)
 	## }
 	## ```
-	any_thing : Parser(Bytes, Bytes)
-	any_thing = Parser.custom(
+	rest : Parser(Bytes, Bytes)
+	rest = Parser.custom(
 		|input| {
 			Ok({ value: input, rest: [] })
 		},
@@ -218,13 +216,13 @@ Utf8 :: [].{
 	## Any input parser consumes all bytes.
 	expect {
 		bytes = "consumes all the input".to_utf8()
-		actual = any_thing.parse(bytes)?
+		actual = rest.parse(bytes)?
 		actual == bytes
 	}
 
-	## Match all remaining input as a `Str`, failing if the bytes are not valid UTF-8.
-	any_string : Parser(Bytes, Str)
-	any_string = Parser.custom(
+	## Consume the rest of the input as a `Str`, failing if the bytes are not valid UTF-8.
+	rest_str : Parser(Bytes, Str)
+	rest_str = Parser.custom(
 		|field_utf8ing| {
 			match Str.from_utf8(field_utf8ing) {
 				Ok(string_val) =>
@@ -250,8 +248,8 @@ Utf8 :: [].{
 					[] =>
 						Err(ParseError({ message: "Expected a digit from 0-9 but input was empty.", offset: 0 }))
 
-					[first, .. as rest] if first >= '0' and first <= '9' =>
-						Ok({ value: (first - '0').to_u64(), rest: rest })
+					[first, .. as others] if first >= '0' and first <= '9' =>
+						Ok({ value: (first - '0').to_u64(), rest: others })
 
 					_ =>
 						Err(ParseError({ message: "Not a digit", offset: 0 }))
@@ -290,75 +288,11 @@ Utf8 :: [].{
 				},
 			)
 			.flatten()
-
-	## Try a bunch of different parsers.
-	##
-	## The first parser which is tried is the one at the front of the list,
-	## and the next one is tried until one succeeds or the end of the list was reached.
-	## Each alternative starts from the same input; an empty list always fails.
-	##
-	## ```roc
-	## bool_parser : Parser(Utf8.Bytes, Bool)
-	## bool_parser =
-	##     Utf8.one_of([Utf8.string("true"), Utf8.string("false")])
-	##         .map(|x| x == "true")
-	##
-	## expect Utf8.parse_str(bool_parser, "true") == Ok(Bool.True)
-	## expect Utf8.parse_str(bool_parser, "false") == Ok(Bool.False)
-	## expect Utf8.parse_str(bool_parser, "not a bool").is_err()
-	## ```
-	one_of : List(Parser(Bytes, a)) -> Parser(Bytes, a)
-	one_of = |parsers| {
-		Parser.custom(
-			|input| {
-				parsers.fold_until(
-					Err(ParseError({ message: "(no possibilities)", offset: 0 })),
-					|_, parser| {
-						match parse_bytes_partial(parser, input) {
-							Ok(val) =>
-								Break(Ok(val))
-
-							Err(problem) =>
-								Continue(Err(problem))
-						}
-					},
-				)
-			},
-		)
-	}
-
-	## Convert known-valid UTF-8 bytes to a `Str`.
-	## Crashes if the bytes are invalid UTF-8.
-	str_from_utf8 : Bytes -> Str
-	str_from_utf8 = |raw_str| {
-		raw_str
-			|> Str.from_utf8
-			?? {
-				crash "Unexpected problem while turning a List U8 (that was originally a Str) back into a Str. This should never happen!"
-			}
-	}
-
-	## Convert one ASCII byte to a `Str`.
-	## Crashes if the byte is not valid as a single-byte UTF-8 scalar.
-	str_from_ascii : U8 -> Str
-	str_from_ascii = |ascii_num| {
-		match Str.from_utf8([ascii_num]) {
-			Ok(answer) => answer
-			Err(_) => {
-				crash "The number ${ascii_num.to_str()} is not a valid ASCII constant!"
-			}
-		}
-	}
-}
-
-str_to_raw : Str -> Utf8.Bytes
-str_to_raw = |str| {
-	str.to_utf8()
 }
 
 str_from_codeunit : U8 -> Str
 str_from_codeunit = |cu| {
-	str_from_utf8_lossy([cu])
+	str_from_utf8([cu])
 }
 
 ## Bytes of remaining input quoted in failure messages.
@@ -373,9 +307,9 @@ excerpt_len = 32
 excerpt : Utf8.Bytes -> Str
 excerpt = |bytes| {
 	if bytes.len() <= excerpt_len {
-		str_from_utf8_lossy(bytes)
+		str_from_utf8(bytes)
 	} else {
-		Str.concat(str_from_utf8_lossy(bytes.sublist({ start: 0, len: excerpt_len })), "…")
+		Str.concat(str_from_utf8(bytes.sublist({ start: 0, len: excerpt_len })), "…")
 	}
 }
 
@@ -388,10 +322,10 @@ expect {
 	}
 }
 
-str_from_utf8_lossy : Utf8.Bytes -> Str
-str_from_utf8_lossy = |bytes| {
-	# Byte-oriented parsers can stop within a multibyte scalar. Diagnostics and
-	# Str leftovers must render that state without calling the strict converter.
+str_from_utf8 : Utf8.Bytes -> Str
+str_from_utf8 = |bytes| {
+	# Byte-oriented parsers can stop within a multibyte scalar, so diagnostics
+	# and Str leftovers render bytes lossily rather than crashing.
 	Str.from_utf8_lossy(bytes)
 }
 
@@ -410,7 +344,7 @@ expect {
 ## Any input parser consumes all bytes and returns them.
 expect {
 	bytes = "consumes all the input".to_utf8()
-	actual = Parser.parse(Utf8.any_thing, bytes)?
+	actual = Parser.parse(Utf8.rest, bytes)?
 	actual == bytes
 }
 
@@ -428,7 +362,7 @@ expect {
 
 color : Parser(Utf8.Bytes, [Red, Green, Blue])
 color =
-	Utf8.one_of([
+	Parser.one_of([
 		Parser.const(Red).skip(Utf8.string("red")),
 		Parser.const(Green).skip(Utf8.string("green")),
 		Parser.const(Blue).skip(Utf8.string("blue")),
@@ -551,7 +485,7 @@ parse_game = |s| {
 	blue = Parser.const(|x| Blue(x)).keep(Utf8.digits).skip(Utf8.string(" blue"))
 
 	requirement_set : Parser(_, RequirementSet)
-	requirement_set = Utf8.one_of([green, red, blue]).sep_by(Utf8.string(", "))
+	requirement_set = Parser.one_of([green, red, blue]).sep_by(Utf8.string(", "))
 
 	requirements : Parser(_, List(RequirementSet))
 	requirements = requirement_set.sep_by(Utf8.string("; "))
@@ -619,7 +553,7 @@ expect Utf8.parse_str(Utf8.digits, "not a digit").is_err()
 
 bool_parser : Parser(Utf8.Bytes, Bool)
 bool_parser =
-	Utf8.one_of([Utf8.string("true"), Utf8.string("false")])
+	Parser.one_of([Utf8.string("true"), Utf8.string("false")])
 		.map(
 			|x| {
 				x == "true"

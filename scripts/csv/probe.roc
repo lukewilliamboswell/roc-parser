@@ -34,10 +34,10 @@ main! = |_| {
 
 ## Every field of a record, raw, via the public typed-decoding API.
 all_fields : Parser(CSV.CSVRecord, List(List(U8)))
-all_fields = Parser.many(CSV.field(Utf8.any_thing))
+all_fields = Parser.many(CSV.field(Utf8.rest))
 
 json_bytes : List(U8) -> Str
-json_bytes = |bytes| "\"${Utf8.str_from_utf8(escape_json(bytes, []))}\""
+json_bytes = |bytes| "\"${Str.from_utf8_lossy(escape_json(bytes, []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

@@ -13,7 +13,7 @@ Tree := [Leaf(U64), Node(List(Tree))]
 
 tree : Parser(Utf8.Bytes, Tree)
 tree =
-	Utf8.one_of([
+	Parser.one_of([
 		Utf8.digits.map(|n| Leaf(n)),
 		Parser.lazy(|_| tree)
 			.sep_by(Utf8.codeunit(','))

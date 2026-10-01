@@ -14,7 +14,7 @@ key : Parser(Utf8.Bytes, Str)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(Utf8.str_from_utf8)
+		.map(Str.from_utf8_lossy)
 
 # tag::value[]
 Value : [Number(U64), Flag(Bool), Text(Str)]
@@ -24,7 +24,7 @@ number = Utf8.digits.map(|n| Number(n))
 
 flag : Parser(Utf8.Bytes, Value)
 flag =
-	Utf8.one_of([
+	Parser.one_of([
 		Parser.const(Flag(Bool.True)).skip(Utf8.string("true")),
 		Parser.const(Flag(Bool.False)).skip(Utf8.string("false")),
 	])
@@ -32,11 +32,11 @@ flag =
 text : Parser(Utf8.Bytes, Value)
 text =
 	Parser.chomp_while(|b| b != '"')
-		.map(|bytes| Text(Utf8.str_from_utf8(bytes)))
+		.map(|bytes| Text(Str.from_utf8_lossy(bytes)))
 		.between(Utf8.codeunit('"'), Utf8.codeunit('"'))
 
 value : Parser(Utf8.Bytes, Value)
-value = Utf8.one_of([number, flag, text])
+value = Parser.one_of([number, flag, text])
 
 # end::value[]
 

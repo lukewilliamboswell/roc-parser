@@ -141,16 +141,16 @@ check_codeunits = |case| {
 			}
 		Err(_) => {}
 	}
-	match Parser.run(Utf8.any_thing, input) {
-		Ok({ value: val, rest: rest }) => check_suffix("any_thing", input, val, rest)
-		Err(_) => crash "any_thing failed"
+	match Parser.run(Utf8.rest, input) {
+		Ok({ value: val, rest: rest }) => check_suffix("rest", input, val, rest)
+		Err(_) => crash "rest failed"
 	}
-	match Parser.run(Utf8.any_string, input) {
+	match Parser.run(Utf8.rest_str, input) {
 		Ok({ value: val, rest: rest }) => {
-			if Str.from_utf8(input) != Ok(val) crash "any_string value"
-			check_suffix("any_string", input, val.to_utf8(), rest)
+			if Str.from_utf8(input) != Ok(val) crash "rest_str value"
+			check_suffix("rest_str", input, val.to_utf8(), rest)
 		}
-		Err(_) => if Str.from_utf8(input).is_ok() crash "any_string rejected valid UTF-8"
+		Err(_) => if Str.from_utf8(input).is_ok() crash "rest_str rejected valid UTF-8"
 	}
 	match Parser.run(Parser.chomp_until(case.unit), input) {
 		Ok({ value: val, rest: rest }) => {
@@ -170,8 +170,8 @@ check_codeunits = |case| {
 		}
 		Err(_) => crash "chomp_while failed"
 	}
-	_ = run("one_of", Utf8.one_of([Utf8.utf8(case.literal), Utf8.digit.map(|_| [])]), input)
-	_ = run("one_of empty", Utf8.one_of([]), input)
+	_ = run("one_of", Parser.one_of([Utf8.utf8(case.literal), Utf8.digit.map(|_| [])]), input)
+	_ = run("one_of empty", Parser.one_of([]), input)
 	{}
 }
 
@@ -224,7 +224,7 @@ check_scaling = |case| {
 		while $big.len() < 20000 + case.scale * 1000 {
 			$big = $big.concat($big)
 		}
-		element = Parser.alt(Utf8.codeunit(case.unit).map(|b| [b]), Utf8.one_of([Utf8.utf8(case.literal), Utf8.any_codeunit.map(|_| [])]))
+		element = Parser.alt(Utf8.codeunit(case.unit).map(|b| [b]), Parser.one_of([Utf8.utf8(case.literal), Utf8.any_codeunit.map(|_| [])]))
 		match Parser.run(Parser.many(element.map(|_| {})), $big) {
 			Ok({ value: val, rest: rest }) => if val.len() == 0 and rest.len() != $big.len() crash "many consumed without values"
 			Err(_) => crash "many failed"

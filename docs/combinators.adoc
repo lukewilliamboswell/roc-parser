@@ -73,7 +73,7 @@ too large for a `U64`.
 |`Parser.chomp_until(b)`
 |Bytes up to, but not including, the byte `b`. Fails if `b` never appears.
 
-|`Utf8.any_string`, `Utf8.any_thing`
+|`Utf8.rest_str`, `Utf8.rest`
 |All remaining input, as a `Str` (failing if it is not valid UTF-8) or as
 bytes.
 |===
@@ -122,7 +122,7 @@ include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 |===
 |Combinator |Does
 
-|`Utf8.one_of(list)`
+|`Parser.one_of(list)`
 |Tries each parser in order; the first success wins. On failure, reports the
 last parser's message.
 
@@ -252,7 +252,7 @@ This has three consequences:
   such as "is a letter" written for ASCII never matches the bytes of `é`. A
   predicate such as `|b| b != '"'` is safe, because no byte of a multi-byte
   character is below 128.
-* `Utf8.str_from_utf8` crashes on bytes that are not valid UTF-8. That
+* `Str.from_utf8_lossy` crashes on bytes that are not valid UTF-8. That
   cannot happen for a slice of a valid `Str` cut at ASCII bytes, as in this
   manual's examples. If your parser can stop in the middle of a character,
   convert with `Str.from_utf8` and handle its error instead.

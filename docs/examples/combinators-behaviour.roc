@@ -11,7 +11,7 @@ import parser.Utf8
 # Both alternatives start with "ab". When the first fails at "d", the
 # second starts again from the beginning of the same input.
 abc_or_abd : Parser(Utf8.Bytes, Str)
-abc_or_abd = Utf8.one_of([Utf8.string("abc"), Utf8.string("abd")])
+abc_or_abd = Parser.one_of([Utf8.string("abc"), Utf8.string("abd")])
 
 expect Utf8.parse_str(abc_or_abd, "abd") == Ok("abd")
 # end::backtrack[]
@@ -20,10 +20,10 @@ expect Utf8.parse_str(abc_or_abd, "abd") == Ok("abd")
 # The first alternative that succeeds wins, even if a later one would
 # consume more input. Put the longer keyword first.
 keyword_short_first : Parser(Utf8.Bytes, Str)
-keyword_short_first = Utf8.one_of([Utf8.string("in"), Utf8.string("int")])
+keyword_short_first = Parser.one_of([Utf8.string("in"), Utf8.string("int")])
 
 keyword_long_first : Parser(Utf8.Bytes, Str)
-keyword_long_first = Utf8.one_of([Utf8.string("int"), Utf8.string("in")])
+keyword_long_first = Parser.one_of([Utf8.string("int"), Utf8.string("in")])
 
 expect Utf8.parse_str_partial(keyword_short_first, "int").map_ok(|r| r.rest) == Ok("t")
 expect Utf8.parse_str(keyword_long_first, "int") == Ok("int")

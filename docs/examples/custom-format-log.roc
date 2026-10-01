@@ -40,14 +40,14 @@ time =
 
 level : Parser(Utf8.Bytes, Level)
 level =
-	Utf8.one_of([
+	Parser.one_of([
 		Parser.const(Info).skip(Utf8.string("INFO")),
 		Parser.const(Warn).skip(Utf8.string("WARN")),
 		Parser.const(Error).skip(Utf8.string("ERROR")),
 	])
 
 message : Parser(Utf8.Bytes, Str)
-message = Utf8.any_string
+message = Utf8.rest_str
 
 # end::pieces[]
 

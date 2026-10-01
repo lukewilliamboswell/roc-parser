@@ -54,14 +54,14 @@ headers = |fields| {
 hex : List(U8) -> Str
 hex = |bytes| {
 	digits = bytes.fold([], |acc, byte| acc.append(hex_digit(byte // 16)).append(hex_digit(byte % 16)))
-	"\"${Utf8.str_from_utf8(digits)}\""
+	"\"${Str.from_utf8_lossy(digits)}\""
 }
 
 hex_digit : U8 -> U8
 hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
 
 json_string : Str -> Str
-json_string = |text| "\"${Utf8.str_from_utf8(escape_json(text.to_utf8(), []))}\""
+json_string = |text| "\"${Str.from_utf8_lossy(escape_json(text.to_utf8(), []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

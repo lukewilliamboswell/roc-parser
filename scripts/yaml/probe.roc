@@ -39,7 +39,7 @@ encode = |value| {
 }
 
 json_string : Str -> Str
-json_string = |text| "\"${Utf8.str_from_utf8(escape_json(text.to_utf8(), []))}\""
+json_string = |text| "\"${Str.from_utf8_lossy(escape_json(text.to_utf8(), []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

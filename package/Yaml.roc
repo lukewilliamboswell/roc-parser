@@ -329,7 +329,7 @@ parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, min_ind
 	body = render_block_scalar(collected.lines, collected.terminated, header.style, header.chomp)
 	input = drop_consumed_lines(clean_rest, collected.consumed_through)
 
-	Ok({ value: String(Utf8.str_from_utf8(body)), input })
+	Ok({ value: String(Str.from_utf8_lossy(body)), input })
 }
 
 parse_block_header : Utf8.Bytes, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
@@ -658,7 +658,7 @@ parse_inline_value = |raw, line, column, depth| {
 			fail(line, column, "complex mapping keys are not supported by this YAML subset")
 
 		[first, ..] if first == ']' or first == '}' or first == ',' or first == '@' or first == '`' =>
-			fail(line, column, "a plain scalar cannot start with `${Utf8.str_from_utf8([first])}`")
+			fail(line, column, "a plain scalar cannot start with `${Str.from_utf8_lossy([first])}`")
 
 		['-'] | ['-', ' ', ..] | ['-', '\t', ..] | [':'] | [':', ' ', ..] | [':', '\t', ..] =>
 			fail(line, column, "a plain scalar cannot start with an indicator followed by white space")
@@ -691,7 +691,7 @@ contains_mapping_indicator = |bytes| {
 ## that matches none of its forms is a string.
 parse_plain_scalar : Utf8.Bytes, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_plain_scalar = |bytes, line, column| {
-	text = Utf8.str_from_utf8(bytes)
+	text = Str.from_utf8_lossy(bytes)
 
 	if ["null", "Null", "NULL", "~"].contains(text) {
 		Ok(Null)
@@ -798,9 +798,9 @@ core_float_text = |bytes| {
 	is_float = has_point or !exponent.is_empty()
 
 	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if whole.is_empty() "0" else Utf8.str_from_utf8(whole)
-		fraction_text = if fraction.is_empty() "0" else Utf8.str_from_utf8(fraction)
-		exponent_text = if exponent.is_empty() "" else Utf8.str_from_utf8(exponent)
+		whole_text = if whole.is_empty() "0" else Str.from_utf8_lossy(whole)
+		fraction_text = if fraction.is_empty() "0" else Str.from_utf8_lossy(fraction)
+		exponent_text = if exponent.is_empty() "" else Str.from_utf8_lossy(exponent)
 		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
 	} else {
 		Err(NotFloat)
@@ -888,15 +888,15 @@ parse_key = |raw, line, column| {
 		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
 		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
 		[first, ..] if first == '|' or first == '>' or first == '%' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
-			fail(line, column, "a plain mapping key cannot start with `${Utf8.str_from_utf8([first])}`")
-		_ => Ok(Utf8.str_from_utf8(bytes))
+			fail(line, column, "a plain mapping key cannot start with `${Str.from_utf8_lossy([first])}`")
+		_ => Ok(Str.from_utf8_lossy(bytes))
 	}
 }
 
 parse_single_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '\'', line, column)?
-	unescape_single(inner, [], line, column).map_ok(Utf8.str_from_utf8)
+	unescape_single(inner, [], line, column).map_ok(Str.from_utf8_lossy)
 }
 
 ## The text between a scalar's opening quote and its real closing quote, which
@@ -944,7 +944,7 @@ unescape_single = |bytes, out, line, column| {
 parse_double_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '"', line, column)?
-	unescape_double(inner, [], line, column).map_ok(Utf8.str_from_utf8)
+	unescape_double(inner, [], line, column).map_ok(Str.from_utf8_lossy)
 }
 
 unescape_double : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
@@ -1075,7 +1075,7 @@ prepare_lines = |raw_lines| {
 				return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
 
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
-			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(Utf8.str_from_utf8(first.content), "---") => {
+			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(Str.from_utf8_lossy(first.content), "---") => {
 				# "--- node": the root node starts on the marker line (YAML 1.2 9.1.4).
 				node = trim_spaces(first.content.drop_first(3))
 				column = first.content.len() - node.len() + 1

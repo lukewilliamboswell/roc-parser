@@ -15,7 +15,7 @@ key : Parser(Utf8.Bytes, Str)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(Utf8.str_from_utf8)
+		.map(Str.from_utf8_lossy)
 # end::key[]
 
 # tag::expects[]

@@ -194,7 +194,7 @@ Markdown := [
 				Parser.one_of([
 					Parser.const(|i| i)
 						.skip(Utf8.string("```"))
-						.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
+						.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
 						.skip(end_of_line),
 					Parser.const("")
 						.skip(Utf8.string("```")),
@@ -519,7 +519,7 @@ take_frontmatter = |lines| {
 		match lines.drop_first(1).find_first_index(|line| line == "---".to_utf8()) {
 			Ok(index) => {
 				raw = lines.sublist({ start: 1, len: index }).fold([], |acc, line| acc.concat(line).append('\n'))
-				{ frontmatter: Ok(Utf8.str_from_utf8(raw)), lines: lines.drop_first(index + 2) }
+				{ frontmatter: Ok(Str.from_utf8_lossy(raw)), lines: lines.drop_first(index + 2) }
 			}
 
 			Err(_) =>
@@ -1020,7 +1020,7 @@ has_gap = |spans| {
 }
 
 placeholder : Utf8.Bytes -> List(Markdown.Inline)
-placeholder = |raw| [Text(Utf8.str_from_utf8(raw))]
+placeholder = |raw| [Text(Str.from_utf8_lossy(raw))]
 
 ## The events for a closed leaf block with these lines.
 finish_leaf : Open, List(Utf8.Bytes) -> List(Event)
@@ -1035,18 +1035,18 @@ finish_leaf = |open, lines| {
 		}
 
 		FencedBlock(fence) =>
-			[Leaf(Code({ info: fence.info, pre: Utf8.str_from_utf8(join_lines_with_newlines(lines)) }), span)]
+			[Leaf(Code({ info: fence.info, pre: Str.from_utf8_lossy(join_lines_with_newlines(lines)) }), span)]
 
 		IndentedBlock => {
 			var $lines = lines
 			while bytes_are_blank($lines.last() ?? [0]) {
 				$lines = $lines.drop_last(1)
 			}
-			[Leaf(Code({ info: "", pre: Utf8.str_from_utf8(join_lines_with_newlines($lines)) }), span)]
+			[Leaf(Code({ info: "", pre: Str.from_utf8_lossy(join_lines_with_newlines($lines)) }), span)]
 		}
 
 		HtmlBlockOpen(_) =>
-			[Leaf(HtmlBlock(Utf8.str_from_utf8(join_lines_with_newlines(lines))), span)]
+			[Leaf(HtmlBlock(Str.from_utf8_lossy(join_lines_with_newlines(lines))), span)]
 
 		TableBlock(table) => {
 			columns = table.align.len()
@@ -1795,7 +1795,7 @@ inline_heading =
 				Parser.const(Six).skip(Utf8.string("###### ")),
 			]),
 		)
-		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
 
 two_line_heading_level_one : Parser(Utf8.Bytes, Markdown)
 two_line_heading_level_one =
@@ -1804,7 +1804,7 @@ two_line_heading_level_one =
 			Heading({ level: One, content: parse_inlines(str.to_utf8()) })
 		},
 	)
-		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
 		.skip(end_of_line)
 		.skip(Utf8.string("=="))
 		.skip(
@@ -1822,7 +1822,7 @@ two_line_heading_level_two =
 			Heading({ level: Two, content: parse_inlines(str.to_utf8()) })
 		},
 	)
-		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
 		.skip(end_of_line)
 		.skip(Utf8.string("--"))
 		.skip(
@@ -3734,10 +3734,10 @@ parse_link_target = |raw| {
 		if parts.rest.is_empty() {
 			None
 		} else {
-			Some(Utf8.str_from_utf8(strip_wrapping_quotes(trim_spaces(parts.rest))))
+			Some(Str.from_utf8_lossy(strip_wrapping_quotes(trim_spaces(parts.rest))))
 		}
 
-	{ href: Utf8.str_from_utf8(parts.first), title }
+	{ href: Str.from_utf8_lossy(parts.first), title }
 }
 
 find_sequence : Utf8.Bytes, Utf8.Bytes -> Try({ before : Utf8.Bytes, after : Utf8.Bytes }, [NotFound])
@@ -4028,7 +4028,7 @@ not_end_of_line = |b| {
 todo : Parser(Utf8.Bytes, Markdown)
 todo =
 	Parser.const(|s| TODO(s))
-		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Str.from_utf8_lossy))
 
 ## Unsupported markdown lines can still be preserved as TODO nodes directly.
 expect {
@@ -4609,7 +4609,7 @@ chomp_until_code_block_end =
 			chomp_to_code_block_end_help({ value: List.with_capacity(1000), rest: input })
 		},
 	)
-		.map(Utf8.str_from_utf8)
+		.map(Str.from_utf8_lossy)
 
 chomp_to_code_block_end_help : { value : Utf8.Bytes, rest : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
 chomp_to_code_block_end_help = |{ value: val, rest: input }| {

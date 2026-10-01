@@ -52,7 +52,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 	parse_str = |csv_parser, input| {
 		match parse_str_to_csv(input) {
 			Err(ParsingIncomplete(rest)) => {
-				rest_str = Utf8.str_from_utf8(rest)
+				rest_str = Str.from_utf8_lossy(rest)
 
 				Err(SyntaxError(rest_str))
 			}
@@ -99,7 +99,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 							index_str = (index + 1).to_str()
 							record_str =
 								record_fields_list
-									.map(Utf8.str_from_utf8)
+									.map(Str.from_utf8_lossy)
 									.map(
 										|val| {
 											"\"${val}\""
@@ -171,16 +171,16 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 							}
 
 							Err(ParsingFailure(reason)) => {
-								field_str = raw_str |> Utf8.str_from_utf8
+								field_str = raw_str |> Str.from_utf8_lossy
 
 								Err(ParseError({ message: "Field `${field_str}` could not be parsed. ${reason}", offset: 0 }))
 							}
 
 							Err(ParsingIncomplete(reason)) => {
-								reason_str = Utf8.str_from_utf8(reason)
+								reason_str = Str.from_utf8_lossy(reason)
 								fields_str =
 									fields_list
-										.map(Utf8.str_from_utf8)
+										.map(Str.from_utf8_lossy)
 										|> Str.join_with(", ")
 
 								Err(ParseError({ message: "The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})", offset: 0 }))
@@ -194,7 +194,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 
 	## Parse one CSV field as a valid UTF-8 string, kept verbatim (no trimming).
 	string : Parser(CSVField, Str)
-	string = Utf8.any_string
+	string = Utf8.rest_str
 
 	## Parse one CSV field as an unsigned 64-bit integer.
 	##
@@ -332,7 +332,7 @@ run_whole = |parser, input| {
 
 bad_field_message : Utf8.Bytes, U64 -> Str
 bad_field_message = |bytes, at| {
-	"malformed quoted CSV field at byte ${at.to_str()}: `${Utf8.str_from_utf8(bytes.drop_first(at))}`"
+	"malformed quoted CSV field at byte ${at.to_str()}: `${Str.from_utf8_lossy(bytes.drop_first(at))}`"
 }
 
 ## Scan one record starting at `start`, stopping before its line break (or at

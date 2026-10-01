@@ -14,13 +14,13 @@ key : Parser(Utf8.Bytes, Str)
 key =
 	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(Utf8.str_from_utf8)
+		.map(Str.from_utf8_lossy)
 
 # tag::entry[]
 value : Parser(Utf8.Bytes, Str)
 value =
 	Parser.chomp_while(|b| b != '\n')
-		.map(Utf8.str_from_utf8)
+		.map(Str.from_utf8_lossy)
 
 Entry : { key : Str, value : Str }
 
