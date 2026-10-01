@@ -27,6 +27,7 @@ generator's oracle agrees with h11 before trusting it.
 
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import subprocess
@@ -39,7 +40,7 @@ import h11
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts" / "http"
 WORK = ROOT / ".roc-parser-tmp" / "http"
-ROC = Path.home() / "roc_nightly-macos_apple_silicon-2026-09-29-7f11a82" / "roc"
+ROC = Path(os.environ.get("ROC", "roc"))
 METHODS = {
     b"OPTIONS": "Options", b"GET": "Get", b"POST": "Post", b"PUT": "Put", b"DELETE": "Delete",
     b"HEAD": "Head", b"TRACE": "Trace", b"CONNECT": "Connect", b"PATCH": "Patch",

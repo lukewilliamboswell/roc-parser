@@ -7,6 +7,7 @@ Build optimized debug binaries, then use samply record --save-only -o profile.js
 import argparse
 import hashlib
 import json
+import os
 import platform
 import re
 import statistics
@@ -14,7 +15,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ROC = Path.home() / 'roc_nightly-macos_apple_silicon-2026-09-29-7f11a82/roc'
+ROC = Path(os.environ.get('ROC', 'roc'))
 
 
 def fixtures(n):

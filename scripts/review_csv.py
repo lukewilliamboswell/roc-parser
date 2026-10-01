@@ -36,7 +36,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts" / "csv"
 WORK = ROOT / ".roc-parser-tmp" / "csv-review"
-ROC = Path(os.environ.get("ROC", Path.home() / "roc_nightly-macos_apple_silicon-2026-09-29-7f11a82" / "roc"))
+ROC = Path(os.environ.get("ROC", "roc"))
 
 
 def oracle(text: str) -> dict:

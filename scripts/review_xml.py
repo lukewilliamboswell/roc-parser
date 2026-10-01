@@ -23,6 +23,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import argparse
 from collections import Counter
 import hashlib
@@ -39,7 +40,7 @@ from xml.parsers import expat
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts" / "xml"
 DEFAULT_WORK = ROOT / ".roc-parser-tmp" / "xml-review"
-DEFAULT_ROC = Path.home() / "roc_nightly-macos_apple_silicon-2026-09-29-7f11a82" / "roc"
+DEFAULT_ROC = Path(os.environ.get("ROC", "roc"))
 SUITE_URL = "https://www.w3.org/XML/Test/xmlts20130923.tar.gz"
 SUITE_SHA256 = "9b61db9f5dbffa545f4b8d78422167083a8568c59bd1129f94138f936cf6fc1f"
 FIFTH_EDITION_ONLY = "\U00010000"  # a name character expat (pre-5th edition tables) rejects
