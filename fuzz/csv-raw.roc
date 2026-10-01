@@ -90,11 +90,13 @@ needs_quotes = |field| field.contains(',') or field.contains('\r') or field.cont
 ## that a neighbouring break could absorb or a final break could hide).
 serialize : Rows, Bool, List(U8) -> Str
 serialize = |rows, always, line_break| {
-	lines = rows.map(|row| {
-		lone_empty = row == [[]]
-		cells = row.map(|field| if always or lone_empty or needs_quotes(field) quote_bytes(field) else field)
-		join_bytes(cells, [','])
-	})
+	lines = rows.map(
+		|row| {
+			lone_empty = row == [[]]
+			cells = row.map(|field| if always or lone_empty or needs_quotes(field) quote_bytes(field) else field)
+			join_bytes(cells, [','])
+		},
+	)
 	joined = lines.fold([], |acc, line| acc.concat(line).concat(line_break))
 	Str.from_utf8(joined) ?? crash "serialize produced invalid UTF-8"
 }
@@ -155,13 +157,15 @@ check_relations = |input, rows| {
 
 check_records_alone : Str, Rows -> {}
 check_records_alone = |input, rows| {
-	_ = rows.map(|row| {
-		lone = serialize([row], False, [])
-		match parse(lone) {
-			Ok([fields]) if fields == row => {}
-			_ => crash "one record parsed alone differs\n--- input ---\n${Str.inspect(input)}\n--- record ---\n${Str.inspect(lone)}"
-		}
-	})
+	_ = rows.map(
+		|row| {
+			lone = serialize([row], False, [])
+			match parse(lone) {
+				Ok([fields]) if fields == row => {}
+				_ => crash "one record parsed alone differs\n--- input ---\n${Str.inspect(input)}\n--- record ---\n${Str.inspect(lone)}"
+			}
+		},
+	)
 	{}
 }
 

@@ -326,9 +326,12 @@ CSV :: [].{
 	## The CSV format for type-directed decoding. Used through [CSV.parse];
 	## you do not need to name it.
 	Format :: [Default].{
+
+		## Field names are matched as written; [CSV.parse_normalized] normalizes the header instead.
 		rename_field : Format, Str -> Str
 		rename_field = |_, name| name
 
+		## Read the cell as UTF-8 text, verbatim.
 		parse_str : Format, State -> Try({ value : Str, rest : State }, [InvalidCsv(Error)])
 		parse_str = |_, state| {
 			bytes = current_cell(state)?
@@ -338,6 +341,7 @@ CSV :: [].{
 			}
 		}
 
+		## Read `true` or `false` in any letter case.
 		parse_bool : Format, State -> Try({ value : Bool, rest : State }, [InvalidCsv(Error)])
 		parse_bool = |_, state| {
 			bytes = current_cell(state)?
@@ -351,36 +355,47 @@ CSV :: [].{
 			}
 		}
 
+		## Read ASCII digits with an optional `+` as a U8.
 		parse_u8 : Format, State -> Try({ value : U8, rest : State }, [InvalidCsv(Error)])
 		parse_u8 = |_, state| cell_int(state, U8.from_str, False, "a U8")
 
+		## Read ASCII digits with an optional sign as a I8.
 		parse_i8 : Format, State -> Try({ value : I8, rest : State }, [InvalidCsv(Error)])
 		parse_i8 = |_, state| cell_int(state, I8.from_str, True, "an I8")
 
+		## Read ASCII digits with an optional `+` as a U16.
 		parse_u16 : Format, State -> Try({ value : U16, rest : State }, [InvalidCsv(Error)])
 		parse_u16 = |_, state| cell_int(state, U16.from_str, False, "a U16")
 
+		## Read ASCII digits with an optional sign as a I16.
 		parse_i16 : Format, State -> Try({ value : I16, rest : State }, [InvalidCsv(Error)])
 		parse_i16 = |_, state| cell_int(state, I16.from_str, True, "an I16")
 
+		## Read ASCII digits with an optional `+` as a U32.
 		parse_u32 : Format, State -> Try({ value : U32, rest : State }, [InvalidCsv(Error)])
 		parse_u32 = |_, state| cell_int(state, U32.from_str, False, "a U32")
 
+		## Read ASCII digits with an optional sign as a I32.
 		parse_i32 : Format, State -> Try({ value : I32, rest : State }, [InvalidCsv(Error)])
 		parse_i32 = |_, state| cell_int(state, I32.from_str, True, "an I32")
 
+		## Read ASCII digits with an optional `+` as a U64.
 		parse_u64 : Format, State -> Try({ value : U64, rest : State }, [InvalidCsv(Error)])
 		parse_u64 = |_, state| cell_int(state, U64.from_str, False, "a U64")
 
+		## Read ASCII digits with an optional sign as a I64.
 		parse_i64 : Format, State -> Try({ value : I64, rest : State }, [InvalidCsv(Error)])
 		parse_i64 = |_, state| cell_int(state, I64.from_str, True, "an I64")
 
+		## Read ASCII digits with an optional `+` as a U128.
 		parse_u128 : Format, State -> Try({ value : U128, rest : State }, [InvalidCsv(Error)])
 		parse_u128 = |_, state| cell_int(state, U128.from_str, False, "a U128")
 
+		## Read ASCII digits with an optional sign as a I128.
 		parse_i128 : Format, State -> Try({ value : I128, rest : State }, [InvalidCsv(Error)])
 		parse_i128 = |_, state| cell_int(state, I128.from_str, True, "an I128")
 
+		## Read an optional sign, digits and an optional fraction.
 		parse_dec : Format, State -> Try({ value : Dec, rest : State }, [InvalidCsv(Error)])
 		parse_dec = |_, state| {
 			bytes = current_cell(state)?
@@ -390,6 +405,7 @@ CSV :: [].{
 			}
 		}
 
+		## Read a float with the grammar of [CSV.f64].
 		parse_f32 : Format, State -> Try({ value : F32, rest : State }, [InvalidCsv(Error)])
 		parse_f32 = |_, state| {
 			bytes = current_cell(state)?
@@ -399,6 +415,7 @@ CSV :: [].{
 			}
 		}
 
+		## Read a float with the grammar of [CSV.f64].
 		parse_f64 : Format, State -> Try({ value : F64, rest : State }, [InvalidCsv(Error)])
 		parse_f64 = |_, state| {
 			bytes = current_cell(state)?
@@ -425,6 +442,7 @@ CSV :: [].{
 			}
 		}
 
+		## Offer the next header name as the field to fill.
 		parse_record_field : Format,
 		Encoding.FieldName.FieldNames(_shape),
 		State -> Try(
@@ -444,6 +462,7 @@ CSV :: [].{
 			}
 		}
 
+		## The record ends after the last header column.
 		parse_record_after_field : Format, State -> Try([Continue(State), Done(State)], [InvalidCsv(Error)])
 		parse_record_after_field = |_, state| {
 			if state.column >= state.header.len() Ok(Done(state)) else Ok(Continue(state))
@@ -465,12 +484,15 @@ CSV :: [].{
 			}
 		}
 
+		## Move to the cell of the next tuple element.
 		parse_tuple_next : Format, State, U64, U64 -> Try(State, [InvalidCsv(Error)])
 		parse_tuple_next = |_, state, index, _| Ok(State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
 
+		## The error for a cell that holds no valid value.
 		invalid_value : Format, State -> [InvalidCsv(Error)]
 		invalid_value = |_, state| cell_error(state, "the cell does not hold a valid value")
 
+		## Finish a tuple row.
 		parse_tuple_end : Format, State, U64 -> Try(State, [InvalidCsv(Error)])
 		parse_tuple_end = |_, state, _| Ok(state)
 
