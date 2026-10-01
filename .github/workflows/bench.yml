@@ -1,0 +1,92 @@
+name: Benchmarks
+
+# The full comparison with Go, Rust and Python runs weekly and on demand; pull
+# requests that touch the parsers get a quick smoke run that fails only when a
+# roc-parser driver crashes, fails to build or times out. See
+# docs/benchmarks.adoc.
+
+on:
+  pull_request:
+    paths:
+      - "package/**"
+      - "bench/**"
+      - "scripts/bench.py"
+      - "scripts/bench_python.py"
+      - ".github/workflows/bench.yml"
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The benchmark drivers use basic-cli 0.23.0, like the quality workflow.
+  BENCH_ROC_NIGHTLY: nightly-2026-09-29-7f11a82
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Benchmark smoke
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.BENCH_ROC_NIGHTLY }}
+      - name: Run quick benchmarks
+        run: python3 scripts/bench.py --quick --langs roc --timeout 60 --fail-on-error
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-quick
+          path: |
+            .roc-parser-tmp/bench/quick/results.json
+            .roc-parser-tmp/bench/quick/report.md
+          if-no-files-found: warn
+          retention-days: 14
+
+  compare:
+    name: Benchmark comparison
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.BENCH_ROC_NIGHTLY }}
+      - name: Show toolchains
+        run: go version && cargo --version && python3 --version
+      - name: Run the full comparison
+        run: python3 scripts/bench.py --allocations --label ci
+      - name: Publish the summary
+        run: cat .roc-parser-tmp/bench/ci/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-${{ github.run_id }}
+          path: |
+            .roc-parser-tmp/bench/ci/results.json
+            .roc-parser-tmp/bench/ci/report.md
+            .roc-parser-tmp/bench/ci/corpus/manifest.json
+            .roc-parser-tmp/bench/ci/logs/
+          if-no-files-found: warn
+          retention-days: 90
