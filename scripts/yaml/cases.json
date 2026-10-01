@@ -1,0 +1,2015 @@
+[
+  {
+    "id": "block/explicit-124-clip-1-indent-first-eof",
+    "group": "block",
+    "input": "value: |1\n one\n two"
+  },
+  {
+    "id": "block/explicit-124-clip-1-indent-first-lf",
+    "group": "block",
+    "input": "value: |1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-1-chomp-first-eof",
+    "group": "block",
+    "input": "value: |1\n one\n two"
+  },
+  {
+    "id": "block/explicit-124-clip-1-chomp-first-lf",
+    "group": "block",
+    "input": "value: |1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-2-indent-first-eof",
+    "group": "block",
+    "input": "value: |2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124-clip-2-indent-first-lf",
+    "group": "block",
+    "input": "value: |2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-2-chomp-first-eof",
+    "group": "block",
+    "input": "value: |2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124-clip-2-chomp-first-lf",
+    "group": "block",
+    "input": "value: |2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-3-indent-first-eof",
+    "group": "block",
+    "input": "value: |3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124-clip-3-indent-first-lf",
+    "group": "block",
+    "input": "value: |3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-3-chomp-first-eof",
+    "group": "block",
+    "input": "value: |3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124-clip-3-chomp-first-lf",
+    "group": "block",
+    "input": "value: |3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-4-indent-first-eof",
+    "group": "block",
+    "input": "value: |4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124-clip-4-indent-first-lf",
+    "group": "block",
+    "input": "value: |4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-4-chomp-first-eof",
+    "group": "block",
+    "input": "value: |4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124-clip-4-chomp-first-lf",
+    "group": "block",
+    "input": "value: |4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-5-indent-first-eof",
+    "group": "block",
+    "input": "value: |5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124-clip-5-indent-first-lf",
+    "group": "block",
+    "input": "value: |5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-5-chomp-first-eof",
+    "group": "block",
+    "input": "value: |5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124-clip-5-chomp-first-lf",
+    "group": "block",
+    "input": "value: |5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-6-indent-first-eof",
+    "group": "block",
+    "input": "value: |6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124-clip-6-indent-first-lf",
+    "group": "block",
+    "input": "value: |6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-6-chomp-first-eof",
+    "group": "block",
+    "input": "value: |6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124-clip-6-chomp-first-lf",
+    "group": "block",
+    "input": "value: |6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-7-indent-first-eof",
+    "group": "block",
+    "input": "value: |7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124-clip-7-indent-first-lf",
+    "group": "block",
+    "input": "value: |7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-7-chomp-first-eof",
+    "group": "block",
+    "input": "value: |7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124-clip-7-chomp-first-lf",
+    "group": "block",
+    "input": "value: |7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-8-indent-first-eof",
+    "group": "block",
+    "input": "value: |8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124-clip-8-indent-first-lf",
+    "group": "block",
+    "input": "value: |8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-8-chomp-first-eof",
+    "group": "block",
+    "input": "value: |8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124-clip-8-chomp-first-lf",
+    "group": "block",
+    "input": "value: |8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-9-indent-first-eof",
+    "group": "block",
+    "input": "value: |9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124-clip-9-indent-first-lf",
+    "group": "block",
+    "input": "value: |9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-124-clip-9-chomp-first-eof",
+    "group": "block",
+    "input": "value: |9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124-clip-9-chomp-first-lf",
+    "group": "block",
+    "input": "value: |9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-124---1-indent-first-eof",
+    "group": "block",
+    "input": "value: |1-\n one\n two"
+  },
+  {
+    "id": "block/explicit-124---1-indent-first-lf",
+    "group": "block",
+    "input": "value: |1-\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124---1-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-1\n one\n two"
+  },
+  {
+    "id": "block/explicit-124---1-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124---2-indent-first-eof",
+    "group": "block",
+    "input": "value: |2-\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124---2-indent-first-lf",
+    "group": "block",
+    "input": "value: |2-\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124---2-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124---2-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124---3-indent-first-eof",
+    "group": "block",
+    "input": "value: |3-\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124---3-indent-first-lf",
+    "group": "block",
+    "input": "value: |3-\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124---3-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124---3-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124---4-indent-first-eof",
+    "group": "block",
+    "input": "value: |4-\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124---4-indent-first-lf",
+    "group": "block",
+    "input": "value: |4-\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124---4-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124---4-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124---5-indent-first-eof",
+    "group": "block",
+    "input": "value: |5-\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124---5-indent-first-lf",
+    "group": "block",
+    "input": "value: |5-\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124---5-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124---5-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124---6-indent-first-eof",
+    "group": "block",
+    "input": "value: |6-\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124---6-indent-first-lf",
+    "group": "block",
+    "input": "value: |6-\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124---6-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124---6-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124---7-indent-first-eof",
+    "group": "block",
+    "input": "value: |7-\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124---7-indent-first-lf",
+    "group": "block",
+    "input": "value: |7-\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124---7-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124---7-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124---8-indent-first-eof",
+    "group": "block",
+    "input": "value: |8-\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124---8-indent-first-lf",
+    "group": "block",
+    "input": "value: |8-\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124---8-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124---8-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124---9-indent-first-eof",
+    "group": "block",
+    "input": "value: |9-\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124---9-indent-first-lf",
+    "group": "block",
+    "input": "value: |9-\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-124---9-chomp-first-eof",
+    "group": "block",
+    "input": "value: |-9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124---9-chomp-first-lf",
+    "group": "block",
+    "input": "value: |-9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-124-+-1-indent-first-eof",
+    "group": "block",
+    "input": "value: |1+\n one\n two"
+  },
+  {
+    "id": "block/explicit-124-+-1-indent-first-lf",
+    "group": "block",
+    "input": "value: |1+\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124-+-1-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+1\n one\n two"
+  },
+  {
+    "id": "block/explicit-124-+-1-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-124-+-2-indent-first-eof",
+    "group": "block",
+    "input": "value: |2+\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124-+-2-indent-first-lf",
+    "group": "block",
+    "input": "value: |2+\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124-+-2-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-124-+-2-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-124-+-3-indent-first-eof",
+    "group": "block",
+    "input": "value: |3+\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124-+-3-indent-first-lf",
+    "group": "block",
+    "input": "value: |3+\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124-+-3-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-124-+-3-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-124-+-4-indent-first-eof",
+    "group": "block",
+    "input": "value: |4+\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124-+-4-indent-first-lf",
+    "group": "block",
+    "input": "value: |4+\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124-+-4-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-124-+-4-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-124-+-5-indent-first-eof",
+    "group": "block",
+    "input": "value: |5+\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124-+-5-indent-first-lf",
+    "group": "block",
+    "input": "value: |5+\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124-+-5-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-124-+-5-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-124-+-6-indent-first-eof",
+    "group": "block",
+    "input": "value: |6+\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124-+-6-indent-first-lf",
+    "group": "block",
+    "input": "value: |6+\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124-+-6-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-124-+-6-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-124-+-7-indent-first-eof",
+    "group": "block",
+    "input": "value: |7+\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124-+-7-indent-first-lf",
+    "group": "block",
+    "input": "value: |7+\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124-+-7-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-124-+-7-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-124-+-8-indent-first-eof",
+    "group": "block",
+    "input": "value: |8+\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124-+-8-indent-first-lf",
+    "group": "block",
+    "input": "value: |8+\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124-+-8-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-124-+-8-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-124-+-9-indent-first-eof",
+    "group": "block",
+    "input": "value: |9+\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124-+-9-indent-first-lf",
+    "group": "block",
+    "input": "value: |9+\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-124-+-9-chomp-first-eof",
+    "group": "block",
+    "input": "value: |+9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-124-+-9-chomp-first-lf",
+    "group": "block",
+    "input": "value: |+9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-1-indent-first-eof",
+    "group": "block",
+    "input": "value: >1\n one\n two"
+  },
+  {
+    "id": "block/explicit-62-clip-1-indent-first-lf",
+    "group": "block",
+    "input": "value: >1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-1-chomp-first-eof",
+    "group": "block",
+    "input": "value: >1\n one\n two"
+  },
+  {
+    "id": "block/explicit-62-clip-1-chomp-first-lf",
+    "group": "block",
+    "input": "value: >1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-2-indent-first-eof",
+    "group": "block",
+    "input": "value: >2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62-clip-2-indent-first-lf",
+    "group": "block",
+    "input": "value: >2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-2-chomp-first-eof",
+    "group": "block",
+    "input": "value: >2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62-clip-2-chomp-first-lf",
+    "group": "block",
+    "input": "value: >2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-3-indent-first-eof",
+    "group": "block",
+    "input": "value: >3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62-clip-3-indent-first-lf",
+    "group": "block",
+    "input": "value: >3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-3-chomp-first-eof",
+    "group": "block",
+    "input": "value: >3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62-clip-3-chomp-first-lf",
+    "group": "block",
+    "input": "value: >3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-4-indent-first-eof",
+    "group": "block",
+    "input": "value: >4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62-clip-4-indent-first-lf",
+    "group": "block",
+    "input": "value: >4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-4-chomp-first-eof",
+    "group": "block",
+    "input": "value: >4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62-clip-4-chomp-first-lf",
+    "group": "block",
+    "input": "value: >4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-5-indent-first-eof",
+    "group": "block",
+    "input": "value: >5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62-clip-5-indent-first-lf",
+    "group": "block",
+    "input": "value: >5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-5-chomp-first-eof",
+    "group": "block",
+    "input": "value: >5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62-clip-5-chomp-first-lf",
+    "group": "block",
+    "input": "value: >5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-6-indent-first-eof",
+    "group": "block",
+    "input": "value: >6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62-clip-6-indent-first-lf",
+    "group": "block",
+    "input": "value: >6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-6-chomp-first-eof",
+    "group": "block",
+    "input": "value: >6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62-clip-6-chomp-first-lf",
+    "group": "block",
+    "input": "value: >6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-7-indent-first-eof",
+    "group": "block",
+    "input": "value: >7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62-clip-7-indent-first-lf",
+    "group": "block",
+    "input": "value: >7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-7-chomp-first-eof",
+    "group": "block",
+    "input": "value: >7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62-clip-7-chomp-first-lf",
+    "group": "block",
+    "input": "value: >7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-8-indent-first-eof",
+    "group": "block",
+    "input": "value: >8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62-clip-8-indent-first-lf",
+    "group": "block",
+    "input": "value: >8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-8-chomp-first-eof",
+    "group": "block",
+    "input": "value: >8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62-clip-8-chomp-first-lf",
+    "group": "block",
+    "input": "value: >8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-9-indent-first-eof",
+    "group": "block",
+    "input": "value: >9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62-clip-9-indent-first-lf",
+    "group": "block",
+    "input": "value: >9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62-clip-9-chomp-first-eof",
+    "group": "block",
+    "input": "value: >9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62-clip-9-chomp-first-lf",
+    "group": "block",
+    "input": "value: >9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62---1-indent-first-eof",
+    "group": "block",
+    "input": "value: >1-\n one\n two"
+  },
+  {
+    "id": "block/explicit-62---1-indent-first-lf",
+    "group": "block",
+    "input": "value: >1-\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62---1-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-1\n one\n two"
+  },
+  {
+    "id": "block/explicit-62---1-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62---2-indent-first-eof",
+    "group": "block",
+    "input": "value: >2-\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62---2-indent-first-lf",
+    "group": "block",
+    "input": "value: >2-\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62---2-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62---2-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62---3-indent-first-eof",
+    "group": "block",
+    "input": "value: >3-\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62---3-indent-first-lf",
+    "group": "block",
+    "input": "value: >3-\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62---3-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62---3-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62---4-indent-first-eof",
+    "group": "block",
+    "input": "value: >4-\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62---4-indent-first-lf",
+    "group": "block",
+    "input": "value: >4-\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62---4-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62---4-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62---5-indent-first-eof",
+    "group": "block",
+    "input": "value: >5-\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62---5-indent-first-lf",
+    "group": "block",
+    "input": "value: >5-\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62---5-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62---5-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62---6-indent-first-eof",
+    "group": "block",
+    "input": "value: >6-\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62---6-indent-first-lf",
+    "group": "block",
+    "input": "value: >6-\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62---6-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62---6-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62---7-indent-first-eof",
+    "group": "block",
+    "input": "value: >7-\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62---7-indent-first-lf",
+    "group": "block",
+    "input": "value: >7-\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62---7-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62---7-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62---8-indent-first-eof",
+    "group": "block",
+    "input": "value: >8-\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62---8-indent-first-lf",
+    "group": "block",
+    "input": "value: >8-\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62---8-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62---8-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62---9-indent-first-eof",
+    "group": "block",
+    "input": "value: >9-\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62---9-indent-first-lf",
+    "group": "block",
+    "input": "value: >9-\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62---9-chomp-first-eof",
+    "group": "block",
+    "input": "value: >-9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62---9-chomp-first-lf",
+    "group": "block",
+    "input": "value: >-9\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62-+-1-indent-first-eof",
+    "group": "block",
+    "input": "value: >1+\n one\n two"
+  },
+  {
+    "id": "block/explicit-62-+-1-indent-first-lf",
+    "group": "block",
+    "input": "value: >1+\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62-+-1-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+1\n one\n two"
+  },
+  {
+    "id": "block/explicit-62-+-1-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+1\n one\n two\n"
+  },
+  {
+    "id": "block/explicit-62-+-2-indent-first-eof",
+    "group": "block",
+    "input": "value: >2+\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62-+-2-indent-first-lf",
+    "group": "block",
+    "input": "value: >2+\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62-+-2-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+2\n  one\n  two"
+  },
+  {
+    "id": "block/explicit-62-+-2-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+2\n  one\n  two\n"
+  },
+  {
+    "id": "block/explicit-62-+-3-indent-first-eof",
+    "group": "block",
+    "input": "value: >3+\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62-+-3-indent-first-lf",
+    "group": "block",
+    "input": "value: >3+\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62-+-3-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+3\n   one\n   two"
+  },
+  {
+    "id": "block/explicit-62-+-3-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+3\n   one\n   two\n"
+  },
+  {
+    "id": "block/explicit-62-+-4-indent-first-eof",
+    "group": "block",
+    "input": "value: >4+\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62-+-4-indent-first-lf",
+    "group": "block",
+    "input": "value: >4+\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62-+-4-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+4\n    one\n    two"
+  },
+  {
+    "id": "block/explicit-62-+-4-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+4\n    one\n    two\n"
+  },
+  {
+    "id": "block/explicit-62-+-5-indent-first-eof",
+    "group": "block",
+    "input": "value: >5+\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62-+-5-indent-first-lf",
+    "group": "block",
+    "input": "value: >5+\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62-+-5-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+5\n     one\n     two"
+  },
+  {
+    "id": "block/explicit-62-+-5-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+5\n     one\n     two\n"
+  },
+  {
+    "id": "block/explicit-62-+-6-indent-first-eof",
+    "group": "block",
+    "input": "value: >6+\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62-+-6-indent-first-lf",
+    "group": "block",
+    "input": "value: >6+\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62-+-6-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+6\n      one\n      two"
+  },
+  {
+    "id": "block/explicit-62-+-6-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+6\n      one\n      two\n"
+  },
+  {
+    "id": "block/explicit-62-+-7-indent-first-eof",
+    "group": "block",
+    "input": "value: >7+\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62-+-7-indent-first-lf",
+    "group": "block",
+    "input": "value: >7+\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62-+-7-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+7\n       one\n       two"
+  },
+  {
+    "id": "block/explicit-62-+-7-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+7\n       one\n       two\n"
+  },
+  {
+    "id": "block/explicit-62-+-8-indent-first-eof",
+    "group": "block",
+    "input": "value: >8+\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62-+-8-indent-first-lf",
+    "group": "block",
+    "input": "value: >8+\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62-+-8-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+8\n        one\n        two"
+  },
+  {
+    "id": "block/explicit-62-+-8-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+8\n        one\n        two\n"
+  },
+  {
+    "id": "block/explicit-62-+-9-indent-first-eof",
+    "group": "block",
+    "input": "value: >9+\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62-+-9-indent-first-lf",
+    "group": "block",
+    "input": "value: >9+\n         one\n         two\n"
+  },
+  {
+    "id": "block/explicit-62-+-9-chomp-first-eof",
+    "group": "block",
+    "input": "value: >+9\n         one\n         two"
+  },
+  {
+    "id": "block/explicit-62-+-9-chomp-first-lf",
+    "group": "block",
+    "input": "value: >+9\n         one\n         two\n"
+  },
+  {
+    "id": "block/auto-124-clip-'\\n'-False",
+    "group": "block",
+    "input": "value: |\n  one\n  two"
+  },
+  {
+    "id": "block/auto-124-clip-'\\n'-True",
+    "group": "block",
+    "input": "value: |\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-124-clip-'\\r\\n'-False",
+    "group": "block",
+    "input": "value: |\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-124-clip-'\\r\\n'-True",
+    "group": "block",
+    "input": "value: |\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-124-clip-'\\r'-False",
+    "group": "block",
+    "input": "value: |\r  one\r  two"
+  },
+  {
+    "id": "block/auto-124-clip-'\\r'-True",
+    "group": "block",
+    "input": "value: |\r  one\r  two\r"
+  },
+  {
+    "id": "block/auto-124---'\\n'-False",
+    "group": "block",
+    "input": "value: |-\n  one\n  two"
+  },
+  {
+    "id": "block/auto-124---'\\n'-True",
+    "group": "block",
+    "input": "value: |-\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-124---'\\r\\n'-False",
+    "group": "block",
+    "input": "value: |-\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-124---'\\r\\n'-True",
+    "group": "block",
+    "input": "value: |-\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-124---'\\r'-False",
+    "group": "block",
+    "input": "value: |-\r  one\r  two"
+  },
+  {
+    "id": "block/auto-124---'\\r'-True",
+    "group": "block",
+    "input": "value: |-\r  one\r  two\r"
+  },
+  {
+    "id": "block/auto-124-+-'\\n'-False",
+    "group": "block",
+    "input": "value: |+\n  one\n  two"
+  },
+  {
+    "id": "block/auto-124-+-'\\n'-True",
+    "group": "block",
+    "input": "value: |+\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-124-+-'\\r\\n'-False",
+    "group": "block",
+    "input": "value: |+\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-124-+-'\\r\\n'-True",
+    "group": "block",
+    "input": "value: |+\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-124-+-'\\r'-False",
+    "group": "block",
+    "input": "value: |+\r  one\r  two"
+  },
+  {
+    "id": "block/auto-124-+-'\\r'-True",
+    "group": "block",
+    "input": "value: |+\r  one\r  two\r"
+  },
+  {
+    "id": "block/auto-62-clip-'\\n'-False",
+    "group": "block",
+    "input": "value: >\n  one\n  two"
+  },
+  {
+    "id": "block/auto-62-clip-'\\n'-True",
+    "group": "block",
+    "input": "value: >\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-62-clip-'\\r\\n'-False",
+    "group": "block",
+    "input": "value: >\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-62-clip-'\\r\\n'-True",
+    "group": "block",
+    "input": "value: >\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-62-clip-'\\r'-False",
+    "group": "block",
+    "input": "value: >\r  one\r  two"
+  },
+  {
+    "id": "block/auto-62-clip-'\\r'-True",
+    "group": "block",
+    "input": "value: >\r  one\r  two\r"
+  },
+  {
+    "id": "block/auto-62---'\\n'-False",
+    "group": "block",
+    "input": "value: >-\n  one\n  two"
+  },
+  {
+    "id": "block/auto-62---'\\n'-True",
+    "group": "block",
+    "input": "value: >-\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-62---'\\r\\n'-False",
+    "group": "block",
+    "input": "value: >-\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-62---'\\r\\n'-True",
+    "group": "block",
+    "input": "value: >-\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-62---'\\r'-False",
+    "group": "block",
+    "input": "value: >-\r  one\r  two"
+  },
+  {
+    "id": "block/auto-62---'\\r'-True",
+    "group": "block",
+    "input": "value: >-\r  one\r  two\r"
+  },
+  {
+    "id": "block/auto-62-+-'\\n'-False",
+    "group": "block",
+    "input": "value: >+\n  one\n  two"
+  },
+  {
+    "id": "block/auto-62-+-'\\n'-True",
+    "group": "block",
+    "input": "value: >+\n  one\n  two\n"
+  },
+  {
+    "id": "block/auto-62-+-'\\r\\n'-False",
+    "group": "block",
+    "input": "value: >+\r\n  one\r\n  two"
+  },
+  {
+    "id": "block/auto-62-+-'\\r\\n'-True",
+    "group": "block",
+    "input": "value: >+\r\n  one\r\n  two\r\n"
+  },
+  {
+    "id": "block/auto-62-+-'\\r'-False",
+    "group": "block",
+    "input": "value: >+\r  one\r  two"
+  },
+  {
+    "id": "block/auto-62-+-'\\r'-True",
+    "group": "block",
+    "input": "value: >+\r  one\r  two\r"
+  },
+  {
+    "id": "block/124-clip-empty",
+    "group": "block",
+    "input": "value: |\n"
+  },
+  {
+    "id": "block/124-clip-blank",
+    "group": "block",
+    "input": "value: |\n\n"
+  },
+  {
+    "id": "block/124-clip-two-blank",
+    "group": "block",
+    "input": "value: |\n\n\n"
+  },
+  {
+    "id": "block/124-clip-paragraph",
+    "group": "block",
+    "input": "value: |\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/124-clip-leading-blank",
+    "group": "block",
+    "input": "value: |\n\n  a\n"
+  },
+  {
+    "id": "block/124-clip-more-indented",
+    "group": "block",
+    "input": "value: |\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/124-clip-whitespace-content",
+    "group": "block",
+    "input": "value: |\n    \n  a\n"
+  },
+  {
+    "id": "block/124-clip-trailing-spaces",
+    "group": "block",
+    "input": "value: |\n  a  \n"
+  },
+  {
+    "id": "block/124-clip-literal-tab",
+    "group": "block",
+    "input": "value: |\n  \ta\n"
+  },
+  {
+    "id": "block/124-clip-literal-markers",
+    "group": "block",
+    "input": "value: |\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/124-clip-overindented-leading-empty",
+    "group": "block",
+    "input": "value: |\n    \n  a\n"
+  },
+  {
+    "id": "block/124-clip-blank-between-indented",
+    "group": "block",
+    "input": "value: |\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/124-clip-root",
+    "group": "block",
+    "input": "|\n  a\n"
+  },
+  {
+    "id": "block/124-clip-root-zero-indent",
+    "group": "block",
+    "input": "|\na\n"
+  },
+  {
+    "id": "block/124-clip-sequence",
+    "group": "block",
+    "input": "- |\n  a\n- next\n"
+  },
+  {
+    "id": "block/124-clip-nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: |\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124-clip-compact-mapping",
+    "group": "block",
+    "input": "- value: |\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124-clip-spaced-compact",
+    "group": "block",
+    "input": "-   value: |2\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/124---empty",
+    "group": "block",
+    "input": "value: |-\n"
+  },
+  {
+    "id": "block/124---blank",
+    "group": "block",
+    "input": "value: |-\n\n"
+  },
+  {
+    "id": "block/124---two-blank",
+    "group": "block",
+    "input": "value: |-\n\n\n"
+  },
+  {
+    "id": "block/124---paragraph",
+    "group": "block",
+    "input": "value: |-\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/124---leading-blank",
+    "group": "block",
+    "input": "value: |-\n\n  a\n"
+  },
+  {
+    "id": "block/124---more-indented",
+    "group": "block",
+    "input": "value: |-\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/124---whitespace-content",
+    "group": "block",
+    "input": "value: |-\n    \n  a\n"
+  },
+  {
+    "id": "block/124---trailing-spaces",
+    "group": "block",
+    "input": "value: |-\n  a  \n"
+  },
+  {
+    "id": "block/124---literal-tab",
+    "group": "block",
+    "input": "value: |-\n  \ta\n"
+  },
+  {
+    "id": "block/124---literal-markers",
+    "group": "block",
+    "input": "value: |-\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/124---overindented-leading-empty",
+    "group": "block",
+    "input": "value: |-\n    \n  a\n"
+  },
+  {
+    "id": "block/124---blank-between-indented",
+    "group": "block",
+    "input": "value: |-\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/124---root",
+    "group": "block",
+    "input": "|-\n  a\n"
+  },
+  {
+    "id": "block/124---root-zero-indent",
+    "group": "block",
+    "input": "|-\na\n"
+  },
+  {
+    "id": "block/124---sequence",
+    "group": "block",
+    "input": "- |-\n  a\n- next\n"
+  },
+  {
+    "id": "block/124---nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: |-\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124---compact-mapping",
+    "group": "block",
+    "input": "- value: |-\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124---spaced-compact",
+    "group": "block",
+    "input": "-   value: |2-\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/124-+-empty",
+    "group": "block",
+    "input": "value: |+\n"
+  },
+  {
+    "id": "block/124-+-blank",
+    "group": "block",
+    "input": "value: |+\n\n"
+  },
+  {
+    "id": "block/124-+-two-blank",
+    "group": "block",
+    "input": "value: |+\n\n\n"
+  },
+  {
+    "id": "block/124-+-paragraph",
+    "group": "block",
+    "input": "value: |+\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/124-+-leading-blank",
+    "group": "block",
+    "input": "value: |+\n\n  a\n"
+  },
+  {
+    "id": "block/124-+-more-indented",
+    "group": "block",
+    "input": "value: |+\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/124-+-whitespace-content",
+    "group": "block",
+    "input": "value: |+\n    \n  a\n"
+  },
+  {
+    "id": "block/124-+-trailing-spaces",
+    "group": "block",
+    "input": "value: |+\n  a  \n"
+  },
+  {
+    "id": "block/124-+-literal-tab",
+    "group": "block",
+    "input": "value: |+\n  \ta\n"
+  },
+  {
+    "id": "block/124-+-literal-markers",
+    "group": "block",
+    "input": "value: |+\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/124-+-overindented-leading-empty",
+    "group": "block",
+    "input": "value: |+\n    \n  a\n"
+  },
+  {
+    "id": "block/124-+-blank-between-indented",
+    "group": "block",
+    "input": "value: |+\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/124-+-root",
+    "group": "block",
+    "input": "|+\n  a\n"
+  },
+  {
+    "id": "block/124-+-root-zero-indent",
+    "group": "block",
+    "input": "|+\na\n"
+  },
+  {
+    "id": "block/124-+-sequence",
+    "group": "block",
+    "input": "- |+\n  a\n- next\n"
+  },
+  {
+    "id": "block/124-+-nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: |+\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124-+-compact-mapping",
+    "group": "block",
+    "input": "- value: |+\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/124-+-spaced-compact",
+    "group": "block",
+    "input": "-   value: |2+\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/62-clip-empty",
+    "group": "block",
+    "input": "value: >\n"
+  },
+  {
+    "id": "block/62-clip-blank",
+    "group": "block",
+    "input": "value: >\n\n"
+  },
+  {
+    "id": "block/62-clip-two-blank",
+    "group": "block",
+    "input": "value: >\n\n\n"
+  },
+  {
+    "id": "block/62-clip-paragraph",
+    "group": "block",
+    "input": "value: >\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/62-clip-leading-blank",
+    "group": "block",
+    "input": "value: >\n\n  a\n"
+  },
+  {
+    "id": "block/62-clip-more-indented",
+    "group": "block",
+    "input": "value: >\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/62-clip-whitespace-content",
+    "group": "block",
+    "input": "value: >\n    \n  a\n"
+  },
+  {
+    "id": "block/62-clip-trailing-spaces",
+    "group": "block",
+    "input": "value: >\n  a  \n"
+  },
+  {
+    "id": "block/62-clip-literal-tab",
+    "group": "block",
+    "input": "value: >\n  \ta\n"
+  },
+  {
+    "id": "block/62-clip-literal-markers",
+    "group": "block",
+    "input": "value: >\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/62-clip-overindented-leading-empty",
+    "group": "block",
+    "input": "value: >\n    \n  a\n"
+  },
+  {
+    "id": "block/62-clip-blank-between-indented",
+    "group": "block",
+    "input": "value: >\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/62-clip-root",
+    "group": "block",
+    "input": ">\n  a\n"
+  },
+  {
+    "id": "block/62-clip-root-zero-indent",
+    "group": "block",
+    "input": ">\na\n"
+  },
+  {
+    "id": "block/62-clip-sequence",
+    "group": "block",
+    "input": "- >\n  a\n- next\n"
+  },
+  {
+    "id": "block/62-clip-nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: >\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62-clip-compact-mapping",
+    "group": "block",
+    "input": "- value: >\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62-clip-spaced-compact",
+    "group": "block",
+    "input": "-   value: >2\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/62---empty",
+    "group": "block",
+    "input": "value: >-\n"
+  },
+  {
+    "id": "block/62---blank",
+    "group": "block",
+    "input": "value: >-\n\n"
+  },
+  {
+    "id": "block/62---two-blank",
+    "group": "block",
+    "input": "value: >-\n\n\n"
+  },
+  {
+    "id": "block/62---paragraph",
+    "group": "block",
+    "input": "value: >-\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/62---leading-blank",
+    "group": "block",
+    "input": "value: >-\n\n  a\n"
+  },
+  {
+    "id": "block/62---more-indented",
+    "group": "block",
+    "input": "value: >-\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/62---whitespace-content",
+    "group": "block",
+    "input": "value: >-\n    \n  a\n"
+  },
+  {
+    "id": "block/62---trailing-spaces",
+    "group": "block",
+    "input": "value: >-\n  a  \n"
+  },
+  {
+    "id": "block/62---literal-tab",
+    "group": "block",
+    "input": "value: >-\n  \ta\n"
+  },
+  {
+    "id": "block/62---literal-markers",
+    "group": "block",
+    "input": "value: >-\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/62---overindented-leading-empty",
+    "group": "block",
+    "input": "value: >-\n    \n  a\n"
+  },
+  {
+    "id": "block/62---blank-between-indented",
+    "group": "block",
+    "input": "value: >-\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/62---root",
+    "group": "block",
+    "input": ">-\n  a\n"
+  },
+  {
+    "id": "block/62---root-zero-indent",
+    "group": "block",
+    "input": ">-\na\n"
+  },
+  {
+    "id": "block/62---sequence",
+    "group": "block",
+    "input": "- >-\n  a\n- next\n"
+  },
+  {
+    "id": "block/62---nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: >-\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62---compact-mapping",
+    "group": "block",
+    "input": "- value: >-\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62---spaced-compact",
+    "group": "block",
+    "input": "-   value: >2-\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/62-+-empty",
+    "group": "block",
+    "input": "value: >+\n"
+  },
+  {
+    "id": "block/62-+-blank",
+    "group": "block",
+    "input": "value: >+\n\n"
+  },
+  {
+    "id": "block/62-+-two-blank",
+    "group": "block",
+    "input": "value: >+\n\n\n"
+  },
+  {
+    "id": "block/62-+-paragraph",
+    "group": "block",
+    "input": "value: >+\n  a\n\n  b\n"
+  },
+  {
+    "id": "block/62-+-leading-blank",
+    "group": "block",
+    "input": "value: >+\n\n  a\n"
+  },
+  {
+    "id": "block/62-+-more-indented",
+    "group": "block",
+    "input": "value: >+\n  a\n    b\n  c\n"
+  },
+  {
+    "id": "block/62-+-whitespace-content",
+    "group": "block",
+    "input": "value: >+\n    \n  a\n"
+  },
+  {
+    "id": "block/62-+-trailing-spaces",
+    "group": "block",
+    "input": "value: >+\n  a  \n"
+  },
+  {
+    "id": "block/62-+-literal-tab",
+    "group": "block",
+    "input": "value: >+\n  \ta\n"
+  },
+  {
+    "id": "block/62-+-literal-markers",
+    "group": "block",
+    "input": "value: >+\n  # text\n  ---\n  ...\n"
+  },
+  {
+    "id": "block/62-+-overindented-leading-empty",
+    "group": "block",
+    "input": "value: >+\n    \n  a\n"
+  },
+  {
+    "id": "block/62-+-blank-between-indented",
+    "group": "block",
+    "input": "value: >+\n  a\n    b\n\n    c\n  d\n"
+  },
+  {
+    "id": "block/62-+-root",
+    "group": "block",
+    "input": ">+\n  a\n"
+  },
+  {
+    "id": "block/62-+-root-zero-indent",
+    "group": "block",
+    "input": ">+\na\n"
+  },
+  {
+    "id": "block/62-+-sequence",
+    "group": "block",
+    "input": "- >+\n  a\n- next\n"
+  },
+  {
+    "id": "block/62-+-nested-mapping",
+    "group": "block",
+    "input": "outer:\n  value: >+\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62-+-compact-mapping",
+    "group": "block",
+    "input": "- value: >+\n    a\n  next: done\n"
+  },
+  {
+    "id": "block/62-+-spaced-compact",
+    "group": "block",
+    "input": "-   value: >2+\n      a\n    next: done\n"
+  },
+  {
+    "id": "block/invalid-zero",
+    "group": "block",
+    "input": "value: |0\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-two-digits",
+    "group": "block",
+    "input": "value: |22\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-two-chomps",
+    "group": "block",
+    "input": "value: |+-\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-space-options",
+    "group": "block",
+    "input": "value: | 2\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-extra",
+    "group": "block",
+    "input": "value: |oops\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-no-separation",
+    "group": "block",
+    "input": "value: |#comment\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-flow",
+    "group": "block",
+    "input": "[|, a]",
+    "valid": false
+  },
+  {
+    "id": "block/invalid-under-indent",
+    "group": "block",
+    "input": "value: |3\n  a\n",
+    "valid": false
+  },
+  {
+    "id": "core/empty",
+    "group": "core",
+    "input": ""
+  },
+  {
+    "id": "core/multiline-plain",
+    "group": "core",
+    "input": "value: first\n  second\n"
+  },
+  {
+    "id": "core/multiline-double",
+    "group": "core",
+    "input": "value: \"first\n  second\"\n"
+  },
+  {
+    "id": "core/unicode-escape",
+    "group": "core",
+    "input": "value: \"\\u263a\""
+  },
+  {
+    "id": "core/quoted-flow-key",
+    "group": "core",
+    "input": "{\"a\":1}"
+  },
+  {
+    "id": "core/trailing-flow-comma",
+    "group": "core",
+    "input": "[1,2,]"
+  },
+  {
+    "id": "core/indentless-sequence",
+    "group": "core",
+    "input": "value:\n- one\n- two\n"
+  },
+  {
+    "id": "core/empty-key",
+    "group": "core",
+    "input": ": value"
+  },
+  {
+    "id": "core/typed-keys",
+    "group": "core",
+    "input": "true: one\n1: two\n"
+  },
+  {
+    "id": "core/duplicate-typed-key",
+    "group": "core",
+    "input": "1: one\n01: two\n"
+  },
+  {
+    "id": "core/hex-octal",
+    "group": "core",
+    "input": "value: [0x10, 0o10]"
+  },
+  {
+    "id": "core/nonfinite",
+    "group": "core",
+    "input": "value: [.inf, -.inf, .NaN]"
+  },
+  {
+    "id": "core/mixed-bool",
+    "group": "core",
+    "input": "value: tRuE"
+  },
+  {
+    "id": "core/bad-float-as-string",
+    "group": "core",
+    "input": "value: 1e"
+  },
+  {
+    "id": "core/overflow",
+    "group": "core",
+    "input": "value: 9223372036854775808"
+  },
+  {
+    "id": "core/directives",
+    "group": "core",
+    "input": "%YAML 1.2\n---\nvalue: true\n"
+  },
+  {
+    "id": "core/tag",
+    "group": "core",
+    "input": "value: !!str 123"
+  },
+  {
+    "id": "core/custom-tag",
+    "group": "core",
+    "input": "value: !foo bar"
+  },
+  {
+    "id": "core/alias",
+    "group": "core",
+    "input": "value: &a [1, 2]\nother: *a\n"
+  },
+  {
+    "id": "core/cycle",
+    "group": "core",
+    "input": "&a [*a]"
+  },
+  {
+    "id": "core/complex-key",
+    "group": "core",
+    "input": "? [one, two]\n: value\n"
+  },
+  {
+    "id": "core/stream",
+    "group": "core",
+    "input": "---\none\n---\ntwo\n"
+  },
+  {
+    "id": "core/bom",
+    "group": "core",
+    "input": "﻿value: one\n"
+  },
+  {
+    "id": "core/nul",
+    "group": "core",
+    "input": "value: a\u0000b"
+  },
+  {
+    "id": "core/closing-bracket",
+    "group": "core",
+    "input": "value: ]"
+  },
+  {
+    "id": "core/duplicate-string-key",
+    "group": "core",
+    "input": "value: first\nvalue: second"
+  },
+  {
+    "id": "limits/block-depth-99",
+    "group": "limits",
+    "input": "k:\n  k:\n    k:\n      k:\n        k:\n          k:\n            k:\n              k:\n                k:\n                  k:\n                    k:\n                      k:\n                        k:\n                          k:\n                            k:\n                              k:\n                                k:\n                                  k:\n                                    k:\n                                      k:\n                                        k:\n                                          k:\n                                            k:\n                                              k:\n                                                k:\n                                                  k:\n                                                    k:\n                                                      k:\n                                                        k:\n                                                          k:\n                                                            k:\n                                                              k:\n                                                                k:\n                                                                  k:\n                                                                    k:\n                                                                      k:\n                                                                        k:\n                                                                          k:\n                                                                            k:\n                                                                              k:\n                                                                                k:\n                                                                                  k:\n                                                                                    k:\n                                                                                      k:\n                                                                                        k:\n                                                                                          k:\n                                                                                            k:\n                                                                                              k:\n                                                                                                k:\n                                                                                                  k:\n                                                                                                    k:\n                                                                                                      k:\n                                                                                                        k:\n                                                                                                          k:\n                                                                                                            k:\n                                                                                                              k:\n                                                                                                                k:\n                                                                                                                  k:\n                                                                                                                    k:\n                                                                                                                      k:\n                                                                                                                        k:\n                                                                                                                          k:\n                                                                                                                            k:\n                                                                                                                              k:\n                                                                                                                                k:\n                                                                                                                                  k:\n                                                                                                                                    k:\n                                                                                                                                      k:\n                                                                                                                                        k:\n                                                                                                                                          k:\n                                                                                                                                            k:\n                                                                                                                                              k:\n                                                                                                                                                k:\n                                                                                                                                                  k:\n                                                                                                                                                    k:\n                                                                                                                                                      k:\n                                                                                                                                                        k:\n                                                                                                                                                          k:\n                                                                                                                                                            k:\n                                                                                                                                                              k:\n                                                                                                                                                                k:\n                                                                                                                                                                  k:\n                                                                                                                                                                    k:\n                                                                                                                                                                      k:\n                                                                                                                                                                        k:\n                                                                                                                                                                          k:\n                                                                                                                                                                            k:\n                                                                                                                                                                              k:\n                                                                                                                                                                                k:\n                                                                                                                                                                                  k:\n                                                                                                                                                                                    k:\n                                                                                                                                                                                      k:\n                                                                                                                                                                                        k:\n                                                                                                                                                                                          k:\n                                                                                                                                                                                            k:\n                                                                                                                                                                                              k:\n                                                                                                                                                                                                k:\n                                                                                                                                                                                                  k:\n                                                                                                                                                                                                    k:\n                                                                                                                                                                                                      value\n"
+  },
+  {
+    "id": "limits/block-depth-100",
+    "group": "limits",
+    "input": "k:\n  k:\n    k:\n      k:\n        k:\n          k:\n            k:\n              k:\n                k:\n                  k:\n                    k:\n                      k:\n                        k:\n                          k:\n                            k:\n                              k:\n                                k:\n                                  k:\n                                    k:\n                                      k:\n                                        k:\n                                          k:\n                                            k:\n                                              k:\n                                                k:\n                                                  k:\n                                                    k:\n                                                      k:\n                                                        k:\n                                                          k:\n                                                            k:\n                                                              k:\n                                                                k:\n                                                                  k:\n                                                                    k:\n                                                                      k:\n                                                                        k:\n                                                                          k:\n                                                                            k:\n                                                                              k:\n                                                                                k:\n                                                                                  k:\n                                                                                    k:\n                                                                                      k:\n                                                                                        k:\n                                                                                          k:\n                                                                                            k:\n                                                                                              k:\n                                                                                                k:\n                                                                                                  k:\n                                                                                                    k:\n                                                                                                      k:\n                                                                                                        k:\n                                                                                                          k:\n                                                                                                            k:\n                                                                                                              k:\n                                                                                                                k:\n                                                                                                                  k:\n                                                                                                                    k:\n                                                                                                                      k:\n                                                                                                                        k:\n                                                                                                                          k:\n                                                                                                                            k:\n                                                                                                                              k:\n                                                                                                                                k:\n                                                                                                                                  k:\n                                                                                                                                    k:\n                                                                                                                                      k:\n                                                                                                                                        k:\n                                                                                                                                          k:\n                                                                                                                                            k:\n                                                                                                                                              k:\n                                                                                                                                                k:\n                                                                                                                                                  k:\n                                                                                                                                                    k:\n                                                                                                                                                      k:\n                                                                                                                                                        k:\n                                                                                                                                                          k:\n                                                                                                                                                            k:\n                                                                                                                                                              k:\n                                                                                                                                                                k:\n                                                                                                                                                                  k:\n                                                                                                                                                                    k:\n                                                                                                                                                                      k:\n                                                                                                                                                                        k:\n                                                                                                                                                                          k:\n                                                                                                                                                                            k:\n                                                                                                                                                                              k:\n                                                                                                                                                                                k:\n                                                                                                                                                                                  k:\n                                                                                                                                                                                    k:\n                                                                                                                                                                                      k:\n                                                                                                                                                                                        k:\n                                                                                                                                                                                          k:\n                                                                                                                                                                                            k:\n                                                                                                                                                                                              k:\n                                                                                                                                                                                                k:\n                                                                                                                                                                                                  k:\n                                                                                                                                                                                                    k:\n                                                                                                                                                                                                      k:\n                                                                                                                                                                                                        value\n"
+  },
+  {
+    "id": "limits/block-depth-101",
+    "group": "limits",
+    "input": "k:\n  k:\n    k:\n      k:\n        k:\n          k:\n            k:\n              k:\n                k:\n                  k:\n                    k:\n                      k:\n                        k:\n                          k:\n                            k:\n                              k:\n                                k:\n                                  k:\n                                    k:\n                                      k:\n                                        k:\n                                          k:\n                                            k:\n                                              k:\n                                                k:\n                                                  k:\n                                                    k:\n                                                      k:\n                                                        k:\n                                                          k:\n                                                            k:\n                                                              k:\n                                                                k:\n                                                                  k:\n                                                                    k:\n                                                                      k:\n                                                                        k:\n                                                                          k:\n                                                                            k:\n                                                                              k:\n                                                                                k:\n                                                                                  k:\n                                                                                    k:\n                                                                                      k:\n                                                                                        k:\n                                                                                          k:\n                                                                                            k:\n                                                                                              k:\n                                                                                                k:\n                                                                                                  k:\n                                                                                                    k:\n                                                                                                      k:\n                                                                                                        k:\n                                                                                                          k:\n                                                                                                            k:\n                                                                                                              k:\n                                                                                                                k:\n                                                                                                                  k:\n                                                                                                                    k:\n                                                                                                                      k:\n                                                                                                                        k:\n                                                                                                                          k:\n                                                                                                                            k:\n                                                                                                                              k:\n                                                                                                                                k:\n                                                                                                                                  k:\n                                                                                                                                    k:\n                                                                                                                                      k:\n                                                                                                                                        k:\n                                                                                                                                          k:\n                                                                                                                                            k:\n                                                                                                                                              k:\n                                                                                                                                                k:\n                                                                                                                                                  k:\n                                                                                                                                                    k:\n                                                                                                                                                      k:\n                                                                                                                                                        k:\n                                                                                                                                                          k:\n                                                                                                                                                            k:\n                                                                                                                                                              k:\n                                                                                                                                                                k:\n                                                                                                                                                                  k:\n                                                                                                                                                                    k:\n                                                                                                                                                                      k:\n                                                                                                                                                                        k:\n                                                                                                                                                                          k:\n                                                                                                                                                                            k:\n                                                                                                                                                                              k:\n                                                                                                                                                                                k:\n                                                                                                                                                                                  k:\n                                                                                                                                                                                    k:\n                                                                                                                                                                                      k:\n                                                                                                                                                                                        k:\n                                                                                                                                                                                          k:\n                                                                                                                                                                                            k:\n                                                                                                                                                                                              k:\n                                                                                                                                                                                                k:\n                                                                                                                                                                                                  k:\n                                                                                                                                                                                                    k:\n                                                                                                                                                                                                      k:\n                                                                                                                                                                                                        k:\n                                                                                                                                                                                                          value\n"
+  },
+  {
+    "id": "limits/flow-depth-100",
+    "group": "limits",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "id": "limits/flow-depth-512",
+    "group": "limits",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "id": "limits/long-literal",
+    "group": "limits",
+    "input": "value: |-\n  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+  },
+  {
+    "id": "limits/repeated-blocks",
+    "group": "limits",
+    "input": "- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n- |-\n  a\n"
+  }
+]

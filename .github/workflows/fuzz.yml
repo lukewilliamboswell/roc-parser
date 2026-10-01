@@ -79,10 +79,44 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  yaml-conformance:
+    name: YAML 1.2 conformance and robustness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install review compiler
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: nightly-2026-09-29-7f11a82
+      - name: Create oracle environment
+        run: python3 -m venv /tmp/roc-parser-yaml-oracle
+      - name: Install pinned pure Python oracle
+        run: /tmp/roc-parser-yaml-oracle/bin/python -m pip install --no-deps -r scripts/yaml/requirements.txt
+      - name: Test review harness
+        run: /tmp/roc-parser-yaml-oracle/bin/python -m unittest discover -s scripts/tests -p test_review_yaml.py
+      - name: Check explicit conformance baseline
+        run: /tmp/roc-parser-yaml-oracle/bin/python scripts/review_yaml.py check --baseline scripts/yaml/known-failures.json
+      - name: Run YAML robustness smoke
+        if: ${{ !cancelled() }}
+        run: /tmp/roc-parser-yaml-oracle/bin/python scripts/review_yaml.py campaign --smoke
+      - name: Upload YAML review evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: yaml-conformance-evidence
+          path: .roc-parser-tmp/yaml-review/
+          if-no-files-found: warn
+          retention-days: 14
+
   property-quality:
     name: property-quality
     if: always()
-    needs: fuzz
+    needs: [fuzz, yaml-conformance]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper
@@ -91,3 +125,5 @@ jobs:
           persist-credentials: false
       - name: Require successful fuzzing
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.fuzz.result }}"
+      - name: Require YAML conformance checks
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.yaml-conformance.result }}"
