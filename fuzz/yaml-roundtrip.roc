@@ -47,7 +47,7 @@ spaces = |count| {
 ## Scalars
 
 alphabet : List(Str)
-alphabet = ["a", "b", "Z", "x", " ", "1", "0", ".", "-", "e", "+", ":", "#", "'", "\"", "\\", "\t", "\n", "é", "😀", ",", "[", "]", "{", "}", "~", "!", "&", "*", "|", ">", "%", "?", "@", "_", "/"]
+alphabet = ["a", "b", "Z", "x", " ", "1", "0", ".", "-", "e", "+", ":", "#", "'", "\"", "\\", "\t", "\n", "é", "😀", ",", "[", "]", "{", "}", "~", "!", "&", "*", "|", ">", "%", "?", "@", "_", "/", "\u(0)", "\u(1b)", "\u(85)", "\u(a0)", "\u(2028)"]
 
 gen_string : Cur -> { s : Str, cur : Cur }
 gen_string = |start| {
@@ -180,8 +180,21 @@ escape_utf8 = |text| {
 			_ => acc.append(b)
 		}
 	})
-	Str.from_utf8(out) ?? ""
+	# Characters that are not printable in YAML must use escapes; others vary.
+	(Str.from_utf8(out) ?? "")
+	|> Str.replace_each("\u(0)", "\\0")
+	|> Str.replace_each("\u(1b)", "\\e")
+	|> Str.replace_each("\u(85)", "\\N")
+	|> Str.replace_each("\u(a0)", "\\_")
+	|> Str.replace_each("\u(2028)", "\\L")
+	|> Str.replace_each("😀", "\\U0001F600")
+	|> Str.replace_each("é", "\\u00E9")
+	|> Str.replace_each("/", "\\/")
 }
+
+## Strings with characters YAML only allows escaped, or line separators.
+needs_escapes : Str -> Bool
+needs_escapes = |text| ["\u(0)", "\u(1b)", "\u(85)", "\u(2028)"].any(|special| Str.contains(text, special))
 
 single_quote : Str -> Str
 single_quote = |text| {
@@ -193,10 +206,10 @@ single_quote = |text| {
 emit_string : Cur, Str, Bool -> { text : Str, cur : Cur }
 emit_string = |start, text, flow| {
 	style = pick(start, 3)
-	single_ok = !text.to_utf8().contains('\n') and !text.to_utf8().contains('\r')
+	single_ok = !text.to_utf8().contains('\n') and !text.to_utf8().contains('\r') and !needs_escapes(text)
 	chosen =
 		match style.n {
-			0 if plain_safe(text, flow) => text
+			0 if plain_safe(text, flow) and !needs_escapes(text) => text
 			1 if single_ok => single_quote(text)
 			_ => escape_double(text)
 		}
@@ -300,7 +313,7 @@ emit_literal = |start, text, base_indent, explicit_ok| {
 	# Tabs in leading whitespace are content, but the parser reads them as indentation.
 	tab_led = body.any(leading_tab)
 	blank_spaces = body.any(|line| !line.is_empty() and line.to_utf8().all(|b| b == ' ' or b == '\t'))
-	if bytes.contains('\r') or !bytes.contains('\n') or body.is_empty() or (needs_explicit and !explicit_ok) or (!known_gaps and (tab_led or blank_spaces)) {
+	if needs_escapes(text) or bytes.contains('\r') or !bytes.contains('\n') or body.is_empty() or (needs_explicit and !explicit_ok) or (!known_gaps and (tab_led or blank_spaces)) {
 		Err(Unsupported)
 	} else {
 		indent_choice = pick(start, 3)
@@ -406,8 +419,8 @@ gen_key = |start, flow| {
 	generated = gen_string(start)
 	style = pick(generated.cur, 3)
 	key = generated.s
-	single_ok = !key.to_utf8().contains('\n')
-	plain_ok = plain_safe(key, flow)
+	single_ok = !key.to_utf8().contains('\n') and !needs_escapes(key)
+	plain_ok = plain_safe(key, flow) and !needs_escapes(key)
 	text =
 		match style.n {
 			0 if plain_ok => key

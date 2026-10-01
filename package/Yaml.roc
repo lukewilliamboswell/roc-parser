@@ -638,14 +638,117 @@ unescape_double : String.Utf8, String.Utf8, U64, U64 -> Try(String.Utf8, [YamlEr
 unescape_double = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
-		['\\', '"', .. as rest] => unescape_double(rest, out.append('"'), line, column)
-		['\\', '\\', .. as rest] => unescape_double(rest, out.append('\\'), line, column)
-		['\\', 'n', .. as rest] => unescape_double(rest, out.append('\n'), line, column)
-		['\\', 'r', .. as rest] => unescape_double(rest, out.append('\r'), line, column)
-		['\\', 't', .. as rest] => unescape_double(rest, out.append('\t'), line, column)
-		['\\', escaped, ..] => fail(line, column, "unsupported escape sequence `\\${String.str_from_utf8([escaped])}`")
+		['\\', escaped, .. as rest] => {
+			match simple_escape(escaped) {
+				Ok(decoded) => unescape_double(rest, append_bytes(out, decoded), line, column)
+				Err(_) => {
+					digits =
+						match escaped {
+							'x' => 2
+							'u' => 4
+							'U' => 8
+							_ => 0
+						}
+
+					if digits == 0 {
+						fail(line, column, "unsupported escape sequence `\\${escaped_character(bytes.drop_first(1))}`")
+					} else {
+						encoded = encode_code_point(rest.sublist({ start: 0, len: digits }), digits, line, column)?
+						unescape_double(rest.drop_first(digits), append_bytes(out, encoded), line, column)
+					}
+				}
+			}
+		}
+
 		['\\'] => fail(line, column, "unterminated escape sequence")
 		[first, .. as rest] => unescape_double(rest, out.append(first), line, column)
+	}
+}
+
+## YAML 1.2 single-character escapes (5.7), as UTF-8.
+simple_escape : U8 -> Try(String.Utf8, [NotSimple])
+simple_escape = |escaped| {
+	match escaped {
+		'0' => Ok([0])
+		'a' => Ok([7])
+		'b' => Ok([8])
+		't' | '\t' => Ok(['\t'])
+		'n' => Ok(['\n'])
+		'v' => Ok([11])
+		'f' => Ok([12])
+		'r' => Ok(['\r'])
+		'e' => Ok([27])
+		' ' => Ok([' '])
+		'"' => Ok(['"'])
+		'/' => Ok(['/'])
+		'\\' => Ok(['\\'])
+		'N' => Ok([0xC2, 0x85])
+		'_' => Ok([0xC2, 0xA0])
+		'L' => Ok([0xE2, 0x80, 0xA8])
+		'P' => Ok([0xE2, 0x80, 0xA9])
+		_ => Err(NotSimple)
+	}
+}
+
+## The whole (possibly multi-byte) character at the start of `bytes`.
+escaped_character : String.Utf8 -> Str
+escaped_character = |bytes| {
+	width =
+		match bytes {
+			[first, ..] if first >= 0xF0 => 4
+			[first, ..] if first >= 0xE0 => 3
+			[first, ..] if first >= 0xC0 => 2
+			_ => 1
+		}
+
+	Str.from_utf8(bytes.sublist({ start: 0, len: width })) ?? "?"
+}
+
+encode_code_point : String.Utf8, U64, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+encode_code_point = |hex, digits, line, column| {
+	if hex.len() != digits {
+		fail(line, column, "escape sequence needs ${digits.to_str()} hexadecimal digits")
+	} else {
+		match parse_hex(hex, 0) {
+			Err(_) => fail(line, column, "escape sequence needs ${digits.to_str()} hexadecimal digits")
+			Ok(code) if code >= 0xD800 and code <= 0xDFFF => fail(line, column, "escape sequence is a UTF-16 surrogate, not a character")
+			Ok(code) if code > 0x10FFFF => fail(line, column, "escape sequence is beyond the last Unicode character")
+			Ok(code) => Ok(utf8_encode(code))
+		}
+	}
+}
+
+parse_hex : String.Utf8, U32 -> Try(U32, [InvalidHex])
+parse_hex = |bytes, value| {
+	match bytes {
+		[] => Ok(value)
+		[first, .. as rest] => {
+			digit =
+				if first >= '0' and first <= '9' {
+					Ok(first - '0')
+				} else if first >= 'a' and first <= 'f' {
+					Ok(first - 'a' + 10)
+				} else if first >= 'A' and first <= 'F' {
+					Ok(first - 'A' + 10)
+				} else {
+					Err(InvalidHex)
+				}
+
+			parse_hex(rest, value * 16 + U8.to_u32(digit?))
+		}
+	}
+}
+
+utf8_encode : U32 -> String.Utf8
+utf8_encode = |code| {
+	if code < 0x80 {
+		[U32.to_u8_wrap(code)]
+	} else if code < 0x800 {
+		[U32.to_u8_wrap(0xC0 + code // 64), U32.to_u8_wrap(0x80 + code % 64)]
+	} else if code < 0x10000 {
+		[U32.to_u8_wrap(0xE0 + code // 4096), U32.to_u8_wrap(0x80 + (code // 64) % 64), U32.to_u8_wrap(0x80 + code % 64)]
+	} else {
+		[U32.to_u8_wrap(0xF0 + code // 262144), U32.to_u8_wrap(0x80 + (code // 4096) % 64), U32.to_u8_wrap(0x80 + (code // 64) % 64), U32.to_u8_wrap(0x80 + code % 64)]
 	}
 }
 
@@ -1125,6 +1228,23 @@ expect {
 	actual = Yaml.parse_str("message: \"first\\nsecond\"")?
 	actual == Mapping([{ key: "message", value: String("first\nsecond") }])
 }
+
+## Double-quoted strings support every YAML 1.2 escape, including Unicode.
+expect {
+	actual = Yaml.parse_str("v: \"\\x41\\u00e9\\U0001F600\\/\\_\\0\"")?
+	actual == Mapping([{ key: "v", value: String("Aé😀/\u(a0)\u(0)") }])
+}
+
+## Unsupported escapes before a multi-byte character fail instead of crashing.
+expect {
+	match Yaml.parse_str("v: \"\\é\"") {
+		Err(YamlError({ message, .. })) => message == "unsupported escape sequence `\\é`"
+		_ => Bool.False
+	}
+}
+
+## Surrogate and short Unicode escapes are rejected.
+expect Yaml.parse_str("v: \"\\uD800\"").is_err() and Yaml.parse_str("v: \"\\u12\"").is_err()
 
 ## Block scalars parse as multiline strings, including folded style.
 expect {

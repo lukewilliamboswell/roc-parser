@@ -13,30 +13,10 @@ import parser.Yaml
 
 Parsed : Try(Yaml, [YamlError(Yaml.Error)])
 
-## Set to Bool.True to also run inputs the parser is known to crash or diverge
-## on (see fuzz/README.md "Known YAML gaps"). Off by default so campaigns can
-## explore past them.
-known_gaps : Bool
-known_gaps = Bool.False
-
-## A backslash before a multi-byte character aborts while building the
-## "unsupported escape sequence" message.
-escape_before_non_ascii : List(U8) -> Bool
-escape_before_non_ascii = |bytes| {
-	var $found = Bool.False
-	var $index = 0
-	while $index + 1 < bytes.len() and !$found {
-		$found = (bytes.get($index) ?? 0) == '\\' and (bytes.get($index + 1) ?? 0) >= 0x80
-		$index = $index + 1
-	}
-	$found
-}
-
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Fuzz.reject
-		Ok(_) if !known_gaps and escape_before_non_ascii(bytes) => Fuzz.reject
 		Ok(input) => {
 			result = Yaml.parse_str(input)
 			check_location(bytes, result)
