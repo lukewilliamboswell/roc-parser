@@ -343,7 +343,8 @@ bad_request_line = |msg, n| {
 	match n % 9 {
 		0 => HttpGen.insert_bytes(start, space, [' '])
 		1 => start.set(space, '\t') ?? start
-		2 => start.map_with_index(|b, i| if i < space and b >= 'A' and b <= 'Z' b + 32 else b)
+		# A lowercase method is a valid extension method; a non-token byte is not.
+		2 => HttpGen.insert_bytes(start, 1, ['('])
 		3 => with_version(msg, "HTTP/1.10").drop_last(1).concat(['1', '0'])
 		4 => with_version(msg, "http/1.1")
 		5 => start.append(' ')
