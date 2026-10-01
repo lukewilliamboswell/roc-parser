@@ -12,3 +12,4 @@ __pycache__/
 .docs-out/
 .docs-api/
 .pages/
+.blueprint/
