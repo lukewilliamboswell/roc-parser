@@ -470,8 +470,10 @@ BlockState : {
 	line : Utf8.Bytes,
 	# For each byte offset of the line: the offset of the next byte that is not
 	# a space or tab, and the column of each offset (tab stops of 4). Computed
-	# once per line, so that finding the next non-space character is constant
-	# time however deeply the containers nest.
+	# only for lines that start inside more than `index_depth` open blocks, so
+	# that finding the next non-space character stays constant time however
+	# deeply the containers nest. Otherwise both are empty and `find_nonspace`
+	# scans, which costs at most `index_depth` passes over a run of spaces.
 	next_nonspace : List(U64),
 	columns : List(U64),
 	line_number : U64,
@@ -606,7 +608,7 @@ parse_block_lines = |lines| {
 		# The previous line's result is gone by now, so the leaf's lines are
 		# not shared and grow in place.
 		$leaf = if $reset $added else $leaf.concat($added)
-		index = index_line(line)
+		index = if $state.depth > index_depth index_line(line) else { next_nonspace: [], columns: [] }
 		result = process_line({ ..$state, line, next_nonspace: index.next_nonspace, columns: index.columns, line_number: $state.line_number + 1, leaf_lines: $leaf, leaf_reset: False, leaf_added: [], events: [] })
 		$events = $events.concat(result.events)
 		$reset = result.leaf_reset
@@ -783,10 +785,31 @@ index_line = |line| {
 find_nonspace : BlockState -> Nonspace
 find_nonspace = |s| {
 	len = s.line.len()
-	pos = if s.offset >= len len else s.next_nonspace.get(s.offset) ?? len
-	column = s.columns.get(pos) ?? s.column
-	{ pos, column, indent: if column > s.column column - s.column else 0, blank: pos >= len }
+	if s.next_nonspace.is_empty() {
+		pos = if s.offset >= len len else Utf8.skip_class(s.line, s.offset, line_spaces)
+		# The column after the skipped spaces and tabs. A partly consumed tab
+		# at the offset ends at the same tab stop as a whole one would.
+		var $column = s.column
+		var $index = s.offset
+		while $index < pos {
+			$column = if byte_at(s.line, $index) == '\t' $column + (4 - ($column % 4)) else $column + 1
+			$index = $index + 1
+		}
+		column = $column
+		{ pos, column, indent: column - s.column, blank: pos >= len }
+	} else {
+		pos = if s.offset >= len len else s.next_nonspace.get(s.offset) ?? len
+		column = s.columns.get(pos) ?? s.column
+		{ pos, column, indent: if column > s.column column - s.column else 0, blank: pos >= len }
+	}
 }
+
+## Lines inside more open blocks than this get a precomputed whitespace index.
+index_depth : U64
+index_depth = 8
+
+line_spaces : Utf8.ByteClass
+line_spaces = Utf8.ByteClass.from_bytes([' ', '\t'])
 
 advance_to_nonspace : BlockState, Nonspace -> BlockState
 advance_to_nonspace = |s, ns| {
