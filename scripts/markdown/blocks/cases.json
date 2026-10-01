@@ -1,0 +1,19 @@
+[
+  {"id": "case/crlf-paragraph", "group": "line-endings", "input": "a\r\nb\r\n\r\nc\r\n"},
+  {"id": "case/cr-only-lines", "group": "line-endings", "input": "# h\rpara\r- item\r"},
+  {"id": "case/nul-byte", "group": "insecure", "input": "a\u0000b\n"},
+  {"id": "case/unclosed-fence", "group": "fence", "input": "```roc\nmain = 1\n"},
+  {"id": "case/frontmatter", "group": "frontmatter", "input": "---\ntitle: x\n---\n# Body\n"},
+  {"id": "case/frontmatter-unclosed", "group": "frontmatter", "input": "---\ntitle: x\n"},
+  {"id": "case/table-basic", "group": "table", "input": "| a | b |\n| :- | -: |\n| c | d |\n"},
+  {"id": "case/table-ragged", "group": "table", "input": "a | b\n--|--\n1\n2 | 3 | 4\n"},
+  {"id": "case/table-interrupt", "group": "table", "input": "| a |\n| - |\n| b |\n> q\n"},
+  {"id": "case/table-in-list", "group": "table", "input": "- | a |\n  | - |\n  | b |\n"},
+  {"id": "case/task-list", "group": "task", "input": "- [ ] a\n- [x] b\n- [X] c\n- [y] d\n"},
+  {"id": "case/task-ordered", "group": "task", "input": "1. [x] a\n2. [ ]\n"},
+  {"id": "case/soft-break-trailing-space", "group": "paragraph", "input": "a \n  b\n"},
+  {"id": "case/hard-break-many-spaces", "group": "paragraph", "input": "a     \nb\n"},
+  {"id": "case/nested-containers", "group": "containers", "input": "> - a\n>   > b\n> c\n"},
+  {"id": "case/deep-nesting", "group": "containers", "input": "> > > > > > > > > > a\n"},
+  {"id": "case/ref-def-multiline", "group": "refs", "input": "[foo]:\n/url\n'title'\n\n[foo]\n"}
+]
