@@ -19,7 +19,7 @@ Cur : { bytes : List(U8), pos : U64 }
 
 Out : { value : Yaml, text : Str, cur : Cur, block_scalar : Bool }
 
-Input : { yaml : Str, expected : Yaml }
+Input : { yaml : Str, expected : Yaml, record_yaml : Str, record : Rec }
 
 pick : Cur, U64 -> { n : U64, cur : Cur }
 pick = |cur, count| {
@@ -89,7 +89,7 @@ is_core_float = |bytes| {
 	exp_ok =
 		match exp {
 			Ok(digits) => all_digits(drop_sign(digits))
-			Err(_) => Bool.True
+			Err(_) => True
 		}
 	mantissa_ok and exp_ok
 }
@@ -153,26 +153,29 @@ plain_safe = |text, flow| {
 
 escape_utf8 : Str -> Str
 escape_utf8 = |text| {
-	out = text.to_utf8().fold([], |acc, b| {
-		match b {
-			'\\' => acc.concat(['\\', '\\'])
-			'"' => acc.concat(['\\', '"'])
-			'\n' => acc.concat(['\\', 'n'])
-			'\r' => acc.concat(['\\', 'r'])
-			'\t' => acc.concat(['\\', 't'])
-			_ => acc.append(b)
-		}
-	})
+	out = text.to_utf8().fold(
+		[],
+		|acc, b| {
+			match b {
+				'\\' => acc.concat(['\\', '\\'])
+				'"' => acc.concat(['\\', '"'])
+				'\n' => acc.concat(['\\', 'n'])
+				'\r' => acc.concat(['\\', 'r'])
+				'\t' => acc.concat(['\\', 't'])
+				_ => acc.append(b)
+			}
+		},
+	)
 	# Characters that are not printable in YAML must use escapes; others vary.
 	(Str.from_utf8(out) ?? "")
-	|> Str.replace_each("\u(0)", "\\0")
-	|> Str.replace_each("\u(1b)", "\\e")
-	|> Str.replace_each("\u(85)", "\\N")
-	|> Str.replace_each("\u(a0)", "\\_")
-	|> Str.replace_each("\u(2028)", "\\L")
-	|> Str.replace_each("😀", "\\U0001F600")
-	|> Str.replace_each("é", "\\u00E9")
-	|> Str.replace_each("/", "\\/")
+		|> Str.replace_each("\u(0)", "\\0")
+		|> Str.replace_each("\u(1b)", "\\e")
+		|> Str.replace_each("\u(85)", "\\N")
+		|> Str.replace_each("\u(a0)", "\\_")
+		|> Str.replace_each("\u(2028)", "\\L")
+		|> Str.replace_each("😀", "\\U0001F600")
+		|> Str.replace_each("é", "\\u00E9")
+		|> Str.replace_each("/", "\\/")
 }
 
 ## Strings with characters YAML only allows escaped, or line separators.
@@ -240,12 +243,12 @@ null_texts = ["null", "Null", "NULL", "~"]
 
 bool_texts : List({ text : Str, value : Bool })
 bool_texts = [
-	{ text: "true", value: Bool.True },
-	{ text: "True", value: Bool.True },
-	{ text: "TRUE", value: Bool.True },
-	{ text: "false", value: Bool.False },
-	{ text: "False", value: Bool.False },
-	{ text: "FALSE", value: Bool.False },
+	{ text: "true", value: True },
+	{ text: "True", value: True },
+	{ text: "TRUE", value: True },
+	{ text: "false", value: False },
+	{ text: "False", value: False },
+	{ text: "FALSE", value: False },
 ]
 
 ## A single-line scalar. `empty_null` allows an empty value to mean null.
@@ -257,27 +260,27 @@ gen_scalar = |start, flow, empty_null| {
 	match kind.n {
 		0 => {
 			if empty_null and choice.n % 3 == 0 {
-				{ value: Null, text: "", cur, block_scalar: Bool.False }
+				{ value: Null, text: "", cur, block_scalar: False }
 			} else {
-				{ value: Null, text: null_texts.get(choice.n % null_texts.len()) ?? "null", cur, block_scalar: Bool.False }
+				{ value: Null, text: null_texts.get(choice.n % null_texts.len()) ?? "null", cur, block_scalar: False }
 			}
 		}
 		1 => {
-			entry = bool_texts.get(choice.n % bool_texts.len()) ?? { text: "true", value: Bool.True }
-			{ value: Bool(entry.value), text: entry.text, cur, block_scalar: Bool.False }
+			entry = bool_texts.get(choice.n % bool_texts.len()) ?? { text: "true", value: True }
+			{ value: Bool(entry.value), text: entry.text, cur, block_scalar: False }
 		}
 		2 => {
 			entry = int_texts.get(choice.n % int_texts.len()) ?? { text: "0", value: 0 }
-			{ value: Int(entry.value), text: entry.text, cur, block_scalar: Bool.False }
+			{ value: Int(entry.value), text: entry.text, cur, block_scalar: False }
 		}
 		3 => {
 			entry = float_texts.get(choice.n % float_texts.len()) ?? { text: "1.5", value: 1.5 }
-			{ value: Float(entry.value), text: entry.text, cur, block_scalar: Bool.False }
+			{ value: Float(entry.value), text: entry.text, cur, block_scalar: False }
 		}
 		_ => {
 			generated = gen_string(cur)
 			emitted = emit_string(generated.cur, generated.s, flow)
-			{ value: String(generated.s), text: emitted.text, cur: emitted.cur, block_scalar: Bool.False }
+			{ value: Text(generated.s), text: emitted.text, cur: emitted.cur, block_scalar: False }
 		}
 	}
 }
@@ -333,13 +336,13 @@ count_trailing_empty : List(Str) -> U64
 count_trailing_empty = |parts| {
 	var $count = 0
 	var $index = parts.len()
-	var $done = Bool.False
+	var $done = False
 	while $index > 1 and !$done {
 		if (parts.get($index - 1) ?? "x").is_empty() {
 			$count = $count + 1
 			$index = $index - 1
 		} else {
-			$done = Bool.True
+			$done = True
 		}
 	}
 	$count
@@ -351,7 +354,7 @@ gen_flow : Cur, U64 -> Out
 gen_flow = |start, depth| {
 	kind = pick(start, 4)
 	if depth == 0 or kind.n < 2 {
-		gen_scalar(kind.cur, Bool.True, Bool.False)
+		gen_scalar(kind.cur, True, False)
 	} else if kind.n == 2 {
 		count = pick(kind.cur, 4)
 		var $cur = count.cur
@@ -367,7 +370,7 @@ gen_flow = |start, depth| {
 		}
 		sep = pick($cur, 2)
 		joiner = if sep.n == 0 ", " else ","
-		{ value: Sequence($values), text: "[${Str.join_with($texts, joiner)}]", cur: sep.cur, block_scalar: Bool.False }
+		{ value: Sequence($values), text: "[${Str.join_with($texts, joiner)}]", cur: sep.cur, block_scalar: False }
 	} else {
 		count = pick(kind.cur, 4)
 		var $cur = count.cur
@@ -375,7 +378,7 @@ gen_flow = |start, depth| {
 		var $texts = []
 		var $index = 0
 		while $index < count.n {
-			key = gen_key($cur, Bool.True)
+			key = gen_key($cur, True)
 			item = gen_flow(key.cur, depth - 1)
 			$cur = item.cur
 			if !$entries.any(|e| e.key == key.key) {
@@ -384,7 +387,7 @@ gen_flow = |start, depth| {
 			}
 			$index = $index + 1
 		}
-		{ value: Mapping($entries), text: "{${Str.join_with($texts, ", ")}}", cur: $cur, block_scalar: Bool.False }
+		{ value: Mapping($entries), text: "{${Str.join_with($texts, ", ")}}", cur: $cur, block_scalar: False }
 	}
 }
 
@@ -428,7 +431,7 @@ gen_block_value = |start, indent, depth, in_sequence| {
 		1 | 2 if depth > 0 => {
 			mapping = gen_block_mapping(kind.cur, child, depth - 1)
 			if mapping.entries_text.is_empty() {
-				{ value: Mapping([]), text: " {}", cur: mapping.cur, block_scalar: Bool.False }
+				{ value: Mapping([]), text: " {}", cur: mapping.cur, block_scalar: False }
 			} else if in_sequence and kind.n == 2 {
 				# Compact form: "- key: value" with later keys at indent + 2.
 				{ value: mapping.value, text: " ${Str.join_with(mapping.entries_text, "\n${spaces(child)}")}", cur: mapping.cur, block_scalar: mapping.block_scalar }
@@ -443,7 +446,7 @@ gen_block_value = |start, indent, depth, in_sequence| {
 			column = if indentless indent else child
 			sequence = gen_block_sequence(form.cur, column, depth - 1)
 			if sequence.items_text.is_empty() {
-				{ value: Sequence([]), text: " []", cur: sequence.cur, block_scalar: Bool.False }
+				{ value: Sequence([]), text: " []", cur: sequence.cur, block_scalar: False }
 			} else if in_sequence and form.n == 2 {
 				# Compact form: "- - item" with later items at indent + 2.
 				{ value: sequence.value, text: " ${Str.join_with(sequence.items_text, "\n${spaces(child)}")}", cur: sequence.cur, block_scalar: sequence.block_scalar }
@@ -453,26 +456,26 @@ gen_block_value = |start, indent, depth, in_sequence| {
 		}
 		4 if depth > 0 => {
 			flow = gen_flow(kind.cur, depth)
-			{ value: flow.value, text: " ${flow.text}", cur: flow.cur, block_scalar: Bool.False }
+			{ value: flow.value, text: " ${flow.text}", cur: flow.cur, block_scalar: False }
 		}
 		5 => {
 			generated = gen_string(kind.cur)
 			# Explicit indentation indicators are relative to the parent node's
 			# indentation, which is unambiguous for mapping values only.
 			match emit_literal(generated.cur, generated.s, indent, !in_sequence) {
-				Ok(literal) => { value: String(generated.s), text: " ${literal.text}", cur: literal.cur, block_scalar: Bool.True }
+				Ok(literal) => { value: Text(generated.s), text: " ${literal.text}", cur: literal.cur, block_scalar: True }
 				Err(_) => {
 					quoted = escape_double(generated.s)
-					{ value: String(generated.s), text: " ${quoted}", cur: generated.cur, block_scalar: Bool.False }
+					{ value: Text(generated.s), text: " ${quoted}", cur: generated.cur, block_scalar: False }
 				}
 			}
 		}
 		_ => {
-			scalar = gen_scalar(kind.cur, Bool.False, Bool.True)
+			scalar = gen_scalar(kind.cur, False, True)
 			note = pick(scalar.cur, 4)
 			trailer = if note.n == 0 and !scalar.text.is_empty() " # note" else ""
 			text = if scalar.text.is_empty() trailer else " ${scalar.text}${trailer}"
-			{ value: scalar.value, text, cur: note.cur, block_scalar: Bool.False }
+			{ value: scalar.value, text, cur: note.cur, block_scalar: False }
 		}
 	}
 }
@@ -484,11 +487,11 @@ gen_block_mapping = |start, indent, depth| {
 	var $cur = count.cur
 	var $entries = []
 	var $texts = []
-	var $last_block = Bool.False
+	var $last_block = False
 	var $index = 0
 	while $index < count.n {
-		key = gen_key($cur, Bool.False)
-		value = gen_block_value(key.cur, indent, depth, Bool.False)
+		key = gen_key($cur, False)
+		value = gen_block_value(key.cur, indent, depth, False)
 		gap = comment_line(value.cur, indent)
 		$cur = gap.cur
 		if !$entries.any(|e| e.key == key.key) {
@@ -509,10 +512,10 @@ gen_block_sequence = |start, indent, depth| {
 	var $cur = count.cur
 	var $values = []
 	var $texts = []
-	var $last_block = Bool.False
+	var $last_block = False
 	var $index = 0
 	while $index < count.n {
-		value = gen_block_value($cur, indent, depth, Bool.True)
+		value = gen_block_value($cur, indent, depth, True)
 		gap = comment_line(value.cur, indent)
 		$cur = gap.cur
 		$values = $values.append(value.value)
@@ -537,7 +540,7 @@ generate = |bytes| {
 			0 | 1 => {
 				mapping = gen_block_mapping(marker.cur, 0, depth)
 				if mapping.entries_text.is_empty() {
-					{ value: Mapping([]), text: "{}", block_scalar: Bool.False }
+					{ value: Mapping([]), text: "{}", block_scalar: False }
 				} else {
 					{ value: mapping.value, text: Str.join_with(mapping.entries_text, "\n"), block_scalar: mapping.block_scalar }
 				}
@@ -545,38 +548,141 @@ generate = |bytes| {
 			2 | 3 => {
 				sequence = gen_block_sequence(marker.cur, 0, depth)
 				if sequence.items_text.is_empty() {
-					{ value: Sequence([]), text: "[]", block_scalar: Bool.False }
+					{ value: Sequence([]), text: "[]", block_scalar: False }
 				} else {
 					{ value: sequence.value, text: Str.join_with(sequence.items_text, "\n"), block_scalar: sequence.block_scalar }
 				}
 			}
 			4 => {
 				flow = gen_flow(marker.cur, depth)
-				{ value: flow.value, text: flow.text, block_scalar: Bool.False }
+				{ value: flow.value, text: flow.text, block_scalar: False }
 			}
 			_ => {
-				scalar = gen_scalar(marker.cur, Bool.False, Bool.False)
-				{ value: scalar.value, text: scalar.text, block_scalar: Bool.False }
+				scalar = gen_scalar(marker.cur, False, False)
+				{ value: scalar.value, text: scalar.text, block_scalar: False }
 			}
 		}
 	prefix = if marker.n % 2 == 1 "---\n" else ""
 	suffix = if marker.n >= 2 "\n...\n" else "\n"
-	{ yaml: "${prefix}${body.text}${suffix}", expected: body.value }
+	typed = gen_record({ bytes, pos: 0 })
+	{ yaml: "${prefix}${body.text}${suffix}", expected: body.value, record_yaml: typed.text, record: typed.value }
+}
+
+## Typed decoding
+
+## A record type with every shape `Yaml.decode` maps: text, numbers,
+## booleans, a list, a nested record and absent optional fields.
+Rec : {
+	name : Str,
+	count : I64,
+	ratio : F64,
+	flag : Bool,
+	tags : List(Str),
+	inner : { level : U8, note : Try(Str, [Missing]) },
+	gone : Try(Str, [Missing]),
+}
+
+## Decode property: fuzzer bytes choose a `Rec` value and how to write it
+## (entry order, scalar styles, flow or block lists, unknown keys). Decoding
+## the text into `Rec` must give back exactly that value.
+gen_record : Cur -> { text : Str, value : Rec }
+gen_record = |start| {
+	name = gen_string(start)
+	name_text = emit_string(name.cur, name.s, False)
+	count = pick(name_text.cur, int_texts.len())
+	count_entry = int_texts.get(count.n) ?? { text: "0", value: 0 }
+	finite_floats = float_texts.keep_if(|entry| entry.value.is_finite())
+	ratio = pick(count.cur, finite_floats.len())
+	ratio_entry = finite_floats.get(ratio.n) ?? { text: "1.5", value: 1.5 }
+	flag = pick(ratio.cur, bool_texts.len())
+	flag_entry = bool_texts.get(flag.n) ?? { text: "true", value: True }
+	tag_count = pick(flag.cur, 4)
+	block_tags = pick(tag_count.cur, 2)
+
+	var $cur = block_tags.cur
+	var $tags = []
+	var $tag_texts = []
+	var $index = 0
+	while $index < tag_count.n {
+		tag = gen_string($cur)
+		emitted = emit_string(tag.cur, tag.s, block_tags.n == 0)
+		$tags = $tags.append(tag.s)
+		$tag_texts = $tag_texts.append(emitted.text)
+		$cur = emitted.cur
+		$index = $index + 1
+	}
+
+	tags_text =
+		if $tags.is_empty() {
+			"tags: []"
+		} else if block_tags.n == 0 {
+			"tags: [${Str.join_with($tag_texts, ", ")}]"
+		} else {
+			"tags:\n${Str.join_with($tag_texts.map(|t| "  - ${t}"), "\n")}"
+		}
+
+	level = pick($cur, 256)
+	has_note = pick(level.cur, 2)
+	note = gen_string(has_note.cur)
+	note_text = emit_string(note.cur, note.s, False)
+	inner_text =
+		if has_note.n == 0 {
+			"inner:\n  level: ${level.n.to_str()}"
+		} else {
+			"inner:\n  note: ${note_text.text}\n  level: ${level.n.to_str()}"
+		}
+	extra = pick(note_text.cur, 3)
+	extra_text =
+		match extra.n {
+			0 => []
+			1 => ["unknown: [1, {a: b}]"]
+			_ => ["unknown:\n  - x\n  - y: z"]
+		}
+	entries = [
+		"name: ${name_text.text}",
+		"count: ${count_entry.text}",
+		"ratio: ${ratio_entry.text}",
+		"flag: ${flag_entry.text}",
+		tags_text,
+		inner_text,
+	].concat(extra_text)
+	rotation = pick(extra.cur, entries.len())
+	ordered = entries.drop_first(rotation.n).concat(entries.take_first(rotation.n))
+	value = {
+		name: name.s,
+		count: count_entry.value,
+		ratio: ratio_entry.value,
+		flag: flag_entry.value,
+		tags: $tags,
+		inner: { level: U64.to_u8_wrap(level.n), note: if has_note.n == 0 Err(Missing) else Ok(note.s) },
+		gone: Err(Missing),
+	}
+
+	{ text: "${Str.join_with(ordered, "\n")}\n", value }
 }
 
 test : Input -> Fuzz.Outcome
 test = |input| {
 	match Yaml.parse_str(input.yaml) {
-		Ok(actual) if actual == input.expected => Fuzz.keep
+		Ok(actual) if actual == input.expected => {}
 		actual => crash "round trip mismatch\n--- yaml ---\n${input.yaml}\n--- expected ---\n${Yaml.to_inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
+	}
+
+	decoded : Try(Rec, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	decoded = Yaml.decode(input.record_yaml)
+
+	if decoded == Ok(input.record) {
+		Fuzz.keep
+	} else {
+		crash "decode mismatch\n--- yaml ---\n${input.record_yaml}\n--- expected ---\n${Str.inspect(input.record)}\n--- actual ---\n${Str.inspect(decoded)}"
 	}
 }
 
-show_result : Try(Yaml, [YamlError(Yaml.Error)]) -> Str
+show_result : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(YamlError(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

@@ -11,7 +11,7 @@ import parser.Yaml
 ## - LF and CRLF line endings give the same result;
 ## - a leading "---" marker gives the same value, with errors one line lower.
 
-Parsed : Try(Yaml, [YamlError(Yaml.Error)])
+Parsed : Try(Yaml, [InvalidYaml(Yaml.Error)])
 
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
@@ -35,20 +35,20 @@ line_lengths : List(U8) -> List(U64)
 line_lengths = |bytes| {
 	var $lengths = []
 	var $current = 0
-	var $previous_cr = Bool.False
+	var $previous_cr = False
 	var $index = 0
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '\n' and $previous_cr {
 			# The CR already ended this line.
-			$previous_cr = Bool.False
+			$previous_cr = False
 		} else if byte == '\n' or byte == '\r' {
 			$lengths = $lengths.append($current)
 			$current = 0
 			$previous_cr = byte == '\r'
 		} else {
 			$current = $current + 1
-			$previous_cr = Bool.False
+			$previous_cr = False
 		}
 		$index = $index + 1
 	}
@@ -59,7 +59,7 @@ check_location : List(U8), Parsed -> {}
 check_location = |bytes, result| {
 	match result {
 		Ok(_) => {}
-		Err(YamlError(error)) => {
+		Err(InvalidYaml(error)) => {
 			lengths = line_lengths(bytes)
 			if error.line == 0 or error.column == 0 {
 				crash "YAML error locations must be one-based: ${show(result)}"
@@ -98,8 +98,8 @@ check_document_start = |bytes, input, result| {
 		consistent =
 			match (result, marked) {
 				(Ok(plain), Ok(with_marker)) => Yaml.to_inspect(plain) == Yaml.to_inspect(with_marker)
-				(Err(YamlError(plain)), Err(YamlError(with_marker))) => plain.line + 1 == with_marker.line and plain.message == with_marker.message
-				_ => Bool.False
+				(Err(InvalidYaml(plain)), Err(InvalidYaml(with_marker))) => plain.line + 1 == with_marker.line and plain.message == with_marker.message
+				_ => False
 			}
 		if !consistent {
 			crash "a leading --- changed the result\nplain:  ${show(result)}\nmarked: ${show(marked)}"
@@ -111,7 +111,7 @@ show : Parsed -> Str
 show = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(YamlError(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

@@ -21,7 +21,7 @@ main! = |args| {
   match Yaml.parse_str(input) {
    Ok(value) => { $checksum = $checksum + consume(value)
  $successes = $successes + 1 }
-   Err(YamlError(error)) => { $checksum = $checksum + error.line + error.column }
+   Err(InvalidYaml(error)) => { $checksum = $checksum + error.line + error.column }
   }
  }
  elapsed = Utc.delta_as_nanos(Utc.now!(), start)
@@ -34,7 +34,7 @@ consume = |value| match value {
  Bool(_) => 2
  Int(_) => 3
  Float(_) => 4
- String(text) => text.count_utf8_bytes().to_u64() + 5
+ Text(text) => text.count_utf8_bytes().to_u64() + 5
  Sequence(values) => values.fold(6, |total, child| total + consume(child))
  Mapping(entries) => entries.fold(7, |total, entry| total + entry.key.count_utf8_bytes().to_u64() + consume(entry.value))
 }

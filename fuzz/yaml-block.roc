@@ -178,7 +178,7 @@ generate = |bytes| {
 	last_white = (content.last() ?? "x").to_utf8().all(|b| b == ' ' or b == '\t')
 	no_break = ending == EofNoBreak and !last_white
 	trailing_kept = if ending == EofNoBreak 0 else trailing_total
-	value = String(expected_value(style, chomp, content, trailing_kept, !no_break))
+	value = Text(expected_value(style, chomp, content, trailing_kept, !no_break))
 	sibling_indent = spaces(base)
 	tail =
 		match ending {
@@ -226,11 +226,11 @@ test = |input| {
 	}
 }
 
-show_result : Try(Yaml, [YamlError(Yaml.Error)]) -> Str
+show_result : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(YamlError(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

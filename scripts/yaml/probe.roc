@@ -17,7 +17,7 @@ main! = |_| {
 		Ok(input) => {
 			match Yaml.parse_str(input) {
 				Ok(value) => Stdout.line!("{\"status\":\"ok\",\"value\":${encode(value)}}")?
-				Err(YamlError(error)) =>
+				Err(InvalidYaml(error)) =>
 					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(error.message)}}")?
 			}
 		}
@@ -32,7 +32,7 @@ encode = |value| {
 		Bool(boolean) => if boolean "[\"bool\",true]" else "[\"bool\",false]"
 		Int(integer) => "[\"int\",${json_string(integer.to_str())}]"
 		Float(float) => "[\"float\",${json_string(float.to_str())}]"
-		String(text) => "[\"string\",${json_string(text)}]"
+		Text(text) => "[\"string\",${json_string(text)}]"
 		Sequence(values) => "[\"sequence\",[${values.map(encode) |> Str.join_with(",")}]]"
 		Mapping(entries) => "[\"mapping\",[${entries.map(|entry| "[[\"string\",${json_string(entry.key)}],${encode(entry.value)}]") |> Str.join_with(",")}]]"
 	}

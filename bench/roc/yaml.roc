@@ -15,7 +15,7 @@ parse : Str -> Try(U64, U64)
 parse = |input| {
 	match Yaml.parse_str(input) {
 		Ok(value) => Ok(consume(value))
-		Err(YamlError(error)) => Err(error.line + error.column)
+		Err(InvalidYaml(error)) => Err(error.line + error.column)
 	}
 }
 
@@ -25,7 +25,7 @@ consume = |value| match value {
 	Bool(_) => 2
 	Int(_) => 3
 	Float(_) => 4
-	String(text) => text.count_utf8_bytes().to_u64() + 5
+	Text(text) => text.count_utf8_bytes().to_u64() + 5
 	Sequence(values) => values.fold(6, |total, child| total + consume(child))
 	Mapping(entries) => entries.fold(7, |total, entry| total + entry.key.count_utf8_bytes().to_u64() + consume(entry.value))
 }
