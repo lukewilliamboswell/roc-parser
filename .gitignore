@@ -9,3 +9,4 @@ dist/
 .roc-parser-tmp/
 __pycache__/
 *.py[cod]
+.roc-fuzz/

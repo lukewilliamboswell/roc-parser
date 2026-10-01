@@ -61,6 +61,12 @@ class SeedCorpusTests(unittest.TestCase):
         sources = {path.stem for path in run_fuzz.FUZZ_ROOT.glob("*.roc")} - not_targets
         self.assertEqual(sources, set(run_fuzz.TARGET_ORDER))
 
+    def test_workflow_matrix_lists_every_target(self) -> None:
+        workflow = (run_fuzz.ROOT / ".github" / "workflows" / "fuzz.yml").read_text(encoding="utf-8")
+        matrix = workflow.split("        target:\n", 1)[1].split("    steps:", 1)[0]
+        listed = [line.strip()[2:] for line in matrix.splitlines() if line.strip().startswith("- ")]
+        self.assertEqual(listed, list(run_fuzz.TARGET_ORDER))
+
     def test_raw_seeds_are_plain_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             corpus = run_fuzz.prepare_corpus("yaml-raw", Path(directory) / "corpus")
