@@ -1055,11 +1055,15 @@ scalar_can_start = |prefix, in_flow| {
 	match prefix.last() {
 		Err(_) => Bool.True
 		Ok(previous) if in_flow and (previous == '[' or previous == '{' or previous == ',') => Bool.True
-		Ok(previous) if previous == ' ' or previous == '\t' =>
-			match trim_end_spaces(prefix).last() {
+		Ok(previous) if previous == ' ' or previous == '\t' => {
+			trimmed = trim_end_spaces(prefix)
+			# "-" and "?" are indicators only on their own, not inside text like "b-".
+			standalone = trimmed.len() < 2 or starts_with_space(trimmed.drop_first(trimmed.len() - 2))
+			match trimmed.last() {
 				Err(_) => Bool.True
-				Ok(indicator) => indicator == ':' or indicator == '-' or indicator == '?' or (in_flow and (indicator == ',' or indicator == '[' or indicator == '{'))
+				Ok(indicator) => indicator == ':' or ((indicator == '-' or indicator == '?') and standalone) or (in_flow and (indicator == ',' or indicator == '[' or indicator == '{'))
 			}
+		}
 
 		_ => Bool.False
 	}
@@ -1569,6 +1573,12 @@ expect {
 		{ key: "a[b", value: String("x]{") },
 		{ key: "list", value: Sequence([String("a"), String("b'c"), String("d, e")]) },
 	])
+}
+
+## A dash inside plain text is not an indicator that can start a quoted scalar.
+expect {
+	actual = Yaml.parse_str("b- \"q: x\n")?
+	actual == Mapping([{ key: "b- \"q", value: String("x") }])
 }
 
 ## A tab before a document marker is not a document marker.
