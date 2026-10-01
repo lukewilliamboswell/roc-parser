@@ -138,7 +138,7 @@ size_from : List(U8) -> U64
 size_from = |bytes| {
 	high = U8.to_u64(bytes.get(1) ?? 0)
 	low = U8.to_u64(bytes.get(2) ?? 0)
-	(high * 256 + low) * 2 + 1
+	high * 64 + low + 1
 }
 
 pathological : List(U8) -> Fuzz.Outcome
