@@ -562,10 +562,10 @@ take_frontmatter = |lines| {
 	if (lines.first() ?? []) != "---".to_utf8() {
 		{ frontmatter: Err(NotFound), lines }
 	} else {
-		match lines.drop_first(1).find_first_index(|line| line == "---".to_utf8()) {
+		match drop_n(lines, 1).find_first_index(|line| line == "---".to_utf8()) {
 			Ok(index) => {
 				raw = lines.sublist({ start: 1, len: index }).fold([], |acc, line| acc.concat(line).append('\n'))
-				{ frontmatter: Ok(bytes_to_str(raw)), lines: lines.drop_first(index + 2) }
+				{ frontmatter: Ok(bytes_to_str(raw)), lines: drop_n(lines, index + 2) }
 			}
 
 			Err(_) =>
@@ -734,7 +734,7 @@ process_line = |initial| {
 			FencedBlock(_) => add_line_to_tip($s)
 			IndentedBlock => add_line_to_tip($s)
 			HtmlBlockOpen(html_type) => {
-				rest = $s.line.drop_first($s.offset)
+				rest = drop_n($s.line, $s.offset)
 				added = add_line_to_tip($s)
 				if html_type <= 5 and html_block_ends(html_type, rest) {
 					close_tip(added, added.line_number)
@@ -854,7 +854,7 @@ continue_block = |s, open, index| {
 			}
 
 		FencedBlock(fence) => {
-			rest = s.line.drop_first(ns.pos)
+			rest = drop_n(s.line, ns.pos)
 			if ns.indent <= 3 and is_closing_fence(rest, fence.fence_char, fence.fence_len) {
 				closed = close_tip(set_tip_last(s, s.line_number), s.line_number)
 				Consumed(closed)
@@ -889,7 +889,7 @@ continue_block = |s, open, index| {
 			if ns.blank NotMatched else Matched(s)
 
 		TableBlock(_) =>
-			if ns.blank or split_table_row(s.line.drop_first(ns.pos)).is_empty() {
+			if ns.blank or split_table_row(drop_n(s.line, ns.pos)).is_empty() {
 				NotMatched
 			} else {
 				Matched(s)
@@ -1002,9 +1002,9 @@ pop_open = |s| { ..s, depth: s.depth - 1 }
 line_rest : BlockState -> Utf8.Bytes
 line_rest = |s| {
 	if s.partial_tab {
-		List.repeat(' ', 4 - (s.column % 4)).concat(s.line.drop_first(s.offset + 1))
+		List.repeat(' ', 4 - (s.column % 4)).concat(drop_n(s.line, s.offset + 1))
 	} else {
-		s.line.drop_first(s.offset)
+		drop_n(s.line, s.offset)
 	}
 }
 
@@ -1090,7 +1090,7 @@ finish_leaf = |open, lines| {
 		IndentedBlock => {
 			var $lines = lines
 			while bytes_are_blank($lines.last() ?? [0]) {
-				$lines = $lines.drop_last(1)
+				$lines = drop_last_n($lines, 1)
 			}
 			[Leaf(Code({ info: "", pre: bytes_to_str(join_lines_with_newlines($lines)) }), span)]
 		}
@@ -1255,7 +1255,7 @@ join_with_newlines = |lines| {
 try_block_starts : BlockState, U64, Nonspace -> StartResult
 try_block_starts = |s, container, ns| {
 	container_kind = (s.stack.get(container) ?? new_open(DocumentBlock, 0)).kind
-	rest = s.line.drop_first(ns.pos)
+	rest = drop_n(s.line, ns.pos)
 	indented = ns.indent >= 4
 	first = rest.first() ?? 0
 
@@ -1322,7 +1322,7 @@ try_after_setext : BlockState, U64, Nonspace -> StartResult
 try_after_setext = |s, container, ns| {
 	container_open = s.stack.get(container) ?? new_open(DocumentBlock, 0)
 	container_kind = container_open.kind
-	rest = s.line.drop_first(ns.pos)
+	rest = drop_n(s.line, ns.pos)
 	indented = ns.indent >= 4
 
 	if !indented and is_thematic_break(rest) {
@@ -1350,7 +1350,7 @@ try_after_setext = |s, container, ns| {
 				if !header.is_empty() and header.len() == align.len() {
 					# The paragraph keeps its other lines; its last line is the header.
 					lines = tip_lines(s)
-					before = { ..set_tip_last(s, s.line_number - 2), leaf_reset: True, leaf_added: lines.drop_last(1) }
+					before = { ..set_tip_last(s, s.line_number - 2), leaf_reset: True, leaf_added: drop_last_n(lines, 1) }
 					closed = close_tip(before, s.line_number - 2)
 					table = { ..new_open(TableBlock({ align, header }), s.line_number - 1), last: s.line_number }
 					return LineDone(push_open(closed, table))
@@ -1396,7 +1396,7 @@ start_list_item = |s, container_kind, ns, marker| {
 	# GFM task list item: `[ ]`, `[x]` or `[X]` then a space or tab opens the
 	# item's first paragraph.
 	task_ns = find_nonspace(item)
-	task_rest = item.line.drop_first(task_ns.pos)
+	task_rest = drop_n(item.line, task_ns.pos)
 	match task_rest {
 		['[', mark, ']', after, ..] if task_ns.indent < 4 and (mark == ' ' or mark == 'x' or mark == 'X') and is_space_or_tab(after) => {
 			task = if mark == ' ' Unchecked else Checked
@@ -1446,13 +1446,13 @@ parse_list_marker = |rest, interrupts_paragraph| {
 			digits = count_leading_digits(rest)
 			delimiter = rest.get(digits) ?? 0
 			if digits >= 1 and digits <= 9 and (delimiter == '.' or delimiter == ')') {
-				Ok({ info: { ordered: True, marker: delimiter, start: digits_to_u64(rest.take_first(digits)) }, width: digits + 1 })
+				Ok({ info: { ordered: True, marker: delimiter, start: digits_to_u64(take_n(rest, digits)) }, width: digits + 1 })
 			} else {
 				Err(NotFound)
 			}
 		}
 	marker = parsed?
-	after = rest.drop_first(marker.width)
+	after = drop_n(rest, marker.width)
 	next = after.first() ?? ' '
 	if !is_space_or_tab(next) {
 		Err(NotFound)
@@ -1476,7 +1476,7 @@ count_leading_digits = |bytes| {
 parse_atx_heading : Utf8.Bytes -> Try(Markdown, [NotFound])
 parse_atx_heading = |rest| {
 	hashes = count_leading_byte(rest, '#', 0)
-	after = rest.drop_first(hashes)
+	after = drop_n(rest, hashes)
 	level = heading_level_from_count(hashes)?
 	if !after.is_empty() and !is_space_or_tab(after.first() ?? 0) {
 		Err(NotFound)
@@ -1487,7 +1487,7 @@ parse_atx_heading = |rest| {
 			if closing == content.len() {
 				[]
 			} else if closing > 0 and is_space_or_tab(content.get(content.len() - closing - 1) ?? 0) {
-				trim_end_spaces(content.drop_last(closing))
+				trim_end_spaces(drop_last_n(content, closing))
 			} else {
 				content
 			}
@@ -1509,7 +1509,7 @@ setext_level : Utf8.Bytes -> Try(Markdown.Level, [NotFound])
 setext_level = |rest| {
 	marker = rest.first() ?? 0
 	run = count_leading_byte(rest, marker, 0)
-	if run == 0 or !bytes_are_blank(rest.drop_first(run)) {
+	if run == 0 or !bytes_are_blank(drop_n(rest, run)) {
 		Err(NotFound)
 	} else if marker == '=' {
 		Ok(One)
@@ -1539,7 +1539,7 @@ parse_fence_open : Utf8.Bytes -> Try({ fence_char : U8, fence_len : U64, fence_o
 parse_fence_open = |rest| {
 	fence_char = rest.first() ?? 0
 	fence_len = count_leading_byte(rest, fence_char, 0)
-	info = trim_spaces(rest.drop_first(fence_len))
+	info = trim_spaces(drop_n(rest, fence_len))
 	if fence_len < 3 or (fence_char == '`' and info.contains('`')) {
 		Err(NotFound)
 	} else {
@@ -1550,7 +1550,7 @@ parse_fence_open = |rest| {
 is_closing_fence : Utf8.Bytes, U8, U64 -> Bool
 is_closing_fence = |rest, fence_char, fence_len| {
 	run = count_leading_byte(rest, fence_char, 0)
-	run >= fence_len and bytes_are_blank(rest.drop_first(run))
+	run >= fence_len and bytes_are_blank(drop_n(rest, run))
 }
 
 ## --- HTML blocks (CommonMark 4.6) -------------------------------------------
@@ -1656,8 +1656,8 @@ html_block_start = |rest, allow_type_7| {
 is_type_6_start : Utf8.Bytes -> Bool
 is_type_6_start = |lower| {
 	name_start = if lower.starts_with("</".to_utf8()) 2 else 1
-	name = take_tag_name(lower.drop_first(name_start))
-	after = lower.drop_first(name_start + name.len())
+	name = take_tag_name(drop_n(lower, name_start))
+	after = drop_n(lower, name_start + name.len())
 	next = after.first() ?? ' '
 	html_type_6_tags.any(|tag| tag.to_utf8() == name)
 		and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
@@ -1671,7 +1671,7 @@ take_tag_name = |bytes| {
 			while is_tag_name_byte(bytes.get($len) ?? ' ') {
 				$len = $len + 1
 			}
-			bytes.take_first($len)
+			take_n(bytes, $len)
 		}
 
 		_ => []
@@ -1690,11 +1690,11 @@ is_type_7_start = |rest| {
 		if rest.starts_with("</".to_utf8()) {
 			scan_closing_tag(rest, 2)
 		} else {
-			name = lowercase_ascii(take_tag_name(rest.drop_first(1)))
+			name = lowercase_ascii(take_tag_name(drop_n(rest, 1)))
 			if html_type_1_tags.any(|tag| tag.to_utf8() == name) Err(NotFound) else scan_open_tag(rest, 1)
 		}
 	match end {
-		Ok(len) => bytes_are_blank(rest.drop_first(len))
+		Ok(len) => bytes_are_blank(drop_n(rest, len))
 		Err(_) => False
 	}
 }
@@ -1733,7 +1733,7 @@ contains_bytes = |haystack, needle| {
 split_table_row : Utf8.Bytes -> List(Utf8.Bytes)
 split_table_row = |line| {
 	trimmed = trim_spaces(line)
-	body = if trimmed.first() == Ok('|') trimmed.drop_first(1) else trimmed
+	body = if trimmed.first() == Ok('|') drop_n(trimmed, 1) else trimmed
 	var $cells = []
 	var $current = []
 	var $pending = False
@@ -1784,7 +1784,7 @@ parse_alignment_cell : Utf8.Bytes -> Try(Markdown.Alignment, [NotFound])
 parse_alignment_cell = |cell| {
 	left = cell.first() == Ok(':')
 	right = cell.len() > 1 and cell.last() == Ok(':')
-	dashes = cell.drop_first(if left 1 else 0).drop_last(if right 1 else 0)
+	dashes = drop_last_n(drop_n(cell, if left 1 else 0), if right 1 else 0)
 	if dashes.is_empty() or dashes.any(|byte| byte != '-') {
 		Err(NotFound)
 	} else if left and right {
@@ -1811,7 +1811,7 @@ extract_reference_definitions = |content, refs| {
 		match parse_reference_definition($rest) {
 			Ok(found) => {
 				$refs = if $refs.any(|ref| ref.label == found.def.label) $refs else $refs.append(found.def)
-				$rest = $rest.drop_first(found.consumed)
+				$rest = drop_n($rest, found.consumed)
 			}
 
 			Err(_) => {
@@ -1994,7 +1994,7 @@ trim_trailing_whitespace = |bytes| {
 	while $len > 0 and is_cmark_space(byte_at(bytes, $len - 1)) {
 		$len = $len - 1
 	}
-	bytes.take_first($len)
+	take_n(bytes, $len)
 }
 
 ## Trailing spaces and tabs before a line ending are not part of the text.
@@ -2005,7 +2005,7 @@ trim_trailing_line_space = |bytes| {
 	while $len > 0 and is_line_space(byte_at(bytes, $len - 1)) {
 		$len = $len - 1
 	}
-	bytes.take_first($len)
+	take_n(bytes, $len)
 }
 
 is_line_space : U8 -> Bool
@@ -2116,7 +2116,7 @@ scan_inlines = |input, refs| {
 				Ok(opener) => {
 					depth = $brackets.len() - 1
 					active = opener.image or depth >= $link_floor
-					$brackets = $brackets.drop_last(1)
+					$brackets = drop_last_n($brackets, 1)
 					$link_floor = min_u64($link_floor, $brackets.len())
 					# A link whose content is already as deep as allowed stays text.
 					resolved =
@@ -2129,8 +2129,8 @@ scan_inlines = |input, refs| {
 						Ok(found) => {
 							# Consume the content slice before truncating, so the
 							# item list stays uniquely owned and is not copied.
-							content = process_emphasis($items.drop_first(opener.item + 1), max_inline_nesting - 1)
-							$items = $items.take_first(opener.item)
+							content = process_emphasis(drop_n($items, opener.item + 1), max_inline_nesting - 1)
+							$items = take_n($items, opener.item)
 							node =
 								if opener.image {
 									Image({ alt: content.nodes, target: found.target })
@@ -2214,7 +2214,7 @@ scan_inlines = |input, refs| {
 					raw = input.sublist({ start: $pos - found.rewind, len: found.end - ($pos - found.rewind) })
 					url = bytes_to_str(raw)
 					node = Link({ label: [Text(url)], target: { href: url, title: Err(Missing) } })
-					$items = flush_chars($items, $text.drop_last(found.rewind)).append(Nested(node, 1))
+					$items = flush_chars($items, drop_last_n($text, found.rewind)).append(Nested(node, 1))
 					$text = []
 					$pos = found.end
 				}
@@ -2524,14 +2524,14 @@ process_emphasis = |items, cap| {
 						Ok(index) => {
 							opener = $stack.get(index) ?? { delim: $closer, at: $out.len() }
 							# Delimiters between the opener and the closer become text.
-							$out = fill_placeholders($out, $stack.drop_first(index + 1))
+							$out = fill_placeholders($out, drop_n($stack, index + 1))
 							$bottoms = $bottoms.map(|bottom| min_u64(bottom, index))
-							$stack = $stack.take_first(index)
+							$stack = take_n($stack, index)
 							depth =
 								if opener.at < $deep_end {
 									cap + 1
 								} else {
-									1 + max_depth($depths.drop_first(opener.at + 1))
+									1 + max_depth(drop_n($depths, opener.at + 1))
 								}
 							if depth > cap {
 								$deep_end = opener.at + 1
@@ -2541,9 +2541,9 @@ process_emphasis = |items, cap| {
 								$searching = $closer.char != '~'
 							} else if $closer.char == '~' {
 								if opener.delim.count == $closer.count {
-									children = merge_text_nodes($out.drop_first(opener.at + 1))
-									$out = $out.take_first(opener.at).append(Strikethrough(children))
-									$depths = $depths.take_first(opener.at).append(depth)
+									children = merge_text_nodes(drop_n($out, opener.at + 1))
+									$out = take_n($out, opener.at).append(Strikethrough(children))
+									$depths = take_n($depths, opener.at).append(depth)
 									$closer = { ..$closer, count: 0 }
 								} else {
 									# cmark-gfm: tilde runs of different lengths do not
@@ -2554,15 +2554,15 @@ process_emphasis = |items, cap| {
 								$searching = False
 							} else {
 								used = if $closer.count >= 2 and opener.delim.count >= 2 2 else 1
-								children = merge_text_nodes($out.drop_first(opener.at + 1))
+								children = merge_text_nodes(drop_n($out, opener.at + 1))
 								node = if used == 2 Strong(children) else Emphasis(children)
 								remaining = opener.delim.count - used
 								if remaining == 0 {
-									$out = $out.take_first(opener.at).append(node)
-									$depths = $depths.take_first(opener.at).append(depth)
+									$out = take_n($out, opener.at).append(node)
+									$depths = take_n($depths, opener.at).append(depth)
 								} else {
-									$out = $out.take_first(opener.at).append(Text("")).append(node)
-									$depths = $depths.take_first(opener.at).append(0).append(depth)
+									$out = take_n($out, opener.at).append(Text("")).append(node)
+									$depths = take_n($depths, opener.at).append(0).append(depth)
 									$stack = $stack.append({ delim: { ..opener.delim, count: remaining }, at: opener.at })
 								}
 								$closer = { ..$closer, count: $closer.count - used }
@@ -3638,7 +3638,7 @@ autolink_email_text = |text| {
 		if $offset >= $remaining {
 			$running = False
 		} else {
-			match find_bytes(data.take_first($start + $remaining), $start + $offset, ['@']) {
+			match find_bytes(take_n(data, $start + $remaining), $start + $offset, ['@']) {
 				Err(_) => {
 					$running = False
 				}
@@ -4130,7 +4130,7 @@ inline_depth = |nodes| {
 	var $max = 0
 	while !$pending.is_empty() {
 		level = $pending.last() ?? { nodes: [], depth: 0 }
-		$pending = $pending.drop_last(1)
+		$pending = drop_last_n($pending, 1)
 		for node in level.nodes {
 			children =
 				match node {
@@ -4520,3 +4520,21 @@ innermost = |blocks| {
 ## (roc#11966), and Markdown input is almost always valid UTF-8.
 bytes_to_str : Utf8.Bytes -> Str
 bytes_to_str = |bytes| Str.from_utf8(bytes) ?? Str.from_utf8_lossy(bytes)
+
+## `List.take_first`, `drop_first` and `drop_last` copy the list instead of
+## slicing it once they have several call sites (roc-lang/roc#11965);
+## `List.sublist` does not.
+take_n : List(a), U64 -> List(a)
+take_n = |list, n| list.sublist({ start: 0, len: n })
+
+drop_n : List(a), U64 -> List(a)
+drop_n = |list, n| {
+	len = list.len()
+	if n >= len [] else list.sublist({ start: n, len: len - n })
+}
+
+drop_last_n : List(a), U64 -> List(a)
+drop_last_n = |list, n| {
+	len = list.len()
+	if n >= len [] else list.sublist({ start: 0, len: len - n })
+}
