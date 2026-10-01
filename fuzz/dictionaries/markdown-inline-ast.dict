@@ -1,0 +1,4 @@
+kind_choice="\x05"
+link_choice="\x08"
+image_choice="\x09"
+doc_mode="\x00"

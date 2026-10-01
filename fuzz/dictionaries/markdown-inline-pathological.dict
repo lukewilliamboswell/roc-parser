@@ -1,0 +1,4 @@
+nested="\x00\x00\x1f\xff"
+interleave="\x23\x05\x1f\xff"
+brackets="[a"
+stars="*"

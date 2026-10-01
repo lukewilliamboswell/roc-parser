@@ -32,7 +32,13 @@ main! = |_| {
 
 run_case : List(U8), List(U8) -> Str
 run_case = |mode, body| {
-	if mode == "inline".to_utf8() {
+	if mode == "count".to_utf8() {
+		# Timing mode: parse and count nodes without building JSON.
+		match String.parse_utf8(Markdown.inlines, body) {
+			Ok(nodes) => "{\"status\":\"ok\",\"nodes\":${count_nodes(nodes).to_str()}}"
+			Err(_) => "{\"status\":\"error\"}"
+		}
+	} else if mode == "inline".to_utf8() {
 		match String.parse_utf8(Markdown.inlines, body) {
 			Ok(nodes) => "{\"status\":\"ok\",\"inlines\":${encode_inlines(nodes)}}"
 			Err(_) => "{\"status\":\"error\"}"
@@ -70,6 +76,25 @@ encode_inline = |node| {
 		HardBreak => "[\"br\"]"
 		HtmlInline(html) => "[\"html\",${json_string(html)}]"
 	}
+}
+
+count_nodes : List(Markdown.Inline) -> U64
+count_nodes = |nodes| {
+	nodes.fold(
+		0,
+		|sum, node| {
+			children =
+				match node {
+					Strong(inner) => count_nodes(inner)
+					Emphasis(inner) => count_nodes(inner)
+					Strikethrough(inner) => count_nodes(inner)
+					Link({ label, .. }) => count_nodes(label)
+					Image({ alt, .. }) => count_nodes(alt)
+					_ => 0
+				}
+			sum + 1 + children
+		},
+	)
 }
 
 encode_title : [Some(Str), None] -> Str

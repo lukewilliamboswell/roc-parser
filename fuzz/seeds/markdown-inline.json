@@ -6,5 +6,16 @@
   "<https://example.com> and www.example.com",
   "one  \ntwo\\\nthree",
   "Hello <span>raw html</span>",
-  "unclosed **emphasis [link](target"
+  "unclosed **emphasis [link](target",
+  "*foo**bar**baz* ***a** b* foo******bar*********baz",
+  "_foo_bar_ *(*foo*)* __a__b __a __b__ c__",
+  "``foo`bar`` ` `` ` `a``b`` c",
+  "\\*not\\* &copy; &#35; &#X22; &#0; &nosuch; &#87654321;",
+  "[a](<b c> 'd') [e](f(g)h) [i](<j)k>) [l](m \"n\\\"o\")",
+  "[foo [bar](/u)](/v) ![a [b](/u)](/v) *[foo*](/u) [foo`](/u)`",
+  "<a b='c' d> <!-- x --> <!--> <?p?> <!X y> <![CDATA[z]]> </a >",
+  "~~a~ b~~ ~a~~b~ ~~a ~b~ c~~ x~~y~~z",
+  "(www.a.b/c?d!) http://x.y/(z)) a.b+c@d.ef. mailto:a@b.co xmpp:a@b.co/r",
+  "*£*bravo a *b* α*β*γ 「*x*」",
+  "a\r\nb  \r\nc\\\r\nd\re"
 ]
