@@ -2097,81 +2097,128 @@ is_white = |byte| byte == ' ' or byte == '\t'
 
 split_mapping_entry : Utf8.Bytes -> Try({ key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }, [NotFound])
 split_mapping_entry = |bytes| {
-	find_mapping_colon(bytes, bytes, NoQuote, False, 0, 0, 0)
-}
-
-find_mapping_colon : Utf8.Bytes, Utf8.Bytes, Quote, Bool, U64, U64, U64 -> Try({ key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }, [NotFound])
-find_mapping_colon = |all, bytes, quote, escaped, square_depth, curly_depth, index| {
-	in_flow = square_depth > 0 or curly_depth > 0
-	can_start = |_| scalar_can_start(all.sublist({ start: 0, len: index }), in_flow)
-
-	match bytes {
-		[] => Err(NotFound)
-
-		[':', .. as rest] if quote == NoQuote and !in_flow and (rest.is_empty() or starts_with_space(rest)) =>
-			Ok({ key: all.sublist({ start: 0, len: index }), value: trim_start_spaces(rest), value_column: index + 2 + rest.len() - trim_start_spaces(rest).len() })
-
-		['\\', .. as rest] if quote == DoubleQuote and !escaped =>
-			find_mapping_colon(all, rest, quote, True, square_depth, curly_depth, index + 1)
-
-		['"', .. as rest] if quote == NoQuote and can_start({}) =>
-			find_mapping_colon(all, rest, DoubleQuote, False, square_depth, curly_depth, index + 1)
-
-		['"', .. as rest] if quote == DoubleQuote and !escaped =>
-			find_mapping_colon(all, rest, NoQuote, False, square_depth, curly_depth, index + 1)
-
-		['\'', .. as rest] if quote == NoQuote and can_start({}) =>
-			find_mapping_colon(all, rest, SingleQuote, False, square_depth, curly_depth, index + 1)
-
-		['\'', '\'', .. as rest] if quote == SingleQuote =>
-			find_mapping_colon(all, rest, quote, False, square_depth, curly_depth, index + 2)
-
-		['\'', .. as rest] if quote == SingleQuote =>
-			find_mapping_colon(all, rest, NoQuote, False, square_depth, curly_depth, index + 1)
-
-		['[', .. as rest] if quote == NoQuote and (in_flow or can_start({})) => find_mapping_colon(all, rest, quote, False, square_depth + 1, curly_depth, index + 1)
-		[']', .. as rest] if quote == NoQuote and square_depth > 0 => find_mapping_colon(all, rest, quote, False, square_depth - 1, curly_depth, index + 1)
-		['{', .. as rest] if quote == NoQuote and (in_flow or can_start({})) => find_mapping_colon(all, rest, quote, False, square_depth, curly_depth + 1, index + 1)
-		['}', .. as rest] if quote == NoQuote and curly_depth > 0 => find_mapping_colon(all, rest, quote, False, square_depth, curly_depth - 1, index + 1)
-
-		[_, .. as rest] => find_mapping_colon(all, rest, quote, False, square_depth, curly_depth, index + 1)
+	# One pass over the line by index: quotes and flow brackets are tracked so
+	# a ": " inside them is not the mapping colon.
+	var $quote = NoQuote
+	var $escaped = False
+	var $square_depth = 0
+	var $curly_depth = 0
+	var $index = 0
+	var $found = Err(NotFound)
+	while $found == Err(NotFound) and $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		in_flow = $square_depth > 0 or $curly_depth > 0
+		was_escaped = $escaped
+		$escaped = False
+		if byte == ':' and $quote == NoQuote and !in_flow and ($index + 1 == bytes.len() or starts_with_space(bytes.drop_first($index + 1))) {
+			rest = bytes.drop_first($index + 1)
+			value = trim_start_spaces(rest)
+			$found = Ok({ key: bytes.sublist({ start: 0, len: $index }), value, value_column: $index + 2 + rest.len() - value.len() })
+		} else if byte == '\\' and $quote == DoubleQuote and !was_escaped {
+			$escaped = True
+			$index = $index + 1
+		} else if byte == '"' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: 0, len: $index }), in_flow) {
+			$quote = DoubleQuote
+			$index = $index + 1
+		} else if byte == '"' and $quote == DoubleQuote and !was_escaped {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if byte == '\'' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: 0, len: $index }), in_flow) {
+			$quote = SingleQuote
+			$index = $index + 1
+		} else if byte == '\'' and $quote == SingleQuote and bytes.get($index + 1) == Ok('\'') {
+			$index = $index + 2
+		} else if byte == '\'' and $quote == SingleQuote {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if byte == '[' and $quote == NoQuote and (in_flow or scalar_can_start(bytes.sublist({ start: 0, len: $index }), in_flow)) {
+			$square_depth = $square_depth + 1
+			$index = $index + 1
+		} else if byte == ']' and $quote == NoQuote and $square_depth > 0 {
+			$square_depth = $square_depth - 1
+			$index = $index + 1
+		} else if byte == '{' and $quote == NoQuote and (in_flow or scalar_can_start(bytes.sublist({ start: 0, len: $index }), in_flow)) {
+			$curly_depth = $curly_depth + 1
+			$index = $index + 1
+		} else if byte == '}' and $quote == NoQuote and $curly_depth > 0 {
+			$curly_depth = $curly_depth - 1
+			$index = $index + 1
+		} else {
+			$index = $index + 1
+		}
 	}
+	$found
 }
 
+## The items of a flow collection's inside, split at top-level commas, each
+## trimmed and as a slice of `bytes`.
 split_flow_items : Utf8.Bytes, U64, U64 -> Try(List(Utf8.Bytes), [InvalidYaml(Yaml.Error)])
 split_flow_items = |bytes, line, column| {
-	split_flow_items_help(bytes, [], [], NoQuote, False, 0, 0, line, column)
-}
-
-split_flow_items_help : Utf8.Bytes, Utf8.Bytes, List(Utf8.Bytes), Quote, Bool, U64, U64, U64, U64 -> Try(List(Utf8.Bytes), [InvalidYaml(Yaml.Error)])
-split_flow_items_help = |bytes, current, items, quote, escaped, square_depth, curly_depth, line, column| {
-	match bytes {
-		[] if quote != NoQuote => fail(line, column, "unterminated quoted string in flow collection")
-		[] if square_depth != 0 or curly_depth != 0 => fail(line, column, "unterminated nested flow collection")
-		[] if trim_spaces(current).is_empty() => fail(line, column, "flow collections may not contain an empty item")
-		[] => Ok(items.append(trim_spaces(current)))
-
-		[',', .. as rest] if quote == NoQuote and square_depth == 0 and curly_depth == 0 => {
-			if trim_spaces(current).is_empty() {
-				fail(line, column, "flow collections may not contain an empty item")
-			} else {
-				split_flow_items_help(rest, [], items.append(trim_spaces(current)), quote, False, square_depth, curly_depth, line, column)
+	var $items = []
+	var $start = 0
+	var $quote = NoQuote
+	var $escaped = False
+	var $square_depth = 0
+	var $curly_depth = 0
+	var $index = 0
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		was_escaped = $escaped
+		$escaped = False
+		if byte == ',' and $quote == NoQuote and $square_depth == 0 and $curly_depth == 0 {
+			item = trim_spaces(bytes.sublist({ start: $start, len: $index - $start }))
+			if item.is_empty() {
+				return fail(line, column, "flow collections may not contain an empty item")
 			}
+			$items = $items.append(item)
+			$index = $index + 1
+			$start = $index
+		} else if byte == '\\' and $quote == DoubleQuote and !was_escaped {
+			$escaped = True
+			$index = $index + 1
+		} else if byte == '"' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: $start, len: $index - $start }), True) {
+			$quote = DoubleQuote
+			$index = $index + 1
+		} else if byte == '"' and $quote == DoubleQuote and !was_escaped {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if byte == '\'' and $quote == NoQuote and scalar_can_start(bytes.sublist({ start: $start, len: $index - $start }), True) {
+			$quote = SingleQuote
+			$index = $index + 1
+		} else if byte == '\'' and $quote == SingleQuote and bytes.get($index + 1) == Ok('\'') {
+			$index = $index + 2
+		} else if byte == '\'' and $quote == SingleQuote {
+			$quote = NoQuote
+			$index = $index + 1
+		} else if byte == '[' and $quote == NoQuote {
+			$square_depth = $square_depth + 1
+			$index = $index + 1
+		} else if byte == ']' and $quote == NoQuote and $square_depth == 0 {
+			return fail(line, column, "unexpected closing bracket in flow collection")
+		} else if byte == ']' and $quote == NoQuote {
+			$square_depth = $square_depth - 1
+			$index = $index + 1
+		} else if byte == '{' and $quote == NoQuote {
+			$curly_depth = $curly_depth + 1
+			$index = $index + 1
+		} else if byte == '}' and $quote == NoQuote and $curly_depth == 0 {
+			return fail(line, column, "unexpected closing brace in flow collection")
+		} else if byte == '}' and $quote == NoQuote {
+			$curly_depth = $curly_depth - 1
+			$index = $index + 1
+		} else {
+			$index = $index + 1
 		}
-
-		['\\', .. as rest] if quote == DoubleQuote and !escaped => split_flow_items_help(rest, current.append('\\'), items, quote, True, square_depth, curly_depth, line, column)
-		['"', .. as rest] if quote == NoQuote and scalar_can_start(current, True) => split_flow_items_help(rest, current.append('"'), items, DoubleQuote, False, square_depth, curly_depth, line, column)
-		['"', .. as rest] if quote == DoubleQuote and !escaped => split_flow_items_help(rest, current.append('"'), items, NoQuote, False, square_depth, curly_depth, line, column)
-		['\'', .. as rest] if quote == NoQuote and scalar_can_start(current, True) => split_flow_items_help(rest, current.append('\''), items, SingleQuote, False, square_depth, curly_depth, line, column)
-		['\'', '\'', .. as rest] if quote == SingleQuote => split_flow_items_help(rest, current.concat(['\'', '\'']), items, quote, False, square_depth, curly_depth, line, column)
-		['\'', .. as rest] if quote == SingleQuote => split_flow_items_help(rest, current.append('\''), items, NoQuote, False, square_depth, curly_depth, line, column)
-		['[', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('['), items, quote, False, square_depth + 1, curly_depth, line, column)
-		[']', ..] if quote == NoQuote and square_depth == 0 => fail(line, column, "unexpected closing bracket in flow collection")
-		[']', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append(']'), items, quote, False, square_depth - 1, curly_depth, line, column)
-		['{', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('{'), items, quote, False, square_depth, curly_depth + 1, line, column)
-		['}', ..] if quote == NoQuote and curly_depth == 0 => fail(line, column, "unexpected closing brace in flow collection")
-		['}', .. as rest] if quote == NoQuote => split_flow_items_help(rest, current.append('}'), items, quote, False, square_depth, curly_depth - 1, line, column)
-		[first, .. as rest] => split_flow_items_help(rest, current.append(first), items, quote, False, square_depth, curly_depth, line, column)
+	}
+	last = trim_spaces(bytes.sublist({ start: $start, len: bytes.len() - $start }))
+	if $quote != NoQuote {
+		fail(line, column, "unterminated quoted string in flow collection")
+	} else if $square_depth != 0 or $curly_depth != 0 {
+		fail(line, column, "unterminated nested flow collection")
+	} else if last.is_empty() {
+		fail(line, column, "flow collections may not contain an empty item")
+	} else {
+		Ok($items.append(last))
 	}
 }
 
