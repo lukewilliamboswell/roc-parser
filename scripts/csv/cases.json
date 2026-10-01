@@ -1,0 +1,142 @@
+[
+  {
+    "name": "empty",
+    "input": ""
+  },
+  {
+    "name": "lf-only",
+    "input": "\n"
+  },
+  {
+    "name": "crlf-only",
+    "input": "\r\n"
+  },
+  {
+    "name": "single",
+    "input": "a"
+  },
+  {
+    "name": "trailing-lf",
+    "input": "a\n"
+  },
+  {
+    "name": "trailing-crlf",
+    "input": "a\r\n"
+  },
+  {
+    "name": "trailing-cr",
+    "input": "a\r"
+  },
+  {
+    "name": "two-rows-lf",
+    "input": "a,b\nc,d"
+  },
+  {
+    "name": "two-rows-crlf",
+    "input": "a,b\r\nc,d\r\n"
+  },
+  {
+    "name": "cr-separator",
+    "input": "a\rb"
+  },
+  {
+    "name": "blank-middle",
+    "input": "a\n\nb"
+  },
+  {
+    "name": "empty-fields",
+    "input": ",,"
+  },
+  {
+    "name": "trailing-comma",
+    "input": "a,\n"
+  },
+  {
+    "name": "quoted",
+    "input": "\"a,b\",c"
+  },
+  {
+    "name": "quoted-quote",
+    "input": "\"x\"\"y\""
+  },
+  {
+    "name": "quoted-newline",
+    "input": "\"a\nb\",c"
+  },
+  {
+    "name": "quoted-crlf",
+    "input": "\"a\r\nb\""
+  },
+  {
+    "name": "quoted-empty",
+    "input": "\"\""
+  },
+  {
+    "name": "quoted-then-text",
+    "input": "\"a\"b"
+  },
+  {
+    "name": "unterminated",
+    "input": "\"abc"
+  },
+  {
+    "name": "unterminated-after-comma",
+    "input": "a,\"b"
+  },
+  {
+    "name": "bare-quote-mid",
+    "input": "a\"b,c"
+  },
+  {
+    "name": "space-before-quote",
+    "input": " \"a\",b"
+  },
+  {
+    "name": "space-after-quote",
+    "input": "\"a\" ,b"
+  },
+  {
+    "name": "utf8",
+    "input": "é,😀\n日本,x"
+  },
+  {
+    "name": "tab",
+    "input": "a\tb,c"
+  },
+  {
+    "name": "nul",
+    "input": "a\u0000b"
+  },
+  {
+    "name": "del",
+    "input": "ab"
+  },
+  {
+    "name": "bom",
+    "input": "﻿a,b"
+  },
+  {
+    "name": "ragged",
+    "input": "a\nb,c,d\n\ne"
+  },
+  {
+    "name": "movies",
+    "input": "name,year,actors\r\nAirplane!,1980,\"Robert Hays,Julie Hagerty\"\r\n"
+  },
+  {
+    "name": "quote-at-eof",
+    "input": "\""
+  },
+  {
+    "name": "double-cr",
+    "input": "a\r\rb"
+  },
+  {
+    "name": "cr-lf-split",
+    "input": "a\r\n\nb"
+  },
+  {
+    "name": "lone-quote-field",
+    "input": "a,\",b"
+  }
+]
