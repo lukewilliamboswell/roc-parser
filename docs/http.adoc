@@ -137,8 +137,8 @@ decoded body: Wikipedia
 
 A client may send several requests on one connection without waiting for
 responses. Each parse consumes exactly one message. To keep the bytes that
-follow it, use `Utf8.parse_utf8_partial`, which returns the message as `val`
-and the unread bytes as `input`. Parse `input` again for the next message:
+follow it, use `Utf8.parse_utf8_partial`, which returns the message as `value`
+and the unread bytes as `rest`. Parse `rest` again for the next message:
 
 [source,roc]
 ----

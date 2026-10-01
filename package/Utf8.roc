@@ -51,16 +51,16 @@ Utf8 :: [].{
 	## at_sign : Parser(Utf8.Bytes, [AtSign])
 	## at_sign = Parser.const(AtSign).skip(Utf8.codeunit('@'))
 	##
-	## expect Utf8.parse_str_partial(at_sign, "@").map_ok(|r| r.val) == Ok(AtSign)
+	## expect Utf8.parse_str_partial(at_sign, "@").map_ok(|r| r.value) == Ok(AtSign)
 	## expect Utf8.parse_str_partial(at_sign, "$").is_err()
 	## ```
-	parse_str_partial : Parser(Bytes, a), Str -> Try({ val : a, input : Str }, [ParsingFailure(Str)])
+	parse_str_partial : Parser(Bytes, a), Str -> Try({ value : a, rest : Str }, [ParsingFailure(Str)])
 	parse_str_partial = |parser, input| {
 		parser
 			|> parse_utf8_partial(str_to_raw(input))
 			.map_ok(
-				|{ val: val, input: rest_raw }| {
-					{ val: val, input: str_from_utf8_lossy(rest_raw) }
+				|{ value: val, rest: rest_raw }| {
+					{ value: val, rest: str_from_utf8_lossy(rest_raw) }
 				},
 			)
 	}
@@ -83,7 +83,7 @@ Utf8 :: [].{
 	## Runs a parser against the start of UTF-8 bytes, allowing the parser to consume them only partially.
 	##
 	## Returns the parsed value and the remaining bytes, or `Err(ParsingFailure(msg))`.
-	parse_utf8_partial : Parser(Bytes, a), Bytes -> Try({ val : a, input : Bytes }, [ParsingFailure(Str)])
+	parse_utf8_partial : Parser(Bytes, a), Bytes -> Try({ value : a, rest : Bytes }, [ParsingFailure(Str)])
 	parse_utf8_partial = |parser, input| {
 		parser.parse_partial(input)
 	}
@@ -111,7 +111,7 @@ Utf8 :: [].{
 
 					Ok(start_codeunit) => {
 						if check(start_codeunit) {
-							Ok({ val: start_codeunit, input: input_rest })
+							Ok({ value: start_codeunit, rest: input_rest })
 						} else {
 							other_char = str_from_codeunit(start_codeunit)
 							input_str = excerpt(input)
@@ -144,7 +144,7 @@ Utf8 :: [].{
 						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but input was empty."))
 
 					[first, .. as rest] if first == expected_code_unit =>
-						Ok({ val: expected_code_unit, input: rest })
+						Ok({ value: expected_code_unit, rest: rest })
 
 					[first, ..] =>
 						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`"))
@@ -163,7 +163,7 @@ Utf8 :: [].{
 				{ before: start, others: input_rest } = input.split_at(expected_string.len())
 
 				if start == expected_string {
-					Ok({ val: expected_string, input: input_rest })
+					Ok({ value: expected_string, rest: input_rest })
 				} else {
 					error_string = str_from_utf8_lossy(expected_string)
 					other_string = str_from_utf8_lossy(start)
@@ -229,7 +229,7 @@ Utf8 :: [].{
 	any_thing : Parser(Bytes, Bytes)
 	any_thing = Parser.build_primitive_parser(
 		|input| {
-			Ok({ val: input, input: [] })
+			Ok({ value: input, rest: [] })
 		},
 	)
 
@@ -246,7 +246,7 @@ Utf8 :: [].{
 		|field_utf8ing| {
 			match Str.from_utf8(field_utf8ing) {
 				Ok(string_val) =>
-					Ok({ val: string_val, input: [] })
+					Ok({ value: string_val, rest: [] })
 
 				Err(BadUtf8(_)) =>
 					Err(ParsingFailure("Expected a string field, but its contents cannot be parsed as UTF8."))
@@ -269,7 +269,7 @@ Utf8 :: [].{
 						Err(ParsingFailure("Expected a digit from 0-9 but input was empty."))
 
 					[first, .. as rest] if first >= '0' and first <= '9' =>
-						Ok({ val: (first - '0').to_u64(), input: rest })
+						Ok({ value: (first - '0').to_u64(), rest: rest })
 
 					_ =>
 						Err(ParsingFailure("Not a digit"))
@@ -547,7 +547,7 @@ expect {
 ## Partial parsing returns the parsed at-sign tag.
 expect {
 	actual = Utf8.parse_str_partial(at_sign, "@")?
-	actual.val == AtSign
+	actual.value == AtSign
 }
 
 ## The at-sign parser rejects other bytes.
@@ -556,7 +556,7 @@ expect Utf8.parse_str_partial(at_sign, "\$").is_err()
 ## Partial string parsing renders a leftover that begins within a UTF-8 scalar.
 expect {
 	actual = Utf8.parse_str_partial(Utf8.any_codeunit, "ӿ")?
-	actual.input == "�"
+	actual.rest == "�"
 }
 
 ## Complete string parsing reports, rather than crashes on, a mid-scalar leftover.

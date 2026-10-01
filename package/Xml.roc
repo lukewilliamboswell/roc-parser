@@ -133,7 +133,7 @@ Xml := {
 		Parser.build_primitive_parser(
 			|input| {
 				match parse_document(input) {
-					Ok({ val, pos }) => Ok({ val, input: input.drop_first(pos) })
+					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
 					Err(XmlFail(failure)) => {
 						error = locate(input, failure.offset, failure.message)
 						Err(ParsingFailure("${error.line.to_str()}:${error.column.to_str()}: ${error.message}"))

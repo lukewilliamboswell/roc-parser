@@ -173,7 +173,7 @@ CSV :: { records : List(List(Utf8.Bytes)) }.{
 					Ok(raw_str) => {
 						match Utf8.parse_utf8(field_parser, raw_str) {
 							Ok(val) => {
-								Ok({ val: val, input: fields_list.drop_first(1) })
+								Ok({ value: val, rest: fields_list.drop_first(1) })
 							}
 
 							Err(ParsingFailure(reason)) => {
@@ -296,7 +296,7 @@ csv_record : Parser(Utf8.Bytes, CSV.CSVRecord)
 csv_record = Parser.build_primitive_parser(
 	|bytes| {
 		match scan_record(bytes, 0) {
-			Ok({ fields, next }) => Ok({ val: fields, input: bytes.drop_first(next) })
+			Ok({ fields, next }) => Ok({ value: fields, rest: bytes.drop_first(next) })
 			Err(BadField(at)) => Err(ParsingFailure(bad_field_message(bytes, at)))
 		}
 	},
@@ -332,8 +332,8 @@ csv_records = Parser.build_primitive_parser(
 			}
 		}
 		match $rest {
-			Ok(at) => Ok({ val: $records, input: bytes.drop_first(at) })
-			Err(Done) => Ok({ val: $records, input: [] })
+			Ok(at) => Ok({ value: $records, rest: bytes.drop_first(at) })
+			Err(Done) => Ok({ value: $records, rest: [] })
 		}
 	},
 )

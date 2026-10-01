@@ -27,7 +27,7 @@ import parser.Parser
 Rows : List(List(List(U8)))
 
 all_fields : Parser(CSV.CSVRecord, List(List(U8)))
-all_fields = Parser.many(CSV.field(Parser.build_primitive_parser(|bytes| Ok({ val: bytes, input: [] }))))
+all_fields = Parser.many(CSV.field(Parser.build_primitive_parser(|bytes| Ok({ value: bytes, rest: [] }))))
 
 parse : Str -> Try(Rows, [Rejected])
 parse = |text| {

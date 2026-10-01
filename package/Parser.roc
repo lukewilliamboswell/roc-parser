@@ -56,7 +56,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 	## The result of parsing part of an input: either a value and the remaining
 	## input, or a `ParsingFailure` message.
-	ParseResult(input, a) : Try({ val : a, input : input }, [ParsingFailure(Str)])
+	ParseResult(input, a) : Try({ value : a, rest : input }, [ParsingFailure(Str)])
 
 	## Write a custom parser without using the provided combinators.
 	##
@@ -95,7 +95,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	parse : Parser(input, a), input, (input -> Bool) -> Try(a, [ParsingFailure(Str), ParsingIncomplete(input)])
 	parse = |parser, input, is_parsing_completed| {
 		match parser.parse_partial(input) {
-			Ok({ val: val, input: leftover }) => {
+			Ok({ value: val, rest: leftover }) => {
 				if is_parsing_completed(leftover) {
 					Ok(val)
 				} else {
@@ -136,7 +136,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	const = |val| {
 		build_primitive_parser(
 			|input| {
-				Ok({ val: val, input: input })
+				Ok({ value: val, rest: input })
 			},
 		)
 	}
@@ -150,10 +150,10 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 		build_primitive_parser(
 			|input| {
 				match parse_partial(first, input) {
-					Ok({ val: val, input: rest }) => Ok({ val: val, input: rest })
+					Ok({ value: val, rest: rest }) => Ok({ value: val, rest: rest })
 					Err(ParsingFailure(first_err)) => {
 						match parse_partial(second, input) {
-							Ok({ val: val, input: rest }) => Ok({ val: val, input: rest })
+							Ok({ value: val, rest: rest }) => Ok({ value: val, rest: rest })
 							Err(ParsingFailure(second_err)) => {
 								Err(ParsingFailure("${first_err} or ${second_err}"))
 							}
@@ -189,11 +189,11 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 	apply : Parser(input, (a -> b)), Parser(input, a) -> Parser(input, b)
 	apply = |fun_parser, val_parser| {
 		combined = |input| {
-			{ val: fun_val, input: rest } = fun_parser.parse_partial(input)?
+			{ value: fun_val, rest: rest } = fun_parser.parse_partial(input)?
 			val_parser.parse_partial(rest)
 				.map_ok(
-					|{ val: val, input: rest2 }| {
-						{ val: fun_val(val), input: rest2 }
+					|{ value: val, rest: rest2 }| {
+						{ value: fun_val(val), rest: rest2 }
 					},
 				)
 		}
@@ -292,8 +292,8 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 
 				match result {
 					Err(problem) => Err(problem)
-					Ok({ val: Ok(val), input: input_rest }) => Ok({ val: val, input: input_rest })
-					Ok({ val: Err(problem), input: _inputRest }) => Err(ParsingFailure(problem))
+					Ok({ value: Ok(val), rest: input_rest }) => Ok({ value: val, rest: input_rest })
+					Ok({ value: Err(problem), rest: _inputRest }) => Err(ParsingFailure(problem))
 				}
 			},
 		)
@@ -453,11 +453,11 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 			|input| {
 				match parse_partial(fun_parser, input) {
 					Err(msg) => Err(msg)
-					Ok({ val: fun_val, input: rest }) => {
+					Ok({ value: fun_val, rest: rest }) => {
 						match parse_partial(val_parser, rest) {
 							Err(msg2) => Err(msg2)
-							Ok({ val: val, input: rest2 }) => {
-								Ok({ val: fun_val(val), input: rest2 })
+							Ok({ value: val, rest: rest2 }) => {
+								Ok({ value: fun_val(val), rest: rest2 })
 							}
 						}
 					}
@@ -481,10 +481,10 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 			|input| {
 				match parse_partial(fun_parser, input) {
 					Err(msg) => Err(msg)
-					Ok({ val: fun_val, input: rest }) => {
+					Ok({ value: fun_val, rest: rest }) => {
 						match parse_partial(skip_parser, rest) {
 							Err(msg2) => Err(msg2)
-							Ok({ val: _, input: rest2 }) => Ok({ val: fun_val, input: rest2 })
+							Ok({ value: _, rest: rest2 }) => Ok({ value: fun_val, rest: rest2 })
 						}
 					}
 				}
@@ -535,7 +535,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 				) {
 					Ok(index) => {
 						val = input.sublist({ start: 0, len: index })
-						Ok({ val, input: input.drop_first(index) })
+						Ok({ value: val, rest: input.drop_first(index) })
 					}
 					Err(_) => Err(ParsingFailure("character not found"))
 				}
@@ -591,11 +591,11 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 				)
 
 				if index == 0 {
-					Ok({ val: [], input: input })
+					Ok({ value: [], rest: input })
 				} else {
 					Ok({
-						val: input.sublist({ start: 0, len: index }),
-						input: input.drop_first(index),
+						value: input.sublist({ start: 0, len: index }),
+						rest: input.drop_first(index),
 					})
 				}
 			},
@@ -615,7 +615,7 @@ Parser(input, a) :: { fun : input -> Parser.ParseResult(input, a) }.{
 and_then : Parser(input, a), (a -> Parser(input, b)) -> Parser(input, b)
 and_then = |first_parser, build_next_parser| {
 	fun = |input| {
-		{ val: first_val, input: rest } = Parser.parse_partial(first_parser, input)?
+		{ value: first_val, rest: rest } = Parser.parse_partial(first_parser, input)?
 		next_parser = build_next_parser(first_val)
 
 		Parser.parse_partial(next_parser, rest)
@@ -630,12 +630,12 @@ many_impl = |parser, vals, input| {
 
 	match result {
 		Err(_) =>
-			Ok({ val: vals, input: input })
+			Ok({ value: vals, rest: input })
 
-		Ok({ val: val, input: input_rest }) =>
+		Ok({ value: val, rest: input_rest }) =>
 			if input_rest == input {
 				# No progress: repeating would loop forever on the same input.
-				Ok({ val: vals, input: input })
+				Ok({ value: vals, rest: input })
 			} else {
 				many_impl(parser, vals.append(val), input_rest)
 			}
@@ -646,7 +646,7 @@ many_impl = |parser, vals, input| {
 expect {
 	input = "# H\nR".to_utf8()
 	result = Parser.parse_partial(Parser.chomp_until('\n'), input)?
-	result == { val: ['#', ' ', 'H'], input: ['\n', 'R'] }
+	result == { value: ['#', ' ', 'H'], rest: ['\n', 'R'] }
 }
 
 ## Chomping until a missing newline reports a parse error.
@@ -662,18 +662,18 @@ expect {
 		x != '\n'
 	}
 	result = Parser.parse_partial(Parser.chomp_while(not_eol), input)?
-	result == { val: ['a', 's'], input: ['\n', 'd', 'f'] }
+	result == { value: ['a', 's'], rest: ['\n', 'd', 'f'] }
 }
 
 ## Repeating a parser that succeeds without consuming input terminates.
 expect {
 	result = Parser.parse_partial(Parser.many(Parser.chomp_while(|b| b == 'a')), "aab".to_utf8())?
-	result == { val: [['a', 'a']], input: ['b'] }
+	result == { value: [['a', 'a']], rest: ['b'] }
 }
 
 ## Separated repetition stops when separator and element consume nothing.
 expect {
 	empty = Parser.chomp_while(|b| b == 'z')
 	result = Parser.parse_partial(Parser.sep_by(empty, empty), "x".to_utf8())?
-	result == { val: [[]], input: ['x'] }
+	result == { value: [[]], rest: ['x'] }
 }

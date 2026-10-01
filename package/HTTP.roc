@@ -116,7 +116,7 @@ Bytes : List(U8)
 
 Framing : [Length(U64), Chunked, Unframed]
 
-parse_request : Bytes -> Try({ val : HTTP.Request, input : Bytes }, Str)
+parse_request : Bytes -> Try({ value : HTTP.Request, rest : Bytes }, Str)
 parse_request = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_request_line(line)?
@@ -133,11 +133,11 @@ parse_request = |input| {
 				Unframed => take_body(Length(0), head.rest)?
 				other => take_body(other, head.rest)?
 			}
-		Ok({ val: { method: start.method, uri: start.uri, http_version: version, headers: head.fields, body: framed.body }, input: framed.rest })
+		Ok({ value: { method: start.method, uri: start.uri, http_version: version, headers: head.fields, body: framed.body }, rest: framed.rest })
 	}
 }
 
-parse_response : Bytes -> Try({ val : HTTP.Response, input : Bytes }, Str)
+parse_response : Bytes -> Try({ value : HTTP.Response, rest : Bytes }, Str)
 parse_response = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_status_line(line)?
@@ -152,7 +152,7 @@ parse_response = |input| {
 		} else {
 			take_body(body_framing, head.rest)?
 		}
-	Ok({ val: { http_version: version, status_code: code, status: start.status, headers: head.fields, body: framed.body }, input: framed.rest })
+	Ok({ value: { http_version: version, status_code: code, status: start.status, headers: head.fields, body: framed.body }, rest: framed.rest })
 }
 
 at_least_1_1 : HTTP.HttpVersion -> Bool
@@ -652,7 +652,7 @@ expect {
 ## A request without framing fields has no body; what follows is the next message.
 expect {
 	actual = Utf8.parse_utf8_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
-	actual.val.body == [] and actual.input == "GET /2".to_utf8()
+	actual.value.body == [] and actual.rest == "GET /2".to_utf8()
 }
 
 ## Chunked bodies are decoded; extensions and trailers are validated and dropped.

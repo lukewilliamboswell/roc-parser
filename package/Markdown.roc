@@ -456,7 +456,7 @@ parse_all : Parser(Utf8.Bytes, List(Markdown))
 parse_all =
 	Parser.build_primitive_parser(
 		|input| {
-			Ok({ val: parse_document(input), input: [] })
+			Ok({ value: parse_document(input), rest: [] })
 		},
 	)
 
@@ -1884,7 +1884,7 @@ parse_inlines_parser : Parser(Utf8.Bytes, List(Markdown.Inline))
 parse_inlines_parser =
 	Parser.build_primitive_parser(
 		|input| {
-			Ok({ val: parse_inlines(input), input: [] })
+			Ok({ value: parse_inlines(input), rest: [] })
 		},
 	)
 
@@ -1901,7 +1901,7 @@ parse_inlines_with_refs = |refs, input| {
 ## Parse a link or image that starts at the beginning of `input`, returning the
 ## node and the unconsumed input. Used by the `Markdown.link`/`Markdown.image`
 ## parsers.
-parse_leading_link : Utf8.Bytes, Bool -> Try({ val : Markdown.Inline, input : Utf8.Bytes }, [ParsingFailure(Str)])
+parse_leading_link : Utf8.Bytes, Bool -> Try({ value : Markdown.Inline, rest : Utf8.Bytes }, [ParsingFailure(Str)])
 parse_leading_link = |input, image| {
 	opens =
 		if image {
@@ -1922,7 +1922,7 @@ parse_leading_link = |input, image| {
 						_ => Bool.False
 					}
 				if matches_kind {
-					Ok({ val: node, input: input.drop_first(end) })
+					Ok({ value: node, rest: input.drop_first(end) })
 				} else {
 					Err(ParsingFailure("expected an inline link"))
 				}
@@ -4263,8 +4263,8 @@ expect inline_test("*[foo*](/u)") == [Text("*"), Link({ label: [Text("foo*")], t
 expect inline_test("[foo`](/u)`") == [Text("[foo"), InlineCode("](/u)")]
 
 ## Public link/image parsers consume one leading inline link.
-expect Utf8.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ val: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), input: " rest" })
-expect Utf8.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ val: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), input: "!" })
+expect Utf8.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ value: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), rest: " rest" })
+expect Utf8.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ value: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), rest: "!" })
 expect Utf8.parse_str_partial(Markdown.link, "[a][b]").is_err()
 
 ## Reference labels match case-insensitively after Unicode case folding.
@@ -4606,17 +4606,17 @@ chomp_until_code_block_end : Parser(Utf8.Bytes, Str)
 chomp_until_code_block_end =
 	Parser.build_primitive_parser(
 		|input| {
-			chomp_to_code_block_end_help({ val: List.with_capacity(1000), input })
+			chomp_to_code_block_end_help({ value: List.with_capacity(1000), rest: input })
 		},
 	)
 		.map(Utf8.str_from_utf8)
 
-chomp_to_code_block_end_help : { val : Utf8.Bytes, input : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
-chomp_to_code_block_end_help = |{ val, input }| {
+chomp_to_code_block_end_help : { value : Utf8.Bytes, rest : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
+chomp_to_code_block_end_help = |{ value: val, rest: input }| {
 	match input {
 		[] => Err(ParsingFailure("expected ```, ran out of input"))
-		['`', '`', '`', .. as rest] => Ok({ val, input: rest })
-		[first, .. as rest] => chomp_to_code_block_end_help({ val: val.append(first), input: rest })
+		['`', '`', '`', .. as rest] => Ok({ value: val, rest: rest })
+		[first, .. as rest] => chomp_to_code_block_end_help({ value: val.append(first), rest: rest })
 	}
 }
 
@@ -4625,6 +4625,6 @@ expect {
 	val = "".to_utf8()
 	input = "some code\n```".to_utf8()
 	expected = "some code\n".to_utf8()
-	a = chomp_to_code_block_end_help({ val, input })?
-	a == { val: expected, input: [] }
+	a = chomp_to_code_block_end_help({ value: val, rest: input })?
+	a == { value: expected, rest: [] }
 }

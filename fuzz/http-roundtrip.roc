@@ -52,18 +52,18 @@ test = |input| {
 	Fuzz.keep
 }
 
-check_request : List(U8), Try({ val : HTTP.Request, input : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Request, _), List(U8) -> {}
+check_request : List(U8), Try({ value : HTTP.Request, rest : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Request, _), List(U8) -> {}
 check_request = |bytes, actual, expected, rest| {
 	match (actual, expected) {
-		(Ok({ val, input }), Ok(want)) if val == want and input == rest => {}
+		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}
 		_ => crash "request mismatch\n--- input ---\n${HttpGen.show_bytes(bytes)}\n--- appended ---\n${HttpGen.show_bytes(rest)}\n--- expected ---\n${Str.inspect(expected)}\n--- actual ---\n${Str.inspect(actual)}"
 	}
 }
 
-check_response : List(U8), Try({ val : HTTP.Response, input : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Response, _), List(U8) -> {}
+check_response : List(U8), Try({ value : HTTP.Response, rest : List(U8) }, [ParsingFailure(Str)]), Try(HTTP.Response, _), List(U8) -> {}
 check_response = |bytes, actual, expected, rest| {
 	match (actual, expected) {
-		(Ok({ val, input }), Ok(want)) if val == want and input == rest => {}
+		(Ok({ value: val, rest: input }), Ok(want)) if val == want and input == rest => {}
 		_ => crash "response mismatch\n--- input ---\n${HttpGen.show_bytes(bytes)}\n--- appended ---\n${HttpGen.show_bytes(rest)}\n--- expected ---\n${Str.inspect(expected)}\n--- actual ---\n${Str.inspect(actual)}"
 	}
 }

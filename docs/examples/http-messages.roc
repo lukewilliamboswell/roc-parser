@@ -53,8 +53,8 @@ main! = |_args| {
 	pipelined = "GET /a HTTP/1.1\r\nHost: example.com\r\n\r\nGET /b HTTP/1.1\r\nHost: example.com\r\n\r\n".to_utf8()
 
 	first = Utf8.parse_utf8_partial(HTTP.request, pipelined).map_err(|ParsingFailure(message)| BadMessage(message))?
-	second = Utf8.parse_utf8_partial(HTTP.request, first.input).map_err(|ParsingFailure(message)| BadMessage(message))?
-	Stdout.line!("first: ${first.val.uri}, second: ${second.val.uri}, left over: ${second.input.len().to_str()} bytes")?
+	second = Utf8.parse_utf8_partial(HTTP.request, first.rest).map_err(|ParsingFailure(message)| BadMessage(message))?
+	Stdout.line!("first: ${first.value.uri}, second: ${second.value.uri}, left over: ${second.rest.len().to_str()} bytes")?
 	# end::pipelined[]
 
 	# tag::rejected[]

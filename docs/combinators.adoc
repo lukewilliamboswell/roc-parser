@@ -34,7 +34,7 @@ every `expect` in them passes.
 |The same for a `List(U8)`.
 
 |`Utf8.parse_str_partial(p, str)`, `Utf8.parse_utf8_partial(p, bytes)`
-|Parse the start of the input and return `{ val, input }`, where `input` is
+|Parse the start of the input and return `{ value, rest }`, where `rest` is
 what is left. Use these to read one message from a stream that holds several.
 
 |`Parser.parse(p, input, is_done)`, `Parser.parse_partial(p, input)`
@@ -263,5 +263,5 @@ This has three consequences:
 module's record parsers read a `CSV.CSVRecord`, a list of fields, and
 `CSV.field(p)` runs a byte parser `p` on one field. To write a primitive
 parser for your own input type, use `Parser.build_primitive_parser` with a
-function from input to `Ok({ val, input: rest })` or
+function from input to `Ok({ value, rest })` or
 `Err(ParsingFailure(message))`.

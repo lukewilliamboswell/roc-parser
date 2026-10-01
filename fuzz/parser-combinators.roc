@@ -392,7 +392,7 @@ test = |case| {
 	actual : Outcome
 	actual =
 		match Parser.parse_partial(parser, case.input) {
-			Ok({ val, input: rest }) => Ok({ val, rest })
+			Ok({ value: val, rest: rest }) => Ok({ val, rest })
 			Err(ParsingFailure(msg)) => {
 				# Messages must be renderable without crashing.
 				_ = msg.count_utf8_bytes()
@@ -423,7 +423,7 @@ test = |case| {
 			partial = Utf8.parse_str_partial(parser, text)
 			match (partial, expected) {
 				(Ok(p), Ok(r)) =>
-					if p.val != r.val or p.input != Str.from_utf8_lossy(r.rest) {
+					if p.value != r.val or p.rest != Str.from_utf8_lossy(r.rest) {
 						crash "parse_str_partial disagrees with model"
 					}
 				(Err(_), Err(_)) => {}

@@ -25,7 +25,7 @@ keyword_short_first = Utf8.one_of([Utf8.string("in"), Utf8.string("int")])
 keyword_long_first : Parser(Utf8.Bytes, Str)
 keyword_long_first = Utf8.one_of([Utf8.string("int"), Utf8.string("in")])
 
-expect Utf8.parse_str_partial(keyword_short_first, "int").map_ok(|r| r.input) == Ok("t")
+expect Utf8.parse_str_partial(keyword_short_first, "int").map_ok(|r| r.rest) == Ok("t")
 expect Utf8.parse_str(keyword_long_first, "int") == Ok("int")
 # end::order[]
 
@@ -35,7 +35,7 @@ expect Utf8.parse_str(keyword_long_first, "int") == Ok("int")
 runs : Parser(Utf8.Bytes, List(List(U8)))
 runs = Parser.many(Parser.chomp_while(|b| b == 'a'))
 
-expect Utf8.parse_str_partial(runs, "aab").map_ok(|r| r.input) == Ok("b")
+expect Utf8.parse_str_partial(runs, "aab").map_ok(|r| r.rest) == Ok("b")
 # end::progress[]
 
 # tag::many-backtracks[]
@@ -44,7 +44,7 @@ expect Utf8.parse_str_partial(runs, "aab").map_ok(|r| r.input) == Ok("b")
 pair : Parser(Utf8.Bytes, U64)
 pair = Utf8.digits.skip(Utf8.codeunit(';'))
 
-expect Utf8.parse_str_partial(Parser.many(pair), "1;2;3x").map_ok(|r| r.input) == Ok("3x")
+expect Utf8.parse_str_partial(Parser.many(pair), "1;2;3x").map_ok(|r| r.rest) == Ok("3x")
 # end::many-backtracks[]
 
 # tag::flatten[]
@@ -86,7 +86,7 @@ expect Utf8.parse_str(signed, "42") == Ok(42)
 
 # tag::bytes[]
 # Parsers read UTF-8 code units (bytes), not characters. "é" is two bytes.
-expect Utf8.parse_str_partial(Utf8.any_codeunit, "é").map_ok(|r| r.val) == Ok(0xC3)
+expect Utf8.parse_str_partial(Utf8.any_codeunit, "é").map_ok(|r| r.value) == Ok(0xC3)
 expect Utf8.parse_str(Utf8.string("é"), "é") == Ok("é")
 # end::bytes[]
 

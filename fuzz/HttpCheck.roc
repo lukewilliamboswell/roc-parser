@@ -20,7 +20,7 @@ HttpCheck :: {}.{
 	check_request = |bytes| {
 		match Utf8.parse_utf8_partial(HTTP.request, bytes) {
 			Err(_) => {}
-			Ok({ val, input: rest }) => {
+			Ok({ value: val, rest: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
 				same_request(Utf8.parse_utf8_partial(HTTP.request, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
@@ -39,7 +39,7 @@ HttpCheck :: {}.{
 	check_response = |bytes| {
 		match Utf8.parse_utf8_partial(HTTP.response, bytes) {
 			Err(_) => {}
-			Ok({ val, input: rest }) => {
+			Ok({ value: val, rest: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
 				same_response(Utf8.parse_utf8_partial(HTTP.response, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
@@ -82,18 +82,18 @@ consumed_prefix = |bytes, rest| {
 	bytes.sublist({ start: 0, len: bytes.len() - rest.len() })
 }
 
-same_request : Try({ val : HTTP.Request, input : List(U8) }, [ParsingFailure(Str)]), HTTP.Request, List(U8), Str, List(U8) -> {}
+same_request : Try({ value : HTTP.Request, rest : List(U8) }, [ParsingFailure(Str)]), HTTP.Request, List(U8), Str, List(U8) -> {}
 same_request = |actual, expected, rest, what, original| {
 	match actual {
-		Ok({ val, input }) if val == expected and input == rest => {}
+		Ok({ value: val, rest: input }) if val == expected and input == rest => {}
 		_ => crash "${what} changed the result\n--- original input ---\n${HttpCheck.show(original)}\n--- first parse ---\n${Str.inspect(expected)}\n--- now ---\n${Str.inspect(actual)}"
 	}
 }
 
-same_response : Try({ val : HTTP.Response, input : List(U8) }, [ParsingFailure(Str)]), HTTP.Response, List(U8), Str, List(U8) -> {}
+same_response : Try({ value : HTTP.Response, rest : List(U8) }, [ParsingFailure(Str)]), HTTP.Response, List(U8), Str, List(U8) -> {}
 same_response = |actual, expected, rest, what, original| {
 	match actual {
-		Ok({ val, input }) if val == expected and input == rest => {}
+		Ok({ value: val, rest: input }) if val == expected and input == rest => {}
 		_ => crash "${what} changed the result\n--- original input ---\n${HttpCheck.show(original)}\n--- first parse ---\n${Str.inspect(expected)}\n--- now ---\n${Str.inspect(actual)}"
 	}
 }

@@ -51,7 +51,7 @@ letter_parser = Parser.build_primitive_parser(
 			}
 
 		val_result
-			.map_ok(|val| { val, input: input.drop_first(1) })
+			.map_ok(|val| { value: val, rest: input.drop_first(1) })
 	},
 )
 

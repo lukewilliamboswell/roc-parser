@@ -22,7 +22,7 @@ main! = |_| {
 		match all.first() {
 			Ok('Q') => {
 				match Utf8.parse_utf8_partial(HTTP.request, bytes) {
-					Ok({ val, input }) => {
+					Ok({ value: val, rest: input }) => {
 						method = Str.inspect(val.method)
 						"{\"status\":\"ok\",\"method\":${json_string(method)},\"target\":${json_string(val.uri)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
 					}
@@ -31,7 +31,7 @@ main! = |_| {
 			}
 			Ok('S') => {
 				match Utf8.parse_utf8_partial(HTTP.response, bytes) {
-					Ok({ val, input }) =>
+					Ok({ value: val, rest: input }) =>
 						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.status)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
 					Err(ParsingFailure(message)) => "{\"status\":\"error\",\"message\":${json_string(message)}}"
 				}

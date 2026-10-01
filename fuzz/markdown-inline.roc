@@ -145,7 +145,7 @@ check_leading_link = |input, tree, parser| {
 	single_line = !bytes.contains('\n') and !bytes.contains('\r') and !bytes.contains(0)
 	match Utf8.parse_str_partial(parser, input) {
 		Err(_) => {}
-		Ok({ val, input: rest }) => {
+		Ok({ value: val, rest: rest }) => {
 			if !Str.ends_with(input, rest) {
 				crash "leading link parser returned input that is not a suffix\ninput: ${Str.inspect(input)}\nrest:  ${Str.inspect(rest)}"
 			}
