@@ -3,11 +3,121 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#compatibility]
 = Compatibility
 
-Content in progress.
+This chapter is for readers choosing a release, upgrading, or matching a Roc
+compiler to the package. It states which compiler each release is built
+for, what a version number promises, where the package runs, and what changed
+in 2.0.0.
+
+== Roc compiler
+
+Roc has no stable release yet, and its compiler changes the language and
+standard library often. Each roc-parser release is therefore built and tested
+with one Roc nightly:
+
+* `.roc-version` at the repository root names the nightly for the package,
+  its tests and the examples, for example `nightly-2026-09-19-d025939`.
+* An automated workflow proposes an update to a newer nightly when one is
+  published, and merges it only when the tests pass with it.
+* The property-testing and conformance workflow
+  (`.github/workflows/fuzz.yml`) pins a newer nightly in its
+  `QUALITY_ROC_NIGHTLY` setting, because the property-testing library needs a
+  newer compiler than the examples' platform supports yet. That pin returns to
+  `.roc-version` once the two match.
+
+Use the nightly named by the release you depend on. A newer nightly often
+works, but a compiler change can break the build without any change to this
+package; the release notes say when a migration changed the package's API.
+
+[source,sh]
+----
+cat .roc-version
+----
+
+== Version numbers
+
+Releases follow https://semver.org/[semantic versioning]:
+
+* A patch release (such as 1.0.2) fixes bugs without changing the API.
+* A minor release (such as 1.2.0) adds API without removing or changing it.
+* A major release (such as 2.0.0) may remove or change API, or change what an
+  existing function accepts or returns.
+
+For a parser, which inputs it accepts and the values it produces matter as
+much as its type signatures. Read the release notes for behaviour changes
+even when the API is unchanged.
+
+Roc packages are fetched by URL, so a release is a bundle URL whose name is
+the hash of its content. Copy it from the {repo}/releases[GitHub releases page];
+each release also publishes an SBOM and signed provenance.
+
+== Platforms
+
+The package is plain Roc with no platform-specific code: it does no input or
+output, so it works with any Roc platform, on any system where that platform
+and the pinned compiler run. CI builds and tests it on Linux x86-64, and the
+conformance results in <<conformance,Conformance>> were measured on macOS with
+Apple silicon.
+
+== Dependencies
+
+The package depends on one other package:
+
+[cols="1,1,3",options="header"]
+|===
+|Package |Version |Used for
+|https://github.com/roc-lang/unicode[roc-lang/unicode] |4.2.0 |Unicode case folding, general categories and scalar handling in the Markdown module
+|===
+
+`package/main.roc` names its release URL. Roc fetches it when it fetches
+roc-parser, so applications need not add it themselves.
+
+== Changes in 2.0.0 at a glance
+
+Version 2.0.0 reworks every format parser to follow its specification and
+checks each one against a reference implementation (see
+<<conformance,Conformance>>). Many inputs now parse differently, so read the
+release notes on the {repo}/releases[releases page] before upgrading. In
+summary:
+
+[cols="1,4",options="header"]
+|===
+|Module |What changed
+
+|`Parser`, `String`
+|`many` and `sep_by` stop when an element consumes no input instead of
+looping forever. Failure messages quote only a short prefix of the remaining
+input. `String.digits` rejects values too large for `U64`.
+
+|`CSV`
+|Parses RFC 4180: an optional final line break, lone CR line breaks, and any
+UTF-8 in fields. `CSV.u64` and `CSV.f64` read data such as `+5` and `1e-3`
+rather than Roc literal syntax.
+
+|`HTTP`
+|Parses HTTP/1.1 per RFC 9112: decodes chunked bodies and rejects messages
+with ambiguous framing (both `Content-Length` and `Transfer-Encoding`, line
+folding, bare LF and similar). Requests that were accepted before may now fail.
+
+|`Markdown`
+|Rebuilt on the CommonMark 0.31.2 parsing strategy, with GFM tables, task
+lists, strikethrough and extended autolinks. The tree types are unchanged, but
+many inputs now produce a different tree, and `Markdown.link` and
+`Markdown.image` accept titles and angle-bracket destinations. Adds the
+roc-lang/unicode dependency.
+
+|`Xml`
+|Checks XML 1.0 well-formedness and adds `Xml.parse_str`, which reports the
+line and column of an error. Documents with a document type declaration are
+rejected.
+
+|`Yaml`
+|Resolves plain scalars with the YAML 1.2 core schema, supports block scalars,
+compact and indentless sequences and all double-quoted escapes, and rejects
+unsupported features, such as anchors, instead of misreading them.
+|===

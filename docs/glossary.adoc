@@ -3,11 +3,104 @@
 ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
-:tree: {repo}/tree/main
 :api: https://lukewilliamboswell.github.io/roc-parser/api/
 endif::[]
 
 [#glossary]
 = Glossary
 
-Content in progress.
+The words this manual uses with a specific meaning, in alphabetical order.
+Terms that belong to one format name the format in parentheses.
+
+[[glossary-backtracking]]Backtracking::
+Returning to an earlier position in the input to try another alternative
+after one fails. `Parser.alt` and `one_of` always backtrack: each alternative
+starts from the input the first one was given, however much the failed one
+read.
+
+[[glossary-chomping]]Chomping (YAML)::
+How a block scalar (`|` or `>`) treats the line breaks at its end. _Clip_ (the
+default) keeps one, _strip_ (`-`) keeps none, and _keep_ (`+`) keeps them all.
+Unrelated to `Parser.chomp_while` and `chomp_until`, which consume input while
+or until a condition holds.
+
+[[glossary-combinator]]Combinator::
+A function that builds a parser from other parsers, such as `keep`, `skip`,
+`many` or `one_of`. A parser for a whole format is built by combining small
+ones. See <<modules,Modules>>.
+
+[[glossary-consumption]]Consumption::
+The part of the input a parser has read when it succeeds. The rest is passed
+to the next parser. A parser that succeeds without consuming anything makes
+no _progress_; `many` and `sep_by` stop repeating when an element makes no
+progress, so they cannot loop forever.
+
+[[glossary-core-schema]]Core schema (YAML)::
+The YAML 1.2 rules that decide what an unquoted (plain) scalar means: `null`
+and `~` are null, `true` and `false` are Booleans, and numbers such as `12`,
+`0o14`, `0xC`, `1.5` and `.inf` are integers or floats. Anything else is a
+string. Quoted scalars are always strings.
+
+[[glossary-flanking]]Flanking (CommonMark)::
+The rule that decides whether a run of `*` or `_` can open or close emphasis.
+A run is _left-flanking_ when it is not followed by whitespace and, if it is
+followed by punctuation, is preceded by whitespace or punctuation;
+_right-flanking_ is the mirror image. So `*foo*` is emphasis but `* foo *` is
+not.
+
+[[glossary-framing]]Framing (HTTP)::
+How the receiver finds where a message body ends: by `Transfer-Encoding:
+chunked`, by `Content-Length`, or, for a response with neither, by the end of
+the connection. See <<glossary-smuggling,smuggling>>.
+
+[[glossary-input]]Input::
+The data a parser reads, given by the first type parameter of
+`Parser(input, a)`. For text it is `String.Utf8`, a list of UTF-8 bytes; for CSV
+record decoding it is a `CSV.CSVRecord`, a list of fields.
+
+[[glossary-known-failure]]Known failure::
+A conformance case where the library and the oracle disagree on purpose,
+listed with its reason in a `known-failures.json` file. See
+<<conformance,Conformance>>.
+
+[[glossary-oracle]]Oracle::
+A trusted reference implementation whose results a test compares with the
+library's, such as Python's `csv` module for CSV or expat for XML. When the
+oracle is itself wrong, the specification decides. See
+<<conformance,Conformance>>.
+
+[[glossary-parser]]Parser::
+A value of type `Parser(input, a)`: a description of how to read an `a` from
+the start of an input. Running it returns the value and the unconsumed input,
+or a `ParsingFailure` message.
+
+[[glossary-parsing-incomplete]]Parsing incomplete::
+The `ParsingIncomplete` error: the parser succeeded but did not consume the
+whole input. Functions such as `String.parse_str`, which expect to read
+everything, return it with the leftover input.
+
+[[glossary-progress]]Progress::
+See <<glossary-consumption,consumption>>.
+
+[[glossary-property-test]]Property test::
+A test that generates many inputs and checks a rule that must hold for every
+one of them, such as "the parser never crashes" or "parsing a rendered value
+gives back the value". This package runs its property tests with coverage
+guidance from the `roc-fuzz` library. See <<property-testing,Property testing>>.
+
+[[glossary-smuggling]]Request smuggling (HTTP)::
+An attack in which two programs that read the same bytes, such as a proxy and
+a server, disagree on where one message ends. The attacker hides a second
+request inside the first one's body. A parser prevents it by rejecting any
+message whose framing could be read two ways.
+
+[[glossary-soft-line-break]]Soft line break (CommonMark)::
+A line break inside a paragraph that is not a hard break. HTML renders it as a
+space; this library keeps it as `\n` in the `Text` node.
+
+[[glossary-well-formed]]Well-formed (XML)::
+Following the syntax rules of XML 1.0: one root element, properly nested and
+matching tags, quoted and unique attributes, and only declared entities.
+Well-formedness says nothing about which elements are allowed; that is
+_validity_, which needs a schema or DTD and which this package does not
+check.
