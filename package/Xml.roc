@@ -212,7 +212,7 @@ Xml := {
 	parse_str : Str -> Try(Xml, [InvalidXml(Error)])
 	parse_str = |input| {
 		bytes = input.to_utf8()
-		match parse_document(bytes) {
+		match parse_document(input, bytes) {
 			Ok({ val, pos }) =>
 				if pos == bytes.len() {
 					Ok(val)
@@ -242,7 +242,9 @@ Xml := {
 	parser =
 		Parser.custom(
 			|input| {
-				match parse_document(input) {
+				# Validate once, so names and text can be cut from the string
+				# without validating each one again.
+				match parse_document(Str.from_utf8(input) ?? "", input) {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
 					Err(XmlFail(failure)) => Err(ParseError({ message: failure.message, offset: failure.offset }))
 				}
@@ -295,8 +297,10 @@ locate = |bytes, offset, message| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-document
-parse_document : List(U8) -> Parsed(Xml)
-parse_document = |bytes| {
+# `src` is the input as a `Str` when it is valid UTF-8, or "" when it is not;
+# leaves are then cut from it instead of being validated one by one.
+parse_document : Str, List(U8) -> Parsed(Xml)
+parse_document = |src, bytes| {
 	var $pos = if starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF]) 3 else 0
 	var $declaration = Err(Missing)
 	if starts_with_at(bytes, $pos, "<?xml".to_utf8()) and is_space_at(bytes, $pos + 5) {
@@ -315,7 +319,7 @@ parse_document = |bytes| {
 			fail($pos, "expected a root element, but found text")
 		}
 	}
-	root = parse_element(bytes, $pos)?
+	root = parse_element(src, bytes, $pos)?
 	end = skip_misc(bytes, root.pos)?
 	Ok({ val: { declaration: $declaration, root: root.val }, pos: end })
 }
@@ -472,7 +476,7 @@ skip_comment = |bytes, start| {
 skip_processing_instruction : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
 skip_processing_instruction = |bytes, start| {
 	target =
-		match parse_name(bytes, start + 2) {
+		match parse_name("", bytes, start + 2) {
 			Ok(name) => name
 			Err(_) => return fail(start + 2, "expected a processing instruction target")
 		}
@@ -531,9 +535,9 @@ parse_cdata = |bytes, start, text| {
 # element's children inside its stack frame instead made every append to a
 # parent copy the whole child list, which was quadratic in the number of
 # siblings.
-parse_element : List(U8), U64 -> Parsed(Xml.Node)
-parse_element = |bytes, start| {
-	first = parse_start_tag(bytes, start)?
+parse_element : Str, List(U8), U64 -> Parsed(Xml.Node)
+parse_element = |src, bytes, start| {
+	first = parse_start_tag(src, bytes, start)?
 	if first.empty {
 		return Ok({ val: Element({ name: first.name, attributes: first.attributes, children: [] }), pos: first.pos })
 	}
@@ -542,7 +546,12 @@ parse_element = |bytes, start| {
 	var $attributes = first.attributes
 	var $first_child = 0
 	var $nodes = []
+	# Pending text is the input slice [$run_start, $run_end) followed by
+	# nothing, while it needs no rewriting; once it does, it is copied into
+	# `$text` and the slice is emptied.
 	var $text = []
+	var $run_start = 0
+	var $run_end = 0
 	var $pos = first.pos
 	while True {
 		byte =
@@ -554,7 +563,7 @@ parse_element = |bytes, start| {
 			next = bytes.get($pos + 1) ?? 0
 			if next == '/' {
 				end_name =
-					match parse_name(bytes, $pos + 2) {
+					match parse_name(src, bytes, $pos + 2) {
 						Ok(parsed) => parsed
 						Err(_) => return fail($pos + 2, "expected an element name in the end tag")
 					}
@@ -566,9 +575,11 @@ parse_element = |bytes, start| {
 					return fail(close, "expected '>' to close the end tag")
 				}
 				$pos = close + 1
-				if !$text.is_empty() {
-					$nodes = $nodes.append(text_node($text))
+				if $run_end > $run_start or !$text.is_empty() {
+					$nodes = $nodes.append(text_node(src, bytes, $text, $run_start, $run_end))
 					$text = []
+					$run_start = $pos
+					$run_end = $pos
 				}
 				node = Element({ name: $name, attributes: $attributes, children: copy_from($nodes, $first_child) })
 				match $open.last() {
@@ -584,7 +595,9 @@ parse_element = |bytes, start| {
 			} else if next == '!' and starts_with_at(bytes, $pos, "<!--".to_utf8()) {
 				$pos = skip_comment(bytes, $pos)?
 			} else if next == '!' and starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
-				parsed = parse_cdata(bytes, $pos, $text)?
+				parsed = parse_cdata(bytes, $pos, materialize(bytes, $text, $run_start, $run_end))?
+				$run_start = 0
+				$run_end = 0
 				$text = parsed.val
 				$pos = parsed.pos
 			} else if next == '?' {
@@ -592,12 +605,14 @@ parse_element = |bytes, start| {
 			} else if next == '!' {
 				return fail($pos, "expected a comment or CDATA section after '<!'")
 			} else {
-				tag = parse_start_tag(bytes, $pos)?
+				tag = parse_start_tag(src, bytes, $pos)?
 				$pos = tag.pos
-				if !$text.is_empty() {
-					$nodes = $nodes.append(text_node($text))
+				if $run_end > $run_start or !$text.is_empty() {
+					$nodes = $nodes.append(text_node(src, bytes, $text, $run_start, $run_end))
 					$text = []
 				}
+				$run_start = $pos
+				$run_end = $pos
 				if tag.empty {
 					$nodes = $nodes.append(Element({ name: tag.name, attributes: tag.attributes, children: [] }))
 				} else {
@@ -609,29 +624,76 @@ parse_element = |bytes, start| {
 			}
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
-			$text = append_utf8($text, reference.val)
+			$text = append_utf8(materialize(bytes, $text, $run_start, $run_end), reference.val)
+			$run_start = 0
+			$run_end = 0
 			$pos = reference.pos
 		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
 			return fail($pos, "']]>' is not allowed in character data")
 		} else if byte == '\r' {
-			$text = $text.append('\n')
+			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
+			$run_start = 0
+			$run_end = 0
 			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
-		} else if byte >= 0x20 and byte < 0x80 {
-			# Copy a run of plain ASCII at once rather than byte by byte.
-			end = plain_run_end(bytes, $pos + 1)
-			$text = append_run($text, bytes.sublist({ start: $pos, len: end - $pos }))
-			$pos = end
 		} else {
-			next = check_char(bytes, $pos)?
-			$text = $text.concat(bytes.sublist({ start: $pos, len: next - $pos }))
-			$pos = next
+			# A run of bytes kept as they are: plain ASCII found 16 bytes at a
+			# time, or one checked non-ASCII character.
+			end =
+				if byte >= 0x20 and byte < 0x80 {
+					Utf8.skip_class(bytes, $pos + 1, text_class)
+				} else {
+					check_char(bytes, $pos)?
+				}
+			if $text.is_empty() and ($run_end == $pos or $run_end == $run_start) {
+				if $run_end == $run_start {
+					$run_start = $pos
+				}
+				$run_end = end
+			} else {
+				$text = materialize(bytes, $text, $run_start, $run_end).concat(bytes.sublist({ start: $pos, len: end - $pos }))
+				$run_start = 0
+				$run_end = 0
+			}
+			$pos = end
 		}
 	}
 	crash "unreachable: the element loop only exits by returning"
 }
 
-text_node : List(U8) -> Xml.Node
-text_node = |text| Text(Str.from_utf8(text) ?? "")
+# The pending text: the input slice when nothing was rewritten, else `text`.
+text_node : Str, List(U8), List(U8), U64, U64 -> Xml.Node
+text_node = |src, bytes, text, run_start, run_end| {
+	if text.is_empty() {
+		Text(slice_str(src, bytes, run_start, run_end))
+	} else {
+		Text(Str.from_utf8(materialize(bytes, text, run_start, run_end)) ?? "")
+	}
+}
+
+# `text` followed by the input slice [start, end).
+materialize : List(U8), List(U8), U64, U64 -> List(U8)
+materialize = |bytes, text, start, end| {
+	if end > start {
+		text.concat(bytes.sublist({ start, len: end - start }))
+	} else {
+		text
+	}
+}
+
+# The input bytes [start, end) as a `Str`. With the validated input string
+# this is a slice of it, checked only at its two ends; without it (invalid
+# UTF-8 elsewhere in the input) the bytes are validated.
+slice_str : Str, List(U8), U64, U64 -> Str
+slice_str = |src, bytes, start, end| {
+	if src.is_empty() {
+		Str.from_utf8(bytes.sublist({ start, len: end - start })) ?? ""
+	} else {
+		match src.drop_first_bytes(start) {
+			Ok(tail) => tail.drop_last_bytes(bytes.len() - end) ?? ""
+			Err(_) => ""
+		}
+	}
+}
 
 ## A fresh copy of the nodes from `start` on, so the shared list stays
 ## uniquely referenced.
@@ -664,10 +726,10 @@ truncate = |nodes, len| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-STag and https://www.w3.org/TR/xml/#NT-EmptyElemTag
-parse_start_tag : List(U8), U64 -> Try(StartTag, [XmlFail(Failure)])
-parse_start_tag = |bytes, start| {
+parse_start_tag : Str, List(U8), U64 -> Try(StartTag, [XmlFail(Failure)])
+parse_start_tag = |src, bytes, start| {
 	name =
-		match parse_name(bytes, start + 1) {
+		match parse_name(src, bytes, start + 1) {
 			Ok(parsed) => parsed
 			Err(_) => return fail(start + 1, "expected an element name after '<'")
 		}
@@ -693,7 +755,7 @@ parse_start_tag = |bytes, start| {
 			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>")
 		}
 		attribute_name =
-			match parse_name(bytes, $pos) {
+			match parse_name(src, bytes, $pos) {
 				Ok(parsed) => parsed
 				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
 			}
@@ -707,7 +769,7 @@ parse_start_tag = |bytes, start| {
 			return fail($pos, "duplicate attribute ${attribute_name.val}")
 		}
 		$pos = skip_eq(bytes, attribute_name.pos)?
-		value = parse_attribute_value(bytes, $pos)?
+		value = parse_attribute_value(src, bytes, $pos)?
 		$attributes = $attributes.append({ name: attribute_name.val, value: value.val })
 		if $attributes.len() > small_attribute_count {
 			$seen =
@@ -727,14 +789,20 @@ small_attribute_count : U64
 small_attribute_count = 16
 
 # See https://www.w3.org/TR/xml/#NT-AttValue and https://www.w3.org/TR/xml/#AVNormalize
-parse_attribute_value : List(U8), U64 -> Parsed(Str)
-parse_attribute_value = |bytes, start| {
+parse_attribute_value : Str, List(U8), U64 -> Parsed(Str)
+parse_attribute_value = |src, bytes, start| {
 	quote = bytes.get(start) ?? 0
 	if quote != '"' and quote != '\'' {
 		return fail(start, "attribute values must be quoted")
 	}
-	var $value = []
-	var $pos = start + 1
+	# Most values are plain ASCII up to the closing quote: find it 16 bytes
+	# at a time and return a slice of the input.
+	plain_end = Utf8.skip_class(bytes, start + 1, if quote == '"' double_quoted_class else single_quoted_class)
+	if bytes.get(plain_end) == Ok(quote) {
+		return Ok({ val: slice_str(src, bytes, start + 1, plain_end), pos: plain_end + 1 })
+	}
+	var $value = bytes.sublist({ start: start + 1, len: plain_end - start - 1 })
+	var $pos = plain_end
 	while $pos < bytes.len() {
 		byte = bytes.get($pos) ?? 0
 		if byte == quote {
@@ -776,7 +844,7 @@ parse_reference = |bytes, start| {
 		parse_char_reference(bytes, start, start + 2, 10)
 	} else {
 		name =
-			match parse_name(bytes, start + 1) {
+			match parse_name("", bytes, start + 1) {
 				Ok(parsed) => parsed
 				Err(_) => return fail(start, "'&' must start a reference; write &amp; for a literal ampersand")
 			}
@@ -839,14 +907,14 @@ digit_value = |byte| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-Name
-parse_name : List(U8), U64 -> Try({ val : Str, pos : U64 }, [NotAName])
-parse_name = |bytes, start| {
+parse_name : Str, List(U8), U64 -> Try({ val : Str, pos : U64 }, [NotAName])
+parse_name = |src, bytes, start| {
 	first = decode_scalar(bytes, start) ?? { code: 0, len: 0 }
 	if !is_name_start_char(first.code) {
 		return Err(NotAName)
 	}
-	var $pos = start + first.len
-	var $done = False
+	var $pos = Utf8.skip_class(bytes, start + first.len, ascii_name_class)
+	var $done = (bytes.get($pos) ?? 0) < 0x80
 	while !$done {
 		scalar = decode_scalar(bytes, $pos) ?? { code: 0, len: 0 }
 		if is_name_char(scalar.code) {
@@ -855,7 +923,7 @@ parse_name = |bytes, start| {
 			$done = True
 		}
 	}
-	Ok({ val: Str.from_utf8(bytes.sublist({ start, len: $pos - start })) ?? "", pos: $pos })
+	Ok({ val: slice_str(src, bytes, start, $pos), pos: $pos })
 }
 
 is_name_start_char : U32 -> Bool
@@ -974,21 +1042,27 @@ append_run : List(U8), List(U8) -> List(U8)
 append_run = |out, run| if out.is_empty() run else out.concat(run)
 
 plain_run_end : List(U8), U64 -> U64
-plain_run_end = |bytes, start| {
-	var $pos = start
-	var $going = True
-	while $going {
-		match bytes.get($pos) {
-			Ok(b) if b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']' and b != '"' and b != '\'' => {
-				$pos = $pos + 1
-			}
-			_ => {
-				$going = False
-			}
-		}
-	}
-	$pos
-}
+plain_run_end = |bytes, start| Utf8.skip_class(bytes, start, plain_class)
+
+# Printable ASCII other than '<', '&', ']' and quotes; scanned 16 bytes at a time.
+plain_class : Utf8.ByteClass
+plain_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']' and b != '"' and b != '\'')
+
+# Character data that needs no handling: printable ASCII but '<', '&' and
+# ']' (which may start "]]>").
+text_class : Utf8.ByteClass
+text_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']')
+
+# Attribute value bytes that need no handling, inside each kind of quote.
+double_quoted_class : Utf8.ByteClass
+double_quoted_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != '"')
+
+single_quoted_class : Utf8.ByteClass
+single_quoted_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != '\'')
+
+# ASCII name characters: a run of these needs no UTF-8 decoding.
+ascii_name_class : Utf8.ByteClass
+ascii_name_class = Utf8.ByteClass.from_predicate(|b| (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == ':' or b == '_' or b == '-' or b == '.')
 
 starts_with_at : List(U8), U64, List(U8) -> Bool
 starts_with_at = |bytes, pos, prefix| {
