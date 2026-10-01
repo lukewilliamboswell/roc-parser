@@ -1,5 +1,5 @@
 import parser.HTTP
-import parser.String
+import parser.Utf8
 
 ## Invariants for arbitrary input to the HTTP parsers, shared by the raw
 ## robustness targets. Crashes describe the violated property.
@@ -18,17 +18,17 @@ HttpCheck :: {}.{
 
 	check_request : List(U8) -> {}
 	check_request = |bytes| {
-		match String.parse_utf8_partial(HTTP.request, bytes) {
+		match Utf8.parse_utf8_partial(HTTP.request, bytes) {
 			Err(_) => {}
 			Ok({ val, input: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
-				same_request(String.parse_utf8_partial(HTTP.request, consumed), val, [], "re-parsing the consumed prefix", bytes)
+				same_request(Utf8.parse_utf8_partial(HTTP.request, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
 				canonical = serialize_request(val)
-				same_request(String.parse_utf8_partial(HTTP.request, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
+				same_request(Utf8.parse_utf8_partial(HTTP.request, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
 				junk = "GET / HTTP/1.1\r\n".to_utf8()
-				same_request(String.parse_utf8_partial(HTTP.request, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
-				if String.parse_utf8_partial(HTTP.request, consumed.drop_last(1)).is_ok() {
+				same_request(Utf8.parse_utf8_partial(HTTP.request, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
+				if Utf8.parse_utf8_partial(HTTP.request, consumed.drop_last(1)).is_ok() {
 					crash "dropping the last byte of a request still parsed\n${show(bytes)}"
 				}
 			}
@@ -37,11 +37,11 @@ HttpCheck :: {}.{
 
 	check_response : List(U8) -> {}
 	check_response = |bytes| {
-		match String.parse_utf8_partial(HTTP.response, bytes) {
+		match Utf8.parse_utf8_partial(HTTP.response, bytes) {
 			Err(_) => {}
 			Ok({ val, input: rest }) => {
 				consumed = consumed_prefix(bytes, rest)
-				same_response(String.parse_utf8_partial(HTTP.response, consumed), val, [], "re-parsing the consumed prefix", bytes)
+				same_response(Utf8.parse_utf8_partial(HTTP.response, consumed), val, [], "re-parsing the consumed prefix", bytes)
 				check_fields(val.headers, bytes)
 				if val.status_code < 100 or val.status_code > 999 {
 					crash "status code ${val.status_code.to_str()} is not three digits\n${show(bytes)}"
@@ -50,11 +50,11 @@ HttpCheck :: {}.{
 					crash "control character in reason phrase\n${show(bytes)}"
 				}
 				canonical = serialize_response(val)
-				same_response(String.parse_utf8_partial(HTTP.response, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
+				same_response(Utf8.parse_utf8_partial(HTTP.response, canonical), val, [], "re-parsing the canonical form ${show(canonical)}", bytes)
 				if response_delimited(val) {
 					junk = "HTTP/1.1 200 OK\r\n".to_utf8()
-					same_response(String.parse_utf8_partial(HTTP.response, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
-					if String.parse_utf8_partial(HTTP.response, consumed.drop_last(1)).is_ok() {
+					same_response(Utf8.parse_utf8_partial(HTTP.response, consumed.concat(junk)), val, junk, "parsing with bytes appended", bytes)
+					if Utf8.parse_utf8_partial(HTTP.response, consumed.drop_last(1)).is_ok() {
 						crash "dropping the last byte of a response still parsed\n${show(bytes)}"
 					}
 				} else if !rest.is_empty() {

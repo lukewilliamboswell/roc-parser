@@ -4,12 +4,12 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.String
+import parser.Utf8
 import parser.Markdown
 
 # tag::inlines[]
 show_inlines! = |text| {
-	inlines = String.parse_str(Markdown.inlines, text)?
+	inlines = Utf8.parse_str(Markdown.inlines, text)?
 	for inline in inlines {
 		Stdout.line!(Markdown.inline_to_debug_str(inline))?
 	}
@@ -36,7 +36,7 @@ main! = |_args| {
 	# end::calls[]
 	Stdout.line!("--")?
 	# tag::resolve[]
-	blocks = String.parse_str(Markdown.all, document)?
+	blocks = Utf8.parse_str(Markdown.all, document)?
 	for block in blocks {
 		Stdout.line!(block.to_debug_str())?
 	}

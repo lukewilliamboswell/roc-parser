@@ -5,19 +5,19 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 # tag::lazy[]
 # A tree is a number or a bracketed, comma-separated list of trees: [1,[2,3]]
 Tree := [Leaf(U64), Node(List(Tree))]
 
-tree : Parser(String.Utf8, Tree)
+tree : Parser(Utf8.Bytes, Tree)
 tree =
-	String.one_of([
-		String.digits.map(|n| Leaf(n)),
+	Utf8.one_of([
+		Utf8.digits.map(|n| Leaf(n)),
 		Parser.lazy(|_| tree)
-			.sep_by(String.codeunit(','))
-			.between(String.codeunit('['), String.codeunit(']'))
+			.sep_by(Utf8.codeunit(','))
+			.between(Utf8.codeunit('['), Utf8.codeunit(']'))
 			.map(|children| Node(children)),
 	])
 
@@ -29,9 +29,9 @@ leaves = |t| {
 	}
 }
 
-expect String.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves) == Ok(3)
+expect Utf8.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves) == Ok(3)
 # end::lazy[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves)))
+	Stdout.line!(Str.inspect(Utf8.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves)))
 }

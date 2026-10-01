@@ -132,12 +132,12 @@ The message is meant for your logs. It may quote the client's input, so
 think before sending it back in a response.
 
 `ParsingIncomplete` here means the input holds more than one message. Use
-`String.parse_utf8_partial` to read one message and keep the rest for the
+`Utf8.parse_utf8_partial` to read one message and keep the rest for the
 next.
 
 == Your own parsers: say where and what
 
-`String.parse_str` returns the message of the parser that failed last. With
+`Utf8.parse_str` returns the message of the parser that failed last. With
 alternatives, that is the last alternative tried, and with repetition, a bad
 element stops the repetition so the error becomes `ParsingIncomplete` (see
 <<combinators>>). Three habits give users better messages:

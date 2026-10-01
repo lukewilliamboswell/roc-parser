@@ -4,12 +4,12 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.String
+import parser.Utf8
 import parser.Xml
 
 test : Str -> Fuzz.Outcome
 test = |input| {
-	match String.parse_str(Xml.xml_parser, input) {
+	match Utf8.parse_str(Xml.xml_parser, input) {
 		Ok(_) => Fuzz.keep
 		Err(_) => Fuzz.keep
 	}

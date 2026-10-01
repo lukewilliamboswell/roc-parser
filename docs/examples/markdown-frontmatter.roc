@@ -4,7 +4,7 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.String
+import parser.Utf8
 import parser.Markdown
 import parser.Yaml
 
@@ -19,7 +19,7 @@ post =
 	\\First post.
 
 main! = |_args| {
-	blocks = String.parse_str(Markdown.all, post)?
+	blocks = Utf8.parse_str(Markdown.all, post)?
 	match blocks {
 		[Frontmatter({ raw }), .. as body] => {
 			Stdout.line!("raw: ${Str.inspect(raw)}")?

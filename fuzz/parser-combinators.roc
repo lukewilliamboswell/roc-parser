@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 ## Combinator model property: bytes decode into a random combinator expression
 ## tree plus an input. The tree is turned into a real `Parser` built from the
@@ -190,15 +190,15 @@ items = |vals, marker| vals.fold([], |acc, v| acc.concat(v).append(marker))
 build : Expr -> Parser(List(U8), List(U8))
 build = |expr| {
 	match expr {
-		Lit(lit) => String.utf8(lit)
-		Text(text) => String.string(text).map(|s| s.to_utf8())
-		Cu(c) => String.codeunit(c).map(|b| [b])
-		Sat(t) => String.codeunit_satisfies(|b| b < t).map(|b| [b])
-		AnyCu => String.any_codeunit.map(|b| [b])
-		AnyThing => String.any_thing
-		AnyString => String.any_string.map(|s| s.to_utf8())
-		Digit => String.digit.map(|n| n.to_str().to_utf8())
-		Digits => String.digits.map(|n| n.to_str().to_utf8())
+		Lit(lit) => Utf8.utf8(lit)
+		Text(text) => Utf8.string(text).map(|s| s.to_utf8())
+		Cu(c) => Utf8.codeunit(c).map(|b| [b])
+		Sat(t) => Utf8.codeunit_satisfies(|b| b < t).map(|b| [b])
+		AnyCu => Utf8.any_codeunit.map(|b| [b])
+		AnyThing => Utf8.any_thing
+		AnyString => Utf8.any_string.map(|s| s.to_utf8())
+		Digit => Utf8.digit.map(|n| n.to_str().to_utf8())
+		Digits => Utf8.digits.map(|n| n.to_str().to_utf8())
 		Const(lit) => Parser.const(lit)
 		Fail => Parser.fail("model fail")
 		ChompWhile(t) => Parser.chomp_while(|b| b < t)
@@ -209,7 +209,7 @@ build = |expr| {
 		Map3(a, b, c) => Parser.map3(build(a), build(b), build(c), |x, y, z| x.append('|').concat(y).append('|').concat(z))
 		Alt(a, b) => Parser.alt(build(a), build(b))
 		OneOf(es) => Parser.one_of(es.map(build))
-		StrOneOf(es) => String.one_of(es.map(build))
+		StrOneOf(es) => Utf8.one_of(es.map(build))
 		Many(a) => Parser.many(build(a)).map(|vs| items(vs, ';'))
 		OneOrMore(a) => Parser.one_or_more(build(a)).map(|vs| items(vs, ';'))
 		SepBy(a, s) => Parser.sep_by(build(a), build(s)).map(|vs| items(vs, ','))
@@ -404,7 +404,7 @@ test = |case| {
 	}
 	# Full-input runs agree with the partial run.
 	full_ok =
-		match String.parse_utf8(parser, case.input) {
+		match Utf8.parse_utf8(parser, case.input) {
 			Ok(v) => Ok(v)
 			Err(ParsingIncomplete(rest)) => Err(Incomplete(rest))
 			Err(ParsingFailure(_)) => Err(Failure)
@@ -420,7 +420,7 @@ test = |case| {
 	# Str front ends only when the input is valid UTF-8.
 	match Str.from_utf8(case.input) {
 		Ok(text) => {
-			partial = String.parse_str_partial(parser, text)
+			partial = Utf8.parse_str_partial(parser, text)
 			match (partial, expected) {
 				(Ok(p), Ok(r)) =>
 					if p.val != r.val or p.input != Str.from_utf8_lossy(r.rest) {
@@ -429,7 +429,7 @@ test = |case| {
 				(Err(_), Err(_)) => {}
 				_ => crash "parse_str_partial success differs from model"
 			}
-			full = String.parse_str(parser, text)
+			full = Utf8.parse_str(parser, text)
 			match (full, expected) {
 				(Ok(v), Ok(r)) => if !r.rest.is_empty() or v != r.val crash "parse_str Ok differs from model"
 				(Err(ParsingIncomplete(left)), Ok(r)) => if r.rest.is_empty() or left != Str.from_utf8_lossy(r.rest) crash "parse_str leftover differs from model"

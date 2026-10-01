@@ -6,7 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.Markdown
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 ## Arbitrary bytes through Markdown.inlines. Parsing never fails or crashes
 ## (also on invalid UTF-8), and for valid UTF-8:
@@ -26,7 +26,7 @@ Tree : List(Markdown.Inline)
 
 parse : List(U8) -> Tree
 parse = |bytes| {
-	match String.parse_utf8(Markdown.inlines, bytes) {
+	match Utf8.parse_utf8(Markdown.inlines, bytes) {
 		Ok(nodes) => nodes
 		Err(_) => crash "Markdown.inlines must accept every input: ${Str.inspect(Str.from_utf8_lossy(bytes))}"
 	}
@@ -139,11 +139,11 @@ is_autolink_shaped = |label, href| {
 ## On one line without U+0000 or leading whitespace (which paragraph content
 ## would normalize), a successful leading link/image parse leaves a suffix of
 ## the input and is exactly the first node Markdown.inlines produces.
-check_leading_link : Str, Tree, Parser.Parser(String.Utf8, Markdown.Inline) -> {}
+check_leading_link : Str, Tree, Parser.Parser(Utf8.Bytes, Markdown.Inline) -> {}
 check_leading_link = |input, tree, parser| {
 	bytes = input.to_utf8()
 	single_line = !bytes.contains('\n') and !bytes.contains('\r') and !bytes.contains(0)
-	match String.parse_str_partial(parser, input) {
+	match Utf8.parse_str_partial(parser, input) {
 		Err(_) => {}
 		Ok({ val, input: rest }) => {
 			if !Str.ends_with(input, rest) {

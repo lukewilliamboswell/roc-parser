@@ -28,8 +28,8 @@ network input, bound the number of bytes you read.
 
 == Parse a request
 
-Parse a request with `HTTP.request`. `String.parse_str` takes a `Str`; use
-`String.parse_utf8` for a `List(U8)` from a socket. Both fail with
+Parse a request with `HTTP.request`. `Utf8.parse_str` takes a `Str`; use
+`Utf8.parse_utf8` for a `List(U8)` from a socket. Both fail with
 `ParsingIncomplete` if bytes remain after the message (see
 <<http-pipelined,Read pipelined messages>>).
 
@@ -137,7 +137,7 @@ decoded body: Wikipedia
 
 A client may send several requests on one connection without waiting for
 responses. Each parse consumes exactly one message. To keep the bytes that
-follow it, use `String.parse_utf8_partial`, which returns the message as `val`
+follow it, use `Utf8.parse_utf8_partial`, which returns the message as `val`
 and the unread bytes as `input`. Parse `input` again for the next message:
 
 [source,roc]

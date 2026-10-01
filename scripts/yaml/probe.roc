@@ -7,7 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Yaml
-import parser.String
+import parser.Utf8
 
 main! : List(OsStr) => Try({}, _)
 main! = |_| {
@@ -39,7 +39,7 @@ encode = |value| {
 }
 
 json_string : Str -> Str
-json_string = |text| "\"${String.str_from_utf8(escape_json(text.to_utf8(), []))}\""
+json_string = |text| "\"${Utf8.str_from_utf8(escape_json(text.to_utf8(), []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

@@ -55,7 +55,7 @@ the connection. See <<glossary-smuggling,smuggling>>.
 
 [[glossary-input]]Input::
 The data a parser reads, given by the first type parameter of
-`Parser(input, a)`. For text it is `String.Utf8`, a list of UTF-8 bytes; for CSV
+`Parser(input, a)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
 record decoding it is a `CSV.CSVRecord`, a list of fields.
 
 [[glossary-known-failure]]Known failure::
@@ -76,7 +76,7 @@ or a `ParsingFailure` message.
 
 [[glossary-parsing-incomplete]]Parsing incomplete::
 The `ParsingIncomplete` error: the parser succeeded but did not consume the
-whole input. Functions such as `String.parse_str`, which expect to read
+whole input. Functions such as `Utf8.parse_str`, which expect to read
 everything, return it with the leftover input.
 
 [[glossary-progress]]Progress::

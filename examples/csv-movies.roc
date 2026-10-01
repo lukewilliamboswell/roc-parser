@@ -8,7 +8,7 @@ import cli.Stderr
 import cli.Stdout
 import parser.CSV
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 input =
 	\\Airplane!,1980,\"Robert Hays,Julie Hagerty\"
@@ -41,7 +41,7 @@ main! = |args| {
 				ParsingIncomplete(leftover) => {
 					leftover_str =
 						leftover
-							.map(String.str_from_utf8)
+							.map(Utf8.str_from_utf8)
 							.map(|val| "\"${val}\"")
 							|> Str.join_with(", ")
 

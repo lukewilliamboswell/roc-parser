@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.String
+import parser.Utf8
 
 ## Typed inline property: bytes choose an inline syntax tree and how to write
 ## it (delimiter characters, link destination and title forms, reference
@@ -449,13 +449,13 @@ generate = |bytes| {
 test : Input -> Fuzz.Outcome
 test = |input| {
 	if input.doc {
-		match String.parse_str(Markdown.all, input.md) {
+		match Utf8.parse_str(Markdown.all, input.md) {
 			Ok([Paragraph(actual)]) if actual == input.expected => Fuzz.keep
 			Ok(blocks) => crash "document mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${blocks.map(Markdown.to_debug_str) |> Str.join_with("\n")}"
 			Err(_) => crash "document failed to parse\n${input.md}"
 		}
 	} else {
-		match String.parse_str(Markdown.inlines, input.md) {
+		match Utf8.parse_str(Markdown.inlines, input.md) {
 			Ok(actual) if actual == input.expected => Fuzz.keep
 			Ok(actual) => crash "inline mismatch\n--- markdown ---\n${input.md}\n--- expected ---\n${show(input.expected)}\n--- actual ---\n${show(actual)}"
 			Err(_) => crash "inline failed to parse\n${input.md}"

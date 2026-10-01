@@ -8,14 +8,14 @@ import parser.CSV
 import parser.HTTP
 import parser.Markdown
 import parser.Parser
-import parser.String
+import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
 # tag::entry-points[]
-# Parser and String: build a parser from combinators, run it on a Str.
-pair : Parser(String.Utf8, (U64, U64))
-pair = Parser.const(|a| |b| (a, b)).keep(String.digits).skip(String.codeunit(',')).keep(String.digits)
+# Parser and Utf8: build a parser from combinators, run it on a Str.
+pair : Parser(Utf8.Bytes, (U64, U64))
+pair = Parser.const(|a| |b| (a, b)).keep(Utf8.digits).skip(Utf8.codeunit(',')).keep(Utf8.digits)
 
 # CSV: decode every record with a record parser.
 row : Parser(CSV.CSVRecord, { name : Str, age : U64 })
@@ -24,7 +24,7 @@ row = CSV.record(|name| |age| { name, age }).keep(CSV.field(CSV.string)).keep(CS
 # HTTP: parse one message; bytes after it are left for the next message.
 http_target : Str -> Str
 http_target = |text| {
-	match String.parse_str(HTTP.request, text) {
+	match Utf8.parse_str(HTTP.request, text) {
 		Ok(req) => req.uri
 		Err(_) => "invalid request"
 	}
@@ -50,7 +50,7 @@ yaml_value = |text| {
 # Markdown: the `all` parser accepts every complete document.
 markdown_blocks : Str -> Str
 markdown_blocks = |text| {
-	match String.parse_str(Markdown.all, text) {
+	match Utf8.parse_str(Markdown.all, text) {
 		Ok(blocks) => blocks.map(Markdown.to_debug_str) |> Str.join_with("\n")
 		Err(_) => "unreachable"
 	}
@@ -59,7 +59,7 @@ markdown_blocks = |text| {
 # end::entry-points[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(pair, "3,4")))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(pair, "3,4")))?
 	Stdout.line!(Str.inspect(CSV.parse_str(row, "Ada,36\nAlan,41\n")))?
 	Stdout.line!(http_target("GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n"))?
 	Stdout.line!(xml_root("<greeting lang=\"en\">hi</greeting>"))?

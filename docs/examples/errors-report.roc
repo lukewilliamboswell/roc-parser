@@ -7,7 +7,7 @@ import cli.Stdout
 import parser.CSV
 import parser.HTTP
 import parser.Parser
-import parser.String
+import parser.Utf8
 import parser.Xml
 import parser.Yaml
 
@@ -56,7 +56,7 @@ csv_message = |source| {
 # tag::http[]
 http_message : Str -> Str
 http_message = |source| {
-	match String.parse_str(HTTP.request, source) {
+	match Utf8.parse_str(HTTP.request, source) {
 		Ok(request) => "request for ${request.uri}"
 		Err(ParsingFailure(message)) => "400 Bad Request: ${message}"
 		Err(ParsingIncomplete(_)) => "a second message follows the first"

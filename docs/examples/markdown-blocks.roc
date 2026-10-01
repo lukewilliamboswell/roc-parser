@@ -4,7 +4,7 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.String
+import parser.Utf8
 import parser.Markdown
 
 # tag::parse[]
@@ -31,7 +31,7 @@ source =
 	\\<div>raw</div>
 
 main! = |_args| {
-	blocks = String.parse_str(Markdown.all, source)?
+	blocks = Utf8.parse_str(Markdown.all, source)?
 	for block in blocks {
 		Stdout.line!(block.to_debug_str())?
 	}
@@ -42,7 +42,7 @@ main! = |_args| {
 
 # tag::loose[]
 loose_list! = || {
-	blocks = String.parse_str(Markdown.all, "3. first\n\n4. second\n")?
+	blocks = Utf8.parse_str(Markdown.all, "3. first\n\n4. second\n")?
 	for block in blocks {
 		Stdout.line!(block.to_debug_str())?
 	}

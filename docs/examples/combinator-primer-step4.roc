@@ -5,62 +5,62 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(String.Utf8, Str)
+key : Parser(Utf8.Bytes, Str)
 key =
-	String.codeunit_satisfies(is_key_byte)
+	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 
 Value : [Number(U64), Flag(Bool), Text(Str)]
 
-number : Parser(String.Utf8, Value)
-number = String.digits.map(|n| Number(n))
+number : Parser(Utf8.Bytes, Value)
+number = Utf8.digits.map(|n| Number(n))
 
-flag : Parser(String.Utf8, Value)
+flag : Parser(Utf8.Bytes, Value)
 flag =
-	String.one_of([
-		Parser.const(Flag(Bool.True)).skip(String.string("true")),
-		Parser.const(Flag(Bool.False)).skip(String.string("false")),
+	Utf8.one_of([
+		Parser.const(Flag(Bool.True)).skip(Utf8.string("true")),
+		Parser.const(Flag(Bool.False)).skip(Utf8.string("false")),
 	])
 
-text : Parser(String.Utf8, Value)
+text : Parser(Utf8.Bytes, Value)
 text =
 	Parser.chomp_while(|b| b != '"')
-		.map(|bytes| Text(String.str_from_utf8(bytes)))
-		.between(String.codeunit('"'), String.codeunit('"'))
+		.map(|bytes| Text(Utf8.str_from_utf8(bytes)))
+		.between(Utf8.codeunit('"'), Utf8.codeunit('"'))
 
-value : Parser(String.Utf8, Value)
-value = String.one_of([number, flag, text])
+value : Parser(Utf8.Bytes, Value)
+value = Utf8.one_of([number, flag, text])
 
 Entry : { key : Str, value : Value }
 
-entry : Parser(String.Utf8, Entry)
+entry : Parser(Utf8.Bytes, Entry)
 entry =
 	Parser.const(|k| |v| { key: k, value: v })
 		.keep(key)
-		.skip(String.codeunit('='))
+		.skip(Utf8.codeunit('='))
 		.keep(value)
 
 # tag::config[]
-config : Parser(String.Utf8, List(Entry))
-config = entry.sep_by(String.codeunit('\n'))
+config : Parser(Utf8.Bytes, List(Entry))
+config = entry.sep_by(Utf8.codeunit('\n'))
 # end::config[]
 
 # tag::expects[]
 expect
-	String.parse_str(config, "port=8080\ndebug=true")
+	Utf8.parse_str(config, "port=8080\ndebug=true")
 		== Ok([{ key: "port", value: Number(8080) }, { key: "debug", value: Flag(Bool.True) }])
 # end::expects[]
 
 # tag::report[]
 report : Str -> Str
 report = |source| {
-	match String.parse_str(config, source) {
+	match Utf8.parse_str(config, source) {
 		Ok(entries) => "parsed ${entries.len().to_str()} entries"
 		Err(ParsingIncomplete(rest)) => "stopped before: `${rest.replace_each("\n", "\\n")}`"
 		Err(ParsingFailure(message)) => "failed: ${message}"
@@ -69,7 +69,7 @@ report = |source| {
 
 report_entry : Str -> Str
 report_entry = |source| {
-	match String.parse_str(entry, source) {
+	match Utf8.parse_str(entry, source) {
 		Ok(_) => "parsed one entry"
 		Err(ParsingIncomplete(rest)) => "stopped before: `${rest}`"
 		Err(ParsingFailure(message)) => "failed: ${message}"

@@ -5,38 +5,38 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(String.Utf8, Str)
+key : Parser(Utf8.Bytes, Str)
 key =
-	String.codeunit_satisfies(is_key_byte)
+	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 
 # tag::entry[]
-value : Parser(String.Utf8, Str)
+value : Parser(Utf8.Bytes, Str)
 value =
 	Parser.chomp_while(|b| b != '\n')
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 
 Entry : { key : Str, value : Str }
 
-entry : Parser(String.Utf8, Entry)
+entry : Parser(Utf8.Bytes, Entry)
 entry =
 	Parser.const(|k| |v| { key: k, value: v })
 		.keep(key)
-		.skip(String.codeunit('='))
+		.skip(Utf8.codeunit('='))
 		.keep(value)
 # end::entry[]
 
 # tag::expects[]
-expect String.parse_str(entry, "name=roc") == Ok({ key: "name", value: "roc" })
-expect String.parse_str(entry, "empty=") == Ok({ key: "empty", value: "" })
+expect Utf8.parse_str(entry, "name=roc") == Ok({ key: "name", value: "roc" })
+expect Utf8.parse_str(entry, "empty=") == Ok({ key: "empty", value: "" })
 # end::expects[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(entry, "name=roc")))
+	Stdout.line!(Str.inspect(Utf8.parse_str(entry, "name=roc")))
 }

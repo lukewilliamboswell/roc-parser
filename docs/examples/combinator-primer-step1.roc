@@ -5,24 +5,24 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 # tag::key[]
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(String.Utf8, Str)
+key : Parser(Utf8.Bytes, Str)
 key =
-	String.codeunit_satisfies(is_key_byte)
+	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 # end::key[]
 
 # tag::expects[]
-expect String.parse_str(key, "name") == Ok("name")
-expect String.parse_str(key, "Name").is_err()
+expect Utf8.parse_str(key, "name") == Ok("name")
+expect Utf8.parse_str(key, "Name").is_err()
 # end::expects[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(key, "name")))
+	Stdout.line!(Str.inspect(Utf8.parse_str(key, "name")))
 }

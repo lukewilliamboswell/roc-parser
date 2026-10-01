@@ -28,9 +28,9 @@ other five are ready-made parsers for one format each.
 |Combine small parsers into larger ones, for any input type
 |`Parser.const`, `keep`, `skip`, `map`, `one_of`, `many`, `sep_by`
 
-|{api}String/[`String`]
+|{api}Utf8/[`Utf8`]
 |Parse text: match bytes, strings and digits, and run a parser on a `Str`
-|`String.parse_str`, `string`, `codeunit`, `digits`
+|`Utf8.parse_str`, `string`, `codeunit`, `digits`
 
 |{api}CSV/[`CSV`]
 |Read comma-separated values, raw or decoded into your own record type
@@ -58,14 +58,14 @@ other five are ready-made parsers for one format each.
 A `Parser(input, a)` is a value that describes how to read an `a` from the
 start of an `input`. Running it returns the value and the input it did not
 consume, or a `ParsingFailure` message. `Parser` provides the combinators that
-build parsers from parsers; `String` provides the parsers that read text, with
-`String.Utf8` (a `List(U8)`) as the input type.
+build parsers from parsers; `Utf8` provides the parsers that read text, with
+`Utf8.Bytes` (a `List(U8)`) as the input type.
 
 The format modules use these in two ways:
 
-* `CSV`, `HTTP` and `Markdown` expose parsers (`Parser(String.Utf8, ...)` or,
+* `CSV`, `HTTP` and `Markdown` expose parsers (`Parser(Utf8.Bytes, ...)` or,
   for CSV records, `Parser(CSV.CSVRecord, ...)`). Run them with
-  `String.parse_str`, or embed them in a larger parser.
+  `Utf8.parse_str`, or embed them in a larger parser.
 * `Xml` and `Yaml` expose a `parse_str` function that takes a whole document
   and returns either the value or an error record with a one-based line and
   column. `Xml.xml_parser` is also available as a parser for embedding.
@@ -101,15 +101,15 @@ format this package does not cover, or extending one of the format parsers.
   when an element fails or consumes nothing.
 * Convert results with `map`, `map2`, `map3`, `apply` and `flatten`.
 * Run a parser with `parse` (whole input) or `parse_partial` (leaving the
-  rest). For text, prefer the `String` functions below.
+  rest). For text, prefer the `Utf8` functions below.
 * `build_primitive_parser` turns your own function into a parser when no
   combinator fits; `lazy` defers building a parser for recursive grammars.
 
-== String
+== Utf8
 
-`String` holds the text parsers and the functions that run a parser on text.
+`Utf8` holds the text parsers and the functions that run a parser on text.
 
-* `String.parse_str` runs a parser on a whole `Str` and reports leftover text
+* `Utf8.parse_str` runs a parser on a whole `Str` and reports leftover text
   as `ParsingIncomplete`. `parse_str_partial`, `parse_utf8` and
   `parse_utf8_partial` cover partial input and byte input.
 * `codeunit`, `codeunit_satisfies`, `any_codeunit`, `utf8` and `string` match
@@ -127,8 +127,8 @@ exact dialect.
 
 * `CSV.parse_str` parses the text and decodes every record with a record
   parser you build from `CSV.record` and `CSV.field`. Field parsers `CSV.string`,
-  `CSV.u64` and `CSV.f64` are provided, and any `Parser(String.Utf8, a)` works.
-* `CSV.parse_str_to_csv` returns the raw records as `List(List(String.Utf8))`
+  `CSV.u64` and `CSV.f64` are provided, and any `Parser(Utf8.Bytes, a)` works.
+* `CSV.parse_str_to_csv` returns the raw records as `List(List(Utf8.Bytes))`
   when rows differ in shape or you want to inspect them first; decode them
   later with `CSV.parse_csv`.
 
@@ -140,8 +140,8 @@ it yourself.
 `HTTP` reads one HTTP/1.1 (or HTTP/1.0) message: start line, header fields and
 body.
 
-* `HTTP.request` and `HTTP.response` are parsers. With `String.parse_str` they
-  reject trailing data; with `String.parse_utf8_partial` they return the bytes
+* `HTTP.request` and `HTTP.response` are parsers. With `Utf8.parse_str` they
+  reject trailing data; with `Utf8.parse_utf8_partial` they return the bytes
   of the next pipelined message.
 * `Request` and `Response` are records; `Header`, `Method` and `HttpVersion`
   describe their fields.
@@ -200,7 +200,7 @@ rather than misread. Nesting is limited to 100 levels.
 [cols="2,3",options="header"]
 |===
 |If your input is |Use
-|A small text format of your own, such as a command or a log line |`Parser` with `String`
+|A small text format of your own, such as a command or a log line |`Parser` with `Utf8`
 |A spreadsheet export or other comma-separated data |`CSV`
 |Raw bytes of an HTTP/1.1 message from a socket or a capture |`HTTP`
 |Documentation, notes or a README |`Markdown`

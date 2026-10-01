@@ -5,57 +5,57 @@ app [main!] {
 
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 is_key_byte : U8 -> Bool
 is_key_byte = |b| (b >= 'a' and b <= 'z') or b == '_'
 
-key : Parser(String.Utf8, Str)
+key : Parser(Utf8.Bytes, Str)
 key =
-	String.codeunit_satisfies(is_key_byte)
+	Utf8.codeunit_satisfies(is_key_byte)
 		.one_or_more()
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 
 # tag::value[]
 Value : [Number(U64), Flag(Bool), Text(Str)]
 
-number : Parser(String.Utf8, Value)
-number = String.digits.map(|n| Number(n))
+number : Parser(Utf8.Bytes, Value)
+number = Utf8.digits.map(|n| Number(n))
 
-flag : Parser(String.Utf8, Value)
+flag : Parser(Utf8.Bytes, Value)
 flag =
-	String.one_of([
-		Parser.const(Flag(Bool.True)).skip(String.string("true")),
-		Parser.const(Flag(Bool.False)).skip(String.string("false")),
+	Utf8.one_of([
+		Parser.const(Flag(Bool.True)).skip(Utf8.string("true")),
+		Parser.const(Flag(Bool.False)).skip(Utf8.string("false")),
 	])
 
-text : Parser(String.Utf8, Value)
+text : Parser(Utf8.Bytes, Value)
 text =
 	Parser.chomp_while(|b| b != '"')
-		.map(|bytes| Text(String.str_from_utf8(bytes)))
-		.between(String.codeunit('"'), String.codeunit('"'))
+		.map(|bytes| Text(Utf8.str_from_utf8(bytes)))
+		.between(Utf8.codeunit('"'), Utf8.codeunit('"'))
 
-value : Parser(String.Utf8, Value)
-value = String.one_of([number, flag, text])
+value : Parser(Utf8.Bytes, Value)
+value = Utf8.one_of([number, flag, text])
 
 # end::value[]
 
 Entry : { key : Str, value : Value }
 
-entry : Parser(String.Utf8, Entry)
+entry : Parser(Utf8.Bytes, Entry)
 entry =
 	Parser.const(|k| |v| { key: k, value: v })
 		.keep(key)
-		.skip(String.codeunit('='))
+		.skip(Utf8.codeunit('='))
 		.keep(value)
 
 # tag::expects[]
-expect String.parse_str(value, "8080") == Ok(Number(8080))
-expect String.parse_str(value, "true") == Ok(Flag(Bool.True))
-expect String.parse_str(value, "\"hello world\"") == Ok(Text("hello world"))
-expect String.parse_str(value, "maybe").is_err()
+expect Utf8.parse_str(value, "8080") == Ok(Number(8080))
+expect Utf8.parse_str(value, "true") == Ok(Flag(Bool.True))
+expect Utf8.parse_str(value, "\"hello world\"") == Ok(Text("hello world"))
+expect Utf8.parse_str(value, "maybe").is_err()
 # end::expects[]
 
 main! = |_args| {
-	Stdout.line!(Str.inspect(String.parse_str(entry, "port=8080")))
+	Stdout.line!(Str.inspect(Utf8.parse_str(entry, "port=8080")))
 }

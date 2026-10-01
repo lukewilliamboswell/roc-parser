@@ -75,7 +75,7 @@ be merged again.
 [cols="1,3",options="header"]
 |===
 |Path |Purpose
-|`package/` |The library: `Parser`, `String`, and one module per format
+|`package/` |The library: `Parser`, `Utf8`, and one module per format
 |`examples/` |Small apps that use the package
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
 |`scripts/` |Test, review, fuzz, documentation and release automation, all in Python

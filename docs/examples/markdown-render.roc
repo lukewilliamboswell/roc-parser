@@ -4,7 +4,7 @@ app [main!] {
 }
 
 import cli.Stdout
-import parser.String
+import parser.Utf8
 import parser.Markdown
 
 source =
@@ -163,7 +163,7 @@ table_of_contents = |blocks| {
 
 main! = |_args| {
 	# tag::main[]
-	blocks = String.parse_str(Markdown.all, source)?
+	blocks = Utf8.parse_str(Markdown.all, source)?
 	Stdout.write!(render_blocks(blocks))?
 	Stdout.line!("--- contents ---")?
 	for line in table_of_contents(blocks) {

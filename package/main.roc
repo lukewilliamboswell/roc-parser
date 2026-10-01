@@ -1,7 +1,7 @@
 package
 	[
 		Parser,
-		String,
+		Utf8,
 		CSV,
 		HTTP,
 		Markdown,

@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.String
+import parser.Utf8
 import parser.Xml
 import XmlGen
 
@@ -196,7 +196,7 @@ test = |mutation| {
 			}
 		}
 	}
-	if String.parse_str(Xml.xml_parser, mutation.xml).is_ok() {
+	if Utf8.parse_str(Xml.xml_parser, mutation.xml).is_ok() {
 		crash "Xml.xml_parser accepted a document with ${mutation.name}: ${Str.inspect(mutation.xml)}"
 	}
 	Fuzz.keep

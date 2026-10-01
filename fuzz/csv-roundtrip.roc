@@ -6,7 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 ## Round-trip property: fuzzer bytes choose a table of arbitrary UTF-8 fields
 ## (ragged rows allowed) *and* how to write it: which fields to quote beyond

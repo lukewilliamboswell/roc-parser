@@ -1,5 +1,5 @@
 import Parser
-import String
+import Utf8
 
 ## XML document tree and parser based on the XML 1.0 (Fifth Edition)
 ## specification.
@@ -126,9 +126,9 @@ Xml := {
 	## `parse_str`, which reports a structured `Error`.
 	##
 	## ```roc
-	## expect String.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+	## expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
 	## ```
-	xml_parser : Parser(String.Utf8, Xml)
+	xml_parser : Parser(Utf8.Bytes, Xml)
 	xml_parser =
 		Parser.build_primitive_parser(
 			|input| {
@@ -845,7 +845,7 @@ test_xml =
 
 ## Full XML parsing captures the declaration and root element.
 expect {
-	result = String.parse_str(Xml.xml_parser, test_xml)?
+	result = Utf8.parse_str(Xml.xml_parser, test_xml)?
 
 	result
 		== {
@@ -871,7 +871,7 @@ expect {
 
 ## XML parsing accepts documents without a prolog.
 expect {
-	result = String.parse_str(Xml.xml_parser, "<element />")?
+	result = Utf8.parse_str(Xml.xml_parser, "<element />")?
 
 	result
 		== {
@@ -970,7 +970,7 @@ expect {
 
 ## Malformed input ending in a multibyte scalar returns an error instead of crashing
 ## while rendering a parser failure from a mid-scalar byte position.
-expect String.parse_str(Xml.xml_parser, "<ӿ").is_err()
+expect Utf8.parse_str(Xml.xml_parser, "<ӿ").is_err()
 
 ## End tags must match their start tag (WFC: Element Type Match).
 expect error_at("<a><b></a></b>") == Ok({ line: 1, column: 7 })
@@ -1050,7 +1050,7 @@ expect {
 }
 
 ## The parser combinator reports leftover input after the document.
-expect String.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+expect Utf8.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
 
 ## Duplicate attribute detection stays fast with many attributes.
 expect {

@@ -7,13 +7,13 @@ import cli.OsStr
 import cli.Stdout
 import cli.Stderr
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "1000\n2000\n3000\n\n4000\n\n5000\n6000\n\n"
 	result : Try(List(List(U64)), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(multiple_numbers.many(), input)
+	result = Utf8.parse_str(multiple_numbers.many(), input)
 
 	match result.map_ok(largest) {
 		Ok(count) => Stdout.line!("The largest sum is ${count.to_str()}")?
@@ -26,12 +26,12 @@ main! = |args| {
 single_number : Parser(List(U8), U64)
 single_number =
 	Parser.const(|n| n)
-		.keep(String.digits)
-		.skip(String.string("\n"))
+		.keep(Utf8.digits)
+		.skip(Utf8.string("\n"))
 
 ## A number parser consumes one newline-terminated number.
 expect {
-	actual = String.parse_str(single_number, "1000\n")?
+	actual = Utf8.parse_str(single_number, "1000\n")?
 	actual == 1000
 }
 
@@ -40,11 +40,11 @@ multiple_numbers : Parser(List(U8), List(U64))
 multiple_numbers =
 	Parser.const(|ns| ns)
 		.keep(single_number.many())
-		.skip(String.string("\n"))
+		.skip(Utf8.string("\n"))
 
 ## A list parser consumes numbers until the blank line terminator.
 expect {
-	actual = String.parse_str(multiple_numbers, "1000\n2000\n3000\n\n")?
+	actual = Utf8.parse_str(multiple_numbers, "1000\n2000\n3000\n\n")?
 	actual == [1000, 2000, 3000]
 }
 

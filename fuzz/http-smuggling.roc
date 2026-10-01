@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.HTTP
-import parser.String
+import parser.Utf8
 import HttpGen
 
 ## Smuggling / ambiguity property: fuzzer bytes choose a valid message (see
@@ -374,8 +374,8 @@ test = |input| {
 		Ok(mutated) => {
 			accepted =
 				match mutated.kind {
-					Req(_) => String.parse_utf8_partial(HTTP.request, mutated.bytes).map_ok(|r| Str.inspect(r))
-					Res(_) => String.parse_utf8_partial(HTTP.response, mutated.bytes).map_ok(|r| Str.inspect(r))
+					Req(_) => Utf8.parse_utf8_partial(HTTP.request, mutated.bytes).map_ok(|r| Str.inspect(r))
+					Res(_) => Utf8.parse_utf8_partial(HTTP.response, mutated.bytes).map_ok(|r| Str.inspect(r))
 				}
 			match accepted {
 				Err(_) => Fuzz.keep

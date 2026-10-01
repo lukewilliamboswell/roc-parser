@@ -7,7 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
-import parser.String
+import parser.Utf8
 import parser.Parser
 
 ## Reads CSV text on stdin and prints one JSON line describing the parse:
@@ -34,10 +34,10 @@ main! = |_| {
 
 ## Every field of a record, raw, via the public typed-decoding API.
 all_fields : Parser(CSV.CSVRecord, List(List(U8)))
-all_fields = Parser.many(CSV.field(String.any_thing))
+all_fields = Parser.many(CSV.field(Utf8.any_thing))
 
 json_bytes : List(U8) -> Str
-json_bytes = |bytes| "\"${String.str_from_utf8(escape_json(bytes, []))}\""
+json_bytes = |bytes| "\"${Utf8.str_from_utf8(escape_json(bytes, []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

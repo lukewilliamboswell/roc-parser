@@ -126,7 +126,7 @@ include::examples/xml-guide.expected[lines=5..9]
 ----
 
 If you are combining XML with other parsers, `Xml.xml_parser` is the same
-parser as a `Parser(String.Utf8, Xml)`. It leaves any input after the document
+parser as a `Parser(Utf8.Bytes, Xml)`. It leaves any input after the document
 for the next parser, and its failure message has the form
 `line:column: message`.
 

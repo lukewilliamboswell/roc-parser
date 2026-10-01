@@ -1,6 +1,6 @@
 import MarkdownEntities
 import Parser
-import String
+import Utf8
 import unicode.Case
 import unicode.GeneralCategory
 import unicode.Scalar
@@ -162,15 +162,15 @@ Markdown := [
 	}
 
 	## Parse a complete Markdown document into block nodes.
-	all : Parser(String.Utf8, List(Markdown))
+	all : Parser(Utf8.Bytes, List(Markdown))
 	all = parse_all
 
 	## Parse inline Markdown content.
-	inlines : Parser(String.Utf8, List(Inline))
+	inlines : Parser(Utf8.Bytes, List(Inline))
 	inlines = parse_inlines_parser
 
 	## Parse an ATX or Setext heading.
-	heading : Parser(String.Utf8, Markdown)
+	heading : Parser(Utf8.Bytes, Markdown)
 	heading =
 		Parser.one_of([
 			inline_heading,
@@ -179,25 +179,25 @@ Markdown := [
 		])
 
 	## Parse an inline link (`[label](destination "title")`) at the start of the input.
-	link : Parser(String.Utf8, Inline)
+	link : Parser(Utf8.Bytes, Inline)
 	link = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.False))
 
 	## Parse an inline image (`![alt](destination "title")`) at the start of the input.
-	image : Parser(String.Utf8, Inline)
+	image : Parser(Utf8.Bytes, Inline)
 	image = Parser.build_primitive_parser(|input| parse_leading_link(input, Bool.True))
 
 	## Parse a fenced code block delimited by triple backticks.
-	code : Parser(String.Utf8, Markdown)
+	code : Parser(Utf8.Bytes, Markdown)
 	code =
 		Parser.const(|info| |pre| Code({ info: info, pre: pre }))
 			.keep(
 				Parser.one_of([
 					Parser.const(|i| i)
-						.skip(String.string("```"))
-						.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+						.skip(Utf8.string("```"))
+						.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
 						.skip(end_of_line),
 					Parser.const("")
-						.skip(String.string("```")),
+						.skip(Utf8.string("```")),
 				]),
 			)
 			.keep(chomp_until_code_block_end)
@@ -398,7 +398,7 @@ OpenKind : [
 	FencedBlock({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }),
 	IndentedBlock,
 	HtmlBlockOpen(U64),
-	TableBlock({ align : List(Markdown.Alignment), header : List(String.Utf8) }),
+	TableBlock({ align : List(Markdown.Alignment), header : List(Utf8.Bytes) }),
 ]
 
 ## First and last source line of a closed block, used to decide list looseness:
@@ -425,7 +425,7 @@ Event : [
 
 BlockState : {
 	stack : List(Open),
-	line : String.Utf8,
+	line : Utf8.Bytes,
 	# For each byte offset of the line: the offset of the next byte that is not
 	# a space or tab, and the column of each offset (tab stops of 4). Computed
 	# once per line, so that finding the next non-space character is constant
@@ -440,9 +440,9 @@ BlockState : {
 	last_matched : U64,
 	# The innermost leaf block's lines from earlier lines (read only), whether
 	# that leaf was closed on this line, and the lines added on this line.
-	leaf_lines : List(String.Utf8),
+	leaf_lines : List(Utf8.Bytes),
 	leaf_reset : Bool,
-	leaf_added : List(String.Utf8),
+	leaf_added : List(Utf8.Bytes),
 	events : List(Event),
 }
 
@@ -452,7 +452,7 @@ Continuation : [Matched(BlockState), NotMatched, Consumed(BlockState)]
 
 StartResult : [NoStart, StartedContainer(BlockState), StartedLeaf(BlockState), LineDone(BlockState), StopStarts(BlockState)]
 
-parse_all : Parser(String.Utf8, List(Markdown))
+parse_all : Parser(Utf8.Bytes, List(Markdown))
 parse_all =
 	Parser.build_primitive_parser(
 		|input| {
@@ -461,7 +461,7 @@ parse_all =
 	)
 
 ## Markdown has no syntax errors: every input is a document.
-parse_document : String.Utf8 -> List(Markdown)
+parse_document : Utf8.Bytes -> List(Markdown)
 parse_document = |input| {
 	all_lines = split_document_lines(input)
 	front = take_frontmatter(all_lines)
@@ -477,7 +477,7 @@ parse_document = |input| {
 
 ## Line endings are LF, CRLF, or a lone CR; U+0000 becomes U+FFFD. A final line
 ## ending does not start another line.
-split_document_lines : String.Utf8 -> List(String.Utf8)
+split_document_lines : Utf8.Bytes -> List(Utf8.Bytes)
 split_document_lines = |input| {
 	var $lines = []
 	var $current = []
@@ -511,7 +511,7 @@ split_document_lines = |input| {
 ## Extension: a first line of exactly `---` up to the next line of exactly
 ## `---` is raw frontmatter, not Markdown. Without a closing line the document
 ## is ordinary Markdown.
-take_frontmatter : List(String.Utf8) -> { frontmatter : Try(Str, [NotFound]), lines : List(String.Utf8) }
+take_frontmatter : List(Utf8.Bytes) -> { frontmatter : Try(Str, [NotFound]), lines : List(Utf8.Bytes) }
 take_frontmatter = |lines| {
 	if (lines.first() ?? []) != "---".to_utf8() {
 		{ frontmatter: Err(NotFound), lines }
@@ -519,7 +519,7 @@ take_frontmatter = |lines| {
 		match lines.drop_first(1).find_first_index(|line| line == "---".to_utf8()) {
 			Ok(index) => {
 				raw = lines.sublist({ start: 1, len: index }).fold([], |acc, line| acc.concat(line).append('\n'))
-				{ frontmatter: Ok(String.str_from_utf8(raw)), lines: lines.drop_first(index + 2) }
+				{ frontmatter: Ok(Utf8.str_from_utf8(raw)), lines: lines.drop_first(index + 2) }
 			}
 
 			Err(_) =>
@@ -533,7 +533,7 @@ new_open = |kind, line_number| {
 	{ kind, start: line_number, last: line_number, has_children: Bool.False }
 }
 
-parse_block_lines : List(String.Utf8) -> List(Event)
+parse_block_lines : List(Utf8.Bytes) -> List(Event)
 parse_block_lines = |lines| {
 	var $state = {
 		stack: [new_open(DocumentBlock, 0)],
@@ -710,7 +710,7 @@ process_line = |initial| {
 	}
 }
 
-index_line : String.Utf8 -> { next_nonspace : List(U64), columns : List(U64) }
+index_line : Utf8.Bytes -> { next_nonspace : List(U64), columns : List(U64) }
 index_line = |line| {
 	len = line.len()
 	var $columns = List.with_capacity(len + 1)
@@ -943,7 +943,7 @@ update_tip = |stack, f| {
 
 ## The rest of the line from the current offset; a partly consumed tab
 ## contributes its remaining columns as spaces.
-line_rest : BlockState -> String.Utf8
+line_rest : BlockState -> Utf8.Bytes
 line_rest = |s| {
 	if s.partial_tab {
 		List.repeat(' ', 4 - (s.column % 4)).concat(s.line.drop_first(s.offset + 1))
@@ -960,10 +960,10 @@ add_line_to_tip = |s| {
 }
 
 ## The innermost leaf block's lines so far.
-tip_lines : BlockState -> List(String.Utf8)
+tip_lines : BlockState -> List(Utf8.Bytes)
 tip_lines = |s| if s.leaf_reset s.leaf_added else s.leaf_lines.concat(s.leaf_added)
 
-tip_last_line : BlockState -> String.Utf8
+tip_last_line : BlockState -> Utf8.Bytes
 tip_last_line = |s| {
 	match s.leaf_added.last() {
 		Ok(line) => line
@@ -1019,11 +1019,11 @@ has_gap = |spans| {
 	$gap
 }
 
-placeholder : String.Utf8 -> List(Markdown.Inline)
-placeholder = |raw| [Text(String.str_from_utf8(raw))]
+placeholder : Utf8.Bytes -> List(Markdown.Inline)
+placeholder = |raw| [Text(Utf8.str_from_utf8(raw))]
 
 ## The events for a closed leaf block with these lines.
-finish_leaf : Open, List(String.Utf8) -> List(Event)
+finish_leaf : Open, List(Utf8.Bytes) -> List(Event)
 finish_leaf = |open, lines| {
 	span = { start: open.start, end: open.last }
 	match open.kind {
@@ -1035,18 +1035,18 @@ finish_leaf = |open, lines| {
 		}
 
 		FencedBlock(fence) =>
-			[Leaf(Code({ info: fence.info, pre: String.str_from_utf8(join_lines_with_newlines(lines)) }), span)]
+			[Leaf(Code({ info: fence.info, pre: Utf8.str_from_utf8(join_lines_with_newlines(lines)) }), span)]
 
 		IndentedBlock => {
 			var $lines = lines
 			while bytes_are_blank($lines.last() ?? [0]) {
 				$lines = $lines.drop_last(1)
 			}
-			[Leaf(Code({ info: "", pre: String.str_from_utf8(join_lines_with_newlines($lines)) }), span)]
+			[Leaf(Code({ info: "", pre: Utf8.str_from_utf8(join_lines_with_newlines($lines)) }), span)]
 		}
 
 		HtmlBlockOpen(_) =>
-			[Leaf(HtmlBlock(String.str_from_utf8(join_lines_with_newlines(lines))), span)]
+			[Leaf(HtmlBlock(Utf8.str_from_utf8(join_lines_with_newlines(lines))), span)]
 
 		TableBlock(table) => {
 			columns = table.align.len()
@@ -1189,7 +1189,7 @@ collect_definitions = |events| {
 	$refs
 }
 
-join_with_newlines : List(String.Utf8) -> String.Utf8
+join_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
 join_with_newlines = |lines| {
 	var $out = []
 	for line in lines {
@@ -1374,7 +1374,7 @@ is_space_or_tab = |byte| byte == ' ' or byte == '\t'
 ## List item marker at the first non-space (CommonMark 5.2). When it would
 ## interrupt a paragraph, the item may not start blank and an ordered list
 ## must start at 1.
-parse_list_marker : String.Utf8, Bool -> Try(ListMarker, [NotFound])
+parse_list_marker : Utf8.Bytes, Bool -> Try(ListMarker, [NotFound])
 parse_list_marker = |rest, interrupts_paragraph| {
 	first = rest.first() ?? 0
 	parsed =
@@ -1401,7 +1401,7 @@ parse_list_marker = |rest, interrupts_paragraph| {
 	}
 }
 
-count_leading_digits : String.Utf8 -> U64
+count_leading_digits : Utf8.Bytes -> U64
 count_leading_digits = |bytes| {
 	var $count = 0
 	while is_digit_byte(bytes.get($count) ?? 'x') {
@@ -1411,7 +1411,7 @@ count_leading_digits = |bytes| {
 }
 
 ## ATX heading (CommonMark 4.2): 1-6 `#` then a space, tab, or end of line.
-parse_atx_heading : String.Utf8 -> Try(Markdown, [NotFound])
+parse_atx_heading : Utf8.Bytes -> Try(Markdown, [NotFound])
 parse_atx_heading = |rest| {
 	hashes = count_leading_byte(rest, '#', 0)
 	after = rest.drop_first(hashes)
@@ -1433,7 +1433,7 @@ parse_atx_heading = |rest| {
 	}
 }
 
-count_trailing_byte : String.Utf8, U8 -> U64
+count_trailing_byte : Utf8.Bytes, U8 -> U64
 count_trailing_byte = |bytes, expected| {
 	var $count = 0
 	while $count < bytes.len() and (bytes.get(bytes.len() - 1 - $count) ?? 0) == expected {
@@ -1443,7 +1443,7 @@ count_trailing_byte = |bytes, expected| {
 }
 
 ## Setext underline (CommonMark 4.3): `=`s or `-`s, then only spaces or tabs.
-setext_level : String.Utf8 -> Try(Markdown.Level, [NotFound])
+setext_level : Utf8.Bytes -> Try(Markdown.Level, [NotFound])
 setext_level = |rest| {
 	marker = rest.first() ?? 0
 	run = count_leading_byte(rest, marker, 0)
@@ -1460,7 +1460,7 @@ setext_level = |rest| {
 
 ## Thematic break (CommonMark 4.1): three or more matching `-`, `_` or `*`,
 ## optionally separated by spaces or tabs.
-is_thematic_break : String.Utf8 -> Bool
+is_thematic_break : Utf8.Bytes -> Bool
 is_thematic_break = |rest| {
 	marker = rest.first() ?? 0
 	if marker != '-' and marker != '_' and marker != '*' {
@@ -1473,7 +1473,7 @@ is_thematic_break = |rest| {
 ## Opening code fence (CommonMark 4.5). A backtick fence's info string may not
 ## contain backticks. Backslash escapes and entity references in the info
 ## string are resolved.
-parse_fence_open : String.Utf8 -> Try({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }, [NotFound])
+parse_fence_open : Utf8.Bytes -> Try({ fence_char : U8, fence_len : U64, fence_offset : U64, info : Str }, [NotFound])
 parse_fence_open = |rest| {
 	fence_char = rest.first() ?? 0
 	fence_len = count_leading_byte(rest, fence_char, 0)
@@ -1485,7 +1485,7 @@ parse_fence_open = |rest| {
 	}
 }
 
-is_closing_fence : String.Utf8, U8, U64 -> Bool
+is_closing_fence : Utf8.Bytes, U8, U64 -> Bool
 is_closing_fence = |rest, fence_char, fence_len| {
 	run = count_leading_byte(rest, fence_char, 0)
 	run >= fence_len and bytes_are_blank(rest.drop_first(run))
@@ -1501,10 +1501,10 @@ html_type_6_tags = [
 	"address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
 ]
 
-lowercase_ascii : String.Utf8 -> String.Utf8
+lowercase_ascii : Utf8.Bytes -> Utf8.Bytes
 lowercase_ascii = |bytes| bytes.map(|byte| if byte >= 'A' and byte <= 'Z' byte + 32 else byte)
 
-html_block_start : String.Utf8, Bool -> Try(U64, [NotFound])
+html_block_start : Utf8.Bytes, Bool -> Try(U64, [NotFound])
 html_block_start = |rest, allow_type_7| {
 	lower = lowercase_ascii(rest)
 	tag_end = |name_len| {
@@ -1530,7 +1530,7 @@ html_block_start = |rest, allow_type_7| {
 	}
 }
 
-is_type_6_start : String.Utf8 -> Bool
+is_type_6_start : Utf8.Bytes -> Bool
 is_type_6_start = |lower| {
 	name_start = if lower.starts_with("</".to_utf8()) 2 else 1
 	name = take_tag_name(lower.drop_first(name_start))
@@ -1540,7 +1540,7 @@ is_type_6_start = |lower| {
 	and (next == ' ' or next == '\t' or next == '>' or after.starts_with("/>".to_utf8()))
 }
 
-take_tag_name : String.Utf8 -> String.Utf8
+take_tag_name : Utf8.Bytes -> Utf8.Bytes
 take_tag_name = |bytes| {
 	match bytes.first() {
 		Ok(first) if is_alphabetic_byte(first) => {
@@ -1561,7 +1561,7 @@ is_tag_name_byte = |byte| is_alphabetic_byte(byte) or is_digit_byte(byte) or byt
 ## Type 7: a complete closing tag, or a complete open tag other than the
 ## type 1 tags (`<pre>` and friends open type 1 blocks instead), alone on the
 ## line.
-is_type_7_start : String.Utf8 -> Bool
+is_type_7_start : Utf8.Bytes -> Bool
 is_type_7_start = |rest| {
 	end =
 		if rest.starts_with("</".to_utf8()) {
@@ -1576,7 +1576,7 @@ is_type_7_start = |rest| {
 	}
 }
 
-html_block_ends : U64, String.Utf8 -> Bool
+html_block_ends : U64, Utf8.Bytes -> Bool
 html_block_ends = |html_type, rest| {
 	lower = lowercase_ascii(rest)
 	match html_type {
@@ -1589,7 +1589,7 @@ html_block_ends = |html_type, rest| {
 	}
 }
 
-contains_bytes : String.Utf8, String.Utf8 -> Bool
+contains_bytes : Utf8.Bytes, Utf8.Bytes -> Bool
 contains_bytes = |haystack, needle| {
 	var $index = 0
 	var $found = Bool.False
@@ -1607,7 +1607,7 @@ contains_bytes = |haystack, needle| {
 ## Cells of a table row: an optional leading and trailing pipe, cells split on
 ## unescaped pipes (even inside code spans), `\|` unescaped to `|`, and each
 ## cell trimmed. A row needs at least one cell.
-split_table_row : String.Utf8 -> List(String.Utf8)
+split_table_row : Utf8.Bytes -> List(Utf8.Bytes)
 split_table_row = |line| {
 	trimmed = trim_spaces(line)
 	body = if trimmed.first() == Ok('|') trimmed.drop_first(1) else trimmed
@@ -1640,7 +1640,7 @@ split_table_row = |line| {
 }
 
 ## Delimiter row: cells of `:?-+:?` surrounded by optional spaces or tabs.
-parse_table_delimiter_row : String.Utf8 -> Try(List(Markdown.Alignment), [NotFound])
+parse_table_delimiter_row : Utf8.Bytes -> Try(List(Markdown.Alignment), [NotFound])
 parse_table_delimiter_row = |rest| {
 	if !rest.contains('-') or rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) {
 		return Err(NotFound)
@@ -1657,7 +1657,7 @@ parse_table_delimiter_row = |rest| {
 	}
 }
 
-parse_alignment_cell : String.Utf8 -> Try(Markdown.Alignment, [NotFound])
+parse_alignment_cell : Utf8.Bytes -> Try(Markdown.Alignment, [NotFound])
 parse_alignment_cell = |cell| {
 	left = cell.first() == Ok(':')
 	right = cell.len() > 1 and cell.last() == Ok(':')
@@ -1679,7 +1679,7 @@ parse_alignment_cell = |cell| {
 
 ## Remove the link reference definitions that begin a paragraph's raw content,
 ## registering each (the first definition of a label wins).
-extract_reference_definitions : String.Utf8, List(ReferenceDefinition) -> { rest : String.Utf8, refs : List(ReferenceDefinition) }
+extract_reference_definitions : Utf8.Bytes, List(ReferenceDefinition) -> { rest : Utf8.Bytes, refs : List(ReferenceDefinition) }
 extract_reference_definitions = |content, refs| {
 	var $rest = content
 	var $refs = refs
@@ -1700,7 +1700,7 @@ extract_reference_definitions = |content, refs| {
 }
 
 ## Spaces or tabs, then at most one line ending, then spaces or tabs.
-skip_spnl : String.Utf8, U64 -> U64
+skip_spnl : Utf8.Bytes, U64 -> U64
 skip_spnl = |bytes, start| {
 	first = skip_spaces_tabs(bytes, start)
 	if (bytes.get(first) ?? 0) == '\n' skip_spaces_tabs(bytes, first + 1) else first
@@ -1710,7 +1710,7 @@ skip_spnl = |bytes, start| {
 ## parser's label, destination and title scanners. It may span lines but must
 ## end at a line ending; a title followed by anything else is dropped and the
 ## definition ends after its destination if that ends its line.
-parse_reference_definition : String.Utf8 -> Try({ def : ReferenceDefinition, consumed : U64 }, [NotFound])
+parse_reference_definition : Utf8.Bytes -> Try({ def : ReferenceDefinition, consumed : U64 }, [NotFound])
 parse_reference_definition = |bytes| {
 	label = scan_link_label(bytes, 0)?
 	if label.raw.is_empty() or (bytes.get(label.end) ?? 0) != ':' {
@@ -1746,7 +1746,7 @@ parse_reference_definition = |bytes| {
 	Ok({ def: { label: normalize_reference_label(label.raw), target: { href, title: title_value } }, consumed })
 }
 
-at_line_end : String.Utf8, U64 -> Bool
+at_line_end : Utf8.Bytes, U64 -> Bool
 at_line_end = |bytes, index| index >= bytes.len() or (bytes.get(index) ?? 0) == '\n'
 
 ## --- Inline phase ---------------------------------------------------------
@@ -1768,7 +1768,7 @@ resolve_inlines = |block, refs| {
 	}
 }
 
-placeholder_raw : List(Markdown.Inline) -> String.Utf8
+placeholder_raw : List(Markdown.Inline) -> Utf8.Bytes
 placeholder_raw = |content| {
 	match content {
 		[Text(raw)] => raw.to_utf8()
@@ -1776,7 +1776,7 @@ placeholder_raw = |content| {
 	}
 }
 
-inline_heading : Parser(String.Utf8, Markdown)
+inline_heading : Parser(Utf8.Bytes, Markdown)
 inline_heading =
 	Parser.const(
 		|level| {
@@ -1787,26 +1787,26 @@ inline_heading =
 	)
 		.keep(
 			Parser.one_of([
-				Parser.const(One).skip(String.string("# ")),
-				Parser.const(Two).skip(String.string("## ")),
-				Parser.const(Three).skip(String.string("### ")),
-				Parser.const(Four).skip(String.string("#### ")),
-				Parser.const(Five).skip(String.string("##### ")),
-				Parser.const(Six).skip(String.string("###### ")),
+				Parser.const(One).skip(Utf8.string("# ")),
+				Parser.const(Two).skip(Utf8.string("## ")),
+				Parser.const(Three).skip(Utf8.string("### ")),
+				Parser.const(Four).skip(Utf8.string("#### ")),
+				Parser.const(Five).skip(Utf8.string("##### ")),
+				Parser.const(Six).skip(Utf8.string("###### ")),
 			]),
 		)
-		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
 
-two_line_heading_level_one : Parser(String.Utf8, Markdown)
+two_line_heading_level_one : Parser(Utf8.Bytes, Markdown)
 two_line_heading_level_one =
 	Parser.const(
 		|str| {
 			Heading({ level: One, content: parse_inlines(str.to_utf8()) })
 		},
 	)
-		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
 		.skip(end_of_line)
-		.skip(String.string("=="))
+		.skip(Utf8.string("=="))
 		.skip(
 			Parser.chomp_while(
 				|b| {
@@ -1815,16 +1815,16 @@ two_line_heading_level_one =
 			),
 		)
 
-two_line_heading_level_two : Parser(String.Utf8, Markdown)
+two_line_heading_level_two : Parser(Utf8.Bytes, Markdown)
 two_line_heading_level_two =
 	Parser.const(
 		|str| {
 			Heading({ level: Two, content: parse_inlines(str.to_utf8()) })
 		},
 	)
-		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
 		.skip(end_of_line)
-		.skip(String.string("--"))
+		.skip(Utf8.string("--"))
 		.skip(
 			Parser.chomp_while(
 				|b| {
@@ -1880,7 +1880,7 @@ TickRun : { start : U64, len : U64 }
 
 InlineStop : [Finished, Stopped({ node : Markdown.Inline, end : U64 }), Failed]
 
-parse_inlines_parser : Parser(String.Utf8, List(Markdown.Inline))
+parse_inlines_parser : Parser(Utf8.Bytes, List(Markdown.Inline))
 parse_inlines_parser =
 	Parser.build_primitive_parser(
 		|input| {
@@ -1888,12 +1888,12 @@ parse_inlines_parser =
 		},
 	)
 
-parse_inlines : String.Utf8 -> List(Markdown.Inline)
+parse_inlines : Utf8.Bytes -> List(Markdown.Inline)
 parse_inlines = |input| {
 	parse_inlines_with_refs([], input)
 }
 
-parse_inlines_with_refs : List(ReferenceDefinition), String.Utf8 -> List(Markdown.Inline)
+parse_inlines_with_refs : List(ReferenceDefinition), Utf8.Bytes -> List(Markdown.Inline)
 parse_inlines_with_refs = |refs, input| {
 	scan_inlines(prepare_inline_input(input), refs, Bool.False).nodes
 }
@@ -1901,7 +1901,7 @@ parse_inlines_with_refs = |refs, input| {
 ## Parse a link or image that starts at the beginning of `input`, returning the
 ## node and the unconsumed input. Used by the `Markdown.link`/`Markdown.image`
 ## parsers.
-parse_leading_link : String.Utf8, Bool -> Try({ val : Markdown.Inline, input : String.Utf8 }, [ParsingFailure(Str)])
+parse_leading_link : Utf8.Bytes, Bool -> Try({ val : Markdown.Inline, input : Utf8.Bytes }, [ParsingFailure(Str)])
 parse_leading_link = |input, image| {
 	opens =
 		if image {
@@ -3725,7 +3725,7 @@ gfm_validate_protocol = |protocol, data, at_index, rewind, max_rewind| {
 	}
 }
 
-parse_link_target : String.Utf8 -> Markdown.LinkTarget
+parse_link_target : Utf8.Bytes -> Markdown.LinkTarget
 parse_link_target = |raw| {
 	clean = trim_spaces(raw)
 	parts = split_first_space(clean)
@@ -3734,18 +3734,18 @@ parse_link_target = |raw| {
 		if parts.rest.is_empty() {
 			None
 		} else {
-			Some(String.str_from_utf8(strip_wrapping_quotes(trim_spaces(parts.rest))))
+			Some(Utf8.str_from_utf8(strip_wrapping_quotes(trim_spaces(parts.rest))))
 		}
 
-	{ href: String.str_from_utf8(parts.first), title }
+	{ href: Utf8.str_from_utf8(parts.first), title }
 }
 
-find_sequence : String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_sequence : Utf8.Bytes, Utf8.Bytes -> Try({ before : Utf8.Bytes, after : Utf8.Bytes }, [NotFound])
 find_sequence = |input, needle| {
 	find_sequence_help(input, needle, [])
 }
 
-find_sequence_help : String.Utf8, String.Utf8, String.Utf8 -> Try({ before : String.Utf8, after : String.Utf8 }, [NotFound])
+find_sequence_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Try({ before : Utf8.Bytes, after : Utf8.Bytes }, [NotFound])
 find_sequence_help = |input, needle, acc| {
 	if starts_with_bytes(input, needle) {
 		Ok({ before: acc, after: input.drop_first(needle.len()) })
@@ -3760,7 +3760,7 @@ find_sequence_help = |input, needle, acc| {
 	}
 }
 
-bytes_are_blank : String.Utf8 -> Bool
+bytes_are_blank : Utf8.Bytes -> Bool
 bytes_are_blank = |bytes| {
 	match bytes {
 		[] =>
@@ -3777,18 +3777,18 @@ bytes_are_blank = |bytes| {
 		}
 }
 
-starts_with_bytes : String.Utf8, String.Utf8 -> Bool
+starts_with_bytes : Utf8.Bytes, Utf8.Bytes -> Bool
 starts_with_bytes = |input, prefix| {
 	{ before: start, others: _ } = input.split_at(prefix.len())
 	start == prefix
 }
 
-ends_with_byte : String.Utf8, U8 -> Bool
+ends_with_byte : Utf8.Bytes, U8 -> Bool
 ends_with_byte = |bytes, expected| {
 	ends_with_byte_help(bytes, expected, Err(NotFound))
 }
 
-ends_with_byte_help : String.Utf8, U8, Try(U8, [NotFound]) -> Bool
+ends_with_byte_help : Utf8.Bytes, U8, Try(U8, [NotFound]) -> Bool
 ends_with_byte_help = |bytes, expected, last| {
 	match bytes {
 		[] =>
@@ -3799,7 +3799,7 @@ ends_with_byte_help = |bytes, expected, last| {
 		}
 }
 
-append_bytes : String.Utf8, String.Utf8 -> String.Utf8
+append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 append_bytes = |left, right| {
 	match right {
 		[] =>
@@ -3810,12 +3810,12 @@ append_bytes = |left, right| {
 		}
 }
 
-join_lines_with_newlines : List(String.Utf8) -> String.Utf8
+join_lines_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
 join_lines_with_newlines = |lines| {
 	join_lines_with_newlines_help(lines, [])
 }
 
-join_lines_with_newlines_help : List(String.Utf8), String.Utf8 -> String.Utf8
+join_lines_with_newlines_help : List(Utf8.Bytes), Utf8.Bytes -> Utf8.Bytes
 join_lines_with_newlines_help = |lines, acc| {
 	match lines {
 		[] =>
@@ -3826,12 +3826,12 @@ join_lines_with_newlines_help = |lines, acc| {
 		}
 }
 
-trim_spaces : String.Utf8 -> String.Utf8
+trim_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_spaces = |bytes| {
 	trim_end_spaces(trim_start_spaces(bytes))
 }
 
-trim_start_spaces : String.Utf8 -> String.Utf8
+trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_start_spaces = |bytes| {
 	match bytes {
 		[' ', .. as rest] =>
@@ -3845,12 +3845,12 @@ trim_start_spaces = |bytes| {
 		}
 }
 
-trim_end_spaces : String.Utf8 -> String.Utf8
+trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces = |bytes| {
 	trim_end_spaces_help(bytes, [], [])
 }
 
-trim_end_spaces_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
+trim_end_spaces_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces_help = |bytes, out, pending_spaces| {
 	match bytes {
 		[] =>
@@ -3867,12 +3867,12 @@ trim_end_spaces_help = |bytes, out, pending_spaces| {
 		}
 }
 
-trim_closing_heading_marker : String.Utf8 -> String.Utf8
+trim_closing_heading_marker : Utf8.Bytes -> Utf8.Bytes
 trim_closing_heading_marker = |bytes| {
 	trim_closing_heading_marker_help(trim_spaces(bytes), [], [])
 }
 
-trim_closing_heading_marker_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
+trim_closing_heading_marker_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 trim_closing_heading_marker_help = |bytes, out, pending_hashes| {
 	match bytes {
 		[] if pending_hashes.is_empty() =>
@@ -3889,12 +3889,12 @@ trim_closing_heading_marker_help = |bytes, out, pending_hashes| {
 		}
 }
 
-split_first_space : String.Utf8 -> { first : String.Utf8, rest : String.Utf8 }
+split_first_space : Utf8.Bytes -> { first : Utf8.Bytes, rest : Utf8.Bytes }
 split_first_space = |bytes| {
 	split_first_space_help(bytes, [])
 }
 
-split_first_space_help : String.Utf8, String.Utf8 -> { first : String.Utf8, rest : String.Utf8 }
+split_first_space_help : Utf8.Bytes, Utf8.Bytes -> { first : Utf8.Bytes, rest : Utf8.Bytes }
 split_first_space_help = |bytes, first_part| {
 	match bytes {
 		[] =>
@@ -3911,7 +3911,7 @@ split_first_space_help = |bytes, first_part| {
 		}
 }
 
-strip_wrapping_quotes : String.Utf8 -> String.Utf8
+strip_wrapping_quotes : Utf8.Bytes -> Utf8.Bytes
 strip_wrapping_quotes = |bytes| {
 	match bytes {
 		['"', .. as rest] => {
@@ -3931,7 +3931,7 @@ strip_wrapping_quotes = |bytes| {
 
 ## Link label matching (CommonMark 4.7): Unicode case fold, strip leading and
 ## trailing whitespace, and collapse internal whitespace runs to one space.
-normalize_reference_label : String.Utf8 -> Str
+normalize_reference_label : Utf8.Bytes -> Str
 normalize_reference_label = |label| {
 	source = Str.from_utf8_lossy(label)
 	folded =
@@ -3955,7 +3955,7 @@ normalize_reference_label = |label| {
 	Str.from_utf8_lossy($out)
 }
 
-lower_ascii_bytes : String.Utf8 -> String.Utf8
+lower_ascii_bytes : Utf8.Bytes -> Utf8.Bytes
 lower_ascii_bytes = |bytes| {
 	List.from_iter(bytes.iter().map(lower_ascii_byte))
 }
@@ -3969,7 +3969,7 @@ lower_ascii_byte = |byte| {
 	}
 }
 
-collapse_reference_whitespace : String.Utf8, String.Utf8, Bool -> String.Utf8
+collapse_reference_whitespace : Utf8.Bytes, Utf8.Bytes, Bool -> Utf8.Bytes
 collapse_reference_whitespace = |bytes, out, pending_space| {
 	match bytes {
 		[] =>
@@ -3986,7 +3986,7 @@ collapse_reference_whitespace = |bytes, out, pending_space| {
 		}
 }
 
-count_leading_byte : String.Utf8, U8, U64 -> U64
+count_leading_byte : Utf8.Bytes, U8, U64 -> U64
 count_leading_byte = |bytes, expected, count| {
 	match bytes {
 		[first, .. as rest] if first == expected =>
@@ -3997,7 +3997,7 @@ count_leading_byte = |bytes, expected, count| {
 		}
 }
 
-digits_to_u64 : String.Utf8 -> U64
+digits_to_u64 : Utf8.Bytes -> U64
 digits_to_u64 = |digits| {
 	digits.fold(
 		0,
@@ -4017,22 +4017,22 @@ is_alphabetic_byte = |byte| {
 	(byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z')
 }
 
-end_of_line : Parser(String.Utf8, Str)
-end_of_line = Parser.one_of([String.string("\n"), String.string("\r\n")])
+end_of_line : Parser(Utf8.Bytes, Str)
+end_of_line = Parser.one_of([Utf8.string("\n"), Utf8.string("\r\n")])
 
 not_end_of_line : U8 -> Bool
 not_end_of_line = |b| {
 	b != '\n' and b != '\r'
 }
 
-todo : Parser(String.Utf8, Markdown)
+todo : Parser(Utf8.Bytes, Markdown)
 todo =
 	Parser.const(|s| TODO(s))
-		.keep(Parser.chomp_while(not_end_of_line).map(String.str_from_utf8))
+		.keep(Parser.chomp_while(not_end_of_line).map(Utf8.str_from_utf8))
 
 ## Unsupported markdown lines can still be preserved as TODO nodes directly.
 expect {
-	a = String.parse_str(todo, "Foo Bar")?
+	a = Utf8.parse_str(todo, "Foo Bar")?
 	a == TODO("Foo Bar")
 }
 
@@ -4116,25 +4116,25 @@ expect {
 
 ## Hash-prefixed headings parse with inline content.
 expect {
-	a = String.parse_str(Markdown.heading, "# Foo **Bar** #")?
+	a = Utf8.parse_str(Markdown.heading, "# Foo **Bar** #")?
 	a == Heading({ level: One, content: [Text("Foo "), Strong([Text("Bar")])] })
 }
 
 ## Underlined headings parse as level two headings.
 expect {
-	a = String.parse_str(Markdown.heading, "Foo Bar\n---")?
+	a = Utf8.parse_str(Markdown.heading, "Foo Bar\n---")?
 	a == Heading({ level: Two, content: [Text("Foo Bar")] })
 }
 
 ## Markdown links parse as inline link nodes.
 expect {
-	a = String.parse_str(Markdown.link, "[roc](https://roc-lang.org \"Roc\")")?
+	a = Utf8.parse_str(Markdown.link, "[roc](https://roc-lang.org \"Roc\")")?
 	a == Link({ label: [Text("roc")], target: { href: "https://roc-lang.org", title: Some("Roc") } })
 }
 
 ## Markdown images parse as inline image nodes.
 expect {
-	a = String.parse_str(Markdown.image, "![alt text](/images/logo.png)")?
+	a = Utf8.parse_str(Markdown.image, "![alt text](/images/logo.png)")?
 	a == Image({ alt: [Text("alt text")], target: { href: "/images/logo.png", title: None } })
 }
 
@@ -4146,13 +4146,13 @@ expect {
 		\\foo = bar
 		\\```
 
-	a = String.parse_str(Markdown.code, text)?
+	a = Utf8.parse_str(Markdown.code, text)?
 	a == Code({ info: "roc", pre: "# some code\nfoo = bar\n" })
 }
 
 ## Public inline parser parses emphasis, strong, strikethrough, code, and links.
 expect {
-	actual = String.parse_str(Markdown.inlines, "Intro with **bold**, *em*, ~~gone~~, `code`, and [a link](https://example.com).")?
+	actual = Utf8.parse_str(Markdown.inlines, "Intro with **bold**, *em*, ~~gone~~, `code`, and [a link](https://example.com).")?
 
 	actual
 		== [
@@ -4174,14 +4174,14 @@ expect {
 expect {
 	text = "\\*literal\\*, \\_em\\_, \\`code\\`, and \\[a link](target)"
 
-	actual = String.parse_str(Markdown.inlines, text)?
+	actual = Utf8.parse_str(Markdown.inlines, text)?
 
 	actual == [Text("*literal*, _em_, `code`, and [a link](target)")]
 }
 
 ## Inline images parse inside prose.
 expect {
-	actual = String.parse_str(Markdown.inlines, "Logo ![Roc](/roc.png) here")?
+	actual = Utf8.parse_str(Markdown.inlines, "Logo ![Roc](/roc.png) here")?
 
 	actual
 		== [
@@ -4193,7 +4193,7 @@ expect {
 
 ## Autolinks and bare URLs parse as inline links.
 expect {
-	actual = String.parse_str(Markdown.inlines, "<https://example.com> and www.example.com")?
+	actual = Utf8.parse_str(Markdown.inlines, "<https://example.com> and www.example.com")?
 
 	actual
 		== [
@@ -4205,20 +4205,20 @@ expect {
 
 ## Hard line breaks parse from trailing spaces and backslash newlines.
 expect {
-	actual = String.parse_str(Markdown.inlines, "one  \ntwo\\\nthree")?
+	actual = Utf8.parse_str(Markdown.inlines, "one  \ntwo\\\nthree")?
 
 	actual == [Text("one"), HardBreak, Text("two"), HardBreak, Text("three")]
 }
 
 ## Raw HTML inline spans are preserved.
 expect {
-	actual = String.parse_str(Markdown.inlines, "Hello <span>world</span>")?
+	actual = Utf8.parse_str(Markdown.inlines, "Hello <span>world</span>")?
 
 	actual == [Text("Hello "), HtmlInline("<span>"), Text("world"), HtmlInline("</span>")]
 }
 
 inline_test : Str -> List(Markdown.Inline)
-inline_test = |text| String.parse_str(Markdown.inlines, text) ?? [Text("<parse error>")]
+inline_test = |text| Utf8.parse_str(Markdown.inlines, text) ?? [Text("<parse error>")]
 
 ## Emphasis follows the delimiter-run algorithm (CommonMark 6.2): flanking,
 ## intraword underscores, the rule of three and nesting.
@@ -4263,24 +4263,24 @@ expect inline_test("*[foo*](/u)") == [Text("*"), Link({ label: [Text("foo*")], t
 expect inline_test("[foo`](/u)`") == [Text("[foo"), InlineCode("](/u)")]
 
 ## Public link/image parsers consume one leading inline link.
-expect String.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ val: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), input: " rest" })
-expect String.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ val: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), input: "!" })
-expect String.parse_str_partial(Markdown.link, "[a][b]").is_err()
+expect Utf8.parse_str_partial(Markdown.link, "[a *b*](/u) rest") == Ok({ val: Link({ label: [Text("a "), Emphasis([Text("b")])], target: { href: "/u", title: None } }), input: " rest" })
+expect Utf8.parse_str_partial(Markdown.image, "![a](/i.png \"T\")!") == Ok({ val: Image({ alt: [Text("a")], target: { href: "/i.png", title: Some("T") } }), input: "!" })
+expect Utf8.parse_str_partial(Markdown.link, "[a][b]").is_err()
 
 ## Reference labels match case-insensitively after Unicode case folding.
 expect {
-	actual = String.parse_str(Markdown.all, "[ẞ]\n\n[SS]: /url")?
+	actual = Utf8.parse_str(Markdown.all, "[ẞ]\n\n[SS]: /url")?
 	actual == [Paragraph([Link({ label: [Text("ẞ")], target: { href: "/url", title: None } })])]
 }
 
 ## Reference definitions decode escapes and entities and reject bracketed labels.
 expect {
-	actual = String.parse_str(Markdown.all, "[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")?
+	actual = Utf8.parse_str(Markdown.all, "[foo]\n\n[foo]: /f&ouml;\\* \"t\\*\"")?
 	actual == [Paragraph([Link({ label: [Text("foo")], target: { href: "/fö*", title: Some("t*") } })])]
 }
 
 expect {
-	actual = String.parse_str(Markdown.all, "[a[b]\n\n[a[b]: /u")?
+	actual = Utf8.parse_str(Markdown.all, "[a[b]\n\n[a[b]: /u")?
 	actual == [Paragraph([Text("[a[b]")]), Paragraph([Text("[a[b]: /u")])]
 }
 
@@ -4318,7 +4318,7 @@ expect {
 		\\[roc]: https://roc-lang.org "Roc"
 		\\Read [Roc][roc].
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4332,7 +4332,7 @@ expect {
 
 ## Unresolved references remain literal text.
 expect {
-	actual = String.parse_str(Markdown.all, "Read [Roc][missing].")?
+	actual = Utf8.parse_str(Markdown.all, "Read [Roc][missing].")?
 
 	actual == [Paragraph([Text("Read [Roc][missing].")])]
 }
@@ -4345,14 +4345,14 @@ expect {
 		\\---
 		\\Body
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual == [Frontmatter({ raw: "title: Hello\n" }), Paragraph([Text("Body")])]
 }
 
 ## Standalone thematic breaks parse as block nodes.
 expect {
-	actual = String.parse_str(Markdown.all, "- - -")?
+	actual = Utf8.parse_str(Markdown.all, "- - -")?
 
 	actual == [ThematicBreak]
 }
@@ -4363,7 +4363,7 @@ expect {
 		\\3) [x] Done
 		\\4) [ ] Later
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4384,7 +4384,7 @@ expect {
 		\\* One
 		\\+ Two
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4400,7 +4400,7 @@ expect {
 		\\
 		\\- Two
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4421,7 +4421,7 @@ expect {
 		\\- One
 		\\  - Nested
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4454,14 +4454,14 @@ expect {
 		\\main = 1
 		\\~~~
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
 
 ## Indented code blocks parse from four leading spaces.
 expect {
-	actual = String.parse_str(Markdown.all, "    main = 1")?
+	actual = Utf8.parse_str(Markdown.all, "    main = 1")?
 
 	actual == [Code({ info: "", pre: "main = 1\n" })]
 }
@@ -4474,7 +4474,7 @@ expect {
 		\\| :--- | ---: |
 		\\| **Roc** | `1\\|2` |
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4497,7 +4497,7 @@ expect {
 		\\Name | Count
 		\\not a delimiter
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual == [Paragraph([Text("Name | Count\nnot a delimiter")])]
 }
@@ -4509,7 +4509,7 @@ expect {
 		\\raw
 		\\</section>
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual == [HtmlBlock("<section>\nraw\n</section>\n")]
 }
@@ -4521,7 +4521,7 @@ expect {
 		\\```roc
 		\\main = 1
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual == [Code({ info: "roc", pre: "main = 1\n" })]
 }
@@ -4530,7 +4530,7 @@ expect {
 ## line starts a type 7 HTML block; only the open tags are excluded from type
 ## 7 (CommonMark 4.6).
 expect {
-	actual = String.parse_str(Markdown.all, "a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")?
+	actual = Utf8.parse_str(Markdown.all, "a\n\n</textarea>\nb\n\n<pre class=\"x\">\n")?
 
 	actual == [Paragraph([Text("a")]), HtmlBlock("</textarea>\nb\n"), HtmlBlock("<pre class=\"x\">\n")]
 }
@@ -4556,7 +4556,7 @@ expect {
 		\\
 		\\> Quote with **strong** text
 
-	actual = String.parse_str(Markdown.all, text)?
+	actual = Utf8.parse_str(Markdown.all, text)?
 
 	actual
 		== [
@@ -4602,16 +4602,16 @@ expect {
 		]
 }
 
-chomp_until_code_block_end : Parser(String.Utf8, Str)
+chomp_until_code_block_end : Parser(Utf8.Bytes, Str)
 chomp_until_code_block_end =
 	Parser.build_primitive_parser(
 		|input| {
 			chomp_to_code_block_end_help({ val: List.with_capacity(1000), input })
 		},
 	)
-		.map(String.str_from_utf8)
+		.map(Utf8.str_from_utf8)
 
-chomp_to_code_block_end_help : { val : String.Utf8, input : String.Utf8 } -> Parser.ParseResult(String.Utf8, String.Utf8)
+chomp_to_code_block_end_help : { val : Utf8.Bytes, input : Utf8.Bytes } -> Parser.ParseResult(Utf8.Bytes, Utf8.Bytes)
 chomp_to_code_block_end_help = |{ val, input }| {
 	match input {
 		[] => Err(ParsingFailure("expected ```, ran out of input"))

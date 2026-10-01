@@ -5,12 +5,12 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Parser
-import parser.String
+import parser.Utf8
 
-## String primitive properties over arbitrary (often invalid) UTF-8:
+## Utf8 primitive properties over arbitrary (often invalid) UTF-8:
 ## - digit/digits agree with a naive U128 decimal oracle and with the builtin
 ##   U64.from_str, including the U64 overflow boundary;
-## - every exported String parser either fails with a renderable message or
+## - every exported Utf8 parser either fails with a renderable message or
 ##   returns a value plus a leftover that is a suffix of the input, with
 ##   `consumed ++ leftover == input`;
 ## - the Str front ends (parse_str, parse_str_partial) never crash, even when
@@ -66,7 +66,7 @@ check_numbers = |input| {
 	prefix = input.sublist({ start: 0, len: count })
 	oracle = prefix.fold(0.U128, |acc, b| if acc > 18446744073709551615 acc else acc * 10 + U8.to_u128(b - '0'))
 	builtin = U64.from_str(Str.from_utf8_lossy(prefix))
-	actual = Parser.parse_partial(String.digits, input)
+	actual = Parser.parse_partial(Utf8.digits, input)
 	match actual {
 		Ok({ val, input: rest }) => {
 			if count == 0 or oracle > 18446744073709551615 or U64.to_u128(val) != oracle or rest != input.drop_first(count) {
@@ -83,7 +83,7 @@ check_numbers = |input| {
 				crash "digits rejected a value U64.from_str accepts: ${Str.inspect(prefix)}"
 			}
 	}
-	match Parser.parse_partial(String.digit, input) {
+	match Parser.parse_partial(Utf8.digit, input) {
 		Ok({ val, input: rest }) =>
 			if count == 0 or U64.to_u128(val) != U8.to_u128((input.get(0) ?? 0) - '0') or rest != input.drop_first(1) {
 				crash "digit wrong"
@@ -97,21 +97,21 @@ check_codeunits : Case -> {}
 check_codeunits = |case| {
 	input = case.input
 	first = input.get(0)
-	match Parser.parse_partial(String.any_codeunit, input) {
+	match Parser.parse_partial(Utf8.any_codeunit, input) {
 		Ok({ val, input: rest }) => {
 			if first != Ok(val) crash "any_codeunit value"
 			check_suffix("any_codeunit", input, [val], rest)
 		}
 		Err(_) => if first.is_ok() crash "any_codeunit failed on non-empty input"
 	}
-	match Parser.parse_partial(String.codeunit(case.unit), input) {
+	match Parser.parse_partial(Utf8.codeunit(case.unit), input) {
 		Ok({ val, input: rest }) => {
 			if first != Ok(case.unit) or val != case.unit crash "codeunit accepted wrong byte"
 			check_suffix("codeunit", input, [val], rest)
 		}
 		Err(_) => if first == Ok(case.unit) crash "codeunit rejected matching byte"
 	}
-	match Parser.parse_partial(String.codeunit_satisfies(|b| b < case.unit), input) {
+	match Parser.parse_partial(Utf8.codeunit_satisfies(|b| b < case.unit), input) {
 		Ok({ val, input: rest }) => {
 			if first != Ok(val) or val >= case.unit crash "codeunit_satisfies accepted wrong byte"
 			check_suffix("codeunit_satisfies", input, [val], rest)
@@ -122,7 +122,7 @@ check_codeunits = |case| {
 				_ => {}
 			}
 	}
-	match Parser.parse_partial(String.utf8(case.literal), input) {
+	match Parser.parse_partial(Utf8.utf8(case.literal), input) {
 		Ok({ val, input: rest }) => {
 			if val != case.literal or !input.starts_with(case.literal) crash "utf8 accepted non-prefix"
 			check_suffix("utf8", input, val, rest)
@@ -131,7 +131,7 @@ check_codeunits = |case| {
 	}
 	match Str.from_utf8(case.literal) {
 		Ok(text) =>
-			match Parser.parse_partial(String.string(text), input) {
+			match Parser.parse_partial(Utf8.string(text), input) {
 				Ok({ val, input: rest }) => {
 					if val != text or !input.starts_with(case.literal) crash "string accepted non-prefix"
 					check_suffix("string", input, case.literal, rest)
@@ -140,11 +140,11 @@ check_codeunits = |case| {
 			}
 		Err(_) => {}
 	}
-	match Parser.parse_partial(String.any_thing, input) {
+	match Parser.parse_partial(Utf8.any_thing, input) {
 		Ok({ val, input: rest }) => check_suffix("any_thing", input, val, rest)
 		Err(_) => crash "any_thing failed"
 	}
-	match Parser.parse_partial(String.any_string, input) {
+	match Parser.parse_partial(Utf8.any_string, input) {
 		Ok({ val, input: rest }) => {
 			if Str.from_utf8(input) != Ok(val) crash "any_string value"
 			check_suffix("any_string", input, val.to_utf8(), rest)
@@ -169,8 +169,8 @@ check_codeunits = |case| {
 		}
 		Err(_) => crash "chomp_while failed"
 	}
-	_ = run("one_of", String.one_of([String.utf8(case.literal), String.digit.map(|_| [])]), input)
-	_ = run("one_of empty", String.one_of([]), input)
+	_ = run("one_of", Utf8.one_of([Utf8.utf8(case.literal), Utf8.digit.map(|_| [])]), input)
+	_ = run("one_of empty", Utf8.one_of([]), input)
 	{}
 }
 
@@ -180,16 +180,16 @@ check_str_front_ends = |case| {
 	text = Str.from_utf8_lossy(case.input)
 	bytes = text.to_utf8()
 	parsers = [
-		String.any_codeunit.map(|b| [b]),
-		String.codeunit(case.unit).map(|b| [b]),
-		String.utf8(case.literal),
-		Parser.many(String.any_codeunit),
+		Utf8.any_codeunit.map(|b| [b]),
+		Utf8.codeunit(case.unit).map(|b| [b]),
+		Utf8.utf8(case.literal),
+		Parser.many(Utf8.any_codeunit),
 		Parser.chomp_until(case.unit),
 	]
 	parsers.fold(
 		{},
 		|_, parser| {
-			match String.parse_str_partial(parser, text) {
+			match Utf8.parse_str_partial(parser, text) {
 				Ok({ val, input: rest }) =>
 					if !Str.from_utf8_lossy(val).is_empty() and rest.count_utf8_bytes() > bytes.len() * 3 {
 						crash "parse_str_partial leftover grew"
@@ -198,7 +198,7 @@ check_str_front_ends = |case| {
 					_ = msg.count_utf8_bytes()
 				}
 			}
-			match String.parse_str(parser, text) {
+			match Utf8.parse_str(parser, text) {
 				Ok(_) => {}
 				Err(ParsingFailure(msg)) => {
 					_ = msg.count_utf8_bytes()
@@ -225,12 +225,12 @@ check_scaling = |case| {
 		while $big.len() < 20000 + case.scale * 1000 {
 			$big = $big.concat($big)
 		}
-		element = Parser.alt(String.codeunit(case.unit).map(|b| [b]), String.one_of([String.utf8(case.literal), String.any_codeunit.map(|_| [])]))
+		element = Parser.alt(Utf8.codeunit(case.unit).map(|b| [b]), Utf8.one_of([Utf8.utf8(case.literal), Utf8.any_codeunit.map(|_| [])]))
 		match Parser.parse_partial(Parser.many(element.map(|_| {})), $big) {
 			Ok({ val, input: rest }) => if val.len() == 0 and rest.len() != $big.len() crash "many consumed without values"
 			Err(_) => crash "many failed"
 		}
-		_ = run("sep_by", Parser.sep_by(String.digits, String.codeunit(case.unit)), $big)
+		_ = run("sep_by", Parser.sep_by(Utf8.digits, Utf8.codeunit(case.unit)), $big)
 		_ = run("chomp_while", Parser.many(Parser.chomp_while(|b| b < case.unit)), $big)
 		{}
 	}

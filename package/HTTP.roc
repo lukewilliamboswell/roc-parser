@@ -1,12 +1,12 @@
 import Parser
-import String
+import Utf8
 
 ## Parsers and syntax types for HTTP/1.x requests and responses, following the
 ## message syntax of RFC 9112 and the field syntax of RFC 9110.
 ##
 ## Each parser consumes exactly one message and leaves any following bytes
-## (a pipelined message) unconsumed, so `String.parse_str` rejects trailing
-## data while `String.parse_utf8_partial` returns it.
+## (a pipelined message) unconsumed, so `Utf8.parse_str` rejects trailing
+## data while `Utf8.parse_utf8_partial` returns it.
 ##
 ## Message framing (RFC 9112 section 6.3):
 ## - `Transfer-Encoding: chunked` bodies are decoded; chunk extensions are
@@ -83,13 +83,13 @@ HTTP :: {}.{
 	## ```roc
 	## expect {
 	##     text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	##     match String.parse_str(HTTP.request, text) {
+	##     match Utf8.parse_str(HTTP.request, text) {
 	##         Ok(req) => req.method == Get and req.uri == "/hello" and req.headers == [Header("Host", "example.com")]
 	##         Err(_) => Bool.False
 	##     }
 	## }
 	## ```
-	request : Parser(String.Utf8, Request)
+	request : Parser(Utf8.Bytes, Request)
 	request =
 		Parser.build_primitive_parser(
 			|input| {
@@ -103,7 +103,7 @@ HTTP :: {}.{
 	## Failure messages start with `invalid HTTP response:`. A response with no
 	## `Content-Length` or `Transfer-Encoding` takes the rest of the input as
 	## its body.
-	response : Parser(String.Utf8, Response)
+	response : Parser(Utf8.Bytes, Response)
 	response =
 		Parser.build_primitive_parser(
 			|input| {
@@ -567,8 +567,8 @@ is_tchar = |byte| {
 				or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
-parse : Parser(String.Utf8, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
-parse = |parser, text| String.parse_str(parser, text)
+parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
+parse = |parser, text| Utf8.parse_str(parser, text)
 
 ## HTTP version parsing captures the major and minor numbers.
 expect parse_version("HTTP/1.1".to_utf8()) == Ok({ major: 1, minor: 1 })
@@ -651,7 +651,7 @@ expect {
 
 ## A request without framing fields has no body; what follows is the next message.
 expect {
-	actual = String.parse_utf8_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
+	actual = Utf8.parse_utf8_partial(HTTP.request, "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /2".to_utf8())?
 	actual.val.body == [] and actual.input == "GET /2".to_utf8()
 }
 
@@ -669,7 +669,7 @@ expect parse(HTTP.response, "HTTP/1.1 65736 OK\r\n\r\n").is_err()
 expect parse(HTTP.response, "HTTP/1.1 204\r\n\r\n").map_ok(|r| r.status) == Ok("")
 
 ## Non-UTF-8 field values are rejected instead of crashing.
-expect String.parse_utf8(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
+expect Utf8.parse_utf8(HTTP.request, ['G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/', '1', '.', '0', '\r', '\n', 'X', ':', 0xFF, '\r', '\n', '\r', '\n']).is_err()
 
 ## Request-smuggling constructs are rejected.
 expect {
@@ -693,11 +693,11 @@ expect {
 ## A simple GET request parses as shown in the request docs.
 expect {
 	text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	match String.parse_str(HTTP.request, text) {
+	match Utf8.parse_str(HTTP.request, text) {
 		Ok(req) => req.method == Get and req.uri == "/hello" and req.headers == [Header("Host", "example.com")]
 		Err(_) => Bool.False
 	}
 }
 
 ## Lowercase method names are rejected.
-expect String.parse_str(HTTP.request, "get / HTTP/1.1\r\nHost: a\r\n\r\n").is_err()
+expect Utf8.parse_str(HTTP.request, "get / HTTP/1.1\r\nHost: a\r\n\r\n").is_err()

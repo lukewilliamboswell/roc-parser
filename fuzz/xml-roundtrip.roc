@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.String
+import parser.Utf8
 import parser.Xml
 import XmlGen
 
@@ -27,7 +27,7 @@ test = |input| {
 		Ok(xml) if xml == input.expected => {}
 		_ => crash "round trip mismatch\n--- xml ---\n${Str.inspect(input.xml)}\n--- expected ---\n${Str.inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
 	}
-	combinator = String.parse_str(Xml.xml_parser, input.xml)
+	combinator = Utf8.parse_str(Xml.xml_parser, input.xml)
 	if combinator != Ok(input.expected) {
 		crash "Xml.xml_parser disagrees with Xml.parse_str on ${Str.inspect(input.xml)}"
 	}

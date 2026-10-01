@@ -132,7 +132,7 @@ split the input first. Describe the whole input with one parser instead:
 
 * Use `sep_by` or `many` for lists, and `Parser.lazy` for nesting, as in
   <<combinators>>.
-* Use `String.parse_str_partial` to read one record at a time when you need
+* Use `Utf8.parse_str_partial` to read one record at a time when you need
   to know where each record starts.
 * Expect a bad record in the middle to appear as `ParsingIncomplete`. The
   length of the remaining input tells you how far parsing got, which

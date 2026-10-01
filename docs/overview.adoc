@@ -103,7 +103,7 @@ and strikethrough
 |https://www.rfc-editor.org/rfc/rfc9112[RFC 9112] message syntax and
 https://www.rfc-editor.org/rfc/rfc9110[RFC 9110] field syntax
 
-|`Parser`, `String`
+|`Parser`, `Utf8`
 |Anything you describe with combinators
 |Not applicable
 |===
@@ -114,7 +114,7 @@ The format chapters describe each module's exact behaviour. The
 == How the pieces fit together
 
 A combinator is a function that takes parsers and returns a new parser. The
-`String` module provides parsers for the smallest pieces of text, such as one
+`Utf8` module provides parsers for the smallest pieces of text, such as one
 byte, a digit, or an exact word. The `Parser` module combines them: one after
 another, one of several alternatives, repeated, or with the result
 transformed. The format modules are built the same way, so your own parsers
@@ -126,7 +126,7 @@ and the library's can be mixed.
 title: Small parsers combine into larger ones
 ---
 flowchart LR
-    Pieces["String parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
+    Pieces["Utf8 parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
     Combine --> Yours["Your parser<br/>for your format"]
     Combine --> Formats["Format parsers:<br/>CSV, HTTP, Markdown"]
     Yours --> Value["Typed Roc value<br/>or an error"]

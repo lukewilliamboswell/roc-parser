@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.HTTP
-import parser.String
+import parser.Utf8
 import HttpGen
 
 ## Round-trip property: fuzzer bytes choose a valid HTTP/1.x request or
@@ -36,16 +36,16 @@ test = |input| {
 	match msg.kind {
 		Req(_) => {
 			expected = HttpGen.expected_request(msg)
-			check_request(bytes, String.parse_utf8_partial(HTTP.request, bytes), expected, [])
-			check_request(bytes, String.parse_utf8_partial(HTTP.request, bytes.concat(next_message)), expected, next_message)
-			check_truncated(bytes, String.parse_utf8_partial(HTTP.request, bytes.drop_last(1)).is_ok())
+			check_request(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes), expected, [])
+			check_request(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes.concat(next_message)), expected, next_message)
+			check_truncated(bytes, Utf8.parse_utf8_partial(HTTP.request, bytes.drop_last(1)).is_ok())
 		}
 		Res(_) => {
 			expected = HttpGen.expected_response(msg)
-			check_response(bytes, String.parse_utf8_partial(HTTP.response, bytes), expected, [])
+			check_response(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes), expected, [])
 			if HttpGen.self_delimiting(msg) {
-				check_response(bytes, String.parse_utf8_partial(HTTP.response, bytes.concat(next_message)), expected, next_message)
-				check_truncated(bytes, String.parse_utf8_partial(HTTP.response, bytes.drop_last(1)).is_ok())
+				check_response(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes.concat(next_message)), expected, next_message)
+				check_truncated(bytes, Utf8.parse_utf8_partial(HTTP.response, bytes.drop_last(1)).is_ok())
 			}
 		}
 	}

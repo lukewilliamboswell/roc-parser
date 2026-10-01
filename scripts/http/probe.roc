@@ -7,7 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.HTTP
-import parser.String
+import parser.Utf8
 
 ## Reads one message from stdin and prints the parser's verdict as JSON.
 ## The first byte selects the parser: `Q` for a request, `S` for a response.
@@ -21,7 +21,7 @@ main! = |_| {
 	line =
 		match all.first() {
 			Ok('Q') => {
-				match String.parse_utf8_partial(HTTP.request, bytes) {
+				match Utf8.parse_utf8_partial(HTTP.request, bytes) {
 					Ok({ val, input }) => {
 						method = Str.inspect(val.method)
 						"{\"status\":\"ok\",\"method\":${json_string(method)},\"target\":${json_string(val.uri)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
@@ -30,7 +30,7 @@ main! = |_| {
 				}
 			}
 			Ok('S') => {
-				match String.parse_utf8_partial(HTTP.response, bytes) {
+				match Utf8.parse_utf8_partial(HTTP.response, bytes) {
 					Ok({ val, input }) =>
 						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.status)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
 					Err(ParsingFailure(message)) => "{\"status\":\"error\",\"message\":${json_string(message)}}"
@@ -54,14 +54,14 @@ headers = |fields| {
 hex : List(U8) -> Str
 hex = |bytes| {
 	digits = bytes.fold([], |acc, byte| acc.append(hex_digit(byte // 16)).append(hex_digit(byte % 16)))
-	"\"${String.str_from_utf8(digits)}\""
+	"\"${Utf8.str_from_utf8(digits)}\""
 }
 
 hex_digit : U8 -> U8
 hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
 
 json_string : Str -> Str
-json_string = |text| "\"${String.str_from_utf8(escape_json(text.to_utf8(), []))}\""
+json_string = |text| "\"${Utf8.str_from_utf8(escape_json(text.to_utf8(), []))}\""
 
 escape_json : List(U8), List(U8) -> List(U8)
 escape_json = |bytes, out| {

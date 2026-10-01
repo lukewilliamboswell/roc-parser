@@ -5,7 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Markdown
-import parser.String
+import parser.Utf8
 
 ## Arbitrary UTF-8 is a Markdown document (CommonMark has no syntax errors), and:
 ## - the result is well formed: table rows are as wide as the header, lists
@@ -24,7 +24,7 @@ Parsed : List(Markdown)
 
 parse : Str -> Parsed
 parse = |text| {
-	match String.parse_str(Markdown.all, text) {
+	match Utf8.parse_str(Markdown.all, text) {
 		Ok(blocks) => blocks
 		Err(_) => crash "Markdown.all rejected a document:\n${Str.inspect(text)}"
 	}

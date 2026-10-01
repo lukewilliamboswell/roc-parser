@@ -4,7 +4,7 @@ app [target] {
 }
 
 import fuzz.Fuzz
-import parser.String
+import parser.Utf8
 import parser.Xml
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and:
@@ -88,7 +88,7 @@ check_location = |bytes, result| {
 
 check_combinator : Str, Parsed -> {}
 check_combinator = |input, result| {
-	combinator = String.parse_str(Xml.xml_parser, input)
+	combinator = Utf8.parse_str(Xml.xml_parser, input)
 	consistent =
 		match (result, combinator) {
 			(Ok(tree), Ok(other)) => tree == other

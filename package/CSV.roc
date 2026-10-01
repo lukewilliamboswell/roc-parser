@@ -1,5 +1,5 @@
 import Parser
-import String
+import Utf8
 
 ## RFC 4180-style CSV parsing and typed record decoding.
 ##
@@ -31,7 +31,7 @@ import String
 ##
 ## expect CSV.parse_str(user, "Ada,36\nAlan,41\n") == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 ## ```
-CSV :: { records : List(List(String.Utf8)) }.{
+CSV :: { records : List(List(Utf8.Bytes)) }.{
 
 	## Compare two decoded CSV values structurally.
 	is_eq : _
@@ -40,7 +40,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	CSVRecord : List(CSVField)
 
 	## One raw UTF-8 field from a CSV row.
-	CSVField : String.Utf8
+	CSVField : Utf8.Bytes
 
 	## Parse CSV text and decode every record with the supplied record parser.
 	##
@@ -52,7 +52,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	parse_str = |csv_parser, input| {
 		match parse_str_to_csv(input) {
 			Err(ParsingIncomplete(rest)) => {
-				rest_str = String.str_from_utf8(rest)
+				rest_str = Utf8.str_from_utf8(rest)
 
 				Err(SyntaxError(rest_str))
 			}
@@ -99,7 +99,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 							index_str = (index + 1).to_str()
 							record_str =
 								record_fields_list
-									.map(String.str_from_utf8)
+									.map(Utf8.str_from_utf8)
 									.map(
 										|val| {
 											"\"${val}\""
@@ -162,7 +162,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	##
 	## The field parser must consume the whole field. Fails when the record has
 	## no fields left.
-	field : Parser(String.Utf8, a) -> Parser(CSVRecord, a)
+	field : Parser(Utf8.Bytes, a) -> Parser(CSVRecord, a)
 	field = |field_parser| {
 		Parser.build_primitive_parser(
 			|fields_list| {
@@ -171,22 +171,22 @@ CSV :: { records : List(List(String.Utf8)) }.{
 						Err(ParsingFailure("expected another CSV field but there are no more fields in this record"))
 
 					Ok(raw_str) => {
-						match String.parse_utf8(field_parser, raw_str) {
+						match Utf8.parse_utf8(field_parser, raw_str) {
 							Ok(val) => {
 								Ok({ val: val, input: fields_list.drop_first(1) })
 							}
 
 							Err(ParsingFailure(reason)) => {
-								field_str = raw_str |> String.str_from_utf8
+								field_str = raw_str |> Utf8.str_from_utf8
 
 								Err(ParsingFailure("Field `${field_str}` could not be parsed. ${reason}"))
 							}
 
 							Err(ParsingIncomplete(reason)) => {
-								reason_str = String.str_from_utf8(reason)
+								reason_str = Utf8.str_from_utf8(reason)
 								fields_str =
 									fields_list
-										.map(String.str_from_utf8)
+										.map(Utf8.str_from_utf8)
 										|> Str.join_with(", ")
 
 								Err(ParsingFailure("The field parser was unable to read the whole field: `${reason_str}` while parsing the first field of leftover ${fields_str})"))
@@ -200,7 +200,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 
 	## Parse one CSV field as a valid UTF-8 string, kept verbatim (no trimming).
 	string : Parser(CSVField, Str)
-	string = String.any_string
+	string = Utf8.any_string
 
 	## Parse one CSV field as an unsigned 64-bit integer.
 	##
@@ -253,7 +253,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	## Parse CSV text into raw records and UTF-8 fields without decoding them.
 	##
 	## Use this to inspect rows of varying shape, or to decode later with `parse_csv`.
-	parse_str_to_csv : Str -> Try(CSV, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
+	parse_str_to_csv : Str -> Try(CSV, [ParsingFailure(Str), ParsingIncomplete(Utf8.Bytes)])
 	parse_str_to_csv = |input| {
 		Parser.parse(
 			file,
@@ -268,7 +268,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	##
 	## A line break after the row is not consumed, so it is reported as
 	## `ParsingIncomplete`.
-	parse_str_to_csv_record : Str -> Try(CSVRecord, [ParsingFailure(Str), ParsingIncomplete(String.Utf8)])
+	parse_str_to_csv_record : Str -> Try(CSVRecord, [ParsingFailure(Str), ParsingIncomplete(Utf8.Bytes)])
 	parse_str_to_csv_record = |input| {
 		Parser.parse(
 			csv_record,
@@ -282,7 +282,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	## Parse a complete RFC 4180-style CSV file into raw records and fields.
 	##
 	## This is the parser behind `parse_str_to_csv`, for use inside larger parsers.
-	file : Parser(String.Utf8, CSV)
+	file : Parser(Utf8.Bytes, CSV)
 	file =
 		csv_records
 			.map(
@@ -292,7 +292,7 @@ CSV :: { records : List(List(String.Utf8)) }.{
 			)
 }
 
-csv_record : Parser(String.Utf8, CSV.CSVRecord)
+csv_record : Parser(Utf8.Bytes, CSV.CSVRecord)
 csv_record = Parser.build_primitive_parser(
 	|bytes| {
 		match scan_record(bytes, 0) {
@@ -304,7 +304,7 @@ csv_record = Parser.build_primitive_parser(
 
 ## Parse records until the input ends; on a malformed field, stop and leave the
 ## input from the start of that field unconsumed.
-csv_records : Parser(String.Utf8, List(CSV.CSVRecord))
+csv_records : Parser(Utf8.Bytes, List(CSV.CSVRecord))
 csv_records = Parser.build_primitive_parser(
 	|bytes| {
 		len = bytes.len()
@@ -338,14 +338,14 @@ csv_records = Parser.build_primitive_parser(
 	},
 )
 
-bad_field_message : String.Utf8, U64 -> Str
+bad_field_message : Utf8.Bytes, U64 -> Str
 bad_field_message = |bytes, at| {
-	"malformed quoted CSV field at byte ${at.to_str()}: `${String.str_from_utf8(bytes.drop_first(at))}`"
+	"malformed quoted CSV field at byte ${at.to_str()}: `${Utf8.str_from_utf8(bytes.drop_first(at))}`"
 }
 
 ## Scan one record starting at `start`, stopping before its line break (or at
 ## the end of input). Fails with the offset of a malformed quoted field.
-scan_record : String.Utf8, U64 -> Try({ fields : CSV.CSVRecord, next : U64 }, [BadField(U64)])
+scan_record : Utf8.Bytes, U64 -> Try({ fields : CSV.CSVRecord, next : U64 }, [BadField(U64)])
 scan_record = |bytes, start| {
 	len = bytes.len()
 	var $fields = []
@@ -380,7 +380,7 @@ scan_record = |bytes, start| {
 }
 
 ## Offset of the first `,`, CR or LF at or after `start`, or the input length.
-scan_unquoted : String.Utf8, U64 -> U64
+scan_unquoted : Utf8.Bytes, U64 -> U64
 scan_unquoted = |bytes, start| {
 	len = bytes.len()
 	var $pos = start
@@ -394,7 +394,7 @@ is_delimiter : U8 -> Bool
 is_delimiter = |byte| byte == ',' or byte == '\r' or byte == '\n'
 
 ## Scan a quoted field whose opening `"` is at `start`.
-scan_quoted : String.Utf8, U64 -> Try({ field : CSV.CSVField, next : U64 }, [BadField(U64)])
+scan_quoted : Utf8.Bytes, U64 -> Try({ field : CSV.CSVField, next : U64 }, [BadField(U64)])
 scan_quoted = |bytes, start| {
 	len = bytes.len()
 	var $field = []
@@ -485,7 +485,7 @@ decimal_f64 = |text| {
 
 parses_u64 : Str, Try(U64, {}) -> Bool
 parses_u64 = |text, expected| {
-	actual = String.parse_utf8(CSV.u64, text.to_utf8())
+	actual = Utf8.parse_utf8(CSV.u64, text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted
 		(Err(_), Err({})) => Bool.True
@@ -495,7 +495,7 @@ parses_u64 = |text, expected| {
 
 parses_f64 : Str, Try(F64, {}) -> Bool
 parses_f64 = |text, expected| {
-	actual = String.parse_utf8(CSV.f64, text.to_utf8())
+	actual = Utf8.parse_utf8(CSV.f64, text.to_utf8())
 	match (actual, expected) {
 		(Ok(value), Ok(wanted)) => value == wanted or (value.is_nan() and wanted.is_nan())
 		(Err(_), Err({})) => Bool.True

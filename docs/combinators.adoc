@@ -11,7 +11,7 @@ endif::[]
 
 This chapter is for readers who have finished <<combinator-primer>> and are
 writing a parser of their own. It groups the combinators in the `Parser` and
-`String` modules by the job they do, and explains the three rules that most
+`Utf8` modules by the job they do, and explains the three rules that most
 often surprise people: how alternatives backtrack, when repetition stops,
 and why parsers read bytes rather than characters. The {api}[API reference]
 has the exact signature of every function.
@@ -26,14 +26,14 @@ every `expect` in them passes.
 |===
 |Function |Use it to
 
-|`String.parse_str(p, str)`
+|`Utf8.parse_str(p, str)`
 |Parse a whole `Str`. Returns `Ok(value)`, `Err(ParsingFailure(message))`, or
 `Err(ParsingIncomplete(rest))` when input is left over.
 
-|`String.parse_utf8(p, bytes)`
+|`Utf8.parse_utf8(p, bytes)`
 |The same for a `List(U8)`.
 
-|`String.parse_str_partial(p, str)`, `String.parse_utf8_partial(p, bytes)`
+|`Utf8.parse_str_partial(p, str)`, `Utf8.parse_utf8_partial(p, bytes)`
 |Parse the start of the input and return `{ val, input }`, where `input` is
 what is left. Use these to read one message from a stream that holds several.
 
@@ -44,25 +44,25 @@ record parsers read.
 
 == Reading text
 
-All of these read from `String.Utf8`, which is `List(U8)`.
+All of these read from `Utf8.Bytes`, which is `List(U8)`.
 
 [cols="2,3",options="header"]
 |===
 |Parser |Reads
 
-|`String.codeunit(b)`
-|Exactly the byte `b`, such as `String.codeunit('=')`.
+|`Utf8.codeunit(b)`
+|Exactly the byte `b`, such as `Utf8.codeunit('=')`.
 
-|`String.codeunit_satisfies(pred)`
+|`Utf8.codeunit_satisfies(pred)`
 |One byte that `pred` accepts.
 
-|`String.any_codeunit`
+|`Utf8.any_codeunit`
 |Any one byte.
 
-|`String.string(s)`, `String.utf8(bytes)`
+|`Utf8.string(s)`, `Utf8.utf8(bytes)`
 |Exactly the given text, returned as a `Str` or as bytes.
 
-|`String.digit`, `String.digits`
+|`Utf8.digit`, `Utf8.digits`
 |One ASCII digit, or a run of them, as a `U64`. `digits` fails on a number
 too large for a `U64`.
 
@@ -72,7 +72,7 @@ too large for a `U64`.
 |`Parser.chomp_until(b)`
 |Bytes up to, but not including, the byte `b`. Fails if `b` never appears.
 
-|`String.any_string`, `String.any_thing`
+|`Utf8.any_string`, `Utf8.any_thing`
 |All remaining input, as a `Str` (failing if it is not valid UTF-8) or as
 bytes.
 |===
@@ -122,7 +122,7 @@ include::examples/combinators-behaviour.roc[tag=flatten,indent=0]
 |===
 |Combinator |Does
 
-|`String.one_of(list)`
+|`Utf8.one_of(list)`
 |Tries each parser in order; the first success wins. On failure, reports the
 last parser's message.
 
@@ -213,7 +213,7 @@ and leaves its input unread. The repetition itself succeeds:
 include::examples/combinators-behaviour.roc[tag=many-backtracks,indent=0]
 ----
 
-So when you parse a whole input with `String.parse_str`, a bad element in the
+So when you parse a whole input with `Utf8.parse_str`, a bad element in the
 middle of a list shows up as `ParsingIncomplete` with the remaining text,
 rather than as the element's own failure message. <<errors>> shows how to
 turn that into a useful message.
@@ -235,7 +235,7 @@ recursion inside one parser where you can, as here.
 
 == Bytes, not characters
 
-The `String` parsers read UTF-8 _code units_, which are bytes. An ASCII
+The `Utf8` parsers read UTF-8 _code units_, which are bytes. An ASCII
 character is one byte, but other characters take two to four. `é`, for
 example, is the two bytes `0xC3 0xA9`:
 
@@ -246,13 +246,13 @@ include::examples/combinators-behaviour.roc[tag=bytes,indent=0]
 
 This has three consequences:
 
-* `String.string` and `String.codeunit` work for any text, because they
+* `Utf8.string` and `Utf8.codeunit` work for any text, because they
   compare exact bytes.
 * `codeunit_satisfies` and `chomp_while` see one byte at a time. A predicate
   such as "is a letter" written for ASCII never matches the bytes of `é`. A
   predicate such as `|b| b != '"'` is safe, because no byte of a multi-byte
   character is below 128.
-* `String.str_from_utf8` crashes on bytes that are not valid UTF-8. That
+* `Utf8.str_from_utf8` crashes on bytes that are not valid UTF-8. That
   cannot happen for a slice of a valid `Str` cut at ASCII bytes, as in this
   manual's examples. If your parser can stop in the middle of a character,
   convert with `Str.from_utf8` and handle its error instead.

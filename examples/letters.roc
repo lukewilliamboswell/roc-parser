@@ -7,13 +7,13 @@ import cli.OsStr
 import cli.Stderr
 import cli.Stdout
 import parser.Parser
-import parser.String
+import parser.Utf8
 
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
 	input = args.get(1).map_ok(OsStr.display) ?? "AAAiBByAABBwBtCCCiAyArBBx"
 	result : Try(List(Letter), [ParsingFailure(Str), ParsingIncomplete(Str)])
-	result = String.parse_str(letter_parser.many(), input)
+	result = Utf8.parse_str(letter_parser.many(), input)
 
 	match result.map_ok(count_letter_as) {
 		Ok(count) => Stdout.line!("I counted ${count.to_str()} letter A's!")?
@@ -60,7 +60,7 @@ letter_parser = Parser.build_primitive_parser(
 expect {
 	input = "B"
 	parser = letter_parser
-	result = parser |> String.parse_str(input)?
+	result = parser |> Utf8.parse_str(input)?
 	result == B
 }
 
@@ -69,6 +69,6 @@ expect {
 expect {
 	input = "BCXA"
 	parser = letter_parser.many()
-	result = parser |> String.parse_str(input)?
+	result = parser |> Utf8.parse_str(input)?
 	result == [B, C, Other, A]
 }

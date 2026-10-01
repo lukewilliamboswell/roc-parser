@@ -89,10 +89,10 @@ summary:
 |===
 |Module |What changed
 
-|`Parser`, `String`
+|`Parser`, `Utf8`
 |`many` and `sep_by` stop when an element consumes no input instead of
 looping forever. Failure messages quote only a short prefix of the remaining
-input. `String.digits` rejects values too large for `U64`.
+input. `Utf8.digits` rejects values too large for `U64`.
 
 |`CSV`
 |Parses RFC 4180: an optional final line break, lone CR line breaks, and any

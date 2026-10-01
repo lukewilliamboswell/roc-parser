@@ -1,4 +1,4 @@
-import String
+import Utf8
 
 ## A practical YAML configuration parser.
 ##
@@ -87,7 +87,7 @@ Yaml := [
 	to_inspect = |value| inspect_yaml(value)
 }
 
-drop_byte_order_mark : String.Utf8 -> String.Utf8
+drop_byte_order_mark : Utf8.Bytes -> Utf8.Bytes
 drop_byte_order_mark = |bytes| {
 	match bytes {
 		[0xEF, 0xBB, 0xBF, .. as rest] => rest
@@ -97,7 +97,7 @@ drop_byte_order_mark = |bytes| {
 
 ## Reject characters outside YAML 1.2's printable set (5.1): C0 controls other
 ## than tab and line breaks, DEL, C1 controls other than NEL, and U+FFFE/U+FFFF.
-check_printable : String.Utf8 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+check_printable : Utf8.Bytes -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 check_printable = |bytes| {
 	var $line = 1
 	var $column = 1
@@ -134,7 +134,7 @@ check_printable = |bytes| {
 ## `terminated` is false only for a final line without a line break. `tab`
 ## marks a tab right after the indentation, which is an error only where the
 ## line is block structure rather than block scalar content.
-Line : { content : String.Utf8, indent : U64, number : U64, terminated : Bool, tab : Bool }
+Line : { content : Utf8.Bytes, indent : U64, number : U64, terminated : Bool, tab : Bool }
 
 ParseResult : { val : Yaml, input : List(Line) }
 
@@ -313,7 +313,7 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 	}
 }
 
-starts_block_scalar : String.Utf8 -> Bool
+starts_block_scalar : Utf8.Bytes -> Bool
 starts_block_scalar = |bytes| {
 	match trim_spaces(bytes) {
 		['|', ..] | ['>', ..] => Bool.True
@@ -321,7 +321,7 @@ starts_block_scalar = |bytes| {
 	}
 }
 
-parse_block_scalar : List(Line), List(Line), String.Utf8, U64, U64, U64 -> Try(BlockScalarResult, [YamlError(Yaml.Error)])
+parse_block_scalar : List(Line), List(Line), Utf8.Bytes, U64, U64, U64 -> Try(BlockScalarResult, [YamlError(Yaml.Error)])
 parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, min_indent| {
 	header = parse_block_header(header_bytes, line, column)?
 	raw_tail = drop_lines_before_number(raw_lines, line + 1)
@@ -329,10 +329,10 @@ parse_block_scalar = |clean_rest, raw_lines, header_bytes, line, column, min_ind
 	body = render_block_scalar(collected.lines, collected.terminated, header.style, header.chomp)
 	input = drop_consumed_lines(clean_rest, collected.consumed_through)
 
-	Ok({ value: String(String.str_from_utf8(body)), input })
+	Ok({ value: String(Utf8.str_from_utf8(body)), input })
 }
 
-parse_block_header : String.Utf8, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
+parse_block_header : Utf8.Bytes, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
 parse_block_header = |raw, line, column| {
 	bytes = trim_spaces(raw)
 
@@ -347,7 +347,7 @@ parse_block_header = |raw, line, column| {
 	}
 }
 
-parse_block_header_options : String.Utf8, BlockHeader, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
+parse_block_header_options : Utf8.Bytes, BlockHeader, U64, U64 -> Try(BlockHeader, [YamlError(Yaml.Error)])
 parse_block_header_options = |bytes, header, line, column| {
 	match bytes {
 		[] => Ok(header)
@@ -417,7 +417,7 @@ block_indent_from_digit = |digit| {
 ## text. Content must be indented at least `min_indent` spaces: one more than
 ## the parent node, or zero for a scalar at the document root. `terminated`
 ## says whether the last content line ended with a line break.
-collect_block_lines : List(Line), U64, BlockIndent, U64 -> Try({ lines : List(String.Utf8), consumed_through : U64, terminated : Bool }, [YamlError(Yaml.Error)])
+collect_block_lines : List(Line), U64, BlockIndent, U64 -> Try({ lines : List(Utf8.Bytes), consumed_through : U64, terminated : Bool }, [YamlError(Yaml.Error)])
 collect_block_lines = |raw_lines, min_indent, block_indent, header_line| {
 	var $content_indent =
 		match block_indent {
@@ -505,7 +505,7 @@ collect_block_lines = |raw_lines, min_indent, block_indent, header_line| {
 }
 
 ## "---" or "..." at the start of a line, alone or followed by white space.
-is_document_marker : String.Utf8 -> Bool
+is_document_marker : Utf8.Bytes -> Bool
 is_document_marker = |bytes| {
 	match bytes {
 		['-', '-', '-'] | ['.', '.', '.'] => Bool.True
@@ -514,7 +514,7 @@ is_document_marker = |bytes| {
 	}
 }
 
-count_spaces : String.Utf8, U64 -> U64
+count_spaces : Utf8.Bytes, U64 -> U64
 count_spaces = |bytes, count| {
 	match bytes {
 		[' ', .. as rest] => count_spaces(rest, count + 1)
@@ -524,7 +524,7 @@ count_spaces = |bytes, count| {
 
 ## Apply the block style and chomping indicator (YAML 1.2 8.1.1.2). Content
 ## runs through the last non-empty line; later empty lines are trailing.
-render_block_scalar : List(String.Utf8), Bool, BlockStyle, BlockChomp -> String.Utf8
+render_block_scalar : List(Utf8.Bytes), Bool, BlockStyle, BlockChomp -> Utf8.Bytes
 render_block_scalar = |lines, terminated, style, chomp| {
 	content_len = last_content_index(lines, 0, 0)
 	content = lines.sublist({ start: 0, len: content_len })
@@ -553,7 +553,7 @@ render_block_scalar = |lines, terminated, style, chomp| {
 	}
 }
 
-last_content_index : List(String.Utf8), U64, U64 -> U64
+last_content_index : List(Utf8.Bytes), U64, U64 -> U64
 last_content_index = |lines, index, last| {
 	match lines.get(index) {
 		Err(_) => last
@@ -562,7 +562,7 @@ last_content_index = |lines, index, last| {
 	}
 }
 
-join_block_lines : List(String.Utf8) -> String.Utf8
+join_block_lines : List(Utf8.Bytes) -> Utf8.Bytes
 join_block_lines = |lines| {
 	match lines {
 		[] => []
@@ -570,7 +570,7 @@ join_block_lines = |lines| {
 	}
 }
 
-join_block_lines_help : List(String.Utf8), String.Utf8 -> String.Utf8
+join_block_lines_help : List(Utf8.Bytes), Utf8.Bytes -> Utf8.Bytes
 join_block_lines_help = |lines, out| {
 	match lines {
 		[] => out
@@ -581,7 +581,7 @@ join_block_lines_help = |lines, out| {
 ## Fold lines (YAML 1.2 8.1.3, 6.5): a break between two text lines that do not
 ## start with white space becomes a space, or is dropped when empty lines
 ## follow it; breaks next to more-indented lines are kept.
-fold_block_lines : List(String.Utf8) -> String.Utf8
+fold_block_lines : List(Utf8.Bytes) -> Utf8.Bytes
 fold_block_lines = |lines| {
 	var $out = []
 	var $previous = Err(NoLine)
@@ -632,7 +632,7 @@ drop_consumed_lines = |lines, consumed_through| {
 	}
 }
 
-parse_inline_value : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_inline_value : Utf8.Bytes, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_inline_value = |raw, line, column, depth| {
 	bytes = trim_spaces(raw)
 
@@ -658,7 +658,7 @@ parse_inline_value = |raw, line, column, depth| {
 			fail(line, column, "complex mapping keys are not supported by this YAML subset")
 
 		[first, ..] if first == ']' or first == '}' or first == ',' or first == '@' or first == '`' =>
-			fail(line, column, "a plain scalar cannot start with `${String.str_from_utf8([first])}`")
+			fail(line, column, "a plain scalar cannot start with `${Utf8.str_from_utf8([first])}`")
 
 		['-'] | ['-', ' ', ..] | ['-', '\t', ..] | [':'] | [':', ' ', ..] | [':', '\t', ..] =>
 			fail(line, column, "a plain scalar cannot start with an indicator followed by white space")
@@ -677,7 +677,7 @@ parse_inline_value = |raw, line, column, depth| {
 }
 
 ## ": " or a final ":" inside a plain scalar would start a mapping value.
-contains_mapping_indicator : String.Utf8 -> Bool
+contains_mapping_indicator : Utf8.Bytes -> Bool
 contains_mapping_indicator = |bytes| {
 	match bytes {
 		[] => Bool.False
@@ -689,9 +689,9 @@ contains_mapping_indicator = |bytes| {
 
 ## Resolve a plain scalar with the YAML 1.2 core schema (10.3.2). Anything
 ## that matches none of its forms is a string.
-parse_plain_scalar : String.Utf8, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_plain_scalar : Utf8.Bytes, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_plain_scalar = |bytes, line, column| {
-	text = String.str_from_utf8(bytes)
+	text = Utf8.str_from_utf8(bytes)
 
 	if ["null", "Null", "NULL", "~"].contains(text) {
 		Ok(Null)
@@ -741,7 +741,7 @@ special_float = |text| {
 is_hex_digit : U8 -> Bool
 is_hex_digit = |byte| is_digit(byte) or (byte >= 'a' and byte <= 'f') or (byte >= 'A' and byte <= 'F')
 
-radix_integer : String.Utf8, U64, Str, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+radix_integer : Utf8.Bytes, U64, Str, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 radix_integer = |digits, radix, text, line, column| {
 	value = digits.fold(
 		Ok(0),
@@ -770,7 +770,7 @@ radix_integer = |digits, radix, text, line, column| {
 
 ## Match the core schema float form [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
 ## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
-core_float_text : String.Utf8 -> Try(Str, [NotFloat])
+core_float_text : Utf8.Bytes -> Try(Str, [NotFloat])
 core_float_text = |bytes| {
 	{ sign, unsigned } =
 		match bytes {
@@ -798,16 +798,16 @@ core_float_text = |bytes| {
 	is_float = has_point or !exponent.is_empty()
 
 	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if whole.is_empty() "0" else String.str_from_utf8(whole)
-		fraction_text = if fraction.is_empty() "0" else String.str_from_utf8(fraction)
-		exponent_text = if exponent.is_empty() "" else String.str_from_utf8(exponent)
+		whole_text = if whole.is_empty() "0" else Utf8.str_from_utf8(whole)
+		fraction_text = if fraction.is_empty() "0" else Utf8.str_from_utf8(fraction)
+		exponent_text = if exponent.is_empty() "" else Utf8.str_from_utf8(exponent)
 		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
 	} else {
 		Err(NotFloat)
 	}
 }
 
-count_while : String.Utf8, (U8 -> Bool) -> U64
+count_while : Utf8.Bytes, (U8 -> Bool) -> U64
 count_while = |bytes, keep| {
 	var $count = 0
 	while $count < bytes.len() and keep(bytes.get($count) ?? 0) {
@@ -816,7 +816,7 @@ count_while = |bytes, keep| {
 	$count
 }
 
-parse_flow_sequence : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_flow_sequence : Utf8.Bytes, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_flow_sequence = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '[', ']', line, column)?
 
@@ -829,7 +829,7 @@ parse_flow_sequence = |bytes, line, column, depth| {
 	}
 }
 
-parse_flow_values : List(String.Utf8), U64, U64, U64, List(Yaml) -> Try(List(Yaml), [YamlError(Yaml.Error)])
+parse_flow_values : List(Utf8.Bytes), U64, U64, U64, List(Yaml) -> Try(List(Yaml), [YamlError(Yaml.Error)])
 parse_flow_values = |parts, line, column, depth, values| {
 	match parts {
 		[] => Ok(values)
@@ -840,7 +840,7 @@ parse_flow_values = |parts, line, column, depth, values| {
 	}
 }
 
-parse_flow_mapping : String.Utf8, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
+parse_flow_mapping : Utf8.Bytes, U64, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 parse_flow_mapping = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '{', '}', line, column)?
 
@@ -853,7 +853,7 @@ parse_flow_mapping = |bytes, line, column, depth| {
 	}
 }
 
-parse_flow_entries : List(String.Utf8), U64, U64, U64, List({ key : Str, value : Yaml }) -> Try(List({ key : Str, value : Yaml }), [YamlError(Yaml.Error)])
+parse_flow_entries : List(Utf8.Bytes), U64, U64, U64, List({ key : Str, value : Yaml }) -> Try(List({ key : Str, value : Yaml }), [YamlError(Yaml.Error)])
 parse_flow_entries = |parts, line, column, depth, entries| {
 	match parts {
 		[] => Ok(entries)
@@ -877,7 +877,7 @@ parse_flow_entries = |parts, line, column, depth, entries| {
 	}
 }
 
-parse_key : String.Utf8, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
+parse_key : Utf8.Bytes, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_key = |raw, line, column| {
 	bytes = trim_spaces(raw)
 
@@ -888,21 +888,21 @@ parse_key = |raw, line, column| {
 		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
 		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
 		[first, ..] if first == '|' or first == '>' or first == '%' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
-			fail(line, column, "a plain mapping key cannot start with `${String.str_from_utf8([first])}`")
-		_ => Ok(String.str_from_utf8(bytes))
+			fail(line, column, "a plain mapping key cannot start with `${Utf8.str_from_utf8([first])}`")
+		_ => Ok(Utf8.str_from_utf8(bytes))
 	}
 }
 
-parse_single_quoted : String.Utf8, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
+parse_single_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '\'', line, column)?
-	unescape_single(inner, [], line, column).map_ok(String.str_from_utf8)
+	unescape_single(inner, [], line, column).map_ok(Utf8.str_from_utf8)
 }
 
 ## The text between a scalar's opening quote and its real closing quote, which
 ## must end the scalar. In single quotes '' is an escaped quote; in double
 ## quotes a backslash escapes the next byte.
-quoted_inner : String.Utf8, U8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+quoted_inner : Utf8.Bytes, U8, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 quoted_inner = |bytes, quote, line, column| {
 	var $index = 1
 	var $close = Err(Unterminated)
@@ -931,7 +931,7 @@ quoted_inner = |bytes, quote, line, column| {
 	}
 }
 
-unescape_single : String.Utf8, String.Utf8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+unescape_single : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 unescape_single = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
@@ -941,13 +941,13 @@ unescape_single = |bytes, out, line, column| {
 	}
 }
 
-parse_double_quoted : String.Utf8, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
+parse_double_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [YamlError(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '"', line, column)?
-	unescape_double(inner, [], line, column).map_ok(String.str_from_utf8)
+	unescape_double(inner, [], line, column).map_ok(Utf8.str_from_utf8)
 }
 
-unescape_double : String.Utf8, String.Utf8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+unescape_double : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 unescape_double = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
@@ -979,7 +979,7 @@ unescape_double = |bytes, out, line, column| {
 }
 
 ## YAML 1.2 single-character escapes (5.7), as UTF-8.
-simple_escape : U8 -> Try(String.Utf8, [NotSimple])
+simple_escape : U8 -> Try(Utf8.Bytes, [NotSimple])
 simple_escape = |escaped| {
 	match escaped {
 		'0' => Ok([0])
@@ -1004,7 +1004,7 @@ simple_escape = |escaped| {
 }
 
 ## The whole (possibly multi-byte) character at the start of `bytes`.
-escaped_character : String.Utf8 -> Str
+escaped_character : Utf8.Bytes -> Str
 escaped_character = |bytes| {
 	width =
 		match bytes {
@@ -1017,7 +1017,7 @@ escaped_character = |bytes| {
 	Str.from_utf8(bytes.sublist({ start: 0, len: width })) ?? "?"
 }
 
-encode_code_point : String.Utf8, U64, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+encode_code_point : Utf8.Bytes, U64, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 encode_code_point = |hex, digits, line, column| {
 	if hex.len() != digits {
 		fail(line, column, "escape sequence needs ${digits.to_str()} hexadecimal digits")
@@ -1031,7 +1031,7 @@ encode_code_point = |hex, digits, line, column| {
 	}
 }
 
-parse_hex : String.Utf8, U32 -> Try(U32, [InvalidHex])
+parse_hex : Utf8.Bytes, U32 -> Try(U32, [InvalidHex])
 parse_hex = |bytes, value| {
 	match bytes {
 		[] => Ok(value)
@@ -1052,7 +1052,7 @@ parse_hex = |bytes, value| {
 	}
 }
 
-utf8_encode : U32 -> String.Utf8
+utf8_encode : U32 -> Utf8.Bytes
 utf8_encode = |code| {
 	if code < 0x80 {
 		[U32.to_u8_wrap(code)]
@@ -1075,7 +1075,7 @@ prepare_lines = |raw_lines| {
 				return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
 
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
-			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(String.str_from_utf8(first.content), "---") => {
+			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(Utf8.str_from_utf8(first.content), "---") => {
 				# "--- node": the root node starts on the marker line (YAML 1.2 9.1.4).
 				node = trim_spaces(first.content.drop_first(3))
 				column = first.content.len() - node.len() + 1
@@ -1130,7 +1130,7 @@ remove_document_end = |lines, out| {
 	}
 }
 
-split_lines : String.Utf8, U64, String.Utf8, List(Line) -> List(Line)
+split_lines : Utf8.Bytes, U64, Utf8.Bytes, List(Line) -> List(Line)
 split_lines = |input, number, current, lines| {
 	match input {
 		# A line break ends a line; it does not start an empty final one.
@@ -1142,10 +1142,10 @@ split_lines = |input, number, current, lines| {
 	}
 }
 
-strip_comment : String.Utf8, Quote, Bool, Bool, String.Utf8 -> String.Utf8
+strip_comment : Utf8.Bytes, Quote, Bool, Bool, Utf8.Bytes -> Utf8.Bytes
 strip_comment = |bytes, quote, escaped, separated, out| strip_comment_help(bytes, quote, escaped, separated, 0, out)
 
-strip_comment_help : String.Utf8, Quote, Bool, Bool, U64, String.Utf8 -> String.Utf8
+strip_comment_help : Utf8.Bytes, Quote, Bool, Bool, U64, Utf8.Bytes -> Utf8.Bytes
 strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
 	match bytes {
 		[] => out
@@ -1185,7 +1185,7 @@ strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
 ## space and standalone "-" or "?" indicators may separate it from the start of
 ## the line, a ": " value indicator, or (in a flow collection) "[", "{" or ",".
 ## Anywhere else, quotes and brackets are ordinary plain scalar text.
-scalar_can_start : String.Utf8, Bool -> Bool
+scalar_can_start : Utf8.Bytes, Bool -> Bool
 scalar_can_start = |prefix, in_flow| {
 	var $index = prefix.len()
 	var $answer = Err(Undecided)
@@ -1221,12 +1221,12 @@ scalar_can_start = |prefix, in_flow| {
 is_white : U8 -> Bool
 is_white = |byte| byte == ' ' or byte == '\t'
 
-split_mapping_entry : String.Utf8 -> Try({ key : String.Utf8, value : String.Utf8, value_column : U64 }, [NotFound])
+split_mapping_entry : Utf8.Bytes -> Try({ key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }, [NotFound])
 split_mapping_entry = |bytes| {
 	find_mapping_colon(bytes, bytes, NoQuote, Bool.False, 0, 0, 0)
 }
 
-find_mapping_colon : String.Utf8, String.Utf8, Quote, Bool, U64, U64, U64 -> Try({ key : String.Utf8, value : String.Utf8, value_column : U64 }, [NotFound])
+find_mapping_colon : Utf8.Bytes, Utf8.Bytes, Quote, Bool, U64, U64, U64 -> Try({ key : Utf8.Bytes, value : Utf8.Bytes, value_column : U64 }, [NotFound])
 find_mapping_colon = |all, bytes, quote, escaped, square_depth, curly_depth, index| {
 	in_flow = square_depth > 0 or curly_depth > 0
 	can_start = |_| scalar_can_start(all.sublist({ start: 0, len: index }), in_flow)
@@ -1264,12 +1264,12 @@ find_mapping_colon = |all, bytes, quote, escaped, square_depth, curly_depth, ind
 	}
 }
 
-split_flow_items : String.Utf8, U64, U64 -> Try(List(String.Utf8), [YamlError(Yaml.Error)])
+split_flow_items : Utf8.Bytes, U64, U64 -> Try(List(Utf8.Bytes), [YamlError(Yaml.Error)])
 split_flow_items = |bytes, line, column| {
 	split_flow_items_help(bytes, [], [], NoQuote, Bool.False, 0, 0, line, column)
 }
 
-split_flow_items_help : String.Utf8, String.Utf8, List(String.Utf8), Quote, Bool, U64, U64, U64, U64 -> Try(List(String.Utf8), [YamlError(Yaml.Error)])
+split_flow_items_help : Utf8.Bytes, Utf8.Bytes, List(Utf8.Bytes), Quote, Bool, U64, U64, U64, U64 -> Try(List(Utf8.Bytes), [YamlError(Yaml.Error)])
 split_flow_items_help = |bytes, current, items, quote, escaped, square_depth, curly_depth, line, column| {
 	match bytes {
 		[] if quote != NoQuote => fail(line, column, "unterminated quoted string in flow collection")
@@ -1301,7 +1301,7 @@ split_flow_items_help = |bytes, current, items, quote, escaped, square_depth, cu
 	}
 }
 
-unwrap_flow : String.Utf8, U8, U8, U64, U64 -> Try(String.Utf8, [YamlError(Yaml.Error)])
+unwrap_flow : Utf8.Bytes, U8, U8, U64, U64 -> Try(Utf8.Bytes, [YamlError(Yaml.Error)])
 unwrap_flow = |bytes, open, close, line, column| {
 	if bytes.len() < 2 or bytes.get(0) != Ok(open) or bytes.get(bytes.len() - 1) != Ok(close) {
 		fail(line, column, "unterminated flow collection")
@@ -1310,7 +1310,7 @@ unwrap_flow = |bytes, open, close, line, column| {
 	}
 }
 
-is_sequence_line : String.Utf8 -> Bool
+is_sequence_line : Utf8.Bytes -> Bool
 is_sequence_line = |bytes| {
 	match bytes {
 		['-'] => Bool.True
@@ -1319,7 +1319,7 @@ is_sequence_line = |bytes| {
 	}
 }
 
-sequence_payload : String.Utf8 -> String.Utf8
+sequence_payload : Utf8.Bytes -> Utf8.Bytes
 sequence_payload = |bytes| {
 	match bytes {
 		['-'] => []
@@ -1337,7 +1337,7 @@ mapping_has_key = |entries, key| {
 	}
 }
 
-is_decimal_integer : String.Utf8 -> Bool
+is_decimal_integer : Utf8.Bytes -> Bool
 is_decimal_integer = |bytes| {
 	match bytes {
 		['+', .. as rest] | ['-', .. as rest] => !rest.is_empty() and all_digits(rest)
@@ -1345,7 +1345,7 @@ is_decimal_integer = |bytes| {
 	}
 }
 
-all_digits : String.Utf8 -> Bool
+all_digits : Utf8.Bytes -> Bool
 all_digits = |bytes| {
 	match bytes {
 		[] => Bool.True
@@ -1356,7 +1356,7 @@ all_digits = |bytes| {
 is_digit : U8 -> Bool
 is_digit = |byte| byte >= '0' and byte <= '9'
 
-starts_with_space : String.Utf8 -> Bool
+starts_with_space : Utf8.Bytes -> Bool
 starts_with_space = |bytes| {
 	match bytes {
 		[' ', ..] | ['\t', ..] => Bool.True
@@ -1364,10 +1364,10 @@ starts_with_space = |bytes| {
 	}
 }
 
-trim_spaces : String.Utf8 -> String.Utf8
+trim_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_spaces = |bytes| trim_end_spaces(trim_start_spaces(bytes))
 
-trim_start_spaces : String.Utf8 -> String.Utf8
+trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_start_spaces = |bytes| {
 	match bytes {
 		[' ', .. as rest] | ['\t', .. as rest] => trim_start_spaces(rest)
@@ -1375,10 +1375,10 @@ trim_start_spaces = |bytes| {
 	}
 }
 
-trim_end_spaces : String.Utf8 -> String.Utf8
+trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces = |bytes| trim_end_spaces_help(bytes, [], [])
 
-trim_end_spaces_help : String.Utf8, String.Utf8, String.Utf8 -> String.Utf8
+trim_end_spaces_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces_help = |bytes, out, pending| {
 	match bytes {
 		[] => out
@@ -1388,7 +1388,7 @@ trim_end_spaces_help = |bytes, out, pending| {
 	}
 }
 
-append_bytes : String.Utf8, String.Utf8 -> String.Utf8
+append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 append_bytes = |left, right| {
 	match right {
 		[] => left
