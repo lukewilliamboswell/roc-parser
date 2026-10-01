@@ -304,7 +304,7 @@ take_line : Bytes -> Try({ line : Bytes, rest : Bytes }, Failure)
 take_line = |bytes| {
 	# Build the error only when there is one: a `Try` holding an error
 	# message costs an allocation even on the success path.
-	var $index = 0
+	var $index = Utf8.find_line_end(bytes, 0)
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		if byte == '\r' {
@@ -325,7 +325,7 @@ take_line = |bytes| {
 # request-line = method SP request-target SP HTTP-version
 parse_request_line : Bytes -> Try({ method : HTTP.Method, target : Str, version : HTTP.Version }, Failure)
 parse_request_line = |line| {
-	method_len = prefix_len(line, is_tchar)
+	method_len = Utf8.skip_class(line, 0, tchar_class)
 	method = to_method(line.sublist({ start: 0, len: method_len }))?
 	match line.drop_first(method_len) {
 		[' ', .. as target_onwards] => {
@@ -461,14 +461,14 @@ ascii_eq_lower = |bytes, wanted| {
 # field-line = field-name ":" OWS field-value OWS
 parse_field_line : Bytes -> Try({ header : HTTP.Header, kind : Try(FieldKind, [Other]), value : Bytes }, Failure)
 parse_field_line = |line| {
-	name_len = prefix_len(line, is_tchar)
+	name_len = Utf8.skip_class(line, 0, tchar_class)
 	match line.drop_first(name_len) {
 		[' ', ..] | ['\t', ..] if name_len == 0 => fail(0, "obsolete line folding is not allowed")
 		[' ', ..] | ['\t', ..] => fail(name_len, "whitespace between a field name and its colon")
 		[':', .. as after_colon] if name_len > 0 => {
 			value_start = name_len + 1 + prefix_len(after_colon, is_ows)
 			value = trim_ows(after_colon)
-			valid_len = prefix_len(value, is_field_byte)
+			valid_len = Utf8.skip_class(value, 0, field_byte_class)
 			if valid_len == value.len() {
 				name = Str.from_utf8(line.sublist({ start: 0, len: name_len })) ?? ""
 				match Str.from_utf8(value) {
@@ -743,6 +743,12 @@ is_field_byte = |byte| is_vchar(byte) or byte >= 0x80 or byte == ' ' or byte == 
 
 # tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
 #         "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+tchar_class : Utf8.ByteClass
+tchar_class = Utf8.ByteClass.from_predicate(is_tchar)
+
+field_byte_class : Utf8.ByteClass
+field_byte_class = Utf8.ByteClass.from_predicate(is_field_byte)
+
 is_tchar : U8 -> Bool
 is_tchar = |byte| {
 	(byte >= 'a' and byte <= 'z')
