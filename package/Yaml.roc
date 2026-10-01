@@ -15,6 +15,15 @@ import String
 ## complex keys, multi-line flow collections, multi-line quoted or plain
 ## scalars, and multi-document streams are rejected with a parse error rather
 ## than misread.
+##
+## A parsed value is one of:
+##
+## - `Null` for `null`, `~`, an empty value or an empty document;
+## - `Bool`, `Int` (an `I64`; larger integers are an error) and `Float` for
+##   plain scalars the core schema resolves;
+## - `String` for quoted scalars, block scalars and any other plain scalar;
+## - `Sequence` and `Mapping` for collections. Mapping entries keep their source
+##   order, and a duplicate key is an error.
 Yaml := [
 	Null,
 	Bool(Bool),
@@ -62,12 +71,18 @@ Yaml := [
 
 					[leftover, ..] =>
 						fail(leftover.number, leftover.indent + 1, "unexpected content after the document root")
-					}
+				}
 			}
 		}
 	}
 
 	## Render a parsed YAML value in Roc source-like notation for inspection.
+	##
+	## The output is meant for debugging and test messages, not for writing YAML.
+	##
+	## ```roc
+	## expect Yaml.to_inspect(Sequence([Int(1), String("a")])) == "Sequence([Int(1), String(\"a\")])"
+	## ```
 	to_inspect : Yaml -> Str
 	to_inspect = |value| inspect_yaml(value)
 }
@@ -221,7 +236,7 @@ parse_mapping_help = |lines, indent, depth, raw_lines, entries| {
 
 							_ =>
 								parse_mapping_help(rest, indent, depth, raw_lines, entries.append({ key, value: Null }))
-							}
+						}
 					} else if starts_block_scalar(parts.value) {
 						block = parse_block_scalar(rest, raw_lines, parts.value, line.number, line.indent + parts.value_column, line.indent + 1)?
 						parse_mapping_help(block.input, indent, depth, raw_lines, entries.append({ key, value: block.value }))
@@ -270,7 +285,7 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 
 					_ =>
 						parse_sequence_help(rest, indent, depth, raw_lines, values.append(Null))
-					}
+				}
 			} else {
 				match (if is_sequence_line(payload) Ok({}) else split_mapping_entry(payload).map_ok(|_| {})) {
 					# A tab before a compact collection would be part of its indentation.
@@ -728,21 +743,24 @@ is_hex_digit = |byte| is_digit(byte) or (byte >= 'a' and byte <= 'f') or (byte >
 
 radix_integer : String.Utf8, U64, Str, U64, U64 -> Try(Yaml, [YamlError(Yaml.Error)])
 radix_integer = |digits, radix, text, line, column| {
-	value = digits.fold(Ok(0), |acc, byte| {
-		digit =
-			if is_digit(byte) {
-				U8.to_u64(byte - '0')
-			} else if byte >= 'a' {
-				U8.to_u64(byte - 'a' + 10)
-			} else {
-				U8.to_u64(byte - 'A' + 10)
-			}
+	value = digits.fold(
+		Ok(0),
+		|acc, byte| {
+			digit =
+				if is_digit(byte) {
+					U8.to_u64(byte - '0')
+				} else if byte >= 'a' {
+					U8.to_u64(byte - 'a' + 10)
+				} else {
+					U8.to_u64(byte - 'A' + 10)
+				}
 
-		match acc {
-			Ok(total) if total <= (9223372036854775807 - digit) // radix => Ok(total * radix + digit)
-			_ => Err(Overflow)
-		}
-	})
+			match acc {
+				Ok(total) if total <= (9223372036854775807 - digit) // radix => Ok(total * radix + digit)
+				_ => Err(Overflow)
+			}
+		},
+	)
 
 	match value {
 		Ok(total) => Ok(Int(U64.to_i64_wrap(total)))
@@ -1160,7 +1178,7 @@ strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
 
 		[first, .. as rest] =>
 			strip_comment_help(rest, quote, Bool.False, first == ' ' or first == '\t', depth, out.append(first))
-		}
+	}
 }
 
 ## Whether a scalar or flow collection may start after `prefix`: only white
@@ -1522,21 +1540,21 @@ expect {
 expect {
 	actual = Yaml.parse_str("[1.2.3, 1e, nUlL, tRUE, 0x1F, 0o17, 1., .5, -1.5e2, .inf, -.Inf, 1_000, 0X1]")?
 	actual
-	== Sequence([
-		String("1.2.3"),
-		String("1e"),
-		String("nUlL"),
-		String("tRUE"),
-		Int(31),
-		Int(15),
-		Float(1.0),
-		Float(0.5),
-		Float(-150.0),
-		Float(F64.infinity),
-		Float(-F64.infinity),
-		String("1_000"),
-		String("0X1"),
-	])
+		== Sequence([
+			String("1.2.3"),
+			String("1e"),
+			String("nUlL"),
+			String("tRUE"),
+			Int(31),
+			Int(15),
+			Float(1.0),
+			Float(0.5),
+			Float(-150.0),
+			Float(F64.infinity),
+			Float(-F64.infinity),
+			String("1_000"),
+			String("0X1"),
+		])
 }
 
 ## Not-a-number resolves to a float.
@@ -1557,10 +1575,10 @@ expect {
 expect {
 	actual = Yaml.parse_str("steps:\n- run: a\n  name: x\n- b\nnext: 1\n")?
 	actual
-	== Mapping([
-		{ key: "steps", value: Sequence([Mapping([{ key: "run", value: String("a") }, { key: "name", value: String("x") }]), String("b")]) },
-		{ key: "next", value: Int(1) },
-	])
+		== Mapping([
+			{ key: "steps", value: Sequence([Mapping([{ key: "run", value: String("a") }, { key: "name", value: String("x") }]), String("b")]) },
+			{ key: "next", value: Int(1) },
+		])
 }
 
 ## A byte order mark is not content; control characters are rejected.
@@ -1758,12 +1776,12 @@ expect {
 expect {
 	actual = Yaml.parse_str("k: it's # comment\nit's: \"q\" # c\na[b: x]{\nlist: [a, 'b''c', \"d, e\"]\n")?
 	actual
-	== Mapping([
-		{ key: "k", value: String("it's") },
-		{ key: "it's", value: String("q") },
-		{ key: "a[b", value: String("x]{") },
-		{ key: "list", value: Sequence([String("a"), String("b'c"), String("d, e")]) },
-	])
+		== Mapping([
+			{ key: "k", value: String("it's") },
+			{ key: "it's", value: String("q") },
+			{ key: "a[b", value: String("x]{") },
+			{ key: "list", value: Sequence([String("a"), String("b'c"), String("d, e")]) },
+		])
 }
 
 ## Indicator-like text inside a plain scalar does not start a quoted scalar.
@@ -1815,3 +1833,10 @@ expect {
 
 ## Malformed flow collections still fail.
 expect Yaml.parse_str("values: [one, two").is_err()
+
+## Module doc examples: a frontmatter flag and the inspection format.
+expect Yaml.parse_str("draft: false") == Ok(Mapping([{ key: "draft", value: Bool(Bool.False) }]))
+expect Yaml.to_inspect(Sequence([Int(1), String("a")])) == "Sequence([Int(1), String(\"a\")])"
+
+## Null spellings and an empty value all parse as Null.
+expect Yaml.parse_str("a: null\nb: ~\nc:\n") == Ok(Mapping([{ key: "a", value: Null }, { key: "b", value: Null }, { key: "c", value: Null }]))

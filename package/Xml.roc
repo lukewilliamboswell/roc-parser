@@ -1,5 +1,3 @@
-# XML parser
-# Original author: [Johannes Maas](https://github.com/j-maas)
 import Parser
 import String
 
@@ -24,15 +22,21 @@ import String
 ## a well-formedness error. Namespaces are not processed: a name such as
 ## `svg:path` is kept as written. Input is already decoded text, so a declared
 ## encoding is reported but not used to decode.
+##
+## Originally written by [Johannes Maas](https://github.com/j-maas).
 Xml := {
 	xml_declaration : [Given(Xml.Declaration), Missing],
 	root : Xml.Node,
 }.{
 
-	## Compare two XML documents structurally.
+	## Compare two XML documents structurally (declaration and tree).
 	is_eq : _
 
 	## An XML attribute name and decoded value.
+	##
+	## The name is kept as written, including any namespace prefix. The value
+	## has references replaced and whitespace normalised. Attributes keep their
+	## source order; duplicate names are a well-formedness error.
 	Attribute : { name : Str, value : Str }
 
 	## Text encoding declared by an XML declaration.
@@ -64,6 +68,11 @@ Xml := {
 	}
 
 	## An XML element or text node.
+	##
+	## `Element(name, attributes, children)` holds the children in document
+	## order. `Text(str)` is decoded character data; adjacent text, CDATA and
+	## references are merged into one `Text`, and whitespace-only text between
+	## elements is kept.
 	Node := [
 		Element(Str, List({ name : Str, value : Str }), List(Node)),
 		Text(Str),
@@ -80,8 +89,19 @@ Xml := {
 
 	## Parse one complete XML document.
 	##
+	## Leading and trailing whitespace, comments and processing instructions
+	## around the root element are allowed; anything else after it is an error.
+	## A leading byte order mark is accepted.
+	##
 	## ```roc
 	## expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element("a", [], [Text("x & y")]))
+	##
+	## expect {
+	##     match Xml.parse_str("<a>&nbsp;</a>") {
+	##         Err(XmlError({ line, column, message: _ })) => line == 1 and column == 4
+	##         Ok(_) => Bool.False
+	##     }
+	## }
 	## ```
 	parse_str : Str -> Try(Xml, [XmlError(Error)])
 	parse_str = |input| {
@@ -101,6 +121,13 @@ Xml := {
 	## Parse one XML document, including an optional declaration and any
 	## trailing comments, processing instructions, and whitespace. Input left
 	## after that is returned to the caller. Failures read `line:column: message`.
+	##
+	## Use this to embed an XML document in a larger parser; otherwise prefer
+	## `parse_str`, which reports a structured `Error`.
+	##
+	## ```roc
+	## expect String.parse_str(Xml.xml_parser, "<a/> <b/>") == Err(ParsingIncomplete("<b/>"))
+	## ```
 	xml_parser : Parser(String.Utf8, Xml)
 	xml_parser =
 		Parser.build_primitive_parser(
@@ -652,31 +679,31 @@ is_name_start_char : U32 -> Bool
 is_name_start_char = |c| {
 	(c >= 'a' and c <= 'z')
 		or (c >= 'A' and c <= 'Z')
-		or c == ':'
-		or c == '_'
-		or (c >= 0xC0 and c <= 0xD6)
-		or (c >= 0xD8 and c <= 0xF6)
-		or (c >= 0xF8 and c <= 0x2FF)
-		or (c >= 0x370 and c <= 0x37D)
-		or (c >= 0x37F and c <= 0x1FFF)
-		or (c >= 0x200C and c <= 0x200D)
-		or (c >= 0x2070 and c <= 0x218F)
-		or (c >= 0x2C00 and c <= 0x2FEF)
-		or (c >= 0x3001 and c <= 0xD7FF)
-		or (c >= 0xF900 and c <= 0xFDCF)
-		or (c >= 0xFDF0 and c <= 0xFFFD)
-		or (c >= 0x10000 and c <= 0xEFFFF)
+			or c == ':'
+				or c == '_'
+					or (c >= 0xC0 and c <= 0xD6)
+						or (c >= 0xD8 and c <= 0xF6)
+							or (c >= 0xF8 and c <= 0x2FF)
+								or (c >= 0x370 and c <= 0x37D)
+									or (c >= 0x37F and c <= 0x1FFF)
+										or (c >= 0x200C and c <= 0x200D)
+											or (c >= 0x2070 and c <= 0x218F)
+												or (c >= 0x2C00 and c <= 0x2FEF)
+													or (c >= 0x3001 and c <= 0xD7FF)
+														or (c >= 0xF900 and c <= 0xFDCF)
+															or (c >= 0xFDF0 and c <= 0xFFFD)
+																or (c >= 0x10000 and c <= 0xEFFFF)
 }
 
 is_name_char : U32 -> Bool
 is_name_char = |c| {
 	is_name_start_char(c)
 		or c == '-'
-		or c == '.'
-		or (c >= '0' and c <= '9')
-		or c == 0xB7
-		or (c >= 0x300 and c <= 0x36F)
-		or (c >= 0x203F and c <= 0x2040)
+			or c == '.'
+				or (c >= '0' and c <= '9')
+					or c == 0xB7
+						or (c >= 0x300 and c <= 0x36F)
+							or (c >= 0x203F and c <= 0x2040)
 }
 
 # See https://www.w3.org/TR/xml/#NT-Char
@@ -684,10 +711,10 @@ is_xml_char : U32 -> Bool
 is_xml_char = |c| {
 	c == 0x9
 		or c == 0xA
-		or c == 0xD
-		or (c >= 0x20 and c <= 0xD7FF)
-		or (c >= 0xE000 and c <= 0xFFFD)
-		or (c >= 0x10000 and c <= 0x10FFFF)
+			or c == 0xD
+				or (c >= 0x20 and c <= 0xD7FF)
+					or (c >= 0xE000 and c <= 0xFFFD)
+						or (c >= 0x10000 and c <= 0x10FFFF)
 }
 
 ## Check that a legal XML character starts at `pos` and return the position after it.
@@ -935,12 +962,10 @@ expect {
 expect {
 	result = Xml.parse_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><Example></Example></root>\n")
 	result
-		== Ok(
-			{
-				xml_declaration: Given({ version: v1_dot0, encoding: Given(Utf8Encoding) }),
-				root: Element("root", [], [Element("Example", [], [])]),
-			},
-		)
+		== Ok({
+			xml_declaration: Given({ version: v1_dot0, encoding: Given(Utf8Encoding) }),
+			root: Element("root", [], [Element("Example", [], [])]),
+		})
 }
 
 ## Malformed input ending in a multibyte scalar returns an error instead of crashing
@@ -1034,4 +1059,13 @@ expect {
 	parsed = Xml.parse_str("<e${attributes}/>")
 	duplicate = Xml.parse_str("<e${attributes} a${(count - 1).to_str()}=''/>")
 	parsed.is_ok() and duplicate.is_err()
+}
+
+## Parse examples in the module docs: text references and error positions.
+expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element("a", [], [Text("x & y")]))
+expect {
+	match Xml.parse_str("<a>&nbsp;</a>") {
+		Err(XmlError({ line, column, message: _ })) => line == 1 and column == 4
+		Ok(_) => Bool.False
+	}
 }

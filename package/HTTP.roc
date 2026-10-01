@@ -34,15 +34,27 @@ import String
 HTTP :: {}.{
 
 	## Supported HTTP request methods.
+	##
+	## Method names are matched case-sensitively, so `get` is rejected; any
+	## method not listed here is also rejected.
 	Method : [Options, Get, Post, Put, Delete, Head, Trace, Connect, Patch]
 
-	## An HTTP protocol version such as `HTTP/1.1`.
+	## An HTTP protocol version such as `HTTP/1.1`, as `{ major: 1, minor: 1 }`.
+	##
+	## Each part is a single digit, as RFC 9112 requires.
 	HttpVersion : { major : U8, minor : U8 }
 
-	## One HTTP header name and value.
+	## One header field: the name as written (case preserved) and the value
+	## with surrounding whitespace removed.
+	##
+	## Fields keep their order in the message, and repeated fields are kept.
 	Header : [Header(Str, Str)]
 
 	## A parsed HTTP request message.
+	##
+	## `uri` is the request-target exactly as written (it is not decoded or
+	## normalized). `body` is the message body after any chunked transfer
+	## coding has been removed.
 	Request : {
 		method : Method,
 		uri : Str,
@@ -52,6 +64,9 @@ HTTP :: {}.{
 	}
 
 	## A parsed HTTP response message.
+	##
+	## `status_code` is the three-digit status code and `status` the reason
+	## phrase, which may be empty. `body` is decoded like `Request.body`.
 	Response : {
 		http_version : HttpVersion,
 		status_code : U16,
@@ -62,6 +77,18 @@ HTTP :: {}.{
 
 	## Parse one HTTP request: request line, header fields, and the body its
 	## framing describes.
+	##
+	## Failure messages start with `invalid HTTP request:`.
+	##
+	## ```roc
+	## expect {
+	##     text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
+	##     match String.parse_str(HTTP.request, text) {
+	##         Ok(req) => req.method == Get and req.uri == "/hello" and req.headers == [Header("Host", "example.com")]
+	##         Err(_) => Bool.False
+	##     }
+	## }
+	## ```
 	request : Parser(String.Utf8, Request)
 	request =
 		Parser.build_primitive_parser(
@@ -72,6 +99,10 @@ HTTP :: {}.{
 
 	## Parse one HTTP response: status line, header fields, and the body its
 	## framing describes.
+	##
+	## Failure messages start with `invalid HTTP response:`. A response with no
+	## `Content-Length` or `Transfer-Encoding` takes the rest of the input as
+	## its body.
 	response : Parser(String.Utf8, Response)
 	response =
 		Parser.build_primitive_parser(
@@ -531,9 +562,9 @@ is_field_byte = |byte| is_vchar(byte) or byte >= 0x80 or byte == ' ' or byte == 
 is_tchar : U8 -> Bool
 is_tchar = |byte| {
 	(byte >= 'a' and byte <= 'z')
-	or (byte >= 'A' and byte <= 'Z')
-	or is_digit(byte)
-	or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
+		or (byte >= 'A' and byte <= 'Z')
+			or is_digit(byte)
+				or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
 parse : Parser(String.Utf8, a), Str -> Try(a, [ParsingFailure(Str), ParsingIncomplete(Str)])
@@ -658,3 +689,15 @@ expect {
 	]
 	smuggling.all(|text| parse(HTTP.request, text).is_err())
 }
+
+## A simple GET request parses as shown in the request docs.
+expect {
+	text = "GET /hello HTTP/1.1\r\nHost: example.com\r\n\r\n"
+	match String.parse_str(HTTP.request, text) {
+		Ok(req) => req.method == Get and req.uri == "/hello" and req.headers == [Header("Host", "example.com")]
+		Err(_) => Bool.False
+	}
+}
+
+## Lowercase method names are rejected.
+expect String.parse_str(HTTP.request, "get / HTTP/1.1\r\nHost: a\r\n\r\n").is_err()
