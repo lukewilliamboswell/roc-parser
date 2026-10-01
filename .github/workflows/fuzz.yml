@@ -35,6 +35,8 @@ jobs:
         # Every target registered in scripts/run_fuzz.py.
         target:
           - markdown-document
+          - markdown-blocks
+          - markdown-refdefs
           - markdown-inline
           - markdown-inline-ast
           - markdown-inline-pathological
@@ -117,6 +119,12 @@ jobs:
           - format: yaml-robustness
             requirements: scripts/yaml/requirements.txt
             command: python scripts/review_yaml.py campaign --smoke
+          - format: markdown-inline
+            requirements: scripts/markdown/requirements.txt
+            command: python scripts/review_markdown.py check
+          - format: markdown-blocks
+            requirements: scripts/markdown/requirements.txt
+            command: python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
           - format: xml
             command: python scripts/review_xml.py check --baseline scripts/xml/known-failures.json
           - format: csv

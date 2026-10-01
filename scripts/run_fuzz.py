@@ -62,7 +62,9 @@ def target(
 
 TARGETS = dict(
     [
-        target("markdown-document", "markdown-document", "fuzz-str", "markdown-document"),
+        target("markdown-document", "markdown-document", "raw", "markdown-document"),
+        target("markdown-blocks", max_input_size=1024),
+        target("markdown-refdefs", max_input_size=256),
         target("markdown-inline", "markdown-inline", "raw", "markdown-inline"),
         target("markdown-inline-ast", max_input_size=1024),
         target("markdown-inline-pathological", max_input_size=64, timeout=10),
