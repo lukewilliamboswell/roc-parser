@@ -522,15 +522,18 @@ split_document_lines = |input| {
 	var $index = 0
 	len = input.len()
 	while $index < len {
+		$index = Utf8.find_any(input, $index, line_end_or_nul)
 		byte = input.get($index) ?? 0
-		if byte == '\n' or byte == '\r' {
+		if $index >= len {
+			{}
+		} else if byte == '\n' or byte == '\r' {
 			$lines = $lines.append(document_line(input, $start, $index, $has_nul))
 			if byte == '\r' and (input.get($index + 1) ?? 0) == '\n' {
 				$index = $index + 1
 			}
 			$start = $index + 1
 			$has_nul = False
-		} else if byte == 0 {
+		} else {
 			$has_nul = True
 		}
 		$index = $index + 1
@@ -541,6 +544,9 @@ split_document_lines = |input| {
 		$lines
 	}
 }
+
+line_end_or_nul : Utf8.ByteClass
+line_end_or_nul = Utf8.ByteClass.from_bytes(['\n', '\r', 0])
 
 document_line : Utf8.Bytes, U64, U64, Bool -> Utf8.Bytes
 document_line = |input, start, end, has_nul| {
@@ -1757,38 +1763,62 @@ split_table_row : Utf8.Bytes -> List(Utf8.Bytes)
 split_table_row = |line| {
 	trimmed = trim_spaces(line)
 	body = if trimmed.first() == Ok('|') drop_n(trimmed, 1) else trimmed
+	len = body.len()
+	# Cells are slices of the line; only a cell with `\|` is copied.
 	var $cells = []
-	var $current = []
-	var $pending = False
-	var $index = 0
-	while $index < body.len() {
-		byte = body.get($index) ?? 0
-		if byte == '\\' and (body.get($index + 1) ?? 0) == '|' {
-			$current = $current.append('|')
-			$pending = True
-			$index = $index + 2
-		} else if byte == '|' {
-			$cells = $cells.append(trim_spaces($current))
-			$current = []
-			$pending = False
-			$index = $index + 1
+	var $start = 0
+	var $escaped = False
+	var $index = Utf8.find_any(body, 0, pipe_or_backslash)
+	while $index < len {
+		if byte_at(body, $index) == '\\' {
+			escapes_pipe = byte_at(body, $index + 1) == '|'
+			$escaped = $escaped or escapes_pipe
+			$index = Utf8.find_any(body, $index + (if escapes_pipe 2 else 1), pipe_or_backslash)
 		} else {
-			$current = $current.append(byte)
-			$pending = True
-			$index = $index + 1
+			$cells = $cells.append(table_cell(body, $start, $index, $escaped))
+			$start = $index + 1
+			$escaped = False
+			$index = Utf8.find_any(body, $start, pipe_or_backslash)
 		}
 	}
-	if $pending and !bytes_are_blank($current) {
-		$cells.append(trim_spaces($current))
+	if $start < len and !bytes_are_blank(body.sublist({ start: $start, len: len - $start })) {
+		$cells.append(table_cell(body, $start, len, $escaped))
 	} else {
 		$cells
+	}
+}
+
+pipe_or_backslash : Utf8.ByteClass
+pipe_or_backslash = Utf8.ByteClass.from_bytes(['|', '\\'])
+
+## One trimmed cell, with `\|` unescaped to `|`.
+table_cell : Utf8.Bytes, U64, U64, Bool -> Utf8.Bytes
+table_cell = |body, start, end, escaped| {
+	raw = body.sublist({ start, len: end - start })
+	if escaped {
+		var $out = List.with_capacity(raw.len())
+		var $index = 0
+		while $index < raw.len() {
+			byte = byte_at(raw, $index)
+			if byte == '\\' and byte_at(raw, $index + 1) == '|' {
+				$out = $out.append('|')
+				$index = $index + 2
+			} else {
+				$out = $out.append(byte)
+				$index = $index + 1
+			}
+		}
+		trim_spaces($out)
+	} else {
+		trim_spaces(raw)
 	}
 }
 
 ## Delimiter row: cells of `:?-+:?` surrounded by optional spaces or tabs.
 parse_table_delimiter_row : Utf8.Bytes -> Try(List(Markdown.Alignment), [NotFound])
 parse_table_delimiter_row = |rest| {
-	if !rest.contains('-') or rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) {
+	# Most lines fail on their first byte, so test the bytes before the `-`.
+	if rest.any(|byte| !(byte == '-' or byte == ':' or byte == '|' or is_space_or_tab(byte))) or !rest.contains('-') {
 		return Err(NotFound)
 	}
 	cells = split_table_row(rest)
