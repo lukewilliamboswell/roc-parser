@@ -6,17 +6,17 @@ import json
 import os
 import re
 import sys
+import zipfile
 from pathlib import Path
 from typing import Sequence
 
 try:
-    from ._common import ROOT, roc_command, run_command
+    from ._common import ROOT
 except ImportError:
-    from _common import ROOT, roc_command, run_command
+    from _common import ROOT
 
 
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-SKIPPED_EXAMPLES: dict[str, str] = {}
 
 
 def append_github_output(path: Path, name: str, value: str) -> None:
@@ -72,21 +72,41 @@ def resolve_bundle_url(metadata: Path, repository: str, version: str) -> str:
     return f"https://github.com/{repository}/releases/download/{version}/{artifact_file}"
 
 
-def validate_examples(examples_dir: Path = ROOT / "examples") -> int:
-    examples = sorted(examples_dir.glob("*.roc"))
-    if not examples:
-        raise ValueError(f"no Roc examples found in {examples_dir}")
-    roc = roc_command()
-    for example in examples:
-        reason = SKIPPED_EXAMPLES.get(example.name)
-        if reason is not None:
-            print(f"Skipping {example}: {reason}.")
-            continue
-        command = [roc, "check", str(example), "--no-cache"]
-        completed = run_command(command)
-        if completed.returncode != 0:
-            return completed.returncode
-    return 0
+EXAMPLE_DEPENDENCY_RE = re.compile(r'(?m)^\s*parser:\s*"([^"]+)"')
+LOCAL_PACKAGE_PATH = "../package/main.roc"
+
+
+def example_dependencies(sources: dict[str, str]) -> dict[str, list[str]]:
+    if not sources:
+        raise ValueError("no Roc examples found")
+    return {name: EXAMPLE_DEPENDENCY_RE.findall(text) for name, text in sorted(sources.items())}
+
+
+def validate_examples(examples_dir: Path = ROOT / "examples", archive: Path | None = None) -> None:
+    """The repository's examples use the package source; the release archive's
+    examples use one https bundle URL."""
+    if archive is None:
+        sources = {path.name: path.read_text(encoding="utf-8") for path in examples_dir.glob("*.roc")}
+        for name, deps in example_dependencies(sources).items():
+            if deps != [LOCAL_PACKAGE_PATH]:
+                raise ValueError(f"{name} must depend on parser: \"{LOCAL_PACKAGE_PATH}\", found {deps}")
+        print(f"{len(sources)} examples use {LOCAL_PACKAGE_PATH}")
+        return
+
+    with zipfile.ZipFile(archive) as bundle:
+        sources = {
+            name: bundle.read(name).decode("utf-8")
+            for name in bundle.namelist()
+            if name.endswith(".roc") and "/examples/" in name
+        }
+    urls = set()
+    for name, deps in example_dependencies(sources).items():
+        if len(deps) != 1 or not deps[0].startswith(("https://", "http://")):
+            raise ValueError(f"{name} must depend on parser through a bundle URL, found {deps}")
+        urls.add(deps[0])
+    if len(urls) != 1:
+        raise ValueError(f"the archive's examples must share one bundle URL, found {sorted(urls)}")
+    print(f"{len(sources)} examples in {archive} use {urls.pop()}")
 
 
 def require_success(results: Sequence[str]) -> None:
@@ -115,6 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser("validate-examples")
     validate.add_argument("--examples-dir", type=Path, default=ROOT / "examples")
+    validate.add_argument("--archive", type=Path, help="check a packaged examples zip instead")
 
     success = subparsers.add_parser("require-success")
     success.add_argument("results", nargs="+")
@@ -136,12 +157,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             url = resolve_bundle_url(args.metadata, args.repository, args.version)
             append_github_output(args.github_output, "bundle-url", url)
         elif args.command == "validate-examples":
-            return validate_examples(args.examples_dir)
+            validate_examples(args.examples_dir, args.archive)
         elif args.command == "require-success":
             require_success(args.results)
         else:
             raise AssertionError(f"unhandled command: {args.command}")
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     return 0

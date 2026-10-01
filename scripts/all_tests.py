@@ -101,7 +101,7 @@ def main() -> int:
         print(f"Error: {error}", file=sys.stderr)
         return 1
 
-    print("\nTesting examples against localhost bundle...", flush=True)
+    print("\nTesting the packaged examples archive against the localhost bundle...", flush=True)
     return run_checked(
         [
             sys.executable,

@@ -180,5 +180,74 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertTrue(helpers.read_editorial_notes(notes.parent, "2.0.0"))
 
 
+class PackageExamplesTests(unittest.TestCase):
+    URL = "https://github.com/owner/repo/releases/download/2.0.0/abc.tar.zst"
+
+    def make_examples(self, root: Path) -> Path:
+        examples = root / "examples"
+        examples.mkdir()
+        for name in ("a.roc", "b.roc"):
+            (examples / name).write_text(
+                'app [main!] {\n\tcli: platform "https://x.test/cli.tar.zst",\n\tparser: "../package/main.roc",\n}\n',
+                encoding="utf-8",
+            )
+        return examples
+
+    def test_archive_pins_every_example_to_the_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            examples = self.make_examples(root)
+            args = argparse.Namespace(
+                release_version="2.0.0", bundle_url=self.URL, release_bundles="", repo="owner/repo",
+                examples_dir=str(examples), output="", output_dir=str(root / "out"),
+            )
+            self.assertEqual(helpers.cmd_package_examples(args), 0)
+            archive = root / "out" / "roc-parser-examples-2.0.0.zip"
+            with zipfile.ZipFile(archive) as bundle:
+                self.assertEqual(sorted(bundle.namelist()), [
+                    "roc-parser-examples-2.0.0/README.md",
+                    "roc-parser-examples-2.0.0/examples/a.roc",
+                    "roc-parser-examples-2.0.0/examples/b.roc",
+                ])
+                app = bundle.read("roc-parser-examples-2.0.0/examples/a.roc").decode()
+                readme = bundle.read("roc-parser-examples-2.0.0/README.md").decode()
+            self.assertIn(f'parser: "{self.URL}"', app)
+            self.assertIn('platform "https://x.test/cli.tar.zst"', app)
+            self.assertNotIn("../package", app)
+            self.assertIn("release 2.0.0", readme)
+            self.assertIn(self.URL, readme)
+            # The repository's examples are left alone.
+            self.assertIn("../package/main.roc", (examples / "a.roc").read_text(encoding="utf-8"))
+
+    def test_url_resolves_from_release_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            examples = self.make_examples(root)
+            metadata = root / "release-bundles.json"
+            metadata.write_text(json.dumps([{"artifact_file": "abc.tar.zst"}]), encoding="utf-8")
+            output = root / "examples.zip"
+            args = argparse.Namespace(
+                release_version="2.0.0", bundle_url="", release_bundles=str(metadata), repo="owner/repo",
+                examples_dir=str(examples), output=str(output), output_dir="",
+            )
+            helpers.cmd_package_examples(args)
+            with zipfile.ZipFile(output) as bundle:
+                self.assertIn(self.URL, bundle.read("roc-parser-examples-2.0.0/examples/b.roc").decode())
+
+    def test_an_example_without_one_parser_dependency_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            examples = self.make_examples(root)
+            (examples / "c.roc").write_text("app [main!] {}\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "c.roc must declare exactly one"):
+                helpers.package_examples(examples, self.URL, "2.0.0", root / "x.zip")
+
+    def test_a_version_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaisesRegex(RuntimeError, "release version"):
+                helpers.package_examples(self.make_examples(root), self.URL, "", root / "x.zip")
+
+
 if __name__ == "__main__":
     unittest.main()
