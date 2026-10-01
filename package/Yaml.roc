@@ -1928,6 +1928,15 @@ prepare_lines = |raw_lines| {
 			_ => clean
 		}
 
+	# A "%" line right after "---" cannot be content either; report it the
+	# same way, before any later document markers.
+	match without_start {
+		[first, ..] if first.indent == 0 and first.content.first() == Ok('%') =>
+			return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
+
+		_ => {}
+	}
+
 	remove_document_end(without_start, [])
 }
 
@@ -2908,3 +2917,4 @@ expect {
 
 # A key starting with % is reported as a directive, with or without a leading --- (fuzz: yaml-raw).
 expect when_error(Yaml.parse_str("%:")) == when_error(Yaml.parse_str("---\n%:"))
+expect when_error(Yaml.parse_str("%-- x\n...\nx")) == when_error(Yaml.parse_str("---\n%-- x\n...\nx"))
