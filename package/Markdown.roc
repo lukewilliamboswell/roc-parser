@@ -3772,30 +3772,19 @@ bytes_are_blank = |bytes| {
 }
 
 append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
-append_bytes = |left, right| {
-	match right {
-		[] =>
-			left
-
-		[first, .. as rest] =>
-			append_bytes(left.append(first), rest)
-	}
-}
+append_bytes = |left, right| left.concat(right)
 
 join_lines_with_newlines : List(Utf8.Bytes) -> Utf8.Bytes
 join_lines_with_newlines = |lines| {
-	join_lines_with_newlines_help(lines, [])
-}
-
-join_lines_with_newlines_help : List(Utf8.Bytes), Utf8.Bytes -> Utf8.Bytes
-join_lines_with_newlines_help = |lines, acc| {
-	match lines {
-		[] =>
-			acc
-
-		[line, .. as rest] =>
-			join_lines_with_newlines_help(rest, append_bytes(acc, line).append('\n'))
+	var $total = 0
+	for line in lines {
+		$total = $total + line.len() + 1
 	}
+	var $acc = List.with_capacity($total)
+	for line in lines {
+		$acc = $acc.concat(line).append('\n')
+	}
+	$acc
 }
 
 trim_spaces : Utf8.Bytes -> Utf8.Bytes
@@ -3805,37 +3794,37 @@ trim_spaces = |bytes| {
 
 trim_start_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_start_spaces = |bytes| {
-	match bytes {
-		[' ', .. as rest] =>
-			trim_start_spaces(rest)
-
-		['\t', .. as rest] =>
-			trim_start_spaces(rest)
-
-		_ =>
-			bytes
+	len = bytes.len()
+	var $start = 0
+	while $start < len and is_space_or_tab_at(bytes, $start) {
+		$start = $start + 1
+	}
+	if $start == 0 {
+		bytes
+	} else {
+		bytes.sublist({ start: $start, len: len - $start })
 	}
 }
 
 trim_end_spaces : Utf8.Bytes -> Utf8.Bytes
 trim_end_spaces = |bytes| {
-	trim_end_spaces_help(bytes, [], [])
+	len = bytes.len()
+	var $end = len
+	while $end > 0 and is_space_or_tab_at(bytes, $end - 1) {
+		$end = $end - 1
+	}
+	if $end == len {
+		bytes
+	} else {
+		bytes.sublist({ start: 0, len: $end })
+	}
 }
 
-trim_end_spaces_help : Utf8.Bytes, Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
-trim_end_spaces_help = |bytes, out, pending_spaces| {
-	match bytes {
-		[] =>
-			out
-
-		[' ', .. as rest] =>
-			trim_end_spaces_help(rest, out, pending_spaces.append(' '))
-
-		['\t', .. as rest] =>
-			trim_end_spaces_help(rest, out, pending_spaces.append('\t'))
-
-		[first, .. as rest] =>
-			trim_end_spaces_help(rest, append_bytes(out, pending_spaces).append(first), [])
+is_space_or_tab_at : Utf8.Bytes, U64 -> Bool
+is_space_or_tab_at = |bytes, index| {
+	match bytes.get(index) {
+		Ok(b) => b == ' ' or b == '\t'
+		Err(_) => False
 	}
 }
 
