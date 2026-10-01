@@ -36,6 +36,8 @@ jobs:
         target:
           - markdown-document
           - markdown-inline
+          - markdown-inline-ast
+          - markdown-inline-pathological
           - yaml
           - yaml-raw
           - yaml-roundtrip
