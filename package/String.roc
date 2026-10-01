@@ -106,7 +106,7 @@ String :: {}.{
 							Ok({ val: start_codeunit, input: input_rest })
 						} else {
 							other_char = str_from_codeunit(start_codeunit)
-							input_str = str_from_utf8_lossy(input)
+							input_str = excerpt(input)
 
 							Err(ParsingFailure("expected a codeunit satisfying a condition but found `${other_char}`.\n While reading: `${input_str}`"))
 						}
@@ -137,7 +137,7 @@ String :: {}.{
 						Ok({ val: expected_code_unit, input: rest })
 
 					[first, ..] =>
-						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${str_from_utf8_lossy(input)}`"))
+						Err(ParsingFailure("expected char `${str_from_codeunit(expected_code_unit)}` but found `${str_from_codeunit(first)}`.\n While reading: `${excerpt(input)}`"))
 					}
 			},
 		)
@@ -157,7 +157,7 @@ String :: {}.{
 				} else {
 					error_string = str_from_utf8_lossy(expected_string)
 					other_string = str_from_utf8_lossy(start)
-					input_string = str_from_utf8_lossy(input)
+					input_string = excerpt(input)
 
 					Err(ParsingFailure("expected string `${error_string}` but found `${other_string}`.\nWhile reading: ${input_string}"))
 				}
@@ -359,6 +359,33 @@ str_to_raw = |str| {
 str_from_codeunit : U8 -> Str
 str_from_codeunit = |cu| {
 	str_from_utf8_lossy([cu])
+}
+
+## Bytes of remaining input quoted in failure messages.
+excerpt_len : U64
+excerpt_len = 32
+
+## Render the start of the remaining input for a failure message.
+##
+## Failures are cheap and frequent (every losing branch of `alt`/`one_of`, the
+## last iteration of `many`), so quoting the whole remaining input made those
+## combinators quadratic in the input length. Quote a bounded prefix instead.
+excerpt : String.Utf8 -> Str
+excerpt = |bytes| {
+	if bytes.len() <= excerpt_len {
+		str_from_utf8_lossy(bytes)
+	} else {
+		Str.concat(str_from_utf8_lossy(bytes.sublist({ start: 0, len: excerpt_len })), "…")
+	}
+}
+
+## Failure messages quote only a bounded prefix of the remaining input.
+expect {
+	long = List.repeat('b', 1000)
+	match Parser.parse_partial(String.codeunit('a'), long) {
+		Err(ParsingFailure(msg)) => msg.count_utf8_bytes() < 200
+		Ok(_) => Bool.False
+	}
 }
 
 str_from_utf8_lossy : String.Utf8 -> Str
