@@ -1046,28 +1046,45 @@ strip_comment_help = |bytes, quote, escaped, separated, depth, out| {
 		}
 }
 
-## Whether a scalar or flow collection may start after `prefix`: at the start,
-## or after white space following an indicator (":", "-", "?", or "," "[" "{"
-## inside a flow collection), or directly after "[", "{" or "," in a flow
-## collection. Elsewhere quotes and brackets are ordinary plain scalar text.
+## Whether a scalar or flow collection may start after `prefix`: only white
+## space and standalone "-" or "?" indicators may separate it from the start of
+## the line, a ": " value indicator, or (in a flow collection) "[", "{" or ",".
+## Anywhere else, quotes and brackets are ordinary plain scalar text.
 scalar_can_start : String.Utf8, Bool -> Bool
 scalar_can_start = |prefix, in_flow| {
-	match prefix.last() {
-		Err(_) => Bool.True
-		Ok(previous) if in_flow and (previous == '[' or previous == '{' or previous == ',') => Bool.True
-		Ok(previous) if previous == ' ' or previous == '\t' => {
-			trimmed = trim_end_spaces(prefix)
-			# "-" and "?" are indicators only on their own, not inside text like "b-".
-			standalone = trimmed.len() < 2 or starts_with_space(trimmed.drop_first(trimmed.len() - 2))
-			match trimmed.last() {
-				Err(_) => Bool.True
-				Ok(indicator) => indicator == ':' or ((indicator == '-' or indicator == '?') and standalone) or (in_flow and (indicator == ',' or indicator == '[' or indicator == '{'))
+	var $index = prefix.len()
+	var $answer = Err(Undecided)
+
+	while $answer == Err(Undecided) {
+		end = $index
+		while $index > 0 and is_white(prefix.get($index - 1) ?? 'x') {
+			$index = $index - 1
+		}
+		separated = $index < end
+
+		if $index == 0 {
+			$answer = Ok(Bool.True)
+		} else {
+			previous = prefix.get($index - 1) ?? 'x'
+			standalone = $index == 1 or is_white(prefix.get($index - 2) ?? 'x')
+
+			if in_flow and (previous == '[' or previous == '{' or previous == ',') {
+				$answer = Ok(Bool.True)
+			} else if previous == ':' and separated {
+				$answer = Ok(Bool.True)
+			} else if (previous == '-' or previous == '?') and separated and standalone {
+				$index = $index - 1
+			} else {
+				$answer = Ok(Bool.False)
 			}
 		}
-
-		_ => Bool.False
 	}
+
+	$answer ?? Bool.False
 }
+
+is_white : U8 -> Bool
+is_white = |byte| byte == ' ' or byte == '\t'
 
 split_mapping_entry : String.Utf8 -> Try({ key : String.Utf8, value : String.Utf8, value_column : U64 }, [NotFound])
 split_mapping_entry = |bytes| {
@@ -1573,6 +1590,12 @@ expect {
 		{ key: "a[b", value: String("x]{") },
 		{ key: "list", value: Sequence([String("a"), String("b'c"), String("d, e")]) },
 	])
+}
+
+## Indicator-like text inside a plain scalar does not start a quoted scalar.
+expect {
+	actual = Yaml.parse_str("{_? -  ': 1, b: 2}")?
+	actual == Mapping([{ key: "_? -  '", value: Int(1) }, { key: "b", value: Int(2) }])
 }
 
 ## A dash inside plain text is not an indicator that can start a quoted scalar.
