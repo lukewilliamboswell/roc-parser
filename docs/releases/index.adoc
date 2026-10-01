@@ -14,9 +14,10 @@ The notes start with the upgrade impact: every change your code or data might
 notice.
 
 * {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes] (not yet
-  released): CommonMark and GFM Markdown, strict RFC 9112 HTTP, XML 1.0
-  well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and property tests
-  and conformance reviews for every format.
+  released): a redesigned API with an upgrade guide, type-directed decoding
+  of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
+  HTTP, XML 1.0 well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and
+  property tests and conformance reviews for every format.
 
 Earlier releases are described on the
 {repo}/releases[roc-parser GitHub releases page].
