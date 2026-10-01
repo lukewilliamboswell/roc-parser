@@ -489,6 +489,19 @@ def first_difference(left, right, path="$"):
     return None
 
 
+WILDCARD = ["paragraph", [["text", "?"]]]
+
+
+def apply_wildcards(expected, actual):
+    """A generator may write a paragraph of just "?" where any paragraph is
+    acceptable; copy that wildcard over the matching oracle paragraph."""
+    if expected == WILDCARD and isinstance(actual, list) and actual[:1] == ["paragraph"]:
+        return WILDCARD
+    if isinstance(expected, list) and isinstance(actual, list) and len(expected) == len(actual):
+        return [apply_wildcards(e, a) for e, a in zip(expected, actual)]
+    return actual
+
+
 def crosscheck(args) -> int:
     """Each ``show`` output is one JSON object {"markdown", "expected"} where
     expected is the generator's own block tree in the probe's JSON shape."""
@@ -508,6 +521,8 @@ def crosscheck(args) -> int:
             continue
         expected = normalize(case["expected"])
         result = oracle(case["markdown"])
+        if result["status"] == "ok":
+            result["value"] = apply_wildcards(expected, result["value"])
         if result["status"] != "ok":
             kind = "oracle_failure"
         else:
