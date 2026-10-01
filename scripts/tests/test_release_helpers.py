@@ -136,9 +136,12 @@ class ReleaseNotesTests(unittest.TestCase):
         if bump is not None:
             bump_file.write_text(bump, encoding="utf-8")
         output = root / "release.md"
+        roc_version = root / ".roc-version"
+        roc_version.write_text("nightly-2026-09-29-7f11a82\n", encoding="utf-8")
         args = argparse.Namespace(
             release_version=version, release_bundles=str(bundles), output_file=str(output),
             docs_url="https://example.com/docs/", notes_dir=str(root / "notes"), bump_output=str(bump_file),
+            roc_version_file=str(roc_version),
         )
         with unittest.mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repo"}):
             helpers.cmd_make_release_notes(args)
@@ -156,6 +159,12 @@ class ReleaseNotesTests(unittest.TestCase):
             for asset in ("roc-parser-manual-2.0.0.pdf", "roc-parser-manual-2.0.0.zip", "roc-parser-api-docs-2.0.0.zip"):
                 self.assertIn(f"https://github.com/owner/repo/releases/download/2.0.0/{asset}", body)
             self.assertNotIn("Roc API changes", body)
+
+    def test_names_the_roc_nightly_the_release_was_built_with(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            body = self.make_notes(Path(temporary), "2.0.0")
+            self.assertIn("Built and tested with Roc `nightly-2026-09-29-7f11a82`", body)
+            self.assertIn("https://github.com/roc-lang/nightlies/releases/tag/nightly-2026-09-29-7f11a82", body)
 
     def test_missing_versioned_notes_uses_generated_intro(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

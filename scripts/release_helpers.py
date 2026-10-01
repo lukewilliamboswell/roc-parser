@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     notes.add_argument("--docs-url", default="")
     notes.add_argument("--bump-output", default=".release/bump-output.txt")
     notes.add_argument("--notes-dir", default="docs/releases")
+    notes.add_argument("--roc-version-file", default=str(ROOT / ".roc-version"))
     notes.set_defaults(func=cmd_make_release_notes)
 
     docs = subcommands.add_parser(
@@ -122,6 +123,14 @@ def release_asset_url(repo: str, release_version: str, artifact_file: str) -> st
     return f"https://github.com/{repo}/releases/download/{release_version}/{artifact_file}"
 
 
+def read_roc_nightly(path: Path) -> str:
+    """The Roc nightly a release is built with, from .roc-version."""
+    nightly = path.read_text(encoding="utf-8").strip()
+    if not nightly or "\n" in nightly:
+        raise RuntimeError(f"{path} must contain exactly one Roc nightly tag")
+    return nightly
+
+
 def cmd_make_release_notes(args: argparse.Namespace) -> int:
     release_version = args.release_version or os.environ.get("RELEASE_VERSION", "")
     if not release_version:
@@ -131,10 +140,14 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         raise RuntimeError("GITHUB_REPOSITORY is required")
 
     package_url = resolve_bundle_url(Path(args.release_bundles), repo, release_version)
+    nightly = read_roc_nightly(Path(args.roc_version_file))
     lines = [
         read_editorial_notes(Path(args.notes_dir), release_version),
         "",
         "## Using this release",
+        "",
+        f"Built and tested with Roc `{nightly}` "
+        f"(https://github.com/roc-lang/nightlies/releases/tag/{nightly}); install that nightly to use it.",
         "",
         "```roc",
         "app [main!] {",

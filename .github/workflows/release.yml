@@ -9,7 +9,7 @@ on:
         required: false
         default: false
       release_version:
-        description: "Release version, e.g. 1.0.1"
+        description: "Release version, e.g. 2.0.0"
         required: false
         type: string
   pull_request:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_version: ${{ steps.validate.outputs.release_version }}
-      docs_version: ${{ steps.validate.outputs.docs_version }}
+      docs_version: ${{ steps.validate.outputs.docs_version || steps.validate.outputs.release_version }}
       test_matrix: ${{ steps.bundles.outputs.test_matrix }}
     steps:
       - name: Require a version for publication

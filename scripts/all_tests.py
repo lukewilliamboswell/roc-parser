@@ -59,6 +59,11 @@ def main() -> int:
     if status:
         return status
 
+    print("\nChecking package formatting...", flush=True)
+    status = run_checked([roc, "fmt", "--check", "package"], env=env)
+    if status:
+        return status
+
     print("\nRunning package tests...", flush=True)
     # Testing through main.roc runs every module's expects with the package's
     # dependencies resolved; a module tested alone cannot import them.

@@ -411,7 +411,7 @@ build_class = |members| {
 		var $l = 0.U64
 		while $l < 16 {
 			if members.get($h * 16 + $l) ?? False {
-				$row = $row.bitwise_or(1.U16.shl_wrap($l.to_u8_wrap()))
+				$row = $row.bitwise_or((1.U16).shl_wrap($l.to_u8_wrap()))
 			}
 			$l = $l + 1
 		}
@@ -421,12 +421,12 @@ build_class = |members| {
 		} else {
 			match $shapes.find_first_index(|s| s == row) {
 				Ok(k) => {
-					$hi = $hi.append(1.U8.shl_wrap(k.to_u8_wrap()))
+					$hi = $hi.append((1.U8).shl_wrap(k.to_u8_wrap()))
 				}
 				Err(NotFound) => {
 					k = $shapes.len()
 					$shapes = $shapes.append(row)
-					$hi = $hi.append(if k < 8 1.U8.shl_wrap(k.to_u8_wrap()) else 0)
+					$hi = $hi.append(if k < 8 (1.U8).shl_wrap(k.to_u8_wrap()) else 0)
 				}
 			}
 		}
@@ -436,12 +436,12 @@ build_class = |members| {
 	var $lo = []
 	var $l2 = 0.U64
 	while $l2 < 16 {
-		bit = 1.U16.shl_wrap($l2.to_u8_wrap())
+		bit = (1.U16).shl_wrap($l2.to_u8_wrap())
 		var $entry = 0.U8
 		var $k = 0.U64
 		while $k < shapes.len() and $k < 8 {
 			if (shapes.get($k) ?? 0).bitwise_and(bit) != 0 {
-				$entry = $entry.bitwise_or(1.U8.shl_wrap($k.to_u8_wrap()))
+				$entry = $entry.bitwise_or((1.U8).shl_wrap($k.to_u8_wrap()))
 			}
 			$k = $k + 1
 		}
