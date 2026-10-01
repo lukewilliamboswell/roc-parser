@@ -18,14 +18,14 @@ HttpGen :: {}.{
 	## One field line as written (without CRLF) and the header it must parse to.
 	Field : { line : List(U8), header : HTTP.Header }
 
-	Kind : [Req({ method : HTTP.Method, uri : Str }), Res({ code : U16, reason : Str })]
+	Kind : [Req({ method : HTTP.Method, target : Str }), Res({ code : U16, reason : Str })]
 
 	Framing : [NoFraming, Length, Chunked]
 
 	Msg : {
 		kind : Kind,
 		start : List(U8),
-		version : HTTP.HttpVersion,
+		version : HTTP.Version,
 		fields : List(Field),
 		framing : Framing,
 		## Bytes after the empty line that belong to this message.
@@ -64,7 +64,7 @@ HttpGen :: {}.{
 	expected_request : Msg -> Try(HTTP.Request, [NotARequest])
 	expected_request = |msg| {
 		match msg.kind {
-			Req({ method, uri }) => Ok({ method, uri, http_version: msg.version, headers: msg.fields.map(|f| f.header), body: msg.body })
+			Req({ method, target }) => Ok({ method, target, version: msg.version, headers: msg.fields.map(|f| f.header), body: msg.body })
 			Res(_) => Err(NotARequest)
 		}
 	}
@@ -72,7 +72,7 @@ HttpGen :: {}.{
 	expected_response : Msg -> Try(HTTP.Response, [NotAResponse])
 	expected_response = |msg| {
 		match msg.kind {
-			Res({ code, reason }) => Ok({ http_version: msg.version, status_code: code, status: reason, headers: msg.fields.map(|f| f.header), body: msg.body })
+			Res({ code, reason }) => Ok({ version: msg.version, status_code: code, reason, headers: msg.fields.map(|f| f.header), body: msg.body })
 			Req(_) => Err(NotAResponse)
 		}
 	}
@@ -82,7 +82,7 @@ HttpGen :: {}.{
 	self_delimiting : Msg -> Bool
 	self_delimiting = |msg| {
 		match msg.kind {
-			Req(_) => Bool.True
+			Req(_) => True
 			Res(r) => msg.framing != NoFraming or no_body_status(r.code)
 		}
 	}
@@ -90,7 +90,7 @@ HttpGen :: {}.{
 	no_body_status : U16 -> Bool
 	no_body_status = |code| code < 200 or code == 204 or code == 304
 
-	at_least_1_1 : HTTP.HttpVersion -> Bool
+	at_least_1_1 : HTTP.Version -> Bool
 	at_least_1_1 = |v| v.major > 1 or (v.major == 1 and v.minor >= 1)
 
 	## A message chosen by the fuzzer bytes. `want` forces a request or a response.
@@ -99,8 +99,8 @@ HttpGen :: {}.{
 		which = pick(start, 2)
 		is_request =
 			match want {
-				Request => Bool.True
-				Response => Bool.False
+				Request => True
+				Response => False
 				Either => which.n == 0
 			}
 		version_choice = gen_version(which.cur)
@@ -112,7 +112,7 @@ HttpGen :: {}.{
 				t = gen_target(m.cur)
 				$cur = t.cur
 				entry = methods.get(m.n) ?? { name: "GET", tag: Get }
-				{ kind: Req({ method: entry.tag, uri: t.text }), bytes: Str.concat(entry.name, " ${t.text} ${version_text(version)}").to_utf8() }
+				{ kind: Req({ method: entry.tag, target: t.text }), bytes: Str.concat(entry.name, " ${t.text} ${version_text(version)}").to_utf8() }
 			} else {
 				c = gen_status(version, $cur)
 				$cur = c.cur
@@ -159,7 +159,7 @@ HttpGen :: {}.{
 		no_body =
 			match start_line.kind {
 				Res(r) => no_body_status(r.code)
-				Req(_) => Bool.False
+				Req(_) => False
 			}
 		body =
 			if no_body or (is_request and framing == NoFraming) {
@@ -180,7 +180,7 @@ HttpGen :: {}.{
 				$cur = cl.cur
 				var $i = 0
 				while $i < cl.fields.len() {
-					placed = insert_at($cur, $fields, cl.fields.get($i) ?? { line: [], header: Header("", "") })
+					placed = insert_at($cur, $fields, cl.fields.get($i) ?? { line: [], header: { name: "", value: "" } })
 					$fields = placed.fields
 					$cur = placed.cur
 					$i = $i + 1
@@ -265,12 +265,15 @@ methods = [
 	{ name: "TRACE", tag: Trace },
 	{ name: "CONNECT", tag: Connect },
 	{ name: "PATCH", tag: Patch },
+	{ name: "PURGE", tag: Extension("PURGE") },
+	{ name: "M-SEARCH", tag: Extension("M-SEARCH") },
+	{ name: "get", tag: Extension("get") },
 ]
 
-version_text : HTTP.HttpVersion -> Str
+version_text : HTTP.Version -> Str
 version_text = |v| "HTTP/${v.major.to_str()}.${v.minor.to_str()}"
 
-gen_version : HttpGen.Cur -> { version : HTTP.HttpVersion, cur : HttpGen.Cur }
+gen_version : HttpGen.Cur -> { version : HTTP.Version, cur : HttpGen.Cur }
 gen_version = |cur| {
 	choice = HttpGen.pick(cur, 8)
 	digits = HttpGen.pick(choice.cur, 100)
@@ -318,7 +321,7 @@ gen_from = |cur, alphabet, max_len| {
 }
 
 ## status-line = HTTP-version SP status-code SP [ reason-phrase ]
-gen_status : HTTP.HttpVersion, HttpGen.Cur -> { kind : HttpGen.Kind, line : List(U8), cur : HttpGen.Cur }
+gen_status : HTTP.Version, HttpGen.Cur -> { kind : HttpGen.Kind, line : List(U8), cur : HttpGen.Cur }
 gen_status = |version, cur| {
 	common = HttpGen.pick(cur, 4)
 	raw_code = HttpGen.pick(common.cur, 900)
@@ -390,7 +393,7 @@ make_field = |cur, name, value| {
 	right = HttpGen.pick(left.cur, ows_options.len())
 	line = "${name}:${ows_options.get(left.n) ?? ""}${value}${ows_options.get(right.n) ?? ""}".to_utf8()
 	expected = Str.from_utf8(trim(value.to_utf8())) ?? ""
-	{ field: { line, header: Header(name, expected) }, cur: right.cur }
+	{ field: { line, header: { name, value: expected } }, cur: right.cur }
 }
 
 ## A framing field with randomly cased name.

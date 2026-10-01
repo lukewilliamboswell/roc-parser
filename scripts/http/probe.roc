@@ -7,7 +7,6 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.HTTP
-import parser.Utf8
 
 ## Reads one message from stdin and prints the parser's verdict as JSON.
 ## The first byte selects the parser: `Q` for a request, `S` for a response.
@@ -21,19 +20,17 @@ main! = |_| {
 	line =
 		match all.first() {
 			Ok('Q') => {
-				match Utf8.parse_bytes_partial(HTTP.request, bytes) {
-					Ok({ value: val, rest: input }) => {
-						method = Str.inspect(val.method)
-						"{\"status\":\"ok\",\"method\":${json_string(method)},\"target\":${json_string(val.uri)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					}
-					Err(ParseError({ message, offset: _ })) => "{\"status\":\"error\",\"message\":${json_string(message)}}"
+				match HTTP.parse_request(bytes) {
+					Ok({ request: val, rest: input }) =>
+						"{\"status\":\"ok\",\"method\":${json_string(method_name(val.method))},\"target\":${json_string(val.target)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
+					Err(InvalidHttp({ message, offset })) => error(message, offset)
 				}
 			}
 			Ok('S') => {
-				match Utf8.parse_bytes_partial(HTTP.response, bytes) {
-					Ok({ value: val, rest: input }) =>
-						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.status)},${version(val.http_version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
-					Err(ParseError({ message, offset: _ })) => "{\"status\":\"error\",\"message\":${json_string(message)}}"
+				match HTTP.parse_response(bytes) {
+					Ok({ response: val, rest: input }) =>
+						"{\"status\":\"ok\",\"code\":${val.status_code.to_str()},\"reason\":${json_string(val.reason)},${version(val.version)},${headers(val.headers)},\"body\":${hex(val.body)},\"rest\":${hex(input)}}"
+					Err(InvalidHttp({ message, offset })) => error(message, offset)
 				}
 			}
 			_ => "{\"status\":\"bad_mode\"}"
@@ -42,12 +39,25 @@ main! = |_| {
 	Ok({})
 }
 
-version : HTTP.HttpVersion -> Str
+error : Str, U64 -> Str
+error = |message, offset| "{\"status\":\"error\",\"message\":${json_string(message)},\"offset\":${offset.to_str()}}"
+
+## The tag name for a standard method (as h11's method table in
+## review_http.py spells it), or the token itself for an extension method.
+method_name : HTTP.Method -> Str
+method_name = |method| {
+	match method {
+		Extension(name) => name
+		_ => Str.inspect(method)
+	}
+}
+
+version : HTTP.Version -> Str
 version = |v| "\"version\":\"${v.major.to_str()}.${v.minor.to_str()}\""
 
 headers : List(HTTP.Header) -> Str
 headers = |fields| {
-	encoded = fields.map(|Header(name, value)| "[${json_string(name)},${json_string(value)}]")
+	encoded = fields.map(|{ name, value }| "[${json_string(name)},${json_string(value)}]")
 	"\"headers\":[${Str.join_with(encoded, ",")}]"
 }
 

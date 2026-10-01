@@ -1,6 +1,4 @@
 {
-  "req/unknown-method": "By design: Method is a closed tag union, so methods outside it (any token per RFC 9110 9.1) are rejected.",
-  "req/lowercase-method": "By design: method names are case-sensitive (RFC 9110 9.1) and `get` is not in the Method union.",
   "req/value-invalid-utf8": "Field values are Str, so non-UTF-8 obs-text is rejected rather than decoded lossily (h11 keeps raw bytes).",
   "req/obs-fold": "RFC 9112 5.2 lets a server reject obs-fold with 400; this parser always rejects it (h11 unfolds it).",
   "req/value-ctl": "RFC 9110 5.5 field-value excludes CTLs; h11 only rejects NUL and whitespace controls. llhttp also rejects.",

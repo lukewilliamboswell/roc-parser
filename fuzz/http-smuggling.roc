@@ -43,12 +43,12 @@ done : HttpGen.Msg, Str -> Result
 done = |msg, label| Ok({ bytes: HttpGen.encode(msg), label })
 
 field_named : Str, Str -> HttpGen.Field
-field_named = |name, value| { line: "${name}: ${value}".to_utf8(), header: Header(name, value) }
+field_named = |name, value| { line: "${name}: ${value}".to_utf8(), header: { name, value } }
 
 name_is : HttpGen.Field, Str -> Bool
 name_is = |field, wanted| {
 	match field.header {
-		Header(name, _) => name.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b) == wanted.to_utf8()
+		{ name, value: _ } => name.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b) == wanted.to_utf8()
 	}
 }
 
@@ -68,8 +68,8 @@ pick_from = |cur, options| options.get(pick(cur, options.len()).n) ?? ""
 is_request : HttpGen.Msg -> Bool
 is_request = |msg| {
 	match msg.kind {
-		Req(_) => Bool.True
-		Res(_) => Bool.False
+		Req(_) => True
+		Res(_) => False
 	}
 }
 
@@ -294,7 +294,7 @@ edit_field = |msg, cur, edit, label| {
 		Err(NotApplicable)
 	} else {
 		index = pick(cur, msg.fields.len()).n
-		field = msg.fields.get(index) ?? { line: [], header: Header("", "") }
+		field = msg.fields.get(index) ?? { line: [], header: { name: "", value: "" } }
 		done({ ..msg, fields: msg.fields.set(index, { ..field, line: edit(field.line) }) ?? msg.fields }, label)
 	}
 }

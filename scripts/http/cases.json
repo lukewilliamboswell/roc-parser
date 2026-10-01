@@ -69,12 +69,24 @@
   "id": "req/unknown-method",
   "mode": "Q",
   "input": "BREW / HTTP/1.1\r\nHost: a\r\n\r\n",
-  "expect": "error"
+  "expect": "ok"
  },
  {
   "id": "req/lowercase-method",
   "mode": "Q",
   "input": "get / HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/extension-method-hyphen",
+  "mode": "Q",
+  "input": "M-SEARCH * HTTP/1.1\r\nHost: a\r\n\r\n",
+  "expect": "ok"
+ },
+ {
+  "id": "req/method-not-token",
+  "mode": "Q",
+  "input": "G(T / HTTP/1.1\r\nHost: a\r\n\r\n",
   "expect": "error"
  },
  {
