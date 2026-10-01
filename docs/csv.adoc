@@ -183,3 +183,15 @@ include::examples/csv-guide.expected[lines=4..6]
 
 For every function and type in the module, see the
 link:{api}CSV[CSV API reference].
+
+[#csv-performance]
+== Performance
+
+Reading every field as a string runs at about 150 MB/s on an Apple M2, from
+a 1.6 KB export to a 1 MiB file: as fast as Rust's `csv` crate, 2.5 times
+slower than Go's `encoding/csv` and twice as fast as Python's C `csv` module.
+The parser is a byte scanner and stays linear on very wide rows and long runs
+of escaped quotes. Decoding typed columns with `CSV.u64`, `CSV.f64` and
+friends adds the cost of each conversion. The whole file and every field are
+held in memory: about 13 MiB of peak memory for a 1 MiB file. See
+<<performance>> for the method and caveats.

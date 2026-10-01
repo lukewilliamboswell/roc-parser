@@ -39,7 +39,7 @@ Parsing a format roc-parser already supports:: Go to its guide: <<csv>>,
 <<yaml>>, <<xml>>, <<markdown>> or <<http>>.
 Writing your own parser:: Read <<combinators>>, <<custom-format>> and
 <<errors>>.
-Looking something up:: <<modules>>, <<conformance>>, <<compatibility>> and
+Looking something up:: <<modules>>, <<conformance>>, <<performance>>, <<compatibility>> and
 <<glossary>>.
 Not sure whether you need a parser:: Read <<choosing-an-approach>>.
 Contributing to roc-parser:: Start with <<contributing>>.
@@ -81,6 +81,8 @@ include::conformance.adoc[leveloffset=+1]
 
 include::compatibility.adoc[leveloffset=+1]
 
+include::performance.adoc[leveloffset=+1]
+
 include::glossary.adoc[leveloffset=+1]
 
 = Contributing
@@ -90,6 +92,8 @@ include::contributing.adoc[leveloffset=+1]
 include::property-testing.adoc[leveloffset=+1]
 
 include::adding-a-format.adoc[leveloffset=+1]
+
+include::benchmarks.adoc[leveloffset=+1]
 
 include::maintaining.adoc[leveloffset=+1]
 

@@ -288,3 +288,14 @@ attribute.
   Use `Markdown.all` for documents.
 
 The {api}[API reference] lists every type and function in the module.
+
+[#markdown-performance]
+== Performance
+
+`Markdown.all` parses about 16 MB/s on an Apple M2, building the block tree
+and every inline: a typical README in about 0.2 ms. That is about 5 times
+slower than goldmark (Go) and comrak (Rust), 13 times slower than
+pulldown-cmark, and 5 times faster than markdown-it-py. Inline parsing stays
+linear on runs of unmatched emphasis and brackets; very deep block quote
+nesting is quadratic in the depth. See <<performance>> for the measurements
+and caveats.

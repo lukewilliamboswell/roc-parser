@@ -158,7 +158,8 @@ intermediate `Try`. That is cheap for configuration files and messages, but
 <<adding-a-format>> records that the CSV, XML, HTTP and Markdown modules
 moved their document-level parsing to byte scanners with an explicit stack,
 to stay linear and avoid deep recursion. Do the same when profiling shows the
-parser matters.
+parser matters. <<performance>> compares the built-in parsers with Go, Rust
+and Python libraries.
 
 The grammar is ambiguous or left-recursive:: Combinators take the first
 alternative that succeeds and cannot handle a rule that starts with itself,

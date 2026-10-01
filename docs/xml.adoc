@@ -149,3 +149,15 @@ Validation:: Only well-formedness is checked. Required elements, attribute
 types and schemas are not.
 
 For the full module interface, see the link:{api}Xml[Xml API reference].
+
+[#xml-performance]
+== Performance
+
+`Xml.parse_str` builds the tree at 45–60 MB/s for documents up to about
+64 KiB on an Apple M2: close to Go's `encoding/xml` and Python's
+ElementTree, and 5–7 times slower than Rust's quick-xml and roxmltree.
+Throughput drops to about 11 MB/s for a 1 MiB document, a known super-linear
+step. Elements are parsed with an explicit stack, so 5,000 levels of nesting
+are safe, and duplicate-attribute checks are linear: an element with 5,000
+attributes parses 14 times faster than with the Rust libraries. See
+<<performance>> for the measurements and caveats.

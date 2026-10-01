@@ -226,3 +226,13 @@ constructs and checks that each one is rejected; see
 * Size limits and timeouts, which the caller must enforce.
 
 The {api}[API reference] lists the `HTTP` types and parsers.
+
+[#http-performance]
+== Performance
+
+A typical request or response head parses in 2–5 µs on an Apple M2, about
+1.5 times slower than Go's `net/http` and 5–6 times slower than Rust's
+httparse, which checks less (see <<performance-fairness>>). A
+`Content-Length` body is returned without copying, so body size barely
+affects the time; a chunked body is assembled once, in linear time even with
+thousands of one-byte chunks. See <<performance>> for the measurements.

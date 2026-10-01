@@ -229,3 +229,15 @@ include::examples/yaml-guide.expected[lines=16..21]
 
 For the full module interface, see the
 link:{api}Yaml[Yaml API reference].
+
+[#yaml-performance]
+== Performance
+
+The YAML parser is the slowest in the package. It parses a 4 KiB
+configuration in under a millisecond (about 6 MB/s on an Apple M2), which is
+fine for configuration and front matter, but throughput falls as documents
+grow: each block scalar (`|` or `>`) re-scans the document's lines, so a
+1 MiB document with many of them takes about a second. Go's `yaml.v3` is
+about 6 times faster and Rust's `yaml-rust2` about 15 times; pure-Python
+PyYAML is about 3.6 times slower. Nesting is limited to 100 levels. See
+<<performance>> for the measurements and caveats.
