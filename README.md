@@ -63,7 +63,7 @@ planets = |text| CSV.parse(text)
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
-		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} moons"), "\n")
+		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if p.moons == 1 "moon" else "moons"}"), "\n")
 		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${error.message}"
 		Err(MissingRequiredField(name)) => "no ${name} column"
 	}
@@ -78,7 +78,7 @@ Running it with `roc main.roc` prints:
 
 ```text
 Mercury: 0 moons
-Earth: 1 moons
+Earth: 1 moon
 Mars: 2 moons
 ```
 
@@ -100,8 +100,8 @@ explains it line by line.
 Roc is still changing, so roc-parser tracks recent nightly builds of the Roc
 compiler. The nightly the `main` branch is tested with is pinned in
 [`.roc-version`](.roc-version), and each release names the nightly it was
-built with. Releases follow semantic versioning, and version 2.0.0 is in
-preparation. Check the release notes before upgrading.
+built with. Releases follow semantic versioning; 2.0.0 is a breaking release,
+so check its release notes before upgrading.
 
 ## Contributing and security
 
