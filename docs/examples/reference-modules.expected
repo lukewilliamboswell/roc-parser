@@ -1,0 +1,8 @@
+Ok((3, 4))
+Ok([{ age: 36, name: "Ada" }, { age: 41, name: "Alan" }])
+/index.html
+Element("greeting", [{ name: "lang", value: "en" }], [Text("hi")])
+1:7: end tag </a> does not match start tag <b>
+Mapping([{ key: "title", value: String("Notes") }, { key: "draft", value: Bool(False) }])
+Heading({ level: One, content: [Text("Title")] })
+Paragraph([Text("Some "), Emphasis([Text("text")]), Text(".")])
