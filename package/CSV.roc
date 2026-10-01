@@ -180,26 +180,46 @@ CSV :: { records : List(List(String.Utf8)) }.{
 	string = String.any_string
 
 	## Parse one CSV field as an unsigned 64-bit integer.
+	##
+	## The field must be ASCII decimal digits with an optional leading `+`, and
+	## fit in a U64 (the grammar of Rust's `u64::from_str`). Whitespace,
+	## underscores, signs other than `+` and `0x`-style prefixes are rejected.
 	u64 : Parser(CSVField, U64)
 	u64 =
 		string
 			.map(
 				|val| {
-					match U64.from_str(val) {
-						Ok(num) => Ok(num)
-						Err(_) => Err("${val} is not a U64.")
+					digits =
+						match val.to_utf8() {
+							['+', .. as rest] => rest
+							bytes => bytes
+						}
+					if all_digits(digits) {
+						match U64.from_str(val) {
+							Ok(num) => Ok(num)
+							Err(_) => Err("${val} is not a U64.")
+						}
+					} else {
+						Err("${val} is not a U64.")
 					}
 				},
 			)
 			.flatten()
 
 	## Parse one CSV field as a 64-bit floating-point number.
+	##
+	## The field is an optional sign followed by `inf`, `infinity` or `nan` in
+	## any case, or by a decimal number with an optional fraction and exponent
+	## (`12`, `1.5`, `.5`, `5.`, `1e-3`, `2.5E+10`); this is the grammar of
+	## Rust's `f64::from_str`. Magnitudes too large for an F64 become infinity
+	## and too small ones become zero. Whitespace, underscores and hexadecimal
+	## forms are rejected.
 	f64 : Parser(CSVField, F64)
 	f64 =
 		string
 			.map(
 				|val| {
-					match F64.from_str(val) {
+					match decimal_f64(val) {
 						Ok(num) => Ok(num)
 						Err(_) => Err("${val} is not a F64.")
 					}
@@ -375,6 +395,95 @@ scan_quoted = |bytes, start| {
 	}
 	$result
 }
+
+all_digits : List(U8) -> Bool
+all_digits = |bytes| !bytes.is_empty() and bytes.all(|b| b >= '0' and b <= '9')
+
+lowercase_ascii : List(U8) -> List(U8)
+lowercase_ascii = |bytes| bytes.map(|b| if b >= 'A' and b <= 'Z' b + 32 else b)
+
+## Parse a float using the grammar documented on `CSV.f64`.
+decimal_f64 : Str -> Try(F64, [NotAFloat])
+decimal_f64 = |text| {
+	bytes = text.to_utf8()
+	{ negative, unsigned } =
+		match bytes {
+			['-', .. as rest] => { negative: Bool.True, unsigned: rest }
+			['+', .. as rest] => { negative: Bool.False, unsigned: rest }
+			_ => { negative: Bool.False, unsigned: bytes }
+		}
+	signed = |value| if negative -value else value
+	word = lowercase_ascii(unsigned)
+	if word == "inf".to_utf8() or word == "infinity".to_utf8() {
+		Ok(signed(F64.infinity))
+	} else if word == "nan".to_utf8() {
+		Ok(F64.nan)
+	} else {
+		{ mantissa, exponent } =
+			match unsigned.find_first_index(|b| b == 'e' or b == 'E') {
+				Ok(at) => { mantissa: unsigned.sublist({ start: 0, len: at }), exponent: Ok(unsigned.drop_first(at + 1)) }
+				Err(_) => { mantissa: unsigned, exponent: Err(NoExponent) }
+			}
+		{ whole, fraction } =
+			match mantissa.find_first_index(|b| b == '.') {
+				Ok(at) => { whole: mantissa.sublist({ start: 0, len: at }), fraction: mantissa.drop_first(at + 1) }
+				Err(_) => { whole: mantissa, fraction: [] }
+			}
+		mantissa_ok = (all_digits(whole) or whole.is_empty()) and (all_digits(fraction) or fraction.is_empty()) and !(whole.is_empty() and fraction.is_empty())
+		exponent_ok =
+			match exponent {
+				Ok(['+', .. as digits]) | Ok(['-', .. as digits]) => all_digits(digits)
+				Ok(digits) => all_digits(digits)
+				Err(NoExponent) => Bool.True
+			}
+		if mantissa_ok and exponent_ok {
+			match F64.from_str(text) {
+				Ok(value) => Ok(value)
+				# F64.from_str rounds tiny magnitudes to zero but rejects huge ones.
+				Err(_) =>
+					if whole.concat(fraction).all(|b| b == '0') {
+						Ok(signed(0.0))
+					} else {
+						Ok(signed(F64.infinity))
+					}
+			}
+		} else {
+			Err(NotAFloat)
+		}
+	}
+}
+
+parses_u64 : Str, Try(U64, {}) -> Bool
+parses_u64 = |text, expected| {
+	actual = String.parse_utf8(CSV.u64, text.to_utf8())
+	match (actual, expected) {
+		(Ok(value), Ok(wanted)) => value == wanted
+		(Err(_), Err({})) => Bool.True
+		_ => Bool.False
+	}
+}
+
+parses_f64 : Str, Try(F64, {}) -> Bool
+parses_f64 = |text, expected| {
+	actual = String.parse_utf8(CSV.f64, text.to_utf8())
+	match (actual, expected) {
+		(Ok(value), Ok(wanted)) => value == wanted or (value.is_nan() and wanted.is_nan())
+		(Err(_), Err({})) => Bool.True
+		_ => Bool.False
+	}
+}
+
+## U64 fields are `+?[0-9]+`; Roc literal syntax is not accepted.
+expect parses_u64("0", Ok(0)) and parses_u64("+5", Ok(5)) and parses_u64("007", Ok(7))
+expect parses_u64("18446744073709551615", Ok(18446744073709551615)) and parses_u64("18446744073709551616", Err({}))
+expect ["", "+", "-0", "-1", " 1", "1 ", "1_000", "0x10", "0b1", "1e3", "1.0"].all(|text| parses_u64(text, Err({})))
+
+## F64 fields follow Rust's f64::from_str grammar, saturating out-of-range values.
+expect parses_f64("1.5", Ok(1.5)) and parses_f64(".5", Ok(0.5)) and parses_f64("5.", Ok(5.0)) and parses_f64("-2.5E+1", Ok(-25.0))
+expect parses_f64("inf", Ok(F64.infinity)) and parses_f64("-Infinity", Ok(-F64.infinity)) and parses_f64("NaN", Ok(F64.nan))
+expect parses_f64("1e400", Ok(F64.infinity)) and parses_f64("-1e400", Ok(-F64.infinity)) and parses_f64("1e-400", Ok(0.0))
+expect parses_f64("0e99999999999999999999", Ok(0.0)) and parses_f64("1.7976931348623159e308", Ok(F64.infinity))
+expect ["", "+", "-", ".", "e5", "1e", "1e+", "1_0.5", "0x10", "0x1p3", " 1", "1 ", "1.2.3", "--1", "infinit", "nan1"].all(|text| parses_f64(text, Err({})))
 
 ## Empty input has no records; a blank line is one record with one empty field.
 expect CSV.parse_str_to_csv("") == Ok({ records: [] })
