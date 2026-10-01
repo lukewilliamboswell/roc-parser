@@ -2694,7 +2694,7 @@ merge_text_nodes = |nodes| {
 	for node in nodes {
 		match node {
 			Text(text) => {
-				$pending = Str.concat($pending, text)
+				$pending = if $pending.is_empty() text else Str.concat($pending, text)
 			}
 
 			_ => {
@@ -2713,19 +2713,21 @@ merge_text_nodes = |nodes| {
 ## Code spans (CommonMark 6.1).
 ## ---------------------------------------------------------------------------
 
+backtick : Utf8.ByteClass
+backtick = Utf8.ByteClass.from_bytes(['`'])
+
 ## All maximal backtick runs, sorted by length and then position.
 backtick_runs : List(U8) -> List(TickRun)
 backtick_runs = |input| {
 	var $runs = []
-	var $index = 0
+	var $index = Utf8.find_any(input, 0, backtick)
 	while $index < input.len() {
-		if byte_at(input, $index) == '`' {
-			end = skip_byte_run(input, $index, '`')
-			$runs = $runs.append({ start: $index, len: end - $index })
-			$index = end
-		} else {
-			$index = $index + 1
-		}
+		end = skip_byte_run(input, $index, '`')
+		$runs = $runs.append({ start: $index, len: end - $index })
+		$index = Utf8.find_any(input, end, backtick)
+	}
+	if $runs.len() < 2 {
+		return $runs
 	}
 	$runs.sort_with(
 		|a, b| {
@@ -2770,6 +2772,9 @@ find_closing_ticks = |runs, from, count| {
 ## when both are present and the content is not only spaces.
 normalize_code_span : List(U8) -> List(U8)
 normalize_code_span = |content| {
+	if Utf8.find_line_end(content, 0) >= content.len() {
+		return strip_code_span_spaces(content)
+	}
 	var $out = List.with_capacity(content.len())
 	var $index = 0
 	while $index < content.len() {
@@ -2783,10 +2788,15 @@ normalize_code_span = |content| {
 		}
 		$index = $index + 1
 	}
-	if $out.len() >= 2 and byte_at($out, 0) == ' ' and byte_at($out, $out.len() - 1) == ' ' and $out.any(|b| b != ' ') {
-		$out.sublist({ start: 1, len: $out.len() - 2 })
+	strip_code_span_spaces($out)
+}
+
+strip_code_span_spaces : List(U8) -> List(U8)
+strip_code_span_spaces = |out| {
+	if out.len() >= 2 and byte_at(out, 0) == ' ' and byte_at(out, out.len() - 1) == ' ' and out.any(|b| b != ' ') {
+		out.sublist({ start: 1, len: out.len() - 2 })
 	} else {
-		$out
+		out
 	}
 }
 
