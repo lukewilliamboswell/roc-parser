@@ -4,7 +4,7 @@
 The oracle is the standard library `csv.reader` configured for RFC 4180
 (delimiter ',', quotechar '"', doublequote=True, strict=True, no
 skipinitialspace). Each case is fed to scripts/csv/probe.roc on stdin; the probe
-prints the records it decoded (via the public CSV.parse_str API) as JSON.
+prints the records it decoded (via the public CSV.parse_records API) as JSON.
 
 Documented dialect decisions where the oracle is normalized:
 

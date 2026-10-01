@@ -111,7 +111,7 @@ generate = |bytes| {
 	{ csv: $text, expected: $rows }
 }
 
-all_fields : Parser(CSV.CSVRecord, List(Str))
+all_fields : Parser(CSV.Record, List(Str))
 all_fields = Parser.many(CSV.field(CSV.string))
 
 show_rows : List(List(Str)) -> Str
@@ -122,9 +122,11 @@ test = |input| {
 	match CSV.parse_str(all_fields, input.csv) {
 		Ok(rows) if rows == input.expected => {}
 		Ok(rows) => crash "round trip mismatch\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- actual ---\n${show_rows(rows)}"
-		Err(SyntaxError(rest)) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- unparsed rest ---\n${Str.inspect(rest)}"
-		Err(ParsingFailure(message)) => crash "round trip failed\n--- csv ---\n${Str.inspect(input.csv)}\n--- message ---\n${message}"
-		Err(ParsingIncomplete(_)) => crash "all_fields left fields unread\n${Str.inspect(input.csv)}"
+		Err(InvalidCsv(problem)) => crash "round trip rejected\n--- csv ---\n${Str.inspect(input.csv)}\n--- expected ---\n${show_rows(input.expected)}\n--- error ---\n${Str.inspect(problem)}"
+	}
+	match CSV.parse_records(input.csv) {
+		Ok(records) if records.map(|fields| fields.map(Str.from_utf8_lossy)) == input.expected => {}
+		_ => crash "parse_records disagrees with parse_str\n${Str.inspect(input.csv)}"
 	}
 	Fuzz.keep
 }

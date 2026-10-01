@@ -6,11 +6,21 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 
+## Any text parses or fails cleanly; a failure names a real position with a
+## bounded message.
 test : Str -> Fuzz.Outcome
 test = |input| {
-	match CSV.parse_str_to_csv(input) {
+	match CSV.parse_records(input) {
 		Ok(_) => Fuzz.keep
-		Err(_) => Fuzz.keep
+		Err(InvalidCsv({ record, field, line, column, message })) => {
+			if record == 0 or field == 0 or line == 0 or column == 0 or column > input.count_utf8_bytes() + 1 {
+				crash "error position out of range: ${Str.inspect({ record, field, line, column })}\n${Str.inspect(input)}"
+			}
+			if message.count_utf8_bytes() > 200 {
+				crash "unbounded message: ${message}"
+			}
+			Fuzz.keep
+		}
 	}
 }
 

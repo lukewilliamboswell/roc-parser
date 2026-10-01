@@ -6,6 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
+import parser.Utf8
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and every accepted input obeys:
 ## - every record has at least one field;
@@ -17,7 +18,14 @@ import parser.Parser
 ##   changes nothing (the final line break is optional);
 ## - joining two accepted inputs with a line break gives the concatenated
 ##   records (records are independent);
-## - every record also parses alone through CSV.parse_str_to_csv_record.
+## - every record also parses alone, serialized with no line break.
+##
+## Every input, UTF-8 or not, also goes through the byte-level CSV.parser and
+## CSV.decode with string and number field parsers, which must not crash on
+## fields that are not UTF-8 and must agree with CSV.parse_records on text.
+## An input starting with byte 0x01 has its 0xC3 bytes removed first, so that
+## reviewable UTF-8 seeds such as "\u(1)é,x" reach those paths with stray
+## continuation bytes.
 ##
 ## A three-byte input starting 0xFF instead selects a pathological input (long
 ## quoted fields full of doubled quotes, many tiny fields, many blank lines,
@@ -26,16 +34,45 @@ import parser.Parser
 
 Rows : List(List(List(U8)))
 
-all_fields : Parser(CSV.CSVRecord, List(List(U8)))
-all_fields = Parser.many(CSV.field(Parser.custom(|bytes| Ok({ value: bytes, rest: [] }))))
-
 parse : Str -> Try(Rows, [Rejected])
 parse = |text| {
-	match CSV.parse_str(all_fields, text) {
+	match CSV.parse_records(text) {
 		Ok(rows) => Ok(rows)
-		Err(SyntaxError(_)) => Err(Rejected)
-		Err(ParsingFailure(message)) => crash "parse_str_to_csv reported a ParsingFailure, not a SyntaxError: ${message}\n${Str.inspect(text)}"
-		Err(ParsingIncomplete(_)) => crash "all_fields left fields unread\n${Str.inspect(text)}"
+		Err(InvalidCsv(_)) => Err(Rejected)
+	}
+}
+
+## Decode raw bytes with the byte-level parser and field parsers that can
+## fail on any field. Nothing may crash, and messages stay bounded.
+check_bytes : List(U8) -> {}
+check_bytes = |bytes| {
+	match Utf8.parse_bytes(CSV.parser, bytes) {
+		Err(ParseError({ message: _, offset })) if offset > bytes.len() => crash "offset beyond the input"
+		Err(_) => {}
+		Ok(rows) => {
+			when_text = |text| {
+				match parse(text) {
+					Ok(again) if again == rows => {}
+					_ => crash "CSV.parser and parse_records disagree\n${Str.inspect(text)}"
+				}
+			}
+			match Str.from_utf8(bytes) {
+				Ok(text) => when_text(text)
+				Err(_) => {}
+			}
+			strings = CSV.decode(Parser.many(CSV.field(CSV.string)), rows)
+			numbers = CSV.decode(Parser.many(CSV.field(CSV.u64)).skip(Parser.many(CSV.field(CSV.f64))), rows)
+			_ = [bounded(strings), bounded(numbers)]
+			{}
+		}
+	}
+}
+
+bounded : Try(a, [InvalidCsv(CSV.Error)]) -> {}
+bounded = |result| {
+	match result {
+		Err(InvalidCsv({ message, record, field: _, line: _, column: _ })) if message.count_utf8_bytes() > 200 or record == 0 => crash "unbounded or unnumbered error: ${message}"
+		_ => {}
 	}
 }
 
@@ -105,10 +142,10 @@ check_relations = |input, rows| {
 			Err(_) => crash "${label} was rejected\n--- input ---\n${Str.inspect(input)}\n--- records ---\n${show_rows(rows)}\n--- variant ---\n${Str.inspect(text)}"
 		}
 	}
-	expect_same("quoting every field", serialize(rows, Bool.True, ['\r', '\n']))
-	expect_same("minimal quoting with LF", serialize(rows, Bool.False, ['\n']))
-	expect_same("minimal quoting with CRLF", serialize(rows, Bool.False, ['\r', '\n']))
-	expect_same("minimal quoting with CR", serialize(rows, Bool.False, ['\r']))
+	expect_same("quoting every field", serialize(rows, True, ['\r', '\n']))
+	expect_same("minimal quoting with LF", serialize(rows, False, ['\n']))
+	expect_same("minimal quoting with CRLF", serialize(rows, False, ['\r', '\n']))
+	expect_same("minimal quoting with CR", serialize(rows, False, ['\r']))
 	if input != "" and !ends_in_break(input) {
 		expect_same("appending CRLF", Str.concat(input, "\r\n"))
 		expect_same("appending LF", Str.concat(input, "\n"))
@@ -119,10 +156,10 @@ check_relations = |input, rows| {
 check_records_alone : Str, Rows -> {}
 check_records_alone = |input, rows| {
 	_ = rows.map(|row| {
-		lone = serialize([row], Bool.False, [])
-		match CSV.parse_str_to_csv_record(lone) {
-			Ok(fields) if fields == row => {}
-			_ => crash "parse_str_to_csv_record disagrees on one record\n--- input ---\n${Str.inspect(input)}\n--- record ---\n${Str.inspect(lone)}"
+		lone = serialize([row], False, [])
+		match parse(lone) {
+			Ok([fields]) if fields == row => {}
+			_ => crash "one record parsed alone differs\n--- input ---\n${Str.inspect(input)}\n--- record ---\n${Str.inspect(lone)}"
 		}
 	})
 	{}
@@ -157,6 +194,7 @@ test = |bytes| {
 		_ = parse(pathological(bytes))
 		Fuzz.keep
 	} else {
+		check_bytes(if bytes.first() == Ok(0x01) bytes.drop_if(|b| b == 0xC3) else bytes)
 		match Str.from_utf8(bytes) {
 			Err(_) => Fuzz.reject
 			Ok(input) => {

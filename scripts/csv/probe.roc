@@ -7,10 +7,9 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.CSV
-import parser.Utf8
-import parser.Parser
 
-## Reads CSV text on stdin and prints one JSON line describing the parse:
+## Reads CSV text on stdin and prints one JSON line describing the parse
+## through the public CSV.parse_records API:
 ## {"status":"ok","records":[["field",...],...]} or {"status":"error",...}.
 main! : List(OsStr) => Try({}, _)
 main! = |_| {
@@ -18,23 +17,20 @@ main! = |_| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(input) => {
-			match CSV.parse_str(all_fields, input) {
+			match CSV.parse_records(input) {
 				Ok(records) => {
 					rows = records.map(|fields| "[${fields.map(json_bytes) |> Str.join_with(",")}]") |> Str.join_with(",")
 					Stdout.line!("{\"status\":\"ok\",\"records\":[${rows}]}")?
 				}
-				Err(ParsingFailure(message)) => Stdout.line!("{\"status\":\"error\",\"message\":${json_bytes(message.to_utf8())}}")?
-				Err(SyntaxError(rest)) => Stdout.line!("{\"status\":\"error\",\"message\":\"syntax\",\"rest\":${json_bytes(rest.to_utf8())}}")?
-				Err(ParsingIncomplete(_)) => Stdout.line!("{\"status\":\"probe_bug\"}")?
+				Err(InvalidCsv({ record, field, line, column, message })) => {
+					location = "\"record\":${record.to_str()},\"field\":${field.to_str()},\"line\":${line.to_str()},\"column\":${column.to_str()}"
+					Stdout.line!("{\"status\":\"error\",\"message\":${json_bytes(message.to_utf8())},${location}}")?
+				}
 			}
 		}
 	}
 	Ok({})
 }
-
-## Every field of a record, raw, via the public typed-decoding API.
-all_fields : Parser(CSV.CSVRecord, List(List(U8)))
-all_fields = Parser.many(CSV.field(Utf8.rest))
 
 json_bytes : List(U8) -> Str
 json_bytes = |bytes| "\"${Str.from_utf8_lossy(escape_json(bytes, []))}\""
