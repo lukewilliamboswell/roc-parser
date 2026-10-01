@@ -202,6 +202,8 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 
 		[line, .. as rest] => {
 			payload = sequence_payload(line.content)
+			# The entry's content starts after "-" and its separating spaces.
+			payload_indent = line.indent + 1 + count_spaces(line.content.drop_first(1), 0)
 
 			if payload.is_empty() {
 				match rest {
@@ -216,17 +218,17 @@ parse_sequence_help = |lines, indent, depth, raw_lines, values| {
 			} else {
 				match split_mapping_entry(payload) {
 					Ok(_) => {
-						virtual = { content: payload, indent: indent + 2, number: line.number, terminated: line.terminated, tab: Bool.False }
-						child = parse_node(List.prepend(rest, virtual), indent + 2, depth + 1, raw_lines)?
+						virtual = { content: payload, indent: payload_indent, number: line.number, terminated: line.terminated, tab: Bool.False }
+						child = parse_node(List.prepend(rest, virtual), payload_indent, depth + 1, raw_lines)?
 						parse_sequence_help(child.input, indent, depth, raw_lines, values.append(child.val))
 					}
 
 					Err(_) => {
 						if starts_block_scalar(payload) {
-							block = parse_block_scalar(rest, raw_lines, payload, line.number, line.indent + 3, line.indent + 1)?
+							block = parse_block_scalar(rest, raw_lines, payload, line.number, payload_indent + 1, line.indent + 1)?
 							parse_sequence_help(block.input, indent, depth, raw_lines, values.append(block.value))
 						} else {
-							value = parse_inline_value(payload, line.number, line.indent + 3)?
+							value = parse_inline_value(payload, line.number, payload_indent + 1)?
 							parse_sequence_help(rest, indent, depth, raw_lines, values.append(value))
 						}
 					}
@@ -1408,6 +1410,13 @@ expect {
 expect {
 	actual = Yaml.parse_str("value: |\r  one\r  two\r")?
 	actual == Mapping([{ key: "value", value: String("one\ntwo\n") }])
+}
+
+## Compact mappings in sequence entries are indented by the spaces after "-"
+## (YAML 1.2 8.2.1: here the mapping, and so the indicator, is relative to column 4).
+expect {
+	actual = Yaml.parse_str("-   value: |2\n      a\n    next: done\n")?
+	actual == Sequence([Mapping([{ key: "value", value: String("a\n") }, { key: "next", value: String("done") }])])
 }
 
 ## A tab before a document marker is not a document marker.
