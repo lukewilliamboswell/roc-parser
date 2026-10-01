@@ -1868,10 +1868,21 @@ parse_key = |raw, line, column| {
 	}
 }
 
+single_quote : Utf8.ByteClass
+single_quote = Utf8.ByteClass.from_predicate(|b| b == '\'')
+
+backslash : Utf8.ByteClass
+backslash = Utf8.ByteClass.from_predicate(|b| b == '\\')
+
 parse_single_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_single_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '\'', line, column)?
-	unescape_single(inner, [], line, column).map_ok(bytes_to_str)
+	# Without a quote inside there is nothing to unescape: keep the slice.
+	if Utf8.find_any(inner, 0, single_quote) >= inner.len() {
+		Ok(bytes_to_str(inner))
+	} else {
+		unescape_single(inner, [], line, column).map_ok(bytes_to_str)
+	}
 }
 
 ## The text between a scalar's opening quote and its real closing quote, which
@@ -1919,7 +1930,12 @@ unescape_single = |bytes, out, line, column| {
 parse_double_quoted : Utf8.Bytes, U64, U64 -> Try(Str, [InvalidYaml(Yaml.Error)])
 parse_double_quoted = |bytes, line, column| {
 	inner = quoted_inner(bytes, '"', line, column)?
-	unescape_double(inner, [], line, column).map_ok(bytes_to_str)
+	# Without a backslash there is nothing to unescape: keep the slice.
+	if Utf8.find_any(inner, 0, backslash) >= inner.len() {
+		Ok(bytes_to_str(inner))
+	} else {
+		unescape_double(inner, [], line, column).map_ok(bytes_to_str)
+	}
 }
 
 unescape_double : Utf8.Bytes, Utf8.Bytes, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
