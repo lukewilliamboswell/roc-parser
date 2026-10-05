@@ -1,4 +1,4 @@
-import Parser exposing [Parser]
+import Parser
 import Utf8
 
 ## A practical YAML configuration parser.

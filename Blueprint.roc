@@ -26,7 +26,7 @@
 app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.3.0/DdfMePZbeL5hodg7j4B6Jzpm9t555B9SPPAJNQ5WzCR9.tar.zst" }
 
 bench_tools = [
-	"rocpkgs.nightly-2026-09-29-7f11a82",
+	"rocpkgs.nightly-2026-10-04-130536d",
 	"go",
 	"cargo",
 	"rustc",
