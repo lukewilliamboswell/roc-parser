@@ -27,8 +27,8 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts" / "yaml"
 DEFAULT_WORK = ROOT / ".roc-parser-tmp" / "yaml-review"
-FUZZ_URL = "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst"
-FUZZ_SHA256 = "60d45f07a51515f2a49eadcf2163fb9c2801df5341c8b8685f81581010c7dd2c"
+FUZZ_URL = "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst"
+FUZZ_SHA256 = "d9bae1e93e6e94f3fafb4040861402dbab90af247023461d8e5451db4a3ae0f2"
 FATAL = {"crash", "timeout", "protocol_error", "invalid_diagnostic"}
 INT_RE = re.compile(r"[-+]?[0-9]+\Z")
 OCT_RE = re.compile(r"0o[0-7]+\Z")
