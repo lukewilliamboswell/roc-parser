@@ -25,6 +25,8 @@ def corpus(sizes=(256, 512, 1024, 2048)):
     for family, make in {
         'definitions': lambda n: 'module []\n' + ''.join(f'x{i} = {i} + 2 * 3\n' for i in range(n)),
         'comment': lambda n: 'module []\n#' + 'x' * n + '\nanswer = 1\n',
+        'adjacent_upper_calls': lambda n: 'main = { ' + 'A() ' * n + '0 }\n',
+        'adjacent_parenthesized': lambda n: 'main = { ' + '(x) ' * n + '0 }\n',
         'operators': lambda n: 'module []\nanswer = ' + ' + '.join(['1'] * n) + '\n',
         'unclosed': lambda n: 'module []\nanswer = ' + '(' * n + '1\n',
     }.items():

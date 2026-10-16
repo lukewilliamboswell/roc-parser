@@ -33,7 +33,7 @@ RocSyntax :: [].{
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
 
 	## Structured issues; human-facing text can be rendered outside parsing.
-	DiagnosticCode : [InvalidByte, InvalidUtf8, UnclosedString, UnclosedDelimiter, UnexpectedToken, InvalidNumber, InvalidEscape, InvalidCharacter, UnsupportedSyntax, ResourceLimit]
+	DiagnosticCode : [InvalidByte, InvalidUtf8, BidiControlInSource, Utf8ByteOrderMark, UnclosedString, UnclosedDelimiter, UnexpectedToken, InvalidNumber, InvalidEscape, InvalidCharacter, UnsupportedSyntax, ResourceLimit]
 
 	## An issue code and its precise source byte interval.
 	Diagnostic : { code : DiagnosticCode, start : U64, end : U64 }
@@ -170,6 +170,14 @@ utf8_diagnostics = |source| {
 		second = byte(source, $i + 1)
 		$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
 		if $valid {
+			third = byte(source, $i + 2)
+			bidi = (b == 0xD8 and second == 0x9C) or (b == 0xE2 and ((second == 0x80 and (third == 0x8E or third == 0x8F or (third >= 0xAA and third <= 0xAE))) or (second == 0x81 and third >= 0xA6 and third <= 0xA9)))
+			if bidi {
+				$out = push_diagnostic($out, BidiControlInSource, $i, $i + width)
+			}
+			if $i == 0 and b == 0xEF and second == 0xBB and third == 0xBF {
+				$out = push_diagnostic($out, Utf8ByteOrderMark, 0, 3)
+			}
 			$i = $i + width
 		} else {
 			$out = push_diagnostic($out, InvalidUtf8, $i, $i + 1)
@@ -181,9 +189,10 @@ utf8_diagnostics = |source| {
 
 lex : List(U8) -> Lexed
 lex = |source| {
-	var $tokens = []
+	bom = byte(source, 0) == 0xEF and byte(source, 1) == 0xBB and byte(source, 2) == 0xBF
+	var $tokens = if bom [{ kind: Invalid, start: 0, end: 3 }] else []
 	var $diagnostics = utf8_diagnostics(source)
-	var $i = 0
+	var $i = if bom 3 else 0
 	var $contexts = []
 	var $resume = False
 	var $resume_multiline = False
@@ -268,7 +277,9 @@ lex = |source| {
 					$i = $i + 1
 				}
 			}
-			$kind = if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
+			previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
+			field_name = previous.end == start and (token_spelling(source, previous, ".") or token_spelling(source, previous, ".?")) and is_lower(b)
+			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
 			if bad_dollar or bad_opaque or b >= 0x80 {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
@@ -446,6 +457,10 @@ expression : State, U64, U64, Bool -> Built
 expression = |initial, minimum, depth, punned| {
 	s = skip_trivia(initial)
 	first = peek(s)
+	sync = declaration_sync(s)
+	if sync.sync {
+		return add_node(issue(s, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
+	}
 	if depth >= 128 {
 		limited = issue(s, ResourceLimit, first.start, first.end)
 		add_node(at_pos(limited, limited.pos + if first.kind == EndOfFile 0 else 1), ErrorNode, first.start, first.end, [])
@@ -453,7 +468,8 @@ expression = |initial, minimum, depth, punned| {
 		next_pos = significant_position(s.tokens, s.pos + 1)
 		package_qualified = (minimum == 100 or minimum == 101) and first.kind == LowerIdent and token_spelling(s.source, source_token(s, next_pos), ".") and source_token(s, next_pos + 1).kind == UpperIdent
 		{ state: built_state, node: built_node } = primary(s, depth, punned)
-		var $s = built_state
+		grouped_tuple = (minimum == 100 or minimum == 101) and (built_state.nodes.get(built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == Tuple
+		var $s = if grouped_tuple issue(built_state, UnexpectedToken, first.start, first.end) else built_state
 		var $left = built_node
 		var $qualified = first.kind == UpperIdent or package_qualified
 		var $done = False
@@ -464,7 +480,7 @@ expression = |initial, minimum, depth, punned| {
 			$s = vacant
 			t = peek(look)
 			bp = binding(look)
-			pipe_boundary = minimum == 100 and t.start > node_end(look, $left) and ((spelling(look, ".") and (peek(at_pos(look, look.pos + 1)).kind == LowerIdent or peek(at_pos(look, look.pos + 1)).kind == Number)) or spelling(look, ".?"))
+			pipe_boundary = (minimum == 100 or minimum == 101) and t.start > node_end(look, $left) and ((spelling(look, ".") and (peek(at_pos(look, look.pos + 1)).kind == LowerIdent or peek(at_pos(look, look.pos + 1)).kind == UpperIdent or peek(at_pos(look, look.pos + 1)).kind == Number)) or spelling(look, ".?"))
 			if pipe_boundary or ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !$qualified))) {
 				$s = look
 				$done = True
@@ -477,7 +493,7 @@ expression = |initial, minimum, depth, punned| {
 				validated = if valid_start rhs else issue(rhs, UnexpectedToken, rhs_token.start, rhs_token.end)
 				{ state: target_state, node: target_node } = expression(validated, if pipe 100 else 101, depth + 1, False)
 				method = pipe and method_target(target_state, target_node)
-				checked = if !pipe or !literal or method target_state else issue(target_state, UnexpectedToken, rhs_token.start, node_end(target_state, target_node))
+				checked = if !pipe or !literal or pipe_has_method(target_state, target_node) target_state else issue(target_state, UnexpectedToken, rhs_token.start, node_end(target_state, target_node))
 				start = node_start(checked, $left)
 				end = node_end(checked, target_node)
 				{ state: arrow_state, node: arrow_node } = add_node(checked, if method MethodArrowCall else ArrowCall, start, end, [$left, target_node])
@@ -500,6 +516,10 @@ expression = |initial, minimum, depth, punned| {
 				$left = call_node
 				$qualified = False
 				$target_done = minimum == 101
+				question_state = skip_trivia(call_state)
+				if minimum == 100 and !method_target(call_state, call_node) and spelling(question_state, "?") and peek(question_state).start == args_end {
+					$done = True
+				}
 			} else if spelling(look, ".") and peek(skip_trivia(at_pos(look, look.pos + 1))).kind == OpenCurly {
 				opening_state = skip_trivia(at_pos(look, look.pos + 1))
 				{ state: backing_state, node: backing_node } = curly(at_pos(opening_state, opening_state.pos + 1), peek(opening_state).start, depth + 1, True, True)
@@ -567,7 +587,12 @@ collection = |initial, closing, depth| {
 		look = skip_trivia($s)
 		$s = vacant
 		t = peek(look)
-		if t.kind == closing {
+		sync = declaration_sync(look)
+		if sync.sync {
+			$s = issue(look, UnclosedDelimiter, sync.start, sync.end)
+			$end = sync.end
+			$done = True
+		} else if t.kind == closing {
 			$s = at_pos(look, look.pos + 1)
 			$end = t.end
 			$done = True
@@ -1157,7 +1182,7 @@ type_expression = |initial, mode, depth| {
 			add_node(ret_state, TypeFunction, node_start(ret_state, atom_node), end, $args.append(ret_node))
 		} else {
 			bad = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
-			add_node(bad, ErrorNode, node_start(bad, atom_node), peek(bad).start, $args)
+			add_node(bad, ErrorNode, node_start(bad, atom_node), U64.max(peek(bad).start, node_end(bad, $args.last() ?? atom_node)), $args)
 		}
 	} else {
 		{ state: atom_state, node: atom_node }
@@ -1193,6 +1218,10 @@ type_atom : State, U64 -> Built
 type_atom = |initial, depth| {
 	s = skip_trivia(initial)
 	t = peek(s)
+	sync = declaration_sync(s)
+	if sync.sync {
+		return add_node(issue(s, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
+	}
 	if depth >= 128 {
 		bad = issue(s, ResourceLimit, t.start, t.end)
 		return add_node(bad, ErrorNode, t.start, t.start, [])
@@ -1319,7 +1348,7 @@ type_parenthesized = |initial, depth| {
 	} else {
 		$s = issue($s, UnclosedDelimiter, closing.start, closing.end)
 	}
-	end = if closing.kind == CloseRound closing.end else closing.start
+	end = U64.max(if closing.kind == CloseRound closing.end else closing.start, node_end($s, $ids.last() ?? $s.nodes.len()))
 	if $ids.is_empty() and (spelling(skip_trivia($s), "->") or spelling(skip_trivia($s), "=>")) {
 		arrow = skip_trivia($s)
 		{ state: ret_state, node: ret_node } = type_expression(at_pos(arrow, arrow.pos + 1), TypeArgument, depth + 1)
@@ -1917,7 +1946,12 @@ curly = |initial, start, depth, punned, forced| {
 	while !$done {
 		$s = skip_trivia($s)
 		t = peek($s)
-		if t.kind == CloseCurly {
+		sync = declaration_sync($s)
+		if record and sync.sync {
+			$s = issue($s, UnclosedDelimiter, sync.start, sync.end)
+			$end = sync.end
+			$done = True
+		} else if t.kind == CloseCurly {
 			$end = t.end
 			$s = at_pos($s, $s.pos + 1)
 			$done = True
@@ -1932,7 +1966,7 @@ curly = |initial, start, depth, punned, forced| {
 				var $field_state = name_state
 				var $field_node = name_node
 				field_look = skip_trivia(name_state)
-				if t.kind != LowerIdent {
+				if t.kind != LowerIdent or !is_lower(byte(field_look.source, t.start)) {
 					bad = issue(field_look, UnsupportedSyntax, t.start, t.end)
 					{ state: next_field_state, node: next_field_node } = add_node(bad, UnsupportedNode, t.start, t.end, [])
 					$field_state = next_field_state
@@ -1960,7 +1994,7 @@ curly = |initial, start, depth, punned, forced| {
 				if spelling($s, ",") {
 					$s = at_pos($s, $s.pos + 1)
 				}
-					else if peek($s).kind != CloseCurly and peek($s).kind != EndOfFile {
+					else if peek($s).kind != CloseCurly and peek($s).kind != EndOfFile and (peek($s).kind != LowerIdent or ($s.nodes.get($field_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).children_len != 2) {
 						$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
 					}
 			} else {
@@ -2748,6 +2782,60 @@ expect {
 	RocSyntax.parse_header_str("").status == Complete and RocSyntax.parse_expr_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }").status == Complete and RocSyntax.parse_expr_str("match text { \"\${a + b}\" => 0 }").status != Complete and RocSyntax.parse_expr_str("match text { \"x\".Str => 0 }").status != Complete
 }
 
+# Only receiver/callee ancestors count: methods buried in arguments cannot
+# make a literal a valid pipe target.
+pipe_has_method : State, U64 -> Bool
+pipe_has_method = |s, root| {
+	var $id = root
+	var $found = False
+	var $done = False
+	while !$done {
+		if method_target(s, $id) {
+			$found = True
+			$done = True
+		} else {
+			match s.nodes.get($id) {
+				Ok(n) if n.kind == Call or n.kind == FieldAccess or n.kind == OptionalFieldAccess or n.kind == Suffix or n.kind == NominalRecord or n.kind == NominalApply => {
+					$id = s.children.get(n.children_start) ?? s.nodes.len()
+				}
+				_ => {
+					$done = True
+				}
+			}
+		}
+	}
+	$found
+}
+
+# An assignment head after a line break cannot continue an expression. Keep
+# its tokens for the enclosing statement loop and blame the damaged line.
+declaration_sync : State -> { sync : Bool, start : U64, end : U64 }
+declaration_sync = |initial| {
+	s = skip_trivia(initial)
+	t = peek(s)
+	next = skip_trivia(at_pos(s, s.pos + 1))
+	if t.kind != LowerIdent or !spelling(next, "=") {
+		return { sync: False, start: t.start, end: t.start }
+	}
+	var $pos = s.pos
+	var $newline = False
+	var $done = False
+	var $start = t.start
+	var $end = t.start
+	while $pos > 0 and !$done {
+		$pos = $pos - 1
+		previous = source_token(s, $pos)
+		if previous.kind == Whitespace or previous.kind == Comment {
+			$newline = $newline or line_break(s.source, previous.start, previous.end)
+		} else {
+			$start = previous.start
+			$end = previous.end
+			$done = True
+		}
+	}
+	{ sync: $newline, start: $start, end: $end }
+}
+
 method_target : State, U64 -> Bool
 method_target = |s, root| {
 	match s.nodes.get(root) {
@@ -2756,7 +2844,9 @@ method_target = |s, root| {
 			match s.nodes.get(callee_id) {
 				Ok(callee) if callee.kind == FieldAccess => {
 					receiver = s.children.get(callee.children_start) ?? s.nodes.len()
-					!namespace_receiver(s, receiver)
+					field_id = s.children.get(callee.children_start + 1) ?? s.nodes.len()
+					field = s.nodes.get(field_id) ?? callee
+					is_lower(byte(s.source, field.start)) and !namespace_receiver(s, receiver)
 				}
 				_ => False
 			}
@@ -3475,4 +3565,38 @@ expect {
 
 expect {
 	["0xff .0", "1.0.0", "x->f(1)(2)", "x |> f .field", "x |> f .?field", "{ A() A() A() 0 }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete) and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 }").status == Complete and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 3 }").status != Complete
+}
+
+expect {
+	["x |> 1.method().field", "x |> 1.method()?(1)", "x |> f(1)?(1)", "x->X .field", "x |> A.fn .else", "x.?if -> f", "Box.import", "{a:1 b:2}"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	p = RocSyntax.parse_str("C,)")
+	p.status != Complete and p.nodes.all(
+		|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
+			|id| {
+				child = p.nodes.get(id) ?? n
+				child.start >= n.start and child.end <= n.end
+			},
+		),
+	)
+}
+
+expect {
+	["\u(61C)", "\u(200E)", "\u(200F)", "\u(202A)", "\u(202B)", "\u(202C)", "\u(202D)", "\u(202E)", "\u(2066)", "\u(2067)", "\u(2068)", "\u(2069)"].all(
+		|control| {
+			["# ".concat(control).concat("\nx = 1"), "\"".concat(control).concat("\""), "'".concat(control).concat("'")].all(
+				|source| {
+					p = RocSyntax.parse_str(source)
+					p.status != Complete and p.diagnostics.any(|d| d.code == BidiControlInSource)
+				},
+			)
+		},
+	)
+}
+
+expect {
+	p = RocSyntax.parse_str("\u(FEFF)x = 1")
+	p.status != Complete and p.diagnostics.any(|d| d.code == Utf8ByteOrderMark and d.start == 0 and d.end == 3) and RocSyntax.parse_expr_str("\"\u(FEFF)\"").status == Complete
 }

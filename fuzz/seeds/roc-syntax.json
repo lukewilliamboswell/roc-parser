@@ -125,5 +125,20 @@
   "Box.()",
   "Box.({ first: 1 })",
   "{ first: _ }.Box",
-  "{ ..base }"
+  "{ ..base }",
+  "C,)",
+  "before = 0\nbad = 1 +\nafter = 42\nlast = after + 1\n",
+  "before = 0\nbad = [1,\nafter = 42\nlast = after + 1\n",
+  "Box.import",
+  "x.?if -> f",
+  "{a:\"1\"b:2}",
+  "{ name, age, email  active }\n",
+  "Str.split_las->(source, \"=\")",
+  "Foo::(]a",
+  "|{ name, age, ..a } as person| { _eting: \"Hello ${name}\", full_record: person, is_adult: age >= 18 }\n",
+  "f({ first: [1, 2], sif econd: (3, 4) })",
+  "{ ..person, age: 31, acti ve: True }\n",
+  "U64.to_str(su->(240, 0))",
+  "Str.drop_prefix->(\"helo world\", \"hello \")",
+  "|{ name, age, ..a } as person| { greeting: \"Hello ${name}\", full_recordwhere son, is_adult: age >= 18 }\n"
 ]

@@ -9,11 +9,16 @@
     "grammar/declaration-tag-boundaries",
     "grammar/exposed-aliases",
     "grammar/flat-body-sequencing",
+    "grammar/global-bidi",
     "grammar/headers-imports",
     "grammar/identifiers",
     "grammar/interpolation",
     "grammar/keyword-context",
+    "grammar/keyword-fields",
     "grammar/lambda-patterns",
+    "grammar/leading-bom",
+    "grammar/malformed-type-span",
+    "grammar/mutation-regression",
     "grammar/numbers-unary",
     "grammar/optional-grouping",
     "grammar/pattern-branches",
@@ -21,6 +26,7 @@
     "grammar/patterns",
     "grammar/pipe-postfix-spacing",
     "grammar/postfix",
+    "grammar/record-optional-commas",
     "grammar/type-boundaries",
     "grammar/type-composition"
   ],
@@ -1364,14 +1370,14 @@
     },
     {
       "id": "identifiers/0ccbd144c0f5",
-      "source": "xé",
+      "source": "x\u00e9",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
     },
     {
       "id": "identifiers/1a7b95985b40",
-      "source": "xé.foo",
+      "source": "x\u00e9.foo",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
@@ -1413,7 +1419,7 @@
     },
     {
       "id": "identifiers/0023f8402099",
-      "source": "|xé| 0",
+      "source": "|x\u00e9| 0",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
@@ -3183,6 +3189,1099 @@
       "mode": "file",
       "rule": "grammar/type-composition",
       "coverage": "supported"
+    },
+    {
+      "id": "keyword-fields/0d26ff820128",
+      "source": "Box.if",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "if"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/7c7ed684d39f",
+      "source": "x.?if",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "if"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/47c8fff83920",
+      "source": "Box.else",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "else"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/8ec210528245",
+      "source": "x.?else",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "else"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/ccf5d78e93fd",
+      "source": "Box.import",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "import"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/4397864bf1e8",
+      "source": "x.?import",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "import"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/e41ca74dd510",
+      "source": "Box.module",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "module"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/4129562fac2b",
+      "source": "x.?module",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "module"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/9bc4408dfaca",
+      "source": "Box.app",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "app"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/579db52cbec7",
+      "source": "x.?app",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "app"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/cd714ea348e2",
+      "source": "Box.platform",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "platform"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/1dbcd45dc28b",
+      "source": "x.?platform",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "platform"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/464b98867fb4",
+      "source": "Box.package",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "package"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/c4927cc55843",
+      "source": "x.?package",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "package"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/602db2670d25",
+      "source": "Box.match",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "match"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/ca5d866164ff",
+      "source": "x.?match",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "match"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/158b09c8bead",
+      "source": "Box.for",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "for"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/7e8c96e609ea",
+      "source": "x.?for",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "for"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/431c8556657f",
+      "source": "Box.return",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "return"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/a22c1268e287",
+      "source": "x.?return",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "return"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/b566c4f4b703",
+      "source": "Box.break",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/d3c5c45a2180",
+      "source": "x.?break",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/56be8218feca",
+      "source": "Box.dbg",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "dbg"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/a1dfeb086ff8",
+      "source": "x.?dbg",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "dbg"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/af1ddf3b36fe",
+      "source": "Box.expect",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "expect"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/5d2bbf7f2979",
+      "source": "x.?expect",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "expect"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/c48ffd21479e",
+      "source": "Box.crash",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "crash"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/a6f302bd07e8",
+      "source": "x.?crash",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "crash"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/5225a6f7b396",
+      "source": "Box.var",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "var"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/a52ee61046cf",
+      "source": "x.?var",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "var"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/45388e7f5027",
+      "source": "Box.as",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "as"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/21d8eabc4309",
+      "source": "x.?as",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "as"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/473021d6901a",
+      "source": "Box.and",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "and"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/2e7303c90420",
+      "source": "x.?and",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "and"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/655ff207ec7c",
+      "source": "Box.or",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "or"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/96f65cae3baf",
+      "source": "x.?or",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "or"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/6e29185fc91a",
+      "source": "Box.where",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "where"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/9fbe6f9d5bcd",
+      "source": "x.?where",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "where"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/a6e1c27a9735",
+      "source": "Box.exposing",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Box"
+          ],
+          "exposing"
+        ]
+      ]
+    },
+    {
+      "id": "keyword-fields/61f8a0c2d0ab",
+      "source": "x.?exposing",
+      "mode": "expr",
+      "rule": "grammar/keyword-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "x"
+          ],
+          "exposing"
+        ]
+      ]
+    },
+    {
+      "id": "global-bidi/a29ac400d6c2",
+      "source": "# \u061c\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/e4894dfa9bdd",
+      "source": "\"\u061c\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/2cfe320a8b6b",
+      "source": "'\u061c'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/5f4993197437",
+      "source": "# \u200e\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/37c4b15c7b4b",
+      "source": "\"\u200e\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/1c972930649e",
+      "source": "'\u200e'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/36bca7334e10",
+      "source": "# \u200f\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/93571581405c",
+      "source": "\"\u200f\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/526aed031ec6",
+      "source": "'\u200f'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/35e507316e23",
+      "source": "# \u202a\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/bdcc2c536f29",
+      "source": "\"\u202a\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/15a646134514",
+      "source": "'\u202a'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/946cbb735847",
+      "source": "# \u202b\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/65a84f11dff6",
+      "source": "\"\u202b\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/4e15ba9b6716",
+      "source": "'\u202b'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/b46909979919",
+      "source": "# \u202c\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/25eb22263920",
+      "source": "\"\u202c\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/2731acaa0947",
+      "source": "'\u202c'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/0c2529ef0bfa",
+      "source": "# \u202d\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/7ab23f438611",
+      "source": "\"\u202d\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/1d62e00de4da",
+      "source": "'\u202d'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/c2993fd22876",
+      "source": "# \u202e\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/801c270069ea",
+      "source": "\"\u202e\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/d24210ea3aad",
+      "source": "'\u202e'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/422e68641585",
+      "source": "# \u2066\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/407ba99ef385",
+      "source": "\"\u2066\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/035967f7ffa6",
+      "source": "'\u2066'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/0534d2924eb3",
+      "source": "# \u2067\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/5bb0a8d51d6e",
+      "source": "\"\u2067\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/ada45e8d8552",
+      "source": "'\u2067'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/7897863e6905",
+      "source": "# \u2068\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/8fa1b438a605",
+      "source": "\"\u2068\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/4abed32da19e",
+      "source": "'\u2068'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/e763ec2a010c",
+      "source": "# \u2069\nx=1",
+      "mode": "file",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/bcd6e1ae7412",
+      "source": "\"\u2069\"",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "global-bidi/9f0b7549b67a",
+      "source": "'\u2069'",
+      "mode": "expr",
+      "rule": "grammar/global-bidi",
+      "coverage": "recovery"
+    },
+    {
+      "id": "leading-bom/6c48b9fd6773",
+      "source": "\ufeffx=1",
+      "mode": "file",
+      "rule": "grammar/leading-bom",
+      "coverage": "recovery"
+    },
+    {
+      "id": "malformed-type-span/297f651dce5d",
+      "source": "C,)",
+      "mode": "file",
+      "rule": "grammar/malformed-type-span",
+      "coverage": "recovery"
+    },
+    {
+      "id": "record-optional-commas/b4f0a29a7350",
+      "source": "{a:1 b:2}",
+      "mode": "expr",
+      "rule": "grammar/record-optional-commas",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record",
+          [
+            [
+              "a",
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "b",
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-optional-commas/e9efac3c74b3",
+      "source": "{a:\"1\"b:2}",
+      "mode": "expr",
+      "rule": "grammar/record-optional-commas",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record",
+          [
+            [
+              "a",
+              [
+                "string",
+                "\"1\""
+              ]
+            ],
+            [
+              "b",
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-optional-commas/3816d1a54831",
+      "source": "{a:1\nb:2}",
+      "mode": "expr",
+      "rule": "grammar/record-optional-commas",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record",
+          [
+            [
+              "a",
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "b",
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "mutation-regression/cda2992d9650",
+      "mode": "expr",
+      "source": "{ name, age, email  active }\n",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/fa6967c3a9d3",
+      "mode": "repl",
+      "source": "Str.split_las->(source, \"=\")",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/819d61a33591",
+      "mode": "file",
+      "source": "Foo::(]a",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/aae7ddb1b35e",
+      "mode": "expr",
+      "source": "|{ name, age, ..a } as person| { _eting: \"Hello ${name}\", full_record: person, is_adult: age >= 18 }\n",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/137535d05d4b",
+      "mode": "expr",
+      "source": "f({ first: [1, 2], sif econd: (3, 4) })",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/efe29a1bfa60",
+      "mode": "expr",
+      "source": "{ ..person, age: 31, acti ve: True }\n",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/7dd1b1e5f1bc",
+      "mode": "repl",
+      "source": "U64.to_str(su->(240, 0))",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/8ada658381ba",
+      "mode": "repl",
+      "source": "Str.drop_prefix->(\"helo world\", \"hello \")",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-regression/1be1f7b7d209",
+      "mode": "expr",
+      "source": "|{ name, age, ..a } as person| { greeting: \"Hello ${name}\", full_recordwhere son, is_adult: age >= 18 }\n",
+      "rule": "grammar/mutation-regression",
+      "coverage": "recovery"
     }
   ]
 }
