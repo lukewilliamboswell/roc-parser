@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, ArrowCall, MethodArrowCall, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode, TypeName, TypeVariable, TypeWildcard, TypeApply, TypeFunction, TypeTuple, TypeRecord, TypeField, TypeTagUnion, TypeExtension, TypeParenthesized, TypeDeclaration, TypeHeader, WhereClause, WhereMethod, WhereAlias, AssociatedBlock]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordUpdate, UnsetField, RecordBuilder, NominalRecord, NominalApply, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, ArrowCall, MethodArrowCall, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode, TypeName, TypeVariable, TypeWildcard, TypeApply, TypeFunction, TypeTuple, TypeRecord, TypeField, TypeTagUnion, TypeExtension, TypeParenthesized, TypeDeclaration, TypeHeader, WhereClause, WhereMethod, WhereAlias, AssociatedBlock]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -507,11 +507,28 @@ expression = |initial, minimum, depth, punned| {
 				$left = call_node
 				$qualified = False
 				$target_done = minimum == 101
+			} else if spelling(look, ".") and peek(at_pos(look, look.pos + 1)).kind == OpenCurly {
+				opening_state = at_pos(look, look.pos + 1)
+				{ state: backing_state, node: backing_node } = curly(at_pos(opening_state, opening_state.pos + 1), peek(opening_state).start, depth + 1, True, True)
+				start = node_start(backing_state, $left)
+				end = node_end(backing_state, backing_node)
+				{ state: nominal_state, node: nominal_node } = add_node(backing_state, NominalRecord, start, end, [$left, backing_node])
+				$s = nominal_state
+				$left = nominal_node
+				$qualified = False
+			} else if spelling(look, ".") and $qualified and peek(at_pos(look, look.pos + 1)).kind == NoSpaceOpenRound {
+				opening_state = at_pos(look, look.pos + 1)
+				{ state: args_state, ids: args, end, comma: _ } = collection(at_pos(opening_state, opening_state.pos + 1), CloseRound, depth + 1)
+				start = node_start(args_state, $left)
+				{ state: nominal_state, node: nominal_node } = add_node(args_state, NominalApply, start, end, [$left].concat(args))
+				$s = nominal_state
+				$left = nominal_node
+				$qualified = False
 			} else if spelling(look, ".") or spelling(look, ".?") {
 				optional = spelling(look, ".?")
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
-				valid_name = (field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
+				valid_name = (field.kind == LowerIdent and (is_lower(byte(field_state.source, field.start)) or byte(field_state.source, field.start) == '$')) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
 				valid_index = field.kind == Number and field_state.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
 				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
 					start = node_start(field_state, $left)
@@ -599,7 +616,7 @@ primary = |s, depth, punned| {
 		Number => literal_suffix(add_node(at_pos(s, s.pos + 1), NumberLiteral, t.start, t.end, []), False)
 		SingleQuote => literal_suffix(add_node(at_pos(s, s.pos + 1), CharacterLiteral, t.start, t.end, []), False)
 		StringStart | MultilineStringStart => parse_string(s, depth + 1)
-		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1, punned)
+		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1, punned, False)
 		Keyword if spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") => {
 			kind = if spelling(s, "dbg") Debug else if spelling(s, "crash") Crash else Return
 			{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1, False)
@@ -958,7 +975,7 @@ exposed_collection = |initial| {
 			$s = issue(item_state, UnclosedDelimiter, t.start, t.end)
 			$done = True
 		} else {
-			valid_start = t.kind == UpperIdent or (t.kind == LowerIdent and is_lower(byte(item_state.source, t.start)))
+			valid_start = t.kind == UpperIdent or (t.kind == LowerIdent and (is_lower(byte(item_state.source, t.start)) or byte(item_state.source, t.start) == '$'))
 			validated = if valid_start item_state else issue(item_state, UnexpectedToken, t.start, t.end)
 			{ state: name_state, node: name_node } = add_node(at_pos(validated, validated.pos + 1), Identifier, t.start, t.end, [])
 			var $name = name_node
@@ -1591,7 +1608,7 @@ parse_associated_block = |initial, depth| {
 			$done = True
 		} else {
 			before = look.pos
-			{ state: item_state, node: item_node } = statement(look, depth + 1)
+			{ state: item_state, node: item_node } = statement(if spelling(look, "var") issue(look, UnexpectedToken, t.start, t.end) else look, depth + 1)
 			$ids = $ids.append(item_node)
 			$s = item_state
 			if (item_state.nodes.get(item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
@@ -1792,7 +1809,7 @@ pattern_record = |initial, alternatives, depth| {
 				} else {
 					add_node(name_state, RestPattern, t.start, t.end, [])
 				}
-			} else if t.kind == LowerIdent and is_lower(byte(look.source, t.start)) {
+			} else if t.kind == LowerIdent and (is_lower(byte(look.source, t.start)) or byte(look.source, t.start) == '$') {
 				{ state: name_state, node: name_node } = add_node(at_pos(look, look.pos + 1), Identifier, t.start, t.end, [])
 				after = skip_trivia(name_state)
 				if spelling(after, ":") {
@@ -1870,16 +1887,25 @@ parse_if = |initial, start, depth| {
 	}
 }
 
-curly : State, U64, U64, Bool -> Built
-curly = |initial, start, depth, punned| {
+curly : State, U64, U64, Bool, Bool -> Built
+curly = |initial, start, depth, punned, forced| {
 	look = skip_trivia(initial)
 	first = peek(look)
 	after = skip_trivia(at_pos(look, look.pos + 1))
-	record = first.kind == CloseCurly or (first.kind == LowerIdent and (spelling(after, ":") or spelling(after, ",") or (punned and peek(after).kind == CloseCurly)))
+	record = forced or first.kind == CloseCurly or spelling(look, "..") or (first.kind == LowerIdent and (spelling(after, ":") or spelling(after, ",") or (punned and peek(after).kind == CloseCurly)) and !(spelling(after, ":") and record_starts_block(look)))
 	var $s = initial
 	var $ids = []
 	var $end = first.start
 	var $done = False
+	var $extension = False
+	if spelling(look, "..") {
+		{ state: base_state, node: base_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1, False)
+		comma = skip_trivia(base_state)
+		$s = if spelling(comma, ",") at_pos(comma, comma.pos + 1) else issue(comma, UnexpectedToken, peek(comma).start, peek(comma).end)
+		$ids = [base_node]
+		$end = node_end($s, base_node)
+		$extension = True
+	}
 	while !$done {
 		$s = skip_trivia($s)
 		t = peek($s)
@@ -1903,6 +1929,12 @@ curly = |initial, start, depth, punned| {
 					{ state: next_field_state, node: next_field_node } = add_node(bad, UnsupportedNode, t.start, t.end, [])
 					$field_state = next_field_state
 					$field_node = next_field_node
+				} else if spelling(field_look, ":") and token_spelling(field_look.source, source_token(field_look, significant_position(field_look.tokens, field_look.pos + 1)), "_") and (token_spelling(field_look.source, source_token(field_look, significant_position(field_look.tokens, significant_position(field_look.tokens, field_look.pos + 1) + 1)), ",") or source_token(field_look, significant_position(field_look.tokens, significant_position(field_look.tokens, field_look.pos + 1) + 1)).kind == CloseCurly) {
+					value_pos = significant_position(field_look.tokens, field_look.pos + 1)
+					unset_end = source_token(field_look, value_pos).end
+					{ state: unset_state, node: unset_node } = add_node(at_pos(field_look, value_pos + 1), UnsetField, t.start, unset_end, [name_node])
+					$field_state = unset_state
+					$field_node = unset_node
 				} else if spelling(field_look, ":") {
 					{ state: value_state, node: value_node } = expression(at_pos(field_look, field_look.pos + 1), 0, depth, True)
 					end = node_end(value_state, value_node)
@@ -1938,7 +1970,41 @@ curly = |initial, start, depth, punned| {
 			}
 		}
 	}
-	add_node($s, if record Record else Block, start, $end, $ids)
+	if record and !$extension and !forced {
+		look_suffix = skip_trivia($s)
+		dot = peek(look_suffix)
+		name_state = at_pos(look_suffix, look_suffix.pos + 1)
+		if spelling(look_suffix, ".") and dot.start == $end and peek(name_state).kind == UpperIdent {
+			var $mapper_ids = []
+			var $mapper_state = name_state
+			var $mapper_end = peek(name_state).end
+			var $mapper_done = False
+			while !$mapper_done {
+				t = peek($mapper_state)
+				{ state: named_state, node: named_node } = add_node(at_pos($mapper_state, $mapper_state.pos + 1), Identifier, t.start, t.end, [])
+				$mapper_state = named_state
+				$mapper_ids = $mapper_ids.append(named_node)
+				$mapper_end = t.end
+				if spelling($mapper_state, ".") and peek($mapper_state).start == $mapper_end and peek(at_pos($mapper_state, $mapper_state.pos + 1)).kind == UpperIdent {
+					$mapper_state = at_pos($mapper_state, $mapper_state.pos + 1)
+				} else {
+					$mapper_done = True
+				}
+			}
+			# Keep the mapper as a normal qualified identifier tree.
+			var $mapper = $mapper_ids.first() ?? 0
+			var $index = 1.U64
+			while $index < $mapper_ids.len() {
+				field = $mapper_ids.get($index) ?? $mapper
+				{ state: access_state, node: access_node } = add_node($mapper_state, FieldAccess, node_start($mapper_state, $mapper), node_end($mapper_state, field), [$mapper, field])
+				$mapper_state = access_state
+				$mapper = access_node
+				$index = $index + 1
+			}
+			return add_node($mapper_state, RecordBuilder, start, $mapper_end, [$mapper].concat($ids))
+		}
+	}
+	add_node($s, if $extension RecordUpdate else if record Record else Block, start, $end, $ids)
 }
 
 parse_match : State, U64, U64 -> Built
@@ -2796,4 +2862,43 @@ expect {
 expect {
 	# The pinned parser accepts adjacent fields/tags without an explicit comma.
 	["f : {a: U8 b: Str}", "f : [A B]", "f : [A(a) B(b)]", "f : {a ?: U8 b ?: Str}", "f : {a: U8 ?? 1 b: Str}"].all(|source| RocSyntax.parse_str(source).status == Complete)
+}
+
+record_starts_block : State -> Bool
+record_starts_block = |s| {
+	var $pos = s.pos + 2
+	var $nesting = 0.U64
+	var $found = False
+	var $done = False
+	while !$done {
+		t = source_token(s, $pos)
+		if t.kind == EndOfFile {
+			$done = True
+		} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
+			$nesting = $nesting + 1
+		} else if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			if $nesting == 0 {
+				$done = True
+			} else {
+				$nesting = $nesting - 1
+			}
+		} else if $nesting == 0 and t.kind == LowerIdent and token_spelling(s.source, source_token(s, significant_position(s.tokens, $pos + 1)), "=") {
+			$found = True
+			$done = True
+		}
+		$pos = $pos + 1
+	}
+	$found
+}
+
+expect {
+	["{ ..person, age: 31 }", "{ ..person, }", "{ field: _ }", "{ x: 1 }.Foo", "{ x: 1 }.Mod.Foo", "Foo.{ x: 1 }", "mapper.{ ..base, x: 1 }", "Foo.(1)", "Mod.Foo.(1, 2)", "{ x : U64\n x = 1\n x }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["{ ..person }", "{ ..person, x: 1 }.Foo", "0.(1)", "value.(1)", "{ field: _ + 1 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and RocSyntax.parse_str("Foo := {}.{ var x = 1 }").status != Complete
+}
+
+expect {
+	RocSyntax.parse_expr_str("match person { { $name } => $name }").status == Complete
 }
