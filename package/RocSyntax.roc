@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -556,21 +556,9 @@ primary = |s, depth| {
 			add_node(bad, ErrorNode, t.start, t.end, [])
 		}
 		LowerIdent | UpperIdent => add_node(at_pos(s, s.pos + 1), Identifier, t.start, t.end, [])
-		Number => add_node(at_pos(s, s.pos + 1), NumberLiteral, t.start, t.end, [])
-		SingleQuote => add_node(at_pos(s, s.pos + 1), CharacterLiteral, t.start, t.end, [])
-		StringStart => {
-			var $s = at_pos(s, s.pos + 1)
-			var $end = t.end
-			if peek($s).kind == StringPart {
-				$end = peek($s).end
-				$s = at_pos($s, $s.pos + 1)
-			}
-			if peek($s).kind == StringEnd {
-				$end = peek($s).end
-				$s = at_pos($s, $s.pos + 1)
-			}
-			add_node($s, StringLiteral, t.start, $end, [])
-		}
+		Number => literal_suffix(add_node(at_pos(s, s.pos + 1), NumberLiteral, t.start, t.end, []), False)
+		SingleQuote => literal_suffix(add_node(at_pos(s, s.pos + 1), CharacterLiteral, t.start, t.end, []), False)
+		StringStart | MultilineStringStart => parse_string(s, depth + 1)
 		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1)
 		Keyword if spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") => {
 			kind = if spelling(s, "dbg") Debug else if spelling(s, "crash") Crash else Return
@@ -598,7 +586,7 @@ primary = |s, depth| {
 			end = node_end(operand_state, operand_node)
 			add_node(operand_state, Unary, t.start, end, [operand_node])
 		}
-		EndOfFile | CloseRound | CloseSquare | CloseCurly => {
+		EndOfFile | InterpolationEnd | CloseRound | CloseSquare | CloseCurly => {
 			err = issue(s, UnexpectedToken, t.start, t.end)
 			add_node(err, ErrorNode, t.start, t.start, [])
 		}
@@ -840,7 +828,7 @@ statement = |initial, depth| {
 	} else if spelling(s, "var") {
 		name_state = skip_trivia(at_pos(s, s.pos + 1))
 		name = peek(name_state)
-		validated = if depth == 0 or name.kind != LowerIdent or !is_lower(byte(name_state.source, name.start)) issue(name_state, UnexpectedToken, name.start, name.end) else name_state
+		validated = if depth == 0 or name.kind != LowerIdent or !(is_lower(byte(name_state.source, name.start)) or byte(name_state.source, name.start) == '$') issue(name_state, UnexpectedToken, name.start, name.end) else name_state
 		{ state: named_state, node: named_node } = add_node(at_pos(validated, validated.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
 		look = skip_trivia(named_state)
 		if spelling(look, "=") {
@@ -949,7 +937,7 @@ parse_pattern = |initial, alternatives, depth| {
 		} else if spelling($s, "as") {
 			name_state = skip_trivia(at_pos($s, $s.pos + 1))
 			name = peek(name_state)
-			if name.kind == LowerIdent and is_lower(byte(name_state.source, name.start)) {
+			if name.kind == LowerIdent and (is_lower(byte(name_state.source, name.start)) or byte(name_state.source, name.start) == '$') {
 				{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
 				{ state: alias_state, node: alias_node } = add_node(named_state, AliasPattern, t.start, name.end, [first_node, named_node])
 				$s = alias_state
@@ -970,7 +958,7 @@ pattern_primary = |s, alternatives, depth| {
 	} else if spelling(s, "var") {
 		look = skip_trivia(at_pos(s, s.pos + 1))
 		name = peek(look)
-		if name.kind == LowerIdent and is_lower(byte(look.source, name.start)) {
+		if name.kind == LowerIdent and (is_lower(byte(look.source, name.start)) or byte(look.source, name.start) == '$') {
 			{ state: name_state, node: name_node } = add_node(at_pos(look, look.pos + 1), Identifier, name.start, name.end, [])
 			add_node(name_state, MutablePattern, t.start, name.end, [name_node])
 		} else {
@@ -1101,7 +1089,7 @@ pattern_record = |initial, alternatives, depth| {
 			{ state: field_state, node: field_node } = if spelling(look, "..") {
 				name_state = skip_trivia(at_pos(look, look.pos + 1))
 				name = peek(name_state)
-				if name.kind == LowerIdent and is_lower(byte(name_state.source, name.start)) {
+				if name.kind == LowerIdent and (is_lower(byte(name_state.source, name.start)) or byte(name_state.source, name.start) == '$') {
 					{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
 					add_node(named_state, RestPattern, t.start, name.end, [named_node])
 				} else {
@@ -1699,4 +1687,85 @@ expect {
 
 expect {
 	RocSyntax.tokenize_str("0_.1e3").status == Complete and RocSyntax.tokenize_str("a=(0\r.e)\n").status == Recovered and RocSyntax.tokenize_str("a=0\r\n").status == Complete
+}
+
+parse_string : State, U64 -> Built
+parse_string = |initial, depth| {
+	first = peek(initial)
+	multiline = first.kind == MultilineStringStart
+	var $s = at_pos(initial, initial.pos + 1)
+	var $ids = []
+	var $end = first.end
+	var $done = False
+	while !$done {
+		look = if multiline skip_trivia($s) else $s
+		$s = vacant
+		t = peek(look)
+		if t.kind == StringPart {
+			{ state: part_state, node: part_node } = add_node(at_pos(look, look.pos + 1), StringSegment, t.start, t.end, [])
+			$s = part_state
+			$ids = $ids.append(part_node)
+			$end = t.end
+		} else if t.kind == InterpolationStart {
+			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1)
+			after = skip_trivia(value_state)
+			close = peek(after)
+			closed = close.kind == InterpolationEnd
+			validated = if closed at_pos(after, after.pos + 1) else issue(after, UnclosedDelimiter, close.start, close.end)
+			end = if closed close.end else node_end(validated, value_node)
+			{ state: interpolation_state, node: interpolation_node } = add_node(validated, Interpolation, t.start, end, [value_node])
+			$s = interpolation_state
+			$ids = $ids.append(interpolation_node)
+			$end = end
+			if !closed {
+				$done = True
+			}
+		} else if multiline and t.kind == MultilineStringStart {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+		} else if !multiline and t.kind == StringEnd {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else {
+			$s = if multiline look else issue(look, UnclosedString, first.start, $end)
+			$done = True
+		}
+	}
+	literal_suffix(add_node($s, if multiline MultilineStringLiteral else StringLiteral, first.start, $end, $ids), multiline)
+}
+
+# A literal's adjacent .Upper chain names its type, rather than a value field.
+literal_suffix : Built, Bool -> Built
+literal_suffix = |built, allow_trivia| {
+	var $s = built.state
+	var $type_ids = []
+	var $end = node_end($s, built.node)
+	var $done = False
+	while !$done {
+		look = if allow_trivia and $type_ids.is_empty() skip_trivia($s) else $s
+		t = peek(look)
+		name_state = at_pos(look, look.pos + 1)
+		name = peek(name_state)
+		if spelling(look, ".") and (allow_trivia and $type_ids.is_empty() or t.start == $end) and name.kind == UpperIdent and is_upper(byte(name_state.source, name.start)) {
+			{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
+			$s = named_state
+			$type_ids = $type_ids.append(named_node)
+			$end = name.end
+		} else {
+			$done = True
+		}
+	}
+	if $type_ids.is_empty() { state: $s, node: built.node } else {
+		start = node_start($s, built.node)
+		add_node($s, TypedLiteral, start, $end, [built.node].concat($type_ids))
+	}
+}
+
+expect {
+	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "42.U8", "1.0.F64", "'a'.U32", "\"hello\".MyText", "0xFF.Gui.Color"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["\"\${}\"", "\"\${x\"", "\"\${x}", "1 .U8"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
 }

@@ -122,4 +122,8 @@ node_kind_code = |kind| match kind {
 	For => 50
 	ForStream => 51
 	While => 52
+	MultilineStringLiteral => 53
+	StringSegment => 54
+	Interpolation => 55
+	TypedLiteral => 56
 }
