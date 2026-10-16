@@ -60,7 +60,7 @@ def scaling_failures(records, max_ratio):
         prior[family] = record
     return failures
 
-def baseline_failures(records, baseline, max_regression):
+def baseline_failures(records, baseline, max_regression, max_allocation_regression=1.25):
     old = {(r['family'], r['size']): r for r in baseline['records']}
     failures = []
     for record in records:
@@ -68,7 +68,12 @@ def baseline_failures(records, baseline, max_regression):
         if previous and previous['sha256'] == record['sha256']:
             if record['median_ns'] > previous['median_ns'] * max_regression:
                 failures.append({'family': record['family'], 'size': record['size'],
-                                 'ratio': record['median_ns'] / previous['median_ns']})
+                                 'metric': 'median_ns', 'ratio': record['median_ns'] / previous['median_ns']})
+            if 'allocation_calls' in record and 'allocation_calls' in previous:
+                before, after = previous['allocation_calls'], record['allocation_calls']
+                if after > before * max_allocation_regression:
+                    failures.append({'family': record['family'], 'size': record['size'], 'metric': 'allocation_calls',
+                                     'before': before, 'after': after, 'ratio': after / before if before else None})
     return failures
 
 def allocations(binary, data):
@@ -89,6 +94,7 @@ def main(argv=None):
     ap.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp/roc-syntax-bench/results.json')
     ap.add_argument('--baseline', type=Path)
     ap.add_argument('--max-regression', type=float, default=1.5)
+    ap.add_argument('--max-allocation-regression', type=float, default=1.25)
     ap.add_argument('--max-scaling-overhead', type=float, default=1.75, help='allowed time growth beyond byte growth')
     ap.add_argument('--sizes', type=int, nargs='+', default=[256, 512, 1024, 2048])
     ap.add_argument('--document-bytes', type=int, nargs='+', default=[4096, 65536, 262144])
@@ -127,7 +133,7 @@ def main(argv=None):
         baseline = json.loads(args.baseline.read_text())
         if baseline['metadata']['machine'] != metadata['machine'] or baseline['metadata']['compiler'] != metadata['compiler']:
             raise RuntimeError('baseline machine/compiler differs; record a separate baseline')
-        failures += baseline_failures(records, baseline, args.max_regression)
+        failures += baseline_failures(records, baseline, args.max_regression, args.max_allocation_regression)
     if source_hash != hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest():
         raise RuntimeError('candidate source changed during benchmark; rebuild and rerun')
     report = {'metadata': metadata, 'records': records, 'failures': failures}

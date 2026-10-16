@@ -23,3 +23,17 @@ class ScalingTests(unittest.TestCase):
         first=list(bench.corpus((8,16)))
         self.assertEqual(first,list(bench.corpus((8,16))))
         self.assertTrue(any(f=='unclosed' for f,_,_ in first))
+
+    def test_allocation_baseline_regression_fails_with_stable_timing(self):
+        previous=self.records([10])[0]; previous['allocation_calls']=100
+        current={**previous,'allocation_calls':126}
+        failures=bench.baseline_failures([current],{'records':[previous]},1.5)
+        self.assertEqual([f['metric'] for f in failures],['allocation_calls'])
+        self.assertEqual(bench.baseline_failures([current],{'records':[previous]},1.5,1.3),[])
+
+    def test_zero_allocation_baseline_detects_first_allocation(self):
+        previous=self.records([10])[0]; previous['allocation_calls']=0
+        current={**previous,'allocation_calls':1}
+        failures=bench.baseline_failures([current],{'records':[previous]},1.5)
+        self.assertEqual(failures[0]['metric'],'allocation_calls')
+        self.assertIsNone(failures[0]['ratio'])

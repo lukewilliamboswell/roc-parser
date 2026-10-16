@@ -133,7 +133,8 @@
       "mode": "expr",
       "source": "1 2",
       "rule": "trailing",
-      "coverage": "recovery"
+      "coverage": "recovery",
+      "expect_consumed": false
     },
     {
       "id": "unicode",
@@ -260,6 +261,104 @@
       "source": "(1, 2)",
       "rule": "tuples",
       "coverage": "supported"
+    },
+    {
+      "id": "negative-bang",
+      "mode": "expr",
+      "source": "-!h",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "negative-char",
+      "mode": "expr",
+      "source": "-'i'",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "empty-match",
+      "mode": "expr",
+      "source": "match 42 {}",
+      "rule": "matches",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-at-field",
+      "mode": "expr",
+      "source": "person.@",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-tag-file",
+      "mode": "file",
+      "source": "F\n",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-name-file",
+      "mode": "file",
+      "source": "modu\n",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "wildcard-value",
+      "mode": "file",
+      "source": "x = _\n\ny = { a: _ + 1 }",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "header-expression",
+      "mode": "file",
+      "source": "module [1 + 2]",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-number",
+      "mode": "file",
+      "source": "import 123",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-lowercase",
+      "mode": "file",
+      "source": "import lower",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-call",
+      "mode": "file",
+      "source": "import f(1)",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "duplicate-header",
+      "mode": "file",
+      "source": "module []\nmodule []",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "arithmetic-pattern",
+      "mode": "expr",
+      "source": "match x { 1 + 2 => 3 }",
+      "rule": "matches",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-type-literal",
+      "mode": "file",
+      "source": "x : 42",
+      "rule": "type-annotations",
+      "coverage": "unsupported"
     }
   ]
 }

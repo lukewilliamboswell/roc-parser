@@ -273,15 +273,19 @@ def compare(case, actual, expected):
     if contract == 'exploratory' and actual.get('status') in {'Unsupported', 'Limited'}:
         differences.append({'field': 'coverage_gap', 'status': actual['status']})
         return differences
-    for field in ('ok', 'consumed'):
-        if actual.get(field) != expected.get(field):
-            differences.append({'field': field, 'actual': actual.get(field), 'expected': expected.get(field)})
     if contract == 'recovery':
         if actual.get('ok') or expected.get('ok'):
             differences.append({'field': 'recovery_acceptance', 'actual': actual.get('ok'), 'expected': False})
+        if 'expect_consumed' in case:
+            for label, response in [('actual', actual), ('expected', expected)]:
+                if response.get('consumed') != case['expect_consumed']:
+                    differences.append({'field': label + '_consumed', 'actual': response.get('consumed'), 'expected': case['expect_consumed']})
         # Recovery tree placements are implementation-specific. Each worker's
         # bounds/progress invariants still apply; rejection must agree.
         return differences
+    for field in ('ok', 'consumed'):
+        if actual.get(field) != expected.get(field):
+            differences.append({'field': field, 'actual': actual.get(field), 'expected': expected.get(field)})
     if contract == 'supported' and (not actual.get('ok') or not expected.get('ok')):
         differences.append({'field': 'supported_acceptance', 'actual': actual.get('ok'), 'expected': expected.get('ok')})
     for field, projector in [('tokens', normalize_tokens), ('shape', syntax_shape)]:
@@ -326,8 +330,9 @@ def run_cases(cases, probe_command, oracle_command, artifact_dir, timeout=5):
             request = {key: case[key] for key in ('id', 'mode', 'source')}
             record = {'id': case['id'], 'rule': case.get('rule'), 'coverage': case.get('coverage', 'replay'),
                       'source_sha256': hashlib.sha256(case['source'].encode()).hexdigest(), 'request': request}
-            if 'model_shape' in case:
-                record['model_shape'] = case['model_shape']
+            for contract_field in ('model_shape', 'expect_consumed'):
+                if contract_field in case:
+                    record[contract_field] = case[contract_field]
             for name, command in [('actual', probe_command), ('expected', oracle_command)]:
                 try:
                     if name not in workers:
@@ -397,8 +402,9 @@ def main(argv=None):
     if args.replay:
         saved = json.loads(args.replay.read_text())
         cases = [{**saved['request'], 'coverage': saved.get('coverage', 'replay'), 'rule': saved.get('rule')}]
-        if 'model_shape' in saved:
-            cases[0]['model_shape'] = saved['model_shape']
+        for contract_field in ('model_shape', 'expect_consumed'):
+            if contract_field in saved:
+                cases[0][contract_field] = saved[contract_field]
     cases += generated_cases(args.generated, args.seed)
     started = time.monotonic()
     results = run_cases(cases, shlex.split(args.probe_command), shlex.split(args.oracle_command), args.output / 'failures', args.timeout)

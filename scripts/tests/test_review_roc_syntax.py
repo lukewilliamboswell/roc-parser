@@ -82,8 +82,11 @@ class ProjectionTests(unittest.TestCase):
         actual = {'ok':False,'consumed':True,'tokens':[{'kind':'Number','start':0,'end':1},{'kind':'EndOfFile','start':1,'end':1}], 'shape':['partial']}
         expected = {'ok':False,'consumed':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
         self.assertEqual(review.compare({'source':'1','coverage':'recovery'},actual,expected),[])
+        expected['consumed'] = False
+        self.assertEqual(review.compare({'source':'1','coverage':'recovery'},actual,expected),[])
+        self.assertTrue(review.compare({'source':'1','coverage':'recovery','expect_consumed':False},actual,expected))
         expected['ok'] = True
-        self.assertTrue(any(d['field']=='ok' for d in review.compare({'source':'1','coverage':'recovery'},actual,expected)))
+        self.assertTrue(any(d['field']=='recovery_acceptance' for d in review.compare({'source':'1','coverage':'recovery'},actual,expected)))
 
     def test_unsupported_gap_requires_status_and_detects_stale_inventory(self):
         actual = {'status':'Unsupported','ok':False,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
