@@ -528,7 +528,7 @@ expression = |initial, minimum, depth, punned| {
 				optional = spelling(look, ".?")
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
-				valid_name = (field.kind == LowerIdent and (is_lower(byte(field_state.source, field.start)) or byte(field_state.source, field.start) == '$')) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
+				valid_name = (field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
 				valid_index = field.kind == Number and field_state.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
 				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
 					start = node_start(field_state, $left)
@@ -688,11 +688,6 @@ parse_source = |source, mode| {
 				if mode == FileMode or mode == HeaderMode {
 					if ($s.nodes.get(built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
 						$s = issue($s, UnexpectedToken, t.start, node_end($s, built_node))
-					}
-					look_next = skip_trivia($s)
-					end = node_end(look_next, built_node)
-					if peek(look_next).kind != EndOfFile and !line_break(look_next.source, end, peek(look_next).start) {
-						$s = issue($s, UnexpectedToken, peek(look_next).start, peek(look_next).end)
 					}
 				}
 				if $s.pos <= before {
@@ -888,7 +883,7 @@ statement = |initial, depth| {
 	if depth >= 128 {
 		bad = issue(s, ResourceLimit, t.start, t.end)
 		add_node(at_pos(bad, bad.pos + if t.kind == EndOfFile 0 else 1), ErrorNode, t.start, t.end, [])
-	} else if (t.kind == UpperIdent and (depth == 0 or type_declaration_start(s)) and !((following.kind == NoSpaceOpenRound or token_spelling(s.source, following, ".")) and has_pattern_assignment(s))) or (t.kind == LowerIdent and token_spelling(s.source, following, ".") and peek(at_pos(s, following_pos + 1)).kind == UpperIdent) {
+	} else if (t.kind == UpperIdent and (type_declaration_start(s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or token_spelling(s.source, following, ".")) and has_pattern_assignment(s))))) or (t.kind == LowerIdent and token_spelling(s.source, following, ".") and peek(at_pos(s, following_pos + 1)).kind == UpperIdent) {
 		parse_type_declaration(s, depth + 1)
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, "=") {
 		{ state: name_state, node: name_node } = parse_pattern(s, False, depth + 1)
@@ -978,7 +973,7 @@ exposed_collection = |initial| {
 			$s = issue(item_state, UnclosedDelimiter, t.start, t.end)
 			$done = True
 		} else {
-			valid_start = t.kind == UpperIdent or (t.kind == LowerIdent and (is_lower(byte(item_state.source, t.start)) or byte(item_state.source, t.start) == '$'))
+			valid_start = (t.kind == UpperIdent and byte(item_state.source, t.start) != '@') or (t.kind == LowerIdent and (is_lower(byte(item_state.source, t.start)) or byte(item_state.source, t.start) == '$'))
 			validated = if valid_start item_state else issue(item_state, UnexpectedToken, t.start, t.end)
 			{ state: name_state, node: name_node } = add_node(at_pos(validated, validated.pos + 1), Identifier, t.start, t.end, [])
 			var $name = name_node
@@ -987,15 +982,15 @@ exposed_collection = |initial| {
 			var $qualified = t.kind == UpperIdent
 			var $chain_done = False
 			while !$chain_done {
-				if $qualified and spelling($s, ".") and (peek(at_pos($s, $s.pos + 1)).kind == UpperIdent or peek(at_pos($s, $s.pos + 1)).kind == LowerIdent) {
+				if $qualified and spelling($s, ".") and (is_upper(byte($s.source, peek(at_pos($s, $s.pos + 1)).start)) or is_lower(byte($s.source, peek(at_pos($s, $s.pos + 1)).start))) {
 					field_state = at_pos($s, $s.pos + 1)
 					field = peek(field_state)
 					{ state: named_state, node: named_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
 					{ state: access_state, node: access_node } = add_node(named_state, FieldAccess, t.start, field.end, [$name, named_node])
 					$s = skip_trivia(access_state)
 					$name = access_node
-					$upper = field.kind == UpperIdent
-					$qualified = $upper
+					$upper = True
+					$qualified = True
 				} else {
 					$chain_done = True
 				}
@@ -1963,10 +1958,6 @@ curly = |initial, start, depth, punned, forced| {
 				$ids = $ids.append(item_node)
 				$end = node_end(item_state, item_node)
 				$s = item_state
-				look_next = skip_trivia($s)
-				if peek(look_next).kind != CloseCurly and peek(look_next).kind != EndOfFile and !line_break(look_next.source, $end, peek(look_next).start) {
-					$s = issue($s, UnexpectedToken, peek(look_next).start, peek(look_next).end)
-				}
 			}
 			if $s.pos <= before {
 				$s = at_pos($s, before + 1)
@@ -2921,4 +2912,12 @@ expect {
 			},
 		),
 	)
+}
+
+expect {
+	["x = 1 y = 2", "main!=|0|\"\"_=\"\"", "C(_,b):()D:C(a,b)E:{b:r}F:e r={(){}}", "module[E.a.*]"].all(|source| RocSyntax.parse_str(source).status == Complete) and RocSyntax.parse_expr_str("{1 2}").status == Complete
+}
+
+expect {
+	["module[Foo.bar as lower]", "module[Foo._]", "module[Foo._a]", "module[Foo.$bar]"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("x.$field").status != Complete
 }
