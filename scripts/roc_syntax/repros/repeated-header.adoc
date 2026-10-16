@@ -1,5 +1,7 @@
 = Repeated native entrypoint calls change generated text
 
+Reported upstream as https://github.com/roc-lang/roc/issues/12328[Roc #12328].
+
 `repeated-header.roc` is a standalone deterministic text generator reduced from
 the CSV property target. Its only dependency is pinned roc-fuzz 0.4.3; it imports
 no CSV parser or roc-parser package modules. This is a correctness reproduction,

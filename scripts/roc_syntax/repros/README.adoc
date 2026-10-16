@@ -1,7 +1,8 @@
 = Local Roc ownership reproduction
 
-This is a reviewable local compiler report and experiment, not a published
-issue. It does not change the parser or establish its performance target.
+Reported upstream as https://github.com/roc-lang/roc/issues/12327[Roc #12327].
+This local reproduction does not change the parser or establish its performance
+target.
 
 == Observed behavior
 
@@ -189,10 +190,10 @@ It contains no machine-specific filesystem paths. The installed nightly's LIR
 excerpt above was not assumed to describe main's generated LIR: the main
 conclusion here comes from fresh native measurements and exact model checks.
 
-== Unpublished issue draft
+== Upstream report
 
-Suggested title: *Nested recursive result retains builder arrays and prevents
-unique append reuse*.
+https://github.com/roc-lang/roc/issues/12327[Roc #12327: ARC: nested recursive result retains builder arrays and prevents unique append reuse]
+contains the reproduction, independent controls, compiler versions and receipts.
 
 The attached `ownership-nesting.roc` builds the same postorder binary tree in
 two functions with identical arguments. Returning `{cursor, builder, node}`
@@ -211,5 +212,8 @@ ownership. Earlier destruction of unused builder fields appears possible, but
 the responsible compiler pass has not been established. This is a request to
 investigate missed ownership reuse; no incorrect Roc values were observed.
 
-Use the reproduction commands and retained receipts above when preparing an
-upstream report. This draft has not been submitted or published.
+Use the reproduction commands and retained receipts above when checking an
+upstream fix. The separate repeated-entrypoint correctness report is retained
+in `repeated-header.adoc` and tracked as
+https://github.com/roc-lang/roc/issues/12328[Roc #12328]; a shared cause has not
+been established.
