@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shlex
@@ -26,6 +27,13 @@ def positive(value: str) -> int:
     number = int(value)
     if number < 1:
         raise argparse.ArgumentTypeError("must be positive")
+    return number
+
+
+def positive_ratio(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be finite and positive")
     return number
 
 
@@ -58,6 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fuzz-runs", type=positive, default=2000)
     parser.add_argument("--skip-fuzz", action="store_true", help="omit campaigns already run separately")
     parser.add_argument("--allocations", action="store_true", help="also build/run the allocation probe")
+    parser.add_argument("--reference-performance", choices=("smoke", "full"),
+                        help="optional compiler speed comparison; smoke checks protocol only, full applies the local ratio ratchet")
+    parser.add_argument("--max-reference-ratio", type=positive_ratio, default=64)
     parser.add_argument("--baseline", type=Path, help="performance baseline from this machine/compiler")
     args = parser.parse_args(argv)
     roc = resolve_command(args.roc)
@@ -72,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
                 "fuzz_omitted": args.skip_fuzz, "allocations": args.allocations, "steps": []}
     manifest["generation_budgets"] = {key: getattr(args, key) for key in
                                       ("expression_depth", "pattern_depth", "type_depth", "statements")}
+    manifest["reference_performance"] = args.reference_performance
+    manifest["max_reference_ratio"] = args.max_reference_ratio
 
     def save() -> None:
         (output / "validation.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -168,6 +181,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.baseline:
             benchmark += ["--baseline", str(args.baseline.resolve())]
         step("performance", benchmark)
+        if args.reference_performance:
+            reference = Path(step("performance-oracle-build", [sys.executable, "scripts/roc_syntax/build_oracle.py",
+                             "--zig", zig, "--roc-repo", str(corpus_repo), "--optimize", "ReleaseFast",
+                             "--cache-dir", str(output / "performance-oracle")]).stdout.strip())
+            comparison = [sys.executable, "scripts/compare_roc_syntax_performance.py", "--roc", roc,
+                          "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(reference)),
+                          "--max-reference-ratio", str(args.max_reference_ratio),
+                          "--output", str(output / "reference-performance")]
+            if args.reference_performance == "smoke":
+                comparison += ["--smoke"]
+            step("reference-performance", comparison)
         if source_identity(ROOT) != manifest["source_sha256"]:
             raise ValueError("Candidate sources changed during validation; rerun against a stable revision.")
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

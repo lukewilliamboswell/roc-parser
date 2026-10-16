@@ -191,10 +191,10 @@ jobs:
           restore-keys: fuzz-${{ runner.os }}-roc-syntax-raw-${{ steps.roc-version.outputs.nightly-tag }}-
       - name: Validate syntax and scaling
         if: (github.event_name == 'pull_request' || inputs.nightly_validation)
-        run: python3 scripts/check_roc_syntax.py --skip-fuzz
+        run: python3 scripts/check_roc_syntax.py --skip-fuzz --reference-performance smoke
       - name: Explore syntax with a new reproducible seed
         if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
-        run: python3 scripts/check_roc_syntax.py --seed "$GITHUB_RUN_ID" --generated 10000 --mutation-runs 10000
+        run: python3 scripts/check_roc_syntax.py --seed "$GITHUB_RUN_ID" --generated 10000 --mutation-runs 10000 --reference-performance smoke
       - name: Upload syntax validation evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
