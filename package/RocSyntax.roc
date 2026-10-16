@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, Suffix, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -420,22 +420,24 @@ expression = |initial, minimum, depth| {
 				$left = suffix_node
 				$qualified = False
 			} else if t.kind == NoSpaceOpenRound {
+				validated = if contains_optional_access(look, $left) issue(look, UnexpectedToken, t.start, t.end) else look
 				start = node_start(look, $left)
-				{ state: args_state, ids: args_ids, end: args_end, comma: _ } = collection(at_pos(look, look.pos + 1), CloseRound, depth + 1)
+				{ state: args_state, ids: args_ids, end: args_end, comma: _ } = collection(at_pos(validated, validated.pos + 1), CloseRound, depth + 1)
 				ids = [$left].concat(args_ids)
 				{ state: call_state, node: call_node } = add_node(args_state, Call, start, args_end, ids)
 				$s = call_state
 				$left = call_node
 				$qualified = False
-			} else if spelling(look, ".") {
+			} else if spelling(look, ".") or spelling(look, ".?") {
+				optional = spelling(look, ".?")
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
 				valid_name = (field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
 				valid_index = field.kind == Number and field_state.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
-				if valid_name or valid_index {
+				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
 					start = node_start(field_state, $left)
 					{ state: leaf_state, node: leaf_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
-					{ state: access_state, node: access_node } = add_node(leaf_state, FieldAccess, start, field.end, [$left, leaf_node])
+					{ state: access_state, node: access_node } = add_node(leaf_state, if optional OptionalFieldAccess else FieldAccess, start, field.end, [$left, leaf_node])
 					$s = access_state
 					$left = access_node
 					$qualified = $qualified and field.kind == UpperIdent
@@ -531,6 +533,14 @@ primary = |s, depth| {
 			add_node($s, StringLiteral, t.start, $end, [])
 		}
 		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1)
+		Keyword if spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") => {
+			kind = if spelling(s, "dbg") Debug else if spelling(s, "crash") Crash else Return
+			{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
+			end = node_end(value_state, value_node)
+			add_node(value_state, kind, t.start, end, [value_node])
+		}
+		Keyword if spelling(s, "break") => add_node(at_pos(s, s.pos + 1), Break, t.start, t.end, [])
+		Punctuation if spelling(s, "...") => add_node(at_pos(s, s.pos + 1), Ellipsis, t.start, t.end, [])
 		Keyword if spelling(s, "if") => parse_if(at_pos(s, s.pos + 1), t.start, depth + 1)
 		Keyword if spelling(s, "match") => parse_match(at_pos(s, s.pos + 1), t.start, depth + 1)
 		Operator if spelling(s, "|") => parse_lambda(at_pos(s, s.pos + 1), t.start, depth + 1)
@@ -1262,4 +1272,35 @@ expect {
 expect {
 	tokens = RocSyntax.tokenize_bytes([0xFF, 0x22])
 	tokens.status == Recovered and !tokens.diagnostics.is_empty() and tokens.source == [0xFF, 0x22] and RocSyntax.highlight_category(Comment) == CommentText and RocSyntax.highlight_category(UpperIdent) == TypeName
+}
+
+expect {
+	["dbg 1 + 2", "crash \"failed\"", "return f(1)", "break", "...", "value.?field", "value.?field.other?"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)", "value.?field.other(1)"].all(|source| RocSyntax.parse_expr_str(source).status == Recovered)
+}
+
+# Calling a field chain that includes optional access requires explicit grouping.
+contains_optional_access : State, U64 -> Bool
+contains_optional_access = |s, root| {
+	var $id = root
+	var $found = False
+	var $done = False
+	while !$done {
+		match s.nodes.get($id) {
+			Ok(n) if n.kind == OptionalFieldAccess => {
+				$found = True
+				$done = True
+			}
+			Ok(n) if n.kind == FieldAccess => {
+				$id = s.children.get(n.children_start) ?? s.nodes.len()
+			}
+			_ => {
+				$done = True
+			}
+		}
+	}
+	$found
 }

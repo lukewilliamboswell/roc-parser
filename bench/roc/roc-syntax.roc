@@ -96,4 +96,10 @@ node_kind_code = |kind| match kind {
 	Parenthesized => 27
 	ErrorNode => 28
 	UnsupportedNode => 29
+	OptionalFieldAccess => 30
+	Debug => 31
+	Crash => 32
+	Return => 33
+	Break => 34
+	Ellipsis => 35
 }
