@@ -89,9 +89,19 @@ ORACLE_BINARY=/path/to/roc-syntax-oracle python3 -m unittest discover \
   -s scripts/roc_syntax/oracle -p 'test_*.py'
 ```
 
+Common expression projections additionally include `lambda` (raw pattern text and
+body), `if` (condition and branches), `match` (scrutinee and pattern/body pairs),
+`record` (ordered field-name/value pairs), `block` (ordered expression and definition
+RHS shapes), nested `field` paths and method calls projected as calls of fields.
+Uppercase tag values project as identifiers; token categories retain their case.
+Optional fields, guarded matches, record extensions, qualified names, and block
+statements outside definitions/expressions remain explicit unsupported projections.
+
 The live contract test sends multiple requests to one process, validates numeric
 and addition structures from the pinned compiler's `expr_int_simple.md` and
 `expr/binop_simple_add.md` snapshots, checks precedence and left associativity,
 then checks rejected trailing input, a module definition, malformed input,
 grouping, lists, strings and unary operators.
+Additional live cases cover lambda/if/match, records and shorthand fields, block
+definitions, chained field access, method calls and uppercase tags.
 The archive tests run without a worker binary.

@@ -90,6 +90,28 @@ class WorkerTests(unittest.TestCase):
             for token in row["tokens"]:
                 self.assertLessEqual(token["start"], token["end"])
 
+    def test_common_expression_projections(self):
+        cases = [
+            ("True", ["identifier", "True"]),
+            ("|x| x + 1", ["lambda", ["x"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]),
+            ("if True { 1 } else { 2 }", ["if", ["identifier", "True"], ["block", [["number", "1"]]], ["block", [["number", "2"]]]]),
+            ("{name: 1}", ["record", [["name", ["number", "1"]]]]),
+            ("{name,}", ["record", [["name", ["identifier", "name"]]]]),
+            ("{x = 1\nx + 1}", ["block", [["number", "1"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]]),
+            ("point.x", ["field", ["identifier", "point"], "x"]),
+            ("point.x.y", ["field", ["field", ["identifier", "point"], "x"], "y"]),
+            ("point.move(1)", ["call", ["field", ["identifier", "point"], "move"], [["number", "1"]]]),
+            ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [["A", ["number", "1"]], ["B", ["number", "2"]]]]),
+        ]
+        requests = "".join(json.dumps({"id": str(i), "mode": "expr", "source": source}) + "\n" for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ["ORACLE_BINARY"]], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row["ok"], row["diagnostics"])
+                self.assertEqual(row["facts"][0]["shape"], expected)
+
 
 if __name__ == "__main__":
     unittest.main()
