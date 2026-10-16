@@ -1,0 +1,964 @@
+{
+  "version": 1,
+  "syntax": "current-zig",
+  "reference_commit": "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5",
+  "coverage": [
+    "types/annotation",
+    "types/declaration",
+    "types/where"
+  ],
+  "cases": [
+    {
+      "id": "types/annotation/417cf521cf2a",
+      "mode": "file",
+      "source": "f : a",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/383b56376de2",
+      "mode": "file",
+      "source": "f : U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/62474fcd584a",
+      "mode": "file",
+      "source": "f : _",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/4112ae5376f2",
+      "mode": "file",
+      "source": "f : _a",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/44111eb99854",
+      "mode": "file",
+      "source": "f : A.B",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b08d080a1f27",
+      "mode": "file",
+      "source": "f : A.b",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/76a19c07c40e",
+      "mode": "file",
+      "source": "f : a.A(b)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/f4ab12b0e499",
+      "mode": "file",
+      "source": "f : List(U8)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/92a0272923bc",
+      "mode": "file",
+      "source": "f : List(a,b -> c)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/109bb98ea2bf",
+      "mode": "file",
+      "source": "f : List(a -> b)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/a9bcaf520273",
+      "mode": "file",
+      "source": "f : a(b)",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/f8dbfbfa6d07",
+      "mode": "file",
+      "source": "f : A ()",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/264224ce47af",
+      "mode": "file",
+      "source": "f : A(1)",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/2e2e7525d03c",
+      "mode": "file",
+      "source": "f : 0",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/de288bba492e",
+      "mode": "file",
+      "source": "f : [1]",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/d2ffb02ae359",
+      "mode": "file",
+      "source": "f : a -> b -> c",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/70ba0971991e",
+      "mode": "file",
+      "source": "f : a -> (b -> c)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b8f8038504d2",
+      "mode": "file",
+      "source": "f : a,b -> c",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/9a77d5207145",
+      "mode": "file",
+      "source": "f : (a,b) -> c",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/ea49a7fdf52c",
+      "mode": "file",
+      "source": "f : (a,b -> c)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/4b7de4d46105",
+      "mode": "file",
+      "source": "f : () -> a",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b22f6b48aedc",
+      "mode": "file",
+      "source": "f : ()",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/111530f0bd5b",
+      "mode": "file",
+      "source": "f : (a,)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/fe470d4a50d9",
+      "mode": "file",
+      "source": "f : (->a)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/f1c9422f88ec",
+      "mode": "file",
+      "source": "f : {a: U8,b:Str}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/a21a0ef0d8dd",
+      "mode": "file",
+      "source": "f : {a: U8, ..}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/e2abd7b4e46b",
+      "mode": "file",
+      "source": "f : {a: U8, ..,}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/e0f1a2700a45",
+      "mode": "file",
+      "source": "f : {a: U8, ..ext}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/feaf3a3995f7",
+      "mode": "file",
+      "source": "f : {a: U8, .._ext}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/279db0775467",
+      "mode": "file",
+      "source": "f : {a: U8, .._}",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/1e87570a84bf",
+      "mode": "file",
+      "source": "f : [A,..]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/6f322aaba7db",
+      "mode": "file",
+      "source": "f : [A,..,]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/463530e67c49",
+      "mode": "file",
+      "source": "f : [A,..r]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/691fe9d247f0",
+      "mode": "file",
+      "source": "f : [a,U8]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/cf8db07121a2",
+      "mode": "file",
+      "source": "f : []",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5efaa1c4c8a0",
+      "mode": "file",
+      "source": "f : {}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/9e1e867302bc",
+      "mode": "file",
+      "source": "f : {a: U8 ?? 1}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/9b3745fbf0c4",
+      "mode": "file",
+      "source": "f : {a ?: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/04f960a979f7",
+      "mode": "file",
+      "source": "f : {_: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/cba7eb31cbc2",
+      "mode": "file",
+      "source": "f : {_ ?: U8}",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/e8db320c4e32",
+      "mode": "file",
+      "source": "f : {a:?U8}",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/4256c3234a14",
+      "mode": "file",
+      "source": "f : [A(a),B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b832c15e5ba4",
+      "mode": "file",
+      "source": "f : {a: (a,b -> c), b: List(U8)}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/666656529856",
+      "mode": "file",
+      "source": "f : U8 => Str",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5729807fd82b",
+      "mode": "file",
+      "source": "f : A.B(C(D))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/a52c1d2219bb",
+      "mode": "file",
+      "source": "f : A. B",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/9ce9a6701b38",
+      "mode": "file",
+      "source": "f : A .B",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/51264a111836",
+      "mode": "file",
+      "source": "f : @Foo",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/8fb626ddd011",
+      "mode": "file",
+      "source": "f : __",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/0419abce2477",
+      "mode": "file",
+      "source": "f : [A,..r,B]",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/1c46581307fc",
+      "mode": "file",
+      "source": "f : {a:U8,..r,b:Str}",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/121236750186",
+      "mode": "file",
+      "source": "f : a,b",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/26781af4cb06",
+      "mode": "file",
+      "source": "f : [a -> b, c]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/4a93fb6f4de7",
+      "mode": "file",
+      "source": "Foo : List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/a4950f1906ac",
+      "mode": "file",
+      "source": "Foo := List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/f82cb867ad1b",
+      "mode": "file",
+      "source": "Foo :: List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/30f953ce9680",
+      "mode": "file",
+      "source": "Foo = List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/77205e1fe7aa",
+      "mode": "file",
+      "source": "Foo(a,_b,_) : List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/107a1760078c",
+      "mode": "file",
+      "source": "Foo(a,_b,_) := List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/be87d632a202",
+      "mode": "file",
+      "source": "Foo(a,_b,_) :: List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/25f40c6a239f",
+      "mode": "file",
+      "source": "Foo(a,_b,_) = List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/fd3dfb18d18f",
+      "mode": "file",
+      "source": "Foo () : List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/659c6d28174c",
+      "mode": "file",
+      "source": "Foo () := List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/d553dc50e2f3",
+      "mode": "file",
+      "source": "Foo () :: List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/29f5c3103459",
+      "mode": "file",
+      "source": "Foo () = List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/ad9051b6ec99",
+      "mode": "file",
+      "source": "Foo(U8) : List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/caf455b1d219",
+      "mode": "file",
+      "source": "Foo(U8) := List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/cf5073efa79f",
+      "mode": "file",
+      "source": "Foo(U8) :: List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/c58d68b41c2f",
+      "mode": "file",
+      "source": "Foo(U8) = List(a)",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/b0f8778e1af1",
+      "mode": "file",
+      "source": "Foo(a b) : List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/8dfeb326101c",
+      "mode": "file",
+      "source": "Foo(a b) := List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/57185f68ce77",
+      "mode": "file",
+      "source": "Foo(a b) :: List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/d0994da4b8e0",
+      "mode": "file",
+      "source": "Foo(a b) = List(a)",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/declaration/9f0f056c011d",
+      "mode": "file",
+      "source": "Foo := U8.{x = 1}",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/d36dd101c647",
+      "mode": "file",
+      "source": "Foo :: U8.{ x : U8\nx = 1 }",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/85ffecfd225c",
+      "mode": "file",
+      "source": "Foo : U8.{x = 1}",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/08c2ec8e2c84",
+      "mode": "file",
+      "source": "f : a -> b where [a.to_b : a -> b]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/cca79e8acfa0",
+      "mode": "file",
+      "source": "f : a -> b where [a.Foo]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/57fd5b1689a2",
+      "mode": "file",
+      "source": "f : a -> b where [a.Foo(b), b.Bar]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/5d8556b07521",
+      "mode": "file",
+      "source": "f : a -> b where [a.to_b : a -> b,b.foo : b -> U8]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/83f9949dcde3",
+      "mode": "file",
+      "source": "f : a -> b where []",
+      "rule": "types/where",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/166715cd8386",
+      "mode": "file",
+      "source": "f : U8 where [x]",
+      "rule": "types/where",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/2c149d4f969e",
+      "mode": "file",
+      "source": "f : U8 where [_a.foo : U8]",
+      "rule": "types/where",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/4db8ad318c6e",
+      "mode": "file",
+      "source": "f : U8 where [a.foo : U8,]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/14ebe63cbc51",
+      "mode": "file",
+      "source": "f : U8 where [a.Foo : U8]",
+      "rule": "types/where",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/3f24e76e80c6",
+      "mode": "file",
+      "source": "a.Sort : where [a.order : a,a -> [Before, Same, After]]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/af026bd222e6",
+      "mode": "file",
+      "source": "a.Sort(b) : where [a.foo : a -> b]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/c9e67d45de5c",
+      "mode": "file",
+      "source": "a.Sort := where [a.foo : a]",
+      "rule": "types/where",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/2ecca00fbf29",
+      "mode": "file",
+      "source": "Foo : U8 where [a.f : a -> U8]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/where/1693c21ee2d0",
+      "mode": "file",
+      "source": "Foo := U8 where [a.f : a -> U8]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/ae4a96bb20a7",
+      "mode": "file",
+      "source": "f = { Foo : U8\n Foo }",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/8179943253ce",
+      "mode": "file",
+      "source": "f = { Foo(1) }",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/fd35d3fe4847",
+      "mode": "file",
+      "source": "Some(x) = value",
+      "rule": "types/declaration",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/c155985f6107",
+      "mode": "file",
+      "source": "f : List(a)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/f214f7844d96",
+      "mode": "file",
+      "source": "f : [a,B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/afab7f26add8",
+      "mode": "file",
+      "source": "f : {a: a, b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/556677ace890",
+      "mode": "file",
+      "source": "f : (a)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/d6d271b14c97",
+      "mode": "file",
+      "source": "f : a -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/2c2851a688a1",
+      "mode": "file",
+      "source": "f : U8 -> (a)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/58e6b1f1cba3",
+      "mode": "file",
+      "source": "f : [U8,B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/3b348e6f3e64",
+      "mode": "file",
+      "source": "f : {a: U8, b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/ade9a9a09d3a",
+      "mode": "file",
+      "source": "f : (U8)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5f685f5cc1bf",
+      "mode": "file",
+      "source": "f : U8 -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b22d13d57c49",
+      "mode": "file",
+      "source": "f : U8 -> (U8)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/d9df39d1893f",
+      "mode": "file",
+      "source": "f : List((a,b))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/50e2cfebe787",
+      "mode": "file",
+      "source": "f : [(a,b),B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/87f674685d9b",
+      "mode": "file",
+      "source": "f : {a: (a,b), b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/bde34e486769",
+      "mode": "file",
+      "source": "f : ((a,b))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/801c94c7c0bb",
+      "mode": "file",
+      "source": "f : (a,b) -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/0b77f0087dff",
+      "mode": "file",
+      "source": "f : U8 -> ((a,b))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/8522cbf92cea",
+      "mode": "file",
+      "source": "f : List(List(a))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/820762336762",
+      "mode": "file",
+      "source": "f : [List(a),B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/6c7f764b3320",
+      "mode": "file",
+      "source": "f : {a: List(a), b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/7411ea3b49e8",
+      "mode": "file",
+      "source": "f : (List(a))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/409e89c46e73",
+      "mode": "file",
+      "source": "f : List(a) -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/9039e28409f8",
+      "mode": "file",
+      "source": "f : U8 -> (List(a))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/cd3aa08ddf00",
+      "mode": "file",
+      "source": "f : List({a: U8})",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/6b8b7b3394e3",
+      "mode": "file",
+      "source": "f : [{a: U8},B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b5a011c43f1e",
+      "mode": "file",
+      "source": "f : {a: {a: U8}, b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/a6915adcccba",
+      "mode": "file",
+      "source": "f : ({a: U8})",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/09d381e7c2e8",
+      "mode": "file",
+      "source": "f : {a: U8} -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5b57d40223b2",
+      "mode": "file",
+      "source": "f : U8 -> ({a: U8})",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/7b0494db8131",
+      "mode": "file",
+      "source": "f : List([A,B])",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/302151009678",
+      "mode": "file",
+      "source": "f : [[A,B],B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/bf0375b4987a",
+      "mode": "file",
+      "source": "f : {a: [A,B], b: U8}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/448cd1d87966",
+      "mode": "file",
+      "source": "f : ([A,B])",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/7bd2101ff61b",
+      "mode": "file",
+      "source": "f : [A,B] -> U8",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/69213c1a4076",
+      "mode": "file",
+      "source": "f : U8 -> ([A,B])",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/36e697357ab0",
+      "mode": "file",
+      "source": "f : {a: U8 b: Str}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/3c0dec673e9c",
+      "mode": "file",
+      "source": "f : [A B]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5d2458cf8e4e",
+      "mode": "file",
+      "source": "f : [A(a) B(b)]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b51c73addaf9",
+      "mode": "file",
+      "source": "f : {a ?: U8 b ?: Str}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/087697e11750",
+      "mode": "file",
+      "source": "f : {a: U8 ?? 1 b: Str}",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/b020028cc71e",
+      "mode": "file",
+      "source": "f : _a.A",
+      "rule": "types/annotation",
+      "coverage": "recovery"
+    },
+    {
+      "id": "types/where/11a9b284538c",
+      "mode": "file",
+      "source": "Holder := {}.{ a.Show : where [a.to_str : a -> Str] }\nf : a -> Str where [a .Holder .Show]",
+      "rule": "types/where",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/declaration/ada20dc125da",
+      "mode": "file",
+      "source": "Foo := [A].{x = 1\nx}",
+      "rule": "types/declaration",
+      "coverage": "recovery"
+    }
+  ]
+}
