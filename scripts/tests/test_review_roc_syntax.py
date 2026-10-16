@@ -68,6 +68,32 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_compact_header_keyword_is_lexical(self):
+        response = {'nodes': [
+            {'kind': 'Dependencies', 'start': 5, 'end': 7, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Header', 'start': 0, 'end': 7, 'children_start': 0, 'children_len': 1},
+            {'kind': 'File', 'start': 0, 'end': 7, 'children_start': 1, 'children_len': 1},
+        ], 'children': [0, 1], 'root': 2, 'tokens': [{'kind': 'Keyword', 'start': 0, 'end': 3}]}
+        self.assertEqual(review.syntax_shape(response, 'app[]{}'), [['header', 'app', [['dependencies', []]]]])
+
+    def test_alias_with_variable_body_and_where_is_not_where_alias(self):
+        def node(kind, start, end, child_start=0, child_len=0):
+            return {'kind': kind, 'start': start, 'end': end, 'children_start': child_start, 'children_len': child_len}
+        response = {'nodes': [
+            node('TypeName', 0, 1), node('TypeHeader', 0, 1, 0, 1), node('TypeVariable', 2, 3),
+            node('TypeVariable', 10, 11), node('Identifier', 12, 13), node('TypeVariable', 14, 15),
+            node('WhereMethod', 10, 15, 1, 3), node('WhereClause', 4, 16, 4, 1), node('TypeDeclaration', 0, 16, 5, 3),
+        ], 'children': [0, 3, 4, 5, 6, 1, 2, 7], 'root': 8, 'tokens': [
+            {'kind': kind, 'start': start, 'end': end}
+            for kind, start, end in [('UpperIdent', 0, 1), ('Punctuation', 1, 2), ('LowerIdent', 2, 3),
+                                     ('Keyword', 4, 9), ('OpenSquare', 9, 10), ('LowerIdent', 10, 11),
+                                     ('Punctuation', 11, 12), ('LowerIdent', 12, 13), ('Punctuation', 13, 14),
+                                     ('LowerIdent', 14, 15), ('CloseSquare', 15, 16)]
+        ]}
+        projected = review.syntax_shape(response, 'A:a where[a.f:a]')
+        self.assertEqual(projected, ['type_decl', 'alias', ['type_header', 'A', []], ['t_var', 'a'],
+                                     ['where', [['where_method', ['t_var', 'a'], 'f', ['t_var', 'a']]]], None])
+
     def test_type_function_effect_comes_from_arrow_token(self):
         response = {'nodes': [
             {'kind': 'TypeVariable', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
@@ -85,7 +111,7 @@ class ProjectionTests(unittest.TestCase):
         response = {'nodes': [
             {'kind': 'Header', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 0},
             {'kind': 'File', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 1},
-        ], 'children': [0], 'root': 1}
+        ], 'children': [0], 'root': 1, 'tokens': [{'kind': 'Keyword', 'start': 0, 'end': 7}]}
         self.assertEqual(review.syntax_shape(response, 'package []'), [['header', 'package', [['dependencies', []]]]])
 
     def test_fixture_loader_accepts_direct_header_statement_and_repl_modes(self):

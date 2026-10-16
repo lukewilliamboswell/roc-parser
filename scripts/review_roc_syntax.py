@@ -247,7 +247,8 @@ def syntax_shape(response, source):
             hi = bisect.bisect_left(token_starts, nodes[ids[1]]['start'])
             spellings = {raw[token['start']:token['end']] for token in source_tokens[lo:hi] if token['kind'] in {'Operator', 'Punctuation'}}
             declaration_kind = 'nominal' if b':=' in spellings else 'opaque' if b'::' in spellings else 'alias'
-            if nodes[ids[1]]['kind'] == 'TypeVariable' and len(branch) > 2 and branch[2][0] == 'where':
+            first_token = source_tokens[bisect.bisect_left(token_starts, node['start'])]
+            if first_token['kind'] == 'LowerIdent':
                 declaration_kind = 'where_alias'
             where = next((item for item in branch[2:] if item[0] == 'where'), None)
             associated = next((item for item in branch[2:] if item[0] == 'associated'), None)
@@ -262,7 +263,8 @@ def syntax_shape(response, source):
         if kind == 'While':
             return ['while', *branch]
         if kind == 'Header':
-            keyword = text.split(None, 1)[0] if text.strip() else 'type_module'
+            first_token = source_tokens[bisect.bisect_left(token_starts, node['start'])] if text.strip() else None
+            keyword = raw[first_token['start']:first_token['end']].decode() if first_token else 'type_module'
             if keyword in {'app', 'package'} and (not branch or branch[-1][0] != 'dependencies'):
                 branch.append(['dependencies', []])
             return ['header', keyword, branch]
