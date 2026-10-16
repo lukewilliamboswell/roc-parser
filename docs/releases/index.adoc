@@ -21,6 +21,11 @@ notice.
 Earlier releases are described on the
 {repo}/releases[roc-parser GitHub releases page].
 
+== Release candidates
+
+* {repo}/releases/tag/2.1.0-rc.1[2.1.0-rc.1]: current Roc syntax tooling for downstream testing,
+  with performance optimization continuing on the feature branch.
+
 == Unreleased
 
 `RocSyntax` adds source-backed tokens and a tolerant indexed syntax tree for
