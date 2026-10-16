@@ -71,41 +71,107 @@ AsciiDocInline :: [].{
 	}
 }
 
+# Experimental ownership boundary: formatting/reference context cannot retain
+# the dynamic dictionaries or note collections owned by the mutation phases.
+RenderContext : { emitted_footnotes : List(U64), refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str) }
+
+assemble_state : RenderContext, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> AsciiDocInline.State
+assemble_state = |context, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count| {
+	{ emitted_footnotes: context.emitted_footnotes, refs: context.refs, ref_index: context.ref_index, indexed_ref_count: context.indexed_ref_count, snapshot: context.snapshot, snapshot_index: context.snapshot_index, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count }
+}
+
 render_state_fixed : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
 render_state_fixed = |input, attrs, options, state, prepared| {
-	prior_notes = state.footnotes.len()
+	# Explicit substitution stages and passthroughs retain their existing path.
+	# The common normal pipeline owns each growing collection independently.
+	if prepared or (options.subs != "normal" and options.subs != "n") {
+		render_state_conservative(input, attrs, options, state, prepared)
+	} else if !needs_substitutions(input, normal) {
+		# Plain input still updates source snapshots and caller-supplied refs,
+		# without paying the passthrough eligibility scans.
+		render_plain_normal(input, attrs, state)
+	} else if pass_needed(input, normal) {
+		render_state_conservative(input, attrs, options, state, prepared)
+	} else {
+		render_normal_owned(input, attrs, state)
+	}
+}
+
+render_plain_normal : Str, List({ name : Str, value : Str }), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
+render_plain_normal = |input, attrs, state| {
 	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
-	original = { ..(if options.subs == "normal" or options.subs == "n" normal else groups(options.subs)), ref_index: indexed.ref_index }
-	refreshed = refresh_state(attrs, indexed)
-	if !needs_substitutions(input, original) {
-		return { html: input, state: refreshed }
+	{ html: input, state: refresh_state(attrs, indexed) }
+}
+
+# The caller has checked that substitutions are needed and source passthroughs
+# are absent. Keep registry ownership within this path through mutation.
+render_normal_owned : Str, List({ name : Str, value : Str }), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
+render_normal_owned = |input, attrs, state| {
+	{ attributes: incoming_attributes, removed: incoming_removed, tag_prefix: incoming_prefix, footnotes: incoming_notes, note_index: incoming_names, indexed_note_count: incoming_note_count, emitted_footnotes, refs, ref_index: incoming_refs, indexed_ref_count, snapshot: incoming_snapshot, snapshot_index: incoming_snapshot_index } = state
+	{ attributes, removed, snapshot, snapshot_index } = refresh_owned_attributes(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_snapshot_index)
+	ref_index = if indexed_ref_count == refs.len() incoming_refs else refs.fold(Dict.empty(), |found, ref| if found.contains(ref.id) found else found.insert(ref.id, ref.text))
+	context = { emitted_footnotes, refs, ref_index, indexed_ref_count: refs.len(), snapshot, snapshot_index }
+	g = { ..normal, ref_index }
+	prior_notes = incoming_notes.len()
+	# pass_needed was checked before entering this path. Ordinary formatting
+	# reads the cached delimiter alone; it never borrows a registry container.
+	before = if quote_needed(input, g) quote_prefixed(input, attrs, g, incoming_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
+	{ source: mutated_source, context: mutated_context, attributes: mutated_attributes, removed: mutated_removed, tag_prefix, footnotes: mutated_notes, note_index: mutated_names, indexed_note_count: mutated_note_count, tags: mutated_tags, prefix: mutated_prefix } = mutate_owned_attributes(before.source, attrs, g, attributes, removed, incoming_prefix, incoming_notes, incoming_names, incoming_note_count, context, before.prefix, before.tags)
+	if mutated_tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutated_source, { ..g, quotes: False, attributes: False }) {
+		return { html: mutated_source, state: assemble_state(mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count) }
 	}
-	quote_groups = if prepared { ..original, macros: False } else original
-	before = if (original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
-	mutation = if original.attributes mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
-	# Plain attribute/counter results need no second attribute merge or scan.
-	# Preserve protected quote/passthrough slots and deferred stateful macros.
-	if !original.attr_quotes and mutation.tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutation.source, { ..original, quotes: False, attributes: False }) {
-		return { html: mutation.source, state: mutation.state }
+	quotes = { source: mutated_source, prefix: mutated_prefix, tags: mutated_tags, deferred: before.deferred }
+	quoted = if quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
+	scan_groups = { ..g, quotes: False, attributes: False, passes_done: True }
+	reference_attrs = (if macro_candidate(quoted.source) merged_attributes(attrs, mutated_attributes, mutated_removed) else attrs).concat(if quoted.source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	if !quoted.source.contains("footnote:") {
+		return finish_owned_normal(scan(quoted.source, reference_attrs, scan_groups, 0), attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count, quoted, prior_notes)
 	}
-	quotes = if original.quotes and original.attr_quotes quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
-	# Footnotes also use protected slots, including notes inserted by attributes.
-	quoted = if original.macros and quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
-	source = quoted.source
-	g = { ..original, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = (if g.macros and macro_candidate(source) effective_attributes(attrs, mutation.state) else attrs).concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
-	if !g.macros {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
+	notes_start = mutated_notes.len()
+	{ html, footnotes, note_index, indexed_note_count: note_count, tags } = render_owned_notes(quoted.source, reference_attrs, scan_groups, quoted, mutated_notes, mutated_names, mutated_note_count)
+	finish_owned_normal(html, attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, footnotes, note_index, note_count, { ..quoted, tags }, notes_start)
+}
+
+# Reconcile only the attribute dictionaries and source snapshots. No footnote
+# or reference registry is available to this helper, even as an aggregate alias.
+refresh_owned_attributes : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool), List({ name : Str, value : Str }), Dict(Str, Str) -> { attributes : Dict(Str, Str), removed : Dict(Str, Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str) }
+refresh_owned_attributes = |attrs, attributes, removed, snapshot, snapshot_index| {
+	if attributes.is_empty() and removed.is_empty() {
+		return { attributes, removed, snapshot: attrs, snapshot_index: Dict.empty() }
 	}
-	if !source.contains("footnote:") {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
+	if attrs == snapshot {
+		return { attributes, removed, snapshot, snapshot_index }
 	}
-	indexed_notes = with_note_index(mutation.state)
-	var $notes = indexed_notes.footnotes
-	var $names = indexed_notes.note_index
-	# Release both growing collections from the old record before updates.
-	base_state = { ..indexed_notes, footnotes: [], note_index: Dict.empty() }
-	notes_start = $notes.len()
+	next = source_attribute_index(attrs)
+	previous = if snapshot_index.is_empty() source_attribute_index(snapshot) else snapshot_index
+	var $attributes = attributes
+	var $removed = removed
+	for source in [snapshot, attrs] {
+		for attr in source {
+			name = if attr.name.starts_with("__revision:") drop(attr.name, 11) else attr.name
+			if next.get(name) != previous.get(name) or next.get("__revision:${name}") != previous.get("__revision:${name}") {
+				$attributes = $attributes.remove(name)
+				$removed = $removed.remove(name)
+			}
+		}
+	}
+	{ attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next }
+}
+
+render_owned_notes : Str, List({ name : Str, value : Str }), Groups, QuoteResult, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> { html : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str) }
+render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_note_count| {
+	var $notes = notes
+	var $names = if indexed_note_count == notes.len() names else {
+		var $index = Dict.empty()
+		var $number = 0.U64
+		for note in notes {
+			$number = $number + 1
+			if note.name != "" and !$index.contains(note.name) {
+				$index = $index.insert(note.name, $number)
+			}
+		}
+		$index
+	}
 	var $render_tags = quoted.tags
 	var $prepared = ""
 	var $pos = 0
@@ -156,7 +222,67 @@ render_state_fixed = |input, attrs, options, state, prepared| {
 			$pos = end
 		}
 	}
-	finish_render(scan($prepared, reference_attrs, g, 0), attrs, { ..base_state, footnotes: $notes, note_index: $names, indexed_note_count: $notes.len() }, { ..quoted, tags: $render_tags }, notes_start)
+	{ html: scan($prepared, reference_attrs, g, 0), footnotes: $notes, note_index: $names, indexed_note_count: $notes.len(), tags: $render_tags }
+}
+
+# Deferred passthroughs use the established full-State path. The ordinary
+# path restores new note text while the note list is still independently owned,
+# then reconstructs State after every collection update has finished.
+finish_owned_normal : Str, List({ name : Str, value : Str }), RenderContext, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, QuoteResult, U64 -> { html : Str, state : AsciiDocInline.State }
+finish_owned_normal = |html, attrs, context, attributes, removed, tag_prefix, notes, names, indexed_note_count, quoted, notes_start| {
+	if !quoted.deferred.is_empty() {
+		return finish_render(html, attrs, assemble_state(context, attributes, removed, tag_prefix, notes, names, indexed_note_count), quoted, notes_start)
+	}
+	var $notes = notes
+	var $index = notes_start
+	while $index < $notes.len() {
+		match $notes.get($index) {
+			Ok(note) => {
+				if quoted.prefix != "" and note.text.contains(quoted.prefix) {
+					$notes = $notes.set($index, { name: note.name, text: restore_tags(note.text, quoted.prefix, quoted.tags) }) ?? []
+				}
+			}
+			Err(_) => {}
+		}
+		$index = $index + 1
+	}
+	{ html: restore_tags(html, quoted.prefix, quoted.tags), state: assemble_state(context, attributes, removed, tag_prefix, $notes, names, indexed_note_count) }
+}
+
+render_state_conservative : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
+render_state_conservative = |input, attrs, options, state, prepared| {
+	prior_notes = state.footnotes.len()
+	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
+	original = { ..(if options.subs == "normal" or options.subs == "n" normal else groups(options.subs)), ref_index: indexed.ref_index }
+	refreshed = refresh_state(attrs, indexed)
+	if !needs_substitutions(input, original) {
+		return { html: input, state: refreshed }
+	}
+	quote_groups = if prepared { ..original, macros: False } else original
+	before = if (original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
+	mutation = if original.attributes mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
+	# Plain attribute/counter results need no second attribute merge or scan.
+	# Preserve protected quote/passthrough slots and deferred stateful macros.
+	if !original.attr_quotes and mutation.tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutation.source, { ..original, quotes: False, attributes: False }) {
+		return { html: mutation.source, state: mutation.state }
+	}
+	quotes = if original.quotes and original.attr_quotes quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
+	# Footnotes also use protected slots, including notes inserted by attributes.
+	quoted = if original.macros and quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
+	source = quoted.source
+	g = { ..original, quotes: False, attributes: False, passes_done: True }
+	reference_attrs = (if g.macros and macro_candidate(source) effective_attributes(attrs, mutation.state) else attrs).concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	if !g.macros {
+		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
+	}
+	if !source.contains("footnote:") {
+		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
+	}
+	indexed_notes = with_note_index(mutation.state)
+	notes_start = indexed_notes.footnotes.len()
+	base_state = { ..indexed_notes, footnotes: [], note_index: Dict.empty() }
+	{ html, footnotes, note_index, indexed_note_count, tags } = render_owned_notes(source, reference_attrs, g, quoted, indexed_notes.footnotes, indexed_notes.note_index, indexed_notes.indexed_note_count)
+	finish_render(html, attrs, { ..base_state, footnotes, note_index, indexed_note_count }, { ..quoted, tags }, notes_start)
 }
 
 # Build an index for caller-supplied notes once; ordinary document renders
@@ -1516,7 +1642,7 @@ token : Str, U64 -> Str
 token = |prefix, index| "${prefix}${index.to_str()}${prefix}"
 
 pass_needed : Str, Groups -> Bool
-pass_needed = |input, g| g.macros and (input.contains("+") or input.contains("pass:") or input.contains("stem:") or input.contains("latexmath:") or input.contains("asciimath:") or input.contains("$$"))
+pass_needed = |input, g| g.macros and (input.contains("+") or (input.contains(":") and (input.contains("pass:") or input.contains("stem:") or input.contains("latexmath:") or input.contains("asciimath:"))) or input.contains("$$"))
 
 quote_needed : Str, Groups -> Bool
 quote_needed = |input, g| {
@@ -1926,32 +2052,9 @@ expect AsciiDocInline.render("Hello {NAME}.", [{ name: "name", value: "Roc" }]) 
 # including a definition whose text equals its previous definition.
 refresh_state : List({ name : Str, value : Str }), AsciiDocInline.State -> AsciiDocInline.State
 refresh_state = |attrs, state| {
-	# With no overrides there is nothing to reconcile. Record the source for
-	# a later first counter/set, without comparing or indexing this snapshot.
-	if state.attributes.is_empty() and state.removed.is_empty() {
-		return { ..state, snapshot: attrs, snapshot_index: Dict.empty() }
-	}
-	if attrs == state.snapshot {
-		return state
-	}
-	next = source_attribute_index(attrs)
-	previous = if state.snapshot_index.is_empty() source_attribute_index(state.snapshot) else state.snapshot_index
-	snapshot = state.snapshot
-	var $attributes = state.attributes
-	var $removed = state.removed
-	base = { ..state, attributes: Dict.empty(), removed: Dict.empty() }
-	# Only names occurring in one of the source snapshots can have changed.
-	# Never rescan every dynamic counter when unrelated metadata changes.
-	for source in [snapshot, attrs] {
-		for attr in source {
-			name = if attr.name.starts_with("__revision:") drop(attr.name, 11) else attr.name
-			if next.get(name) != previous.get(name) or next.get("__revision:${name}") != previous.get("__revision:${name}") {
-				$attributes = $attributes.remove(name)
-				$removed = $removed.remove(name)
-			}
-		}
-	}
-	{ ..base, attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next }
+	{ attributes: incoming_attributes, removed: incoming_removed, snapshot: incoming_snapshot, snapshot_index: incoming_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count } = state
+	{ attributes, removed, snapshot, snapshot_index } = refresh_owned_attributes(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_index)
+	{ attributes, removed, snapshot, snapshot_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count }
 }
 
 # Source attributes use their first matching binding, just like direct().
@@ -2022,15 +2125,27 @@ attribute_delimiter = |source, attrs, prefix| {
 
 mutate_attributes : Str, List({ name : Str, value : Str }), Groups, AsciiDocInline.State, Str, List(Str) -> { source : Str, state : AsciiDocInline.State, tags : List(Str), prefix : Str }
 mutate_attributes = |source, attrs, g, state, prefix, tags| {
+	{ attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count, snapshot, snapshot_index } = state
+	context = { emitted_footnotes, refs, ref_index, indexed_ref_count, snapshot, snapshot_index }
+	{ source: result, context: next_context, attributes: next_attributes, removed: next_removed, tag_prefix: next_prefix, footnotes: next_notes, note_index: next_names, indexed_note_count: next_count, tags: next_tags, prefix: delimiter } = mutate_owned_attributes(source, attrs, g, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, context, prefix, tags)
+	{ source: result, state: assemble_state(next_context, next_attributes, next_removed, next_prefix, next_notes, next_names, next_count), tags: next_tags, prefix: delimiter }
+}
+
+mutate_owned_attributes : Str, List({ name : Str, value : Str }), Groups, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, RenderContext, Str, List(Str) -> { source : Str, context : RenderContext, attributes : Dict(Str, Str), removed : Dict(Str, Bool), tag_prefix : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str), prefix : Str }
+mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, context, prefix, tags| {
 	if !source.contains("{") {
-		return { source, state, tags, prefix }
+		return { source, context, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, tags, prefix }
 	}
-	# Reserve a collision-free delimiter only if an insertion needs a tag.
+	# Each growing collection is an owned argument. The read-only context
+	# contains neither attribute dictionaries nor footnote/name registries.
+	var $context = context
 	var $delimiter = prefix
-	var $attributes = state.attributes
-	var $removed = state.removed
-	var $tag_prefix = state.tag_prefix
-	var $state = { ..state, attributes: Dict.empty(), removed: Dict.empty() }
+	var $attributes = attributes
+	var $removed = removed
+	var $tag_prefix = tag_prefix
+	var $footnotes = footnotes
+	var $note_index = note_index
+	var $indexed_note_count = indexed_note_count
 	var $tags = tags
 	var $lines = []
 	for line in source.split_on("\n") {
@@ -2112,15 +2227,20 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 												effective = if g.macros and macro_candidate(value) merged_attributes(attrs, $attributes, $removed) else attrs
 												$rendered_html = scan(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0)
 											} else {
-												shared = { ..$state, attributes: $attributes, removed: $removed, tag_prefix: $tag_prefix }
+												shared = assemble_state($context, $attributes, $removed, $tag_prefix, $footnotes, $note_index, $indexed_note_count)
 												$attributes = Dict.empty()
 												$removed = Dict.empty()
-												rendered = AsciiDocInline.render_state(value, attrs, { subs: subs }, shared)
-												$rendered_html = rendered.html
-												$attributes = rendered.state.attributes
-												$removed = rendered.state.removed
-												$tag_prefix = rendered.state.tag_prefix
-												$state = { ..rendered.state, attributes: Dict.empty(), removed: Dict.empty() }
+												$footnotes = []
+												$note_index = Dict.empty()
+												{ html, state: { attributes: next_attributes, removed: next_removed, tag_prefix: next_prefix, footnotes: next_notes, note_index: next_names, indexed_note_count: next_count, emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index } } = AsciiDocInline.render_state(value, attrs, { subs: subs }, shared)
+												$rendered_html = html
+												$attributes = next_attributes
+												$removed = next_removed
+												$tag_prefix = next_prefix
+												$footnotes = next_notes
+												$note_index = next_names
+												$indexed_note_count = next_count
+												$context = { emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index }
 											}
 											if $rendered_html == value and !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
 												$out = $out.concat(value)
@@ -2159,7 +2279,7 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 	}
 	# Return the delimiter alongside source by retaining one identity slot when
 	# no quote stage supplied it. The caller restores this same tag registry.
-	{ source: Str.join_with($lines, "\n"), state: { ..$state, attributes: $attributes, removed: $removed, tag_prefix: $tag_prefix }, tags: $tags, prefix: $delimiter }
+	{ source: Str.join_with($lines, "\n"), context: $context, attributes: $attributes, removed: $removed, tag_prefix: $tag_prefix, footnotes: $footnotes, note_index: $note_index, indexed_note_count: $indexed_note_count, tags: $tags, prefix: $delimiter }
 }
 
 normalize_number : Str -> Try(Str, [Missing])
@@ -3160,4 +3280,31 @@ expect {
 	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, plain.state)
 	second = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, first.state)
 	first.html == "9" and second.html == "10"
+}
+
+# Nested attribute-inserted notes and ordinary counters share their registries.
+expect {
+	attrs = [{ name: "note", value: "footnote:shared[Nested note.]" }]
+	first = AsciiDocInline.render_state("{note} {counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	next = AsciiDocInline.render_state("*{counter:n}* footnote:shared[]", attrs, { subs: "normal" }, first.state)
+	first.state.footnotes == [{ name: "shared", text: "Nested note." }] and next.state.footnotes == first.state.footnotes and next.state.attributes.get("n") == Ok("2") and next.html == "<strong>2</strong> <sup class=\"footnoteref\">[<a class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>"
+}
+
+# Crossing the passthrough boundary preserves source revisions and resets.
+expect {
+	attrs = [{ name: "n", value: "4" }, { name: "__revision:n", value: "1" }]
+	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	passed = AsciiDocInline.render_state("pass:a[{counter:n}]", attrs, { subs: "normal" }, first.state)
+	redefined = [{ name: "n", value: "4" }, { name: "__revision:n", value: "2" }]
+	next = AsciiDocInline.render_state("{counter:n}", redefined, { subs: "normal" }, passed.state)
+	first.html == "5" and passed.html == "6" and next.html == "5" and next.state.snapshot == redefined
+}
+
+# The nested semantic path also preserves emissions/reference/source metadata.
+expect {
+	attrs = [{ name: "note", value: "footnote:shared[Nested note.]" }]
+	refs = [{ id: "go", text: "Go" }]
+	initial = { ..AsciiDocInline.initial_state, emitted_footnotes: [7], refs }
+	result = AsciiDocInline.render_state("{note}", attrs, { subs: "normal" }, initial)
+	result.state.emitted_footnotes == [7] and result.state.refs == refs and result.state.ref_index.get("go") == Ok("Go") and result.state.indexed_ref_count == 1 and result.state.snapshot == attrs and result.state.indexed_note_count == 1
 }
