@@ -63,6 +63,8 @@ def target(
 
 TARGETS = dict(
     [
+        target("asciidoc-raw", "asciidoc", "raw", "asciidoc"),
+        target("asciidoc-structured", max_input_size=256),
         target("markdown-document", "markdown-document", "raw", "markdown-document"),
         target("markdown-blocks", max_input_size=1024),
         target("markdown-refdefs", max_input_size=256),

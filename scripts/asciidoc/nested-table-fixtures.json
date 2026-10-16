@@ -1,0 +1,525 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original nested table, row span and separator cases with independently authored targeted HTML semantics. The runtime also compares full native projection and HTML.",
+    "reference_family": "Asciidoctor 2.0 table documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/tables/build-a-basic-table/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle; no external includes."
+  },
+  "coverage": [
+    {
+      "category": "tables-nesting-spans-separators",
+      "required_cases": [
+        "table-nested-nested-table",
+        "table-nested-bang-table",
+        "table-nested-comma-table",
+        "table-nested-colon-table",
+        "table-nested-rowspan-styles",
+        "table-nested-rowspan-align",
+        "table-nested-rowspan-colspan",
+        "table-nested-rowspan-header",
+        "table-nested-rowspan-multi",
+        "table-nested-tsv-unquoted-comma",
+        "table-nested-tsv-quoted-comma",
+        "table-nested-tsv-quoted-tab",
+        "table-nested-csv-custom-separator",
+        "table-nested-csv-custom-quoted-separator",
+        "table-nested-colspan-styles",
+        "table-nested-colspan-inference",
+        "table-nested-rowspan-full-width-drops-extra",
+        "table-nested-wide-column-arithmetic",
+        "table-nested-empty-table",
+        "table-nested-empty-monospaced-cell",
+        "table-nested-table-style-options",
+        "table-nested-table-cell-background",
+        "table-nested-table-autowidth-fixed-width"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "table-nested-nested-table",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "nested-table"
+      ],
+      "source": "[cols=\"a\"]\n|===\n|Before\n\n!===\n!A !B\n!C !D\n!===\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p>Before</p>",
+          "width: 50%;",
+          ">D</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-bang-table",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "bang-table"
+      ],
+      "source": "!===\n!A !B\n!C !D\n!===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 100%;",
+          "!A !B\n!C !D"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-comma-table",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "comma-table"
+      ],
+      "source": ",===\nA,B\nC,D\n,===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 50%;",
+          ">D</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-colon-table",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "colon-table"
+      ],
+      "source": ":===\nA:B\nC:D\n:===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 50%;",
+          ">D</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-styles",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-styles"
+      ],
+      "source": "[cols=\"s,e\"]\n|===\n.2+|A |B\n|C\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "rowspan=\"2\"",
+          "<strong>C</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-align",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-align"
+      ],
+      "source": "[cols=\">,^,<\"]\n|===\n.2+|A |B |C\n|D |E\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "rowspan=\"2\"",
+          "halign-right"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-colspan",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-colspan"
+      ],
+      "source": "[cols=\"1,1,1\"]\n|===\n2.2+|A |B\n|C\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "colspan=\"2\" rowspan=\"2\"",
+          ">C</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-header",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-header"
+      ],
+      "source": "[cols=\"h,e\",options=header]\n|===\n|H1 |H2\n\n.2+|A |B\n|C\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<th",
+          "rowspan=\"2\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-multi",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-multi"
+      ],
+      "source": "[cols=\"s,e,m\"]\n|===\n.3+|A |B .2+|C\n|D\n|E |F\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "rowspan=\"3\"",
+          "<em>F</em>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-tsv-unquoted-comma",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "tsv-unquoted-comma"
+      ],
+      "source": "[format=tsv]\n|===\nA,B\tC\nD\tE\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          ">A,B</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-tsv-quoted-comma",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "tsv-quoted-comma"
+      ],
+      "source": "[format=tsv]\n|===\n\"A,B\"\tC\nD\tE\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          ">A,B</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-tsv-quoted-tab",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "tsv-quoted-tab"
+      ],
+      "source": "[format=tsv]\n|===\n\"A\tB\"\tC\nD\tE\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          ">A\tB</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-csv-custom-separator",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "csv-custom-separator"
+      ],
+      "source": "[format=csv,separator=;]\n|===\nA,B;C\nD;E\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          ">A,B</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-csv-custom-quoted-separator",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "csv-custom-quoted-separator"
+      ],
+      "source": "[format=csv,separator=;]\n|===\n\"A;B\";C\nD;E\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          ">A;B</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-colspan-styles",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "colspan-styles"
+      ],
+      "source": "[cols=\"s,e,m\"]\n|===\n2+|A |B\n|C |D |E\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<em>B</em>",
+          "<code>E</code>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-colspan-inference",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "colspan-inference"
+      ],
+      "source": "|===\n2+|A |B\n|C |D |E\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 33.3333%;",
+          "colspan=\"2\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-rowspan-full-width-drops-extra",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "rowspan-full-width-drops-extra"
+      ],
+      "source": "[cols=\"1\"]\n|===\n.3+|A\n|B\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "rowspan=\"3\""
+        ],
+        "html_excludes": [
+          ">B</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-wide-column-arithmetic",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "wide-column-arithmetic"
+      ],
+      "source": "[cols=\"18446744073709551615,18446744073709551615\"]\n|===\n|A |B\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 50%;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-empty-table",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "empty-table"
+      ],
+      "source": "|===\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<table class=\"tableblock"
+        ],
+        "html_excludes": [
+          "<colgroup>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-empty-monospaced-cell",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "empty-monospaced-cell"
+      ],
+      "source": "[cols=\"m\"]\n|===\n|\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<td class=\"tableblock halign-left valign-top\"></td>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-table-style-options",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "table-style-options"
+      ],
+      "source": "[frame=topbot,stripes=even,float=right]\n|===\n|A\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "frame-ends",
+          "stripes-even",
+          "right"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-table-cell-background",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "table-cell-background"
+      ],
+      "source": ":cellbgcolor: lightblue\n\n|===\n|A\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "style=\"background-color: lightblue;\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-nested-table-autowidth-fixed-width",
+      "category": "tables-nesting-spans-separators",
+      "features": [
+        "table-autowidth-fixed-width"
+      ],
+      "source": "[options=autowidth,width=40]\n|===\n|A |B\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "style=\"width: 40%;\"",
+          "<col>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    }
+  ]
+}

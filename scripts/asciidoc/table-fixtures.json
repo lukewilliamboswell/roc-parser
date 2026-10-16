@@ -1,0 +1,479 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original feature-composition inputs, semantic predicates authored independently of parser output.",
+    "reference": "Asciidoctor 2.0 table grammar and HTML5 conversion"
+  },
+  "coverage": [
+    {
+      "category": "tables-extended",
+      "required_cases": [
+        "table-extended-noheader",
+        "table-extended-footer",
+        "table-extended-weighted",
+        "table-extended-repeat",
+        "table-extended-align",
+        "table-extended-valign",
+        "table-extended-strong",
+        "table-extended-emphasis",
+        "table-extended-mono",
+        "table-extended-header-style",
+        "table-extended-literal",
+        "table-extended-unrecognized-style",
+        "table-extended-cell-style",
+        "table-extended-rowspan",
+        "table-extended-span-both",
+        "table-extended-csv-quotes",
+        "table-extended-csv-multiline",
+        "table-extended-dsv",
+        "table-extended-separator",
+        "table-extended-title",
+        "table-extended-id-role",
+        "table-extended-width",
+        "table-extended-autowidth",
+        "table-extended-frame-grid",
+        "table-extended-nested-block",
+        "table-extended-unicode",
+        "table-extended-paragraphs",
+        "table-extended-escaped-multiple"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "table-extended-noheader",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[options=noheader]\n|===\n|A |B\n\n|C |D\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<tbody>"
+        ],
+        "html_excludes": [
+          "<thead>"
+        ]
+      }
+    },
+    {
+      "id": "table-extended-footer",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"1,1\",options=\"header,footer\"]\n|===\n|Name |Value\n|A |1\n|Total |1\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<thead>",
+          "<tfoot>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-weighted",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"1,3\"]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 25%;",
+          "width: 75%;"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-repeat",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"3*\"]\n|===\n|A |B |C\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 33.3333%;"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-align",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"^,>\"]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "halign-center",
+          "halign-right"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-valign",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\".^,.>\"]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "valign-middle",
+          "valign-bottom"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-strong",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"s\"]\n|===\n|Strong\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<strong>Strong</strong>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-emphasis",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"e\"]\n|===\n|Quiet\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<em>Quiet</em>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-mono",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"m\"]\n|===\n|Code\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<code>Code</code>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-header-style",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"h,1\"]\n|===\n|Name |Value\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<th class=\"tableblock"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-literal",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"l\"]\n|===\n|  A\n B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<pre>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-unrecognized-style",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"v\"]\n|===\n|A\nB\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p class=\"tableblock\">A\nB</p>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-cell-style",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "|===\ns|Strong\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<strong>Strong</strong>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-rowspan",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"1,1\"]\n|===\n.2+|Tall |A\n|B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "rowspan=\"2\""
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-span-both",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"1,1,1\"]\n|===\n2.2+|Wide and tall |A\n|B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "colspan=\"2\"",
+          "rowspan=\"2\""
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-csv-quotes",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[format=csv]\n|===\n\"A,B\",C\nD,E\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A,B"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-csv-multiline",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[format=csv]\n|===\n\"A\nB\",C\nD,E\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A\nB"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-dsv",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[format=dsv]\n|===\nA:B\nC:D\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p class=\"tableblock\">A</p>",
+          "<p class=\"tableblock\">D</p>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-separator",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[separator=\";\"]\n|===\n;A ;B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p class=\"tableblock\">A</p>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-title",
+      "category": "tables-extended",
+      "support": "future",
+      "source": ".Measures\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "Table 1. Measures"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-id-role",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[#measure.compact]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "id=\"measure\"",
+          "compact"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-width",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[width=70%]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "width: 70%;"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-autowidth",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[%autowidth]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "fit-content"
+        ],
+        "html_excludes": [
+          "width:"
+        ]
+      }
+    },
+    {
+      "id": "table-extended-frame-grid",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[frame=sides,grid=rows]\n|===\n|A |B\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "frame-sides",
+          "grid-rows"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-nested-block",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"a\"]\n|===\n|----\n*literal*\n----\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<pre>*literal*</pre>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-unicode",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "|===\n|東京 |Café\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "東京",
+          "Café"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-paragraphs",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "[cols=\"1\"]\n|===\n|First\n\nSecond\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p class=\"tableblock\">First</p>",
+          "<p class=\"tableblock\">Second</p>"
+        ],
+        "html_excludes": []
+      }
+    },
+    {
+      "id": "table-extended-escaped-multiple",
+      "category": "tables-extended",
+      "support": "future",
+      "source": "|===\n|A \\| B \\| C\n|===",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A | B | C"
+        ],
+        "html_excludes": []
+      }
+    }
+  ]
+}

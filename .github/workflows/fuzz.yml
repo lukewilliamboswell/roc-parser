@@ -29,6 +29,8 @@ jobs:
       matrix:
         # Every target registered in scripts/run_fuzz.py.
         target:
+          - asciidoc-raw
+          - asciidoc-structured
           - markdown-document
           - markdown-blocks
           - markdown-refdefs
@@ -204,10 +206,48 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  asciidoc:
+    name: AsciiDoc oracle and performance smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Install hash-pinned Asciidoctor
+        run: python3 scripts/asciidoc/setup_oracle.py
+      - name: Build public API probe
+        run: roc build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+      - name: Check fixtures, generated trees and exploratory edits
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
+        run: python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
+      - name: Explore with a recorded rotating seed
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        run: python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 2000 --mutations 2000 --seed "$GITHUB_RUN_ID" --corpus docs
+      - name: Smoke test local performance harness
+        run: python3 scripts/check_asciidoc_performance.py --smoke --output .roc-parser-tmp/asciidoc/performance-smoke
+      - name: Upload oracle evidence and reproducers
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asciidoc-validation
+          path: .roc-parser-tmp/asciidoc/
+          if-no-files-found: warn
+          retention-days: 14
+
   property-quality:
     name: property-quality
     if: always()
-    needs: [fuzz, conformance, roc-syntax]
+    needs: [fuzz, conformance, roc-syntax, asciidoc]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper
@@ -220,3 +260,5 @@ jobs:
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.conformance.result }}"
       - name: Require Roc syntax validation
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.roc-syntax.result }}"
+      - name: Require AsciiDoc oracle validation
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.asciidoc.result }}"

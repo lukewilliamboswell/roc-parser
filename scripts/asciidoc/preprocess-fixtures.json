@@ -1,0 +1,2776 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original short inputs and semantic expectations independently authored for roc-parser; expected results are never generated from the oracle.",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/directives/",
+    "execution_policy": "SECURE policy with caller-supplied virtual includes; selector handling delegated to the pinned native engine."
+  },
+  "coverage": [
+    {
+      "category": "preprocessing",
+      "required_cases": [
+        "preprocess-lines-single",
+        "preprocess-lines-range",
+        "preprocess-lines-open-end",
+        "preprocess-lines-union",
+        "preprocess-lines-source-order",
+        "preprocess-lines-overlap",
+        "preprocess-tags-single",
+        "preprocess-tags-inner",
+        "preprocess-tags-union",
+        "preprocess-tags-exclude",
+        "preprocess-tags-all",
+        "preprocess-tags-all-exclude",
+        "preprocess-tags-tagged",
+        "preprocess-tags-untagged",
+        "preprocess-tags-negative",
+        "preprocess-tags-line-precedence",
+        "preprocess-tags-no-selection",
+        "preprocess-ifeval-eq",
+        "preprocess-ifeval-ne",
+        "preprocess-ifeval-lt",
+        "preprocess-ifeval-gt",
+        "preprocess-ifeval-le",
+        "preprocess-ifeval-ge",
+        "preprocess-ifeval-decimal",
+        "preprocess-ifeval-negative",
+        "preprocess-ifeval-quoted-eq",
+        "preprocess-ifeval-quoted-ne",
+        "preprocess-ifeval-string-lt",
+        "preprocess-ifeval-string-ge",
+        "preprocess-ifeval-false",
+        "preprocess-conditional-and",
+        "preprocess-conditional-or",
+        "preprocess-conditional-nested",
+        "preprocess-conditional-inline-definition",
+        "preprocess-conditional-unclosed-inactive",
+        "preprocess-conditional-unmatched-end",
+        "preprocess-conditional-malformed",
+        "preprocess-builtin-attributes",
+        "preprocess-attribute-unset-prefix",
+        "preprocess-attribute-unset-suffix",
+        "preprocess-attribute-reset",
+        "preprocess-attribute-midparagraph",
+        "preprocess-attribute-continuation-plus",
+        "preprocess-attribute-nested-values",
+        "preprocess-attribute-escaped-reference",
+        "preprocess-include-attribute-order",
+        "preprocess-include-target-attribute",
+        "preprocess-include-opaque-definition",
+        "preprocess-include-nested-parent",
+        "preprocess-include-indent-select",
+        "preprocess-include-leveloffset-select",
+        "preprocess-escaped-directives-listing",
+        "preprocess-conditional-in-listing",
+        "preprocess-missing-tag-warning",
+        "preprocess-mismatched-tag-warning",
+        "preprocess-malformed-unclosed-directive",
+        "preprocess-invalid-ifeval-expression",
+        "preprocess-bom-attribute",
+        "preprocess-include-indent-attribute",
+        "preprocess-quoted-lines-comma",
+        "preprocess-quoted-tags-comma",
+        "preprocess-attribute-line-selector",
+        "preprocess-attribute-name-punctuation",
+        "preprocess-attribute-definition-pass",
+        "preprocess-attribute-name-unicode",
+        "preprocess-regression-mutation-13-000233",
+        "preprocess-regression-mutation-13-000957",
+        "preprocess-named-endif-mismatch",
+        "preprocess-missing-conditional-target",
+        "preprocess-invalid-ifeval-target",
+        "preprocess-conditional-target-whitespace",
+        "preprocess-ifeval-quoted-number-order",
+        "preprocess-ifeval-quoted-number-not-numeric",
+        "preprocess-ifeval-quoted-attribute-order",
+        "preprocess-ifeval-boolean-inequality",
+        "preprocess-ifeval-boolean-equality",
+        "preprocess-ifeval-nonnumeric-zero",
+        "preprocess-ifeval-missing-nil",
+        "preprocess-ifeval-numeric-prefix",
+        "preprocess-ifeval-big-integer-order",
+        "preprocess-ifeval-big-negative-order",
+        "preprocess-ifeval-integer-float-precision",
+        "preprocess-ifeval-integer-float-upper",
+        "preprocess-ifeval-float-rounding",
+        "preprocess-ifeval-float-inexact-inequality",
+        "preprocess-ifeval-negative-integer-float",
+        "preprocess-ifeval-positive-small-float",
+        "preprocess-ifeval-negative-small-float",
+        "preprocess-ifeval-float-overflow",
+        "preprocess-ifeval-negative-float-overflow",
+        "preprocess-ifeval-float-underflow",
+        "preprocess-ifeval-integer-underscores",
+        "preprocess-ifeval-float-underscores",
+        "preprocess-ifeval-invalid-double-underscore",
+        "preprocess-ifeval-float-incomplete-fraction",
+        "preprocess-ifeval-float-exponent-before-dot",
+        "preprocess-ifeval-float-leading-dot",
+        "preprocess-ifeval-subnormal",
+        "preprocess-ifeval-subnormal-underflow",
+        "preprocess-ifeval-big-leading-zero",
+        "preprocess-ifeval-negative-zero",
+        "preprocess-ifeval-float-negative-fraction",
+        "preprocess-ifeval-float-positive-fraction",
+        "preprocess-ifeval-float-max-exact",
+        "preprocess-ifeval-float-max-neighbor",
+        "preprocess-ifeval-float-max-negative",
+        "preprocess-ifeval-first-operator",
+        "preprocess-ifeval-single-quote-operands",
+        "preprocess-regression-mutation-1-000107",
+        "preprocess-lines-zero-blocks",
+        "preprocess-lines-invalid-blocks",
+        "preprocess-lines-reverse-all",
+        "preprocess-lines-open-with-later-finite",
+        "preprocess-lines-trailing-delimiter",
+        "preprocess-lines-prefix-number",
+        "preprocess-lines-comma-precedes-semicolon",
+        "preprocess-lines-negative-blocks",
+        "preprocess-lines-reverse-huge-all"
+      ],
+      "scope": "future"
+    }
+  ],
+  "cases": [
+    {
+      "id": "preprocess-lines-single",
+      "category": "preprocessing",
+      "features": [
+        "lines-single"
+      ],
+      "source": "----\ninclude::part.adoc[lines=3]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "three"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-lines-range",
+      "category": "preprocessing",
+      "features": [
+        "lines-range"
+      ],
+      "source": "----\ninclude::part.adoc[lines=2..4]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "two\nthree\nfour"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-lines-open-end",
+      "category": "preprocessing",
+      "features": [
+        "lines-open-end"
+      ],
+      "source": "----\ninclude::part.adoc[lines=3..-1]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "three\nfour\nfive"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-lines-union",
+      "category": "preprocessing",
+      "features": [
+        "lines-union"
+      ],
+      "source": "----\ninclude::part.adoc[lines=1;4..5]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "one\nfour\nfive"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-lines-source-order",
+      "category": "preprocessing",
+      "features": [
+        "lines-source-order"
+      ],
+      "source": "----\ninclude::part.adoc[lines=4;1]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "one\nfour"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-lines-overlap",
+      "category": "preprocessing",
+      "features": [
+        "lines-overlap"
+      ],
+      "source": "----\ninclude::part.adoc[lines=1..3;2..4]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "one\ntwo\nthree\nfour"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour\nfive\n"
+      }
+    },
+    {
+      "id": "preprocess-tags-single",
+      "category": "preprocessing",
+      "features": [
+        "tags-single"
+      ],
+      "source": "----\ninclude::part.adoc[tag=outer]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "outer\nboth"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-inner",
+      "category": "preprocessing",
+      "features": [
+        "tags-inner"
+      ],
+      "source": "----\ninclude::part.adoc[tag=inner]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "both"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-union",
+      "category": "preprocessing",
+      "features": [
+        "tags-union"
+      ],
+      "source": "----\ninclude::part.adoc[tags=outer;inner]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "outer\nboth"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-exclude",
+      "category": "preprocessing",
+      "features": [
+        "tags-exclude"
+      ],
+      "source": "----\ninclude::part.adoc[tags=outer;!inner]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "outer"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-all",
+      "category": "preprocessing",
+      "features": [
+        "tags-all"
+      ],
+      "source": "----\ninclude::part.adoc[tags=**]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\nouter\nboth\nafter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-all-exclude",
+      "category": "preprocessing",
+      "features": [
+        "tags-all-exclude"
+      ],
+      "source": "----\ninclude::part.adoc[tags=**;!outer]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\nafter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-tagged",
+      "category": "preprocessing",
+      "features": [
+        "tags-tagged"
+      ],
+      "source": "----\ninclude::part.adoc[tags=*]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "outer\nboth"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-untagged",
+      "category": "preprocessing",
+      "features": [
+        "tags-untagged"
+      ],
+      "source": "----\ninclude::part.adoc[tags=!*]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\nafter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-negative",
+      "category": "preprocessing",
+      "features": [
+        "tags-negative"
+      ],
+      "source": "----\ninclude::part.adoc[tags=!outer]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\nafter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-line-precedence",
+      "category": "preprocessing",
+      "features": [
+        "tags-line-precedence"
+      ],
+      "source": "----\ninclude::part.adoc[lines=1..3,tag=inner]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\n// tag::outer[]\nouter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-tags-no-selection",
+      "category": "preprocessing",
+      "features": [
+        "tags-no-selection"
+      ],
+      "source": "----\ninclude::part.adoc[]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "before\n// tag::outer[]\nouter\n// tag::inner[]\nboth\n// end::inner[]\n// end::outer[]\nafter"
+      }
+    },
+    {
+      "id": "preprocess-ifeval-eq",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-eq"
+      ],
+      "source": "ifeval::[7 == 7]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-ne",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-ne"
+      ],
+      "source": "ifeval::[7 != 8]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-lt",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-lt"
+      ],
+      "source": "ifeval::[7 < 8]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-gt",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-gt"
+      ],
+      "source": "ifeval::[8 > 7]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-le",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-le"
+      ],
+      "source": "ifeval::[7 <= 7]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-ge",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-ge"
+      ],
+      "source": "ifeval::[7 >= 7]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-decimal",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-decimal"
+      ],
+      "source": "ifeval::[1.5 > 1.25]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-negative",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-negative"
+      ],
+      "source": "ifeval::[-2 < -1]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-quoted-eq",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-quoted-eq"
+      ],
+      "source": "ifeval::[\"same\" == \"same\"]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-quoted-ne",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-quoted-ne"
+      ],
+      "source": "ifeval::['a' != 'b']\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-string-lt",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-string-lt"
+      ],
+      "source": "ifeval::[\"ant\" < \"bee\"]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-string-ge",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-string-ge"
+      ],
+      "source": "ifeval::[\"bee\" >= \"ant\"]\nkept\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>kept</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-false",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-false"
+      ],
+      "source": "ifeval::[2 > 3]\nhidden\nendif::[]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [],
+        "html_excludes": [
+          "hidden"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-and",
+      "category": "preprocessing",
+      "features": [
+        "conditional-and"
+      ],
+      "source": ":one:\n:two:\nifdef::one+two[both]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>both</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-or",
+      "category": "preprocessing",
+      "features": [
+        "conditional-or"
+      ],
+      "source": ":one:\nifdef::one,missing[either]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>either</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-nested",
+      "category": "preprocessing",
+      "features": [
+        "conditional-nested"
+      ],
+      "source": ":one:\nifdef::one[]\nifndef::missing[]\nnested\nendif::[]\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>nested</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-inline-definition",
+      "category": "preprocessing",
+      "features": [
+        "conditional-inline-definition"
+      ],
+      "source": ":one:\nifdef::one[:two: yes]\n\n{two}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>yes</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-unclosed-inactive",
+      "category": "preprocessing",
+      "features": [
+        "conditional-unclosed-inactive"
+      ],
+      "source": "ifdef::missing[]\nhidden",
+      "support": "future",
+      "expect": {
+        "contexts": [],
+        "html_contains": [],
+        "warning_severities": [],
+        "html_excludes": [
+          "hidden"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-unmatched-end",
+      "category": "preprocessing",
+      "features": [
+        "conditional-unmatched-end"
+      ],
+      "source": "endif::[]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [
+          "ERROR"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-malformed",
+      "category": "preprocessing",
+      "features": [
+        "conditional-malformed"
+      ],
+      "source": "ifdef:one[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "ifdef:one[]"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-builtin-attributes",
+      "category": "preprocessing",
+      "features": [
+        "builtin-attributes"
+      ],
+      "source": "ifdef::asciidoctor+backend-html5[]\n{docyear} {safe-mode-name}\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>2000 secure</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-unset-prefix",
+      "category": "preprocessing",
+      "features": [
+        "attribute-unset-prefix"
+      ],
+      "source": ":item: yes\n:!item:\nifndef::item[absent]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>absent</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-unset-suffix",
+      "category": "preprocessing",
+      "features": [
+        "attribute-unset-suffix"
+      ],
+      "source": ":item: yes\n:item!:\nifndef::item[absent]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>absent</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-reset",
+      "category": "preprocessing",
+      "features": [
+        "attribute-reset"
+      ],
+      "source": ":item: first\n\n{item}\n\n:item: second\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>first</p>",
+          "<p>second</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-midparagraph",
+      "category": "preprocessing",
+      "features": [
+        "attribute-midparagraph"
+      ],
+      "source": ":item: first\n\n{item}\n:item: second\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>first\n:item: second\nfirst</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-continuation-plus",
+      "category": "preprocessing",
+      "features": [
+        "attribute-continuation-plus"
+      ],
+      "source": ":item: alpha +\n beta\n\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>alpha beta</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-nested-values",
+      "category": "preprocessing",
+      "features": [
+        "attribute-nested-values"
+      ],
+      "source": ":base: blue\n:word: {base} sky\n\n{word}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>blue sky</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-escaped-reference",
+      "category": "preprocessing",
+      "features": [
+        "attribute-escaped-reference"
+      ],
+      "source": ":item: yes\n\n\\{item} {item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>{item} yes</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-include-attribute-order",
+      "category": "preprocessing",
+      "features": [
+        "include-attribute-order"
+      ],
+      "source": ":item: first\n\ninclude::part.adoc[]\n\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>first</p>",
+          "<p>second</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "{item}\n\n:item: second"
+      }
+    },
+    {
+      "id": "preprocess-include-target-attribute",
+      "category": "preprocessing",
+      "features": [
+        "include-target-attribute"
+      ],
+      "source": ":part: chapter\n\ninclude::{part}.adoc[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>chapter text</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "chapter.adoc": "chapter text"
+      }
+    },
+    {
+      "id": "preprocess-include-opaque-definition",
+      "category": "preprocessing",
+      "features": [
+        "include-opaque-definition"
+      ],
+      "source": "----\ninclude::part.adoc[]\n----\n\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<pre>:item: hidden\n{item}</pre>",
+          "<p>{item}</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": ":item: hidden\n{item}"
+      }
+    },
+    {
+      "id": "preprocess-include-nested-parent",
+      "category": "preprocessing",
+      "features": [
+        "include-nested-parent"
+      ],
+      "source": "include::dir/a.adoc[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>root child</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "dir/a.adoc": "include::../child.adoc[]",
+        "child.adoc": "root child"
+      }
+    },
+    {
+      "id": "preprocess-include-indent-select",
+      "category": "preprocessing",
+      "features": [
+        "include-indent-select"
+      ],
+      "source": "include::part.adoc[lines=2..3,indent=0]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>alpha\nbeta</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "unused\n    alpha\n    beta\nunused"
+      }
+    },
+    {
+      "id": "preprocess-include-leveloffset-select",
+      "category": "preprocessing",
+      "features": [
+        "include-leveloffset-select"
+      ],
+      "source": "== Parent\n\ninclude::part.adoc[lines=2..4,leveloffset=+1]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<h3 id=\"_child\">Child</h3>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "unused\n== Child\n\nbody\nunused"
+      }
+    },
+    {
+      "id": "preprocess-escaped-directives-listing",
+      "category": "preprocessing",
+      "features": [
+        "escaped-directives-listing"
+      ],
+      "source": "----\n\\ifdef::x[]\n\\include::part.adoc[]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>ifdef::x[]\ninclude::part.adoc[]</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-in-listing",
+      "category": "preprocessing",
+      "features": [
+        "conditional-in-listing"
+      ],
+      "source": ":item:\n\n----\nifdef::item[kept]\nifndef::item[hidden]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>kept</pre>"
+        ],
+        "warning_severities": [],
+        "html_excludes": [
+          "hidden"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-missing-tag-warning",
+      "category": "preprocessing",
+      "features": [
+        "missing-tag-warning"
+      ],
+      "source": "----\ninclude::part.adoc[tag=missing]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "text"
+      }
+    },
+    {
+      "id": "preprocess-mismatched-tag-warning",
+      "category": "preprocessing",
+      "features": [
+        "mismatched-tag-warning"
+      ],
+      "source": "----\ninclude::part.adoc[tag=one]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>inside</pre>"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "// tag::one[]\ninside\n// end::two[]"
+      }
+    },
+    {
+      "id": "preprocess-malformed-unclosed-directive",
+      "category": "preprocessing",
+      "features": [
+        "malformed-unclosed-directive"
+      ],
+      "source": "ifdef::item\ninclude::part.adoc\nendif::item",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>ifdef::item\ninclude::part.adoc\nendif::item</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-invalid-ifeval-expression",
+      "category": "preprocessing",
+      "features": [
+        "invalid-ifeval-expression"
+      ],
+      "source": "ifeval::[1]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [
+          "ERROR"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-bom-attribute",
+      "category": "preprocessing",
+      "features": [
+        "bom-attribute"
+      ],
+      "source": "﻿:item: yes\n\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>yes</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ]
+    },
+    {
+      "id": "preprocess-include-indent-attribute",
+      "category": "preprocessing",
+      "features": [
+        "include-indent-attribute"
+      ],
+      "source": "include::part.adoc[indent=0]\n\n{item}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>yes</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/"
+      ],
+      "includes": {
+        "part.adoc": "    :item: yes"
+      }
+    },
+    {
+      "id": "preprocess-quoted-lines-comma",
+      "category": "preprocessing",
+      "features": [
+        "quoted-lines-comma"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"1..2,4\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "one\ntwo\nfour"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "preprocess-quoted-tags-comma",
+      "category": "preprocessing",
+      "features": [
+        "quoted-tags-comma"
+      ],
+      "source": "----\ninclude::part.adoc[tags=\"x,y\"]\n----",
+      "includes": {
+        "part.adoc": "// tag::x[]\nx\n// end::x[]\n// tag::y[]\ny\n// end::y[]"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "x\ny"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-line-selector",
+      "category": "preprocessing",
+      "features": [
+        "attribute-line-selector"
+      ],
+      "source": ":range: 2..3\n\n----\ninclude::part.adoc[lines={range}]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "two\nthree"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-name-punctuation",
+      "category": "preprocessing",
+      "features": [
+        "attribute-name-punctuation"
+      ],
+      "source": ":experimen=== tal:\n\nPress kbd:[Ctrl++].",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<kbd>Ctrl</kbd>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/names-and-values/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-definition-pass",
+      "category": "preprocessing",
+      "features": [
+        "attribute-definition-pass"
+      ],
+      "source": ":x: pass:q[*bold*]\n\n{x}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<strong>bold</strong>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/names-and-values/"
+      ]
+    },
+    {
+      "id": "preprocess-attribute-name-unicode",
+      "category": "preprocessing",
+      "features": [
+        "attribute-name-unicode"
+      ],
+      "source": ":CAFÉ ・ 東京: yes\n\n{café東京}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>yes</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/names-and-values/"
+      ]
+    },
+    {
+      "id": "preprocess-regression-mutation-13-000233",
+      "category": "preprocessing",
+      "features": [
+        "retained-original-mutation",
+        "duplicate"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"\"1..2,4\"]\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "one\ntwo\nthree\nfour"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ],
+      "provenance": {
+        "parent_id": "preprocess-quoted-lines-comma",
+        "mutation": "duplicate",
+        "original_id": "mutation-13-000233"
+      },
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      }
+    },
+    {
+      "id": "preprocess-regression-mutation-13-000957",
+      "category": "preprocessing",
+      "features": [
+        "retained-original-mutation",
+        "replace"
+      ],
+      "source": "----\n\\ifdef::x[]\n\\include::pé----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "ifdef::x[]\n\\include::pé----"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ],
+      "provenance": {
+        "parent_id": "preprocess-escaped-directives-listing",
+        "mutation": "replace",
+        "original_id": "mutation-13-000957"
+      }
+    },
+    {
+      "id": "preprocess-named-endif-mismatch",
+      "category": "preprocessing",
+      "features": [
+        "named-endif-mismatch"
+      ],
+      "source": "ifdef::missing[]\nhidden\nendif::different[]\nstill hidden\nendif::missing[]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [
+          "ERROR"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-missing-conditional-target",
+      "category": "preprocessing",
+      "features": [
+        "missing-conditional-target"
+      ],
+      "source": "ifdef::[]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [
+          "ERROR"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-invalid-ifeval-target",
+      "category": "preprocessing",
+      "features": [
+        "invalid-ifeval-target"
+      ],
+      "source": "ifeval::target[1 == 1]\nvisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>visible</p>"
+        ],
+        "warning_severities": [
+          "ERROR"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-conditional-target-whitespace",
+      "category": "preprocessing",
+      "features": [
+        "conditional-target-whitespace"
+      ],
+      "source": "ifdef::a + b[raw]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>ifdef::a + b[raw]</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-quoted-number-order",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[\"10\" < \"2\"]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-quoted-number-not-numeric",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[\"10\" != 10]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-quoted-attribute-order",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[\"{n}\" < \"2\"]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-boolean-inequality",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[true != false]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-boolean-equality",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[true == true]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-nonnumeric-zero",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[abc == 0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-missing-nil",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[{missing} == {other}]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-numeric-prefix",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-typed-operands"
+      ],
+      "source": ":n: 10\n\nifeval::[12abc == 12]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-big-integer-order",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[123456789012345678901234567890123456789 > 123456789012345678901234567890123456788]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-big-negative-order",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-123456789012345678901234567890123456789 < -123456789012345678901234567890123456788]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-integer-float-precision",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[9007199254740993 > 9007199254740992.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-integer-float-upper",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[9007199254740993 < 9007199254740994.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-rounding",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[9007199254740992 == 9007199254740993.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-inexact-inequality",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[9007199254740993 != 9007199254740993.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-negative-integer-float",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-9007199254740993 < -9007199254740992.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-positive-small-float",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[0 < 1.0e-300]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-negative-small-float",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[0 > -1.0e-300]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-overflow",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.0e999 > 9999999999999999999999999999999999999999999]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-negative-float-overflow",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-1.0e999 < -9999999999999999999999999999999999999999999]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-underflow",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.0e-999 == 0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-integer-underscores",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1_000_000 == 1000000]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-underscores",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1_2.3_4 == 12.34]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-invalid-double-underscore",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1__2.0 == 1]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-incomplete-fraction",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.e2 == 1]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-exponent-before-dot",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1e3. == 1000]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-leading-dot",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[.1e2 == 10]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-subnormal",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[0 < 4.9406564584124654e-324]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-subnormal-underflow",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[2.0e-324 == 0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-big-leading-zero",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[+000000000000000000000000000000000000001 == 1]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-negative-zero",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-0000000000 == -0.0]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-negative-fraction",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-1 < -0.5]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-positive-fraction",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1 > 0.5]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-max-exact",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.7976931348623157e308 == 179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-max-neighbor",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1.7976931348623157e308 < 179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858369]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-float-max-negative",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[-1.7976931348623157e308 > -179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858369]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-first-operator",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[1 != 2 == 3]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-ifeval-single-quote-operands",
+      "category": "preprocessing",
+      "features": [
+        "ifeval-numeric-coercion"
+      ],
+      "source": "ifeval::[\" == \"]\nselected\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>selected</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/ifeval/"
+      ]
+    },
+    {
+      "id": "preprocess-regression-mutation-1-000107",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"1..2,part.adoc[lines=\"1..2,4\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre></pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-zero-blocks",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"0,2\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre></pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-invalid-blocks",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"1,,4\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre></pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-reverse-all",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=4..2]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\ntwo\nthree\nfour</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-open-with-later-finite",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"2..,4\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>two\nfour</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-trailing-delimiter",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"1,4,\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\nfour</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-prefix-number",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=4abc]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>four</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-comma-precedes-semicolon",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"1;2,4\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\nfour</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-negative-blocks",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=\"-1,2\"]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre></pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-lines-reverse-huge-all",
+      "category": "preprocessing",
+      "features": [
+        "native-line-selector-cursor"
+      ],
+      "source": "----\ninclude::part.adoc[lines=999999999999999999999999999999999999999..999999999999999999999999999999999999998]\n----",
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      },
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\ntwo\nthree\nfour</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    }
+  ]
+}

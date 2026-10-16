@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "document-header-state",
+      "required_cases": [
+        "header-state-late-attribute",
+        "header-state-counter",
+        "header-state-notes",
+        "header-state-forward-reference",
+        "header-state-note-only",
+        "header-state-counter-only",
+        "header-state-late-attribute-only",
+        "header-state-title-override",
+        "header-state-body-redefinition",
+        "header-state-named-note",
+        "header-state-preexisting-doctitle"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "header-state-late-attribute",
+      "category": "document-header-state",
+      "source": "= {project} Guide\n:project: Roc\n\nBody",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Roc Guide",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-counter",
+      "category": "document-header-state",
+      "source": "= {counter:n}\n\n{counter:n}",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "2",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "{counter:n}",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-notes",
+      "category": "document-header-state",
+      "source": "= Title footnote:[Header]\n\nBody footnote:[Body]",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Title <sup class=\"footnote\">[<a id=\"_footnoteref_1\" class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body footnote:[Body]",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-forward-reference",
+      "category": "document-header-state",
+      "source": "= See <<target>>\n\n[[target]]\n== Destination",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "See <a href=\"#target\">Destination</a>",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Destination",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-note-only",
+      "category": "document-header-state",
+      "source": "= Title footnote:[Header]",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Title <sup class=\"footnote\">[<a id=\"_footnoteref_1\" class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "header-state-counter-only",
+      "category": "document-header-state",
+      "source": "= {counter:n}",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "2",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "header-state-late-attribute-only",
+      "category": "document-header-state",
+      "source": "= {project} Guide\n:project: Roc",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Roc Guide",
+          "blocks": []
+        }
+      }
+    },
+    {
+      "id": "header-state-title-override",
+      "category": "document-header-state",
+      "source": "= Original\n:doctitle: Actual\n\nBody",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Actual",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-body-redefinition",
+      "category": "document-header-state",
+      "source": "= {project} Guide\n:project: Roc\n\nBody\n\n:project: Later\n\n{project}",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Roc Guide",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "{project}",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-named-note",
+      "category": "document-header-state",
+      "source": "= Title footnote:h[Header]\n\nBody footnote:h[]",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Title <sup class=\"footnote\" id=\"_footnote_h\">[<a id=\"_footnoteref_1\" class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body footnote:h[]",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "header-state-preexisting-doctitle",
+      "category": "document-header-state",
+      "source": ":doctitle: Custom\n= {counter:n}\n\n{counter:n}",
+      "features": [
+        "header",
+        "inline-state"
+      ],
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Custom",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "{counter:n}",
+              "blocks": []
+            }
+          ]
+        },
+        "html_contains": [
+          "<p>1</p>"
+        ]
+      }
+    }
+  ]
+}

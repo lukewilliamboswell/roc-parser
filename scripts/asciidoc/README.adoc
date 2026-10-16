@@ -1,0 +1,124 @@
+= AsciiDoc reference harness
+
+This development harness pins Ruby Asciidoctor 2.0.23 and compares block-source
+structure and embedded HTML with `package/AsciiDoc.roc`.
+The package itself has no Ruby dependency.
+
+== Setup and checks
+
+Set `ROC` to the compiler in `.roc-version`:
+
+[source,sh]
+----
+python3 scripts/asciidoc/setup_oracle.py
+$ROC build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 1000 --mutations 1000 --seed 13 --corpus docs
+python3 -m unittest discover -s scripts/tests -p 'test_asciidoc*.py'
+python3 scripts/run_fuzz.py smoke asciidoc-raw asciidoc-structured
+----
+
+`setup_oracle.py --gem-file FILE` supports offline setup. The installer verifies
+the archive SHA-256 before installing into the ignored local gem directory;
+the pinned gem has no runtime dependencies. `--gem-home DIR` selects another
+installation in both setup and review commands. `--oracle-only` checks authored
+reference expectations without a Roc executable.
+
+== Evidence and scope
+
+`fixtures.json` contains original authored inputs, explicit feature categories,
+a required-case coverage manifest, and independent expected projections or
+semantic predicates. Predicates inspect HTML, block contexts, titles and
+warnings. They are checked before parser comparison, including future features.
+The runner validates the manifest before executing it. Tests also check that
+the inventory and independent generator retain their intended contracts.
+
+`models.py` constructs a document model before printing its source and expected
+projection. It varies Unicode text, nested sections, opaque blocks, line endings
+and final newlines. `mutations.py` makes reproducible edits without assuming
+the resulting documents are valid. The corpus reader retains original UTF-8
+bytes, paths and SHA-256 hashes, deduplicates exact content and excludes links;
+it does not expand repository includes or silently repair invalid UTF-8.
+
+Comparison uses the block-source projection, with the preamble wrapper
+flattened, and canonical HTML when `--compare-html` is supplied. Rich AST and
+rendered HTML remain in each evidence row. Inline semantic trees are not exported.
+`--require-complete` makes reference-accepted parser rejections fatal.
+
+Report classifications:
+
+* `pass`: the projection and requested HTML comparison match, and independent
+  expectations hold.
+* `wrong_html`, `missing_html`, `coverage_gap`: strict rendering or acceptance
+  requirements failed.
+* `structural_only`: a future-feature fixture has matching structure/source;
+  its inline semantics or rendering remain unimplemented in Roc.
+* `unsupported`: the Roc parser rejected a case outside the declared subset.
+  Exploratory rejections are visible exclusions, not successful comparisons.
+* `oracle_verified`: independent reference assertions passed in oracle-only
+  mode. Exploratory cases without assertions merely exercised the oracle.
+* `oracle_policy_rejection`: an exploratory request exceeded the virtual-include
+  policy. It is an explicit exclusion, not a semantic comparison. The same
+  rejection on an authored or generated contract is a fatal
+  `oracle_policy_disagreement`.
+* `valid_rejection`, `unexpected_acceptance` and `wrong_projection`: a declared
+  implementation contract or structural comparison failed.
+* `oracle_disagreement`, `oracle_error`, `timeout`, `crash`, `protocol_error`:
+  a reference assertion, worker, resource bound or protocol failed.
+
+All failure classes fail the command; no baseline silently absorbs them. The
+default report is `.roc-parser-tmp/asciidoc/review/check.json`. It records the
+seed, original cases, source hashes, engine/adapter fingerprints, parser/probe
+hashes and process configuration. Failing source bytes and JSON evidence are
+retained by hash under `failures/`.
+
+[source,sh]
+----
+python3 scripts/review_asciidoc.py replay /path/to/failure.json --probe .roc-parser-tmp/asciidoc/probe
+python3 scripts/review_asciidoc.py replay /path/to/input.adoc --probe .roc-parser-tmp/asciidoc/probe
+python3 scripts/review_asciidoc.py differential /path/to/corpus --probe .roc-parser-tmp/asciidoc/probe
+----
+
+JSON replay retains authored assertions and scope; raw-source replay is
+exploration. Reported hashes identify the supplied probe; callers rebuilding
+outside CI must ensure it represents their intended source revision.
+
+== Worker contract
+
+`oracle.rb` is a persistent JSONL worker. Requests contain `id` (a nonnegative
+integer) and `source` (UTF-8 text). Responses echo the id and return the pinned
+version, projection, rich AST, HTML, warnings and policy limitations, or a
+structured error. The Python controller validates envelopes, field types,
+ids and versions and bounds response time and output bytes. It drains stdout
+and stderr together and reaps workers after failure or completion.
+
+The oracle creates a fresh document, logger and extension registry for each
+request. It fixes date attributes, locale, backend and safe mode and disables
+ambient extensions, external highlighters and include reads. Resource limits
+are explicit in the adapter and runner; oversized inputs fail visibly.
+
+Optional `includes` maps provide request-local virtual sources. The adapter
+materializes only supplied content in a private directory and lets the pinned
+engine perform native preprocessing, including line and tag selectors. Only
+include processing temporarily uses SAFE mode; document conversion remains
+SECURE. Absolute paths, URIs, traversal, missing sources, cycles and excess
+expansion fail explicitly. Without a map, includes retain the secure link
+fallback.
+
+== Local performance gate
+
+[source,sh]
+----
+python3 scripts/check_asciidoc_performance.py --roc "$ROC"
+python3 scripts/check_asciidoc_performance.py --smoke --roc "$ROC"
+----
+
+The full local campaign defaults to 2,000 generated documents plus 500 mutations,
+all fixture suites and geometric scaling families. Sizes run from 32 to 1,024;
+nested lists and containers use depths from 2 to 32. It measures parse and parse
+plus render with optimized code and persistent workers. Every input must meet
+the 1.0-times-oracle ceiling; uncertain timings escalate to longer batches.
+Scaling families use full timing windows. Correctness, warmup, IPC and JSON
+serialization are excluded from timed operations. Source/build fingerprints,
+raw samples and replay commands are saved in the report. CI runs only two tiny
+smoke cases and never asserts timings. See `--help` for corpus, seed and replay
+options.

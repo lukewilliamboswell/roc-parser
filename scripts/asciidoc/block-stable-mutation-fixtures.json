@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "block-retained-stable-mutations",
+      "required_cases": [
+        "block-retained-stable-mutation-1-000011",
+        "block-retained-stable-mutation-1-000032"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "block-retained-stable-mutation-1-000011",
+      "source": "[cols=\"1\"]\n|===\n|First\n\nSecond\n|====\n|First\n\nSecond\n|===",
+      "parent_id": "table-extended-paragraphs",
+      "sha256": "cb8664d988b42aaed4f44f757f0f93658d540d9fa1ac78a1d103c776848b41fa",
+      "operation": "duplicate",
+      "category": "block-retained-stable-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "block-retained-stable-mutation-1-000032",
+      "source": "[😀subs=none]\n<b> *Hi*",
+      "parent_id": "block-paragraph-subs-none",
+      "sha256": "713473623286de53410a2c8ffcc0939e230c9ee7af1f68a23feda8fe47c50322",
+      "operation": "insert",
+      "category": "block-retained-stable-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "[😀subs=none]\n<b> *Hi*",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
