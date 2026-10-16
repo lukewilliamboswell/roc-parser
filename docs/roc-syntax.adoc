@@ -8,18 +8,17 @@ endif::[]
 = Parsing Roc source
 
 This chapter is for authors of highlighters and source analysis tools. `RocSyntax`
-parses a growing subset of current Zig compiler syntax and returns source tokens,
-a syntax tree and diagnostics. Coverage is incomplete; it is not a replacement
-for compiler validation. The implementation is pure Roc; the compiler reference worker is
+parses Roc source and returns source tokens, a syntax tree and diagnostics.
+The implementation is pure Roc; the compiler reference worker is
 development tooling and is not a dependency of applications using the module.
 Legacy Rust compiler syntax is outside its scope.
 
-The current implementation includes literals, identifiers, calls, field access,
-lists, tuples, unary and binary expressions, simple declarations, lambdas,
-conditionals, match branches, records, blocks, imports and module headers.
-Patterns and type annotations have partial coverage. Interpolated strings and
-other unimplemented constructs carry explicit coverage diagnostics. Check the
-source doc comment and differential corpus when depending on a specific form.
+The syntax tree represents expressions, interpolated and multiline strings,
+typed literals, binding patterns, declarations, control flow, records, nominal
+construction, imports, type annotations and declarations, constraints and
+associated items. Module, hosted, app, package and platform headers retain their
+exposures, dependencies and target configuration. The compatibility section
+identifies the changing compiler grammar used for validation.
 
 == Parse and inspect tokens
 
@@ -58,8 +57,7 @@ once when converting many locations in the same source.
 
 A highlighter can start from tokens for comments, keywords, strings, literals and
 punctuation. Syntax structure adds context for declarations, calls and expressions.
-Preserved tokens continue to be useful when a node is malformed or its syntax is
-not yet supported.
+Preserved tokens continue to be useful when a node is malformed.
 
 Use `RocSyntax.tokenize_str` or `tokenize_bytes` when only lexical highlighting is
 needed. They return source-backed tokens and diagnostics without constructing a
@@ -73,10 +71,11 @@ and operator precedence are represented structurally. Rules that need binding or
 type information must add scope analysis or use compiler information; parsing
 alone does not establish that a program typechecks.
 
-Treat recovery diagnostics and implementation coverage separately. A construct
-outside the implemented grammar does not establish that the source is invalid Roc.
 Check the parse status and diagnostics before applying a rule that assumes a
-complete tree. Code completion and highlighting should tolerate partial results.
+complete tree. Recovery returns partial structure for malformed input. Nesting
+at the configured limit, or a document above the token limit, returns `Limited`;
+tokens remain available for highlighting. Code completion and highlighting
+should tolerate partial results.
 
 == Compatibility and validation
 
@@ -105,7 +104,7 @@ ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 
 The command checks the package, builds the pinned compiler oracle and optimized
 Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
-expression trees, checks dedicated type fixtures and the complete pinned snapshot
+expression trees, checks dedicated type and platform fixtures and the complete pinned snapshot
 acceptance corpus, runs both fuzz smoke campaigns and checks performance scaling.
 It rebuilds candidate probes and records source and executable hashes. Its
 `validation.json`, step logs, differential failures and performance results live

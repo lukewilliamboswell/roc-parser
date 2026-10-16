@@ -3,13 +3,11 @@ import RocSyntaxBuffer
 ## Lossless parsing of Roc source into tokens, syntax trees and diagnostics.
 ## Byte spans are half-open. Comments and whitespace are tokens.
 ##
-## Expressions support identifiers, numbers, strings without interpolation,
-## calls, field access, lists, tuples, records, blocks, simple lambdas, if/else,
-## simple match branches, unary and binary operators. Files support module
-## headers, simple imports, value declarations and simple type annotations.
-## Other constructs remain
-## source-backed `UnsupportedNode` values with an `UnsupportedSyntax` diagnostic.
-## This is an evolving syntax API, not a complete Roc validity checker.
+## Expressions include interpolated and multiline strings, typed literals,
+## calls, field access, operators, pipes, nominal construction and control flow.
+## Binding patterns, type declarations, annotations, constraints, imports and
+## module, app, package and platform headers retain their syntax structure.
+## Parsing does not resolve names or establish that a program typechecks.
 ##
 ## Parsing retains the source once and builds persistent radix buffers, then
 ## returns nodes/children as flat lists. Retained recursive states copy bounded

@@ -24,9 +24,11 @@ Earlier releases are described on the
 == Unreleased
 
 `RocSyntax` adds source-backed tokens and a tolerant indexed syntax tree for
-highlighters and source analysis tools. It targets the pinned Zig compiler
-syntax and has explicit limits on grammar coverage; legacy Rust syntax is not
-supported. See <<roc-syntax>> before treating a parse result as a validity answer.
+highlighters and source analysis tools. Expressions, patterns, type declarations,
+constraints and all header forms retain their syntax structure. Parsing has
+explicit nesting and token limits and does not perform binding or type analysis.
+Legacy Rust syntax is outside scope. See <<roc-syntax>> for the supported tooling
+workflow and source-location conventions.
 
 Development tooling adds a persistent compiler reference worker, independent
 generated syntax checks, raw and structured fuzz targets, an upstream snapshot
