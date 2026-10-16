@@ -336,7 +336,7 @@ def parser():
     ap.add_argument('--max-iterations', type=int, default=100000)
     ap.add_argument('--timeout', type=positive, default=30.0)
     ap.add_argument('--build-timeout', type=positive, default=180.0)
-    ap.add_argument('--deadline-seconds', type=positive, default=3600.0)
+    ap.add_argument('--deadline-seconds', type=positive, default=7200.0)
     ap.add_argument('--fixtures', type=Path, action='append', help='override default: main fixtures plus all *-fixtures.json suites')
     ap.add_argument('--corpus', type=Path, action='append', default=[])
     ap.add_argument('--replay', type=Path, action='append', default=[])

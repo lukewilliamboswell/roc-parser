@@ -121,4 +121,6 @@ Scaling families use full timing windows. Correctness, warmup, IPC and JSON
 serialization are excluded from timed operations. Source/build fingerprints,
 raw samples and replay commands are saved in the report. CI runs only two tiny
 smoke cases and never asserts timings. See `--help` for corpus, seed and replay
-options.
+options. The default wall-clock budget is two hours; the full campaign can take
+more than an hour on a development machine. Use `--deadline-seconds` to adjust
+that budget without changing the per-input timing or scaling limits.
