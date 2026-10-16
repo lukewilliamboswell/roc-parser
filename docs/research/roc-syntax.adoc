@@ -295,3 +295,46 @@ the newer tokenizer failure flags. Zig 0.17 removes the
 `ZIG_GLOBAL_CACHE_DIR` instead. The audit established source differences
 and adapter requirements, not new runtime or allocation measurements. Historical
 results above retain their original reference and measurement scope.
+
+== Runtime investigation, 16 October 2026
+
+The local comparison scaffold now measures repeated in-process parses with an
+optimized Roc executable and a verified ReleaseFast compiler oracle. Source
+decoding, JSON transport, warm-up and tree projection are outside timing. Result
+disposal is included. The required per-input ceiling is 1.5 times the reference;
+the current implementation still exceeds it. CI only checks the two-input
+benchmark protocol smoke, with no runtime-ratio assertion.
+
+Independent alternating-order measurements confirmed that the original gap was
+real: a 1,690-byte, 100-definition input took approximately 609 microseconds in
+Roc and 36.4 microseconds in Zig; a 1,000-definition input took 6.62 milliseconds
+and 0.361 milliseconds. The AST node counts were nearly equal. Extra trivia
+tokens accounted for only about 2.5% of Roc's time on the 100-definition input.
+These measurements precede the buffer improvement below.
+
+The compiler's public parse wrapper additionally copies tokenizer diagnostics,
+allocates an AST shell and checks redundant returns. A separate optimized
+measurement put this overhead at about 1% for 100 and 1,000 definitions. Keeping
+the stricter raw-tokenizer/parser reference therefore does not explain away the
+gap. The basic-cli resource registry adds a hash-map lookup on every deallocation,
+but an optimized allocator microbenchmark measured single-digit nanoseconds of
+additional cost per allocation/free pair; it is another cost to track, not an
+explanation for a seventeen-fold parser slowdown.
+
+Tree construction dominates the Roc profile. One 4,096-statement case made about
+123,000 allocations during a full parse, versus 18 during tokenization. Excluding
+the final output flattening did not materially change the result. The original
+persistent vector rebuilt a five-list radix path for every node and child index.
+The first validated improvement keeps a separate 32-element tail, archives the
+path only when that tail fills, and transfers displaced child lists with
+`List.replace`. Controlled before/after runs improved time by 2.3–2.8 times and
+removed 75–80% of allocations while retaining identical trees and persistent
+prefixes. The complete upstream structural corpus and native structured fuzz
+campaign passed with this change.
+
+Parser-state sharing and compiler ownership inference remain under investigation.
+Simple recursive nominal-state reproductions retain geometric list growth, so
+they do not establish a compiler bug. Reordering builder arguments and removing
+several apparent temporary aliases also failed to change allocation counts.
+Any upstream report needs a smaller reproduction that actually retains the
+observed problem, with pinned flags, output checks and allocation evidence.
