@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "syntax": "current-zig",
+  "reference_commit": "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5",
+  "coverage": [
+    "identifiers",
+    "integers",
+    "precedence",
+    "parentheses",
+    "calls",
+    "comments",
+    "recovery",
+    "unsupported",
+    "spacing",
+    "associativity",
+    "unary",
+    "trailing",
+    "unicode",
+    "strings",
+    "numbers-boundaries"
+  ],
+  "cases": [
+    {
+      "id": "integer",
+      "mode": "expr",
+      "source": "42",
+      "rule": "integers",
+      "coverage": "supported"
+    },
+    {
+      "id": "identifier",
+      "mode": "expr",
+      "source": "value",
+      "rule": "identifiers",
+      "coverage": "supported"
+    },
+    {
+      "id": "precedence",
+      "mode": "expr",
+      "source": "1 + 2 * 3",
+      "rule": "precedence",
+      "coverage": "supported"
+    },
+    {
+      "id": "precedence-reverse",
+      "mode": "expr",
+      "source": "1 * 2 + 3",
+      "rule": "precedence",
+      "coverage": "supported"
+    },
+    {
+      "id": "parentheses",
+      "mode": "expr",
+      "source": "(1 + 2) * 3",
+      "rule": "parentheses",
+      "coverage": "supported"
+    },
+    {
+      "id": "call",
+      "mode": "expr",
+      "source": "add(1, 2)",
+      "rule": "calls",
+      "coverage": "supported"
+    },
+    {
+      "id": "nested-call",
+      "mode": "expr",
+      "source": "add(f(1), 2)",
+      "rule": "calls",
+      "coverage": "supported"
+    },
+    {
+      "id": "comment",
+      "mode": "expr",
+      "source": "# hello\n1 # trailing\n",
+      "rule": "comments",
+      "coverage": "supported"
+    },
+    {
+      "id": "unfinished",
+      "mode": "expr",
+      "source": "(1 +",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported",
+      "mode": "expr",
+      "source": "if True 1 else 2",
+      "rule": "unsupported",
+      "coverage": "unsupported"
+    },
+    {
+      "id": "call-space",
+      "mode": "expr",
+      "source": "add (1, 2)",
+      "rule": "spacing",
+      "coverage": "supported"
+    },
+    {
+      "id": "left-assoc",
+      "mode": "expr",
+      "source": "8 - 4 - 2",
+      "rule": "associativity",
+      "coverage": "supported"
+    },
+    {
+      "id": "unary",
+      "mode": "expr",
+      "source": "-1 + 2",
+      "rule": "unary",
+      "coverage": "supported"
+    },
+    {
+      "id": "binary-minus",
+      "mode": "expr",
+      "source": "4 - 2",
+      "rule": "unary",
+      "coverage": "supported"
+    },
+    {
+      "id": "trailing",
+      "mode": "expr",
+      "source": "1 2",
+      "rule": "trailing",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unicode",
+      "mode": "expr",
+      "source": "\"λ\"",
+      "rule": "unicode",
+      "coverage": "supported"
+    },
+    {
+      "id": "string",
+      "mode": "expr",
+      "source": "\"hello\"",
+      "rule": "strings",
+      "coverage": "supported"
+    },
+    {
+      "id": "integer-prefix",
+      "mode": "expr",
+      "source": "0xFF",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "float",
+      "mode": "expr",
+      "source": "1.25",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "exponent",
+      "mode": "expr",
+      "source": "1.0e3",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    }
+  ]
+}

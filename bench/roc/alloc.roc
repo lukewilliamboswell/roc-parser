@@ -7,6 +7,7 @@ import fuzz.Fuzz
 import parser.CSV
 import parser.HTTP
 import parser.Markdown
+import parser.RocSyntax
 import parser.Parser
 import parser.Utf8
 import parser.Xml
@@ -28,6 +29,7 @@ test! = |bytes| {
 parse : Str, Str -> Str
 parse = |format, input| {
 	accepted = match format {
+		"roc-syntax" => RocSyntax.parse_str(input).status == Complete
 		"csv" => CSV.parse_with(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()

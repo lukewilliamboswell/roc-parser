@@ -88,6 +88,8 @@ TARGETS = dict(
         target("parser-combinators", max_input_size=256),
         target("string-primitives", max_input_size=256, timeout=10),
         target("byte-scan", max_input_size=256, timeout=10),
+        target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
+        target("roc-syntax-structured", max_input_size=256),
     ]
 )
 
@@ -194,7 +196,7 @@ def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]
         return 0, output
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [roc, "build", "--fuzz", str(config.source), f"--output={output}"]
+    command = [roc, "build", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
     print(f"+ {shlex.join(command)}", flush=True)
     try:
         completed = subprocess.run(command, cwd=ROOT, check=False)
