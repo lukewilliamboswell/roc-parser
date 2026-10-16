@@ -157,6 +157,28 @@ class Performance(unittest.TestCase):
                 rows.append({'case':{'id':str(size),'family':'f','source':'a'*size,'provenance':{'geometric':True}},'mode':mode,'candidate':{'median_ns':size}})
         self.assertEqual(len(perf.scaling(rows)),2)
 
+    def test_default_scaling_retains_explicit_and_passthrough_state_growth(self):
+        families={'explicit-attribute-counter-blocks','passthrough-counter-blocks',
+                  'explicit-macro-footnote-blocks'}
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes)
+               if case['family'] in families]
+        for family in families:
+            with self.subTest(family=family):
+                sizes={case['size'] for case in cases if case['family']==family}
+                self.assertTrue({1024,2048,4096}.issubset(sizes))
+        large={case['family']:case['source'] for case in cases if case['size']==4096}
+        self.assertEqual(large['explicit-attribute-counter-blocks'].count('[subs="attributes"]'),4096)
+        self.assertEqual(large['passthrough-counter-blocks'].count('pass:a['),4096)
+        for family in ('explicit-attribute-counter-blocks','passthrough-counter-blocks'):
+            self.assertTrue(large[family].endswith('{key0} {key4095}'))
+        notes=large['explicit-macro-footnote-blocks']
+        self.assertEqual(notes.count('[subs="macros"]'),4097)
+        self.assertEqual(notes.count('footnote:note4095[Note 4095.]'),1)
+        self.assertTrue(notes.endswith('footnote:note0[] footnote:note4095[]'))
+        small=[case for case in perf.geometric([4,8]) if case['family'] in families]
+        self.assertEqual(len(small),6)
+        self.assertEqual({case['size'] for case in small},{4,8})
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})
