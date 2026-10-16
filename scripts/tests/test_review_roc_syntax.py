@@ -68,6 +68,17 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_fixture_loader_accepts_direct_header_statement_and_repl_modes(self):
+        document = {'version': review.PROTOCOL_VERSION, 'reference_commit': review.REFERENCE_COMMIT,
+                    'coverage': ['modes'], 'cases': [
+                        {'id': mode, 'mode': mode, 'rule': 'modes', 'coverage': 'supported', 'source': ''}
+                        for mode in ('header', 'statement', 'repl')
+                    ]}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'fixtures.json'
+            path.write_text(json.dumps(document))
+            self.assertEqual(len(review.load_cases(path)[1]), 3)
+
     def test_file_retains_import_structure(self):
         response = {'nodes': [
             {'kind': 'ImportPath', 'start': 7, 'end': 10, 'children_start': 0, 'children_len': 0},

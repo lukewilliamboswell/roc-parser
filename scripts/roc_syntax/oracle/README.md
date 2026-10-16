@@ -38,7 +38,7 @@ use stderr and a nonzero exit status, which the supervisor must handle.
 {"version":1,"id":"case-1","mode":"expr","source":"1 + 2 * 3"}
 ```
 
-`version` defaults to 1. `id` is a string; `mode` is `file` or `expr`; `source` is
+`version` defaults to 1. `id` is a string; `mode` is `file`, `expr`, `header`, `statement`, or `repl`; `source` is
 a JSON string decoded as UTF-8. Unknown fields are ignored. Arbitrary invalid UTF-8
 source transport is not implemented in this version. There is a 16 MiB request-line
 limit. Invalid JSON, unsupported modes/versions, and compiler crashes terminate
@@ -49,13 +49,14 @@ Response fields:
 - `version`, `id`: protocol version and request identity.
 - `ok`: no tokenizer/parser diagnostics and the entire token stream consumed.
 - `consumed`: parser position reached `EndOfFile`; this is checked explicitly,
-  because the compiler's expression convenience API may accept a prefix.
+  because the compiler convenience APIs may accept a prefix. This strict
+  full-input contract also applies to headers, statements and REPL fragments.
 - `tokens`: compiler token `kind` plus half-open UTF-8 byte `start`/`end` offsets.
   Includes `EndOfFile`; trivia is omitted by the compiler tokenizer. Token kinds
   are compiler-specific and include compound forms such as `NoSpaceDotLowerIdent`.
 - `diagnostics`: `stage`, compiler `kind`, and half-open byte `start`/`end` offsets.
   Includes explicit `UnconsumedInput` and `TooManyTokenizationErrors` markers.
-- `facts`: valid-file top-level definitions or a valid expression root, with
+- `facts`: valid-file statements, a valid expression, header, or statement root, with
   `kind`, byte `start`/`end`, `node_kind`, and a structural `shape` projection.
 
 Shape projection is intentionally limited, with unsupported syntax explicit:
@@ -65,14 +66,17 @@ Shape projection is intentionally limited, with unsupported syntax explicit:
 ["identifier", "answer"]
 ["binary", "+", ["number", "1"], ["number", "2"]]
 ["call", ["identifier", "f"], [["number", "1"]]]
-["unsupported", "lambda"]
+["lambda", [["p_identifier", "x"]], ["identifier", "x"]]
 ```
 
 Lists and tuples use `["list", [...]]` and `["tuple", [...]]`; plain strings
 use `["string", rawSourceIncludingQuotes]`; unary expressions use
-`["unary", operator, child]`. Interpolated strings remain explicitly unsupported.
+`["unary", operator, child]`. Interpolated strings use `["interpolated_string", parts]`; multiline strings
+use `["multiline_string", parts]`. A part is `["text", rawSource]` or
+`["interpolation", expression]`; empty text parts are omitted. Typed literals
+use `["typed", literal, [typePathSegments...]]`.
 
-Definition facts project the RHS. Parentheses follow the compiler AST's grouping;
+Definition facts retain bindings as `["decl", pattern, expression]`. Parentheses follow the compiler AST's grouping;
 they do not introduce a separate shape. Projection depth above 256 produces an
 explicit unsupported marker. A consumer must not count unsupported projections
 as structural agreement. Raw number/identifier spellings are retained.
@@ -89,13 +93,26 @@ ORACLE_BINARY=/path/to/roc-syntax-oracle python3 -m unittest discover \
   -s scripts/roc_syntax/oracle -p 'test_*.py'
 ```
 
-Common expression projections additionally include `lambda` (raw pattern text and
-body), `if` (condition and branches), `match` (scrutinee and pattern/body pairs),
-`record` (ordered field-name/value pairs), `block` (ordered expression and definition
-RHS shapes), nested `field` paths and method calls projected as calls of fields.
-Uppercase tag values project as identifiers; token categories retain their case.
-Optional fields, guarded matches, record extensions, qualified names, and block
-statements outside definitions/expressions remain explicit unsupported projections.
+Common expression projections include lambdas, conditionals, guarded matches,
+records, blocks, required/optional field paths, qualified names, tuple access,
+characters, suffix propagation, arrows, loops and control expressions. Patterns
+retain their structure, argument-list presence and nominal record shorthand.
+Variable declarations preserve their name and optional initializer. Imports
+preserve source targets, aliases, exposed qualified names and file content type.
+Headers currently project module and hosted exposure lists; file-mode header/type
+facts and additional record/nominal forms still have explicit projection gaps.
+
+`statement` invokes the pinned parser's in-body statement entry point; it can
+accept a variable declaration that file mode rejects. `header` invokes its header
+entry point directly, without wrapping the source. `repl` takes one extracted
+fragment, not a transcript. It follows `resolveSnapshotReplInputKind`: retain a
+successful file parse containing exactly one definition statement; otherwise try
+an in-body statement, falling back to the valid single-file statement if that
+parse fails. This dispatch inspects parser errors, then the selected parse must
+consume the entire fragment to satisfy `ok`. The pinned snapshot tool can accept
+a parsed prefix, so the strict worker does not claim identical snapshot acceptance
+for trailing input. REPL evaluation and cross-fragment bindings are outside this
+parse-only protocol.
 
 The live contract test sends multiple requests to one process, validates numeric
 and addition structures from the pinned compiler's `expr_int_simple.md` and

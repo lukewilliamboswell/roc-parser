@@ -287,10 +287,41 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
         else => array(gpa, &.{ string("unsupported"), string(@tagName(expr)) }),
     };
 }
+fn replParseMode(gpa: Allocator, source: []const u8) Allocator.Error![]const u8 {
+    var env = try base.CommonEnv.init(gpa, source);
+    defer env.deinit(gpa);
+    const file = try parse.file(gpa, &env);
+    defer file.deinit();
+    const statements = file.store.statementSlice(file.store.getFile().statements);
+    if (file.hasErrors() or statements.len != 1) return "statement";
+    switch (file.store.getStatement(statements[0])) {
+        .decl, .@"var", .import, .file_import, .type_decl, .type_anno => return "file",
+        else => {},
+    }
+    const statement = try parse.statement(gpa, &env);
+    defer statement.deinit();
+    return if (!statement.hasErrors()) "statement" else "file";
+}
+fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Header.Idx) Allocator.Error!std.json.Value {
+    const header = store.getHeader(idx);
+    const collection = switch (header) {
+        .module => |value| value.exposes,
+        .hosted => |value| value.exposes,
+        .default_app => return array(gpa, &.{ string("header"), string("default_app"), try array(gpa, &.{}) }),
+        .type_module => return array(gpa, &.{ string("header"), string("type_module"), try array(gpa, &.{}) }),
+        else => return array(gpa, &.{ string("unsupported"), string(@tagName(header)) }),
+    };
+    var exposed = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.exposedItemSlice(.{ .span = store.getCollection(collection).span })) |item| try exposed.append(try exposedShape(gpa, store, tokens, source, item));
+    return array(gpa, &.{ string("header"), string(@tagName(header)), .{ .array = exposed } });
+}
 fn handle(gpa: Allocator, req: Request) !Response {
     if (req.version != 1) return error.UnsupportedVersion;
-    const is_file = std.mem.eql(u8, req.mode, "file");
-    if (!is_file and !std.mem.eql(u8, req.mode, "expr")) return error.UnsupportedMode;
+    const mode = if (std.mem.eql(u8, req.mode, "repl")) try replParseMode(gpa, req.source) else req.mode;
+    const is_file = std.mem.eql(u8, mode, "file");
+    const is_header = std.mem.eql(u8, mode, "header");
+    const is_statement = std.mem.eql(u8, mode, "statement");
+    if (!is_file and !is_header and !is_statement and !std.mem.eql(u8, mode, "expr")) return error.UnsupportedMode;
     var env = try base.CommonEnv.init(gpa, req.source);
     defer env.deinit(gpa);
     var messages: [128]parse.tokenize.Diagnostic = undefined;
@@ -304,7 +335,9 @@ fn handle(gpa: Allocator, req: Request) !Response {
     defer parser.decl_index.deinit();
     defer parser.diagnostics.deinit(gpa);
     var expression: ?parse.AST.Expr.Idx = null;
-    if (is_file) try parser.runFile() else expression = try parser.runExpr();
+    var header: ?parse.AST.Header.Idx = null;
+    var statement: ?parse.AST.Statement.Idx = null;
+    if (is_file) try parser.runFile() else if (is_header) header = try parser.runHeader() else if (is_statement) statement = try parser.runStatement() else expression = try parser.runExpr();
     const consumed = parser.peekAt(parser.pos) == .EndOfFile;
     var tokens: std.ArrayList(Token) = .empty;
     for (result.tokens.tokens.items(.tag), 0..) |tag, i| {
@@ -328,6 +361,12 @@ fn handle(gpa: Allocator, req: Request) !Response {
             const expr = parser.store.getExpr(idx);
             const region = expr.to_tokenized_region();
             try facts.append(gpa, .{ .kind = "expression", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(expr), .shape = try shape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
+        } else if (statement) |idx| {
+            const stmt = parser.store.getStatement(idx);
+            const region = stmt.to_tokenized_region();
+            try facts.append(gpa, .{ .kind = "statement", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(stmt), .shape = try statementShape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
+        } else if (header) |idx| {
+            try facts.append(gpa, .{ .kind = "header", .start = 0, .end = @intCast(req.source.len), .node_kind = @tagName(parser.store.getHeader(idx)), .shape = try headerShape(gpa, &parser.store, &result.tokens, req.source, idx) });
         } else {
             for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
                 const stmt = parser.store.getStatement(idx);

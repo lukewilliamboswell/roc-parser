@@ -55,6 +55,32 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_header_statement_and_repl_modes_are_direct_and_strict(self):
+        cases = [
+            ('header', 'module [run]', True, True),
+            ('header', 'hosted [main!]', True, True),
+            ('header', 'module []\nx = 1', False, False),
+            ('statement', 'var x = 1', True, True),
+            ('file', 'var x = 1', False, True),
+            ('statement', '1 + 2', True, True),
+            ('statement', 'x = 1\ny = 2', False, False),
+            ('repl', 'x = 1', True, True),
+            ('repl', 'var x = 1', True, True),
+            ('repl', '1 + 2', True, True),
+            ('repl', 'dbg 1', True, True),
+            ('repl', 'x = 1\ny = 2', False, False),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': mode, 'source': source}) + '\n' for i, (mode, source, _, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (mode, source, ok, consumed), row in zip(cases, rows):
+            with self.subTest(mode=mode, source=source):
+                self.assertEqual(row['ok'], ok, row['diagnostics'])
+                self.assertEqual(row['consumed'], consumed)
+        self.assertEqual(rows[0]['facts'][0]['shape'], ['header', 'module', [['exposed', ['identifier', 'run'], None]]])
+        self.assertEqual(rows[3]['facts'][0]['shape'], ['var', 'x', ['number', '1']])
+
     def test_import_target_alias_exposes_and_file_content_type(self):
         cases = [
             ('import Foo', ['import', 'Foo', None, []]),

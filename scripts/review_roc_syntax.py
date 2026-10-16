@@ -171,7 +171,8 @@ def syntax_shape(response, source):
         branch = [visit(child) for child in children[start:start+length]]
         active.remove(index)
         if kind in {'File', 'Module'}:
-            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in {'Header', 'TypeAnnotation'}]
+            omitted = {'TypeAnnotation'} if response.get('mode') == 'header' else {'Header', 'TypeAnnotation'}
+            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in omitted]
         # Parentheses are concrete syntax; grouping already determines topology.
         if kind in {'Group', 'Parenthesized'} and len(branch) == 1:
             return branch[0]
@@ -188,6 +189,8 @@ def syntax_shape(response, source):
             return ['expect', branch[0]]
         if kind == 'While':
             return ['while', *branch]
+        if kind == 'Header':
+            return ['header', text.split(None, 1)[0], branch]
         if kind == 'ImportPath':
             return ['import_path', text]
         if kind == 'ImportAlias':
@@ -406,7 +409,7 @@ def load_cases(path):
     for case in cases:
         if case['coverage'] not in {'supported', 'recovery', 'unsupported', 'exploratory'}:
             raise ValueError('unknown coverage classification')
-        if case['mode'] not in {'file', 'expr'}:
+        if case['mode'] not in {'file', 'expr', 'header', 'statement', 'repl'}:
             raise ValueError('unknown parse mode')
     return document, cases
 
