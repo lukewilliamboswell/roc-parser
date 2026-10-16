@@ -60,7 +60,7 @@ fn suffixNames(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
             for (store.tokenSlice(path.qualifiers)) |raw_token| try names.append(string(fieldName(tokenText(tokens, source, @intCast(raw_token)))));
             try names.append(string(fieldName(tokenText(tokens, source, path.final_token))));
         },
-        .deprecated_builtin => try names.append(string("deprecated_builtin")),
+        .deprecated_builtin => |name| try names.append(string(tokens.env.getIdent(name))),
     }
     return .{ .array = names };
 }
@@ -176,7 +176,7 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
             }
             break :blk array(gpa, &.{ string("type_decl"), string(@tagName(value.kind)), projected_header, try typeShape(gpa, store, tokens, source, value.anno, depth + 1), try whereShape(gpa, store, tokens, source, value.where, depth + 1), associated });
         },
-        else => array(gpa, &.{ string("unsupported"), string(@tagName(stmt)) }),
+        .malformed => |value| array(gpa, &.{ string("malformed_statement"), string(@tagName(value.reason)) }),
     };
 }
 fn exposedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.ExposedItem.Idx) Allocator.Error!std.json.Value {
@@ -496,7 +496,7 @@ fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
         .package => |value| value.exposes,
         .default_app => return array(gpa, &.{ string("header"), string("default_app"), try array(gpa, &.{}) }),
         .type_module => return array(gpa, &.{ string("header"), string("type_module"), try array(gpa, &.{}) }),
-        else => return array(gpa, &.{ string("unsupported"), string(@tagName(header)) }),
+        .malformed => |value| return array(gpa, &.{ string("malformed_header"), string(@tagName(value.reason)) }),
     };
     var exposed = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.exposedItemSlice(.{ .span = store.getCollection(collection).span })) |item| try exposed.append(try exposedShape(gpa, store, tokens, source, item));
