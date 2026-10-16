@@ -29,7 +29,8 @@
     "grammar/record-optional-commas",
     "grammar/type-boundaries",
     "grammar/type-composition",
-    "associated-contexts"
+    "associated-contexts",
+    "mutation-qualification"
   ],
   "provenance": {
     "purpose": "Branch-directed production and cross-composition audit; explicit arrow models independently constructed and verified against the immutable compiler oracle.",
@@ -4353,6 +4354,69 @@
       "mode": "file",
       "coverage": "supported",
       "rule": "associated-contexts"
+    },
+    {
+      "id": "mutation-qualification-0",
+      "mode": "expr",
+      "source": "{ $field: \"value\" }",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-1",
+      "mode": "expr",
+      "source": "x->f.method()",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-2",
+      "mode": "expr",
+      "source": "x->a.b.c",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-3",
+      "mode": "expr",
+      "source": "x->A.0",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-4",
+      "mode": "expr",
+      "source": "x->A.?b",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-5",
+      "mode": "expr",
+      "source": "x->A.{b:1}",
+      "rule": "mutation-qualification",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-qualification-6",
+      "mode": "file",
+      "source": "import ..",
+      "rule": "mutation-qualification",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-qualification-7",
+      "mode": "file",
+      "source": "for }, 2] {}",
+      "rule": "mutation-qualification",
+      "coverage": "recovery"
+    },
+    {
+      "id": "mutation-qualification-8",
+      "mode": "expr",
+      "source": "x->A.(1)",
+      "rule": "mutation-qualification",
+      "coverage": "recovery"
     }
   ]
 }

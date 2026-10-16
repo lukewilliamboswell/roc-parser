@@ -480,8 +480,10 @@ expression = |initial, minimum, depth, punned| {
 			$s = vacant
 			t = peek(look)
 			bp = binding(look)
+			arrow_name = peek(at_pos(look, look.pos + 1))
+			arrow_field = spelling(look, ".") and t.start == node_end(look, $left) and (($qualified and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent)) or (first.kind == LowerIdent and $left == built_node and arrow_name.kind == LowerIdent))
 			pipe_boundary = (minimum == 100 or minimum == 101) and t.start > node_end(look, $left) and ((spelling(look, ".") and (peek(at_pos(look, look.pos + 1)).kind == LowerIdent or peek(at_pos(look, look.pos + 1)).kind == UpperIdent or peek(at_pos(look, look.pos + 1)).kind == Number)) or spelling(look, ".?"))
-			if pipe_boundary or ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !$qualified))) {
+			if pipe_boundary or ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !arrow_field))) {
 				$s = look
 				$done = True
 			} else if spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>") {
@@ -1103,6 +1105,7 @@ parse_import = |initial, depth| {
 			$local = spelling(next, "/")
 		}
 		first = peek($s)
+		$end = U64.max($end, first.start)
 		var $upper = first.kind == UpperIdent
 		if first.kind != UpperIdent and first.kind != LowerIdent {
 			$s = issue($s, UnexpectedToken, first.start, first.end)
@@ -1967,7 +1970,7 @@ curly = |initial, start, depth, punned, forced| {
 				var $field_state = name_state
 				var $field_node = name_node
 				field_look = skip_trivia(name_state)
-				if t.kind != LowerIdent or !is_lower(byte(field_look.source, t.start)) {
+				if t.kind != LowerIdent or !(is_lower(byte(field_look.source, t.start)) or byte(field_look.source, t.start) == '$') {
 					bad = issue(field_look, UnsupportedSyntax, t.start, t.end)
 					{ state: next_field_state, node: next_field_node } = add_node(bad, UnsupportedNode, t.start, t.end, [])
 					$field_state = next_field_state
@@ -2431,7 +2434,7 @@ parse_for = |initial, start, stream, depth| {
 	validated = if spelling(look, "in") at_pos(look, look.pos + 1) else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
 	{ state: list_state, node: list_node } = expression(validated, 0, depth + 1, False)
 	{ state: body_state, node: body_node } = expression(list_state, 0, depth + 1, False)
-	end = node_end(body_state, body_node)
+	end = U64.max(node_end(body_state, body_node), U64.max(node_end(body_state, pattern_node), node_end(body_state, list_node)))
 	add_node(body_state, if stream ForStream else For, start, end, [pattern_node, list_node, body_node])
 }
 
