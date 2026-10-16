@@ -112,6 +112,10 @@ def normalize_tokens(response, source):
         # candidate omits zero-byte tokens to retain its progress invariant.
         if kind == 'StringPart' and start == end:
             continue
+        if kind in {'DotInt', 'NoSpaceDotInt'}:
+            out.append(['Punctuation', start, start + 1])
+            out.append(['Number', start + 1, end])
+            continue
         if kind in {'DotLowerIdent', 'DotUpperIdent', 'NoSpaceDotLowerIdent', 'NoSpaceDotUpperIdent'}:
             out.append(['Punctuation', start, start + 1])
             out.append(['LowerIdent' if kind.endswith('LowerIdent') else 'UpperIdent', start + 1, end])

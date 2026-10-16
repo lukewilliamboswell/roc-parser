@@ -68,6 +68,19 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_tuple_index_tokens_preserve_dot_and_original_index_span(self):
+        for kind in ('DotInt', 'NoSpaceDotInt'):
+            with self.subTest(kind=kind):
+                reference = {'tokens': [{'kind': kind, 'start': 2, 'end': 5}]}
+                candidate = {'tokens': [
+                    {'kind': 'Punctuation', 'start': 2, 'end': 3},
+                    {'kind': 'Number', 'start': 3, 'end': 5},
+                ]}
+                self.assertEqual(review.normalize_tokens(reference, 'x .01'),
+                                 [['Punctuation', 2, 3], ['Number', 3, 5]])
+                self.assertEqual(review.normalize_tokens(reference, 'x .01'),
+                                 review.normalize_tokens(candidate, 'x .01'))
+
     def test_precedence_disagreement_detected(self):
         first = {'ok':True,'consumed':True,'tokens':[], 'shape':['binary','+',1,['binary','*',2,3]]}
         second = {**first,'shape':['binary','*',['binary','+',1,2],3]}
