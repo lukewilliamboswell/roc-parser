@@ -114,4 +114,9 @@ node_kind_code = |kind| match kind {
 	RestPattern => 45
 	AliasPattern => 46
 	AlternativePattern => 47
+	VariableDeclaration => 48
+	Expect => 49
+	For => 50
+	ForStream => 51
+	While => 52
 }

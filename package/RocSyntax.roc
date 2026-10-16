@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -542,6 +542,7 @@ primary = |s, depth| {
 		Keyword if spelling(s, "break") => add_node(at_pos(s, s.pos + 1), Break, t.start, t.end, [])
 		Punctuation if spelling(s, "...") => add_node(at_pos(s, s.pos + 1), Ellipsis, t.start, t.end, [])
 		Keyword if spelling(s, "if") => parse_if(at_pos(s, s.pos + 1), t.start, depth + 1)
+		Keyword if spelling(s, "for") or spelling(s, "for!") => parse_for(at_pos(s, s.pos + 1), t.start, spelling(s, "for!"), depth + 1)
 		Keyword if spelling(s, "match") => parse_match(at_pos(s, s.pos + 1), t.start, depth + 1)
 		Operator if spelling(s, "|") => parse_lambda(at_pos(s, s.pos + 1), t.start, depth + 1)
 		OpenRound | NoSpaceOpenRound | OpenSquare => {
@@ -779,8 +780,9 @@ statement = |initial, depth| {
 		bad = issue(s, ResourceLimit, t.start, t.end)
 		add_node(at_pos(bad, bad.pos + if t.kind == EndOfFile 0 else 1), ErrorNode, t.start, t.end, [])
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, "=") {
-		{ state: name_state, node: name_node } = add_node(at_pos(s, following_pos), Identifier, t.start, t.end, [])
-		{ state: value_state, node: value_node } = expression(at_pos(name_state, name_state.pos + 1), 0, depth)
+		{ state: name_state, node: name_node } = parse_pattern(s, False, depth + 1)
+		after_name = skip_trivia(name_state)
+		{ state: value_state, node: value_node } = expression(at_pos(after_name, after_name.pos + 1), 0, depth)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [name_node, value_node])
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, ":") {
@@ -788,6 +790,41 @@ statement = |initial, depth| {
 		{ state: ty_state, node: ty_node } = type_expression(at_pos(name_state, name_state.pos + 1), depth)
 		end = node_end(ty_state, ty_node)
 		add_node(ty_state, TypeAnnotation, t.start, end, [name_node, ty_node])
+	} else if spelling(s, "var") {
+		name_state = skip_trivia(at_pos(s, s.pos + 1))
+		name = peek(name_state)
+		validated = if depth == 0 or name.kind != LowerIdent or !is_lower(byte(name_state.source, name.start)) issue(name_state, UnexpectedToken, name.start, name.end) else name_state
+		{ state: named_state, node: named_node } = add_node(at_pos(validated, validated.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
+		look = skip_trivia(named_state)
+		if spelling(look, "=") {
+			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1)
+			end = node_end(value_state, value_node)
+			add_node(value_state, VariableDeclaration, t.start, end, [named_node, value_node])
+		} else if spelling(look, ":") {
+			{ state: ty_state, node: ty_node } = type_expression(at_pos(look, look.pos + 1), depth + 1)
+			end = node_end(ty_state, ty_node)
+			add_node(ty_state, TypeAnnotation, t.start, end, [named_node, ty_node])
+		} else {
+			add_node(look, VariableDeclaration, t.start, name.end, [named_node])
+		}
+	} else if spelling(s, "expect") {
+		{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
+		end = node_end(value_state, value_node)
+		add_node(value_state, Expect, t.start, end, [value_node])
+	} else if spelling(s, "while") {
+		{ state: condition_state, node: condition_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
+		{ state: body_state, node: body_node } = expression(condition_state, 0, depth + 1)
+		end = node_end(body_state, body_node)
+		add_node(body_state, While, t.start, end, [condition_node, body_node])
+	} else if spelling(s, "for") or spelling(s, "for!") or spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") or spelling(s, "break") {
+		primary(s, depth + 1)
+	} else if (t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(s) {
+		{ state: pattern_state, node: pattern_node } = parse_pattern(s, False, depth + 1)
+		look = skip_trivia(pattern_state)
+		validated = if spelling(look, "=") look else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
+		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1)
+		end = node_end(value_state, value_node)
+		add_node(value_state, Declaration, t.start, end, [pattern_node, value_node])
 	} else if spelling(s, "module") {
 		look = skip_trivia(at_pos(s, s.pos + 1))
 		if peek(look).kind == OpenSquare {
@@ -1530,4 +1567,57 @@ expect {
 
 expect {
 	["|1 + 2| 0", "match x { 1 + 2 => 0 }", "match x { [a b] => 0 }", "|var _| 0", "match x { [.. old] => 0 }", "match x { _ as Upper => 0 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+}
+
+# Only inspect potential destructuring starts; ordinary definitions take the
+# constant-lookahead path above. Delimiters shield nested assignments.
+has_pattern_assignment : State -> Bool
+has_pattern_assignment = |s| {
+	var $pos = s.pos
+	var $nesting = 0.U64
+	var $found = False
+	var $done = False
+	while !$done {
+		t = source_token(s, $pos)
+		if t.kind == EndOfFile {
+			$done = True
+		} else if $nesting == 0 and token_spelling(s.source, t, "=") {
+			$found = True
+			$done = True
+		} else if $nesting == 0 and ((t.kind == Whitespace and line_break(s.source, t.start, t.end)) or t.kind == CloseCurly) {
+			$done = True
+		} else {
+			if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
+				$nesting = $nesting + 1
+			}
+			if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+				if $nesting > 0 {
+					$nesting = $nesting - 1
+				} else {
+					$done = True
+				}
+			}
+			$pos = $pos + 1
+		}
+	}
+	$found
+}
+
+parse_for : State, U64, Bool, U64 -> Built
+parse_for = |initial, start, stream, depth| {
+	{ state: pattern_state, node: pattern_node } = parse_pattern(initial, False, depth + 1)
+	look = skip_trivia(pattern_state)
+	validated = if spelling(look, "in") at_pos(look, look.pos + 1) else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
+	{ state: list_state, node: list_node } = expression(validated, 0, depth + 1)
+	{ state: body_state, node: body_node } = expression(list_state, 0, depth + 1)
+	end = node_end(body_state, body_node)
+	add_node(body_state, if stream ForStream else For, start, end, [pattern_node, list_node, body_node])
+}
+
+expect {
+	["(a, b) = pair", "{name, count} = value", "Some(x) = result", "expect 1 == 1", "dbg 1", "for x in items { dbg x }", "while True { break }", "main = { var count = 0\n count = count + 1\n expect count > 0\n count }"].all(|source| RocSyntax.parse_str(source).status == Complete)
+}
+
+expect {
+	RocSyntax.parse_str("var count = 0").status == Recovered and RocSyntax.parse_expr_str("for (a, b) in pairs { a + b }").status == Complete and RocSyntax.parse_expr_str("for! item in stream { dbg item }").status == Complete
 }
