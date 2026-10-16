@@ -103,5 +103,6 @@
   "1 + 2",
   "import Foo as Bar exposing [value, Baz]",
   "{ tag\n ... }",
-  "{ ...\n f(...) }"
+  "{ ...\n f(...) }",
+  "Y{\u0001]"
 ]

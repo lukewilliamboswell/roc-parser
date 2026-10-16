@@ -580,7 +580,7 @@ collection = |initial, closing, depth| {
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else {
 			before = look.pos
@@ -1255,7 +1255,7 @@ type_collection = |initial, closing, mode, depth| {
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else {
 			before = look.pos
@@ -1346,7 +1346,7 @@ type_fields = |initial, record, depth| {
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else if $extension {
 			$s = issue(look, UnexpectedToken, t.start, t.end)
@@ -1607,7 +1607,7 @@ parse_associated_block = |initial, depth| {
 			$done = True
 		} else if t.kind == EndOfFile {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else {
 			before = look.pos
@@ -1763,7 +1763,7 @@ pattern_collection = |initial, closing, alternatives, depth| {
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else {
 			{ state: item_state, node: item_node } = parse_pattern(look, alternatives, depth + 1)
@@ -1800,7 +1800,7 @@ pattern_record = |initial, alternatives, depth| {
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
 			$s = issue(look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$done = True
 		} else {
 			{ state: field_state, node: field_node } = if spelling(look, "..") {
@@ -1917,7 +1917,7 @@ curly = |initial, start, depth, punned, forced| {
 			$s = at_pos($s, $s.pos + 1)
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
-			$end = t.start
+			$end = if t.start > $end t.start else $end
 			$s = issue($s, UnclosedDelimiter, t.start, t.end)
 			$done = True
 		} else {
@@ -2031,7 +2031,7 @@ parse_match = |initial, start, depth| {
 				$done = True
 			} else if t.kind == EndOfFile {
 				$s = issue($s, UnclosedDelimiter, t.start, t.end)
-				$end = t.start
+				$end = if t.start > $end t.start else $end
 				$done = True
 			} else {
 				before = $s.pos
@@ -2908,4 +2908,17 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("...").status == Complete and RocSyntax.parse_expr_str("value\n...").status == Recovered and RocSyntax.parse_expr_str("{ return Tag\n... }").status == Recovered
+}
+
+expect {
+	# Minimized raw-fuzz recovery: a mismatched closer overlaps an error child.
+	p = RocSyntax.parse_bytes([89, 123, 1, 93])
+	p.status != Complete and p.nodes.all(
+		|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
+			|id| match p.nodes.get(id) {
+				Ok(child) => n.start <= child.start and child.end <= n.end
+				Err(_) => False
+			},
+		),
+	)
 }
