@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import statistics
@@ -86,6 +87,46 @@ def allocations(binary, data):
         raise RuntimeError(f'allocation diagnostic missing: {result.stderr[:500]!r}')
     return int(found[1])
 
+def machine_identity():
+    model = None
+    system = platform.system()
+    if system == 'Darwin':
+        try:
+            result = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                model = result.stdout.strip() or None
+        except OSError:
+            pass
+    elif system == 'Linux':
+        try:
+            fields = {}
+            for line in Path('/proc/cpuinfo').read_text().splitlines():
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    fields.setdefault(key.strip(), value.strip())
+            model = fields.get('model name') or fields.get('Hardware')
+            if not model and fields.get('CPU implementer'):
+                model = fields['CPU implementer'] + ':' + fields.get('CPU part', 'unknown')
+        except OSError:
+            pass
+    cores = os.cpu_count()
+    return {'os': system, 'release': platform.release(), 'architecture': platform.machine(),
+            'cpu_model': model, 'logical_cpus': cores,
+            'strength': 'model_and_core_count' if model and cores else 'weak'}
+
+
+def validate_baseline(metadata, previous, allow_unverified=False):
+    current_hardware, old_hardware = metadata.get('hardware'), previous.get('hardware')
+    if not allow_unverified and (not current_hardware or not old_hardware or current_hardware.get('strength') == 'weak' or old_hardware.get('strength') == 'weak'):
+        raise RuntimeError('baseline hardware identity is weak or unavailable; record a new baseline or explicitly allow unverified comparison')
+    if current_hardware != old_hardware or metadata['compiler'] != previous['compiler']:
+        raise RuntimeError('baseline CPU/core count/OS/compiler differs; record a separate baseline')
+    if not allow_unverified and (metadata.get('reused_binary') or previous.get('reused_binary') or not metadata.get('build_flags') or not previous.get('build_flags')):
+        raise RuntimeError('baseline build configuration is unverified; rebuild or explicitly allow unverified comparison')
+    if metadata.get('build_flags') and previous.get('build_flags') and metadata['build_flags'] != previous['build_flags']:
+        raise RuntimeError('baseline build flags differ; record a separate baseline')
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--roc', default='roc')
@@ -93,6 +134,7 @@ def main(argv=None):
     ap.add_argument('--allocation-binary', type=Path, help='existing bench/roc/alloc.roc --fuzz executable')
     ap.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp/roc-syntax-bench/results.json')
     ap.add_argument('--baseline', type=Path)
+    ap.add_argument('--allow-unverified-baseline', action='store_true', help='explicitly compare weak hardware/reused binary metadata')
     ap.add_argument('--max-regression', type=float, default=1.5)
     ap.add_argument('--max-allocation-regression', type=float, default=1.25)
     ap.add_argument('--max-scaling-overhead', type=float, default=1.75, help='allowed time growth beyond byte growth')
@@ -120,7 +162,7 @@ def main(argv=None):
         if args.allocation_binary:
             record['allocation_calls'] = allocations(args.allocation_binary.resolve(), data)
         records.append(record)
-    metadata = {'machine': platform.platform(), 'cpu': platform.machine(), 'timestamp': time.time(),
+    metadata = {'machine': platform.platform(), 'hardware': machine_identity(), 'cpu': platform.machine(), 'timestamp': time.time(),
                 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
                 'compiler': subprocess.run([args.roc, 'version'], capture_output=True, text=True, check=True).stdout.strip(),
                 'build_flags': None if args.binary else ['--no-cache', '--opt=speed'],
@@ -131,8 +173,7 @@ def main(argv=None):
     failures = scaling_failures(records, args.max_scaling_overhead)
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())
-        if baseline['metadata']['machine'] != metadata['machine'] or baseline['metadata']['compiler'] != metadata['compiler']:
-            raise RuntimeError('baseline machine/compiler differs; record a separate baseline')
+        validate_baseline(metadata, baseline['metadata'], args.allow_unverified_baseline)
         failures += baseline_failures(records, baseline, args.max_regression, args.max_allocation_regression)
     if source_hash != hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest():
         raise RuntimeError('candidate source changed during benchmark; rebuild and rerun')

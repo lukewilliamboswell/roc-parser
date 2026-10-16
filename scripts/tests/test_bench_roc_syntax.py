@@ -37,3 +37,17 @@ class ScalingTests(unittest.TestCase):
         failures=bench.baseline_failures([current],{'records':[previous]},1.5)
         self.assertEqual(failures[0]['metric'],'allocation_calls')
         self.assertIsNone(failures[0]['ratio'])
+
+    def test_baseline_cpu_model_core_count_and_build_configuration_checked(self):
+        metadata={'compiler':'pinned','hardware':{'cpu_model':'Apple M1','logical_cpus':8,'strength':'model_and_core_count'},
+                  'reused_binary':False,'build_flags':['--no-cache','--opt=speed']}
+        bench.validate_baseline(metadata,metadata)
+        different={**metadata,'hardware':{**metadata['hardware'],'cpu_model':'Apple M4'}}
+        with self.assertRaisesRegex(RuntimeError,'CPU'):
+            bench.validate_baseline(metadata,different)
+        reused={**metadata,'reused_binary':True,'build_flags':None}
+        with self.assertRaisesRegex(RuntimeError,'configuration'):
+            bench.validate_baseline(reused,metadata)
+        weak={**metadata,'hardware':{'strength':'weak','cpu_model':None}}
+        with self.assertRaisesRegex(RuntimeError,'weak'):
+            bench.validate_baseline(weak,weak)
