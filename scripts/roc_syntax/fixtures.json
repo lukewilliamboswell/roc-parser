@@ -2128,6 +2128,412 @@
       "source": "x -...",
       "rule": "unary",
       "coverage": "recovery"
+    },
+    {
+      "id": "ellipsis-after-expression",
+      "mode": "expr",
+      "source": "{ tag\n ... }",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "identifier",
+              "tag"
+            ],
+            [
+              "ellipsis"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-update",
+      "mode": "expr",
+      "source": "{ ..base, first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_update",
+          [
+            "identifier",
+            "base"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-unset",
+      "mode": "expr",
+      "source": "{ first: _, second: 2 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record",
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ],
+            [
+              "second",
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-update-unset",
+      "mode": "expr",
+      "source": "{ ..base, first: _ }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_update",
+          [
+            "identifier",
+            "base"
+          ],
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-builder",
+      "mode": "expr",
+      "source": "{ first: 1 }.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-record",
+      "mode": "expr",
+      "source": "Box.{ first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_record",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            "record",
+            [
+              [
+                "first",
+                [
+                  "number",
+                  "1"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-apply",
+      "mode": "expr",
+      "source": "Box.(1)",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-qualified-apply",
+      "mode": "expr",
+      "source": "Outer.Box.(1, { first: 2 })",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ],
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "number",
+                    "2"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-qualified-record",
+      "mode": "expr",
+      "source": "Outer.Box.{ first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_record",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            "record",
+            [
+              [
+                "first",
+                [
+                  "number",
+                  "1"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "qualified-record-builder",
+      "mode": "expr",
+      "source": "{ first: 1 }.Outer.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-tuple-argument",
+      "mode": "expr",
+      "source": "Box.((1, 2))",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "tuple",
+              [
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-two-arguments",
+      "mode": "expr",
+      "source": "Box.(1, 2)",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ],
+            [
+              "number",
+              "2"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-zero-arguments",
+      "mode": "expr",
+      "source": "Box.()",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          []
+        ]
+      ]
+    },
+    {
+      "id": "nominal-record-argument",
+      "mode": "expr",
+      "source": "Box.({ first: 1 })",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "number",
+                    "1"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-builder-unset",
+      "mode": "expr",
+      "source": "{ first: _ }.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-record-update-missing-comma",
+      "mode": "expr",
+      "source": "{ ..base }",
+      "rule": "nominal-records",
+      "coverage": "recovery"
     }
   ]
 }

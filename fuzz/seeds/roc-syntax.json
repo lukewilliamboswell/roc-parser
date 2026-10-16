@@ -110,5 +110,20 @@
   "package [] { dep: \"a\\tb\" }",
   "package [] { dep }",
   "package [] { dep: 42 }",
-  "app [] { pf: platform \"a\\tb\" }"
+  "app [] { pf: platform \"a\\tb\" }",
+  "{ ..base, first: 1 }",
+  "{ first: _, second: 2 }",
+  "{ ..base, first: _ }",
+  "{ first: 1 }.Box",
+  "Box.{ first: 1 }",
+  "Box.(1)",
+  "Outer.Box.(1, { first: 2 })",
+  "Outer.Box.{ first: 1 }",
+  "{ first: 1 }.Outer.Box",
+  "Box.((1, 2))",
+  "Box.(1, 2)",
+  "Box.()",
+  "Box.({ first: 1 })",
+  "{ first: _ }.Box",
+  "{ ..base }"
 ]

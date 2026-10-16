@@ -8,14 +8,14 @@ import parser.RocSyntax
 
 ## The generator constructs its own expression tree, then prints it. Parsing
 ## must recover that tree; no parser output is used to compute expectations.
-Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Pat, Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr), OptionalAccess(Expr), DebugExpr(Expr), CrashExpr(Expr), ReturnExpr(Expr), Guarded(Pat, Expr, Expr), Alternatives(Expr), Interpolated(Expr), TypedNumber(Str)]
+Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Pat, Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr), OptionalAccess(Expr), DebugExpr(Expr), CrashExpr(Expr), ReturnExpr(Expr), Guarded(Pat, Expr, Expr), Alternatives(Expr), Interpolated(Expr), TypedNumber(Str), UpdateRecord(Expr, Expr), BuildRecord(Expr), NominalFields(Expr), ApplyNominal(Expr), UnsetFields(Expr)]
 Pat := [Bind(Str), Wild, Mutable(Str), Tagged(Pat), Nominal(Pat), PatPair(Pat, Pat), PatList(Pat), PatRecord(Pat), Alias(Pat)]
 Case : { source : Str, expected : Expr }
 
 build : List(U8), U64, U64 -> (Expr, U64)
 build = |bytes, pos, depth| {
 	choice = bytes.get(pos) ?? 0
-	kind = if depth == 0 { choice % 4 } else { choice % 20 }
+	kind = if depth == 0 { choice % 4 } else { choice % 25 }
 	if kind == 0 {
 		(Number(U8.to_str(bytes.get(pos + 1) ?? 0)), pos + 2)
 	} else if kind == 1 {
@@ -29,12 +29,12 @@ build = |bytes, pos, depth| {
 		if kind == 3 { (Call(left), next) } else if kind == 4 {
 			(pattern, end) = build_pattern(bytes, next, 2)
 			(Function(pattern, left), end)
-		} else if kind == 5 { (Access(left), next) } else if kind == 12 { (DebugExpr(left), next) } else if kind == 13 { (CrashExpr(left), next) } else if kind == 14 { (ReturnExpr(left), next) } else if kind == 15 { (OptionalAccess(left), next) } else if kind == 17 { (Alternatives(left), next) } else if kind == 18 { (Interpolated(left), next) } else {
+		} else if kind == 5 { (Access(left), next) } else if kind == 12 { (DebugExpr(left), next) } else if kind == 13 { (CrashExpr(left), next) } else if kind == 14 { (ReturnExpr(left), next) } else if kind == 15 { (OptionalAccess(left), next) } else if kind == 17 { (Alternatives(left), next) } else if kind == 18 { (Interpolated(left), next) } else if kind == 21 { (BuildRecord(left), next) } else if kind == 22 { (NominalFields(left), next) } else if kind == 23 { (ApplyNominal(left), next) } else if kind == 24 { (UnsetFields(left), next) } else {
 			(right, end) = build(bytes, next, depth - 1)
 			(if kind == 16 {
 				(pattern, _) = build_pattern(bytes, end, 2)
 				Guarded(pattern, left, right)
-			} else if kind == 6 { Add(left, right) } else if kind == 7 { Mul(left, right) } else if kind == 8 { Sequence(left, right) } else if kind == 9 { Pair(left, right) } else if kind == 10 { Conditional(left, right) } else { Fields(left, right) }, end)
+			} else if kind == 20 { UpdateRecord(left, right) } else if kind == 6 { Add(left, right) } else if kind == 7 { Mul(left, right) } else if kind == 8 { Sequence(left, right) } else if kind == 9 { Pair(left, right) } else if kind == 10 { Conditional(left, right) } else { Fields(left, right) }, end)
 		}
 	}
 }
@@ -82,6 +82,11 @@ render = |expr| match expr {
 	Function(pattern, body) => "(|${render_pattern(pattern)}| ${render(body)})"
 	Conditional(a, b) => "(if True (${render(a)}) else (${render(b)}))"
 	Fields(a, b) => "{ first: ${render(a)}, second: ${render(b)} }"
+	UpdateRecord(base, value) => "{ ..(${render(base)}), first: ${render(value)} }"
+	BuildRecord(value) => "{ first: ${render(value)} }.Box"
+	NominalFields(value) => "Box.{ first: ${render(value)} }"
+	ApplyNominal(value) => "Box.(${render(value)})"
+	UnsetFields(value) => "{ first: _, second: ${render(value)} }"
 	Access(base) => "(${render(base)}).value"
 	OptionalAccess(base) => "(${render(base)}).?value"
 	DebugExpr(value) => "(dbg (${render(value)}))"
@@ -141,6 +146,17 @@ matches = |parsed, id, expr| {
 				}
 				Conditional(a, b) => node.kind == If and node.children_len == 3 and matches(parsed, child(parsed, node, 0), Name("True")) and matches(parsed, child(parsed, node, 1), a) and matches(parsed, child(parsed, node, 2), b)
 				Fields(a, b) => node.kind == Record and node.children_len == 2 and matches_field(parsed, child(parsed, node, 0), "first", a) and matches_field(parsed, child(parsed, node, 1), "second", b)
+				UpdateRecord(base, value) => node.kind == RecordUpdate and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches_field(parsed, child(parsed, node, 1), "first", value)
+				BuildRecord(value) => node.kind == RecordBuilder and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and matches_field(parsed, child(parsed, node, 1), "first", value)
+				NominalFields(value) => {
+					backing = parsed.nodes.get(child(parsed, node, 1)) ?? node
+					node.kind == NominalRecord and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and backing.kind == Record and backing.children_len == 1 and matches_field(parsed, child(parsed, backing, 0), "first", value)
+				}
+				ApplyNominal(value) => node.kind == NominalApply and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and matches(parsed, child(parsed, node, 1), value)
+				UnsetFields(value) => {
+					unset = parsed.nodes.get(child(parsed, node, 0)) ?? node
+					node.kind == Record and node.children_len == 2 and unset.kind == UnsetField and unset.children_len == 1 and matches(parsed, child(parsed, unset, 0), Name("first")) and matches_field(parsed, child(parsed, node, 1), "second", value)
+				}
 				Access(base) | OptionalAccess(base) => {
 					kind = match expr { Access(_) => FieldAccess _ => OptionalFieldAccess }
 					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches(parsed, child(parsed, node, 1), Name("value"))
