@@ -1980,6 +1980,42 @@
           ]
         ]
       ]
+    },
+    {
+      "id": "reject-ellipsis-suffix-across-newline",
+      "mode": "expr",
+      "source": "{ tag\n ... }",
+      "rule": "control-expressions",
+      "coverage": "recovery"
+    },
+    {
+      "id": "ellipsis-first-block",
+      "mode": "expr",
+      "source": "{ ...\n f(...) }",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "ellipsis"
+            ],
+            [
+              "call",
+              [
+                "identifier",
+                "f"
+              ],
+              [
+                [
+                  "ellipsis"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
     }
   ]
 }

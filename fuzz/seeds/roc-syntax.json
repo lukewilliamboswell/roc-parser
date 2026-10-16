@@ -101,5 +101,7 @@
   "expect True",
   "x = 1",
   "1 + 2",
-  "import Foo as Bar exposing [value, Baz]"
+  "import Foo as Bar exposing [value, Baz]",
+  "{ tag\n ... }",
+  "{ ...\n f(...) }"
 ]
