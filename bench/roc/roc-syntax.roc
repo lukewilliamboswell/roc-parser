@@ -131,4 +131,7 @@ node_kind_code = |kind| match kind {
 	ImportAlias => 59
 	ExposedItem => 60
 	ExposedWildcard => 61
+	Dependencies => 62
+	DependencyField => 63
+	PlatformReference => 64
 }

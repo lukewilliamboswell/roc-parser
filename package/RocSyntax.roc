@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -878,6 +878,18 @@ statement = |initial, depth| {
 		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1, False)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [pattern_node, value_node])
+	} else if spelling(s, "app") or spelling(s, "package") {
+		{ state: exposed_state, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(at_pos(s, s.pos + 1))
+		look = skip_trivia(exposed_state)
+		if peek(look).kind == OpenCurly {
+			{ state: deps_state, node: deps_node } = dependency_record(look, spelling(s, "app"), depth + 1)
+			end = node_end(deps_state, deps_node)
+			validated = if depth == 0 deps_state else issue(deps_state, UnexpectedToken, t.start, end)
+			add_node(validated, Header, t.start, end, exposed_ids.append(deps_node))
+		} else {
+			validated = if depth == 0 and spelling(s, "package") look else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
+			add_node(validated, Header, t.start, exposed_end, exposed_ids)
+		}
 	} else if spelling(s, "module") or spelling(s, "hosted") {
 		{ state: items_state, ids: items_ids, end: items_end, comma: _ } = exposed_collection(at_pos(s, s.pos + 1))
 		validated = if depth == 0 items_state else issue(items_state, UnexpectedToken, t.start, items_end)
@@ -1983,4 +1995,127 @@ expect {
 
 expect {
 	RocSyntax.parse_statement_str("var count = 0").status == Complete and RocSyntax.parse_statement_str("1 + 2").status == Complete and RocSyntax.parse_statement_str("x = 1\ny = 2").status == Recovered and RocSyntax.parse_header_str("module [run]").status == Complete and RocSyntax.parse_header_str("x = 1").status == Recovered and RocSyntax.parse_header_str("module []\nx = 1").status == Recovered
+}
+
+dependency_record : State, Bool, U64 -> Built
+dependency_record = |initial, strict, depth| {
+	start = peek(initial).start
+	var $s = at_pos(initial, initial.pos + 1)
+	var $ids = []
+	var $end = peek(initial).end
+	var $platform = False
+	var $version = False
+	var $done = False
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$end = t.end
+			$s = at_pos(look, look.pos + 1)
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$done = True
+		} else {
+			before = look.pos
+			valid_name = t.kind == LowerIdent and !spelling(look, "_") and byte(look.source, t.start) != '_'
+			checked = if valid_name look else issue(look, UnexpectedToken, t.start, t.end)
+			{ state: name_state, node: name_node } = add_node(at_pos(checked, checked.pos + 1), Identifier, t.start, t.end, [])
+			var $field_ids = [name_node]
+			$s = skip_trivia(name_state)
+			$end = t.end
+			is_version = token_spelling($s.source, t, "roc")
+			if spelling($s, ":") {
+				value_start = skip_trivia(at_pos($s, $s.pos + 1))
+				is_platform = spelling(value_start, "platform")
+				value_state = if is_platform skip_trivia(at_pos(value_start, value_start.pos + 1)) else value_start
+				value_token = peek(value_state)
+				valid_start = if is_platform value_token.kind == StringStart or spelling(value_state, "glue") else !strict or value_token.kind == StringStart
+				validated = if valid_start and (!is_platform or !$platform) value_state else issue(value_state, UnexpectedToken, value_token.start, value_token.end)
+				{ state: parsed_state, node: parsed_node } = expression(validated, 0, depth + 1, False)
+				var $value_state = parsed_state
+				var $value_node = parsed_node
+				$end = node_end(parsed_state, parsed_node)
+				if is_platform {
+					{ state: platform_state, node: platform_node } = add_node(parsed_state, PlatformReference, peek(value_start).start, $end, [parsed_node])
+					$value_state = platform_state
+					$value_node = platform_node
+					$platform = True
+				}
+				$s = $value_state
+				$field_ids = $field_ids.append($value_node)
+				if is_version {
+					n = $s.nodes.get(parsed_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
+					part_id = $s.children.get(n.children_start) ?? $s.nodes.len()
+					part = $s.nodes.get(part_id) ?? n
+					version_text = Str.from_utf8_lossy($s.source.sublist({ start: part.start, len: part.end - part.start }))
+					if $version or is_platform or n.kind != StringLiteral or n.children_len != 1 or part.kind != StringSegment or !valid_roc_version(version_text) {
+						$s = issue($s, UnexpectedToken, t.start, $end)
+					}
+				}
+			} else if strict or is_version {
+				$s = issue($s, UnexpectedToken, t.start, $end)
+			}
+			$version = $version or is_version
+			{ state: field_state, node: field_node } = add_node($s, DependencyField, t.start, $end, $field_ids)
+			$ids = $ids.append(field_node)
+			$s = skip_trivia(field_state)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			} else if peek($s).kind != CloseCurly {
+				$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+			}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, Dependencies, start, $end, $ids)
+}
+
+version_digits : Str, U64, U64, U64 -> Bool
+version_digits = |text, minimum, maximum, limit| {
+	bytes = text.to_utf8()
+	var $value = 0.U64
+	if bytes.len() < minimum or bytes.len() > maximum or !bytes.all(is_digit) {
+		return False
+	}
+	for digit in bytes {
+		$value = $value * 10 + U8.to_u64(digit - '0')
+	}
+	$value <= limit
+}
+
+valid_roc_version : Str -> Bool
+valid_roc_version = |text| {
+	parts = Str.split_on(text, "-")
+	first = parts.first() ?? ""
+	if first == "nightly" {
+		year = parts.get(1) ?? ""
+		month = parts.get(2) ?? ""
+		day = parts.get(3) ?? ""
+		commit = parts.get(4) ?? ""
+		named_month = match month {
+			"January" | "February" | "March" | "April" | "May" | "June" | "July" | "August" | "September" | "October" | "November" | "December" => True
+			_ => False
+		}
+		month_number = version_digits(month, 1, 2, 12) and month.to_utf8().any(|b| b != '0')
+		parts.len() == 5 and version_digits(year, 4, 4, 65535) and (named_month or month_number) and version_digits(day, 1, 2, 31) and day.to_utf8().any(|b| b != '0') and !commit.is_empty() and commit.to_utf8().all(|b| is_digit(b) or (b >= 'a' and b <= 'f') or (b >= 'A' and b <= 'F'))
+	} else {
+		numbers = Str.split_on(first, ".")
+		valid_numbers = numbers.len() == 3 and numbers.all(|part| version_digits(part, 1, 10, 4294967295))
+		if parts.len() == 1 valid_numbers else {
+			suffix = text.to_utf8().drop_first(first.count_utf8_bytes() + 1)
+			valid_numbers and !suffix.is_empty() and suffix.all(|b| is_digit(b) or is_lower(b) or is_upper(b) or b == '.' or b == '-')
+		}
+	}
+}
+
+expect {
+	["app [main!] { pf: platform \"../platform/main.roc\" }", "app [] {}", "app [] { pf: platform glue }", "package [Parser, parse]", "package [parse] { util, other: value }", "app [] { roc: \"nightly-2026-July-31-123c5d7\" }", "package [] { roc: \"1.0.0-rc1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+}
+
+expect {
+	["app []", "app [] { pkg }", "app [] { pkg: 42 }", "app [] { a: platform glue, b: platform glue }", "app [] { roc: platform glue }", "package [] { roc: \"bad\" }", "package [] { roc: \"1.0.0\", roc: \"1.0.1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
 }
