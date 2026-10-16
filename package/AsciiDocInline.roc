@@ -37,11 +37,11 @@ AsciiDocInline :: [].{
 		bounded_attribute(value)
 	}
 
-	State : { emitted_footnotes : List(U64), footnotes : List({ name : Str, text : Str }), refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, attributes : List({ name : Str, value : Str }), removed : List(Str), snapshot : List({ name : Str, value : Str }) }
+	State : { emitted_footnotes : List(U64), footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, attributes : Dict(Str, Str), removed : Dict(Str, Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str), tag_prefix : Str }
 
 	## Start a new document; reuse the returned state between its blocks.
 	initial_state : State
-	initial_state = { emitted_footnotes: [], footnotes: [], refs: [], ref_index: Dict.empty(), indexed_ref_count: 0, attributes: [], removed: [], snapshot: [] }
+	initial_state = { emitted_footnotes: [], footnotes: [], note_index: Dict.empty(), indexed_note_count: 0, refs: [], ref_index: Dict.empty(), indexed_ref_count: 0, attributes: Dict.empty(), removed: Dict.empty(), snapshot: [], snapshot_index: Dict.empty(), tag_prefix: "\u(1)" }
 
 	## Replace the reference registry and build its lookup index once.
 	with_refs : State, List({ id : Str, text : Str }) -> State
@@ -58,6 +58,11 @@ AsciiDocInline :: [].{
 		if options.subs == "normal" or options.subs == "n" {
 			return render_state_fixed(input, attrs, options, state, False)
 		}
+		# Header attributes follow special characters, so inserted attribute
+		# values must not be escaped again. This pair needs one state pass.
+		if options.subs == "specialcharacters,attributes" {
+			return render_state_fixed(escape(input), attrs, { subs: "attributes" }, state, True)
+		}
 		stages = substitution_stages(options.subs)
 		if stages == normal_stages {
 			return render_state_fixed(input, attrs, { subs: "normal" }, state, False)
@@ -68,29 +73,38 @@ AsciiDocInline :: [].{
 
 render_state_fixed : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
 render_state_fixed = |input, attrs, options, state, prepared| {
+	prior_notes = state.footnotes.len()
 	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
-	original = { ..groups(options.subs), ref_index: indexed.ref_index }
+	original = { ..(if options.subs == "normal" or options.subs == "n" normal else groups(options.subs)), ref_index: indexed.ref_index }
 	refreshed = refresh_state(attrs, indexed)
 	if !needs_substitutions(input, original) {
 		return { html: input, state: refreshed }
 	}
-	effective = effective_attributes(attrs, refreshed)
-	before = if (original.quotes or original.macros) and !original.attr_quotes quote_all(input, effective, if prepared { ..original, macros: False } else original, 0) else { source: input, prefix: "", tags: [], deferred: [] }
+	quote_groups = if prepared { ..original, macros: False } else original
+	before = if (original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
 	mutation = if original.attributes mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
-	quoted = if original.quotes and original.attr_quotes quote_all(mutation.source, effective_attributes(attrs, mutation.state), original, 0) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
+	# Plain attribute/counter results need no second attribute merge or scan.
+	# Preserve protected quote/passthrough slots and deferred stateful macros.
+	if !original.attr_quotes and mutation.tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutation.source, { ..original, quotes: False, attributes: False }) {
+		return { html: mutation.source, state: mutation.state }
+	}
+	quotes = if original.quotes and original.attr_quotes quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
+	# Footnotes also use protected slots, including notes inserted by attributes.
+	quoted = if original.macros and quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
 	source = quoted.source
 	g = { ..original, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = effective_attributes(attrs, mutation.state).concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	reference_attrs = (if g.macros and macro_candidate(source) effective_attributes(attrs, mutation.state) else attrs).concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
 	if !g.macros {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, state.footnotes.len())
+		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
 	}
 	if !source.contains("footnote:") {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, state.footnotes.len())
+		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
 	}
-	var $notes = mutation.state.footnotes
-	# Release the old record's ownership of the growing note buffer before
-	# appending. All other document state remains available independently.
-	base_state = { ..mutation.state, footnotes: [] }
+	indexed_notes = with_note_index(mutation.state)
+	var $notes = indexed_notes.footnotes
+	var $names = indexed_notes.note_index
+	# Release both growing collections from the old record before updates.
+	base_state = { ..indexed_notes, footnotes: [], note_index: Dict.empty() }
 	notes_start = $notes.len()
 	var $render_tags = quoted.tags
 	var $prepared = ""
@@ -110,12 +124,15 @@ render_state_fixed = |input, attrs, options, state, prepared| {
 					Ok(end) => {
 						name = slice(source, $pos + marker.len(), $open - $pos - marker.len())
 						text = slice(source, $open + 1, end - $open - 1)
-						existing = note_index($notes, name)
+						existing = $names.get(name) ?? 0
 						reference = text == "" or existing > 0
 						number = if reference existing else $notes.len() + 1
 						if number > 0 {
 							if !reference {
 								$notes = $notes.append({ name, text: scan(text, reference_attrs, g, 0) })
+								if name != "" {
+									$names = $names.insert(name, number)
+								}
 							}
 							n = number.to_str()
 							id = if name == "" "" else " id=\"_footnote_${escape(name)}\""
@@ -139,22 +156,25 @@ render_state_fixed = |input, attrs, options, state, prepared| {
 			$pos = end
 		}
 	}
-	finish_render(scan($prepared, reference_attrs, g, 0), attrs, { ..base_state, footnotes: $notes }, { ..quoted, tags: $render_tags }, notes_start)
+	finish_render(scan($prepared, reference_attrs, g, 0), attrs, { ..base_state, footnotes: $notes, note_index: $names, indexed_note_count: $notes.len() }, { ..quoted, tags: $render_tags }, notes_start)
 }
 
-note_index : List({ name : Str, text : Str }), Str -> U64
-note_index = |notes, name| {
-	if name == "" {
-		return 0
+# Build an index for caller-supplied notes once; ordinary document renders
+# carry and update it across blocks, preserving the first definition's number.
+with_note_index : AsciiDocInline.State -> AsciiDocInline.State
+with_note_index = |state| {
+	if state.indexed_note_count == state.footnotes.len() {
+		return state
 	}
-	var $index = 0
-	for note in notes {
-		$index = $index + 1
-		if note.name == name and name != "" {
-			return $index
+	var $names = Dict.empty()
+	var $number = 0.U64
+	for note in state.footnotes {
+		$number = $number + 1
+		if note.name != "" and !$names.contains(note.name) {
+			$names = $names.insert(note.name, $number)
 		}
 	}
-	0
+	{ ..state, note_index: $names, indexed_note_count: state.footnotes.len() }
 }
 
 Groups : { special : Bool, quotes : Bool, attributes : Bool, replacements : Bool, macros : Bool, post : Bool, passes_done : Bool, attr_quotes : Bool, ref_index : Dict(Str, Str) }
@@ -218,18 +238,7 @@ slice : Str, U64, U64 -> Str
 slice = |s, start, len| Str.from_utf8_lossy(s.to_utf8().sublist({ start, len }))
 
 find : Str, Str, U64 -> Try(U64, [Missing])
-find = |s, needle, start| {
-	bytes = s.to_utf8()
-	target = needle.to_utf8()
-	var $pos = start
-	while $pos + target.len() <= bytes.len() {
-		if bytes.drop_first($pos).starts_with(target) {
-			return Ok($pos)
-		}
-		$pos = $pos + 1
-	}
-	Err(Missing)
-}
+find = |s, needle, start| find_bytes(s.to_utf8(), needle.to_utf8(), start)
 
 space : U8 -> Bool
 space = |c| c == ' ' or c == '\n' or c == '\t' or c == '\r'
@@ -273,7 +282,7 @@ lookup = |attrs, key| {
 }
 
 escape : Str -> Str
-escape = |s| repl(repl(repl(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+escape = |s| s.replace_each("&", "&amp;").replace_each("<", "&lt;").replace_each(">", "&gt;")
 
 repl : Str, Str, Str -> Str
 repl = |s, before, after| Str.join_with(s.split_on(before), after)
@@ -1506,9 +1515,40 @@ QuoteMatch : { used : U64, body : Str, role : Str, escaped : Bool, escaped_role 
 token : Str, U64 -> Str
 token = |prefix, index| "${prefix}${index.to_str()}${prefix}"
 
+pass_needed : Str, Groups -> Bool
+pass_needed = |input, g| g.macros and (input.contains("+") or input.contains("pass:") or input.contains("stem:") or input.contains("latexmath:") or input.contains("asciimath:") or input.contains("$$"))
+
+quote_needed : Str, Groups -> Bool
+quote_needed = |input, g| {
+	quoted = g.quotes and (input.contains("*") or input.contains("_") or input.contains("`") or input.contains("#") or input.contains("^") or input.contains("~"))
+	quoted or pass_needed(input, g)
+}
+
+# Formatting reads attribute values only to reserve a private delimiter.
+# Carry that delimiter across dynamic writes rather than materialize every
+# stored counter. Passthrough substitution still receives the full context.
+quote_state : Str, List({ name : Str, value : Str }), Groups, AsciiDocInline.State -> QuoteResult
+quote_state = |input, attrs, g, state| {
+	if pass_needed(input, g) {
+		quote_all(input, effective_attributes(attrs, state), g, 0)
+	} else {
+		quote_prefixed(input, attrs, g, state.tag_prefix)
+	}
+}
+
+macro_candidate : Str -> Bool
+macro_candidate = |source| source.contains(":") or source.contains("@") or source.contains("+") or source.contains("[") or source.contains("$") or source.contains("((") or source.contains("<<") or source.contains("&lt;&lt;")
+
 quote_all : Str, List({ name : Str, value : Str }), Groups, U64 -> QuoteResult
-quote_all = |input, attrs, g, _depth| {
-	var $prefix = "\u(1)"
+quote_all = |input, attrs, g, _depth| quote_prefixed(input, attrs, g, "\u(1)")
+
+quote_prefixed : Str, List({ name : Str, value : Str }), Groups, Str -> QuoteResult
+quote_prefixed = |input, attrs, g, prefix| {
+	# Most attribute references and URLs need no private quote slots.
+	if !quote_needed(input, g) {
+		return { source: input, prefix: "", tags: [], deferred: [] }
+	}
+	var $prefix = prefix
 	while input.contains($prefix) or attrs.any(|attr| attr.value.contains($prefix)) {
 		$prefix = $prefix.concat("\u(1)")
 	}
@@ -1886,8 +1926,44 @@ expect AsciiDocInline.render("Hello {NAME}.", [{ name: "name", value: "Roc" }]) 
 # including a definition whose text equals its previous definition.
 refresh_state : List({ name : Str, value : Str }), AsciiDocInline.State -> AsciiDocInline.State
 refresh_state = |attrs, state| {
-	keep = |name| direct(attrs, name) == direct(state.snapshot, name) and direct(attrs, "__revision:${name}") == direct(state.snapshot, "__revision:${name}")
-	{ ..state, attributes: state.attributes.keep_if(|attr| keep(attr.name)), removed: state.removed.keep_if(keep), snapshot: attrs }
+	# With no overrides there is nothing to reconcile. Record the source for
+	# a later first counter/set, without comparing or indexing this snapshot.
+	if state.attributes.is_empty() and state.removed.is_empty() {
+		return { ..state, snapshot: attrs, snapshot_index: Dict.empty() }
+	}
+	if attrs == state.snapshot {
+		return state
+	}
+	next = source_attribute_index(attrs)
+	previous = if state.snapshot_index.is_empty() source_attribute_index(state.snapshot) else state.snapshot_index
+	snapshot = state.snapshot
+	var $attributes = state.attributes
+	var $removed = state.removed
+	base = { ..state, attributes: Dict.empty(), removed: Dict.empty() }
+	# Only names occurring in one of the source snapshots can have changed.
+	# Never rescan every dynamic counter when unrelated metadata changes.
+	for source in [snapshot, attrs] {
+		for attr in source {
+			name = if attr.name.starts_with("__revision:") drop(attr.name, 11) else attr.name
+			if next.get(name) != previous.get(name) or next.get("__revision:${name}") != previous.get("__revision:${name}") {
+				$attributes = $attributes.remove(name)
+				$removed = $removed.remove(name)
+			}
+		}
+	}
+	{ ..base, attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next }
+}
+
+# Source attributes use their first matching binding, just like direct().
+source_attribute_index : List({ name : Str, value : Str }) -> Dict(Str, Str)
+source_attribute_index = |attrs| {
+	var $index = Dict.empty()
+	for attr in attrs {
+		if !$index.contains(attr.name) {
+			$index = $index.insert(attr.name, attr.value)
+		}
+	}
+	$index
 }
 
 direct : List({ name : Str, value : Str }), Str -> Try(Str, [Missing])
@@ -1901,33 +1977,60 @@ direct = |attrs, name| {
 }
 
 effective_attributes : List({ name : Str, value : Str }), AsciiDocInline.State -> List({ name : Str, value : Str })
-effective_attributes = |attrs, state| {
-	if state.attributes.is_empty() and state.removed.is_empty() {
-		attrs
+effective_attributes = |attrs, state| merged_attributes(attrs, state.attributes, state.removed)
+
+merged_attributes : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool) -> List({ name : Str, value : Str })
+merged_attributes = |attrs, attributes, removed| {
+	if attributes.is_empty() and removed.is_empty() {
+		return attrs
 	}
-		else {
-			state.attributes.concat(attrs.keep_if(|attr| !state.removed.contains(attr.name) and !state.attributes.any(|entry| entry.name == attr.name)))
-		}
+	attributes.to_list().map(|(name, value)| { name, value }).concat(attrs.keep_if(|attr| !removed.contains(attr.name) and !attributes.contains(attr.name)))
 }
 
-put_attribute : AsciiDocInline.State, Str, Str -> AsciiDocInline.State
-put_attribute = |state, name, value| { ..state, attributes: [{ name, value }].concat(state.attributes.keep_if(|attr| attr.name != name)), removed: state.removed.keep_if(|entry| entry != name) }
+# Dynamic values override the source snapshot, then removed values remain
+# hidden. Built-in attribute defaults are applied by the ordinary lookup.
+dynamic_value : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool), Str -> Try(Str, [Missing])
+dynamic_value = |attrs, attributes, removed, name| {
+	match attributes.get(name) {
+		Ok(value) => Ok(value)
+		Err(_) => if removed.contains(name) Err(Missing) else direct(attrs, name)
+	}
+}
+
+# A longer delimiter stays safe for every value that was previously stored.
+# Removing or redefining attributes therefore never requires a dictionary scan.
+safe_prefix : Str, Str -> Str
+safe_prefix = |value, prefix| {
+	var $prefix = prefix
+	while value.contains($prefix) {
+		$prefix = $prefix.concat("\u(1)")
+	}
+	$prefix
+}
+
+attribute_delimiter : Str, List({ name : Str, value : Str }), Str -> Str
+attribute_delimiter = |source, attrs, prefix| {
+	if prefix != "" {
+		return prefix
+	}
+	var $delimiter = "\u(1)"
+	while source.contains($delimiter) or attrs.any(|attr| attr.value.contains($delimiter)) {
+		$delimiter = $delimiter.concat("\u(1)")
+	}
+	$delimiter
+}
 
 mutate_attributes : Str, List({ name : Str, value : Str }), Groups, AsciiDocInline.State, Str, List(Str) -> { source : Str, state : AsciiDocInline.State, tags : List(Str), prefix : Str }
 mutate_attributes = |source, attrs, g, state, prefix, tags| {
 	if !source.contains("{") {
 		return { source, state, tags, prefix }
 	}
-	# Quotes already have private tag slots. Allocate the same collision-free
-	# delimiter even when quotes are disabled to protect inserted HTML.
+	# Reserve a collision-free delimiter only if an insertion needs a tag.
 	var $delimiter = prefix
-	if $delimiter == "" {
-		$delimiter = "\u(1)"
-		while source.contains($delimiter) or attrs.any(|attr| attr.value.contains($delimiter)) {
-			$delimiter = $delimiter.concat("\u(1)")
-		}
-	}
-	var $state = state
+	var $attributes = state.attributes
+	var $removed = state.removed
+	var $tag_prefix = state.tag_prefix
+	var $state = { ..state, attributes: Dict.empty(), removed: Dict.empty() }
 	var $tags = tags
 	var $lines = []
 	for line in source.split_on("\n") {
@@ -1937,25 +2040,26 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 		var $drop_line = False
 		var $drop_empty = False
 		while $pos < bytes.len() {
-			rest = drop(line, $pos)
+			byte = bytes.get($pos) ?? 0
 			# Escaped references are protected from this stage, then unescaped
 			# by the ordinary scanner.
-			if rest.starts_with("\\{") {
-				match find(rest, "}", 2) {
+			if byte == '\\' and (bytes.get($pos + 1) ?? 0) == '{' {
+				match find_bytes(bytes, "}".to_utf8(), $pos + 2) {
 					Ok(end) => {
+						$delimiter = attribute_delimiter(source, attrs, $delimiter)
 						$out = $out.concat(token($delimiter, $tags.len()))
-						$tags = $tags.append(slice(rest, 1, end))
-						$pos = $pos + end + 1
+						$tags = $tags.append(slice(line, $pos + 1, end - $pos))
+						$pos = end + 1
 					}
 					Err(_) => {
-						$out = $out.concat(rest)
+						$out = $out.concat(drop(line, $pos))
 						$pos = bytes.len()
 					}
 				}
-			} else if rest.starts_with("{") {
-				match find(rest, "}", 1) {
+			} else if byte == '{' {
+				match find_bytes(bytes, "}".to_utf8(), $pos + 1) {
 					Ok(end) => {
-						key = slice(rest, 1, end - 1)
+						key = slice(line, $pos + 1, end - $pos - 1)
 						if key.contains("{") and !key.starts_with("set:") and !key.starts_with("counter:") and !key.starts_with("counter2:") {
 							$out = $out.concat("{")
 							$pos = $pos + 1
@@ -1963,14 +2067,15 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 							parts = key.split_on(":")
 							kind = parts.first() ?? ""
 							name = (parts.get(1) ?? "").with_ascii_lowercased()
-							effective = effective_attributes(attrs, $state)
 							if (kind == "counter" or kind == "counter2") and name != "" {
-								current = direct(effective, name)
+								current = dynamic_value(attrs, $attributes, $removed, name)
 								value = match current {
 									Ok(text) if text != "" => successor(text)
 									_ => if parts.len() > 2 Str.join_with(parts.drop_first(2), ":") else "1"
 								}
-								$state = put_attribute($state, name, value)
+								$tag_prefix = safe_prefix(value, $tag_prefix)
+								$attributes = $attributes.insert(name, value)
+								$removed = $removed.remove(name)
 								if kind == "counter" {
 									$out = $out.concat(value)
 								} else {
@@ -1979,41 +2084,63 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 							} else if kind == "set" and name != "" {
 								if name.ends_with("!") {
 									unset = take(name, name.to_utf8().len() - 1)
-									$state = { ..$state, attributes: $state.attributes.keep_if(|attr| attr.name != unset), removed: $state.removed.append(unset) }
+									$attributes = $attributes.remove(unset)
+									$removed = $removed.insert(unset, True)
 									$drop_line = True
 								} else {
 									raw = Str.join_with(parts.drop_first(2), ":")
 									value = scan(restore_tags(raw, prefix, tags), [], { ..empty, special: g.special }, 0)
-									$state = put_attribute($state, name, value)
+									$tag_prefix = safe_prefix(value, $tag_prefix)
+									$attributes = $attributes.insert(name, value)
+									$removed = $removed.remove(name)
 									$drop_empty = True
 								}
 							} else {
-								match lookup(effective, key.with_ascii_lowercased()) {
+								normalized = key.with_ascii_lowercased()
+								resolved = match dynamic_value(attrs, $attributes, $removed, normalized) {
+									Ok(value) => Ok(value)
+									Err(_) => lookup([], normalized)
+								}
+								match resolved {
 									Ok(value) => {
 										if g.attr_quotes or !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
 											$out = $out.concat(value)
 										} else {
 											subs = Str.join_with((if g.replacements ["replacements"] else []).concat(if g.macros ["macros"] else []).concat(if g.post ["post_replacements"] else []), ",")
-											rendered = if !value.contains("footnote:") { html: scan(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0), state: $state } else AsciiDocInline.render_state(value, attrs, { subs: subs }, $state)
-											$state = rendered.state
-											if rendered.html == value and !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
+											var $rendered_html = ""
+											if !value.contains("footnote:") {
+												effective = if g.macros and macro_candidate(value) merged_attributes(attrs, $attributes, $removed) else attrs
+												$rendered_html = scan(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0)
+											} else {
+												shared = { ..$state, attributes: $attributes, removed: $removed, tag_prefix: $tag_prefix }
+												$attributes = Dict.empty()
+												$removed = Dict.empty()
+												rendered = AsciiDocInline.render_state(value, attrs, { subs: subs }, shared)
+												$rendered_html = rendered.html
+												$attributes = rendered.state.attributes
+												$removed = rendered.state.removed
+												$tag_prefix = rendered.state.tag_prefix
+												$state = { ..rendered.state, attributes: Dict.empty(), removed: Dict.empty() }
+											}
+											if $rendered_html == value and !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
 												$out = $out.concat(value)
 											} else {
+												$delimiter = attribute_delimiter(source, attrs, $delimiter)
 												$out = $out.concat(token($delimiter, $tags.len()))
-												$tags = $tags.append(rendered.html)
+												$tags = $tags.append($rendered_html)
 											}
 										}
 									}
 									Err(_) => {
-										$out = $out.concat(take(rest, end + 1))
+										$out = $out.concat(slice(line, $pos, end - $pos + 1))
 									}
 								}
 							}
-							$pos = $pos + end + 1
+							$pos = end + 1
 						}
 					}
 					Err(_) => {
-						$out = $out.concat(rest)
+						$out = $out.concat(drop(line, $pos))
 						$pos = bytes.len()
 					}
 				}
@@ -2032,7 +2159,7 @@ mutate_attributes = |source, attrs, g, state, prefix, tags| {
 	}
 	# Return the delimiter alongside source by retaining one identity slot when
 	# no quote stage supplied it. The caller restores this same tag registry.
-	{ source: Str.join_with($lines, "\n"), state: $state, tags: $tags, prefix: $delimiter }
+	{ source: Str.join_with($lines, "\n"), state: { ..$state, attributes: $attributes, removed: $removed, tag_prefix: $tag_prefix }, tags: $tags, prefix: $delimiter }
 }
 
 normalize_number : Str -> Try(Str, [Missing])
@@ -2404,15 +2531,39 @@ expect AsciiDocInline.render("pass:a[{set:x:new}] { {x}", [{ name: "x", value: "
 
 find_bytes : List(U8), List(U8), U64 -> Try(U64, [Missing])
 find_bytes = |bytes, needle, start| {
+	if start > bytes.len() or needle.len() > bytes.len() - start {
+		return Err(Missing)
+	}
+	if needle.is_empty() {
+		return Ok(start)
+	}
+	first = needle.get(0) ?? 0
+	last = bytes.len() - needle.len()
 	var $pos = start
-	while $pos + needle.len() <= bytes.len() {
-		if bytes.drop_first($pos).starts_with(needle) {
-			return Ok($pos)
+	while $pos <= last {
+		if (bytes.get($pos) ?? 0) == first {
+			var $matched = 1.U64
+			while $matched < needle.len() and bytes.get($pos + $matched) == needle.get($matched) {
+				$matched = $matched + 1
+			}
+			if $matched == needle.len() {
+				return Ok($pos)
+			}
 		}
 		$pos = $pos + 1
 	}
 	Err(Missing)
 }
+
+expect find("abc", "", 0) == Ok(0)
+expect find("abc", "", 3) == Ok(3)
+expect find("abc", "", 4) == Err(Missing)
+expect find("abc", "bc", 1) == Ok(1)
+expect find("abc", "bc", 2) == Err(Missing)
+expect find("aaabaaab", "aab", 0) == Ok(1)
+expect find("aaabaaab", "aab", 2) == Ok(5)
+expect find("café café", "é", 4) == Ok(9)
+expect find("abc", "abcd", 0) == Err(Missing)
 
 # Inspect only the few bytes of a possible macro name. Avoid allocating a
 # byte list for every macro spelling at every ordinary character position.
@@ -2646,10 +2797,10 @@ substitution_stages = |spec| {
 
 render_ordered : Str, List({ name : Str, value : Str }), List(Str), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
 render_ordered = |input, attrs, stages, state| {
+	prior_notes = state.footnotes.len()
 	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
 	refreshed = refresh_state(attrs, indexed)
-	effective = effective_attributes(attrs, refreshed)
-	extracted = if stages.contains("macros") quote_all(input, effective, { ..empty, macros: True, ref_index: refreshed.ref_index }, 0) else { source: input, prefix: "", tags: [], deferred: [] }
+	extracted = if stages.contains("macros") and quote_needed(input, { ..empty, macros: True }) quote_state(input, attrs, { ..empty, macros: True, ref_index: refreshed.ref_index }, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
 	var $text = extracted.source
 	var $state = refreshed
 	for stage in stages {
@@ -2657,7 +2808,7 @@ render_ordered = |input, attrs, stages, state| {
 		$text = rendered.html
 		$state = rendered.state
 	}
-	finish_render($text, attrs, $state, extracted, refreshed.footnotes.len())
+	finish_render($text, attrs, $state, extracted, prior_notes)
 }
 
 expect AsciiDocInline.render_with("*<b>*", [], { subs: "quotes,specialcharacters" }) == "&lt;strong&gt;&lt;b&gt;&lt;/strong&gt;"
@@ -2945,3 +3096,68 @@ expect [2, 3, 4, 5].all(
 		AsciiDocInline.render(escaped, []) == expected and AsciiDocInline.render("A${escaped}B", []) == "A${expected}B" and AsciiDocInline.render("--${escaped}", []) == "--${expected}"
 	},
 )
+
+expect {
+	result = AsciiDocInline.render_state("{note}", [{ name: "note", value: "footnote:[A note.]" }], { subs: "normal" }, AsciiDocInline.initial_state)
+	result.state.footnotes == [{ name: "", text: "A note." }] and result.html.contains("_footnoteref_1")
+}
+
+expect {
+	var $state = AsciiDocInline.initial_state
+	var $correct = True
+	var $number = 0.U64
+	while $number < 128 {
+		rendered = AsciiDocInline.render_state("{counter:key${$number.to_str()}}", [], { subs: "normal" }, $state)
+		$correct = $correct and rendered.html == "1"
+		$state = rendered.state
+		$number = $number + 1
+	}
+	final = AsciiDocInline.render_state("{counter:key0} {counter:key127} {key64}", [{ name: "role", value: "unrelated" }], { subs: "normal" }, $state)
+	$correct and final.html == "2 2 1"
+}
+
+expect AsciiDocInline.render("*bold* {mark}", [{ name: "mark", value: "\u(1)" }]) == "<strong>bold</strong> \u(1)"
+expect {
+	first = AsciiDocInline.render_state("{set:mark:\u(1)}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("*bold* {mark}", [], { subs: "normal" }, first.state).html == "<strong>bold</strong> \u(1)"
+}
+expect {
+	first = AsciiDocInline.render_state("{counter:key:\u(1)}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("*bold* {key}", [], { subs: "normal" }, first.state).html == "<strong>bold</strong> \u(1)"
+}
+expect {
+	first = AsciiDocInline.render_state("{set:mark:\u(1)\u(1)}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	second = AsciiDocInline.render_state("{set:mark!}", [], { subs: "normal" }, first.state)
+	AsciiDocInline.render_state("*bold* {counter:key_0}", [], { subs: "normal" }, second.state).html == "<strong>bold</strong> 1"
+}
+expect {
+	first = AsciiDocInline.render_state("pass:a[{set:mark:\u(1)}]", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("*bold* {mark}", [], { subs: "normal" }, first.state).html == "<strong>bold</strong> \u(1)"
+}
+expect {
+	first = AsciiDocInline.render_state("{set:mark:\u(1)}footnote:note[{mark}]", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	second = AsciiDocInline.render_state("*bold* footnote:note[] {mark}", [], { subs: "normal" }, first.state)
+	second.state.footnotes == [{ name: "note", text: "\u(1)" }] and second.html.contains("<strong>bold</strong>") and second.html.contains("_footnotedef_1") and second.html.ends_with(" \u(1)")
+}
+
+expect {
+	attrs = [{ name: "n", value: "4" }, { name: "n", value: "99" }, { name: "__revision:n", value: "1" }]
+	plain = AsciiDocInline.render_state("plain", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, plain.state)
+	redefined = [{ name: "n", value: "4" }, { name: "n", value: "99" }, { name: "__revision:n", value: "2" }]
+	reset = AsciiDocInline.render_state("{counter:n}", redefined, { subs: "normal" }, first.state)
+	first.html == "5" and reset.html == "5"
+}
+expect {
+	attrs = [{ name: "n", value: "4" }, { name: "__revision:n", value: "1" }]
+	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	next = AsciiDocInline.render_state("{counter:n}", attrs.append({ name: "role", value: "metadata" }), { subs: "normal" }, first.state)
+	next.html == "6"
+}
+expect {
+	plain = AsciiDocInline.render_state("plain", [{ name: "n", value: "4" }], { subs: "normal" }, AsciiDocInline.initial_state)
+	attrs = [{ name: "n", value: "8" }]
+	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, plain.state)
+	second = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, first.state)
+	first.html == "9" and second.html == "10"
+}

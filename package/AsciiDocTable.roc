@@ -35,10 +35,34 @@ AsciiDocTable :: [].{
 }
 
 attr : List(AsciiDocTable.Attribute), Str, Str -> Str
-attr = |attrs, name, fallback| attrs.fold(fallback, |value, item| if item.name == name item.value else value)
+attr = |attrs, name, fallback| lookup_attr(attrs, name) ?? fallback
+
+lookup_attr : List(AsciiDocTable.Attribute), Str -> Try(Str, [Missing])
+lookup_attr = |attrs, name| {
+	var $position = attrs.len()
+	while $position > 0 {
+		$position = $position - 1
+		match attrs.get($position) {
+			Ok(item) if item.name == name => return Ok(item.value)
+			_ => {}
+		}
+	}
+	Err(Missing)
+}
 
 option : List(AsciiDocTable.Attribute), Str -> Bool
-option = |attrs, name| attrs.any(|item| item.name == "${name}-option") or attr(attrs, "options", "").split_on(",").any(|item| item.trim() == name)
+option = |attrs, name| {
+	flag = "${name}-option"
+	if lookup_attr(attrs, flag).is_ok() {
+		return True
+	}
+	for item in attr(attrs, "options", "").split_on(",") {
+		if item.trim() == name {
+			return True
+		}
+	}
+	False
+}
 
 column : Str -> AsciiDocTable.Column
 column = |spec| {
@@ -335,17 +359,23 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 	grid = attr(attrs, "grid", attr(attrs, "table-grid", "all"))
 	width = attr(attrs, "width", "")
 	roles = attr(attrs, "role", "")
-	stretch = if option(attrs, "autowidth") and width == "" " fit-content" else if width == "" or width == "100" or width == "100%" " stretch" else ""
+	autowidth = option(attrs, "autowidth")
+	stretch = if autowidth and width == "" " fit-content" else if width == "" or width == "100" or width == "100%" " stretch" else ""
 	role_class = if roles == "" "" else " ${roles}"
 	width_attr = if width == "" or stretch == " stretch" "" else " style=\"width: ${width.trim()}${if width.ends_with("%") "" else "%"};\""
 	id = attr(attrs, "id", "")
 	id_attr = if id == "" "" else " id=\"${id}\""
 	stripes = attr(attrs, "stripes", attr(attrs, "table-stripes", ""))
-	extra = "${if stripes == "" "" else " stripes-${stripes}"}${if attr(attrs, "float", "") == "" "" else " ${attr(attrs, "float", "")}"}"
+	float = attr(attrs, "float", "")
+	extra = "${if stripes == "" "" else " stripes-${stripes}"}${if float == "" "" else " ${float}"}"
 	var $html = "<table${id_attr} class=\"tableblock frame-${frame} grid-${grid}${stretch}${extra}${role_class}\"${width_attr}>\n"
 	title = attr(attrs, "title", "")
 	if title != "" {
-		$html = Str.concat($html, "<caption class=\"title\">${attr(attrs, "__rendered-title", "Table ${attr(attrs, "__caption-number", "1")}. ${AsciiDocInline.render(title, attrs)}")}</caption>\n")
+		caption = match lookup_attr(attrs, "__rendered-title") {
+			Ok(cached) => cached
+			Err(_) => "Table ${attr(attrs, "__caption-number", "1")}. ${AsciiDocInline.render(title, attrs)}"
+		}
+		$html = Str.concat($html, "<caption class=\"title\">${caption}</caption>\n")
 	}
 	if table.rows.is_empty() {
 		return { html: "${$html}</table>", state: $state }
@@ -358,10 +388,13 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 		$column_index = $column_index + 1
 		amount = if $column_index == table.columns.len() 1000000 - $assigned else if total == 0 0 else (col.width.to_u128() * 1000000 / total).to_u64_try() ?? 0
 		$assigned = $assigned + amount
-		style = if option(attrs, "autowidth") "" else " style=\"width: ${percent(amount, 1000000)}%;\""
+		style = if autowidth "" else " style=\"width: ${percent(amount, 1000000)}%;\""
 		$html = Str.concat($html, "<col${style}>\n")
 	}
 	$html = Str.concat($html, "</colgroup>\n")
+	background = attr(attrs, "cellbgcolor", "")
+	background_attr = if background == "" "" else " style=\"background-color: ${background};\""
+	default_column = column("")
 	var $section = ""
 	var $row_index = 0
 	for row in table.rows {
@@ -376,13 +409,13 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 		$html = Str.concat($html, "<tr>\n")
 		var $col_index = 0
 		for current in row {
-			col = table.columns.get($col_index) ?? column("")
+			col = table.columns.get($col_index) ?? default_column
 			style = if current.style == "" col.style else current.style
 			halign = if current.halign == "left" col.halign else current.halign
 			valign = if current.valign == "top" col.valign else current.valign
 			tag = if section == "thead" or style == "header" "th" else "td"
 			spans = "${if current.colspan > 1 " colspan=\"${current.colspan.to_str()}\"" else ""}${if current.rowspan > 1 " rowspan=\"${current.rowspan.to_str()}\"" else ""}"
-			$html = Str.concat($html, "<${tag} class=\"tableblock halign-${halign} valign-${valign}\"${spans}${if attr(attrs, "cellbgcolor", "") == "" "" else " style=\"background-color: ${attr(attrs, "cellbgcolor", "")};\""}>")
+			$html = Str.concat($html, "<${tag} class=\"tableblock halign-${halign} valign-${valign}\"${spans}${background_attr}>")
 			if section == "thead" {
 				rendered = render_inline(current.text.trim(), $state)
 				$state = rendered.state
@@ -395,7 +428,8 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 				$html = Str.concat($html, "<div class=\"${if style == "literal" "literal" else "verse"}\"><pre>${escape(current.text)}</pre></div>")
 			} else {
 				var $paragraph_index = 0.U64
-				for paragraph in (if current.text.trim() == "" [] else current.text.trim().split_on("\n\n")) {
+				text = current.text.trim()
+				for paragraph in (if text == "" [] else text.split_on("\n\n")) {
 					if $paragraph_index > 0 {
 						$html = Str.concat($html, "\n")
 					}
@@ -496,3 +530,15 @@ expect {
 	table = parse_table("|one\n\n |two\n|three |four", [])
 	table.columns.len() == 1 and table.rows.len() == 4 and table.header
 }
+
+expect {
+	html = AsciiDocTable.render("|A", [{ name: "frame", value: "none" }, { name: "frame", value: "ends" }, { name: "cellbgcolor", value: "pink" }])
+	html.contains("frame-ends") and html.contains("background-color: pink;") and !html.contains("frame-none")
+}
+expect {
+	html = AsciiDocTable.render("|A", [{ name: "title", value: "Unused *source*" }, { name: "__rendered-title", value: "" }])
+	html.contains("<caption class=\"title\"></caption>") and !html.contains("Unused")
+}
+
+expect AsciiDocTable.render("|A", [{ name: "autowidth-option", value: "" }]).contains("fit-content")
+expect AsciiDocTable.render("|A", [{ name: "options", value: " footer, autowidth " }]).contains("fit-content")

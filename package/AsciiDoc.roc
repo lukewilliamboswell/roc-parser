@@ -584,7 +584,7 @@ parse_list = |lines, kind, level, ancestors| {
 }
 
 escape : Str -> Str
-escape = |s| replace(replace(replace(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+escape = |s| s.replace_each("&", "&amp;").replace_each("<", "&lt;").replace_each(">", "&gt;")
 
 inline : Str -> Str
 inline = |s| AsciiDocInline.render(s, [])
@@ -952,7 +952,17 @@ render_node = |block| match block {
 }
 
 has_attr : List(AsciiDoc.Attribute), Str -> Bool
-has_attr = |attrs, name| attrs.any(|a| a.name == name)
+has_attr = |attrs, name| {
+	var $position = attrs.len()
+	while $position > 0 {
+		$position = $position - 1
+		match attrs.get($position) {
+			Ok(found) if found.name == name => return True
+			_ => {}
+		}
+	}
+	False
+}
 
 put_attr : List(AsciiDoc.Attribute), Str, Str -> List(AsciiDoc.Attribute)
 put_attr = |attrs, name, value| attrs.keep_if(|a| a.name != name).append({ name, value })
@@ -985,11 +995,15 @@ identify_blocks = |blocks, state| {
 				base = generated_id(node.title, node.attrs)
 				separator = if has_attr(node.attrs, "idseparator") attribute(node.attrs, "idseparator") else "_"
 				$id = base
-				$attrs = put_attr($attrs, "__generated-id", "")
 				var $suffix = 2.U64
 				while $state.ids.contains($id) {
 					$id = "${base}${separator}${$suffix.to_str()}"
 					$suffix = $suffix + 1
+				}
+				# Only an empty generated ID needs to be distinguished from an
+				# explicitly disabled section ID by the HTML renderer.
+				if $id == "" {
+					$attrs = put_attr($attrs, "__generated-id", "")
 				}
 			}
 			if node.context == "section" and node.level > 0 and node.level <= 6 {
@@ -1033,6 +1047,12 @@ identify_blocks = |blocks, state| {
 	{ blocks: $blocks, state: $state }
 }
 
+# Ordinary words and spaces render identically for every attribute snapshot.
+# Keep caching syntax-bearing titles, even if their first rendering happened
+# to preserve the source, since a fresh renderer has different dynamic state.
+plain_title : Str -> Bool
+plain_title = |title| title.to_utf8().all(|byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == ' ' or byte >= 128)
+
 prepare_blocks : List(AsciiDoc.Block), AsciiDocInline.State -> { blocks : List(AsciiDoc.Block), state : AsciiDocInline.State }
 prepare_blocks = |blocks, state| {
 	var $state = state
@@ -1040,12 +1060,16 @@ prepare_blocks = |blocks, state| {
 	for block in blocks {
 		node = render_node(block)
 		var $attrs = node.attrs
-		title = if node.title == "" { html: "", state: $state } else AsciiDocInline.render_state(node.title, node.attrs, { subs: "normal" }, $state)
-		$state = title.state
+		var $title_html = ""
+		if node.title != "" {
+			title = AsciiDocInline.render_state(node.title, node.attrs, { subs: "normal" }, $state)
+			$title_html = title.html
+			$state = title.state
+		}
 		caption_kind = if node.context == "example" "example" else if node.context == "image" "figure" else if node.context == "table" "table" else ""
 		caption = if caption_kind == "" "" else if has_attr(node.attrs, "caption") attribute(node.attrs, "caption") else if caption_kind != "" and has_attr(node.attrs, "${caption_kind}-caption") "${attribute(node.attrs, "${caption_kind}-caption")} ${attribute(node.attrs, "__caption-number")}. " else ""
-		if node.title != "" {
-			$attrs = put_attr($attrs, "__rendered-title", "${caption}${title.html}")
+		if node.title != "" and (caption != "" or $title_html != node.title or !plain_title(node.title)) {
+			$attrs = put_attr($attrs, "__rendered-title", "${caption}${$title_html}")
 		}
 		if node.source != "" and ["paragraph", "list_item", "verse", "admonition", "quote", "example", "sidebar", "open"].contains(node.context) {
 			subs = if has_attr(node.attrs, "subs") attribute(node.attrs, "subs") else "normal"
@@ -1094,7 +1118,7 @@ render_document = |document| {
 	document_refs = if document_id == "" [] else [{ id: document_id, text: attribute(first_node.attrs, "__document-reftext") }]
 	identified = identify_blocks(document.blocks, { ids: if document_id == "" Dict.empty() else Dict.empty().insert(document_id, True), refs: document_refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
 	header = prepare_header(first_node.attrs, identified.state.refs)
-	initial = prepare_blocks(identified.blocks, header.state)
+	initial = prepare_blocks(without_header_snapshots(identified.blocks), header.state)
 	prepared = { blocks: if identified.state.toc attach_toc(initial.blocks, initial.blocks) else initial.blocks, state: initial.state }
 	var $split = 0.U64
 	while $split < prepared.blocks.len() and (render_node(prepared.blocks.get($split) ?? AsciiDoc.empty_item)).context != "section" {
@@ -1106,20 +1130,34 @@ render_document = |document| {
 	"${html}${footnote_footer(prepared.state, attrs, 0)}"
 }
 
+# Header snapshots are needed to restore the title state, then have no role
+# in body substitutions. Keep them on the caller's AST while rendering the
+# first block with its original source attributes.
+without_header_snapshots : List(AsciiDoc.Block) -> List(AsciiDoc.Block)
+without_header_snapshots = |blocks| {
+	match blocks.first() {
+		Ok(Rich(node)) if has_attr(node.attrs, "__header-source") => {
+			attrs = node.attrs.keep_if(|attr| attr.name != "__header-source" and !attr.name.starts_with("__header-initial:") and !attr.name.starts_with("__header-final:"))
+			[Rich({ ..node, attrs })].concat(blocks.drop_first(1))
+		}
+		_ => blocks
+	}
+}
+
 footnote_footer : AsciiDocInline.State, List(AsciiDoc.Attribute), U64 -> Str
 footnote_footer = |state, attrs, start| {
-	var $notes = ""
+	var $notes = []
 	var $index = 0.U64
 	if !has_attr(attrs, "nofootnotes") {
 		for note in state.footnotes {
 			$index = $index + 1
 			if $index > start and !state.emitted_footnotes.contains($index) {
 				n = $index.to_str()
-				$notes = "${$notes}<div class=\"footnote\" id=\"_footnotedef_${n}\">\n<a href=\"#_footnoteref_${n}\">${n}</a>. ${note.text}\n</div>\n"
+				$notes = $notes.append("<div class=\"footnote\" id=\"_footnotedef_${n}\">\n<a href=\"#_footnoteref_${n}\">${n}</a>. ${note.text}\n</div>\n")
 			}
 		}
 	}
-	if $notes == "" "" else "\n<div id=\"footnotes\">\n<hr>\n${$notes}</div>"
+	if $notes.is_empty() "" else "\n<div id=\"footnotes\">\n<hr>\n${Str.join_with($notes, "")}</div>"
 }
 
 attach_toc : List(AsciiDoc.Block), List(AsciiDoc.Block) -> List(AsciiDoc.Block)

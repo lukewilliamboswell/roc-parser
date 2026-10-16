@@ -128,7 +128,13 @@
         "preprocess-lines-prefix-number",
         "preprocess-lines-comma-precedes-semicolon",
         "preprocess-lines-negative-blocks",
-        "preprocess-lines-reverse-huge-all"
+        "preprocess-lines-reverse-huge-all",
+        "preprocess-index-inline-redefine-unset",
+        "preprocess-index-include-redefine",
+        "preprocess-index-recursive-value",
+        "preprocess-index-unicode-and-or",
+        "preprocess-index-compound-alias",
+        "preprocess-index-alias-redefinition"
       ],
       "scope": "future"
     }
@@ -2770,6 +2776,139 @@
       },
       "references": [
         "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "preprocess-index-inline-redefine-unset",
+      "category": "preprocessing",
+      "features": [
+        "conditional-index-invalidation"
+      ],
+      "source": ":key: old\nifdef::key[:key: new]\nifeval::[\"{key}\" == \"new\"]\nfirst\nendif::[]\n\n:key!:\nifndef::key[]\nsecond\nendif::[]",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>first</p>",
+          "<p>second</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-index-include-redefine",
+      "category": "preprocessing",
+      "features": [
+        "conditional-index-invalidation"
+      ],
+      "source": ":key: old\nifdef::key[]\ninclude::part.adoc[]\nendif::[]\nifeval::[\"{key}\" == \"new\"]\npassed\nendif::[]",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>passed</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ],
+      "includes": {
+        "part.adoc": ":key: new"
+      }
+    },
+    {
+      "id": "preprocess-index-recursive-value",
+      "category": "preprocessing",
+      "features": [
+        "conditional-index-invalidation"
+      ],
+      "source": ":inner: yes\n:outer: {inner}\nifeval::[\"{outer}\" == \"yes\"]\npassed\nendif::[]",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>passed</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-index-unicode-and-or",
+      "category": "preprocessing",
+      "features": [
+        "conditional-index-invalidation"
+      ],
+      "source": ":café:\n:other:\nifdef::CAFÉ+other[]\nyes\nendif::[]\n\nifdef::missing,CAFÉ[]\nalso\nendif::[]",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>yes</p>",
+          "<p>also</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/conditionals/"
+      ]
+    },
+    {
+      "id": "preprocess-index-compound-alias",
+      "category": "preprocessing",
+      "features": [
+        "definition-attribute-index"
+      ],
+      "source": ":base: Roc\n:empty:\n:alias: prefix {BASE}{empty} suffix\n\n{alias}",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>prefix Roc suffix</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/reference-attributes/"
+      ]
+    },
+    {
+      "id": "preprocess-index-alias-redefinition",
+      "category": "preprocessing",
+      "features": [
+        "definition-attribute-index"
+      ],
+      "source": ":base: Roc\n:alias: {base}\n\n:base: Parser\n:alias: {base} {base}\n\n{alias}",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>Parser Parser</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/reference-attributes/"
       ]
     }
   ]

@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original collision interactions authored for stateful inline rendering. Structural and full HTML results are checked live against the pinned oracle.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "inline-prefix-collisions",
+      "required_cases": [
+        "prefix-source-attribute",
+        "prefix-dynamic-set",
+        "prefix-counter-seed",
+        "prefix-unset-history",
+        "prefix-source-redefinition",
+        "prefix-deferred-set",
+        "prefix-named-note",
+        "prefix-attribute-note",
+        "prefix-nested-pass",
+        "prefix-xref-dynamic-image"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "prefix-source-attribute",
+      "category": "inline-prefix-collisions",
+      "source": ":mark: \u0001\n\n*bold* {mark} {counter:key_0}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-dynamic-set",
+      "category": "inline-prefix-collisions",
+      "source": "{set:mark:\u0001}\n\n*bold* {mark} {counter:key_0}\n\n{counter:key_0}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-counter-seed",
+      "category": "inline-prefix-collisions",
+      "source": "{counter:key:\u0001}\n\n*bold* {key}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-unset-history",
+      "category": "inline-prefix-collisions",
+      "source": "{set:mark:\u0001\u0001}\n\n{set:mark!}\n\n*bold* {counter:key_0}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-source-redefinition",
+      "category": "inline-prefix-collisions",
+      "source": "{set:mark:\u0001}\n\n:mark: \u0001\n\n*bold* {mark}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-deferred-set",
+      "category": "inline-prefix-collisions",
+      "source": "pass:a[{set:mark:\u0001}]\n\n*bold* {mark}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-named-note",
+      "category": "inline-prefix-collisions",
+      "source": "{set:mark:\u0001} footnote:note[{mark}]\n\n*bold* footnote:note[] {mark}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-attribute-note",
+      "category": "inline-prefix-collisions",
+      "source": ":note: footnote:[*note* {mark}]\n\n{set:mark:\u0001}\n\n*bold* {note}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-nested-pass",
+      "category": "inline-prefix-collisions",
+      "source": "pass:a[pass:a[{set:mark:\u0001}]]\n\n*bold* {mark}",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    },
+    {
+      "id": "prefix-xref-dynamic-image",
+      "category": "inline-prefix-collisions",
+      "source": "{set:imagesdir:pics}\n\n[[target]]\n== Target\n\n*bold* See <<target,image:cat.png[]>> and &lt;&lt;target,image:cat.png[]&gt;&gt;.",
+      "features": [
+        "inline-state",
+        "formatting",
+        "collision-preservation"
+      ],
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      }
+    }
+  ]
+}

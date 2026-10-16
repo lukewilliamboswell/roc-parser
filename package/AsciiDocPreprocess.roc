@@ -86,7 +86,11 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			negative = text.starts_with("ifndef::")
 			body = drop(text, if negative 8 else 7)
 			parts = directive(body)
-			defined = condition(parts.target, $attributes)
+			if !$index_ready {
+				$attribute_index = index_attributes($attributes)
+				$index_ready = True
+			}
+			defined = condition(parts.target, $attribute_index)
 			enabled = if negative !defined else defined
 			if parts.target != "" and parts.body == "" {
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
@@ -109,7 +113,21 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			parsed = directive(drop(text, 8))
 			expression = parsed.body
 			if parsed.target == "" and ["==", "!=", "<=", ">=", "<", ">"].any(|operator| expression.contains(operator)) {
-				$conditions = $conditions.append({ enabled: active and evaluate_with(expression, $attributes), target: "" })
+				var $enabled = False
+				if active {
+					if expression.contains("{") {
+						if !$index_ready {
+							$attribute_index = index_attributes($attributes)
+							$index_ready = True
+						}
+						$enabled = evaluate_lookup(expression, $attributes, Indexed($attribute_index))
+					} else {
+						## Literal expressions never perform attribute lookups.
+						## Keep the reader index lazy for subsequent directives.
+						$enabled = evaluate_with(expression, $attributes)
+					}
+				}
+				$conditions = $conditions.append({ enabled: $enabled, target: "" })
 			}
 		} else if active {
 			if $continuation != "" {
@@ -127,8 +145,12 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 					$definition_text = text
 				}
 			} else if text.starts_with("include::") and complete_directive(text) {
-				parsed = directive(AsciiDocPreprocess.substitute(drop(text, 9), $attributes))
-				target = AsciiDocPreprocess.substitute(parsed.target, $attributes)
+				if !$index_ready {
+					$attribute_index = index_attributes($attributes)
+					$index_ready = True
+				}
+				parsed = directive(expand_lookup(drop(text, 9), $attributes, Indexed($attribute_index), 0))
+				target = expand_lookup(parsed.target, $attributes, Indexed($attribute_index), 0)
 				resolved = resolve(path, target)
 				found = if options.expand_includes options.includes.find_first(|entry| entry.path == resolved) else Err(NotFound)
 				match found {
@@ -199,7 +221,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			# Dict and attribute list through a helper forces backing-buffer
 			# copies on the pinned compiler, despite consuming the old values.
 			if !$attribute_index.contains(name) and !$attribute_index.contains(revision_name) {
-				value = if unset "" else AsciiDocInline.attribute_value(trim(parts.after), $attributes)
+				value = if unset "" else definition_value(trim(parts.after), $attributes, $attribute_index)
 				if !unset {
 					$attribute_index = $attribute_index.insert(name, $attributes.len())
 					$attributes = $attributes.append({ name, value })
@@ -210,7 +232,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				## The most recently defined name already occupies the canonical
 				## remove-then-append position. Keep its stable index and replace
 				## only that final pair, retaining earlier per-line snapshots.
-				value = AsciiDocInline.attribute_value(trim(parts.after), $attributes)
+				value = definition_value(trim(parts.after), $attributes, $attribute_index)
 				revision = U64.from_str(($attributes.last() ?? { name: "", value: "0" }).value) ?? 0
 				$attributes = $attributes.drop_last(2).append({ name, value }).append({ name: revision_name, value: (revision + 1).to_str() })
 			} else {
@@ -264,7 +286,7 @@ define_indexed = |source, attributes, index, ready| {
 	unset = parts.before.starts_with("!") or parts.before.ends_with("!")
 	name = normalize_attribute_name(strip_suffix(if parts.before.starts_with("!") drop(parts.before, 1) else parts.before, "!"))
 	revision_name = Str.concat("__revision:", name)
-	value = if unset "" else AsciiDocInline.attribute_value(trim(parts.after), attributes)
+	value = if unset "" else definition_value(trim(parts.after), attributes, current)
 	if !current.contains(name) and !current.contains(revision_name) {
 		var $updated = attributes
 		var $index = current
@@ -287,12 +309,65 @@ define_indexed = |source, attributes, index, ready| {
 	}
 }
 
-condition : Str, List(AsciiDocPreprocess.Attribute) -> Bool
-condition = |source, attributes| {
+## Ordinary definition substitutions only consult explicitly referenced names.
+## Select those bindings through the reader's current index, then retain the
+## canonical inline escape/substitution/cap pipeline. Inserted values stay
+## opaque. Stateful, escaped and pass-macro inputs retain the full environment.
+definition_value : Str, List(AsciiDocPreprocess.Attribute), Dict(Str, U64) -> Str
+definition_value = |source, attributes, index| {
+	if source.contains("\\") or (source.starts_with("pass:") and source.ends_with("]")) {
+		return AsciiDocInline.attribute_value(source, attributes)
+	}
+	if !source.contains("{") {
+		return AsciiDocInline.attribute_value(source, [])
+	}
+	bytes = source.to_utf8()
+	var $position = 0
+	var $selected = []
+	var $seen = Dict.empty()
+	while $position < bytes.len() {
+		if bytes.get($position) == Ok('{') {
+			var $end = $position + 1
+			while $end < bytes.len() and bytes.get($end) != Ok('}') {
+				byte = bytes.get($end) ?? 0
+
+				## Special characters inside a name would be escaped before
+				## canonical lookup; nested and stateful names need full state.
+				if byte == '{' or byte == ':' or byte == '<' or byte == '>' or byte == '&' {
+					return AsciiDocInline.attribute_value(source, attributes)
+				}
+				$end = $end + 1
+			}
+			if $end == bytes.len() {
+				return AsciiDocInline.attribute_value(source, attributes)
+			}
+			name = slice(source, $position + 1, $end - $position - 1).with_ascii_lowercased()
+			if !$seen.contains(name) {
+				$seen = $seen.insert(name, True)
+				match index.get(name) {
+					Ok(attribute_position) => match attributes.get(attribute_position) {
+						Ok(attribute) => {
+							$selected = $selected.append(attribute)
+						}
+						Err(_) => {}
+					}
+					Err(_) => {}
+				}
+			}
+			$position = $end + 1
+		} else {
+			$position = $position + 1
+		}
+	}
+	AsciiDocInline.attribute_value(source, $selected)
+}
+
+condition : Str, Dict(Str, U64) -> Bool
+condition = |source, index| {
 	if source.contains(",") {
-		source.split_on(",").any(|name| attributes.any(|attribute| attribute.name == lower(trim(name))))
+		source.split_on(",").any(|name| index.contains(lower(trim(name))))
 	} else {
-		source.split_on("+").all(|name| attributes.any(|attribute| attribute.name == lower(trim(name))))
+		source.split_on("+").all(|name| index.contains(lower(trim(name))))
 	}
 }
 
@@ -305,7 +380,14 @@ ExpressionValue : [Text(Str), Integer(IntegerValue), Floating(F64), Truth(Bool),
 
 ## Quotes classify operands before attribute expansion: "10" remains a string.
 evaluate_with : Str, List(AsciiDocPreprocess.Attribute) -> Bool
-evaluate_with = |source, attributes| {
+evaluate_with = |source, attributes| evaluate_lookup(source, attributes, FirstMatch)
+
+## Reader lookups borrow the existing name index; standalone substitutions
+## retain first-match semantics even for caller-provided duplicate names.
+AttributeLookup : [FirstMatch, Indexed(Dict(Str, U64))]
+
+evaluate_lookup : Str, List(AsciiDocPreprocess.Attribute), AttributeLookup -> Bool
+evaluate_lookup = |source, attributes, lookup| {
 	## EvalExpressionRx uses the first operator after a nonempty left operand;
 	## it does not interpret quotes while finding that operator.
 	text = trim(source)
@@ -317,8 +399,8 @@ evaluate_with = |source, attributes| {
 		length = if (byte == '=' or byte == '!' or byte == '<' or byte == '>') and next == '=' 2 else if byte == '<' or byte == '>' 1 else 0
 		if length > 0 and $index + length < bytes.len() {
 			operator = slice(text, $index, length)
-			left = expression_value(trim(slice(text, 0, $index)), attributes)
-			right = expression_value(trim(drop(text, $index + length)), attributes)
+			left = expression_value(trim(slice(text, 0, $index)), attributes, lookup)
+			right = expression_value(trim(drop(text, $index + length)), attributes, lookup)
 			return match (left, right) {
 				(Text(a), Text(b)) => compare_strings(a, b, operator)
 				(Integer(a), Integer(b)) => numeric_relation(integer_order(a, b), operator)
@@ -333,13 +415,13 @@ evaluate_with = |source, attributes| {
 	False
 }
 
-expression_value : Str, List(AsciiDocPreprocess.Attribute) -> ExpressionValue
-expression_value = |source, attributes| {
+expression_value : Str, List(AsciiDocPreprocess.Attribute), AttributeLookup -> ExpressionValue
+expression_value = |source, attributes, lookup| {
 	unquoted = unquote(source)
 	quoted = unquoted != source
 
 	## Missing references drop in conditional expressions (unlike normal text).
-	var $value = AsciiDocPreprocess.substitute(unquoted, attributes)
+	var $value = expand_lookup(unquoted, attributes, lookup, 0)
 	bytes = $value.to_utf8()
 	var $index = 0
 	var $cleaned = ""
@@ -504,12 +586,7 @@ integer_float_order = |integer, float| {
 	var $digits = "0"
 	var $fraction = False
 	if exponent >= 1075 {
-		$digits = mantissa.to_str()
-		var $remaining = exponent - 1075
-		while $remaining > 0 {
-			$digits = decimal_double($digits)
-			$remaining = $remaining - 1
-		}
+		$digits = binary_integer_digits(mantissa, exponent - 1075)
 	} else {
 		shift = if exponent == 0 1074 else 1075 - exponent
 		if shift >= 64 {
@@ -527,30 +604,61 @@ integer_float_order = |integer, float| {
 	} else order
 }
 
-decimal_double : Str -> Str
-decimal_double = |digits| {
-	bytes = digits.to_utf8()
-	var $remaining = bytes.len()
-	var $carry = 0
-	var $reversed = []
+## Base 10^9 limbs let each multiplication consume 32 binary exponent bits.
+## A limb product plus carry fits U64: (10^9 - 1) * 2^32 + (2^32 - 1).
+## This constructs at most 35 limbs for binary64, without repeatedly allocating
+## and reversing the complete decimal string for every exponent bit.
+binary_integer_digits : U64, U64 -> Str
+binary_integer_digits = |mantissa, shift| {
+	base = 1000000000.U64
+	var $limbs = [mantissa % base]
+	if mantissa >= base {
+		$limbs = $limbs.append(mantissa // base)
+	}
+	var $remaining = shift
 	while $remaining > 0 {
-		$remaining = $remaining - 1
-		value = (bytes.get($remaining) ?? '0') - '0'
-		doubled = value * 2 + $carry
-		$carry = doubled.div_trunc_by(10)
-		$reversed = $reversed.append('0' + doubled - $carry * 10)
+		step = if $remaining > 32 32 else $remaining
+		factor = U64.shl_wrap(1, step.to_u8_wrap())
+		var $next = []
+		var $carry = 0.U64
+		for limb in $limbs {
+			product = limb * factor + $carry
+			$next = $next.append(product % base)
+			$carry = product // base
+		}
+		while $carry > 0 {
+			$next = $next.append($carry % base)
+			$carry = $carry // base
+		}
+		$limbs = $next
+		$remaining = $remaining - step
 	}
-	if $carry > 0 {
-		$reversed = $reversed.append('0' + $carry)
-	}
-	var $output = []
-	var $index = $reversed.len()
+	var $index = $limbs.len() - 1
+	var $output = ($limbs.get($index) ?? 0).to_str()
 	while $index > 0 {
 		$index = $index - 1
-		$output = $output.append($reversed.get($index) ?? '0')
+		chunk = ($limbs.get($index) ?? 0).to_str()
+		$output = Str.concat($output, slice("000000000", 0, 9 - chunk.to_utf8().len()))
+		$output = Str.concat($output, chunk)
 	}
-	Str.from_utf8_lossy($output)
+	$output
 }
+
+expect binary_integer_digits(1, 0) == "1"
+expect binary_integer_digits(1, 32) == "4294967296"
+expect binary_integer_digits(4503599627370496, 1) == "9007199254740992"
+expect binary_integer_digits(9007199254740991, 32) == "38685626227668129295630336"
+expect binary_integer_digits(1, 128) == "340282366920938463463374607431768211456"
+
+expect binary_integer_digits(1, 31) == "2147483648"
+
+expect binary_integer_digits(1, 33) == "8589934592"
+
+expect binary_integer_digits(1, 64) == "18446744073709551616"
+
+expect binary_integer_digits(9007199254740991, 63) == "83076749736557232833115904412745728"
+
+expect binary_integer_digits(4503599627370496, 75) == "170141183460469231731687303715884105728"
 
 compare : Dec, Dec, Str -> Bool
 compare = |a, b, operator| match operator {
@@ -563,7 +671,10 @@ compare = |a, b, operator| match operator {
 }
 
 expand : Str, List(AsciiDocPreprocess.Attribute), U64 -> Str
-expand = |source, attributes, depth| {
+expand = |source, attributes, depth| expand_lookup(source, attributes, FirstMatch, depth)
+
+expand_lookup : Str, List(AsciiDocPreprocess.Attribute), AttributeLookup, U64 -> Str
+expand_lookup = |source, attributes, lookup, depth| {
 	if depth >= 16 {
 		return source
 	}
@@ -582,9 +693,10 @@ expand = |source, attributes, depth| {
 			}
 			if $end < bytes.len() {
 				name = slice(source, $position + 1, $end - $position - 1)
-				match attributes.find_first(|attribute| attribute.name == lower(name)) {
+				normalized_name = lower(name)
+				match lookup_attribute(attributes, normalized_name, lookup) {
 					Ok(attribute) => {
-						$output = Str.concat($output, expand(attribute.value, attributes, depth + 1))
+						$output = Str.concat($output, expand_lookup(attribute.value, attributes, lookup, depth + 1))
 					}
 					Err(_) => {
 						$output = Str.concat($output, slice(source, $position, $end - $position + 1))
@@ -606,6 +718,33 @@ expand = |source, attributes, depth| {
 	}
 	$output
 }
+
+lookup_attribute : List(AsciiDocPreprocess.Attribute), Str, AttributeLookup -> Try(AsciiDocPreprocess.Attribute, [NotFound])
+lookup_attribute = |attributes, name, lookup| match lookup {
+	FirstMatch => find_attribute(attributes, name)
+	Indexed(index) => match index.get(name) {
+		Ok(position) => attributes.get(position).map_err(|_| NotFound)
+		Err(_) => Err(NotFound)
+	}
+}
+
+## Indexed lookup keeps first-definition precedence without allocating an
+## iterator callback or normalizing the reference name for every candidate.
+find_attribute : List(AsciiDocPreprocess.Attribute), Str -> Try(AsciiDocPreprocess.Attribute, [NotFound])
+find_attribute = |attributes, name| {
+	var $index = 0
+	while $index < attributes.len() {
+		attribute = attributes.get($index) ?? { name: "", value: "" }
+		if attribute.name == name {
+			return Ok(attribute)
+		}
+		$index = $index + 1
+	}
+	Err(NotFound)
+}
+
+expect AsciiDocPreprocess.substitute("{CAFÉ}", [{ name: "café", value: "first" }, { name: "café", value: "second" }]) == "first"
+expect AsciiDocPreprocess.substitute("{Missing}", [{ name: "other", value: "value" }]) == "{Missing}"
 
 directive : Str -> { target : Str, body : Str }
 directive = |source| {
@@ -1320,6 +1459,61 @@ expect {
 	options = { ..AsciiDocPreprocess.defaults, includes: [{ path: "row.adoc", source: ":value: inner\n|included" }], expand_includes: True }
 	match AsciiDocPreprocess.run(source, options) {
 		Ok(result) => result.source.contains(":value: inner") and result.source.contains("|included") and !result.source.contains("include::") and AsciiDocPreprocess.substitute("{value}", result.attributes) == "{value}"
+		_ => False
+	}
+}
+
+expect {
+	source = ":key: old\nifdef::key[:key: new]\nifeval::[\"{key}\" == \"new\"]\nfirst\nendif::[]\n\n:key!:\nifndef::key[]\nsecond\nendif::[]"
+	match AsciiDocPreprocess.run(source, AsciiDocPreprocess.defaults) {
+		Ok(result) => result.source == "first\n\nsecond" and !result.attributes.any(|attribute| attribute.name == "key")
+		_ => False
+	}
+}
+
+expect {
+	source = ":key: old\nifdef::key[]\ninclude::part.adoc[]\nendif::[]\nifeval::[\"{key}\" == \"new\"]\npassed\nendif::[]"
+	options = { ..AsciiDocPreprocess.defaults, includes: [{ path: "part.adoc", source: ":key: new" }], expand_includes: True }
+	match AsciiDocPreprocess.run(source, options) {
+		Ok(result) => result.source == "passed"
+		_ => False
+	}
+}
+
+expect {
+	source = ":inner: yes\n:outer: {inner}\nifeval::[\"{outer}\" == \"yes\"]\npassed\nendif::[]"
+	match AsciiDocPreprocess.run(source, AsciiDocPreprocess.defaults) {
+		Ok(result) => result.source == "passed"
+		_ => False
+	}
+}
+
+expect {
+	source = "ifdef::CAFÉ+other[]\nyes\nendif::[]\nifdef::missing,CAFÉ[]\nalso\nendif::[]"
+	options = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "café", value: "" }, { name: "other", value: "" }] }
+	match AsciiDocPreprocess.run(source, options) {
+		Ok(result) => result.source == "yes\nalso"
+		_ => False
+	}
+}
+
+expect {
+	attributes = [{ name: "unused", value: "\u(1)\u(1)unused" }, { name: "prev", value: "Roc" }, { name: "empty", value: "" }, { name: "html", value: "<b>Roc</b> &amp; +" }, { name: "amp", value: "override" }, { name: "café", value: "Unicode" }, { name: "a&amp;b", value: "escaped-name" }, { name: "control", value: "\u(1)0\u(1)" }]
+	index = index_attributes(attributes)
+	sources = ["{prev}", "prefix {prev}{empty} < & suffix", "{html}-{prev}-{html}", "{PREV} {café} {CAFÉ}", "{amp} {lt} {missing}", "\\{prev}", "pass:q[*{prev}*]", "{counter:n}{prev}", "{set:prev:new}{prev}", "{{prev}}", "{prev", "{html}&{empty}", "{a&b}", "literal \u(1)0\u(1) {control} {html}"]
+	sources.all(|source| definition_value(source, attributes, index) == AsciiDocInline.attribute_value(source, attributes))
+}
+
+expect {
+	value = Str.join_with(List.repeat("é", 2050), "")
+	attributes = [{ name: "long", value }]
+	definition_value("prefix{long}", attributes, index_attributes(attributes)) == AsciiDocInline.attribute_value("prefix{long}", attributes)
+}
+
+expect {
+	source = "ifeval::[1 == 1]\nendif::[]\n:answer: 42\nifeval::[{answer} == 42]\nindexed\nendif::[]\n\n:answer: 43\nifeval::[1 == 1]\nendif::[]\nifeval::[{answer} == 43]\nupdated\nendif::[]"
+	match AsciiDocPreprocess.run(source, AsciiDocPreprocess.defaults) {
+		Ok(result) => result.source == "indexed\n\nupdated"
 		_ => False
 	}
 }

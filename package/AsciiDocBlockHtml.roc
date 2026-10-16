@@ -131,10 +131,10 @@ lookup_attr = |attrs, name| {
 }
 
 has_attr : List(AsciiDocBlockHtml.Attribute), Str -> Bool
-has_attr = |attrs, name| attrs.any(|a| a.name == name)
+has_attr = |attrs, name| lookup_attr(attrs, name).is_ok()
 
 replace : Str, Str, Str -> Str
-replace = |s, old, new| Str.join_with(s.split_on(old), new)
+replace = |s, old, new| s.replace_each(old, new)
 
 escape : Str -> Str
 escape = |s| replace(replace(replace(replace(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"), "\"", "&quot;")
