@@ -50,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / ".roc-parser-tmp/roc-syntax-validation")
     parser.add_argument("--generated", type=positive, default=1000)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--mutation-runs", type=positive, default=1000)
     parser.add_argument("--fuzz-runs", type=positive, default=2000)
     parser.add_argument("--skip-fuzz", action="store_true", help="omit campaigns already run separately")
     parser.add_argument("--allocations", action="store_true", help="also build/run the allocation probe")
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     env["ROC"] = roc
     env.setdefault("ROC_CACHE_DIR", str(output / "roc-cache"))
     manifest = {"schema": 1, "started": time.time(), "source_sha256": source_identity(ROOT),
-                "generated": args.generated, "seed": args.seed, "fuzz_runs": args.fuzz_runs,
+                "generated": args.generated, "seed": args.seed, "mutation_runs": args.mutation_runs, "fuzz_runs": args.fuzz_runs,
                 "fuzz_omitted": args.skip_fuzz, "allocations": args.allocations, "steps": []}
 
     def save() -> None:
@@ -130,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest["corpus_repository"] = str(corpus_repo)
         step("full-corpus", [sys.executable, "scripts/check_roc_syntax_corpus.py", "--roc-source", str(corpus_repo),
                              "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),
+                             "--fixtures-output", str(output / "upstream-fixtures.json"),
                              "--output", str(output / "corpus.json")])
         step("editor-recovery", [sys.executable, "scripts/check_roc_syntax_recovery.py",
                                 "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),
@@ -137,6 +139,17 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_fuzz:
             step("fuzz", [sys.executable, "scripts/run_fuzz.py", "smoke", "roc-syntax-raw",
                           "roc-syntax-structured", "--runs", str(args.fuzz_runs)])
+        mutations = [sys.executable, "scripts/mutate_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
+                     "--oracle-command", shlex.quote(str(oracle)), "--runs", str(args.mutation_runs),
+                     "--seed", str(args.seed), "--output", str(output / "mutations")]
+        for fixtures in ["scripts/roc_syntax/fixtures.json", "scripts/roc_syntax/type-fixtures.json",
+                         "scripts/roc_syntax/platform-fixtures.json", "scripts/roc_syntax/grammar-fixtures.json",
+                         str(output / "upstream-fixtures.json")]:
+            mutations += ["--fixtures", fixtures]
+        raw_corpus = ROOT / ".roc-parser-tmp/fuzz/corpus/roc-syntax-raw"
+        if raw_corpus.is_dir():
+            mutations += ["--corpus", str(raw_corpus)]
+        step("oracle-mutations", mutations)
         benchmark = [sys.executable, "scripts/bench_roc_syntax.py", "--roc", roc,
                      "--output", str(output / "performance.json")]
         if args.allocations:

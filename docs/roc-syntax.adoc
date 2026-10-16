@@ -107,7 +107,8 @@ Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
 expression trees, checks dedicated type, platform and adversarial grammar fixtures,
 compares acceptance across the complete pinned snapshot corpus, and compares tokens
 and normalized trees for every compiler-accepted input. It checks editor recovery,
-runs both fuzz smoke campaigns and checks performance scaling.
+runs both fuzz smoke campaigns, compares mutated inputs with the compiler oracle,
+and checks performance scaling.
 It rebuilds candidate probes and records source and executable hashes. Its
 `validation.json`, step logs, differential failures and performance results live
 under `.roc-parser-tmp/roc-syntax-validation/`.
@@ -117,7 +118,7 @@ compiler repository is available. `--roc-source /path/to/roc` selects an existin
 Git repository; its working files are ignored. Build caches stay under the
 validation output directory. Compiler backend libraries are not required.
 
-Use `--generated 10000 --fuzz-runs 10000` for a larger campaign. Add `--allocations`
+Use `--generated 10000 --mutation-runs 10000 --fuzz-runs 10000` for a larger campaign. Add `--allocations`
 to collect allocation/reallocation call counts. For performance comparisons, save
 the first run's `performance.json` and pass it as `--baseline /path/to/before.json`
 on a later run on the same machine and compiler. An allocation call count does
@@ -137,6 +138,15 @@ must stay inside the damaged region. Compiler rejection confirms that an edit is
 malformed; compiler recovery layout is not used as the candidate's expected tree.
 These contracts cover specific edit classes rather than promising recovery from
 every possible incomplete program.
+
+The oracle mutation lane edits accepted seeds from all four fixture sets and the
+complete upstream corpus. Every mutation must agree on acceptance; accepted
+mutations must also agree on tokens and normalized trees. The lane additionally
+compares unchanged UTF-8 inputs harvested from the raw fuzz corpus when present.
+Invalid UTF-8 bytes remain in the raw robustness lane, and exclusions are counted
+explicitly. Mutation provenance records exact byte edits, seeds and original
+source so each failure can be replayed without the original corpus. See
+{src}/scripts/roc_syntax/MUTATIONS.md[mutation campaign commands and limits].
 
 To import the larger upstream source corpus, run:
 

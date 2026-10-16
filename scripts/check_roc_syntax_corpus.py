@@ -87,9 +87,13 @@ def main(argv=None):
     parser.add_argument('--oracle-command', required=True)
     parser.add_argument('--timeout', type=float, default=5)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--fixtures-output', type=Path, help='retain the complete imported inputs for mutation campaigns')
     args = parser.parse_args(argv)
     # Import here, rather than accepting a filtered or truncated saved inventory.
     document = import_snapshots(args.roc_source)
+    if args.fixtures_output:
+        args.fixtures_output.parent.mkdir(parents=True, exist_ok=True)
+        args.fixtures_output.write_text(json.dumps(document, ensure_ascii=True, indent=2) + '\n')
     commands = [shlex.split(args.probe_command), shlex.split(args.oracle_command)]
     report = run_corpus(document, *commands, timeout=args.timeout)
     report['workers'] = {name: {'command': command, 'sha256': hashlib.sha256(Path(command[0]).read_bytes()).hexdigest()}
