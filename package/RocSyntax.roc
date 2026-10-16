@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -860,25 +860,190 @@ statement = |initial, depth| {
 		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [pattern_node, value_node])
-	} else if spelling(s, "module") {
-		look = skip_trivia(at_pos(s, s.pos + 1))
-		if peek(look).kind == OpenSquare {
-			{ state: items_state, ids: items_ids, end: items_end, comma: _ } = collection(at_pos(look, look.pos + 1), CloseSquare, depth + 1)
-			validated = if items_ids.all(|id| (items_state.nodes.get(id) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == Identifier) items_state else issue(items_state, UnexpectedToken, t.start, items_end)
-			add_node(validated, Header, t.start, items_end, items_ids)
-		} else {
-			bad = issue(look, UnsupportedSyntax, t.start, peek(look).end)
-			add_node(bad, UnsupportedNode, t.start, t.end, [])
-		}
+	} else if spelling(s, "module") or spelling(s, "hosted") {
+		{ state: items_state, ids: items_ids, end: items_end, comma: _ } = exposed_collection(at_pos(s, s.pos + 1))
+		validated = if depth == 0 items_state else issue(items_state, UnexpectedToken, t.start, items_end)
+		add_node(validated, Header, t.start, items_end, items_ids)
 	} else if spelling(s, "import") {
-		{ state: imported_state, node: imported_node } = expression(at_pos(s, s.pos + 1), 0, depth)
-		end = node_end(imported_state, imported_node)
-		validated = if valid_import(imported_state, imported_node) imported_state else issue(imported_state, UnexpectedToken, t.start, end)
-		add_node(validated, Import, t.start, end, [imported_node])
+		validated = if depth == 0 s else issue(s, UnexpectedToken, t.start, t.end)
+		parse_import(validated, depth + 1)
 	} else {
 		{ state: value_state, node: value_node } = expression(s, 0, depth)
 		end = node_end(value_state, value_node)
 		add_node(value_state, ExpressionStatement, t.start, end, [value_node])
+	}
+}
+
+exposed_collection : State -> Collection
+exposed_collection = |initial| {
+	look = skip_trivia(initial)
+	opening = peek(look)
+	var $s = if opening.kind == OpenSquare at_pos(look, look.pos + 1) else issue(look, UnexpectedToken, opening.start, opening.end)
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenSquare
+	while !$done {
+		item_state = skip_trivia($s)
+		$s = vacant
+		t = peek(item_state)
+		if t.kind == CloseSquare {
+			$s = at_pos(item_state, item_state.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
+			$s = issue(item_state, UnclosedDelimiter, t.start, t.end)
+			$done = True
+		} else {
+			valid_start = t.kind == UpperIdent or (t.kind == LowerIdent and is_lower(byte(item_state.source, t.start)))
+			validated = if valid_start item_state else issue(item_state, UnexpectedToken, t.start, t.end)
+			{ state: name_state, node: name_node } = add_node(at_pos(validated, validated.pos + 1), Identifier, t.start, t.end, [])
+			var $name = name_node
+			$s = skip_trivia(name_state)
+			var $upper = t.kind == UpperIdent
+			var $qualified = t.kind == UpperIdent
+			var $chain_done = False
+			while !$chain_done {
+				if $qualified and spelling($s, ".") and (peek(at_pos($s, $s.pos + 1)).kind == UpperIdent or peek(at_pos($s, $s.pos + 1)).kind == LowerIdent) {
+					field_state = at_pos($s, $s.pos + 1)
+					field = peek(field_state)
+					{ state: named_state, node: named_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
+					{ state: access_state, node: access_node } = add_node(named_state, FieldAccess, t.start, field.end, [$name, named_node])
+					$s = skip_trivia(access_state)
+					$name = access_node
+					$upper = field.kind == UpperIdent
+					$qualified = $upper
+				} else {
+					$chain_done = True
+				}
+			}
+			var $children = [$name]
+			var $wildcard = False
+			$end = node_end($s, $name)
+			if spelling($s, "as") {
+				alias_state = skip_trivia(at_pos($s, $s.pos + 1))
+				alias = peek(alias_state)
+				valid_alias = if $upper alias.kind == UpperIdent else if t.kind == UpperIdent alias.kind == LowerIdent or alias.kind == UpperIdent else alias.kind == LowerIdent
+				checked = if valid_alias alias_state else issue(alias_state, UnexpectedToken, alias.start, alias.end)
+				{ state: alias_built, node: alias_node } = add_node(at_pos(checked, checked.pos + if alias.kind == EndOfFile 0 else 1), Identifier, alias.start, alias.end, [])
+				$s = alias_built
+				$children = $children.append(alias_node)
+				$end = alias.end
+			} else if $upper and spelling($s, ".*") {
+				$end = peek($s).end
+				$s = at_pos($s, $s.pos + 1)
+				$wildcard = True
+			}
+			{ state: exposed_state, node: exposed_node } = add_node($s, if $wildcard ExposedWildcard else ExposedItem, t.start, $end, $children)
+			$ids = $ids.append(exposed_node)
+			$s = skip_trivia(exposed_state)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			} else if peek($s).kind != CloseSquare {
+				$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+			}
+		}
+	}
+	{ state: $s, ids: $ids, end: $end, comma: False }
+}
+
+parse_import : State, U64 -> Built
+parse_import = |initial, depth| {
+	start = peek(initial).start
+	look = skip_trivia(at_pos(initial, initial.pos + 1))
+	if peek(look).kind == StringStart {
+		{ state: path_state, node: path_node } = parse_string(look, depth + 1)
+		after_path = skip_trivia(path_state)
+		validated = if spelling(after_path, "as") at_pos(after_path, after_path.pos + 1) else issue(after_path, UnexpectedToken, peek(after_path).start, peek(after_path).end)
+		name_state = skip_trivia(validated)
+		name = peek(name_state)
+		checked = if name.kind == LowerIdent and !spelling(name_state, "_") name_state else issue(name_state, UnexpectedToken, name.start, name.end)
+		{ state: named_state, node: named_node } = add_node(at_pos(checked, checked.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
+		colon = skip_trivia(named_state)
+		ty_start = if spelling(colon, ":") at_pos(colon, colon.pos + 1) else issue(colon, UnexpectedToken, peek(colon).start, peek(colon).end)
+		{ state: ty_state, node: ty_node } = file_import_type(ty_start)
+		end = node_end(ty_state, ty_node)
+		path_info = ty_state.nodes.get(path_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
+		path_child = ty_state.children.get(path_info.children_start) ?? ty_state.nodes.len()
+		part_info = ty_state.nodes.get(path_child) ?? path_info
+		plain_path = path_info.kind == StringLiteral and path_info.children_len == 1 and part_info.kind == StringSegment
+		checked_type = if plain_path ty_state else issue(ty_state, UnexpectedToken, start, end)
+		add_node(checked_type, FileImport, start, end, [path_node, named_node, ty_node])
+	} else {
+		var $s = look
+		path_start = peek(look).start
+		var $end = path_start
+		var $local = True
+		if spelling($s, "/") {
+			$s = skip_trivia(at_pos($s, $s.pos + 1))
+		} else if spelling($s, ".") and token_spelling($s.source, source_token($s, significant_position($s.tokens, $s.pos + 1)), "/") {
+			$s = skip_trivia(at_pos($s, significant_position($s.tokens, $s.pos + 1) + 1))
+		} else if spelling($s, "..") {
+			while spelling($s, "..") {
+				parent = skip_trivia(at_pos($s, $s.pos + 1))
+				if spelling(parent, "/") {
+					$s = skip_trivia(at_pos(parent, parent.pos + 1))
+				} else {
+					$s = issue(parent, UnexpectedToken, peek(parent).start, peek(parent).end)
+				}
+			}
+		} else if peek($s).kind == LowerIdent {
+			next = skip_trivia(at_pos($s, $s.pos + 1))
+			$local = spelling(next, "/")
+		}
+		first = peek($s)
+		var $upper = first.kind == UpperIdent
+		if first.kind != UpperIdent and first.kind != LowerIdent {
+			$s = issue($s, UnexpectedToken, first.start, first.end)
+		} else {
+			$end = first.end
+			$s = skip_trivia(at_pos($s, $s.pos + 1))
+		}
+		if $local {
+			while spelling($s, "/") {
+				$s = skip_trivia(at_pos($s, $s.pos + 1))
+				part = peek($s)
+				if part.kind == LowerIdent or part.kind == UpperIdent {
+					$upper = part.kind == UpperIdent
+					$end = part.end
+					$s = skip_trivia(at_pos($s, $s.pos + 1))
+				} else {
+					$s = issue($s, UnexpectedToken, part.start, part.end)
+				}
+			}
+			if !$upper {
+				$s = issue($s, UnexpectedToken, first.start, $end)
+			}
+		}
+		var $nested = 0.U64
+		while spelling($s, ".") and peek(at_pos($s, $s.pos + 1)).kind == UpperIdent {
+			field_state = at_pos($s, $s.pos + 1)
+			$end = peek(field_state).end
+			$s = skip_trivia(at_pos(field_state, field_state.pos + 1))
+			$nested = $nested + 1
+		}
+		if !$local and $nested == 0 {
+			$s = issue($s, UnexpectedToken, first.start, $end)
+		}
+		{ state: path_state, node: path_node } = add_node($s, ImportPath, path_start, $end, [])
+		$s = path_state
+		var $ids = [path_node]
+		if spelling($s, "as") {
+			alias_state = skip_trivia(at_pos($s, $s.pos + 1))
+			alias = peek(alias_state)
+			checked = if alias.kind == UpperIdent alias_state else issue(alias_state, UnexpectedToken, alias.start, alias.end)
+			{ state: named_state, node: named_node } = add_node(at_pos(checked, checked.pos + if alias.kind == EndOfFile 0 else 1), Identifier, alias.start, alias.end, [])
+			{ state: alias_built, node: alias_node } = add_node(named_state, ImportAlias, alias.start, alias.end, [named_node])
+			$s = skip_trivia(alias_built)
+			$ids = $ids.append(alias_node)
+			$end = alias.end
+		}
+		if spelling($s, "exposing") {
+			{ state: exposed_state, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(at_pos($s, $s.pos + 1))
+			$s = exposed_state
+			$ids = $ids.concat(exposed_ids)
+			$end = exposed_end
+		}
+		add_node($s, Import, start, $end, $ids)
 	}
 }
 
@@ -1768,4 +1933,37 @@ expect {
 
 expect {
 	["\"\${}\"", "\"\${x\"", "\"\${x}", "1 .U8"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+}
+
+file_import_type : State -> Built
+file_import_type = |initial| {
+	s = skip_trivia(initial)
+	t = peek(s)
+	valid_name = spelling(s, "Str") or spelling(s, "List")
+	checked = if valid_name s else issue(s, UnexpectedToken, t.start, t.end)
+	{ state: name_state, node: name_node } = add_node(at_pos(checked, checked.pos + if t.kind == EndOfFile 0 else 1), Identifier, t.start, t.end, [])
+	if spelling(s, "List") {
+		look = skip_trivia(name_state)
+		opening = peek(look)
+		after = if opening.kind == OpenRound or opening.kind == NoSpaceOpenRound at_pos(look, look.pos + 1) else issue(look, UnexpectedToken, opening.start, opening.end)
+		arg_state = skip_trivia(after)
+		arg = peek(arg_state)
+		validated = if spelling(arg_state, "U8") arg_state else issue(arg_state, UnexpectedToken, arg.start, arg.end)
+		{ state: arg_built, node: arg_node } = add_node(at_pos(validated, validated.pos + if arg.kind == EndOfFile 0 else 1), Identifier, arg.start, arg.end, [])
+		close_state = skip_trivia(arg_built)
+		close = peek(close_state)
+		closed = close.kind == CloseRound
+		finished = if closed at_pos(close_state, close_state.pos + 1) else issue(close_state, UnclosedDelimiter, close.start, close.end)
+		add_node(finished, TypeExpression, t.start, if closed close.end else arg.end, [name_node, arg_node])
+	} else {
+		{ state: name_state, node: name_node }
+	}
+}
+
+expect {
+	["import json.Json", "import json.Json as MyJson exposing [parse, Value]", "import http.Client.Auth as Auth exposing [get as fetch, Request.*]", "import ../Utils", "import ../../lib/Parser.Config", "import /root/Module", "import ./relative/Module", "import \"data.txt\" as text : Str", "import \"bytes.bin\" as data : List ( U8 )", "module [run as start, Foo.*, Foo.bar as Baz]", "hosted [main!]"].all(|source| RocSyntax.parse_str(source).status == Complete)
+}
+
+expect {
+	["import lower", "import pkg.lower", "import json.Json as lower", "import Foo exposing [1]", "import Foo exposing [a b]", "import \"data\" as text : U64", "import \"data\" as text : List(U16)", "import \"\${name}\" as text : Str", "module [1 + 2]", "module [value as Type]"].all(|source| RocSyntax.parse_str(source).status != Complete)
 }

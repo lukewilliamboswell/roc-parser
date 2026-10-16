@@ -126,4 +126,9 @@ node_kind_code = |kind| match kind {
 	StringSegment => 54
 	Interpolation => 55
 	TypedLiteral => 56
+	FileImport => 57
+	ImportPath => 58
+	ImportAlias => 59
+	ExposedItem => 60
+	ExposedWildcard => 61
 }
