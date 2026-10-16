@@ -55,6 +55,24 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_app_package_headers_and_string_pattern_captures(self):
+        cases = [
+            ('header', 'app [] {}', ['header', 'app', [['dependencies', []]]]),
+            ('header', 'package [Foo]', ['header', 'package', [['exposed', ['identifier', 'Foo'], None], ['dependencies', []]]]),
+            ('header', 'app [main!] {pf: platform "x"}', ['header', 'app', [['exposed', ['identifier', 'main!'], None], ['dependencies', [['dependency', 'pf', ['platform', ['string', '"x"']]]]]]]),
+            ('header', 'package [] {util: "../util/main.roc"}', ['header', 'package', [['dependencies', [['dependency', 'util', ['string', '"../util/main.roc"']]]]]]),
+            ('expr', '|"hello ${name}"| name', ['lambda', [['p_string_parts', [['text', 'hello '], ['capture', 'name']]]], ['identifier', 'name']]),
+            ('expr', '|"${_}"| 1', ['lambda', [['p_string_parts', [['capture', None]]]], ['number', '1']]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': mode, 'source': source}) + '\n' for i, (mode, source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (_, source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], [expected])
+
     def test_header_statement_and_repl_modes_are_direct_and_strict(self):
         cases = [
             ('header', 'module [run]', True, True),
@@ -106,7 +124,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_statement_binding_and_control_structure(self):
         cases = [
-            ('file', 'module []\nx = 1', [['decl', ['p_identifier', 'x'], ['number', '1']]]),
+            ('file', 'module []\nx = 1', [['header', 'module', []], ['decl', ['p_identifier', 'x'], ['number', '1']]]),
             ('file', 'expect True', [['expect', ['identifier', 'True']]]),
             ('file', 'dbg 1', [['dbg', ['number', '1']]]),
             ('expr', '{var x = 1\nx}', [['block', [['var', 'x', ['number', '1']], ['identifier', 'x']]]]),
@@ -177,7 +195,9 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(rows[4]["consumed"])
         self.assertFalse(rows[4]["ok"])
         self.assertTrue(rows[5]["ok"])
-        self.assertEqual(rows[5]["facts"][0]["kind"], "definition")
+        self.assertEqual(rows[5]["facts"][0]["kind"], "header")
+        self.assertEqual(rows[5]["facts"][0]["end"], len('module []'))
+        self.assertEqual(rows[5]["facts"][1]["kind"], "definition")
         self.assertFalse(rows[6]["ok"])
         self.assertEqual(rows[7]["facts"][0]["shape"], ["binary", "*", ["binary", "+", ["number", "1"], ["number", "2"]], ["number", "3"]])
         self.assertEqual(rows[8]["facts"][0]["shape"], ["list", [["number", "1"], ["number", "2"]]])

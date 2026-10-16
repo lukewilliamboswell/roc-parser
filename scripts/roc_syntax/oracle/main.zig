@@ -147,7 +147,10 @@ fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pa
             var captures = false;
             for (store.patternStringPartSlice(p.parts)) |part_idx| {
                 switch (store.getPatternStringPart(part_idx)) {
-                    .text => |part| try parts.append(try array(gpa, &.{ string("text"), string(tokenText(tokens, source, part.token)) })),
+                    .text => |part| {
+                        const text = tokenText(tokens, source, part.token);
+                        if (text.len > 0) try parts.append(try array(gpa, &.{ string("text"), string(text) }));
+                    },
                     .capture => |part| {
                         captures = true;
                         try parts.append(try array(gpa, &.{ string("capture"), if (part.name) |name| string(tokenText(tokens, source, name)) else .null }));
@@ -307,12 +310,29 @@ fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
     const collection = switch (header) {
         .module => |value| value.exposes,
         .hosted => |value| value.exposes,
+        .app => |value| value.provides,
+        .package => |value| value.exposes,
         .default_app => return array(gpa, &.{ string("header"), string("default_app"), try array(gpa, &.{}) }),
         .type_module => return array(gpa, &.{ string("header"), string("type_module"), try array(gpa, &.{}) }),
         else => return array(gpa, &.{ string("unsupported"), string(@tagName(header)) }),
     };
     var exposed = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.exposedItemSlice(.{ .span = store.getCollection(collection).span })) |item| try exposed.append(try exposedShape(gpa, store, tokens, source, item));
+    if (header == .app or header == .package) {
+        const packages = if (header == .app) header.app.packages else header.package.packages;
+        const platform = if (header == .app) header.app.platform_idx else header.package.platform_idx;
+        var fields = std.array_list.Managed(std.json.Value).init(gpa);
+        for (store.recordFieldSlice(.{ .span = store.getCollection(packages).span })) |field_idx| {
+            const field = store.getRecordField(field_idx);
+            var value: std.json.Value = switch (field.value) {
+                .supplied => |expr| try shape(gpa, store, tokens, source, expr, 0),
+                .punned, .unset => .null,
+            };
+            if (platform != null and platform.? == field_idx) value = try array(gpa, &.{ string("platform"), value });
+            try fields.append(try array(gpa, &.{ string("dependency"), string(tokenText(tokens, source, field.name)), value }));
+        }
+        try exposed.append(try array(gpa, &.{ string("dependencies"), .{ .array = fields } }));
+    }
     return array(gpa, &.{ string("header"), string(@tagName(header)), .{ .array = exposed } });
 }
 fn handle(gpa: Allocator, req: Request) !Response {
@@ -366,8 +386,16 @@ fn handle(gpa: Allocator, req: Request) !Response {
             const region = stmt.to_tokenized_region();
             try facts.append(gpa, .{ .kind = "statement", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(stmt), .shape = try statementShape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
         } else if (header) |idx| {
-            try facts.append(gpa, .{ .kind = "header", .start = 0, .end = @intCast(req.source.len), .node_kind = @tagName(parser.store.getHeader(idx)), .shape = try headerShape(gpa, &parser.store, &result.tokens, req.source, idx) });
+            const parsed_header = parser.store.getHeader(idx);
+            const region = parsed_header.to_tokenized_region();
+            try facts.append(gpa, .{ .kind = "header", .start = result.tokens.resolve(region.start).start.offset, .end = if (region.end > region.start) result.tokens.resolve(region.end - 1).end.offset else result.tokens.resolve(region.start).start.offset, .node_kind = @tagName(parsed_header), .shape = try headerShape(gpa, &parser.store, &result.tokens, req.source, idx) });
         } else {
+            const file_header_idx = parser.store.getFile().header;
+            const file_header = parser.store.getHeader(file_header_idx);
+            if (file_header != .default_app and file_header != .type_module) {
+                const region = file_header.to_tokenized_region();
+                try facts.append(gpa, .{ .kind = "header", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(file_header), .shape = try headerShape(gpa, &parser.store, &result.tokens, req.source, file_header_idx) });
+            }
             for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
                 const stmt = parser.store.getStatement(idx);
                 if (stmt != .type_anno and stmt != .type_decl) {

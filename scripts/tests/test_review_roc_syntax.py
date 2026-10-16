@@ -68,6 +68,13 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_file_retains_header_and_implicit_package_dependencies(self):
+        response = {'nodes': [
+            {'kind': 'Header', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 0},
+            {'kind': 'File', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 1},
+        ], 'children': [0], 'root': 1}
+        self.assertEqual(review.syntax_shape(response, 'package []'), [['header', 'package', [['dependencies', []]]]])
+
     def test_fixture_loader_accepts_direct_header_statement_and_repl_modes(self):
         document = {'version': review.PROTOCOL_VERSION, 'reference_commit': review.REFERENCE_COMMIT,
                     'coverage': ['modes'], 'cases': [

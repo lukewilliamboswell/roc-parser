@@ -171,7 +171,7 @@ def syntax_shape(response, source):
         branch = [visit(child) for child in children[start:start+length]]
         active.remove(index)
         if kind in {'File', 'Module'}:
-            omitted = {'TypeAnnotation'} if response.get('mode') == 'header' else {'Header', 'TypeAnnotation'}
+            omitted = {'TypeAnnotation'}
             return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in omitted]
         # Parentheses are concrete syntax; grouping already determines topology.
         if kind in {'Group', 'Parenthesized'} and len(branch) == 1:
@@ -190,7 +190,16 @@ def syntax_shape(response, source):
         if kind == 'While':
             return ['while', *branch]
         if kind == 'Header':
-            return ['header', text.split(None, 1)[0], branch]
+            keyword = text.split(None, 1)[0] if text.strip() else 'default_app'
+            if keyword in {'app', 'package'} and (not branch or branch[-1][0] != 'dependencies'):
+                branch.append(['dependencies', []])
+            return ['header', keyword, branch]
+        if kind == 'Dependencies':
+            return ['dependencies', branch]
+        if kind == 'DependencyField':
+            return ['dependency', branch[0][1], branch[1] if len(branch) > 1 else None]
+        if kind == 'PlatformReference':
+            return ['platform', branch[0]]
         if kind == 'ImportPath':
             return ['import_path', text]
         if kind == 'ImportAlias':
@@ -229,6 +238,10 @@ def syntax_shape(response, source):
             return ['multiline_string' if kind == 'MultilineStringLiteral' else 'interpolated_string', branch]
         if kind == 'StringSegment':
             return ['text', text]
+        if kind == 'PatternStringLiteral':
+            return ['p_string_parts', branch]
+        if kind == 'CapturePattern':
+            return ['capture', branch[0][1] if branch[0][0] == 'p_identifier' else None]
         if kind == 'Interpolation':
             return ['interpolation', branch[0]]
         if kind == 'TypedLiteral':
