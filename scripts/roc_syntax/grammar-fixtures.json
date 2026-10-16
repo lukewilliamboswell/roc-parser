@@ -28,7 +28,8 @@
     "grammar/postfix",
     "grammar/record-optional-commas",
     "grammar/type-boundaries",
-    "grammar/type-composition"
+    "grammar/type-composition",
+    "associated-contexts"
   ],
   "provenance": {
     "purpose": "Branch-directed production and cross-composition audit; explicit arrow models independently constructed and verified against the immutable compiler oracle.",
@@ -1370,14 +1371,14 @@
     },
     {
       "id": "identifiers/0ccbd144c0f5",
-      "source": "x\u00e9",
+      "source": "xé",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
     },
     {
       "id": "identifiers/1a7b95985b40",
-      "source": "x\u00e9.foo",
+      "source": "xé.foo",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
@@ -1419,7 +1420,7 @@
     },
     {
       "id": "identifiers/0023f8402099",
-      "source": "|x\u00e9| 0",
+      "source": "|xé| 0",
       "mode": "expr",
       "rule": "grammar/identifiers",
       "coverage": "recovery"
@@ -3872,259 +3873,259 @@
     },
     {
       "id": "global-bidi/a29ac400d6c2",
-      "source": "# \u061c\nx=1",
+      "source": "# ؜\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/e4894dfa9bdd",
-      "source": "\"\u061c\"",
+      "source": "\"؜\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/2cfe320a8b6b",
-      "source": "'\u061c'",
+      "source": "'؜'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/5f4993197437",
-      "source": "# \u200e\nx=1",
+      "source": "# ‎\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/37c4b15c7b4b",
-      "source": "\"\u200e\"",
+      "source": "\"‎\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/1c972930649e",
-      "source": "'\u200e'",
+      "source": "'‎'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/36bca7334e10",
-      "source": "# \u200f\nx=1",
+      "source": "# ‏\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/93571581405c",
-      "source": "\"\u200f\"",
+      "source": "\"‏\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/526aed031ec6",
-      "source": "'\u200f'",
+      "source": "'‏'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/35e507316e23",
-      "source": "# \u202a\nx=1",
+      "source": "# ‪\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/bdcc2c536f29",
-      "source": "\"\u202a\"",
+      "source": "\"‪\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/15a646134514",
-      "source": "'\u202a'",
+      "source": "'‪'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/946cbb735847",
-      "source": "# \u202b\nx=1",
+      "source": "# ‫\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/65a84f11dff6",
-      "source": "\"\u202b\"",
+      "source": "\"‫\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/4e15ba9b6716",
-      "source": "'\u202b'",
+      "source": "'‫'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/b46909979919",
-      "source": "# \u202c\nx=1",
+      "source": "# ‬\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/25eb22263920",
-      "source": "\"\u202c\"",
+      "source": "\"‬\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/2731acaa0947",
-      "source": "'\u202c'",
+      "source": "'‬'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/0c2529ef0bfa",
-      "source": "# \u202d\nx=1",
+      "source": "# ‭\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/7ab23f438611",
-      "source": "\"\u202d\"",
+      "source": "\"‭\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/1d62e00de4da",
-      "source": "'\u202d'",
+      "source": "'‭'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/c2993fd22876",
-      "source": "# \u202e\nx=1",
+      "source": "# ‮\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/801c270069ea",
-      "source": "\"\u202e\"",
+      "source": "\"‮\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/d24210ea3aad",
-      "source": "'\u202e'",
+      "source": "'‮'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/422e68641585",
-      "source": "# \u2066\nx=1",
+      "source": "# ⁦\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/407ba99ef385",
-      "source": "\"\u2066\"",
+      "source": "\"⁦\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/035967f7ffa6",
-      "source": "'\u2066'",
+      "source": "'⁦'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/0534d2924eb3",
-      "source": "# \u2067\nx=1",
+      "source": "# ⁧\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/5bb0a8d51d6e",
-      "source": "\"\u2067\"",
+      "source": "\"⁧\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/ada45e8d8552",
-      "source": "'\u2067'",
+      "source": "'⁧'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/7897863e6905",
-      "source": "# \u2068\nx=1",
+      "source": "# ⁨\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/8fa1b438a605",
-      "source": "\"\u2068\"",
+      "source": "\"⁨\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/4abed32da19e",
-      "source": "'\u2068'",
+      "source": "'⁨'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/e763ec2a010c",
-      "source": "# \u2069\nx=1",
+      "source": "# ⁩\nx=1",
       "mode": "file",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/bcd6e1ae7412",
-      "source": "\"\u2069\"",
+      "source": "\"⁩\"",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "global-bidi/9f0b7549b67a",
-      "source": "'\u2069'",
+      "source": "'⁩'",
       "mode": "expr",
       "rule": "grammar/global-bidi",
       "coverage": "recovery"
     },
     {
       "id": "leading-bom/6c48b9fd6773",
-      "source": "\ufeffx=1",
+      "source": "﻿x=1",
       "mode": "file",
       "rule": "grammar/leading-bom",
       "coverage": "recovery"
@@ -4282,6 +4283,76 @@
       "source": "|{ name, age, ..a } as person| { greeting: \"Hello ${name}\", full_recordwhere son, is_adult: age >= 18 }\n",
       "rule": "grammar/mutation-regression",
       "coverage": "recovery"
+    },
+    {
+      "id": "associated-context-0",
+      "source": "_: U64",
+      "mode": "file",
+      "coverage": "recovery",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-1",
+      "source": "Foo := U64.{ Tag x = 2 }",
+      "mode": "file",
+      "coverage": "recovery",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-2",
+      "source": "Foo := U64.{ Tag(1) x = 2 }",
+      "mode": "file",
+      "coverage": "recovery",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-3",
+      "source": "Foo := U64.{ @Foo x = 2 }",
+      "mode": "file",
+      "coverage": "recovery",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-4",
+      "source": "Foo := U64.{ _: U64\nx=1 }",
+      "mode": "file",
+      "coverage": "recovery",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-5",
+      "source": "_foo: U64",
+      "mode": "file",
+      "coverage": "supported",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-6",
+      "source": "$foo: U64",
+      "mode": "file",
+      "coverage": "supported",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-7",
+      "source": "Foo := U64.{ 1 x = 2 }",
+      "mode": "file",
+      "coverage": "supported",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-8",
+      "source": "Foo := U64.{ f() x = 2 }",
+      "mode": "file",
+      "coverage": "supported",
+      "rule": "associated-contexts"
+    },
+    {
+      "id": "associated-context-9",
+      "source": "Foo := U64.{ _foo: U64\nx=1 }",
+      "mode": "file",
+      "coverage": "supported",
+      "rule": "associated-contexts"
     }
   ]
 }

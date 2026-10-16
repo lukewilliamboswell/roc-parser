@@ -921,7 +921,8 @@ statement = |initial, depth| {
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [name_node, value_node])
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, ":") {
-		{ state: name_state, node: name_node } = add_node(at_pos(s, following_pos), Identifier, t.start, t.end, [])
+		validated = if spelling(s, "_") issue(s, UnexpectedToken, t.start, t.end) else s
+		{ state: name_state, node: name_node } = add_node(at_pos(validated, following_pos), Identifier, t.start, t.end, [])
 		parse_annotation_after_name(at_pos(name_state, name_state.pos + 1), name_node, t.start, depth)
 	} else if spelling(s, "var") {
 		name_state = skip_trivia(at_pos(s, s.pos + 1))
@@ -1645,7 +1646,7 @@ parse_associated_block = |initial, depth| {
 			{ state: item_state, node: item_node } = statement(if spelling(look, "var") issue(look, UnexpectedToken, t.start, t.end) else look, depth + 1)
 			$ids = $ids.append(item_node)
 			$s = item_state
-			if peek(skip_trivia(item_state)).kind == CloseCurly and (item_state.nodes.get(item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
+			if (t.kind == UpperIdent or peek(skip_trivia(item_state)).kind == CloseCurly) and (item_state.nodes.get(item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
 				$s = issue($s, UnexpectedToken, t.start, node_end($s, item_node))
 			}
 			if $s.pos <= before {
