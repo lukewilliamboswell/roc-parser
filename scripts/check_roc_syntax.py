@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allocations", action="store_true", help="also build/run the allocation probe")
     parser.add_argument("--reference-performance", choices=("smoke", "full"),
                         help="optional compiler speed comparison; smoke checks protocol only, full applies the local ratio ratchet")
-    parser.add_argument("--max-reference-ratio", type=positive_ratio, default=64)
+    parser.add_argument("--max-reference-ratio", type=positive_ratio, default=1.5)
     parser.add_argument("--baseline", type=Path, help="performance baseline from this machine/compiler")
     args = parser.parse_args(argv)
     roc = resolve_command(args.roc)

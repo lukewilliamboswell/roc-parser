@@ -16,6 +16,14 @@ class ScalingTests(unittest.TestCase):
     def test_quadratic_growth_fails(self):
         self.assertEqual(len(bench.scaling_failures(self.records([10,40,160]),1.75)),2)
 
+    def test_load_noise_needs_consistent_slowdown_to_fail(self):
+        records = self.records([10, 45])
+        records[0]['samples_ns'] = [9, 10, 11, 10, 10]
+        records[1]['samples_ns'] = [20, 45, 48, 50, 44]
+        self.assertEqual(bench.scaling_failures(records, 1.75), [])
+        records[1]['samples_ns'] = [40, 45, 48, 50, 44]
+        self.assertEqual(len(bench.scaling_failures(records, 1.75)), 1)
+
     def test_valid_sources_cannot_pass_by_rejecting_or_limiting(self):
         for family in ['definitions', 'comment', 'operators', 'sibling-document']:
             for status, accepted in [('Limited', False), ('Recovered', False), ('Complete', False)]:

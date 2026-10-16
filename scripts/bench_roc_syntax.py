@@ -72,8 +72,13 @@ def scaling_failures(records, max_ratio):
                 continue
             ratio = record['median_ns'] / previous['median_ns']
             growth = record['bytes'] / previous['bytes']
-            if ratio > growth * max_ratio:
-                failures.append({'family': family, 'size': record['size'], 'time_ratio': ratio, 'byte_ratio': growth})
+            # Cross-size batches can encounter different host load. Require the
+            # slowdown even between the fastest current and slowest prior sample;
+            # retain medians so noisy measurements remain visible in the report.
+            lower_ratio = min(record.get('samples_ns', [record['median_ns']])) / max(previous.get('samples_ns', [previous['median_ns']]))
+            if lower_ratio > growth * max_ratio:
+                failures.append({'family': family, 'size': record['size'], 'time_ratio': ratio,
+                                 'time_ratio_lower_bound': lower_ratio, 'byte_ratio': growth})
         prior[family] = record
     return failures
 
