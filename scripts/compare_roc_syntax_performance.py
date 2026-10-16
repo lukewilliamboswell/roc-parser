@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Local per-input Roc/reference parse timing ratchet; --smoke checks protocol only."""
+"""Local per-input Roc/reference parse timing ratchet; --smoke checks protocol only.
+
+Fresh builds write a sibling JSON receipt binding compiler, flags, sources and
+executable bytes. Reused executables without receipts remain measurable, with
+compiler/build-source attribution explicitly unknown; --roc never identifies a
+reused build. The workspace hash is recorded separately for its correctness gate.
+"""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -7,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import shlex
+import shutil
 import statistics
 import subprocess
 import sys
@@ -130,6 +137,7 @@ def parser():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--roc', default='roc')
     ap.add_argument('--candidate-binary', type=Path, help='reuse optimized parse-only Roc driver')
+    ap.add_argument('--candidate-build-info', type=Path, help='build receipt for reused candidate; defaults to executable sibling .json; absent receipt means unknown build provenance')
     ap.add_argument('--probe-command', required=True, help='persistent correctness worker')
     ap.add_argument('--oracle-command', required=True, help='optimized reference correctness/benchmark worker')
     ap.add_argument('--reference-build-info', type=Path, help='oracle build metadata; defaults to executable sibling .json')
@@ -145,6 +153,55 @@ def parser():
     ap.add_argument('--timeout', type=positive_finite, default=30.0)
     ap.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp/reference-performance/results.json')
     return ap
+
+
+def compiler_identity(command):
+    """Identify the executable actually used for a fresh build, not the current PATH label."""
+    executable = shutil.which(command)
+    if executable is None:
+        raise ValueError(f'candidate compiler executable unavailable: {command}')
+    return {'version': subprocess.run([executable, 'version'], capture_output=True, text=True,
+                                      check=True).stdout.strip(),
+            'binary_sha256': hashlib.sha256(Path(executable).read_bytes()).hexdigest()}
+
+
+def candidate_build(binary, source_hash, *, receipt_path=None):
+    """A sidecar binds claimed build inputs to the exact reused executable bytes."""
+    binary_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
+    path = receipt_path or binary.with_suffix('.json')
+    if not path.exists() and receipt_path is None:
+        return {'provenance': 'unknown', 'binary_sha256': binary_hash,
+                'source_identity': None, 'compiler': None, 'build_flags': None}
+    receipt = json.loads(path.read_text())
+    if receipt.get('schema_version') != 1:
+        raise ValueError('unsupported candidate build receipt schema')
+    if receipt.get('binary_sha256') != binary_hash:
+        raise ValueError('candidate executable does not match build receipt')
+    if receipt.get('source_identity') != source_hash:
+        raise ValueError('candidate build receipt differs from current candidate sources')
+    compiler = receipt.get('compiler')
+    if (not isinstance(compiler, dict) or not compiler.get('version') or
+            not isinstance(compiler.get('binary_sha256'), str) or len(compiler['binary_sha256']) != 64 or
+            not isinstance(receipt.get('build_flags'), list) or not receipt['build_flags'] or
+            not all(isinstance(flag, str) for flag in receipt['build_flags'])):
+        raise ValueError('candidate build receipt lacks compiler identity or build flags')
+    return {**receipt, 'provenance': 'verified_receipt'}
+
+
+def build_candidate(roc, binary, source_hash):
+    identity = compiler_identity(roc)
+    flags = ['--no-cache', '--opt=speed']
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([roc, 'build', *flags, str(ROOT/'bench/roc/roc-syntax-compare.roc'),
+                    f'--output={binary}'], check=True)
+    if geometric.source_identity(ROOT) != source_hash:
+        raise ValueError('candidate sources changed during build')
+    if compiler_identity(roc) != identity:
+        raise ValueError('candidate compiler changed during build')
+    receipt = {'schema_version': 1, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+               'source_identity': source_hash, 'compiler': identity, 'build_flags': flags}
+    binary.with_suffix('.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return {**receipt, 'provenance': 'built_in_this_run'}
 
 
 def main(argv=None):
@@ -165,21 +222,20 @@ def main(argv=None):
         raise SystemExit('reference performance comparison requires a verified ReleaseFast oracle (smoke also permits ReleaseSafe)')
     source_hash = geometric.source_identity(ROOT)
     binary = (args.candidate_binary or ROOT / '.roc-parser-tmp/reference-performance/driver').resolve()
-    if not args.candidate_binary:
-        binary.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([args.roc, 'build', '--no-cache', '--opt=speed', str(ROOT/'bench/roc/roc-syntax-compare.roc'), f'--output={binary}'], check=True)
+    if args.candidate_build_info and not args.candidate_binary:
+        raise SystemExit('--candidate-build-info requires --candidate-binary')
+    build = (candidate_build(binary, source_hash, receipt_path=args.candidate_build_info) if args.candidate_binary
+             else build_candidate(args.roc, binary, source_hash))
     cases = inputs(sorted(args.sizes), args.document_bytes, args.fixtures, args.smoke)
     if args.replay and not args.smoke:
         cases = [json.loads(path.read_text())['request'] for path in args.replay]
-    try:
-        compiler = subprocess.run([args.roc, 'version'], capture_output=True, text=True, check=True).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        compiler = None
+    compiler = build['compiler']['version'] if build['compiler'] else None
     report = {'version': 1, 'hardware': geometric.machine_identity(), 'roc_compiler': compiler, 'timing_scope': 'tokenize + parse + result disposal; shared source bytes; O(1) result observation; excludes JSON, encoding, startup and I/O',
               'source_ownership': 'file/expr shared immutable UTF-8 byte list prepared before timing; statement/header string API; repl compiler-compatible dispatch',
-              'ratio_assertion': not args.smoke, 'smoke': args.smoke, 'source_identity': source_hash,
-              'candidate_binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
-              'candidate_reused': bool(args.candidate_binary), 'candidate_build_flags': None if args.candidate_binary else ['--no-cache', '--opt=speed'],
+              'ratio_assertion': not args.smoke, 'smoke': args.smoke, 'source_identity': build['source_identity'],
+              'workspace_source_identity': source_hash, 'candidate_build': build,
+              'candidate_binary_sha256': build['binary_sha256'],
+              'candidate_reused': bool(args.candidate_binary), 'candidate_build_flags': build['build_flags'],
               'oracle_command': reference_command, 'reference_build': reference_metadata, 'records': [], 'failures': []}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with review.Worker(shlex.split(args.probe_command), timeout=args.timeout) as probe, review.Worker(shlex.split(args.oracle_command), timeout=args.timeout) as oracle, review.Worker([str(binary)], timeout=args.timeout) as candidate:
@@ -213,6 +269,10 @@ def main(argv=None):
                 break  # A timed-out stream cannot safely serve another request.
     if source_hash != geometric.source_identity(ROOT):
         report['failures'].append({'error': 'candidate source changed during benchmark'})
+    if hashlib.sha256(binary.read_bytes()).hexdigest() != build['binary_sha256']:
+        report['failures'].append({'error': 'candidate executable changed during benchmark'})
+    if hashlib.sha256(reference_binary.read_bytes()).hexdigest() != reference_metadata['binary_sha256']:
+        report['failures'].append({'error': 'reference executable changed during benchmark'})
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({'cases': len(report['records']), 'requested_cases': len(cases), 'failures': len(report['failures']), 'ratio_assertion': not args.smoke, 'output': str(args.output)}))
     return 1 if report['failures'] else 0

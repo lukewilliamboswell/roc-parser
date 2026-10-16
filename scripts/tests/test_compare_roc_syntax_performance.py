@@ -1,5 +1,9 @@
 import unittest
 import argparse
+import hashlib
+import json
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -48,5 +52,72 @@ class ComparisonTests(unittest.TestCase):
             with self.assertRaises(argparse.ArgumentTypeError): comparison.bounded_samples(value)
     def test_smoke_is_small_and_fixture_independent(self):
         self.assertEqual(len(comparison.inputs([1,2],[4096],['missing.json'],True)),2)
+
+class CandidateProvenanceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.binary = Path(self.temp.name) / 'driver'
+        self.binary.write_bytes(b'compiled candidate')
+        self.source = 'a' * 64
+        self.compiler = {'version': 'Roc compiler version pinned-build', 'binary_sha256': 'b' * 64}
+
+    def receipt(self, **changes):
+        receipt = {'schema_version': 1,
+                   'binary_sha256': hashlib.sha256(self.binary.read_bytes()).hexdigest(),
+                   'source_identity': self.source, 'compiler': self.compiler,
+                   'build_flags': ['--no-cache', '--opt=speed']}
+        receipt.update(changes)
+        self.binary.with_suffix('.json').write_text(json.dumps(receipt))
+
+    def test_unidentified_reuse_does_not_claim_current_compiler_or_sources(self):
+        with patch.object(comparison, 'compiler_identity', side_effect=AssertionError('must not query current compiler')):
+            build = comparison.candidate_build(self.binary, self.source)
+        self.assertEqual(build['provenance'], 'unknown')
+        self.assertIsNone(build['compiler'])
+        self.assertIsNone(build['source_identity'])
+        self.assertIsNone(build['build_flags'])
+        self.assertEqual(build['binary_sha256'], hashlib.sha256(self.binary.read_bytes()).hexdigest())
+
+    def test_verified_reuse_retains_actual_build_compiler_and_flags(self):
+        self.receipt()
+        with patch.object(comparison, 'compiler_identity', side_effect=AssertionError('wrong compiler attribution')):
+            build = comparison.candidate_build(self.binary, self.source)
+        self.assertEqual(build['compiler'], self.compiler)
+        self.assertEqual(build['source_identity'], self.source)
+        self.assertEqual(build['build_flags'], ['--no-cache', '--opt=speed'])
+        self.assertEqual(build['provenance'], 'verified_receipt')
+
+    def test_stale_binary_and_changed_helpers_cannot_reuse_receipt(self):
+        self.receipt()
+        self.binary.write_bytes(b'replaced candidate')
+        with self.assertRaisesRegex(ValueError, 'executable does not match'):
+            comparison.candidate_build(self.binary, self.source)
+        self.receipt()
+        with self.assertRaisesRegex(ValueError, 'differs from current candidate sources'):
+            comparison.candidate_build(self.binary, 'c' * 64)
+
+    def test_missing_explicit_or_incomplete_receipt_cannot_be_verified(self):
+        with self.assertRaises(FileNotFoundError):
+            comparison.candidate_build(self.binary, self.source, receipt_path=Path(self.temp.name)/'missing.json')
+        for changes in [{'compiler': None}, {'build_flags': None}, {'compiler': {'version': 'claimed'}}]:
+            self.receipt(**changes)
+            with self.assertRaisesRegex(ValueError, 'lacks compiler identity or build flags'):
+                comparison.candidate_build(self.binary, self.source)
+
+    def test_fresh_build_writes_reusable_receipt_and_detects_source_race(self):
+        with patch.object(comparison, 'compiler_identity', return_value=self.compiler), \
+             patch.object(comparison.subprocess, 'run') as run, \
+             patch.object(comparison.geometric, 'source_identity', return_value=self.source):
+            build = comparison.build_candidate('selected-roc', self.binary, self.source)
+        self.assertEqual(build['provenance'], 'built_in_this_run')
+        self.assertEqual(run.call_args.args[0][:4], ['selected-roc', 'build', '--no-cache', '--opt=speed'])
+        self.assertEqual(comparison.candidate_build(self.binary, self.source)['compiler'], self.compiler)
+        with patch.object(comparison, 'compiler_identity', return_value=self.compiler), \
+             patch.object(comparison.subprocess, 'run'), \
+             patch.object(comparison.geometric, 'source_identity', return_value='changed'):
+            with self.assertRaisesRegex(ValueError, 'sources changed during build'):
+                comparison.build_candidate('selected-roc', self.binary, self.source)
+
 
 if __name__ == '__main__': unittest.main()
