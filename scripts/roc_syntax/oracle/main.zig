@@ -53,6 +53,39 @@ fn qualifiedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
 fn regionText(tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, region: parse.AST.TokenizedRegion) []const u8 {
     return source[tokens.resolve(region.start).start.offset..tokens.resolve(region.end - 1).end.offset];
 }
+fn suffixNames(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, suffix: parse.AST.LiteralTypeSuffix) Allocator.Error!std.json.Value {
+    var names = std.array_list.Managed(std.json.Value).init(gpa);
+    switch (suffix) {
+        .path => |path| {
+            for (store.tokenSlice(path.qualifiers)) |raw_token| try names.append(string(fieldName(tokenText(tokens, source, @intCast(raw_token)))));
+            try names.append(string(fieldName(tokenText(tokens, source, path.final_token))));
+        },
+        .deprecated_builtin => try names.append(string("deprecated_builtin")),
+    }
+    return .{ .array = names };
+}
+fn stringShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, parts_span: parse.AST.Expr.Span, region: parse.AST.TokenizedRegion, multiline: bool, depth: usize) Allocator.Error!std.json.Value {
+    var parts = std.array_list.Managed(std.json.Value).init(gpa);
+    var interpolated = false;
+    for (store.exprSlice(parts_span)) |part_idx| {
+        const part = store.getExpr(part_idx);
+        if (part == .string_part) {
+            const text = tokenText(tokens, source, part.string_part.token);
+            if (text.len > 0) try parts.append(try array(gpa, &.{ string("text"), string(text) }));
+        } else {
+            interpolated = true;
+            try parts.append(try array(gpa, &.{ string("interpolation"), try shape(gpa, store, tokens, source, part_idx, depth + 1) }));
+        }
+    }
+    if (!multiline and !interpolated) return array(gpa, &.{ string("string"), string(regionText(tokens, source, region)) });
+    return array(gpa, &.{ string(if (multiline) "multiline_string" else "interpolated_string"), .{ .array = parts } });
+}
+fn beforeSuffix(store: *const parse.NodeStore, region: parse.AST.TokenizedRegion, suffix: parse.AST.LiteralTypeSuffix) parse.AST.TokenizedRegion {
+    return switch (suffix) {
+        .path => |path| .{ .start = region.start, .end = if (store.tokenSlice(path.qualifiers).len > 0) @intCast(store.tokenSlice(path.qualifiers)[0]) else path.final_token },
+        .deprecated_builtin => region,
+    };
+}
 fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Pattern.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("pattern_depth_limit") });
     const pattern = store.getPattern(idx);
@@ -70,9 +103,12 @@ fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pa
         },
         .int => |p| array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }),
         .frac => |p| array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }),
-        .typed_int => |p| array(gpa, &.{ string("typed_number"), string(regionText(tokens, source, p.region)) }),
-        .typed_frac => |p| array(gpa, &.{ string("typed_number"), string(regionText(tokens, source, p.region)) }),
-        .single_quote => |p| array(gpa, &.{ string(if (p.type_suffix == null) "character" else "typed_character"), string(regionText(tokens, source, p.region)) }),
+        .typed_int => |p| array(gpa, &.{ string("typed"), try array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }), try suffixNames(gpa, store, tokens, source, p.type_suffix) }),
+        .typed_frac => |p| array(gpa, &.{ string("typed"), try array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }), try suffixNames(gpa, store, tokens, source, p.type_suffix) }),
+        .single_quote => |p| blk: {
+            const literal = try array(gpa, &.{ string("character"), string(tokenText(tokens, source, p.token)) });
+            break :blk if (p.type_suffix) |suffix| array(gpa, &.{ string("typed"), literal, try suffixNames(gpa, store, tokens, source, suffix) }) else literal;
+        },
         .string => |p| blk: {
             var parts = std.array_list.Managed(std.json.Value).init(gpa);
             var captures = false;
@@ -128,7 +164,12 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
     return switch (expr) {
         .int => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
         .frac => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
-        .single_quote => |value| if (value.type_suffix == null) array(gpa, &.{ string("character"), string(tokenText(tokens, source, value.token)) }) else array(gpa, &.{ string("unsupported"), string("typed_character") }),
+        .typed_int => |value| array(gpa, &.{ string("typed"), try array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }), try suffixNames(gpa, store, tokens, source, value.type_suffix) }),
+        .typed_frac => |value| array(gpa, &.{ string("typed"), try array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }), try suffixNames(gpa, store, tokens, source, value.type_suffix) }),
+        .single_quote => |value| blk: {
+            const literal = try array(gpa, &.{ string("character"), string(tokenText(tokens, source, value.token)) });
+            break :blk if (value.type_suffix) |suffix| array(gpa, &.{ string("typed"), literal, try suffixNames(gpa, store, tokens, source, suffix) }) else literal;
+        },
         .ident => |value| qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token),
         .bin_op => |value| array(gpa, &.{ string("binary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.left, depth + 1), try shape(gpa, store, tokens, source, value.right, depth + 1) }),
         .tuple, .list => blk: {
@@ -150,8 +191,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             var branches = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.matchBranchSlice(value.branches)) |idx_branch| {
                 const branch = store.getBranch(idx_branch);
-                if (branch.guard != null) break :blk array(gpa, &.{ string("unsupported"), string("guarded_match") });
-                try branches.append(try array(gpa, &.{ try patternShape(gpa, store, tokens, source, branch.pattern, depth + 1), try shape(gpa, store, tokens, source, branch.body, depth + 1) }));
+                try branches.append(try array(gpa, &.{ string("branch"), try patternShape(gpa, store, tokens, source, branch.pattern, depth + 1), if (branch.guard) |guard| try shape(gpa, store, tokens, source, guard, depth + 1) else .null, try shape(gpa, store, tokens, source, branch.body, depth + 1) }));
             }
             break :blk array(gpa, &.{ string("match"), try shape(gpa, store, tokens, source, value.expr, depth + 1), .{ .array = branches } });
         },
@@ -199,14 +239,12 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             const callee = try array(gpa, &.{ string("field"), try shape(gpa, store, tokens, source, value.receiver, depth + 1), string(fieldName(tokenText(tokens, source, value.method_token))) });
             break :blk array(gpa, &.{ string("call"), callee, .{ .array = args } });
         },
-        .string => |value| blk: {
-            for (store.exprSlice(value.parts)) |part| {
-                if (store.getExpr(part) != .string_part) break :blk array(gpa, &.{ string("unsupported"), string("interpolated_string") });
-            }
-            const start = tokens.resolve(value.region.start).start.offset;
-            const end = tokens.resolve(value.region.end - 1).end.offset;
-            break :blk array(gpa, &.{ string("string"), string(source[start..end]) });
-        },
+        .string => |value| stringShape(gpa, store, tokens, source, value.parts, value.region, false, depth),
+        .multiline_string => |value| stringShape(gpa, store, tokens, source, value.parts, value.region, true, depth),
+        .typed_string => |value| array(gpa, &.{ string("typed"), try stringShape(gpa, store, tokens, source, value.parts, beforeSuffix(store, value.region, value.type_suffix), false, depth), try suffixNames(gpa, store, tokens, source, value.type_suffix) }),
+        .typed_multiline_string => |value| array(gpa, &.{ string("typed"), try stringShape(gpa, store, tokens, source, value.parts, beforeSuffix(store, value.region, value.type_suffix), true, depth), try suffixNames(gpa, store, tokens, source, value.type_suffix) }),
+        .for_expr => |value| array(gpa, &.{ string(if (value.kind == .iter) "for" else "for!"), try patternShape(gpa, store, tokens, source, value.patt, depth + 1), try shape(gpa, store, tokens, source, value.expr, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        .arrow_call => |value| array(gpa, &.{ string("arrow"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.left, depth + 1), try shape(gpa, store, tokens, source, value.right, depth + 1), string(@tagName(value.target_kind)) }),
         .unary_op => |value| array(gpa, &.{ string("unary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
         .suffix_single_question => |value| array(gpa, &.{ string("suffix"), string("?"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
         .dbg => |value| array(gpa, &.{ string("dbg"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),

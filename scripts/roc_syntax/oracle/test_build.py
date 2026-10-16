@@ -122,6 +122,21 @@ class WorkerTests(unittest.TestCase):
     def test_common_expression_projections(self):
         cases = [
             ("True", ["identifier", "True"]),
+            ('"a ${1 + 2} b"', ['interpolated_string', [['text', 'a '], ['interpolation', ['binary', '+', ['number', '1'], ['number', '2']]], ['text', ' b']]]),
+            ('"${name}"', ['interpolated_string', [['interpolation', ['identifier', 'name']]]]),
+            ('"""hello', ['multiline_string', [['text', 'hello']]]),
+            ('"""hello ${name}', ['multiline_string', [['text', 'hello '], ['interpolation', ['identifier', 'name']]]]),
+            ('\\\\hello\n\\\\world', ['multiline_string', [['text', 'hello'], ['text', 'world']]]),
+            ('123.U64', ['typed', ['number', '123'], ['U64']]),
+            ('3.14.Dec', ['typed', ['number', '3.14'], ['Dec']]),
+            ("'é'.U8", ['typed', ['character', "'é'"], ['U8']]),
+            ('"hello".Str', ['typed', ['string', '"hello"'], ['Str']]),
+            ('123.Module.Integer', ['typed', ['number', '123'], ['Module', 'Integer']]),
+            ('"${name}".Str', ['typed', ['interpolated_string', [['interpolation', ['identifier', 'name']]]], ['Str']]),
+            ('x -> f(1)', ['arrow', '->', ['identifier', 'x'], ['call', ['identifier', 'f'], [['number', '1']]], 'ordinary']),
+            ('x |> f(1)', ['arrow', '|>', ['identifier', 'x'], ['call', ['identifier', 'f'], [['number', '1']]], 'ordinary']),
+            ('for x in items { x }', ['for', ['p_identifier', 'x'], ['identifier', 'items'], ['block', [['identifier', 'x']]]]),
+            ('match x { A if True => 1 }', ['match', ['identifier', 'x'], [['branch', ['p_tag', ['identifier', 'A'], False, []], ['identifier', 'True'], ['number', '1']]]]),
             ("'é'", ["character", "'é'"]),
             ("'\\n'", ["character", "'\\n'"]),
             ("answer?", ["suffix", "?", ["identifier", "answer"]]),
@@ -147,7 +162,7 @@ class WorkerTests(unittest.TestCase):
             ("x.01", ["field", ["identifier", "x"], "01"]),
             ("x .01", ["field", ["identifier", "x"], "01"]),
             ("point.move(1)", ["call", ["field", ["identifier", "point"], "move"], [["number", "1"]]]),
-            ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [[["p_tag", ["identifier", "A"], False, []], ["number", "1"]], [["p_tag", ["identifier", "B"], False, []], ["number", "2"]]]]),
+            ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [["branch", ["p_tag", ["identifier", "A"], False, []], None, ["number", "1"]], ["branch", ["p_tag", ["identifier", "B"], False, []], None, ["number", "2"]]]]),
         ]
         requests = "".join(json.dumps({"id": str(i), "mode": "expr", "source": source}) + "\n" for i, (source, _) in enumerate(cases))
         result = subprocess.run([os.environ["ORACLE_BINARY"]], input=requests, text=True, capture_output=True, check=True, timeout=30)

@@ -68,6 +68,20 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_interpolation_and_typed_literal_project_children(self):
+        response = {'nodes': [
+            {'kind': 'Identifier', 'start': 3, 'end': 4, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Interpolation', 'start': 1, 'end': 5, 'children_start': 0, 'children_len': 1},
+            {'kind': 'StringLiteral', 'start': 0, 'end': 6, 'children_start': 1, 'children_len': 1},
+        ], 'children': [0, 1], 'root': 2}
+        self.assertEqual(review.syntax_shape(response, '"${x}"'), ['interpolated_string', [['interpolation', ['identifier', 'x']]]])
+        response = {'nodes': [
+            {'kind': 'NumberLiteral', 'start': 0, 'end': 3, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Identifier', 'start': 4, 'end': 7, 'children_start': 0, 'children_len': 0},
+            {'kind': 'TypedLiteral', 'start': 0, 'end': 7, 'children_start': 0, 'children_len': 2},
+        ], 'children': [0, 1], 'root': 2}
+        self.assertEqual(review.syntax_shape(response, '123.U64'), ['typed', ['number', '123'], ['U64']])
+
     def test_constructor_pattern_preserves_explicit_empty_arguments(self):
         for source, called in [('Some', False), ('Some()', True)]:
             response = {'nodes': [

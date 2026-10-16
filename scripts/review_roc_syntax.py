@@ -136,6 +136,10 @@ def normalize_tokens(response, source):
             kind = 'LowerIdent'
         elif kind == 'OpaqueName':
             kind = 'UpperIdent'
+        elif kind == 'OpenStringInterpolation':
+            kind = 'InterpolationStart'
+        elif kind == 'CloseStringInterpolation':
+            kind = 'InterpolationEnd'
         elif kind.startswith('Kw'):
             kind = 'Keyword'
         out.append([kind, start, end])
@@ -193,8 +197,17 @@ def syntax_shape(response, source):
             first = nodes[children[start]]
             operator = raw[node['start']:first['start']].decode().strip()
             return ['unary', operator, *branch]
-        if kind == 'StringLiteral':
-            return ['string', text]
+        if kind in {'StringLiteral', 'MultilineStringLiteral'}:
+            interpolated = any(nodes[index]['kind'] == 'Interpolation' for index in children[start:start+length])
+            if kind == 'StringLiteral' and not interpolated:
+                return ['string', text]
+            return ['multiline_string' if kind == 'MultilineStringLiteral' else 'interpolated_string', branch]
+        if kind == 'StringSegment':
+            return ['text', text]
+        if kind == 'Interpolation':
+            return ['interpolation', branch[0]]
+        if kind == 'TypedLiteral':
+            return ['typed', branch[0], [name[1] for name in branch[1:]]]
         if kind == 'CharacterLiteral':
             return ['character', text]
         if kind == 'Suffix':
@@ -249,11 +262,19 @@ def syntax_shape(response, source):
         if kind in {'Break', 'Ellipsis'}:
             return [kind.lower()]
         if kind == 'MatchBranch':
-            return branch
+            return ['branch', branch[0], branch[1] if len(branch) == 3 else None, branch[-1]]
         if kind == 'Match':
             return ['match', branch[0], branch[1:]]
         if kind == 'Call':
             return ['call', branch[0], branch[1:]]
+        if kind in {'For', 'ForStream'}:
+            return ['for' if kind == 'For' else 'for!', *branch]
+        if kind in {'ArrowCall', 'MethodArrowCall'}:
+            left, right = [nodes[index] for index in children[start:start+length]]
+            lo = bisect.bisect_left(operator_starts, left['end'])
+            hi = bisect.bisect_left(operator_starts, right['start'])
+            operator = ''.join(raw[token['start']:token['end']].decode() for token in operators[lo:hi])
+            return ['arrow', operator, *branch, 'method_call' if kind == 'MethodArrowCall' else 'ordinary']
         return ['unsupported', kind]
     try:
         return visit(response['root'])
