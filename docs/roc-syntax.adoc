@@ -8,10 +8,18 @@ endif::[]
 = Parsing Roc source
 
 This chapter is for authors of highlighters and source analysis tools. `RocSyntax`
-reads current Zig compiler syntax and returns source tokens, a syntax tree and
-diagnostics. The implementation is pure Roc; the compiler reference worker is
+parses a growing subset of current Zig compiler syntax and returns source tokens,
+a syntax tree and diagnostics. Coverage is incomplete; it is not a replacement
+for compiler validation. The implementation is pure Roc; the compiler reference worker is
 development tooling and is not a dependency of applications using the module.
 Legacy Rust compiler syntax is outside its scope.
+
+The current implementation includes literals, identifiers, calls, field access,
+lists, tuples, unary and binary expressions, simple declarations, lambdas,
+conditionals, match branches, records, blocks, imports and module headers.
+Patterns and type annotations have partial coverage. Interpolated strings and
+other unimplemented constructs carry explicit coverage diagnostics. Check the
+source doc comment and differential corpus when depending on a specific form.
 
 == Parse and inspect tokens
 
@@ -77,3 +85,52 @@ generation checks independently constructed syntax. Performance runs use optimiz
 builds and measure scaling as documents grow. See
 {src}/docs/research/roc-syntax.adoc[the architecture research] for the reference
 selection and allocation constraints behind these choices.
+
+== Run the feedback loop
+
+Install the Roc nightly named in `.roc-version`, Zig 0.16.0 and Python 3.
+From the repository root, run:
+
+[source,sh]
+----
+ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
+----
+
+The command checks the package, builds the pinned compiler oracle and optimized
+Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
+expression trees, runs both fuzz smoke campaigns and checks performance scaling.
+It rebuilds candidate probes and records source and executable hashes. Its
+`validation.json`, step logs, differential failures and performance results live
+under `.roc-parser-tmp/roc-syntax-validation/`.
+
+The first oracle build fetches the pinned compiler Git objects when no sibling
+compiler repository is available. `--roc-source /path/to/roc` selects an existing
+Git repository; its working files are ignored. Build caches stay under the
+validation output directory. Compiler backend libraries are not required.
+
+Use `--generated 10000 --fuzz-runs 10000` for a larger campaign. Add `--allocations`
+to collect allocation/reallocation call counts. For performance comparisons, save
+the first run's `performance.json` and pass it as `--baseline /path/to/before.json`
+on a later run on the same machine and compiler. An allocation call count does
+not measure bytes copied or peak memory; inspect timing growth too.
+
+To import the larger upstream source corpus, run:
+
+[source,sh]
+----
+python3 scripts/import_roc_syntax_snapshots.py --roc-source /path/to/roc
+----
+
+The importer reads the pinned commit's immutable snapshot blobs and records
+source hashes, parse modes and skipped snapshot kinds. This is an exploratory
+coverage corpus, including invalid and historical examples. It is not a list of
+programs the current compiler promises to accept. Feed the generated fixtures to
+`scripts/review_roc_syntax.py` with the built probe and oracle commands. Every
+disagreement remains available for inspection; unknown projections and unsupported
+syntax must not be presented as structural agreement.
+
+For each parser improvement, add a curated case for the relevant rule, check its
+normalized structure against the reference, extend the independent generator
+where useful, and rerun scaling when the parser's traversal or allocation changes.
+Preserve minimized fuzz failures as source fixtures so the check survives corpus
+and generator changes.

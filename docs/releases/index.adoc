@@ -20,3 +20,15 @@ notice.
 
 Earlier releases are described on the
 {repo}/releases[roc-parser GitHub releases page].
+
+== Unreleased
+
+`RocSyntax` adds source-backed tokens and a tolerant indexed syntax tree for
+highlighters and source analysis tools. It targets the pinned Zig compiler
+syntax and has explicit limits on grammar coverage; legacy Rust syntax is not
+supported. See <<roc-syntax>> before treating a parse result as a validity answer.
+
+Development tooling adds a persistent compiler reference worker, independent
+generated syntax checks, raw and structured fuzz targets, an upstream snapshot
+corpus importer, and runtime/allocation/scaling checks. The feedback loop is
+available through `scripts/check_roc_syntax.py`.
