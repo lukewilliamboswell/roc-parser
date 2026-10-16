@@ -8,13 +8,14 @@ import parser.RocSyntax
 
 ## The generator constructs its own expression tree, then prints it. Parsing
 ## must recover that tree; no parser output is used to compute expectations.
-Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr)]
+Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Pat, Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr), OptionalAccess(Expr), DebugExpr(Expr), CrashExpr(Expr), ReturnExpr(Expr), Guarded(Pat, Expr, Expr), Alternatives(Expr)]
+Pat := [Bind(Str), Wild, Mutable(Str), Tagged(Pat), Nominal(Pat), PatPair(Pat, Pat), PatList(Pat), PatRecord(Pat), Alias(Pat)]
 Case : { source : Str, expected : Expr }
 
 build : List(U8), U64, U64 -> (Expr, U64)
 build = |bytes, pos, depth| {
 	choice = bytes.get(pos) ?? 0
-	kind = if depth == 0 { choice % 3 } else { choice % 12 }
+	kind = if depth == 0 { choice % 3 } else { choice % 18 }
 	if kind == 0 {
 		(Number(U8.to_str(bytes.get(pos + 1) ?? 0)), pos + 2)
 	} else if kind == 1 {
@@ -23,11 +24,47 @@ build = |bytes, pos, depth| {
 		(Text(if choice % 2 == 0 { "\"hello\"" } else { "\"two words\"" }), pos + 1)
 	} else {
 		(left, next) = build(bytes, pos + 1, depth - 1)
-		if kind == 3 { (Call(left), next) } else if kind == 4 { (Function(left), next) } else if kind == 5 { (Access(left), next) } else {
+		if kind == 3 { (Call(left), next) } else if kind == 4 {
+			(pattern, end) = build_pattern(bytes, next, 2)
+			(Function(pattern, left), end)
+		} else if kind == 5 { (Access(left), next) } else if kind == 12 { (DebugExpr(left), next) } else if kind == 13 { (CrashExpr(left), next) } else if kind == 14 { (ReturnExpr(left), next) } else if kind == 15 { (OptionalAccess(left), next) } else if kind == 17 { (Alternatives(left), next) } else {
 			(right, end) = build(bytes, next, depth - 1)
-			(if kind == 6 { Add(left, right) } else if kind == 7 { Mul(left, right) } else if kind == 8 { Sequence(left, right) } else if kind == 9 { Pair(left, right) } else if kind == 10 { Conditional(left, right) } else { Fields(left, right) }, end)
+			(if kind == 16 {
+				(pattern, _) = build_pattern(bytes, end, 2)
+				Guarded(pattern, left, right)
+			} else if kind == 6 { Add(left, right) } else if kind == 7 { Mul(left, right) } else if kind == 8 { Sequence(left, right) } else if kind == 9 { Pair(left, right) } else if kind == 10 { Conditional(left, right) } else { Fields(left, right) }, end)
 		}
 	}
+}
+
+build_pattern : List(U8), U64, U64 -> (Pat, U64)
+build_pattern = |bytes, pos, depth| {
+	choice = bytes.get(pos) ?? 0
+	kind = if depth == 0 { choice % 3 } else { choice % 9 }
+	if kind == 0 { (Bind("p${U8.to_str(choice)}"), pos + 1) } else if kind == 1 { (Wild, pos + 1) } else if kind == 2 { (Mutable("count"), pos + 1) } else {
+		(inner, next) = build_pattern(bytes, pos + 1, depth - 1)
+		if kind == 3 { (Tagged(inner), next) } else if kind == 4 { (Nominal(inner), next) } else if kind == 5 {
+			(other, end) = build_pattern(bytes, next, depth - 1)
+			(PatPair(inner, other), end)
+		} else if kind == 6 { (PatList(inner), next) } else if kind == 7 { (PatRecord(inner), next) } else {
+			# A repeated ungrouped alias is invalid in the compiler grammar.
+			base = match inner { Alias(_) => Bind("named") _ => inner }
+			(Alias(base), next)
+		}
+	}
+}
+
+render_pattern : Pat -> Str
+render_pattern = |pattern| match pattern {
+	Bind(name) => name
+	Wild => "_"
+	Mutable(name) => "var ${name}"
+	Tagged(inner) => "Some(${render_pattern(inner)})"
+	Nominal(inner) => "Box.(${render_pattern(inner)})"
+	PatPair(a, b) => "(${render_pattern(a)}, ${render_pattern(b)})"
+	PatList(inner) => "[${render_pattern(inner)}, .. as rest]"
+	PatRecord(inner) => "{ value: ${render_pattern(inner)}, other }"
+	Alias(inner) => "${render_pattern(inner)} as whole"
 }
 
 render : Expr -> Str
@@ -38,10 +75,16 @@ render = |expr| match expr {
 	Call(arg) => "f(${render(arg)})"
 	Sequence(a, b) => "[${render(a)}, ${render(b)}]"
 	Pair(a, b) => "(${render(a)}, ${render(b)})"
-	Function(body) => "(|x| ${render(body)})"
+	Function(pattern, body) => "(|${render_pattern(pattern)}| ${render(body)})"
 	Conditional(a, b) => "(if True (${render(a)}) else (${render(b)}))"
 	Fields(a, b) => "{ first: ${render(a)}, second: ${render(b)} }"
 	Access(base) => "(${render(base)}).value"
+	OptionalAccess(base) => "(${render(base)}).?value"
+	DebugExpr(value) => "(dbg (${render(value)}))"
+	CrashExpr(value) => "(crash (${render(value)}))"
+	ReturnExpr(value) => "(return (${render(value)}))"
+	Guarded(pattern, guard, body) => "(match subject { ${render_pattern(pattern)} if (${render(guard)}) => (${render(body)}) })"
+	Alternatives(body) => "(match subject { Some(x) | None => (${render(body)}) })"
 }
 
 generate : List(U8) -> Case
@@ -70,13 +113,27 @@ matches = |parsed, id, expr| {
 					kind = match expr { Sequence(_, _) => ListLiteral _ => Tuple }
 					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), a) and matches(parsed, child(parsed, node, 1), b)
 				}
-				Function(body) => {
-					parameter = parsed.nodes.get(child(parsed, node, 0)) ?? node
-					node.kind == Lambda and node.children_len == 2 and parameter.kind == IdentifierPattern and lexeme(parsed, parameter) == "x" and matches(parsed, child(parsed, node, 1), body)
+				Function(pattern, body) => node.kind == Lambda and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), pattern) and matches(parsed, child(parsed, node, 1), body)
+				DebugExpr(value) | CrashExpr(value) | ReturnExpr(value) => {
+					kind = match expr { DebugExpr(_) => Debug CrashExpr(_) => Crash _ => Return }
+					node.kind == kind and node.children_len == 1 and matches(parsed, child(parsed, node, 0), value)
+				}
+				Guarded(pattern, guard, body) => {
+					branch = parsed.nodes.get(child(parsed, node, 1)) ?? node
+					node.kind == Match and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 3 and matches_pattern(parsed, child(parsed, branch, 0), pattern) and matches(parsed, child(parsed, branch, 1), guard) and matches(parsed, child(parsed, branch, 2), body)
+				}
+				Alternatives(body) => {
+					branch = parsed.nodes.get(child(parsed, node, 1)) ?? node
+					pattern = parsed.nodes.get(child(parsed, branch, 0)) ?? node
+					second = parsed.nodes.get(child(parsed, pattern, 1)) ?? node
+					node.kind == Match and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 2 and pattern.kind == AlternativePattern and pattern.children_len == 2 and matches_pattern(parsed, child(parsed, pattern, 0), Tagged(Bind("x"))) and second.kind == TagPattern and second.children_len == 1 and matches(parsed, child(parsed, second, 0), Name("None")) and matches(parsed, child(parsed, branch, 1), body)
 				}
 				Conditional(a, b) => node.kind == If and node.children_len == 3 and matches(parsed, child(parsed, node, 0), Name("True")) and matches(parsed, child(parsed, node, 1), a) and matches(parsed, child(parsed, node, 2), b)
 				Fields(a, b) => node.kind == Record and node.children_len == 2 and matches_field(parsed, child(parsed, node, 0), "first", a) and matches_field(parsed, child(parsed, node, 1), "second", b)
-				Access(base) => node.kind == FieldAccess and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches(parsed, child(parsed, node, 1), Name("value"))
+				Access(base) | OptionalAccess(base) => {
+					kind = match expr { Access(_) => FieldAccess _ => OptionalFieldAccess }
+					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches(parsed, child(parsed, node, 1), Name("value"))
+				}
 				Add(a, b) | Mul(a, b) => {
 					left_id = child(parsed, node, 0)
 					right_id = child(parsed, node, 1)
@@ -91,6 +148,34 @@ matches = |parsed, id, expr| {
 				}
 				Call(arg) => node.kind == Call and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("f")) and matches(parsed, child(parsed, node, 1), arg)
 			}
+		}
+	}
+}
+
+matches_pattern : RocSyntax.Parsed, U64, Pat -> Bool
+matches_pattern = |parsed, id, pattern| {
+	match parsed.nodes.get(id) {
+		Err(_) => False
+		Ok(node) => match pattern {
+			Bind(name) => node.kind == IdentifierPattern and node.children_len == 0 and lexeme(parsed, node) == name
+			Wild => node.kind == WildcardPattern and node.children_len == 0 and lexeme(parsed, node) == "_"
+			Mutable(name) => node.kind == MutablePattern and node.children_len == 1 and matches(parsed, child(parsed, node, 0), Name(name))
+			Tagged(inner) | Nominal(inner) => {
+				kind = match pattern { Tagged(_) => TagPattern _ => NominalPattern }
+				name = match pattern { Tagged(_) => "Some" _ => "Box" }
+				node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name(name)) and matches_pattern(parsed, child(parsed, node, 1), inner)
+			}
+			PatPair(a, b) => node.kind == TuplePattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), a) and matches_pattern(parsed, child(parsed, node, 1), b)
+			PatList(inner) => {
+				rest = parsed.nodes.get(child(parsed, node, 1)) ?? node
+				node.kind == ListPattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), inner) and rest.kind == RestPattern and rest.children_len == 1 and matches(parsed, child(parsed, rest, 0), Name("rest"))
+			}
+			PatRecord(inner) => {
+				field = parsed.nodes.get(child(parsed, node, 0)) ?? node
+				pun = parsed.nodes.get(child(parsed, node, 1)) ?? node
+				node.kind == RecordPattern and node.children_len == 2 and field.kind == PatternField and field.children_len == 2 and matches(parsed, child(parsed, field, 0), Name("value")) and matches_pattern(parsed, child(parsed, field, 1), inner) and pun.kind == PatternField and pun.children_len == 1 and matches(parsed, child(parsed, pun, 0), Name("other"))
+			}
+			Alias(inner) => node.kind == AliasPattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), inner) and matches(parsed, child(parsed, node, 1), Name("whole"))
 		}
 	}
 }
