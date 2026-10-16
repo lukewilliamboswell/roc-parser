@@ -180,7 +180,7 @@ jobs:
       - name: Install pinned Zig toolchain
         uses: xyzzylabs/setup-zig@09d85d9dbb73308882e7a26e61a8f706eed40df1 # v1.0.2, also used by Roc CI
         with:
-          version: 0.16.0
+          version: 0.17.0
           use-cache: false
       - name: Validate syntax and scaling
         run: python3 scripts/check_roc_syntax.py --skip-fuzz

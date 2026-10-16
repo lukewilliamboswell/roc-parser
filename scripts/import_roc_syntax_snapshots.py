@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 
-REFERENCE_COMMIT = "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5"
+REFERENCE_COMMIT = "0d4b0ab02f9239448d034db17b4e63051a7c57ae"
 ROOT = Path(__file__).resolve().parents[1]
 # These snapshot types all invoke the file parser in the pinned snapshot tool.
 FILE_TYPES = {"file", "snippet", "mono", "package", "platform", "app", "reporting"}
@@ -64,8 +64,8 @@ def snapshot_case(path: str, blob: str, contents: bytes) -> tuple[dict | None, s
 def snapshot_cases(path: str, blob: str, contents: bytes) -> tuple[list[dict], str | None]:
     """Extract parse-only inputs using the pinned snapshot runner's transforms.
 
-    main.zig:992 maps header/statement goals; :3779 parses multi-file SOURCE;
-    :5763 splits REPL input on literal » then ASCII-trims each nonempty part.
+    main.zig:1008 maps header/statement goals; :3639 parses multi-file SOURCE;
+    :4974 splits REPL input on literal » then ASCII-trims each nonempty part.
     REPL mode dispatch is the worker's job, not a text heuristic here.
     """
     text = contents.decode('utf-8')

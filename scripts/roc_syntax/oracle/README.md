@@ -1,7 +1,7 @@
 # Compiler reference worker
 
 This worker imports only Roc's tokenization/parser modules, pinned to compiler
-commit `7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, using Zig `0.16.0`.
+commit `0d4b0ab02f9239448d034db17b4e63051a7c57ae`, using Zig `0.17.0`.
 It does not invoke the compiler CLI or link compiler backends/LLVM libraries.
 
 Build from the repository root:

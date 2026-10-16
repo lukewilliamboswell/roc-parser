@@ -81,8 +81,7 @@ complete tree. Code completion and highlighting should tolerate partial results.
 == Compatibility and validation
 
 The syntax reference is compiler commit
-`7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, corresponding to
-`nightly-2026-09-29-7f11a82`. The implementation compiler is pinned separately to
+`0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is pinned separately to
 `nightly-2026-10-15-38e6c42` in `.roc-version`. This identifies a changing language implementation,
 rather than a stable language specification. Updating the implementation compiler
 and updating the syntax reference are separate maintenance decisions.
@@ -96,7 +95,7 @@ selection and allocation constraints behind these choices.
 
 == Run the feedback loop
 
-Install the Roc nightly named in `.roc-version`, Zig 0.16.0 and Python 3.
+Install the Roc nightly named in `.roc-version`, Zig 0.17.0 and Python 3.
 From the repository root, run:
 
 [source,sh]
@@ -106,7 +105,8 @@ ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 
 The command checks the package, builds the pinned compiler oracle and optimized
 Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
-expression trees, runs both fuzz smoke campaigns and checks performance scaling.
+expression trees, checks dedicated type fixtures and the complete pinned snapshot
+acceptance corpus, runs both fuzz smoke campaigns and checks performance scaling.
 It rebuilds candidate probes and records source and executable hashes. Its
 `validation.json`, step logs, differential failures and performance results live
 under `.roc-parser-tmp/roc-syntax-validation/`.

@@ -18,8 +18,8 @@ import sys
 import tarfile
 import tempfile
 
-ROC_REVISION = "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5"
-ZIG_VERSION = "0.16.0"
+ROC_REVISION = "0d4b0ab02f9239448d034db17b4e63051a7c57ae"
+ZIG_VERSION = "0.17.0"
 REPOSITORY = "https://github.com/roc-lang/roc.git"
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -91,7 +91,8 @@ def main() -> None:
             local_repo = sibling
     source = source_tree(cache, local_repo.resolve() if local_repo else None)
     install = cache / "install"
-    run([args.zig, "build", "--build-file", str(Path(__file__).parent / "oracle" / "build.zig"), f"-Droc-source={source}", "-Doptimize=ReleaseSafe", "--cache-dir", str(cache / "zig-cache"), "--global-cache-dir", str(cache / "zig-global-cache"), "--prefix", str(install)], stdout=sys.stderr)
+    build_env = {**os.environ, "ZIG_GLOBAL_CACHE_DIR": str(cache / "zig-global-cache")}
+    run([args.zig, "build", "--build-file", str(Path(__file__).parent / "oracle" / "build.zig"), f"-Droc-source={source}", "-Doptimize=ReleaseSafe", "--cache-dir", str(cache / "zig-cache"), "--prefix", str(install)], stdout=sys.stderr, env=build_env)
     binary = install / "bin" / "roc-syntax-oracle"
     worker_files = [Path(__file__), Path(__file__).parent / "oracle" / "main.zig", Path(__file__).parent / "oracle" / "build.zig"]
     worker_hash = hashlib.sha256()

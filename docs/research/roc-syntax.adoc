@@ -260,3 +260,38 @@ No throughput target or standalone compiler integration has yet been validated.
 The repository's existing module, conformance, fuzz-registration and documentation
 checks apply as implementation grows. A future public API should be documented
 and agreed before release; this research does not commit to a public module name.
+
+== Reference drift audit, 16 October 2026
+
+A source audit compared the original syntax reference,
+`7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5` (29 September), the installed
+implementation compiler source `38e6c42c889cc7ffd97beea9199186790cc848f5`
+(15 October), and the newer oracle reference
+`0d4b0ab02f9239448d034db17b4e63051a7c57ae`. Each revision was fetched into
+an isolated bare cache; the sibling compiler working tree was not changed.
+The implementation compiler remains the installed October nightly.
+
+The nine inventoried AST union categories retain the same 107 variants, but
+acceptance changed. October permits an ellipsis to start a new expression after
+a preceding expression, and distinguishes unary `-...` from subtraction after
+an expression. It adds a specific diagnostic for `=` used as a record field
+separator and changes record/block lookahead. Tokenization rejects literal
+bidirectional controls in every lexical context, diagnoses a leading UTF-8 BOM,
+and preserves failure independently of diagnostic-buffer capacity. Escaped
+Unicode values and a BOM inside a literal remain distinct from source controls.
+
+The newer main reference additionally checks dependency records in app, package
+and platform headers. Duplicate shorthands, punned or non-string sources,
+interpolated sources and sources containing backslash escapes are rejected.
+These are real acceptance differences; a green September corpus cannot establish
+conformance to the newer grammar.
+
+The compiler internals changed generic NodeStore collections, region storage,
+type extensions and Zig integer conversions, but the adapter reads through
+compatible public AST getters. A native compatibility build with Zig 0.17
+succeeded without changing its AST projection schemas. The worker must honor
+the newer tokenizer failure flags. Zig 0.17 removes the
+`zig build --global-cache-dir` option; the build helper must supply
+`ZIG_GLOBAL_CACHE_DIR` instead. The audit established source differences
+and adapter requirements, not new runtime or allocation measurements. Historical
+results above retain their original reference and measurement scope.

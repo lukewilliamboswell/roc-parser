@@ -1,7 +1,7 @@
 {
   "version": 1,
   "syntax": "current-zig",
-  "reference_commit": "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5",
+  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
   "coverage": [
     "integers",
     "identifiers",
@@ -281,6 +281,19 @@
           "header",
           "module",
           []
+        ],
+        [
+          "annotation",
+          "answer",
+          [
+            "t_named",
+            [
+              "identifier",
+              "U64"
+            ]
+          ],
+          null,
+          false
         ],
         [
           "decl",
@@ -2030,6 +2043,48 @@
           ]
         ]
       ]
+    },
+    {
+      "id": "reject-duplicate-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"a\", dep: \"b\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-interpolated-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"${name}\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-escaped-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"a\\tb\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-punned-dependency",
+      "mode": "header",
+      "source": "package [] { dep }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-nonstring-dependency",
+      "mode": "header",
+      "source": "package [] { dep: 42 }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-escaped-platform-source",
+      "mode": "header",
+      "source": "app [] { pf: platform \"a\\tb\" }",
+      "rule": "headers",
+      "coverage": "recovery"
     },
     {
       "id": "unary-ellipsis",

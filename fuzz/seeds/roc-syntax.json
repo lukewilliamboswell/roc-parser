@@ -104,5 +104,11 @@
   "import Foo as Bar exposing [value, Baz]",
   "{ tag\n ... }",
   "{ ...\n f(...) }",
-  "Y{\u0001]"
+  "Y{\u0001]",
+  "package [] { dep: \"a\", dep: \"b\" }",
+  "package [] { dep: \"${name}\" }",
+  "package [] { dep: \"a\\tb\" }",
+  "package [] { dep }",
+  "package [] { dep: 42 }",
+  "app [] { pf: platform \"a\\tb\" }"
 ]

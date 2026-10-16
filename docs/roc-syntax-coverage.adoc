@@ -1,6 +1,6 @@
 = Current Roc syntax coverage inventory
 
-The authority is `roc-lang/roc` revision `7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, `src/parse/AST.zig` and its parser/tokenizer. Legacy Rust grammar is excluded. This inventory lists compiler syntax variants; it does not assert that this parser implements them. Some variants represent malformed input or parser desugaring rather than a distinct valid surface production.
+The authority is `roc-lang/roc` revision `0d4b0ab02f9239448d034db17b4e63051a7c57ae`, `src/parse/AST.zig` and its parser/tokenizer. Legacy Rust grammar is excluded. This inventory lists compiler syntax variants; it does not assert that this parser implements them. Some variants represent malformed input or parser desugaring rather than a distinct valid surface production.
 
 == Acceptance gate
 
@@ -16,7 +16,7 @@ Every entry below remains unchecked until the full production is audited. Repres
 
 === Header
 
-Source: `src/parse/AST.zig`, line 1945.
+Source: `src/parse/AST.zig`, line 1798.
 
 * [ ] `app` — fixture `header-app-version` (`headers`, `supported`).
 * [ ] `module` — fixture `header-module-exposes` (`headers`, `supported`).
@@ -29,7 +29,7 @@ Source: `src/parse/AST.zig`, line 1945.
 
 === Statement
 
-Source: `src/parse/AST.zig`, line 1015.
+Source: `src/parse/AST.zig`, line 1043.
 
 * [ ] `decl` — fixture `file-definitions` (`file-headers`, `supported`); fixture `block` (`blocks`, `supported`).
 * [ ] `@"var"` — fixture `mutable-block` (`statements`, `supported`); fixture `statement-variable-goal` (`direct-goals`, `supported`).
@@ -49,7 +49,7 @@ Source: `src/parse/AST.zig`, line 1015.
 
 === Expr
 
-Source: `src/parse/AST.zig`, line 2947.
+Source: `src/parse/AST.zig`, line 2663.
 
 * [ ] `int` — fixture `integer` (`integers`, `supported`).
 * [ ] `frac` — fixture `float` (`numbers-boundaries`, `supported`).
@@ -93,7 +93,7 @@ Source: `src/parse/AST.zig`, line 2947.
 
 === Pattern
 
-Source: `src/parse/AST.zig`, line 1431.
+Source: `src/parse/AST.zig`, line 1389.
 
 * [ ] `ident` — fixture `lambda` (`lambdas`, `supported`).
 * [ ] `var_ident` — fixture `pattern-mutable` (`patterns`, `supported`); fixture `pattern-mutable-dollar` (`patterns`, `supported`).
@@ -115,7 +115,7 @@ Source: `src/parse/AST.zig`, line 1431.
 
 === TypeAnno
 
-Source: `src/parse/AST.zig`, line 2539.
+Source: `src/parse/AST.zig`, line 2321.
 
 * [ ] `apply`
 * [ ] `ty_var`
@@ -131,7 +131,7 @@ Source: `src/parse/AST.zig`, line 2539.
 
 === WhereClause
 
-Source: `src/parse/AST.zig`, line 2846.
+Source: `src/parse/AST.zig`, line 2571.
 
 * [ ] `mod_method`
 * [ ] `mod_alias`
@@ -139,7 +139,7 @@ Source: `src/parse/AST.zig`, line 2846.
 
 === ExposedItem
 
-Source: `src/parse/AST.zig`, line 2299.
+Source: `src/parse/AST.zig`, line 2099.
 
 * [ ] `lower_ident` — fixture `header-module-exposes` (`headers`, `supported`).
 * [ ] `upper_ident` — fixture `header-module-exposes` (`headers`, `supported`).
@@ -148,7 +148,7 @@ Source: `src/parse/AST.zig`, line 2299.
 
 === TargetFile
 
-Source: `src/parse/AST.zig`, line 2461.
+Source: `src/parse/AST.zig`, line 2243.
 
 * [ ] `string_literal`
 * [ ] `special_ident`
@@ -156,7 +156,7 @@ Source: `src/parse/AST.zig`, line 2461.
 
 === TargetConfigValue
 
-Source: `src/parse/AST.zig`, line 2489.
+Source: `src/parse/AST.zig`, line 2271.
 
 * [ ] `int_literal`
 * [ ] `string_literal`
@@ -175,9 +175,9 @@ or dev-object snapshots. This exercises syntax only: it does not execute REPL
 sessions, extract documentation, or run code-generation backends.
 
 The pinned snapshot runner's `src/snapshot_tool/main.zig` is the extraction
-authority. Its goal mapping is at line 992, multi-file extraction at line 3779,
-REPL input classification at line 4462, and literal `»` splitting plus ASCII
-trimming at line 5763. REPL input dispatch uses the `repl` worker mode; the
+authority. Its goal mapping is at line 1008, multi-file extraction at line 3639,
+REPL input classification at line 4275, and literal `»` splitting plus ASCII
+trimming at line 4974. REPL input dispatch uses the `repl` worker mode; the
 importer never guesses whether text is a declaration using token heuristics.
 Each extracted input retains its original snapshot path and Git blob, byte
 range within that blob, exact extracted-byte checksum, and final parser-input

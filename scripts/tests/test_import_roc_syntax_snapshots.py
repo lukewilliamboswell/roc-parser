@@ -52,7 +52,7 @@ class SnapshotImportTests(unittest.TestCase):
 
 
 class PinnedExtractionTests(unittest.TestCase):
-    # Full immutable blobs from reference 7f11a825..., not invented transcripts.
+    # Full immutable blobs from reference 0d4b0ab0..., not invented transcripts.
     FIXTURES = {
         'repl/two_defs.md': '4a12ea85e693a48f6a257b8e3bd90fb403780882',
         'dev_object_hello_world.md': '6e14655dd70810f065ebfa755b24dd0d8dfc2ab2',

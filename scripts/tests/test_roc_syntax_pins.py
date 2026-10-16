@@ -4,6 +4,10 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+import tempfile
+import subprocess
+import sys
+from unittest.mock import patch
 
 from scripts import import_roc_syntax_snapshots, review_roc_syntax
 
@@ -18,6 +22,8 @@ class SyntaxPinTests(unittest.TestCase):
         spec.loader.exec_module(module)
         fixture = json.loads((ROOT / "scripts/roc_syntax/fixtures.json").read_text())
         self.assertEqual(module.ROC_REVISION, fixture["reference_commit"])
+        types = json.loads((ROOT / "scripts/roc_syntax/type-fixtures.json").read_text())
+        self.assertEqual(module.ROC_REVISION, types["reference_commit"])
         self.assertEqual(review_roc_syntax.REFERENCE_COMMIT, module.ROC_REVISION)
         self.assertEqual(import_roc_syntax_snapshots.REFERENCE_COMMIT, module.ROC_REVISION)
         self.assertEqual(len(module.ROC_REVISION), 40)
@@ -32,6 +38,31 @@ class SyntaxPinTests(unittest.TestCase):
         job = workflow.split("  roc-syntax:\n", 1)[1].split("  property-quality:\n", 1)[0]
         self.assertIn("version: " + module.ZIG_VERSION, job)
         self.assertIn("python3 scripts/check_roc_syntax.py", job)
+
+    def test_zig17_build_uses_isolated_cache_environment_and_records_pin(self):
+        path = ROOT / 'scripts/roc_syntax/build_oracle.py'
+        spec = importlib.util.spec_from_file_location('cache_checked_build_oracle', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp).resolve()
+            binary = cache / 'install/bin/roc-syntax-oracle'
+            calls = []
+            def command(args, **kwargs):
+                calls.append((args, kwargs))
+                if args[-1] == 'version':
+                    return subprocess.CompletedProcess(args, 0, module.ZIG_VERSION + '\n', '')
+                binary.parent.mkdir(parents=True)
+                binary.write_bytes(b'newly built oracle')
+                self.assertNotIn('--global-cache-dir', args)
+                self.assertEqual(kwargs['env']['ZIG_GLOBAL_CACHE_DIR'], str(cache / 'zig-global-cache'))
+                return subprocess.CompletedProcess(args, 0, '', '')
+            with patch.object(module, 'run', side_effect=command), patch.object(module, 'source_tree', return_value=cache / 'src'), patch.object(sys, 'argv', ['build_oracle.py', '--cache-dir', str(cache)]):
+                module.main()
+            receipt = json.loads(binary.with_suffix('.json').read_text())
+            self.assertEqual(receipt['compiler_revision'], import_roc_syntax_snapshots.REFERENCE_COMMIT)
+            self.assertEqual(receipt['zig_version'], '0.17.0')
+            self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":
