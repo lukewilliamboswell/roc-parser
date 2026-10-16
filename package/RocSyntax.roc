@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -661,7 +661,11 @@ parse_source = |source, mode| {
 			}
 		}
 	}
-	if single and $roots.is_empty() {
+	if mode == HeaderMode and $roots.is_empty() {
+		{ state: header_state, node: header_node } = add_node($s, Header, 0, 0, [])
+		$s = header_state
+		$roots = [header_node]
+	} else if single and $roots.is_empty() {
 		$s = issue($s, UnexpectedToken, source.len(), source.len())
 	}
 	{ state: root_state, node: root_node } = add_node($s, File, 0, source.len(), $roots)
@@ -1217,7 +1221,9 @@ pattern_primary = |s, alternatives, depth| {
 		add_node(items_state, if t.kind == OpenSquare ListPattern else TuplePattern, t.start, end, ids)
 	} else if t.kind == OpenCurly {
 		pattern_record(s, alternatives, depth)
-	} else if t.kind == Number or t.kind == StringStart or t.kind == SingleQuote {
+	} else if t.kind == StringStart {
+		pattern_string(s)
+	} else if t.kind == Number or t.kind == SingleQuote {
 		primary(s, depth, False)
 	} else {
 		bad = issue(s, UnexpectedToken, t.start, t.end)
@@ -2118,4 +2124,52 @@ expect {
 
 expect {
 	["app []", "app [] { pkg }", "app [] { pkg: 42 }", "app [] { a: platform glue, b: platform glue }", "app [] { roc: platform glue }", "package [] { roc: \"bad\" }", "package [] { roc: \"1.0.0\", roc: \"1.0.1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
+}
+
+pattern_string : State -> Built
+pattern_string = |initial| {
+	first = peek(initial)
+	var $s = at_pos(initial, initial.pos + 1)
+	var $ids = []
+	var $end = first.end
+	var $captures = False
+	var $done = False
+	while !$done {
+		t = peek($s)
+		if t.kind == StringPart {
+			{ state: part_state, node: part_node } = add_node(at_pos($s, $s.pos + 1), StringSegment, t.start, t.end, [])
+			$s = part_state
+			$ids = $ids.append(part_node)
+			$end = t.end
+		} else if t.kind == InterpolationStart {
+			name_state = skip_trivia(at_pos($s, $s.pos + 1))
+			name = peek(name_state)
+			checked = if name.kind == LowerIdent name_state else issue(name_state, UnexpectedToken, name.start, name.end)
+			{ state: named_state, node: named_node } = add_node(at_pos(checked, checked.pos + if name.kind == EndOfFile or name.kind == InterpolationEnd 0 else 1), if spelling(checked, "_") WildcardPattern else IdentifierPattern, name.start, name.end, [])
+			close_state = skip_trivia(named_state)
+			close = peek(close_state)
+			closed = close.kind == InterpolationEnd
+			finished = if closed at_pos(close_state, close_state.pos + 1) else issue(close_state, UnclosedDelimiter, close.start, close.end)
+			$end = if closed close.end else name.end
+			{ state: capture_state, node: capture_node } = add_node(finished, CapturePattern, t.start, $end, [named_node])
+			$s = capture_state
+			$ids = $ids.append(capture_node)
+			$captures = True
+			if !closed {
+				$done = True
+			}
+		} else if t.kind == StringEnd {
+			$s = at_pos($s, $s.pos + 1)
+			$end = t.end
+			$done = True
+		} else {
+			$s = issue($s, UnclosedString, first.start, $end)
+			$done = True
+		}
+	}
+	add_node($s, if $captures PatternStringLiteral else StringLiteral, first.start, $end, $ids)
+}
+
+expect {
+	RocSyntax.parse_header_str("").status == Complete and RocSyntax.parse_expr_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }").status == Complete and RocSyntax.parse_expr_str("match text { \"\${a + b}\" => 0 }").status != Complete and RocSyntax.parse_expr_str("match text { \"x\".Str => 0 }").status != Complete
 }

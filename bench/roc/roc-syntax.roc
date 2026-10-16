@@ -134,4 +134,6 @@ node_kind_code = |kind| match kind {
 	Dependencies => 62
 	DependencyField => 63
 	PlatformReference => 64
+	PatternStringLiteral => 65
+	CapturePattern => 66
 }
