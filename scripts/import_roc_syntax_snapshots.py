@@ -61,6 +61,86 @@ def snapshot_case(path: str, blob: str, contents: bytes) -> tuple[dict | None, s
     return case, None
 
 
+def snapshot_cases(path: str, blob: str, contents: bytes) -> tuple[list[dict], str | None]:
+    """Extract parse-only inputs using the pinned snapshot runner's transforms.
+
+    main.zig:992 maps header/statement goals; :3779 parses multi-file SOURCE;
+    :5763 splits REPL input on literal » then ASCII-trims each nonempty part.
+    REPL mode dispatch is the worker's job, not a text heuristic here.
+    """
+    text = contents.decode('utf-8')
+    metadata = dict(line.partition('=')[::2] for line in section(text, 'META', 'ini').splitlines() if '=' in line)
+    metadata = {key.strip(): value.strip() for key, value in metadata.items()}
+    kind = metadata.get('type')
+    if kind not in {'repl', 'header', 'statement', 'dev_object', 'docs'}:
+        case, reason = snapshot_case(path, blob, contents)
+        return [case] if case else [], reason
+    case_base = {'mode': kind, 'coverage': 'exploratory',
+                 'upstream': {'path': path, 'blob': blob, 'type': kind,
+                              'snapshot_skip': metadata.get('skip') == 'true'}}
+    base_id = 'upstream/' + path.removeprefix('test/snapshots/').removesuffix('.md')
+    cases = []
+    def add(source, mode, suffix, start, end, extraction):
+        original = source
+        if metadata.get('source_escapes') == 'true':
+            source = source.replace('\\r', '\r')
+        cases.append({**case_base, 'id': base_id + suffix, 'mode': mode, 'rule': 'upstream/' + mode,
+                      'source': source, 'source_sha256': hashlib.sha256(source.encode()).hexdigest(),
+                      'upstream': {**case_base['upstream'], 'extraction': {
+                          'kind': extraction, 'snapshot_byte_start': len(text[:start].encode()),
+                          'snapshot_byte_end': len(text[:end].encode()),
+                          'extracted_sha256': hashlib.sha256(original.encode()).hexdigest(),
+                          'source_escapes': metadata.get('source_escapes') == 'true'}}})
+    if kind in {'header', 'statement', 'repl'}:
+        match = re.search(r'^# SOURCE\n~~~roc\n(.*?)^~~~(?:\n|$)', text, re.M | re.S)
+        if match is None:
+            raise ValueError('missing fenced SOURCE section')
+        raw = match.group(1)
+        if kind != 'repl':
+            add(raw, kind, '', match.start(1), match.end(1), kind)
+        else:
+            # splitSequence is intentionally not restricted to line starts.
+            cursor = 0
+            for index, part in enumerate(raw.split('»')):
+                start = cursor
+                cursor += len(part) + 1
+                if index == 0:
+                    continue
+                source = part.strip(' \t\r\n')
+                if not source:
+                    continue
+                offset = len(part) - len(part.lstrip(' \t\r\n'))
+                absolute = match.start(1) + start + offset
+                add(source, 'repl', f'/input-{index}', absolute, absolute + len(source), 'repl_ascii_trim')
+    else:
+        marker = '# SOURCE\n'
+        if marker not in text:
+            raise ValueError('missing multi-file SOURCE section')
+        start = text.index(marker) + len(marker)
+        end = start
+        fenced = False
+        external_headings = 0
+        for line in text[start:].splitlines(keepends=True):
+            if not fenced and line.startswith('# '):
+                break
+            if not fenced and line.startswith('## '):
+                external_headings += 1
+            if line.startswith('~~~'):
+                fenced = not fenced
+            end += len(line)
+        body = text[start:end]
+        matches = list(re.finditer(r'^## ([^\n]+)\n~~~roc\n(.*?)~~~', body, re.M | re.S))
+        if len(matches) != external_headings:
+            raise ValueError('unhandled multi-file SOURCE heading or fence')
+        for index, match in enumerate(matches):
+            filename = match.group(1).strip(' \t\r')
+            if not filename.endswith('.roc'):
+                raise ValueError('non-Roc source file in parse-only inventory: ' + filename)
+            add(match.group(2), 'file', f'/file-{index}-{filename}', start + match.start(2),
+                start + match.end(2), 'multi_file')
+            cases[-1]['upstream']['filename'] = filename
+    return cases, None if cases else 'empty_parse_input_inventory:' + str(kind)
+
 def git(repository: Path, *args: str, input_bytes: bytes | None = None) -> bytes:
     return subprocess.run(["git", "-C", str(repository), *args], input=input_bytes,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
@@ -102,16 +182,17 @@ def import_snapshots(repository: Path, *, limit: int | None = None,
             skipped.append({"path": path, "reason": "documentation"})
             continue
         try:
-            case, reason = snapshot_case(path, blob, contents)
+            extracted, reason = snapshot_cases(path, blob, contents)
         except ValueError as error:
             # Imported coverage must never silently drop a broken source section.
             raise ValueError(f"{path}: {error}") from error
-        if case is None:
+        if not extracted:
             skipped.append({"path": path, "reason": reason})
-        elif limit is None or len(cases) < limit:
-            cases.append(case)
-        else:
-            skipped.append({"path": path, "reason": "requested_case_limit"})
+        for case in extracted:
+            if limit is None or len(cases) < limit:
+                cases.append(case)
+            else:
+                skipped.append({"path": path, "reason": "requested_case_limit", "id": case['id']})
     if cursor != len(payload):
         raise ValueError("unexpected trailing Git object data")
     return {"version": 1, "syntax": "current-zig", "reference_commit": REFERENCE_COMMIT,

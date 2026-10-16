@@ -166,3 +166,28 @@ Source: `src/parse/AST.zig`, line 2489.
 * [ ] `files`
 * [ ] `malformed`
 
+
+== Snapshot extraction audit
+
+The parsing inventory includes ordinary and named files, exact header and
+statement goals, every nonempty REPL input, and each Roc file embedded in docs
+or dev-object snapshots. This exercises syntax only: it does not execute REPL
+sessions, extract documentation, or run code-generation backends.
+
+The pinned snapshot runner's `src/snapshot_tool/main.zig` is the extraction
+authority. Its goal mapping is at line 992, multi-file extraction at line 3779,
+REPL input classification at line 4462, and literal `»` splitting plus ASCII
+trimming at line 5763. REPL input dispatch uses the `repl` worker mode; the
+importer never guesses whether text is a declaration using token heuristics.
+Each extracted input retains its original snapshot path and Git blob, byte
+range within that blob, exact extracted-byte checksum, and final parser-input
+checksum. `source_escapes=true` records the runner's explicit carriage-return
+transformation. The original compiler snapshot output is not used as an
+acceptance oracle.
+
+Regression tests retain complete immutable upstream blobs for REPL,
+dev-object, and docs extraction, check their Git object identities, and verify
+all byte slices and hashes. In particular, documentation comments beginning
+with `##` inside a Roc fence remain source text. Unknown modes, malformed
+fences and empty inventories fail explicitly rather than becoming passing
+skips. The only excluded inventory item is the snapshot directory README.
