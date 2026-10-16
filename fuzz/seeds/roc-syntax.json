@@ -88,5 +88,9 @@
   "3.14.Dec",
   "'\u00e9'.U8",
   "\"hello\".Str",
-  "123.Module.Integer"
+  "123.Module.Integer",
+  "{ var count = 1\n count }",
+  "{ expect True\n 1 }",
+  "{ while True { break }\n 1 }",
+  "{ for x in items { dbg x }\n 1 }"
 ]

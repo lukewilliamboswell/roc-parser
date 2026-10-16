@@ -30,7 +30,8 @@
     "control-expressions",
     "optional-fields",
     "patterns",
-    "literal-types"
+    "literal-types",
+    "statements"
   ],
   "cases": [
     {
@@ -197,21 +198,85 @@
       "mode": "file",
       "source": "module []\none = 1\ntwo = 2 + 3\n",
       "rule": "file-headers",
-      "coverage": "supported"
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "decl",
+          [
+            "p_identifier",
+            "one"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "two"
+          ],
+          [
+            "binary",
+            "+",
+            [
+              "number",
+              "2"
+            ],
+            [
+              "number",
+              "3"
+            ]
+          ]
+        ]
+      ]
     },
     {
       "id": "file-import",
       "mode": "file",
       "source": "module []\nimport Foo\nanswer = 1\n",
       "rule": "imports",
-      "coverage": "supported"
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "import",
+          "Foo",
+          null,
+          []
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "answer"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
     },
     {
       "id": "file-type",
       "mode": "file",
       "source": "module []\nanswer : U64\nanswer = 42\n",
       "rule": "type-annotations",
-      "coverage": "supported"
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "decl",
+          [
+            "p_identifier",
+            "answer"
+          ],
+          [
+            "number",
+            "42"
+          ]
+        ]
+      ]
     },
     {
       "id": "lambda",
@@ -239,7 +304,37 @@
       "mode": "expr",
       "source": "{ x = 1\nx + 2 }",
       "rule": "blocks",
-      "coverage": "supported"
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "decl",
+              [
+                "p_identifier",
+                "x"
+              ],
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "binary",
+              "+",
+              [
+                "identifier",
+                "x"
+              ],
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
     },
     {
       "id": "match",
@@ -915,24 +1010,26 @@
       "source": "value.?field.other(1)",
       "rule": "optional-fields",
       "coverage": "supported",
-      "model": [
-        "call",
+      "model_shape": [
         [
-          "field",
+          "call",
           [
-            "optional_field",
+            "field",
             [
-              "identifier",
-              "value"
+              "optional_field",
+              [
+                "identifier",
+                "value"
+              ],
+              "field"
             ],
-            "field"
+            "other"
           ],
-          "other"
-        ],
-        [
           [
-            "number",
-            "1"
+            [
+              "number",
+              "1"
+            ]
           ]
         ]
       ]
@@ -1495,6 +1592,131 @@
           [
             "Module",
             "Integer"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "mutable-block",
+      "mode": "expr",
+      "source": "{ var count = 1\n count }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "var",
+              "count",
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "identifier",
+              "count"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "expect-block",
+      "mode": "expr",
+      "source": "{ expect True\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "expect",
+              [
+                "identifier",
+                "True"
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "while-block",
+      "mode": "expr",
+      "source": "{ while True { break }\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "while",
+              [
+                "identifier",
+                "True"
+              ],
+              [
+                "block",
+                [
+                  [
+                    "break"
+                  ]
+                ]
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "for-block",
+      "mode": "expr",
+      "source": "{ for x in items { dbg x }\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "for",
+              [
+                "p_identifier",
+                "x"
+              ],
+              [
+                "identifier",
+                "items"
+              ],
+              [
+                "block",
+                [
+                  [
+                    "dbg",
+                    [
+                      "identifier",
+                      "x"
+                    ]
+                  ]
+                ]
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
           ]
         ]
       ]
