@@ -910,11 +910,32 @@
       "coverage": "recovery"
     },
     {
-      "id": "reject-optional-field-3",
+      "id": "optional-receiver-method-call",
       "mode": "expr",
       "source": "value.?field.other(1)",
       "rule": "optional-fields",
-      "coverage": "recovery"
+      "coverage": "supported",
+      "model": [
+        "call",
+        [
+          "field",
+          [
+            "optional_field",
+            [
+              "identifier",
+              "value"
+            ],
+            "field"
+          ],
+          "other"
+        ],
+        [
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
     },
     {
       "id": "misplaced-carriage-return",

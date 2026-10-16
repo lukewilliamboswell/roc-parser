@@ -459,7 +459,7 @@ expression = |initial, minimum, depth, punned| {
 				$left = suffix_node
 				$qualified = False
 			} else if t.kind == NoSpaceOpenRound {
-				validated = if contains_optional_access(look, $left) issue(look, UnexpectedToken, t.start, t.end) else look
+				validated = if is_optional_access(look, $left) issue(look, UnexpectedToken, t.start, t.end) else look
 				start = node_start(look, $left)
 				{ state: args_state, ids: args_ids, end: args_end, comma: _ } = collection(at_pos(validated, validated.pos + 1), CloseRound, depth + 1)
 				ids = [$left].concat(args_ids)
@@ -1735,30 +1735,17 @@ expect {
 }
 
 expect {
-	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)", "value.?field.other(1)"].all(|source| RocSyntax.parse_expr_str(source).status == Recovered)
+	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)"].all(|source| RocSyntax.parse_expr_str(source).status == Recovered)
 }
 
-# Calling a field chain that includes optional access requires explicit grouping.
-contains_optional_access : State, U64 -> Bool
-contains_optional_access = |s, root| {
-	var $id = root
-	var $found = False
-	var $done = False
-	while !$done {
-		match s.nodes.get($id) {
-			Ok(n) if n.kind == OptionalFieldAccess => {
-				$found = True
-				$done = True
-			}
-			Ok(n) if n.kind == FieldAccess => {
-				$id = s.children.get(n.children_start) ?? s.nodes.len()
-			}
-			_ => {
-				$done = True
-			}
-		}
+# A direct optional-field call is forbidden. A following required field with
+# arguments is a method call and starts a separate postfix operation.
+is_optional_access : State, U64 -> Bool
+is_optional_access = |s, root| {
+	match s.nodes.get(root) {
+		Ok(n) => n.kind == OptionalFieldAccess
+		_ => False
 	}
-	$found
 }
 
 expect {
@@ -1970,4 +1957,8 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("{ x }").nodes.any(|n| n.kind == Block) and RocSyntax.parse_expr_str("{ { x } }").nodes.any(|n| n.kind == Record) and RocSyntax.parse_expr_str("{ field: { x } }").nodes.keep_if(|n| n.kind == Record).len() == 2
+}
+
+expect {
+	RocSyntax.parse_expr_str("value.?field.other(1)").status == Complete and RocSyntax.parse_expr_str("value.?field.0(1)").status == Complete
 }
