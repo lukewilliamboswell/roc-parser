@@ -95,6 +95,7 @@ def main(argv=None):
     ap.add_argument('--repetitions', type=int, default=5)
     ap.add_argument('--target-ms', type=float, default=50)
     args = ap.parse_args(argv)
+    source_hash = hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest()
     binary = args.binary or ROOT / '.roc-parser-tmp/roc-syntax-bench/driver'
     binary = binary.resolve()
     if not args.binary:
@@ -117,7 +118,8 @@ def main(argv=None):
                 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
                 'compiler': subprocess.run([args.roc, 'version'], capture_output=True, text=True, check=True).stdout.strip(),
                 'build_flags': None if args.binary else ['--no-cache', '--opt=speed'],
-                'candidate_source_sha256': hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest(),
+                'candidate_source_sha256': source_hash,
+                'candidate_source_relationship': 'workspace source; reused binary relationship unverified' if args.binary else 'built from workspace source in this run',
                 'candidate_commit': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip(),
                 'reused_binary': bool(args.binary), 'input_ownership': 'shared in-memory source across iterations; fresh parse result each iteration', 'allocation_metric': 'roc_alloc + roc_realloc calls; not byte volume or peak memory'}
     failures = scaling_failures(records, args.max_scaling_overhead)
@@ -126,6 +128,8 @@ def main(argv=None):
         if baseline['metadata']['machine'] != metadata['machine'] or baseline['metadata']['compiler'] != metadata['compiler']:
             raise RuntimeError('baseline machine/compiler differs; record a separate baseline')
         failures += baseline_failures(records, baseline, args.max_regression)
+    if source_hash != hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest():
+        raise RuntimeError('candidate source changed during benchmark; rebuild and rerun')
     report = {'metadata': metadata, 'records': records, 'failures': failures}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')

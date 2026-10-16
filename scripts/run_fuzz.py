@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 from typing import Sequence
@@ -188,7 +189,9 @@ def build_identity(target_name: str, roc: str) -> dict:
     for path in [config.source, *sorted((ROOT / "package").glob("*.roc"))]:
         digest.update(str(path.relative_to(ROOT)).encode())
         digest.update(path.read_bytes())
-    return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT),
+    compiler_path = Path(shutil.which(roc) or roc)
+    compiler_sha256 = hashlib.sha256(compiler_path.read_bytes()).hexdigest() if compiler_path.is_file() else None
+    return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT), "compiler_sha256": compiler_sha256,
             "flags": ["--no-cache", "--opt=speed", "--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE}
 
 
