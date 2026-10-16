@@ -1,80 +1,56 @@
-## Internal persistent append buffer for syntax construction. Tree chunks never
-## contain the growing flat output, so retaining an old parser state does not
-## force a copy of every previously constructed node.
-RocSyntaxBuffer(a) :: { count : U64, forest : Forest(a) }.{
-	## An empty buffer. Type is inferred from appended values.
+## Internal persistent radix-32 append vector. Each path contains five lists
+## of at most 32 entries under the parser's 1,048,576-token resource budget.
+## Retaining parser snapshots copies bounded paths, never the growing output.
+## Fixed levels also avoid recursive generic type expansion in the compiler.
+RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.{
 	empty : {} -> RocSyntaxBuffer(a)
-	empty = |_| { count: 0, forest: Empty }
+	empty = |_| RocSyntaxBuffer.{ count: 0, blocks: [] }
 
-	## Number of appended values, without traversing the forest.
 	len : RocSyntaxBuffer(a) -> U64
 	len = |buffer| buffer.count
 
-	## Persistent append: old snapshots remain valid. Binary carry merges equal
-	## chunks; each merged pair is ordered older-left, newer-right.
 	append : RocSyntaxBuffer(a), a -> RocSyntaxBuffer(a)
 	append = |buffer, value| {
-		{ count: buffer.count + 1, forest: carry(Leaf(value), buffer.forest) }
+		index = buffer.count
+		i4 = index // 1048576
+		i3 = (index // 32768) % 32
+		i2 = (index // 1024) % 32
+		i1 = (index // 32) % 32
+		b3 = buffer.blocks.get(i4) ?? []
+		b2 = b3.get(i3) ?? []
+		b1 = b2.get(i2) ?? []
+		leaf = b1.get(i1) ?? []
+		next1 = put(b1, i1, leaf.append(value))
+		next2 = put(b2, i2, next1)
+		next3 = put(b3, i3, next2)
+		RocSyntaxBuffer.{ count: index + 1, blocks: put(buffer.blocks, i4, next3) }
 	}
 
-	## Append a flat list in order while preserving the original buffer.
 	concat_list : RocSyntaxBuffer(a), List(a) -> RocSyntaxBuffer(a)
 	concat_list = |buffer, values| values.fold(buffer, |acc, value| acc.append(value))
 
-	## Look up a source-order index in O(log n), including the forest scan.
 	get : RocSyntaxBuffer(a), U64 -> Try(a, [OutOfBounds])
 	get = |buffer, index| {
-		if index >= buffer.count { return Err(OutOfBounds) }
-		var $forest = buffer.forest
-		var $remaining = buffer.count
-		var $result = Err(OutOfBounds)
-		var $done = False
-		while !$done {
-			match $forest {
-				Empty => { $done = True }
-				Link(tree, rest) => {
-					base = $remaining - width(tree)
-					if index >= base {
-						$result = tree_get(tree, index - base)
-						$done = True
-					} else {
-						$remaining = base
-						$forest = rest
-					}
-				}
-			}
+		if index >= buffer.count {
+			return Err(OutOfBounds)
 		}
-		$result
+		b3 = buffer.blocks.get(index // 1048576)?
+		b2 = b3.get((index // 32768) % 32)?
+		b1 = b2.get((index // 1024) % 32)?
+		leaf = b1.get((index // 32) % 32)?
+		leaf.get(index % 32)
 	}
 
-	## Flatten once in source order, using an explicit O(log n) work stack.
-	## Only this loop owns the growing output list.
 	to_list : RocSyntaxBuffer(a) -> List(a)
 	to_list = |buffer| {
-		var $forest = buffer.forest
-		var $todo = empty_forest({})
-		var $done = False
-		while !$done {
-			match $forest {
-				Empty => { $done = True }
-				Link(tree, rest) => {
-					$todo = Link(tree, $todo)
-					$forest = rest
-				}
-			}
-		}
 		var $out = []
-		$done = False
-		while !$done {
-			match $todo {
-				Empty => { $done = True }
-				Link(tree, rest) => {
-					match tree {
-						Leaf(value) => {
+		for b3 in buffer.blocks {
+			for b2 in b3 {
+				for b1 in b2 {
+					for leaf in b1 {
+						for value in leaf {
 							$out = $out.append(value)
-							$todo = rest
 						}
-						Branch(data) => { $todo = Link(data.left, Link(data.right, rest)) }
 					}
 				}
 			}
@@ -83,37 +59,9 @@ RocSyntaxBuffer(a) :: { count : U64, forest : Forest(a) }.{
 	}
 }
 
-# Linked forest avoids copying an O(log n) List spine on every append.
-# Occupied trees have strictly increasing powers-of-two widths, newest first.
-Forest(a) := [Empty, Link(Tree(a), Forest(a))]
-Tree(a) := [Leaf(a), Branch({ size : U64, left : Tree(a), right : Tree(a) })]
-
-empty_forest : {} -> Forest(a)
-empty_forest = |_| Empty
-
-width : Tree(a) -> U64
-width = |tree| match tree {
-	Leaf(_) => 1
-	Branch(data) => data.size
-}
-
-carry : Tree(a), Forest(a) -> Forest(a)
-carry = |tree, forest| match forest {
-	Empty => Link(tree, Empty)
-	Link(older, rest) => {
-		if width(older) == width(tree) {
-			carry(Branch({ size: width(tree) * 2, left: older, right: tree }), rest)
-		} else { Link(tree, forest) }
-	}
-}
-
-tree_get : Tree(a), U64 -> Try(a, [OutOfBounds])
-tree_get = |tree, index| match tree {
-	Leaf(value) => if index == 0 Ok(value) else Err(OutOfBounds)
-	Branch(data) => {
-		half = data.size // 2
-		if index < half tree_get(data.left, index) else tree_get(data.right, index - half)
-	}
+put : List(a), U64, a -> List(a)
+put = |values, index, value| {
+	if index == values.len() values.append(value) else values.set(index, value) ?? values
 }
 
 expect {
@@ -158,4 +106,15 @@ expect {
 	}
 	final_values = $buffer.to_list()
 	$prefixes.all(|prefix| prefix.to_list() == final_values.take_first(prefix.len()) and (prefix.len() == 0 or prefix.get(prefix.len() - 1) == Ok(prefix.len() - 1)))
+}
+
+expect {
+	# Exercise the next radix level without keeping a flat expected copy alive.
+	var $buffer = RocSyntaxBuffer.empty({})
+	var $i = 0.U64
+	while $i < 32769 {
+		$buffer = $buffer.append($i)
+		$i = $i + 1
+	}
+	$buffer.len() == 32769 and $buffer.get(31) == Ok(31) and $buffer.get(32) == Ok(32) and $buffer.get(1023) == Ok(1023) and $buffer.get(1024) == Ok(1024) and $buffer.get(32767) == Ok(32767) and $buffer.get(32768) == Ok(32768) and $buffer.to_list().last() == Ok(32768)
 }

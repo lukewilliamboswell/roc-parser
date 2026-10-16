@@ -1,5 +1,9 @@
-## Lossless syntax scaffolding for the Zig Roc compiler syntax pinned in
-## `.roc-version`. Byte spans are half-open. Comments and whitespace are tokens.
+import RocSyntaxBuffer
+
+## Lossless syntax scaffolding for the Zig Roc compiler syntax at
+## revision `7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`.
+## `.roc-version` pins the implementation toolchain separately.
+## Byte spans are half-open. Comments and whitespace are tokens.
 ##
 ## Expressions support identifiers, numbers, strings without interpolation,
 ## calls, field access, lists, tuples, records, blocks, simple lambdas, if/else,
@@ -9,31 +13,74 @@
 ## source-backed `UnsupportedNode` values with an `UnsupportedSyntax` diagnostic.
 ## This is an evolving syntax API, not a complete Roc validity checker.
 ##
-## Parsing retains the source once and stores nodes/children in flat lists.
+## Parsing retains the source once and builds persistent radix buffers, then
+## returns nodes/children as flat lists. Retained recursive states copy bounded
+## radix paths instead of the entire accumulated tree.
 ## Nesting is bounded at 128; documents over 1,048,576 tokens retain all tokens but
 ## skip syntax construction with `Limited` status. Malformed input returns a
 ## partial tree and diagnostics, including arbitrary non-UTF-8 source bytes.
 RocSyntax :: [].{
+
 	## A UTF-8 byte interval; `end` is excluded.
 	Span : { start : U64, end : U64 }
 
 	## Lexical classes. Operator and punctuation spelling is available by span.
 	TokenKind : [Whitespace, Comment, LowerIdent, UpperIdent, Keyword, Number, StringStart, StringPart, StringEnd, SingleQuote, OpenRound, NoSpaceOpenRound, CloseRound, OpenSquare, CloseSquare, OpenCurly, CloseCurly, Operator, Punctuation, Invalid, EndOfFile]
+
 	## Lossless token. Only EOF has an empty span.
 	Token : { kind : TokenKind, start : U64, end : U64 }
+
 	## Syntax categories. Children are indices into `Parsed.nodes`.
 	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, Suffix, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
+
 	## Structured issues; human-facing text can be rendered outside parsing.
 	DiagnosticCode : [InvalidByte, InvalidUtf8, UnclosedString, UnclosedDelimiter, UnexpectedToken, InvalidNumber, InvalidEscape, InvalidCharacter, UnsupportedSyntax, ResourceLimit]
+
 	## An issue code and its precise source byte interval.
 	Diagnostic : { code : DiagnosticCode, start : U64, end : U64 }
+
 	## `Complete` means the implemented grammar consumed the input without issues.
 	## It does not establish type correctness or complete language conformance.
 	Status : [Complete, Recovered, Unsupported, Limited]
+
 	## Source-backed tokens and a flat, indexed syntax tree with recovery status.
 	Parsed : { source : List(U8), tokens : List(Token), nodes : List(Node), children : List(U64), diagnostics : List(Diagnostic), status : Status, root : U64, consumed : Bool }
+
+	## Lexer-only result; suitable for highlighting without constructing a tree.
+	Tokenized : { source : List(U8), tokens : List(Token), diagnostics : List(Diagnostic), status : Status }
+
+	## Stable presentation categories, independent of theme colors.
+	HighlightCategory : [Trivia, CommentText, Name, TypeName, ReservedWord, NumericLiteral, StringText, Symbol, InvalidText]
+
+	## Lossless lexer entry point for arbitrary source bytes.
+	tokenize_bytes : List(U8) -> Tokenized
+	tokenize_bytes = |source| {
+		lexed = lex(source)
+		status = if lexed.unsupported Unsupported else if lexed.diagnostics.is_empty() Complete else Recovered
+		{ source, tokens: lexed.tokens, diagnostics: lexed.diagnostics, status }
+	}
+
+	## Lossless lexer entry point for UTF-8 source text.
+	tokenize_str : Str -> Tokenized
+	tokenize_str = |source| tokenize_bytes(source.to_utf8())
+
+	## Map one lexical kind to a theme category without allocating.
+	## Semantic highlighting can refine names using the syntax tree.
+	highlight_category : TokenKind -> HighlightCategory
+	highlight_category = |kind| match kind {
+		Whitespace | EndOfFile => Trivia
+		Comment => CommentText
+		LowerIdent => Name
+		UpperIdent => TypeName
+		Keyword => ReservedWord
+		Number => NumericLiteral
+		StringStart | StringPart | StringEnd | SingleQuote => StringText
+		Invalid => InvalidText
+		_ => Symbol
+	}
 
 	## Parse source text; offsets refer to UTF-8 bytes, not Unicode characters.
 	parse_str : Str -> Parsed
@@ -57,7 +104,9 @@ RocSyntax :: [].{
 }
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
-State : { source : List(U8), tokens : List(RocSyntax.Token), pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool, limited : Bool }
+
+State := { source : List(U8), tokens : List(RocSyntax.Token), pos : U64, nodes : RocSyntaxBuffer(RocSyntax.Node), children : RocSyntaxBuffer(U64), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool, limited : Bool }
+
 Built : { state : State, node : U64 }
 
 byte : List(U8), U64 -> U8
@@ -65,12 +114,16 @@ byte = |bytes, at| bytes.get(at) ?? 0
 
 is_space : U8 -> Bool
 is_space = |b| b == ' ' or b == '\t' or b == '\n' or b == '\r'
+
 is_lower : U8 -> Bool
 is_lower = |b| b >= 'a' and b <= 'z'
+
 is_upper : U8 -> Bool
 is_upper = |b| b >= 'A' and b <= 'Z'
+
 is_digit : U8 -> Bool
 is_digit = |b| b >= '0' and b <= '9'
+
 is_ident : U8 -> Bool
 is_ident = |b| is_lower(b) or is_upper(b) or is_digit(b) or b == '_' or b == '!' or b == '$' or b >= 0x80
 
@@ -112,7 +165,9 @@ utf8_diagnostics = |source| {
 		}
 		second = byte(source, $i + 1)
 		$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
-		if $valid { $i = $i + width } else {
+		if $valid {
+			$i = $i + width
+		} else {
 			$out = push_diagnostic($out, InvalidUtf8, $i, $i + 1)
 			$i = $i + 1
 		}
@@ -134,17 +189,27 @@ lex = |source| {
 		$i = $i + 1
 		if is_space(b) {
 			$kind = Whitespace
-			while $i < source.len() and is_space(byte(source, $i)) { $i = $i + 1 }
+			while $i < source.len() and is_space(byte(source, $i)) {
+				$i = $i + 1
+			}
 		} else if b == '#' {
 			$kind = Comment
-			while $i < source.len() and byte(source, $i) != '\n' and byte(source, $i) != '\r' { $i = $i + 1 }
+			while $i < source.len() and byte(source, $i) != '\n' and byte(source, $i) != '\r' {
+				$i = $i + 1
+			}
 		} else if is_lower(b) or is_upper(b) or b == '_' or b == '$' or b == '@' {
-			while $i < source.len() and is_ident(byte(source, $i)) { $i = $i + 1 }
+			while $i < source.len() and is_ident(byte(source, $i)) {
+				$i = $i + 1
+			}
 			$kind = if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or b == '@' UpperIdent else LowerIdent
-			if b == '_' and byte(source, start + 1) == '_' { $diagnostics = push_diagnostic($diagnostics, UnexpectedToken, start, $i) }
+			if b == '_' and byte(source, start + 1) == '_' {
+				$diagnostics = push_diagnostic($diagnostics, UnexpectedToken, start, $i)
+			}
 			var $j = start + 1
 			while $j < $i {
-				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 { $diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1) }
+				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 {
+					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1)
+				}
 				$j = $j + 1
 			}
 		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_expression($last_significant))) {
@@ -152,7 +217,9 @@ lex = |source| {
 			number = scan_number(source, start + if b == '-' 1 else 0)
 			$i = number.end
 			tuple_index = start > 0 and byte(source, start - 1) == '.' and source.sublist({ start, len: $i - start }).all(is_digit)
-			if !number.valid and !tuple_index { $diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i) }
+			if !number.valid and !tuple_index {
+				$diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i)
+			}
 		} else if b == '"' {
 			width = 1
 			$tokens = $tokens.append({ kind: StringStart, start, end: start + width })
@@ -162,14 +229,18 @@ lex = |source| {
 			while $i < source.len() and !$closed {
 				if byte(source, $i) == '\\' {
 					escape = scan_escape(source, $i)
-					if !escape.valid { $diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end) }
+					if !escape.valid {
+						$diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end)
+					}
 					$i = escape.end
 				} else if byte(source, $i) == '\n' or byte(source, $i) == '\r' {
 					$closed = True
 				} else if matches(source, $i, "\"") {
 					$closed = True
 				} else {
-					if nonprintable(source, $i) { $diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1) }
+					if nonprintable(source, $i) {
+						$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1)
+					}
 					if matches(source, $i, "\${") {
 						$unsupported = True
 						$diagnostics = push_diagnostic($diagnostics, UnsupportedSyntax, $i, $i + 2)
@@ -177,36 +248,52 @@ lex = |source| {
 					$i = $i + 1
 				}
 			}
-			if $i > part { $tokens = $tokens.append({ kind: StringPart, start: part, end: $i }) }
+			if $i > part {
+				$tokens = $tokens.append({ kind: StringPart, start: part, end: $i })
+			}
 			if $closed and byte(source, $i) == '"' {
 				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + width })
 				$i = $i + width
-			} else { $diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i) }
+			} else {
+				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
+			}
 		} else if b == '\'' {
 			$kind = SingleQuote
 			var $closed = False
 			while $i < source.len() and !$closed and byte(source, $i) != '\n' {
 				if byte(source, $i) == '\\' {
 					escape = scan_escape(source, $i)
-					if !escape.valid { $diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end) }
+					if !escape.valid {
+						$diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end)
+					}
 					$i = escape.end
 				} else if byte(source, $i) == '\'' {
 					$i = $i + 1
 					$closed = True
-				} else { $i = $i + 1 }
+				} else {
+					$i = $i + 1
+				}
 			}
-			if !$closed { $diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i) } else {
+			if !$closed {
+				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
+			} else {
 				var $chars = 0
 				var $j = start + 1
 				while $j + 1 < $i {
-					if byte(source, $j) == '\\' { $j = scan_escape(source, $j).end
-						$chars = $chars + 1 }
-					else {
-						if byte(source, $j) < 0x80 or byte(source, $j) >= 0xC0 { $chars = $chars + 1 }
-						$j = $j + 1
+					if byte(source, $j) == '\\' {
+						$j = scan_escape(source, $j).end
+						$chars = $chars + 1
 					}
+						else {
+							if byte(source, $j) < 0x80 or byte(source, $j) >= 0xC0 {
+								$chars = $chars + 1
+							}
+							$j = $j + 1
+						}
 				}
-				if $chars != 1 { $diagnostics = push_diagnostic($diagnostics, InvalidCharacter, start, $i) }
+				if $chars != 1 {
+					$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, start, $i)
+				}
 			}
 		} else {
 			$kind = match b {
@@ -226,11 +313,19 @@ lex = |source| {
 				$i = start + width
 				$kind = if b == '.' or b == ':' Punctuation else Operator
 			}
-			if $kind == Invalid { $diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i) }
+			if $kind == Invalid {
+				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
+			}
 		}
-		if b != '"' { $tokens = $tokens.append({ kind: $kind, start, end: $i }) }
-		if b == '"' { $last_significant = StringEnd }
-		else if $kind != Whitespace and $kind != Comment { $last_significant = $kind }
+		if b != '"' {
+			$tokens = $tokens.append({ kind: $kind, start, end: $i })
+		}
+		if b == '"' {
+			$last_significant = StringEnd
+		}
+			else if $kind != Whitespace and $kind != Comment {
+				$last_significant = $kind
+			}
 	}
 	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: $unsupported }
 }
@@ -239,14 +334,18 @@ peek : State -> RocSyntax.Token
 peek = |s| s.tokens.get(s.pos) ?? { kind: EndOfFile, start: s.source.len(), end: s.source.len() }
 
 skip_trivia : State -> State
-skip_trivia = |{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }| {
+skip_trivia = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }| {
 	var $pos = pos
 	var $done = False
 	while !$done {
 		kind = (tokens.get($pos) ?? { kind: EndOfFile, start: source.len(), end: source.len() }).kind
-		if kind == Whitespace or kind == Comment { $pos = $pos + 1 } else { $done = True }
+		if kind == Whitespace or kind == Comment {
+			$pos = $pos + 1
+		} else {
+			$done = True
+		}
 	}
-	{ source, tokens, pos: $pos, nodes, children, diagnostics, unsupported, limited }
+	State.{ source, tokens, pos: $pos, nodes, children, diagnostics, unsupported, limited }
 }
 
 spelling : State, Str -> Bool
@@ -261,14 +360,15 @@ issue = |s, code, start, end| {
 }
 
 add_node : State, RocSyntax.NodeKind, U64, U64, List(U64) -> Built
-add_node = |{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }, kind, start, end, ids| {
+add_node = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }, kind, start, end, ids| {
 	index = nodes.len()
 	node = { kind, start, end, children_start: children.len(), children_len: ids.len() }
-	{ state: { source, tokens, pos, nodes: nodes.append(node), children: children.concat(ids), diagnostics, unsupported, limited }, node: index }
+	{ state: State.{ source, tokens, pos, nodes: nodes.append(node), children: children.concat_list(ids), diagnostics, unsupported, limited }, node: index }
 }
 
 node_start : State, U64 -> U64
 node_start = |s, id| (s.nodes.get(id) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).start
+
 node_end : State, U64 -> U64
 node_end = |s, id| (s.nodes.get(id) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).end
 
@@ -341,8 +441,10 @@ expression = |initial, minimum, depth| {
 					$s = access_state
 					$left = access_node
 					$qualified = $qualified and field.kind == UpperIdent
-				} else { $s = look
-					$done = True }
+				} else {
+					$s = look
+					$done = True
+				}
 			} else if bp.left > 0 and bp.left >= minimum {
 				start = node_start(look, $left)
 				{ state: right_state, node: right_node } = expression(at_pos(look, look.pos + 1), bp.right, depth + 1)
@@ -351,14 +453,17 @@ expression = |initial, minimum, depth| {
 				$s = binary_state
 				$left = binary_node
 				$qualified = False
-			} else { $s = look
-				$done = True }
+			} else {
+				$s = look
+				$done = True
+			}
 		}
 		{ state: $s, node: $left }
 	}
 }
 
 Collection : { state : State, ids : List(U64), end : U64, comma : Bool }
+
 collection : State, RocSyntax.TokenKind, U64 -> Collection
 collection = |initial, closing, depth| {
 	var $s = initial
@@ -390,7 +495,9 @@ collection = |initial, closing, depth| {
 			} else if peek($s).kind != closing and peek($s).kind != EndOfFile {
 				bad = peek($s)
 				$s = issue($s, UnexpectedToken, bad.start, bad.end)
-				if $s.pos <= before { $s = at_pos($s, $s.pos + 1) }
+				if $s.pos <= before {
+					$s = at_pos($s, $s.pos + 1)
+				}
 			}
 		}
 	}
@@ -458,7 +565,7 @@ primary = |s, depth| {
 parse_source : List(U8), Bool -> RocSyntax.Parsed
 parse_source = |source, expression_only| {
 	lexed = lex(source)
-	initial = { source, tokens: lexed.tokens, pos: 0, nodes: [], children: [], diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False }
+	initial = State.{ source, tokens: lexed.tokens, pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False }
 	var $s = initial
 	var $roots = []
 	if $s.tokens.len() > 1048576 {
@@ -470,8 +577,10 @@ parse_source = |source, expression_only| {
 			# Drop the previous loop-state owner before builders grow its buffers.
 			$s = vacant
 			t = peek(look)
-			if t.kind == EndOfFile { $s = look
-				$done = True } else {
+			if t.kind == EndOfFile {
+				$s = look
+				$done = True
+			} else {
 				before = look.pos
 				{ state: built_state, node: built_node } = if expression_only expression(look, 0, 0) else statement(look, 0)
 				$roots = $roots.append(built_node)
@@ -501,21 +610,21 @@ parse_source = |source, expression_only| {
 			}
 		}
 	}
-	first_start = (source_token($s, significant_position($s.tokens, 0))).start
+	{ state: root_state, node: root_node } = add_node($s, File, 0, source.len(), $roots)
+	nodes = root_state.nodes.to_list()
+	first_start = (source_token(root_state, significant_position(root_state.tokens, 0))).start
 	var $header_count = 0.U64
 	var $bad_header = False
-	for n in $s.nodes {
+	for n in nodes {
 		if n.kind == Header {
 			$header_count = $header_count + 1
 			$bad_header = $bad_header or n.start != first_start
 		}
 	}
-	if $header_count > 1 or $bad_header { $s = issue($s, UnexpectedToken, first_start, source.len()) }
-	{ state: root_state, node: root_node } = add_node($s, File, 0, source.len(), $roots)
-	finished = root_state
+	finished = if $header_count > 1 or $bad_header issue(root_state, UnexpectedToken, first_start, source.len()) else root_state
 	has_error = finished.diagnostics.any(|d| d.code != UnsupportedSyntax)
 	status = if finished.limited Limited else if finished.unsupported Unsupported else if has_error Recovered else Complete
-	{ source: finished.source, tokens: finished.tokens, nodes: finished.nodes, children: finished.children, diagnostics: finished.diagnostics, status, root: root_node, consumed: peek(skip_trivia(finished)).kind == EndOfFile }
+	{ source: finished.source, tokens: finished.tokens, nodes, children: finished.children.to_list(), diagnostics: finished.diagnostics, status, root: root_node, consumed: peek(skip_trivia(finished)).kind == EndOfFile }
 }
 
 expect {
@@ -549,6 +658,7 @@ expect {
 }
 
 Scanned : { end : U64, valid : Bool }
+
 scan_number : List(U8), U64 -> Scanned
 scan_number = |source, start| {
 	var $i = start
@@ -559,30 +669,44 @@ scan_number = |source, start| {
 		if prefix == 'x' or prefix == 'o' or prefix == 'b' {
 			$base = if prefix == 'x' 16 else if prefix == 'o' 8 else 2
 			$i = start + 2
-		} else if is_digit(prefix) { $valid = False }
+		} else if is_digit(prefix) {
+			$valid = False
+		}
 	}
 	var $digits = 0.U64
 	var $done = False
 	while $i < source.len() and !$done {
 		b = byte(source, $i)
 		digit = if is_digit(b) U8.to_u64(b - '0') else if b >= 'a' and b <= 'f' U8.to_u64(b - 'a') + 10 else if b >= 'A' and b <= 'F' U8.to_u64(b - 'A') + 10 else 99
-		if b == '_' { $i = $i + 1 }
-		else if digit < $base { $digits = $digits + 1
-			$i = $i + 1 }
-		else { $done = True }
+		if b == '_' {
+			$i = $i + 1
+		}
+			else if digit < $base {
+				$digits = $digits + 1
+				$i = $i + 1
+			}
+				else {
+					$done = True
+				}
 	}
 	$valid = $valid and $digits > 0
 	if $base == 10 {
 		if byte(source, $i) == '.' and (is_digit(byte(source, $i + 1)) or byte(source, $i + 1) == 'e' or byte(source, $i + 1) == 'E') {
 			$i = $i + 1
-			while $i < source.len() and (is_digit(byte(source, $i)) or byte(source, $i) == '_') { $i = $i + 1 }
+			while $i < source.len() and (is_digit(byte(source, $i)) or byte(source, $i) == '_') {
+				$i = $i + 1
+			}
 		}
 		if byte(source, $i) == 'e' or byte(source, $i) == 'E' {
 			$i = $i + 1
-			if byte(source, $i) == '+' or byte(source, $i) == '-' { $i = $i + 1 }
+			if byte(source, $i) == '+' or byte(source, $i) == '-' {
+				$i = $i + 1
+			}
 			var $exponent_digits = 0.U64
 			while $i < source.len() and (is_digit(byte(source, $i)) or byte(source, $i) == '_') {
-				if is_digit(byte(source, $i)) { $exponent_digits = $exponent_digits + 1 }
+				if is_digit(byte(source, $i)) {
+					$exponent_digits = $exponent_digits + 1
+				}
 				$i = $i + 1
 			}
 			$valid = $valid and $exponent_digits > 0
@@ -592,7 +716,9 @@ scan_number = |source, start| {
 	# parser diagnoses these deprecated forms. Retain them in the number span.
 	if $i < source.len() and (is_ident(byte(source, $i))) {
 		$valid = False
-		while $i < source.len() and is_ident(byte(source, $i)) { $i = $i + 1 }
+		while $i < source.len() and is_ident(byte(source, $i)) {
+			$i = $i + 1
+		}
 	}
 	{ end: $i, valid: $valid }
 }
@@ -609,7 +735,9 @@ scan_escape = |source, start| {
 			c = byte(source, $i)
 			digit = if is_digit(c) U8.to_u64(c - '0') else if c >= 'a' and c <= 'f' U8.to_u64(c - 'a') + 10 else if c >= 'A' and c <= 'F' U8.to_u64(c - 'A') + 10 else 99
 			$valid = $valid and digit < 16
-			if $digits < 7 { $value = $value * 16 + digit }
+			if $digits < 7 {
+				$value = $value * 16 + digit
+			}
 			$digits = $digits + 1
 			$i = $i + 1
 		}
@@ -690,12 +818,14 @@ type_expression = |initial, depth| {
 			end = node_end(right_state, right_node)
 			add_node(right_state, TypeExpression, start, end, [left_node, right_node])
 		} else {
-			if type_tree_supported(left_state, left_node) { { state: left_state, node: left_node } }
-			else {
-				start = node_start(left_state, left_node)
-				end = node_end(left_state, left_node)
-				{ state: issue(left_state, UnsupportedSyntax, start, end), node: left_node }
+			if type_tree_supported(left_state, left_node) {
+				{ state: left_state, node: left_node }
 			}
+				else {
+					start = node_start(left_state, left_node)
+					end = node_end(left_state, left_node)
+					{ state: issue(left_state, UnsupportedSyntax, start, end), node: left_node }
+				}
 		}
 	}
 }
@@ -715,11 +845,13 @@ parse_lambda = |initial, start, depth| {
 			{ state: param_state, node: param_node } = add_node(at_pos($s, $s.pos + 1), Pattern, t.start, t.end, [])
 			$ids = $ids.append(param_node)
 			$s = skip_trivia(param_state)
-			if spelling($s, ",") { $s = at_pos($s, $s.pos + 1) }
-			else if !spelling($s, "|") {
-				$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
-				$done = True
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
 			}
+				else if !spelling($s, "|") {
+					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					$done = True
+				}
 		} else {
 			$s = issue($s, if t.kind == EndOfFile UnclosedDelimiter else UnsupportedSyntax, t.start, t.end)
 			$done = True
@@ -793,8 +925,12 @@ curly = |initial, start, depth| {
 				$ids = $ids.append($field_node)
 				$end = node_end($field_state, $field_node)
 				$s = skip_trivia($field_state)
-				if spelling($s, ",") { $s = at_pos($s, $s.pos + 1) }
-				else if peek($s).kind != CloseCurly and peek($s).kind != EndOfFile { $s = issue($s, UnexpectedToken, peek($s).start, peek($s).end) }
+				if spelling($s, ",") {
+					$s = at_pos($s, $s.pos + 1)
+				}
+					else if peek($s).kind != CloseCurly and peek($s).kind != EndOfFile {
+						$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					}
 			} else {
 				{ state: item_state, node: item_node } = statement($s, depth)
 				$ids = $ids.append(item_node)
@@ -805,7 +941,9 @@ curly = |initial, start, depth| {
 					$s = issue($s, UnexpectedToken, peek(look_next).start, peek(look_next).end)
 				}
 			}
-			if $s.pos <= before { $s = at_pos($s, before + 1) }
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
 		}
 	}
 	add_node($s, if record Record else Block, start, $end, $ids)
@@ -848,15 +986,21 @@ parse_match = |initial, start, depth| {
 					$ids = $ids.append(branch_node)
 					$s = skip_trivia(branch_state)
 					$end = branch_end
-					if spelling($s, ",") { $s = at_pos($s, $s.pos + 1) }
+					if spelling($s, ",") {
+						$s = at_pos($s, $s.pos + 1)
+					}
 				} else {
 					$s = issue(arrow, UnsupportedSyntax, t.start, peek(arrow).end)
 					$ids = $ids.append(pattern_node)
 				}
-				if $s.pos <= before { $s = at_pos($s, before + 1) }
+				if $s.pos <= before {
+					$s = at_pos($s, before + 1)
+				}
 			}
 		}
-		if $ids.len() == 1 { $s = issue($s, UnexpectedToken, start, $end) }
+		if $ids.len() == 1 {
+			$s = issue($s, UnexpectedToken, start, $end)
+		}
 		add_node($s, Match, start, $end, $ids)
 	}
 }
@@ -981,7 +1125,9 @@ type_tree_supported = |s, root| {
 		$depth = $depth - 1
 		id = $work.get($depth) ?? s.nodes.len()
 		match s.nodes.get(id) {
-			Err(_) => { $valid = False }
+			Err(_) => {
+				$valid = False
+			}
 			Ok(n) => {
 				$valid = n.kind == Identifier or n.kind == Call or n.kind == Parenthesized or n.kind == Tuple or n.kind == ListLiteral or n.kind == TypeExpression
 				var $i = 0
@@ -1026,7 +1172,7 @@ expect {
 # then clear the loop variable before invoking a growing builder. Keeping both
 # records alive would force copy-on-write at every append in native Roc builds.
 vacant : State
-vacant = { source: [], tokens: [], pos: 0, nodes: [], children: [], diagnostics: [], unsupported: False, limited: False }
+vacant = State.{ source: [], tokens: [], pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: [], unsupported: False, limited: False }
 
 expect {
 	["-!h", "-'i'", "match 42 {}", "person.@"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and ["F\n", "modu\n", "S\n0\n", "x = _\n\ny = { a: _ + 1 }"].all(|source| RocSyntax.parse_str(source).status != Complete)
@@ -1035,8 +1181,8 @@ expect {
 # Consume a state when advancing. Avoid a record spread retaining an alias to
 # its growing buffers across a recursive parse call.
 at_pos : State, U64 -> State
-at_pos = |{ source, tokens, pos: _, nodes, children, diagnostics, unsupported, limited }, position| {
-	{ source, tokens, pos: position, nodes, children, diagnostics, unsupported, limited }
+at_pos = |State.{ source, tokens, pos: _, nodes, children, diagnostics, unsupported, limited }, position| {
+	State.{ source, tokens, pos: position, nodes, children, diagnostics, unsupported, limited }
 }
 
 significant_position : List(RocSyntax.Token), U64 -> U64
@@ -1045,8 +1191,12 @@ significant_position = |tokens, position| {
 	var $done = False
 	while !$done {
 		match tokens.get($pos) {
-			Ok(t) if t.kind == Whitespace or t.kind == Comment => { $pos = $pos + 1 }
-			_ => { $done = True }
+			Ok(t) if t.kind == Whitespace or t.kind == Comment => {
+				$pos = $pos + 1
+			}
+			_ => {
+				$done = True
+			}
 		}
 	}
 	$pos
@@ -1082,7 +1232,9 @@ valid_pattern = |s, root| {
 		$depth = $depth - 1
 		id = $work.get($depth) ?? s.nodes.len()
 		match s.nodes.get(id) {
-			Err(_) => { $valid = False }
+			Err(_) => {
+				$valid = False
+			}
 			Ok(n) => {
 				$valid = n.kind == Identifier or n.kind == NumberLiteral or n.kind == StringLiteral or n.kind == CharacterLiteral or n.kind == Call or n.kind == Tuple or n.kind == ListLiteral or n.kind == Parenthesized
 				var $i = 0
@@ -1100,4 +1252,16 @@ valid_pattern = |s, root| {
 
 expect {
 	["module [1 + 2]", "import 123", "import lower", "import f(1)", "module []\nmodule []"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("match x { 1 + 2 => 3 }").status != Complete
+}
+
+expect {
+	source = "module []\nanswer = 42 # hello\n"
+	tokens = RocSyntax.tokenize_str(source)
+	parsed = RocSyntax.parse_str(source)
+	tokens.status == Complete and tokens.tokens == parsed.tokens and tokens.source == parsed.source and tokens.diagnostics == parsed.diagnostics
+}
+
+expect {
+	tokens = RocSyntax.tokenize_bytes([0xFF, 0x22])
+	tokens.status == Recovered and !tokens.diagnostics.is_empty() and tokens.source == [0xFF, 0x22] and RocSyntax.highlight_category(Comment) == CommentText and RocSyntax.highlight_category(UpperIdent) == TypeName
 }
