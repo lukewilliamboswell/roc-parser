@@ -55,6 +55,41 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_platform_requires_symbols_and_target_configuration(self):
+        base = 'platform "p" requires {} exposes [] packages {} provides {}'
+        prefix = [['string', '"p"'], ['platform_requires', []], ['dependencies', []], ['platform_provides', []]]
+        cases = [
+            (base, ['header', 'platform', prefix]),
+            (base + ' hosted {}', ['header', 'platform', prefix + [['platform_hosted', []]]]),
+            (base + ' targets: {}', ['header', 'platform', prefix + [['platform_targets', []]]]),
+            (base + ' targets: {linux:{inputs:["crt.o",app],output:Exe,custom}}', ['header', 'platform', prefix + [['platform_targets', [
+                ['target_entry', 'linux', ['target_config', [
+                    ['target_field', 'inputs', ['target_list', [['target_file', ['string', '"crt.o"']], ['target_file', ['identifier', 'app']]]]],
+                    ['target_field', 'output', ['identifier', 'Exe']], ['target_field', 'custom', None],
+                ]]],
+            ]]]]),
+            (base + ' targets: {linux:{},inputs_dir:"a",inputs_dir:"b"}', ['header', 'platform', prefix + [['platform_targets', [
+                ['target_inputs_directory', ['string', '"b"']], ['target_entry', 'linux', ['target_config', []]],
+            ]]]]),
+            (base + ' targets: {linux:{value:"${x}"}}', ['header', 'platform', prefix + [['platform_targets', [
+                ['target_entry', 'linux', ['target_config', [['target_field', 'value', ['string', '"${x}"']]]]],
+            ]]]]),
+            ('platform "" requires {[Model:model] for main : () -> Model} exposes [run] packages {} provides {"":Module.run}', ['header', 'platform', [
+                ['string', '""'], ['platform_requires', [['required_value', [
+                    ['required_type', ['t_named', ['identifier', 'Model']], ['t_var', 'model']],
+                ], 'main', ['t_fn', False, [], ['t_named', ['identifier', 'Model']]]]]],
+                ['exposed', ['identifier', 'run'], None], ['dependencies', []], ['platform_provides', [['symbol_mapping', '""', 'Module.run']]],
+            ]]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': 'header', 'source': source}) + '\n' for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], [expected])
+
     def test_record_updates_unset_fields_and_nominal_forms(self):
         number = ['number', '1']
         fields = [['x', number]]

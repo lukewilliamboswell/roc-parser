@@ -272,6 +272,33 @@ def syntax_shape(response, source):
             return ['dependency', branch[0][1], branch[1] if len(branch) > 1 else None]
         if kind == 'PlatformReference':
             return ['platform', branch[0]]
+        if kind in {'PlatformRequires', 'PlatformProvides', 'PlatformHosted'}:
+            tag = {'PlatformRequires': 'platform_requires', 'PlatformProvides': 'platform_provides', 'PlatformHosted': 'platform_hosted'}[kind]
+            return [tag, branch]
+        if kind == 'RequiredValue':
+            return ['required_value', branch[:-2], branch[-2][1], branch[-1]]
+        if kind == 'RequiredType':
+            return ['required_type', *branch]
+        if kind == 'SymbolMapping':
+            return ['symbol_mapping', branch[0][1], branch[1][1]]
+        if kind == 'PlatformTargets':
+            # The compiler retains the last inputs_dir and stores it separately
+            # from target entries. The candidate tree still retains every node.
+            directories = [entry for entry in branch if entry[0] == 'target_inputs_directory']
+            entries = [entry for entry in branch if entry[0] != 'target_inputs_directory']
+            return ['platform_targets', directories[-1:] + entries]
+        if kind == 'TargetInputsDirectory':
+            return ['target_inputs_directory', branch[0]]
+        if kind == 'TargetEntry':
+            return ['target_entry', branch[0][1], branch[1]]
+        if kind == 'TargetConfig':
+            return ['target_config', branch]
+        if kind == 'TargetField':
+            return ['target_field', branch[0][1], branch[1] if len(branch) > 1 else None]
+        if kind == 'TargetList':
+            return ['target_list', branch]
+        if kind == 'TargetFile':
+            return ['target_file', branch[0]]
         if kind == 'ImportPath':
             return ['import_path', text]
         if kind == 'ImportAlias':

@@ -102,8 +102,11 @@ preserve source targets, aliases, exposed qualified names and file content type.
 Explicit file headers and all statements retain source order. Module, hosted,
 app and package headers preserve exposure lists and dependencies. Type annotations,
 declarations, constraints, associated definitions and open type extensions retain
-their structure. Platform headers and additional record/nominal forms still have
-explicit projection gaps.
+their structure. Platform headers preserve required values and rigid type aliases, symbol maps,
+dependencies and target configurations. Record extensions, unset fields, record
+builders and nominal constructors have distinct shapes. The expression, pattern
+and type switches enumerate every pinned AST variant; future variants fail the
+worker build until their projection is implemented.
 
 `statement` invokes the pinned parser's in-body statement entry point; it can
 accept a variable declaration that file mode rejects. `header` invokes its header
@@ -125,3 +128,8 @@ grouping, lists, strings and unary operators.
 Additional live cases cover lambda/if/match, records and shorthand fields, block
 definitions, chained field access, method calls and uppercase tags.
 The archive tests run without a worker binary.
+
+Target configurations retain file-list wrappers and raw string spelling. The
+compiler stores only the last `inputs_dir` and separates it from target entries;
+the normalized candidate view follows that ordering and last-value behavior.
+The candidate syntax tree and lossless tokens still retain every occurrence.

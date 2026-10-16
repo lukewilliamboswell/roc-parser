@@ -387,12 +387,112 @@ fn replParseMode(gpa: Allocator, source: []const u8) Allocator.Error![]const u8 
     defer statement.deinit();
     return if (!statement.hasErrors()) "statement" else "file";
 }
+fn quotedTokenText(tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, content: ?u32) []const u8 {
+    const token = content orelse return "\"\"";
+    const start = tokens.resolve(if (token > 0) token - 1 else token).start.offset;
+    var end = token;
+    while (end < tokens.tokens.len and tokens.tokens.items(.tag)[end] != .StringEnd) : (end += 1) {}
+    return source[start..tokens.resolve(@min(end, tokens.tokens.len - 1)).end.offset];
+}
+fn dependenciesShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, collection: parse.AST.Collection.Idx, platform: ?parse.AST.RecordField.Idx) Allocator.Error!std.json.Value {
+    var fields = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.recordFieldSlice(.{ .span = store.getCollection(collection).span })) |field_idx| {
+        const field = store.getRecordField(field_idx);
+        var value: std.json.Value = switch (field.value) {
+            .supplied => |expr| try shape(gpa, store, tokens, source, expr, 0),
+            .punned, .unset => .null,
+        };
+        if (platform != null and platform.? == field_idx) value = try array(gpa, &.{ string("platform"), value });
+        try fields.append(try array(gpa, &.{ string("dependency"), string(tokenText(tokens, source, field.name)), value }));
+    }
+    return array(gpa, &.{ string("dependencies"), .{ .array = fields } });
+}
+fn symbolMapShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, items: parse.AST.SymbolMapEntry.Span, hosted: bool) Allocator.Error!std.json.Value {
+    var out = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.symbolMapEntrySlice(items)) |idx| {
+        const item = store.getSymbolMapEntry(idx);
+        const start = tokens.resolve(item.module orelse item.func).start.offset;
+        const target = source[start..tokens.resolve(item.func).end.offset];
+        try out.append(try array(gpa, &.{ string("symbol_mapping"), string(quotedTokenText(tokens, source, item.symbol)), string(target) }));
+    }
+    return array(gpa, &.{ string(if (hosted) "platform_hosted" else "platform_provides"), .{ .array = out } });
+}
+fn targetFileShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TargetFile.Idx) Allocator.Error!std.json.Value {
+    const value = switch (store.getTargetFile(idx)) {
+        .string_literal => |token| try array(gpa, &.{ string("string"), string(quotedTokenText(tokens, source, token)) }),
+        .special_ident => |token| try array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, token)) }),
+        .malformed => |value| try array(gpa, &.{ string("malformed_target_file"), string(@tagName(value.reason)) }),
+    };
+    return array(gpa, &.{ string("target_file"), value });
+}
+fn targetValueShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TargetConfigValue.Idx, depth: usize) Allocator.Error!std.json.Value {
+    if (depth > 256) return array(gpa, &.{ string("unsupported"), string("target_depth_limit") });
+    return switch (store.getTargetConfigValue(idx)) {
+        .int_literal => |token| array(gpa, &.{ string("number"), string(tokenText(tokens, source, token)) }),
+        .string_literal => |token| array(gpa, &.{ string("string"), string(quotedTokenText(tokens, source, token)) }),
+        .tag_literal, .ident => |token| array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, token)) }),
+        .list => |items| blk: {
+            var out = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.targetConfigValueSlice(items)) |item| try out.append(try targetValueShape(gpa, store, tokens, source, item, depth + 1));
+            break :blk array(gpa, &.{ string("target_list"), .{ .array = out } });
+        },
+        .files => |items| blk: {
+            var out = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.targetFileSlice(items)) |item| try out.append(try targetFileShape(gpa, store, tokens, source, item));
+            break :blk array(gpa, &.{ string("target_list"), .{ .array = out } });
+        },
+        .malformed => |value| array(gpa, &.{ string("malformed_target_value"), string(@tagName(value.reason)) }),
+    };
+}
+fn targetsShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TargetsSection.Idx) Allocator.Error!std.json.Value {
+    const section = store.getTargetsSection(idx);
+    var entries = std.array_list.Managed(std.json.Value).init(gpa);
+    if (section.inputs_dir) |token| try entries.append(try array(gpa, &.{ string("target_inputs_directory"), try array(gpa, &.{ string("string"), string(quotedTokenText(tokens, source, token)) }) }));
+    for (store.targetEntrySlice(section.entries)) |entry_idx| {
+        const entry = store.getTargetEntry(entry_idx);
+        var fields = std.array_list.Managed(std.json.Value).init(gpa);
+        for (store.targetConfigEntrySlice(store.getTargetConfig(entry.config).entries)) |field_idx| {
+            const field = store.getTargetConfigEntry(field_idx);
+            const value = store.getTargetConfigValue(field.value);
+            const punned = value == .ident and value.ident == field.name;
+            try fields.append(try array(gpa, &.{ string("target_field"), string(tokenText(tokens, source, field.name)), if (punned) .null else try targetValueShape(gpa, store, tokens, source, field.value, 0) }));
+        }
+        try entries.append(try array(gpa, &.{ string("target_entry"), string(tokenText(tokens, source, entry.target)), try array(gpa, &.{ string("target_config"), .{ .array = fields } }) }));
+    }
+    return array(gpa, &.{ string("platform_targets"), .{ .array = entries } });
+}
+fn platformHeaderShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, header: parse.AST.Header) Allocator.Error!std.json.Value {
+    const value = header.platform;
+    var children = std.array_list.Managed(std.json.Value).init(gpa);
+    try children.append(try array(gpa, &.{ string("string"), string(quotedTokenText(tokens, source, value.name)) }));
+    var requires = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.requiresEntrySlice(value.requires_entries)) |entry_idx| {
+        const entry = store.getRequiresEntry(entry_idx);
+        var aliases = std.array_list.Managed(std.json.Value).init(gpa);
+        for (store.forClauseTypeAliasSlice(entry.type_aliases)) |alias_idx| {
+            const alias = store.getForClauseTypeAlias(alias_idx);
+            const alias_name = try array(gpa, &.{ string("t_named"), try array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, alias.alias_name)) }) });
+            const rigid = try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, alias.rigid_name)) });
+            try aliases.append(try array(gpa, &.{ string("required_type"), alias_name, rigid }));
+        }
+        try requires.append(try array(gpa, &.{ string("required_value"), .{ .array = aliases }, string(tokenText(tokens, source, entry.entrypoint_name)), try typeShape(gpa, store, tokens, source, entry.type_anno, 0) }));
+    }
+    try children.append(try array(gpa, &.{ string("platform_requires"), .{ .array = requires } }));
+    for (store.exposedItemSlice(.{ .span = store.getCollection(value.exposes).span })) |item| try children.append(try exposedShape(gpa, store, tokens, source, item));
+    try children.append(try dependenciesShape(gpa, store, tokens, source, value.packages, null));
+    try children.append(try symbolMapShape(gpa, store, tokens, source, value.provides, false));
+    if (value.hosted.span.len > 0 or value.hosted.region.end > value.hosted.region.start) try children.append(try symbolMapShape(gpa, store, tokens, source, value.hosted, true));
+    if (value.targets) |targets| try children.append(try targetsShape(gpa, store, tokens, source, targets));
+    return array(gpa, &.{ string("header"), string("platform"), .{ .array = children } });
+}
+
 fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Header.Idx) Allocator.Error!std.json.Value {
     const header = store.getHeader(idx);
     const collection = switch (header) {
         .module => |value| value.exposes,
         .hosted => |value| value.exposes,
         .app => |value| value.provides,
+        .platform => return platformHeaderShape(gpa, store, tokens, source, header),
         .package => |value| value.exposes,
         .default_app => return array(gpa, &.{ string("header"), string("default_app"), try array(gpa, &.{}) }),
         .type_module => return array(gpa, &.{ string("header"), string("type_module"), try array(gpa, &.{}) }),
@@ -403,17 +503,7 @@ fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
     if (header == .app or header == .package) {
         const packages = if (header == .app) header.app.packages else header.package.packages;
         const platform = if (header == .app) header.app.platform_idx else header.package.platform_idx;
-        var fields = std.array_list.Managed(std.json.Value).init(gpa);
-        for (store.recordFieldSlice(.{ .span = store.getCollection(packages).span })) |field_idx| {
-            const field = store.getRecordField(field_idx);
-            var value: std.json.Value = switch (field.value) {
-                .supplied => |expr| try shape(gpa, store, tokens, source, expr, 0),
-                .punned, .unset => .null,
-            };
-            if (platform != null and platform.? == field_idx) value = try array(gpa, &.{ string("platform"), value });
-            try fields.append(try array(gpa, &.{ string("dependency"), string(tokenText(tokens, source, field.name)), value }));
-        }
-        try exposed.append(try array(gpa, &.{ string("dependencies"), .{ .array = fields } }));
+        try exposed.append(try dependenciesShape(gpa, store, tokens, source, packages, platform));
     }
     return array(gpa, &.{ string("header"), string(@tagName(header)), .{ .array = exposed } });
 }
