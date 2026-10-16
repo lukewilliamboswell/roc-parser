@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Inventory every pinned snapshot and gate candidate acceptance against the oracle.
+"""Inventory pinned snapshots and gate acceptance, tokens and normalized structure.
 
-This lane establishes acceptance and source bounds, not AST equivalence. Oracle
+Compiler-accepted inputs require lexical and normalized AST agreement. Oracle
 rejection includes intentional errors and obsolete examples; filenames and saved
 snapshot expectations never decide validity. Unhandled inputs remain failures.
 """
@@ -15,7 +15,7 @@ import shlex
 import sys
 
 from import_roc_syntax_snapshots import import_snapshots, REFERENCE_COMMIT
-from review_roc_syntax import Worker, WorkerError, validate_spans
+from review_roc_syntax import Worker, WorkerError, validate_spans, compare
 
 
 def outcome(case, actual, expected):
@@ -32,7 +32,13 @@ def outcome(case, actual, expected):
         if not expected['consumed']:
             return 'unknown', 'oracle accepted unconsumed source'
         if actual['ok'] and actual['consumed'] and actual.get('status') == 'Complete':
-            return 'accepted', None
+            try:
+                differences = compare({**case, 'coverage': 'supported'}, actual, expected)
+            except (WorkerError, KeyError, TypeError, IndexError) as error:
+                return 'unknown', 'structural comparison: ' + str(error)
+            if any(d['field'] == 'projection_gap' for d in differences):
+                return 'unknown', differences
+            return ('structure_mismatch', differences) if differences else ('accepted', None)
         return 'missing_grammar', None
     if actual['ok']:
         return 'false_acceptance', None
@@ -61,16 +67,16 @@ def run_corpus(document, probe_command, oracle_command, timeout=5):
         for worker in workers.values():
             worker.close()
     unknown_imports = [item for item in document['provenance']['skipped'] if item['reason'] != 'documentation']
-    counts = Counter({name: 0 for name in ('accepted', 'missing_grammar', 'rejected', 'false_acceptance', 'unknown')})
+    counts = Counter({name: 0 for name in ('accepted', 'missing_grammar', 'rejected', 'false_acceptance', 'structure_mismatch', 'unknown')})
     counts.update(item['classification'] for item in results)
     counts['unknown_imports'] = len(unknown_imports)
     if not results:
         counts['unknown'] += 1
-    return {'reference_commit': REFERENCE_COMMIT, 'contract': 'acceptance and source invariants; no structural equivalence claim',
+    return {'reference_commit': REFERENCE_COMMIT, 'contract': 'acceptance, tokens, normalized structure and source invariants for valid inputs; rejection agreement for invalid inputs',
             'counts': dict(counts), 'inventory': {'imported': len(results),
             'documentation': sum(item['reason'] == 'documentation' for item in document['provenance']['skipped']),
             'unhandled': len(unknown_imports)}, 'unknown_imports': unknown_imports, 'provenance': document['provenance'],
-            'passed': not unknown_imports and not any(counts[k] for k in ('unknown', 'missing_grammar', 'false_acceptance')),
+            'passed': not unknown_imports and not any(counts[k] for k in ('unknown', 'missing_grammar', 'false_acceptance', 'structure_mismatch')),
             'results': results}
 
 

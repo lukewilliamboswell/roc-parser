@@ -32,6 +32,19 @@ class CorpusGateTests(unittest.TestCase):
         self.assertEqual(gate.outcome({'source': ''}, self.response(consumed=False), self.response())[0], 'missing_grammar')
         self.assertEqual(gate.outcome({'source': ''}, self.response(), self.response(consumed=False))[0], 'unknown')
 
+    def test_acceptance_agreement_cannot_hide_a_wrong_tree(self):
+        actual = self.response(shape=[['binary', '+', ['number', '1'], ['number', '2']]])
+        expected = self.response(shape=[['binary', '*', ['number', '1'], ['number', '2']]])
+        classification, differences = gate.outcome({'source': ''}, actual, expected)
+        self.assertEqual(classification, 'structure_mismatch')
+        self.assertEqual([d['field'] for d in differences], ['shape'])
+
+    def test_matching_unknown_projections_are_unknown_not_passing(self):
+        response = self.response(shape=[['unsupported', 'future']])
+        classification, differences = gate.outcome({'source': ''}, response, response)
+        self.assertEqual(classification, 'unknown')
+        self.assertEqual(differences[0]['field'], 'projection_gap')
+
     def test_unhandled_imports_cannot_pass_empty_inventory(self):
         doc = {'cases': [], 'provenance': {'skipped': [{'path': 'x', 'reason': 'unsupported_snapshot_mode:repl'}]}}
         report = gate.run_corpus(doc, [], [])

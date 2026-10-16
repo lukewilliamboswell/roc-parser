@@ -8,7 +8,7 @@ Run `python3 scripts/check_roc_syntax_corpus.py --roc-source /path/to/roc --prob
 
 The gate imports the entire immutable snapshot inventory without a filter or limit. Oracle-accepted inputs require a Complete candidate parse and full consumption. Oracle-rejected inputs require candidate rejection; these include intentional errors and possibly obsolete examples, and are never treated as missing valid grammar. Worker failures, malformed protocols, source invariant failures and unhandled snapshot modes are explicit unknown failures. Every imported source and response is retained.
 
-Acceptance agreement does not establish AST equivalence. The curated differential and independent-model lanes remain necessary. The report can be red while parser coverage is being expanded; unsupported source must never be relabelled as passing.
+Accepted inputs additionally require token boundaries/classes and normalized parent/child structure to agree. Projection gaps fail as unknowns even when both workers report the same unsupported shape. Recovery trees remain implementation-specific, so invalid inputs require rejection and source invariants. The curated differential and independent-model lanes remain necessary. The report can be red while parser coverage is being expanded; unsupported source must never be relabelled as passing.
 
 == Grammar checklist
 
