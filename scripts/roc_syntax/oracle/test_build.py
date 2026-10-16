@@ -55,6 +55,33 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_current_reference_source_policy_and_dependency_rules(self):
+        cases = [
+            ('expr', '{1\n...}', True),
+            ('expr', '-...', True),
+            ('expr', '\ufeff1', False),
+            ('expr', '1 #\u202e', False),
+            ('expr', '"\u202e"', False),
+            ('header', 'package [] {dep}', False),
+            ('header', 'package [] {dep: 1}', False),
+            ('header', 'app [] {dep: "a", dep: "b"}', False),
+            ('header', 'package [] {dep: "a\\nb"}', False),
+            ('header', 'package [] {dep: "${name}"}', False),
+            ('header', 'package [] {dep: "../dep/main.roc"}', True),
+            ('header', 'app [] {pf: platform "../platform/main.roc"}', True),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': mode, 'source': source}) + '\n' for i, (mode, source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (mode, source, expected), row in zip(cases, rows):
+            with self.subTest(mode=mode, source=source):
+                self.assertEqual(row['ok'], expected, row['diagnostics'])
+                if not expected:
+                    self.assertTrue(row['diagnostics'])
+        self.assertEqual(rows[0]['facts'][0]['shape'], ['block', [['number', '1'], ['ellipsis']]])
+        self.assertEqual(rows[1]['facts'][0]['shape'], ['unary', '-', ['ellipsis']])
+
     def test_types_extensions_constraints_and_associated_definitions(self):
         named = lambda name: ['t_named', ['identifier', name]]
         var = lambda name: ['t_var', name]

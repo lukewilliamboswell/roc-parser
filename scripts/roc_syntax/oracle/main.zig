@@ -439,6 +439,10 @@ fn handle(gpa: Allocator, req: Request) !Response {
         const end = @min(@as(usize, if (diag.region.end > diag.region.start) diag.region.end - 1 else diag.region.start), result.tokens.tokens.len - 1);
         try diagnostics.append(gpa, .{ .stage = "parse", .kind = @tagName(diag.tag), .start = result.tokens.resolve(start).start.offset, .end = result.tokens.resolve(end).end.offset });
     }
+    // The tokenizer's fatal status is independent of its bounded message buffer.
+    if (diagnostics.items.len == 0 and (result.has_errors or result.source_rejected)) {
+        try diagnostics.append(gpa, .{ .stage = "tokenize", .kind = if (result.source_rejected) "SourceRejected" else "TokenizationFailed", .start = 0, .end = 0 });
+    }
     if (!consumed) {
         const region = result.tokens.resolve(@min(parser.pos, result.tokens.tokens.len - 1));
         try diagnostics.append(gpa, .{ .stage = "parse", .kind = "UnconsumedInput", .start = region.start.offset, .end = @intCast(req.source.len) });
