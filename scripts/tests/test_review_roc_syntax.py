@@ -68,6 +68,46 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_character_and_suffix_nodes_project_structure(self):
+        character = {'nodes': [{'kind': 'CharacterLiteral', 'start': 0, 'end': 4,
+                                'children_start': 0, 'children_len': 0}],
+                     'children': [], 'root': 0}
+        self.assertEqual(review.syntax_shape(character, "'é'"), ['character', "'é'"])
+        suffix = {'nodes': [
+            {'kind': 'Identifier', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Suffix', 'start': 0, 'end': 2, 'children_start': 0, 'children_len': 1},
+        ], 'children': [0], 'root': 1}
+        self.assertEqual(review.syntax_shape(suffix, 'x?'), ['suffix', '?', ['identifier', 'x']])
+
+    def test_control_and_optional_field_nodes_project_structure(self):
+        for kind, keyword in [('Debug', 'dbg'), ('Crash', 'crash'), ('Return', 'return')]:
+            source = keyword + ' 1'
+            response = {'nodes': [
+                {'kind': 'NumberLiteral', 'start': len(keyword) + 1, 'end': len(source), 'children_start': 0, 'children_len': 0},
+                {'kind': kind, 'start': 0, 'end': len(source), 'children_start': 0, 'children_len': 1},
+            ], 'children': [0], 'root': 1}
+            self.assertEqual(review.syntax_shape(response, source), [keyword, ['number', '1']])
+        for kind, source, expected in [('Break', 'break', ['break']), ('Ellipsis', '...', ['ellipsis'])]:
+            response = {'nodes': [{'kind': kind, 'start': 0, 'end': len(source), 'children_start': 0, 'children_len': 0}], 'children': [], 'root': 0}
+            self.assertEqual(review.syntax_shape(response, source), expected)
+        response = {'nodes': [
+            {'kind': 'Identifier', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Identifier', 'start': 3, 'end': 8, 'children_start': 0, 'children_len': 0},
+            {'kind': 'OptionalFieldAccess', 'start': 0, 'end': 8, 'children_start': 0, 'children_len': 2},
+        ], 'children': [0, 1], 'root': 2}
+        self.assertEqual(review.syntax_shape(response, 'x.?field'), ['optional_field', ['identifier', 'x'], 'field'])
+
+    def test_optional_field_suffix_and_discard_token_classes(self):
+        response = {'tokens': [
+            {'kind': 'NoSpaceDotQuestionLowerIdent', 'start': 1, 'end': 8},
+            {'kind': 'NoSpaceOpQuestion', 'start': 8, 'end': 9},
+        ]}
+        self.assertEqual(review.normalize_tokens(response, 'x.?field?'), [
+            ['Punctuation', 1, 3], ['LowerIdent', 3, 8], ['Operator', 8, 9],
+        ])
+        for kind in ('Underscore', 'NamedUnderscore'):
+            self.assertEqual(review.normalize_tokens({'tokens': [{'kind': kind, 'start': 0, 'end': 1}]}, '_'), [['LowerIdent', 0, 1]])
+
     def test_tuple_index_tokens_preserve_dot_and_original_index_span(self):
         for kind in ('DotInt', 'NoSpaceDotInt'):
             with self.subTest(kind=kind):
@@ -91,6 +131,17 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(review.normalize_tokens(empty, '""'), [])
         content = {'tokens': [{'kind': 'StringPart', 'start': 1, 'end': 2}]}
         self.assertEqual(review.normalize_tokens(content, '"x"'), [['StringPart', 1, 2]])
+
+    def test_oracle_empty_string_part_is_valid_but_candidate_must_progress(self):
+        reference = {'tokens': [
+            {'kind': 'StringStart', 'start': 0, 'end': 1},
+            {'kind': 'StringPart', 'start': 1, 'end': 1},
+            {'kind': 'StringEnd', 'start': 1, 'end': 2},
+            {'kind': 'EndOfFile', 'start': 2, 'end': 2},
+        ]}
+        review.validate_spans(reference, '""')
+        with self.assertRaisesRegex(review.WorkerError, 'no progress'):
+            review.validate_spans(reference, '""', lossless=True)
 
     def test_call_adjacency_preserved(self):
         first={'tokens':[{'kind':'NoSpaceOpenRound','start':1,'end':2}]}

@@ -93,6 +93,17 @@ class WorkerTests(unittest.TestCase):
     def test_common_expression_projections(self):
         cases = [
             ("True", ["identifier", "True"]),
+            ("'é'", ["character", "'é'"]),
+            ("'\\n'", ["character", "'\\n'"]),
+            ("answer?", ["suffix", "?", ["identifier", "answer"]]),
+            ("f(1)?", ["suffix", "?", ["call", ["identifier", "f"], [["number", "1"]]]]),
+            ("dbg 1", ["dbg", ["number", "1"]]),
+            ('crash "oops"', ["crash", ["string", '"oops"']]),
+            ("return 1", ["return", ["number", "1"]]),
+            ("break", ["break"]),
+            ("...", ["ellipsis"]),
+            ("x.?field", ["optional_field", ["identifier", "x"], "field"]),
+            ("x.?field.next", ["field", ["optional_field", ["identifier", "x"], "field"], "next"]),
             ("|x| x + 1", ["lambda", ["x"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]),
             ("if True { 1 } else { 2 }", ["if", ["identifier", "True"], ["block", [["number", "1"]]], ["block", [["number", "2"]]]]),
             ("{name: 1}", ["record", [["name", ["number", "1"]]]]),

@@ -56,6 +56,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
     return switch (expr) {
         .int => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
         .frac => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
+        .single_quote => |value| if (value.type_suffix == null) array(gpa, &.{ string("character"), string(tokenText(tokens, source, value.token)) }) else array(gpa, &.{ string("unsupported"), string("typed_character") }),
         .ident => |value| qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token),
         .bin_op => |value| array(gpa, &.{ string("binary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.left, depth + 1), try shape(gpa, store, tokens, source, value.right, depth + 1) }),
         .tuple, .list => blk: {
@@ -113,8 +114,9 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
         .field_access => |value| blk: {
             var receiver = try shape(gpa, store, tokens, source, value.receiver, depth + 1);
             for (store.fieldAccessSegmentSlice(value.segments)) |segment| {
-                if (segment.mode == .optional) break :blk array(gpa, &.{ string("unsupported"), string("optional_field") });
-                receiver = try array(gpa, &.{ string("field"), receiver, string(fieldName(tokenText(tokens, source, segment.field_token))) });
+                const text = tokenText(tokens, source, segment.field_token);
+                const name = if (segment.mode == .optional) text[2..] else fieldName(text);
+                receiver = try array(gpa, &.{ string(if (segment.mode == .optional) "optional_field" else "field"), receiver, string(name) });
             }
             break :blk receiver;
         },
@@ -134,6 +136,12 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             break :blk array(gpa, &.{ string("string"), string(source[start..end]) });
         },
         .unary_op => |value| array(gpa, &.{ string("unary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .suffix_single_question => |value| array(gpa, &.{ string("suffix"), string("?"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .dbg => |value| array(gpa, &.{ string("dbg"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .crash => |value| array(gpa, &.{ string("crash"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .@"return" => |value| array(gpa, &.{ string("return"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .@"break" => array(gpa, &.{string("break")}),
+        .ellipsis => array(gpa, &.{string("ellipsis")}),
         .apply => |value| blk: {
             var args = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.exprSlice(value.args)) |arg| try args.append(try shape(gpa, store, tokens, source, arg, depth + 1));

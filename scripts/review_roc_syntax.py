@@ -112,6 +112,10 @@ def normalize_tokens(response, source):
         # candidate omits zero-byte tokens to retain its progress invariant.
         if kind == 'StringPart' and start == end:
             continue
+        if kind in {'DotQuestionLowerIdent', 'NoSpaceDotQuestionLowerIdent'}:
+            out.append(['Punctuation', start, start + 2])
+            out.append(['LowerIdent', start + 2, end])
+            continue
         if kind in {'DotInt', 'NoSpaceDotInt'}:
             out.append(['Punctuation', start, start + 1])
             out.append(['Number', start + 1, end])
@@ -124,10 +128,14 @@ def normalize_tokens(response, source):
             kind = 'Number'
         elif kind == 'OpColon':
             kind = 'Punctuation'
-        elif (kind.startswith('Op') and kind[2:3].isupper()) or kind == 'Operator':
+        elif (kind.startswith('Op') and kind[2:3].isupper()) or kind in {'Operator', 'NoSpaceOpQuestion'}:
             kind = 'Operator'
-        elif kind in {'Comma', 'Dot', 'Colon'}:
+        elif kind in {'Comma', 'Dot', 'Colon', 'DoubleDot', 'TripleDot', 'DotStar'}:
             kind = 'Punctuation'
+        elif kind in {'Underscore', 'NamedUnderscore'}:
+            kind = 'LowerIdent'
+        elif kind == 'OpaqueName':
+            kind = 'UpperIdent'
         elif kind.startswith('Kw'):
             kind = 'Keyword'
         out.append([kind, start, end])
@@ -187,6 +195,10 @@ def syntax_shape(response, source):
             return ['unary', operator, *branch]
         if kind == 'StringLiteral':
             return ['string', text]
+        if kind == 'CharacterLiteral':
+            return ['character', text]
+        if kind == 'Suffix':
+            return ['suffix', '?', *branch]
         if kind == 'ListLiteral':
             return ['list', branch]
         if kind == 'Tuple':
@@ -206,8 +218,12 @@ def syntax_shape(response, source):
             return ['record', branch]
         if kind == 'Block':
             return ['block', branch]
-        if kind == 'FieldAccess':
-            return ['field', branch[0], raw[nodes[children[start+1]]['start']:nodes[children[start+1]]['end']].decode()]
+        if kind in {'FieldAccess', 'OptionalFieldAccess'}:
+            return ['optional_field' if kind == 'OptionalFieldAccess' else 'field', branch[0], raw[nodes[children[start+1]]['start']:nodes[children[start+1]]['end']].decode()]
+        if kind in {'Debug', 'Crash', 'Return'}:
+            return [{'Debug': 'dbg', 'Crash': 'crash', 'Return': 'return'}[kind], *branch]
+        if kind in {'Break', 'Ellipsis'}:
+            return [kind.lower()]
         if kind == 'MatchBranch':
             return branch
         if kind == 'Match':
