@@ -32,6 +32,16 @@ Where the oracle is itself wrong, the script records an _oracle disagreement_
 and uses the specification's expected result instead; these cases are reported
 but are not failures.
 
+The <<asciidoc,AsciiDoc parser>> has a separate development harness:
+`scripts/review_asciidoc.py`. It pins Asciidoctor 2.0.23 and checks independently
+authored semantic assertions, a normalized block-source projection and embedded
+HTML. CI uses `--require-complete --compare-html`: reference-accepted parser
+rejections, projection differences and HTML differences fail. Generated models,
+reproducible mutations and repository document harvesting extend the authored
+cases. Reports retain original inputs, source hashes and failing reproducers.
+The separate local performance harness compares optimized native parsing and
+rendering with the same oracle and checks geometric scaling.
+
 == Results
 
 The numbers below were measured on 1 October 2026 at commit `7afc741`, with Roc

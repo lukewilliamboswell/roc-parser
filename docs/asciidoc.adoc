@@ -1,0 +1,120 @@
+// Defined by index.adoc; repeated so the chapter renders on its own.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+endif::[]
+
+[#asciidoc]
+= Reading AsciiDoc
+
+`AsciiDoc` parses an in-memory string into a document title and typed blocks,
+and renders embedded HTML. Paragraphs retain their inline source. Parsing
+normalizes line endings to LF and removes trailing ASCII whitespace from each
+line to match Asciidoctor's source representation.
+
+== Parsing and rendering
+
+`parse_str` uses the default attributes and leaves includes as links.
+`parse_with` accepts initial attributes and an explicit map of virtual include
+sources as a list of `{path, source}` records. Set `expand_includes: True`
+explicitly; the default is `False`. Includes never read files or the network.
+The parser supports nested includes, line and tag selectors, conditionals, attribute definitions and
+include level offsets. `render` converts a parsed document to embedded HTML;
+`render_inline` applies inline substitutions to a string and attributes.
+
+For example, supply a virtual chapter using these options:
+
+[source,roc]
+----
+options = {
+    ..AsciiDoc.default_options,
+    includes: [{ path: "chapter.adoc", source: "Chapter text" }],
+    expand_includes: True,
+}
+----
+
+Block forms include sections, paragraphs, lists and description lists, listing
+and literal blocks, compound blocks, admonitions, tables, media and block
+metadata. Rendering handles inline formatting, macros, substitutions, cross
+references, section IDs, numbering, tables of contents, captions and footnotes.
+`Rich` blocks retain context, style, ID, attributes and nested blocks alongside
+the simpler paragraph, section, listing and literal variants.
+
+Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
+64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
+resource-limit failures return a message, one-based line and zero-based UTF-8
+byte offset. An initial UTF-8 byte order mark is ignored.
+
+[source,roc]
+----
+include::examples/asciidoc.roc[tag=example]
+----
+
+This complete example prints:
+
+[source,text]
+----
+include::examples/asciidoc.expected[]
+----
+
+== Oracle coverage and implementation coverage
+
+The development oracle pins Ruby Asciidoctor to version 2.0.23 and verifies the
+gem's SHA-256 before installing it. Its JSON protocol exposes a structural
+projection, richer block metadata, rendered HTML and warnings. The structural
+projection flattens Asciidoctor's preamble wrapper and retains raw block source.
+It deliberately does not claim an inline semantic tree.
+
+Authored fixtures assert reference behavior independently of the Roc parser.
+Strict review checks both the structural projection and rendered HTML against
+the pinned oracle. HTML comparison ignores layout indentation while retaining
+attributes, inline text and significant whitespace. Reference-accepted inputs
+that the implementation rejects fail the strict gate.
+
+The oracle runs without ambient file or network access. Tests can supply a
+bounded virtual include map; the oracle applies its own include processing,
+including line and tag selectors, to those sources. Repository chapters are
+also checked individually, with unresolved includes left as links.
+
+== Reproduce the checks
+
+Use the compiler pinned in `.roc-version`, plus Ruby and Python:
+
+[source,sh]
+----
+python3 scripts/asciidoc/setup_oracle.py
+mkdir -p .roc-parser-tmp/asciidoc
+$ROC build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
+python3 scripts/run_fuzz.py smoke asciidoc-raw asciidoc-structured
+----
+
+The review writes machine-readable evidence and retains failing inputs for
+replay under `.roc-parser-tmp/asciidoc/`. Use `--oracle-only` to validate the
+reference fixtures without a Roc probe. The native raw target checks crashes,
+error locations and LF/CRLF agreement; the structured target builds expected
+block trees independently from its input choices.
+
+== Local performance gate
+
+The performance harness builds optimized native code and compares parsing and
+parsing plus HTML rendering with the same pinned Asciidoctor. Its default
+ceiling is 1.0 times the oracle duration for each input. Persistent workers keep
+IPC, JSON serialization, warmup and correctness checks outside timed batches.
+
+[source,sh]
+----
+python3 scripts/check_asciidoc_performance.py --roc "$ROC"
+----
+
+The default campaign generates 2,000 seeded documents plus 500 raw mutations,
+runs the authored fixtures, and tests geometric sizes from 32 to 1,024 for
+paragraphs, sections, footnotes, cross references, lists, tables, attributes
+and delimiters. Nested containers use depths from 2 to 32. Scaling checks
+flag growth above the configured exponent. Reports record source hashes,
+compiler, machine, samples and replay commands. Failing inputs and scaling
+pairs are retained under `.roc-parser-tmp/asciidoc-performance/`.
+Use `--seed` to explore another deterministic campaign, `--corpus` for local
+documents, and `--replay` to repeat a retained failure. `--smoke` runs two tiny
+correctness and protocol cases without asserting timing; CI runs this smoke
+check. The full timing gate is intended for a quiet local machine.

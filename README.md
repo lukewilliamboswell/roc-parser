@@ -16,6 +16,7 @@ crash.
 | YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
 | XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
 | Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) |
+| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) |
 | HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) |
 | Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
 | Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |

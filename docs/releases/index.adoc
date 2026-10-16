@@ -39,3 +39,9 @@ Development tooling adds a persistent compiler reference worker, independent
 generated syntax checks, raw and structured fuzz targets, an upstream snapshot
 corpus importer, and runtime/allocation/scaling checks. The feedback loop is
 available through `scripts/check_roc_syntax.py`.
+
+`AsciiDoc` adds block parsing, virtual-source preprocessing and embedded HTML
+rendering. A pinned Asciidoctor oracle checks authored fixtures, independent
+generated models and reproducible mutations. Native fuzz targets and a local
+1.0-times-oracle performance gate exercise correctness and scaling. CI runs a
+minimal performance harness smoke check. See <<asciidoc>> for scope and commands.

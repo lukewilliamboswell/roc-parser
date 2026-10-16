@@ -17,12 +17,16 @@ documentation of every type and function, generated from the source.
 
 == The modules at a glance
 
-The package exposes eight modules. Two are general-purpose building blocks; the
+The package exposes nine modules. Two are general-purpose building blocks; the
 others parse data formats or Roc source.
 
 [cols="1,3,3",options="header"]
 |===
 |Module |Use it to |Start from
+
+|{api}AsciiDoc/[`AsciiDoc`]
+|Parse and preprocess AsciiDoc, preserve source blocks and render embedded HTML
+|`AsciiDoc.parse_str`
 
 |{api}Parser/[`Parser`]
 |Combine small parsers into larger ones, for any input type

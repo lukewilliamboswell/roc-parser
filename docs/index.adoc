@@ -65,6 +65,8 @@ include::xml.adoc[leveloffset=+1]
 
 include::markdown.adoc[leveloffset=+1]
 
+include::asciidoc.adoc[leveloffset=+1]
+
 include::http.adoc[leveloffset=+1]
 
 include::roc-syntax.adoc[leveloffset=+1]
