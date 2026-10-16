@@ -50,6 +50,78 @@ fn qualifiedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
     const name = fieldName(tokenText(tokens, source, final_token));
     return if (receiver) |base_shape| array(gpa, &.{ string("field"), base_shape, string(name) }) else array(gpa, &.{ string("identifier"), string(name) });
 }
+fn regionText(tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, region: parse.AST.TokenizedRegion) []const u8 {
+    return source[tokens.resolve(region.start).start.offset..tokens.resolve(region.end - 1).end.offset];
+}
+fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Pattern.Idx, depth: usize) Allocator.Error!std.json.Value {
+    if (depth > 256) return array(gpa, &.{ string("unsupported"), string("pattern_depth_limit") });
+    const pattern = store.getPattern(idx);
+    return switch (pattern) {
+        .ident => |p| array(gpa, &.{ string("p_identifier"), string(tokenText(tokens, source, p.ident_tok)) }),
+        .var_ident => |p| array(gpa, &.{ string("p_mutable"), string(tokenText(tokens, source, p.ident_tok)) }),
+        .underscore => array(gpa, &.{string("p_wildcard")}),
+        .tag => |p| blk: {
+            var args = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.patternSlice(p.args)) |arg| try args.append(try patternShape(gpa, store, tokens, source, arg, depth + 1));
+            const name = try qualifiedShape(gpa, store, tokens, source, p.qualifiers, p.tag_tok);
+            const called: std.json.Value = .{ .bool = p.has_args };
+            if (p.backing_value) break :blk array(gpa, &.{ string("p_nominal"), name, called, .{ .array = args }, .{ .bool = p.record_shorthand } });
+            break :blk array(gpa, &.{ string("p_tag"), name, called, .{ .array = args } });
+        },
+        .int => |p| array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }),
+        .frac => |p| array(gpa, &.{ string("number"), string(tokenText(tokens, source, p.number_tok)) }),
+        .typed_int => |p| array(gpa, &.{ string("typed_number"), string(regionText(tokens, source, p.region)) }),
+        .typed_frac => |p| array(gpa, &.{ string("typed_number"), string(regionText(tokens, source, p.region)) }),
+        .single_quote => |p| array(gpa, &.{ string(if (p.type_suffix == null) "character" else "typed_character"), string(regionText(tokens, source, p.region)) }),
+        .string => |p| blk: {
+            var parts = std.array_list.Managed(std.json.Value).init(gpa);
+            var captures = false;
+            for (store.patternStringPartSlice(p.parts)) |part_idx| {
+                switch (store.getPatternStringPart(part_idx)) {
+                    .text => |part| try parts.append(try array(gpa, &.{ string("text"), string(tokenText(tokens, source, part.token)) })),
+                    .capture => |part| {
+                        captures = true;
+                        try parts.append(try array(gpa, &.{ string("capture"), if (part.name) |name| string(tokenText(tokens, source, name)) else .null }));
+                    },
+                }
+            }
+            if (!captures) break :blk array(gpa, &.{ string("string"), string(regionText(tokens, source, p.region)) });
+            break :blk array(gpa, &.{ string("p_string_parts"), .{ .array = parts } });
+        },
+        .list, .tuple, .alternatives => blk: {
+            const patterns = switch (pattern) {
+                .list => pattern.list.patterns,
+                .tuple => pattern.tuple.patterns,
+                else => pattern.alternatives.patterns,
+            };
+            var items = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.patternSlice(patterns)) |item| try items.append(try patternShape(gpa, store, tokens, source, item, depth + 1));
+            const name = switch (pattern) {
+                .list => "p_list",
+                .tuple => "p_tuple",
+                else => "p_alternative",
+            };
+            break :blk array(gpa, &.{ string(name), .{ .array = items } });
+        },
+        .list_rest => |p| array(gpa, &.{ string("p_rest"), if (p.name) |name| string(tokenText(tokens, source, name)) else .null }),
+        .as => |p| array(gpa, &.{ string("p_alias"), try patternShape(gpa, store, tokens, source, p.pattern, depth + 1), string(tokenText(tokens, source, p.name)) }),
+        .record => |p| blk: {
+            var fields = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.patternRecordFieldSlice(p.fields)) |field_idx| {
+                const field = store.getPatternRecordField(field_idx);
+                const name: std.json.Value = if (field.name) |name| string(tokenText(tokens, source, name)) else .null;
+                if (field.rest) {
+                    try fields.append(try array(gpa, &.{ string("p_rest"), name }));
+                } else {
+                    try fields.append(try array(gpa, &.{ string("p_field"), name, if (field.value) |value| try patternShape(gpa, store, tokens, source, value, depth + 1) else .null }));
+                }
+            }
+            break :blk array(gpa, &.{ string("p_record"), .{ .array = fields } });
+        },
+        .malformed => |p| array(gpa, &.{ string("malformed_pattern"), string(@tagName(p.reason)) }),
+    };
+}
+
 fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Expr.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("depth_limit") });
     const expr = store.getExpr(idx);
@@ -69,7 +141,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
         .tag => |value| qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token),
         .lambda => |value| blk: {
             var args = std.array_list.Managed(std.json.Value).init(gpa);
-            for (store.patternSlice(value.args)) |arg| try args.append(string(patternText(store, tokens, source, arg)));
+            for (store.patternSlice(value.args)) |arg| try args.append(try patternShape(gpa, store, tokens, source, arg, depth + 1));
             break :blk array(gpa, &.{ string("lambda"), .{ .array = args }, try shape(gpa, store, tokens, source, value.body, depth + 1) });
         },
         .if_then_else => |value| array(gpa, &.{ string("if"), try shape(gpa, store, tokens, source, value.condition, depth + 1), try shape(gpa, store, tokens, source, value.then, depth + 1), try shape(gpa, store, tokens, source, value.@"else", depth + 1) }),
@@ -79,7 +151,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             for (store.matchBranchSlice(value.branches)) |idx_branch| {
                 const branch = store.getBranch(idx_branch);
                 if (branch.guard != null) break :blk array(gpa, &.{ string("unsupported"), string("guarded_match") });
-                try branches.append(try array(gpa, &.{ string(patternText(store, tokens, source, branch.pattern)), try shape(gpa, store, tokens, source, branch.body, depth + 1) }));
+                try branches.append(try array(gpa, &.{ try patternShape(gpa, store, tokens, source, branch.pattern, depth + 1), try shape(gpa, store, tokens, source, branch.body, depth + 1) }));
             }
             break :blk array(gpa, &.{ string("match"), try shape(gpa, store, tokens, source, value.expr, depth + 1), .{ .array = branches } });
         },

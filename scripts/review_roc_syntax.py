@@ -207,6 +207,30 @@ def syntax_shape(response, source):
             return ['lambda', branch[:-1], branch[-1]]
         if kind == 'Pattern':
             return text.strip()
+        if kind == 'IdentifierPattern':
+            return ['p_identifier', text]
+        if kind == 'WildcardPattern':
+            return ['p_wildcard']
+        if kind == 'MutablePattern':
+            return ['p_mutable', branch[0][1]]
+        if kind in {'TagPattern', 'NominalPattern'}:
+            called = text.rstrip().endswith(')') or (kind == 'NominalPattern' and text.rstrip().endswith('}'))
+            result = ['p_nominal' if kind == 'NominalPattern' else 'p_tag', branch[0], called, branch[1:]]
+            if kind == 'NominalPattern':
+                # A nominal record shorthand is `Type.{...}`; the general
+                # backing pattern spelling `Type.({...})` retains its parens.
+                result.append(text.rstrip().endswith('}'))
+            return result
+        if kind in {'TuplePattern', 'ListPattern', 'RecordPattern', 'AlternativePattern'}:
+            name = {'TuplePattern': 'p_tuple', 'ListPattern': 'p_list',
+                    'RecordPattern': 'p_record', 'AlternativePattern': 'p_alternative'}[kind]
+            return [name, branch]
+        if kind == 'PatternField':
+            return ['p_field', branch[0][1], branch[1] if len(branch) > 1 else None]
+        if kind == 'RestPattern':
+            return ['p_rest', branch[0][1] if branch else None]
+        if kind == 'AliasPattern':
+            return ['p_alias', branch[0], branch[1][1]]
         if kind == 'If':
             return ['if', *branch]
         if kind == 'RecordField':
@@ -406,7 +430,7 @@ def generated_cases(count, seed):
         if choice == 3:
             return f'f({left})', ['call', ['identifier', 'f'], [lshape]]
         if choice == 4:
-            return f'(|x| {left})', ['lambda', ['x'], lshape]
+            return f'(|x| {left})', ['lambda', [['p_identifier', 'x']], lshape]
         if choice == 5:
             return f'({left}).value', ['field', lshape, 'value']
         right, rshape = expression(depth - 1)

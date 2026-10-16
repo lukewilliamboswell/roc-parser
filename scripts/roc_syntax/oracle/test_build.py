@@ -55,6 +55,35 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_structural_pattern_projections(self):
+        identifier = ['p_identifier', 'x']
+        cases = [
+            ('|_| 1', ['p_wildcard']),
+            ('|var x| 1', ['p_mutable', 'x']),
+            ('|var $x| 1', ['p_mutable', '$x']),
+            ('|Some(x)| 1', ['p_tag', ['identifier', 'Some'], True, [identifier]]),
+            ('|Some()| 1', ['p_tag', ['identifier', 'Some'], True, []]),
+            ('|Some| 1', ['p_tag', ['identifier', 'Some'], False, []]),
+            ('|Foo.Bar(x)| 1', ['p_tag', ['field', ['identifier', 'Foo'], 'Bar'], True, [identifier]]),
+            ('|Type.(x)| 1', ['p_nominal', ['identifier', 'Type'], True, [identifier], False]),
+            ('|Type.{x}| 1', ['p_nominal', ['identifier', 'Type'], True, [['p_record', [['p_field', 'x', None]]]], True]),
+            ('|(x,_)| 1', ['p_tuple', [identifier, ['p_wildcard']]]),
+            ('|[x,.. as rest]| 1', ['p_list', [identifier, ['p_rest', 'rest']]]),
+            ('|{x,y: z,..}| 1', ['p_record', [['p_field', 'x', None], ['p_field', 'y', ['p_identifier', 'z']], ['p_rest', None]]]),
+            ('|Some(x) as whole| 1', ['p_alias', ['p_tag', ['identifier', 'Some'], True, [identifier]], 'whole']),
+            ('|42| 1', ['number', '42']),
+            ('|"text"| 1', ['string', '"text"']),
+            ("|'é'| 1", ['character', "'é'"]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': 'expr', 'source': source}) + '\n' for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual(row['facts'][0]['shape'], ['lambda', [expected], ['number', '1']])
+
     def test_persistent_shapes_errors_and_consumption(self):
         requests = [
             {"id": "integer-snapshot", "mode": "expr", "source": "42\n"},
@@ -104,7 +133,7 @@ class WorkerTests(unittest.TestCase):
             ("...", ["ellipsis"]),
             ("x.?field", ["optional_field", ["identifier", "x"], "field"]),
             ("x.?field.next", ["field", ["optional_field", ["identifier", "x"], "field"], "next"]),
-            ("|x| x + 1", ["lambda", ["x"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]),
+            ("|x| x + 1", ["lambda", [["p_identifier", "x"]], ["binary", "+", ["identifier", "x"], ["number", "1"]]]),
             ("if True { 1 } else { 2 }", ["if", ["identifier", "True"], ["block", [["number", "1"]]], ["block", [["number", "2"]]]]),
             ("{name: 1}", ["record", [["name", ["number", "1"]]]]),
             ("{name,}", ["record", [["name", ["identifier", "name"]]]]),
@@ -118,7 +147,7 @@ class WorkerTests(unittest.TestCase):
             ("x.01", ["field", ["identifier", "x"], "01"]),
             ("x .01", ["field", ["identifier", "x"], "01"]),
             ("point.move(1)", ["call", ["field", ["identifier", "point"], "move"], [["number", "1"]]]),
-            ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [["A", ["number", "1"]], ["B", ["number", "2"]]]]),
+            ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [[["p_tag", ["identifier", "A"], False, []], ["number", "1"]], [["p_tag", ["identifier", "B"], False, []], ["number", "2"]]]]),
         ]
         requests = "".join(json.dumps({"id": str(i), "mode": "expr", "source": source}) + "\n" for i, (source, _) in enumerate(cases))
         result = subprocess.run([os.environ["ORACLE_BINARY"]], input=requests, text=True, capture_output=True, check=True, timeout=30)

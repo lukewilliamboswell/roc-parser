@@ -68,6 +68,14 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_constructor_pattern_preserves_explicit_empty_arguments(self):
+        for source, called in [('Some', False), ('Some()', True)]:
+            response = {'nodes': [
+                {'kind': 'Identifier', 'start': 0, 'end': 4, 'children_start': 0, 'children_len': 0},
+                {'kind': 'TagPattern', 'start': 0, 'end': len(source), 'children_start': 0, 'children_len': 1},
+            ], 'children': [0], 'root': 1}
+            self.assertEqual(review.syntax_shape(response, source), ['p_tag', ['identifier', 'Some'], called, []])
+
     def test_character_and_suffix_nodes_project_structure(self):
         character = {'nodes': [{'kind': 'CharacterLiteral', 'start': 0, 'end': 4,
                                 'children_start': 0, 'children_len': 0}],
