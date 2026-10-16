@@ -505,6 +505,207 @@
           ]
         ]
       ]
+    },
+    {
+      "id": "reject-field-name-0",
+      "mode": "expr",
+      "source": "x.1e3",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-1",
+      "mode": "expr",
+      "source": "x.0xff",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-2",
+      "mode": "expr",
+      "source": "x.Foo",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-3",
+      "mode": "expr",
+      "source": "@Foo",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-4",
+      "mode": "expr",
+      "source": "@a",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-5",
+      "mode": "expr",
+      "source": "__",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-6",
+      "mode": "expr",
+      "source": "Foo.bar.Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-7",
+      "mode": "expr",
+      "source": "Foo.0.Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-8",
+      "mode": "expr",
+      "source": "Foo().Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-9",
+      "mode": "expr",
+      "source": "(Foo).Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-annotation-operand-10",
+      "mode": "file",
+      "source": "x : 1 -> U64",
+      "rule": "type-annotations",
+      "coverage": "unsupported"
+    },
+    {
+      "id": "unsupported-annotation-operand-11",
+      "mode": "file",
+      "source": "x : \"hi\" -> U64",
+      "rule": "type-annotations",
+      "coverage": "unsupported"
+    },
+    {
+      "id": "unsupported-annotation-operand-12",
+      "mode": "file",
+      "source": "x : [1] -> U64",
+      "rule": "type-annotations",
+      "coverage": "unsupported"
+    },
+    {
+      "id": "qualified-field-13",
+      "mode": "expr",
+      "source": "x .field",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "x"
+          ],
+          "field"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-14",
+      "mode": "expr",
+      "source": "x.01",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "x"
+          ],
+          "01"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-15",
+      "mode": "expr",
+      "source": "Foo.Bar",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Foo"
+          ],
+          "Bar"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-16",
+      "mode": "expr",
+      "source": "Foo.Bar.Baz",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "field",
+            [
+              "identifier",
+              "Foo"
+            ],
+            "Bar"
+          ],
+          "Baz"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-17",
+      "mode": "expr",
+      "source": "Foo .Bar",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Foo"
+          ],
+          "Bar"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-18",
+      "mode": "expr",
+      "source": "Foo.Bar.baz",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "field",
+            [
+              "identifier",
+              "Foo"
+            ],
+            "Bar"
+          ],
+          "baz"
+        ]
+      ]
     }
   ]
 }
