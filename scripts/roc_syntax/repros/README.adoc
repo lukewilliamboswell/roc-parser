@@ -110,21 +110,106 @@ the same values. The parser's actual call graph, additional fields and mutually
 recursive procedures can introduce further ownership constraints, so this
 minimal result alone does not justify a mechanical production migration.
 
-In a separate parser-shaped control on the same installed compiler, the final
-LIR for its recursive binary procedure projects `State -> Buffer -> List`
-without `take`, emits `incref leaf x1` immediately before
-`list_reserve_for_append`, and decrements the original buffer only after the
-append. That sequence makes append observe a shared allocation. Other state
-fields, including source and tokens, are taken, so this is not simply a wholly
-borrowed caller snapshot. A specialization accepting flat list leaves exists,
-but the recursive calls in that control use the nested-record procedure.
+The installed compiler's final LIR also confirms retained ownership in this
+exact minimal source. Capture it independently:
 
-These ARC operations were observed in the independent `ownership-binary`
-control, not yet attributed to individual procedures in this minimal source.
-Attributing the missed reuse to aggregate ownership solving or recursive
-specialization remains an inference. Other controls with nominal state,
-identical flat input/output state layouts, or additional readonly metadata can
-still reuse geometrically; none of those features alone explains the full
-parser's remaining copies. Preserve the immutable cursor when reducing this
-particular example. The reproduction demonstrates a performance problem with
-correct values, and does not claim a semantic miscompilation.
+[source,shell]
+----
+ROC_LIR_DUMP=nested "$ROC" build --no-cache --opt=speed --fuzz \
+  scripts/roc_syntax/repros/ownership-nesting.roc \
+  --output=.roc-parser-tmp/ownership-lir \
+  2> .roc-parser-tmp/ownership-lir.txt
+----
+
+In one emitted `nested` procedure, `l914` is the left child's `NestedResult`.
+Its cursor is taken, while its builder's arrays are borrowed and incremented
+before the second recursive call. Relevant operations, with unrelated lines
+omitted, are:
+
+[source,text]
+----
+l958:struct_#66 = ref.field l968[1] take
+l966:struct_#61 = ref.field l967[0]
+l959:list#60 = ref.field l966[1]
+incref l959 x1 rc=concrete(incref,60) single_thread
+l964:struct_#61 = ref.field l965[0]
+l960:list#58 = ref.field l964[0]
+incref l960 x1 rc=concrete(incref,58) single_thread
+l903:struct_#69 = call p16(l958, l959, l960, l961)
+...
+l912:u64 = ref.field l913[2]
+l1186:struct_#61 = ref.field l914[0] take
+decref l1186 rc=concrete(decref,61) single_thread
+----
+
+The original left builder is released only after its scalar node index is
+read. Consequently the right recursive call receives arrays sharing ownership
+with the retained left result, even though that result's old arrays are no
+longer required by the source program. The same procedure increments arrays
+projected from the right result before appending and later releases the original
+parent builder. This explains the measured loss of reuse. Procedure/local/layout
+numbers vary with compilation details; the operations and source ownership
+pattern are the evidence.
+
+An independent parser-shaped control with `State -> Buffer -> List` projections
+showed the same increment-before-reserve and delayed parent decrement. Other
+controls with nominal state, identical flat input/output state layouts, scalar
+metadata after recursion, readonly source lookups, or different-arity mutually
+recursive procedures still reused geometrically. A `List(Node).get` followed
+by reading `.start`/`.end` also retained geometric allocation growth. None of
+those features alone explains the full parser's remaining copies. Preserve
+the immutable cursor when reducing this particular example.
+
+These are observed ARC operations and correct output values. Attributing the
+missed reuse to a specific aggregate-ownership rule or recursive specialization
+pass remains an inference. This report describes a performance/missed-reuse
+issue, not a semantic miscompilation. The exact compiler version must be stated
+when reporting it; changes on compiler main require a fresh native comparison.
+
+== Current-main comparison
+
+The unchanged minimal and all eight controls were also rebuilt natively using
+compiler revision `0d4b0ab02f9239448d034db17b4e63051a7c57ae`.
+That compiler was built from an immutable, unmodified source archive using
+Zig 0.17.0 and `-Doptimize=ReleaseFast`, with isolated local caches. It identifies
+itself as `research-main-0d4b0ab`; it does not replace the project's pinned
+nightly. Both versions compiled the Roc fixtures with
+`build --no-cache --opt=speed --fuzz`.
+
+Every allocation count, node/edge count and independent-model checksum was
+identical between the pinned nightly and this compiler main, at all three
+depths in both fixture files. In particular, the minimal nested/flat counts
+remain `766/19`, `3070/26` and `12286/32`. Main's branch-entry ARC release changes
+therefore do not resolve this particular example. No timing comparison between
+compiler versions was performed.
+
+`ownership-compiler-comparison.json` retains both fresh allocation reports,
+compiler/source/worker hashes, immutable revisions and compiler build identity.
+It contains no machine-specific filesystem paths. The installed nightly's LIR
+excerpt above was not assumed to describe main's generated LIR: the main
+conclusion here comes from fresh native measurements and exact model checks.
+
+== Unpublished issue draft
+
+Suggested title: *Nested recursive result retains builder arrays and prevents
+unique append reuse*.
+
+The attached `ownership-nesting.roc` builds the same postorder binary tree in
+two functions with identical arguments. Returning `{cursor, builder, node}`
+instead of `{cursor, nodes, children, node}` changes 2,047-node construction
+from 26 allocation/reallocation calls to 3,070, with identical complete output.
+The eight-control fixture separates return layout from input destructuring and
+append helpers. The immutable cursor and its later source lookup must remain
+in this reduction; nested records alone do not establish the problem.
+
+This reproduces on macOS arm64 using both the October 15 nightly and the tested
+main revision above. Optimized no-cache native workers and independent checksums
+rule out stale worker output or a different constructed tree. On the installed
+nightly, final LIR increments builder arrays before right recursion and releases
+their old parent only after reading scalar metadata, leaving append with shared
+ownership. Earlier destruction of unused builder fields appears possible, but
+the responsible compiler pass has not been established. This is a request to
+investigate missed ownership reuse; no incorrect Roc values were observed.
+
+Use the reproduction commands and retained receipts above when preparing an
+upstream report. This draft has not been submitted or published.
