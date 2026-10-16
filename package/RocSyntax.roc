@@ -23,7 +23,7 @@ RocSyntax :: [].{
 	Span : { start : U64, end : U64 }
 
 	## Lexical classes. Operator and punctuation spelling is available by span.
-	TokenKind : [Whitespace, Comment, LowerIdent, UpperIdent, Keyword, Number, StringStart, StringPart, StringEnd, SingleQuote, OpenRound, NoSpaceOpenRound, CloseRound, OpenSquare, CloseSquare, OpenCurly, CloseCurly, Operator, Punctuation, Invalid, EndOfFile]
+	TokenKind : [Whitespace, Comment, LowerIdent, UpperIdent, Keyword, Number, StringStart, MultilineStringStart, StringPart, StringEnd, InterpolationStart, InterpolationEnd, SingleQuote, OpenRound, NoSpaceOpenRound, CloseRound, OpenSquare, CloseSquare, OpenCurly, CloseCurly, Operator, Punctuation, Invalid, EndOfFile]
 
 	## Lossless token. Only EOF has an empty span.
 	Token : { kind : TokenKind, start : U64, end : U64 }
@@ -75,7 +75,7 @@ RocSyntax :: [].{
 		UpperIdent => TypeName
 		Keyword => ReservedWord
 		Number => NumericLiteral
-		StringStart | StringPart | StringEnd | SingleQuote => StringText
+		StringStart | MultilineStringStart | StringPart | StringEnd | SingleQuote => StringText
 		Invalid => InvalidText
 		_ => Symbol
 	}
@@ -177,17 +177,77 @@ lex : List(U8) -> Lexed
 lex = |source| {
 	var $tokens = []
 	var $diagnostics = utf8_diagnostics(source)
-	var $unsupported = False
 	var $last_significant = EndOfFile
 	var $i = 0
-	while $i < source.len() {
+	var $contexts = []
+	var $resume = False
+	var $resume_multiline = False
+	while $i < source.len() or $resume {
 		start = $i
 		b = byte(source, start)
 		var $kind = Invalid
+		var $emitted = False
 		$i = $i + 1
-		if is_space(b) {
+		if $resume or b == '"' or (b == '\\' and byte(source, start + 1) == '\\') {
+			$emitted = True
+			multiline = if $resume $resume_multiline else b == '\\' or matches(source, start, "\"\"\"")
+			if $resume {
+				$i = start
+			} else {
+				width = if b == '\\' 2 else if multiline 3 else 1
+				$tokens = $tokens.append({ kind: if multiline MultilineStringStart else StringStart, start, end: start + width })
+				$i = start + width
+			}
+			$resume = False
+			part = $i
+			var $done = False
+			while $i < source.len() and !$done {
+				c = byte(source, $i)
+				if c == '\\' {
+					escape = scan_escape(source, $i)
+					if !escape.valid {
+						$diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end)
+					}
+					$i = escape.end
+				} else if c == '\n' or (!multiline and c == '"') or (c == '$' and byte(source, $i + 1) == '{') {
+					$done = True
+				} else {
+					if nonprintable(source, $i) {
+						$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1)
+					}
+					$i = $i + 1
+				}
+			}
+			if $i > part {
+				$tokens = $tokens.append({ kind: StringPart, start: part, end: $i })
+			}
+			if byte(source, $i) == '$' and byte(source, $i + 1) == '{' {
+				$tokens = $tokens.append({ kind: InterpolationStart, start: $i, end: $i + 2 })
+				$contexts = $contexts.append({ multiline, depth: 0.U64 })
+				$i = $i + 2
+				$last_significant = InterpolationStart
+			} else if !multiline and $i < source.len() and byte(source, $i) == '"' {
+				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + 1 })
+				$i = $i + 1
+				$last_significant = StringEnd
+			} else if !multiline {
+				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
+			}
+		} else if b == '}' and !$contexts.is_empty() and ($contexts.last() ?? { multiline: False, depth: 0 }).depth == 0 {
+			context = $contexts.last() ?? { multiline: False, depth: 0 }
+			$contexts = $contexts.drop_last(1)
+			$kind = InterpolationEnd
+			$resume = True
+			$resume_multiline = context.multiline
+		} else if is_space(b) {
 			$kind = Whitespace
+			if b == '\r' and byte(source, start + 1) != '\n' {
+				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, start + 1)
+			}
 			while $i < source.len() and is_space(byte(source, $i)) {
+				if byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
+					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $i, $i + 1)
+				}
 				$i = $i + 1
 			}
 		} else if b == '#' {
@@ -195,13 +255,19 @@ lex = |source| {
 			while $i < source.len() and byte(source, $i) != '\n' and byte(source, $i) != '\r' {
 				$i = $i + 1
 			}
-		} else if is_lower(b) or is_upper(b) or b == '_' or b == '$' or b == '@' {
-			while $i < source.len() and is_ident(byte(source, $i)) {
-				$i = $i + 1
+		} else if is_lower(b) or is_upper(b) or b == '_' or b == '$' or b == '@' or b >= 0x80 {
+			next = byte(source, start + 1)
+			standalone_underscore = b == '_' and !(is_lower(next) or is_upper(next) or is_digit(next))
+			bad_dollar = b == '$' and !(is_lower(next) or is_upper(next))
+			bad_opaque = b == '@' and !(is_lower(next) or is_upper(next) or is_digit(next) or next == '_' or next >= 0x80)
+			if !standalone_underscore and !bad_dollar and !bad_opaque {
+				while $i < source.len() and is_ident(byte(source, $i)) {
+					$i = $i + 1
+				}
 			}
-			$kind = if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or b == '@' UpperIdent else LowerIdent
-			if b == '_' and byte(source, start + 1) == '_' {
-				$diagnostics = push_diagnostic($diagnostics, UnexpectedToken, start, $i)
+			$kind = if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
+			if bad_dollar or bad_opaque or b >= 0x80 {
+				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
 			var $j = start + 1
 			while $j < $i {
@@ -218,43 +284,6 @@ lex = |source| {
 			if !number.valid and !tuple_index {
 				$diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i)
 			}
-		} else if b == '"' {
-			width = 1
-			$tokens = $tokens.append({ kind: StringStart, start, end: start + width })
-			$i = start + width
-			part = $i
-			var $closed = False
-			while $i < source.len() and !$closed {
-				if byte(source, $i) == '\\' {
-					escape = scan_escape(source, $i)
-					if !escape.valid {
-						$diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end)
-					}
-					$i = escape.end
-				} else if byte(source, $i) == '\n' or byte(source, $i) == '\r' {
-					$closed = True
-				} else if matches(source, $i, "\"") {
-					$closed = True
-				} else {
-					if nonprintable(source, $i) {
-						$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1)
-					}
-					if matches(source, $i, "\${") {
-						$unsupported = True
-						$diagnostics = push_diagnostic($diagnostics, UnsupportedSyntax, $i, $i + 2)
-					}
-					$i = $i + 1
-				}
-			}
-			if $i > part {
-				$tokens = $tokens.append({ kind: StringPart, start: part, end: $i })
-			}
-			if $closed and byte(source, $i) == '"' {
-				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + width })
-				$i = $i + width
-			} else {
-				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
-			}
 		} else if b == '\'' {
 			$kind = SingleQuote
 			var $closed = False
@@ -269,6 +298,9 @@ lex = |source| {
 					$i = $i + 1
 					$closed = True
 				} else {
+					if nonprintable(source, $i) {
+						$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1)
+					}
 					$i = $i + 1
 				}
 			}
@@ -315,17 +347,24 @@ lex = |source| {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
 		}
-		if b != '"' {
+		if !$emitted {
 			$tokens = $tokens.append({ kind: $kind, start, end: $i })
 		}
-		if b == '"' {
-			$last_significant = StringEnd
+		if !$contexts.is_empty() and ($kind == OpenCurly or $kind == CloseCurly) {
+			index = $contexts.len() - 1
+			context = $contexts.last() ?? { multiline: False, depth: 0 }
+			next_depth = if $kind == OpenCurly context.depth + 1 else if context.depth > 0 context.depth - 1 else 0
+			$contexts = $contexts.set(index, { multiline: context.multiline, depth: next_depth }) ?? $contexts
 		}
-			else if $kind != Whitespace and $kind != Comment {
-				$last_significant = $kind
-			}
+		if $kind != Invalid and $kind != Whitespace and $kind != Comment {
+			$last_significant = $kind
+		}
 	}
-	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: $unsupported }
+	if !$contexts.is_empty() {
+		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, source.len(), source.len())
+	}
+
+	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: False }
 }
 
 peek : State -> RocSyntax.Token
@@ -674,10 +713,14 @@ scan_number = |source, start| {
 	var $valid = True
 	var $base = 10
 	if byte(source, start) == '0' {
-		prefix = byte(source, start + 1)
+		var $prefix_at = start + 1
+		while byte(source, $prefix_at) == '_' and $prefix_at < source.len() {
+			$prefix_at = $prefix_at + 1
+		}
+		prefix = byte(source, $prefix_at)
 		if prefix == 'x' or prefix == 'o' or prefix == 'b' {
 			$base = if prefix == 'x' 16 else if prefix == 'o' 8 else 2
-			$i = start + 2
+			$i = $prefix_at + 1
 		} else if is_digit(prefix) {
 			$valid = False
 		}
@@ -700,13 +743,15 @@ scan_number = |source, start| {
 	}
 	$valid = $valid and $digits > 0
 	if $base == 10 {
+		var $decimal = False
 		if byte(source, $i) == '.' and (is_digit(byte(source, $i + 1)) or byte(source, $i + 1) == 'e' or byte(source, $i + 1) == 'E') {
+			$decimal = True
 			$i = $i + 1
 			while $i < source.len() and (is_digit(byte(source, $i)) or byte(source, $i) == '_') {
 				$i = $i + 1
 			}
 		}
-		if byte(source, $i) == 'e' or byte(source, $i) == 'E' {
+		if (byte(source, $i) == 'e' or byte(source, $i) == 'E') and (byte(source, start) != '0' or $decimal) {
 			$i = $i + 1
 			if byte(source, $i) == '+' or byte(source, $i) == '-' {
 				$i = $i + 1
@@ -723,9 +768,9 @@ scan_number = |source, start| {
 	}
 	# Old numeric suffix spellings are intentionally unsupported: the pinned
 	# parser diagnoses these deprecated forms. Retain them in the number span.
-	if $i < source.len() and (is_ident(byte(source, $i))) {
+	if $i < source.len() and is_ident(byte(source, $i)) and byte(source, $i) != '!' {
 		$valid = False
-		while $i < source.len() and is_ident(byte(source, $i)) {
+		while $i < source.len() and is_ident(byte(source, $i)) and byte(source, $i) != '!' {
 			$i = $i + 1
 		}
 	}
@@ -744,16 +789,18 @@ scan_escape = |source, start| {
 			c = byte(source, $i)
 			digit = if is_digit(c) U8.to_u64(c - '0') else if c >= 'a' and c <= 'f' U8.to_u64(c - 'a') + 10 else if c >= 'A' and c <= 'F' U8.to_u64(c - 'A') + 10 else 99
 			$valid = $valid and digit < 16
-			if $digits < 7 {
+			if $value <= 0x10FFFF and digit < 16 {
 				$value = $value * 16 + digit
+			} else {
+				$valid = False
 			}
 			$digits = $digits + 1
 			$i = $i + 1
 		}
 		closed = byte(source, $i) == ')'
-		{ end: $i + if closed 1 else 0, valid: $valid and closed and $digits > 0 and $digits <= 6 and $value <= 0x10FFFF and !($value >= 0xD800 and $value <= 0xDFFF) }
+		{ end: $i + if closed 1 else 0, valid: $valid and closed and $digits > 0 and $value <= 0x10FFFF and !($value >= 0xD800 and $value <= 0xDFFF) }
 	} else {
-		{ end: if start + 1 < source.len() start + 2 else start + 1, valid: b == 'n' or b == 'r' or b == 't' or b == '\\' or b == '"' or b == '\'' or b == '$' }
+		{ end: if start + 1 < source.len() and b != '\n' start + 2 else start + 1, valid: b == 'n' or b == 'r' or b == 't' or b == '\\' or b == '"' or b == '\'' or b == '$' }
 	}
 }
 
@@ -1620,4 +1667,36 @@ expect {
 
 expect {
 	RocSyntax.parse_str("var count = 0").status == Recovered and RocSyntax.parse_expr_str("for (a, b) in pairs { a + b }").status == Complete and RocSyntax.parse_expr_str("for! item in stream { dbg item }").status == Complete
+}
+
+expect {
+	# Current compiler line-prefix strings and nested interpolation lex losslessly.
+	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "\"\"\"hello\"\"\"", "0_xFF", "0__b10", "\"\\u(0000000000000000000000000041)\"", "'\\u(00000041)'", "$Type", "_a", "@Foo"].all(
+		|source| {
+			lexed = RocSyntax.tokenize_str(source)
+			lexed.status == Complete and lexed.tokens.drop_last(1).all(|t| t.start < t.end) and lexed.tokens.fold(0.U64, |end, t| if t.start == end t.end else 18446744073709551615) == source.count_utf8_bytes()
+		},
+	)
+}
+
+expect {
+	["0_1", "0_0", "0e3", "0e+3", "'\r'", "'\u(1)'", "\"a\rb\"", "\"\${x", "\"\${x}", "$1"].all(|source| RocSyntax.tokenize_str(source).status == Recovered)
+}
+
+expect {
+	lexed = RocSyntax.tokenize_str("\"\${{ a: 1 }}\"")
+	lexed.tokens.map(|t| t.kind) == [StringStart, InterpolationStart, OpenCurly, Whitespace, LowerIdent, Punctuation, Whitespace, Number, Whitespace, CloseCurly, InterpolationEnd, StringEnd, EndOfFile]
+}
+
+expect {
+	lexed = RocSyntax.tokenize_str("\\\\a\${b}c\n\\\\d")
+	lexed.tokens.map(|t| t.kind) == [MultilineStringStart, StringPart, InterpolationStart, LowerIdent, InterpolationEnd, StringPart, Whitespace, MultilineStringStart, StringPart, EndOfFile]
+}
+
+expect {
+	RocSyntax.tokenize_str("_ _name @Name $Upper $lower __").tokens.map(|t| t.kind) == [LowerIdent, Whitespace, LowerIdent, Whitespace, UpperIdent, Whitespace, UpperIdent, Whitespace, LowerIdent, Whitespace, LowerIdent, LowerIdent, EndOfFile]
+}
+
+expect {
+	RocSyntax.tokenize_str("0_.1e3").status == Complete and RocSyntax.tokenize_str("a=(0\r.e)\n").status == Recovered and RocSyntax.tokenize_str("a=0\r\n").status == Complete
 }

@@ -63,6 +63,9 @@ token_kind_code = |kind| match kind {
 	Punctuation => 19
 	Invalid => 20
 	EndOfFile => 21
+	MultilineStringStart => 22
+	InterpolationStart => 23
+	InterpolationEnd => 24
 }
 
 node_kind_code : RocSyntax.NodeKind -> U64
