@@ -101,12 +101,13 @@ def main(argv: list[str] | None = None) -> int:
             command += ["--roc-repo", str(args.roc_source.resolve())]
         oracle = Path(step("oracle-build", command).stdout.strip())
         probe = output / "probe"
-        step("probe-build", [roc, "build", "--opt=speed", "scripts/roc_syntax/probe.roc", f"--output={probe}"])
+        step("probe-build", [roc, "build", "--opt=speed", "--no-cache", "scripts/roc_syntax/probe.roc", f"--output={probe}"])
         manifest["binary_sha256"] = {name: hashlib.sha256(path.read_bytes()).hexdigest()
                                      for name, path in [("probe", probe), ("oracle", oracle)]}
         metadata = oracle.with_suffix(".json")
-        if metadata.is_file():
-            manifest["oracle_build"] = json.loads(metadata.read_text())
+        manifest["oracle_build"] = json.loads(metadata.read_text())
+        if manifest["oracle_build"]["binary_sha256"] != manifest["binary_sha256"]["oracle"]:
+            raise ValueError("Oracle executable does not match its build metadata.")
         step("oracle-contract", [sys.executable, "-m", "unittest", "discover", "-s",
                                  "scripts/roc_syntax/oracle", "-p", "test_*.py"],
              extra_env={"ORACLE_BINARY": str(oracle)})
@@ -120,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
                      "--output", str(output / "performance.json")]
         if args.allocations:
             alloc = output / "alloc"
-            step("allocation-build", [roc, "build", "--opt=speed", "--fuzz",
+            step("allocation-build", [roc, "build", "--opt=speed", "--no-cache", "--fuzz",
                                       "bench/roc/roc-syntax-alloc.roc", f"--output={alloc}"])
             benchmark += ["--allocation-binary", str(alloc)]
         if args.baseline:
