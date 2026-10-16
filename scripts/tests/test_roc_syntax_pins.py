@@ -22,8 +22,9 @@ class SyntaxPinTests(unittest.TestCase):
         spec.loader.exec_module(module)
         fixture = json.loads((ROOT / "scripts/roc_syntax/fixtures.json").read_text())
         self.assertEqual(module.ROC_REVISION, fixture["reference_commit"])
-        types = json.loads((ROOT / "scripts/roc_syntax/type-fixtures.json").read_text())
-        self.assertEqual(module.ROC_REVISION, types["reference_commit"])
+        for name in ['type-fixtures.json', 'platform-fixtures.json', 'grammar-fixtures.json']:
+            extra = json.loads((ROOT / 'scripts/roc_syntax' / name).read_text())
+            self.assertEqual(module.ROC_REVISION, extra['reference_commit'], name)
         self.assertEqual(review_roc_syntax.REFERENCE_COMMIT, module.ROC_REVISION)
         self.assertEqual(import_roc_syntax_snapshots.REFERENCE_COMMIT, module.ROC_REVISION)
         self.assertEqual(len(module.ROC_REVISION), 40)

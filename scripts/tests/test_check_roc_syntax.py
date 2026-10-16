@@ -80,6 +80,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(record['status'], 'failed')
             self.assertIn('type-differential', [step['name'] for step in record['steps']])
             self.assertIn('platform-differential', [step['name'] for step in record['steps']])
+            self.assertIn('grammar-differential', [step['name'] for step in record['steps']])
             self.assertEqual(record['corpus_repository'], str(output / 'compiler.git'))
             self.assertEqual(record['steps'][-1]['name'], 'full-corpus')
             self.assertFalse(any('scripts/run_fuzz.py' in call for call in calls))

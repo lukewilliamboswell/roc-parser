@@ -104,7 +104,7 @@ ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 
 The command checks the package, builds the pinned compiler oracle and optimized
 Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
-expression trees, checks dedicated type and platform fixtures and the complete pinned snapshot
+expression trees, checks dedicated type, platform and adversarial grammar fixtures and the complete pinned snapshot
 acceptance corpus, runs both fuzz smoke campaigns and checks performance scaling.
 It rebuilds candidate probes and records source and executable hashes. Its
 `validation.json`, step logs, differential failures and performance results live

@@ -120,6 +120,9 @@ def main(argv: list[str] | None = None) -> int:
         step("platform-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                                        "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/platform-fixtures.json",
                                        "--generated", "0", "--output", str(output / "platforms")])
+        step("grammar-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
+                                      "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/grammar-fixtures.json",
+                                      "--generated", "0", "--output", str(output / "grammar")])
         source_git = manifest["oracle_build"].get("source_git")
         if not source_git:
             raise ValueError("Oracle build receipt lacks its Git object source; rebuild the oracle.")
