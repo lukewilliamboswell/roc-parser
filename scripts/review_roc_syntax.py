@@ -190,7 +190,7 @@ def syntax_shape(response, source):
         if kind == 'While':
             return ['while', *branch]
         if kind == 'Header':
-            keyword = text.split(None, 1)[0] if text.strip() else 'default_app'
+            keyword = text.split(None, 1)[0] if text.strip() else 'type_module'
             if keyword in {'app', 'package'} and (not branch or branch[-1][0] != 'dependencies'):
                 branch.append(['dependencies', []])
             return ['header', keyword, branch]
