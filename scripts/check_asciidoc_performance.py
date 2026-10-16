@@ -185,6 +185,10 @@ def geometric(sizes):
                       'distinct-counters','counter-blocks','formatted-counter-blocks',
                       'underscored-counter-blocks','attribute-aliases','table-footnotes') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
+        if family == 'table-footnotes' and max(sizes) >= 1024:
+            # The footer's repeated prior-note scans become clear at 8,192
+            # cells, still within the default 256 KiB source bound.
+            family_sizes = sorted(set(family_sizes) | {8192})
         for size in family_sizes:
             yield {'id': f'scaling-{family}-{size}', 'family': family, 'size': size, 'source': make(size),
                    'provenance': {'generator': family, 'parameter': size, 'geometric': True}}

@@ -141,6 +141,15 @@ class Performance(unittest.TestCase):
             with self.subTest(case=case['id']):
                 self.assertLessEqual(len(case['source'].encode()), 262144)
 
+    def test_default_table_footnotes_retain_large_footer_regression(self):
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes)
+               if case['family']=='table-footnotes']
+        large=next(case for case in cases if case['size']==8192)
+        self.assertEqual(large['source'].count('footnote:['),8192)
+        self.assertTrue({2048,4096,8192}.issubset({case['size']for case in cases}))
+        small=[case for case in perf.geometric([4,8]) if case['family']=='table-footnotes']
+        self.assertEqual([case['size']for case in small],[4,8])
+
     def test_geometric_modes_are_independent(self):
         rows=[]
         for mode in ['parse','render']:
