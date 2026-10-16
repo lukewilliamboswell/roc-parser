@@ -893,6 +893,13 @@
       "source": "value.?field.other(1)",
       "rule": "optional-fields",
       "coverage": "recovery"
+    },
+    {
+      "id": "misplaced-carriage-return",
+      "mode": "file",
+      "source": "a=(0\r.e)\n",
+      "rule": "spacing",
+      "coverage": "recovery"
     }
   ]
 }
