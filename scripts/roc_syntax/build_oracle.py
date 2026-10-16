@@ -73,6 +73,22 @@ def source_tree(cache: Path, local_repo: Path | None) -> Path:
     return destination
 
 
+def has_pinned_revision(repository: Path) -> bool:
+    result = subprocess.run(['git', '-C', str(repository), 'cat-file', '-e', ROC_REVISION + '^{commit}'],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    return result.returncode == 0
+
+
+def select_git_source(explicit: Path | None, root: Path = ROOT) -> Path | None:
+    """Select only existing trusted objects; fetching belongs to our own cache."""
+    if explicit is not None:
+        selected = explicit.resolve()
+        if not has_pinned_revision(selected):
+            raise ValueError(f'Compiler Git object source {selected} does not contain pinned revision {ROC_REVISION}; provide another source or omit --roc-repo to fetch into the isolated cache')
+        return selected
+    sibling = root.parent / 'roc'
+    return sibling if (sibling / '.git').exists() and has_pinned_revision(sibling) else None
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roc-repo", type=Path, help="Local Git object source (working tree ignored)")
@@ -84,11 +100,10 @@ def main() -> None:
         parser.error(f"Zig {ZIG_VERSION} required; found {version}")
     cache = args.cache_dir.resolve()
     cache.mkdir(parents=True, exist_ok=True)
-    local_repo = args.roc_repo
-    if local_repo is None:
-        sibling = ROOT.parent / "roc"
-        if (sibling / ".git").exists():
-            local_repo = sibling
+    try:
+        local_repo = select_git_source(args.roc_repo)
+    except ValueError as error:
+        parser.error(str(error))
     source = source_tree(cache, local_repo.resolve() if local_repo else None)
     install = cache / "install"
     build_env = {**os.environ, "ZIG_GLOBAL_CACHE_DIR": str(cache / "zig-global-cache")}
@@ -101,6 +116,7 @@ def main() -> None:
     metadata = {
         "schema_version": 1,
         "compiler_revision": ROC_REVISION,
+        "source_git": str(local_repo or cache / "upstream.git"),
         "zig_version": version,
         "optimize": "ReleaseSafe",
         "worker_sha256": worker_hash.hexdigest(),

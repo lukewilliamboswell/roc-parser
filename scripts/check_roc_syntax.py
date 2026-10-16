@@ -42,13 +42,6 @@ def source_identity(root: Path) -> str:
     return digest.hexdigest()
 
 
-def corpus_repository(explicit: Path | None, oracle_cache: Path, root: Path = ROOT) -> Path:
-    """Match build_oracle.py's Git object source, including its fetched cache."""
-    if explicit is not None:
-        return explicit.resolve()
-    sibling = root.parent / 'roc'
-    return sibling if (sibling / '.git').exists() else oracle_cache / 'upstream.git'
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roc", default=os.environ.get("ROC", "roc"))
@@ -124,7 +117,13 @@ def main(argv: list[str] | None = None) -> int:
         step("type-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                                    "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/type-fixtures.json",
                                    "--generated", "0", "--output", str(output / "types")])
-        corpus_repo = corpus_repository(args.roc_source, output / "oracle")
+        step("platform-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
+                                       "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/platform-fixtures.json",
+                                       "--generated", "0", "--output", str(output / "platforms")])
+        source_git = manifest["oracle_build"].get("source_git")
+        if not source_git:
+            raise ValueError("Oracle build receipt lacks its Git object source; rebuild the oracle.")
+        corpus_repo = Path(source_git)
         manifest["corpus_repository"] = str(corpus_repo)
         step("full-corpus", [sys.executable, "scripts/check_roc_syntax_corpus.py", "--roc-source", str(corpus_repo),
                              "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),

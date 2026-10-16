@@ -39,6 +39,28 @@ class SyntaxPinTests(unittest.TestCase):
         self.assertIn("version: " + module.ZIG_VERSION, job)
         self.assertIn("python3 scripts/check_roc_syntax.py", job)
 
+    def test_old_sibling_falls_back_to_owned_cache_without_fetching_sibling(self):
+        path = ROOT / 'scripts/roc_syntax/build_oracle.py'
+        spec = importlib.util.spec_from_file_location('source_checked_build_oracle', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'parser'
+            sibling = Path(tmp) / 'roc'
+            (sibling / '.git').mkdir(parents=True)
+            for available, expected in [(False, None), (True, sibling)]:
+                with patch.object(module, 'has_pinned_revision', return_value=available) as lookup:
+                    self.assertEqual(module.select_git_source(None, root), expected)
+                    lookup.assert_called_once_with(sibling)
+            explicit = Path(tmp) / 'old-objects.git'
+            with patch.object(module, 'has_pinned_revision', return_value=False):
+                with self.assertRaisesRegex(ValueError, 'does not contain pinned revision'):
+                    module.select_git_source(explicit, root)
+            missing = Path(tmp) / 'no-sibling' / 'parser'
+            with patch.object(module, 'has_pinned_revision') as lookup:
+                self.assertIsNone(module.select_git_source(None, missing))
+                lookup.assert_not_called()
+
     def test_zig17_build_uses_isolated_cache_environment_and_records_pin(self):
         path = ROOT / 'scripts/roc_syntax/build_oracle.py'
         spec = importlib.util.spec_from_file_location('cache_checked_build_oracle', path)
@@ -57,11 +79,13 @@ class SyntaxPinTests(unittest.TestCase):
                 self.assertNotIn('--global-cache-dir', args)
                 self.assertEqual(kwargs['env']['ZIG_GLOBAL_CACHE_DIR'], str(cache / 'zig-global-cache'))
                 return subprocess.CompletedProcess(args, 0, '', '')
-            with patch.object(module, 'run', side_effect=command), patch.object(module, 'source_tree', return_value=cache / 'src'), patch.object(sys, 'argv', ['build_oracle.py', '--cache-dir', str(cache)]):
+            with patch.object(module, 'run', side_effect=command), patch.object(module, 'source_tree', return_value=cache / 'src') as source, patch.object(sys, 'argv', ['build_oracle.py', '--cache-dir', str(cache)]):
                 module.main()
             receipt = json.loads(binary.with_suffix('.json').read_text())
             self.assertEqual(receipt['compiler_revision'], import_roc_syntax_snapshots.REFERENCE_COMMIT)
             self.assertEqual(receipt['zig_version'], '0.17.0')
+            self.assertEqual(receipt['source_git'], str(cache / 'upstream.git'))
+            source.assert_called_once_with(cache, None)
             self.assertEqual(len(calls), 2)
 
 
