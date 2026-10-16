@@ -3,8 +3,8 @@
   "syntax": "current-zig",
   "reference_commit": "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5",
   "coverage": [
-    "identifiers",
     "integers",
+    "identifiers",
     "precedence",
     "parentheses",
     "calls",
@@ -17,7 +17,16 @@
     "trailing",
     "unicode",
     "strings",
-    "numbers-boundaries"
+    "numbers-boundaries",
+    "file-headers",
+    "imports",
+    "type-annotations",
+    "lambdas",
+    "conditionals",
+    "records",
+    "blocks",
+    "matches",
+    "fields"
   ],
   "cases": [
     {
@@ -158,6 +167,83 @@
       "mode": "expr",
       "source": "1.0e3",
       "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "file-definitions",
+      "mode": "file",
+      "source": "module []\none = 1\ntwo = 2 + 3\n",
+      "rule": "file-headers",
+      "coverage": "supported"
+    },
+    {
+      "id": "file-import",
+      "mode": "file",
+      "source": "module []\nimport Foo\nanswer = 1\n",
+      "rule": "imports",
+      "coverage": "supported"
+    },
+    {
+      "id": "file-type",
+      "mode": "file",
+      "source": "module []\nanswer : U64\nanswer = 42\n",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "lambda",
+      "mode": "expr",
+      "source": "|x| x + 1",
+      "rule": "lambdas",
+      "coverage": "supported"
+    },
+    {
+      "id": "if",
+      "mode": "expr",
+      "source": "if True 1 else 2",
+      "rule": "conditionals",
+      "coverage": "supported"
+    },
+    {
+      "id": "record",
+      "mode": "expr",
+      "source": "{ x: 1, y: 2 }",
+      "rule": "records",
+      "coverage": "supported"
+    },
+    {
+      "id": "block",
+      "mode": "expr",
+      "source": "{ x = 1\nx + 2 }",
+      "rule": "blocks",
+      "coverage": "supported"
+    },
+    {
+      "id": "match",
+      "mode": "expr",
+      "source": "match value {\n Some(x) => x\n None => 0\n}",
+      "rule": "matches",
+      "coverage": "supported"
+    },
+    {
+      "id": "field",
+      "mode": "expr",
+      "source": "record.name",
+      "rule": "fields",
+      "coverage": "supported"
+    },
+    {
+      "id": "unary-space",
+      "mode": "expr",
+      "source": "- 1",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "subtract-no-space",
+      "mode": "expr",
+      "source": "x-1",
+      "rule": "spacing",
       "coverage": "supported"
     }
   ]

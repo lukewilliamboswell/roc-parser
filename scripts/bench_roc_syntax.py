@@ -105,7 +105,7 @@ def main(argv=None):
     for target in args.document_bytes:
         lines = ['module []\n']; length = len(lines[0]); index = 0
         while length < target:
-            line = f'x{index} = {index} + 2 * 3\n'; lines.append(line); length += len(line); index += 1
+            line = f'x{index} = {index} + 2 * 3 # representative source padding for sibling scaling\n'; lines.append(line); length += len(line); index += 1
         documents.append(('sibling-document', target, ''.join(lines).encode()))
     for family, size, data in documents:
         record = {'family': family, 'size': size, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),

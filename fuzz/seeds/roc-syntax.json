@@ -4,5 +4,17 @@
   "module []\nanswer = 1 + 2 * 3\n",
   "module []\nanswer = add(1, 2)\n",
   "module []\nanswer = (1 +\n",
-  "module []\n# comment\n"
+  "module []\n# comment\n",
+  "module []\none = 1\ntwo = 2 + 3\n",
+  "module []\nimport Foo\nanswer = 1\n",
+  "module []\nanswer : U64\nanswer = 42\n",
+  "|x| x + 1",
+  "if True 1 else 2",
+  "{ x: 1, y: 2 }",
+  "{ x = 1\nx + 2 }",
+  "match value {\n Some(x) => x\n None => 0\n}",
+  "record.name",
+  "- 1",
+  "module []\nbroken = (1 +\nvalid = 42\n",
+  "module []\nx = \"unterminated\nvalid = 42\n"
 ]

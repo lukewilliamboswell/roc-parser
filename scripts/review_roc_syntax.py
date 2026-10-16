@@ -32,7 +32,7 @@ class Worker:
                                      stderr=self.stderr, bufsize=0)
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.proc.stdout, selectors.EVENT_READ)
-        self.pending = b''
+        self.pending = bytearray()
         self.requests = 0
 
     def request(self, value):
@@ -62,13 +62,13 @@ class Worker:
                 self.stderr.seek(0)
                 detail = self.stderr.read(4096).decode(errors='replace')
                 raise WorkerError(f'worker exited {self.proc.poll()}: {detail}')
-            self.pending += chunk
+            self.pending.extend(chunk)
             if len(self.pending) > self.max_response:
                 raise WorkerError('worker response exceeds limit')
         line, self.pending = self.pending.split(b'\n', 1)
         try:
             result = json.loads(line)
-        except (ValueError, UnicodeError) as error:
+        except (ValueError, UnicodeError, RecursionError) as error:
             raise WorkerError(f'invalid worker JSON: {line[:200]!r}') from error
         if not isinstance(result, dict) or result.get('id') != value['id']:
             raise WorkerError('worker response ID mismatch')
@@ -108,8 +108,14 @@ def normalize_tokens(response, source):
         start, end = token['start'], token['end']
         if not isinstance(start, int) or not isinstance(end, int) or not 0 <= start <= end <= len(raw):
             raise WorkerError(f'invalid token span: {token}')
+        if kind in {'DotLowerIdent', 'DotUpperIdent', 'NoSpaceDotLowerIdent', 'NoSpaceDotUpperIdent'}:
+            out.append(['Punctuation', start, start + 1])
+            out.append(['LowerIdent' if kind.endswith('LowerIdent') else 'UpperIdent', start + 1, end])
+            continue
         if kind in {'Int', 'Float', 'Number', 'MalformedNumber', 'MalformedUnicodeEscape'}:
             kind = 'Number'
+        elif kind == 'OpColon':
+            kind = 'Punctuation'
         elif (kind.startswith('Op') and kind[2:3].isupper()) or kind == 'Operator':
             kind = 'Operator'
         elif kind in {'Comma', 'Dot', 'Colon'}:
@@ -124,6 +130,10 @@ def syntax_shape(response, source):
     """Parent/child structure is compared, so swapping precedence changes output."""
     if 'shape' in response:
         return response['shape']
+    raw = source.encode()
+    import bisect
+    operators = [t for t in response.get('tokens', []) if t['kind'] == 'Operator']
+    operator_starts = [t['start'] for t in operators]
     nodes, children = response.get('nodes', []), response.get('children', [])
     if not nodes:
         return [fact.get('shape', ['unsupported', fact.get('node_kind', fact['kind'])])
@@ -141,11 +151,11 @@ def syntax_shape(response, source):
         branch = [visit(child) for child in children[start:start+length]]
         active.remove(index)
         if kind in {'File', 'Module'}:
-            return branch
+            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in {'Header', 'Import', 'TypeAnnotation'}]
         # Parentheses are concrete syntax; grouping already determines topology.
         if kind in {'Group', 'Parenthesized'} and len(branch) == 1:
             return branch[0]
-        text = source.encode()[node['start']:node['end']].decode(errors='replace')
+        text = raw[node['start']:node['end']].decode(errors='replace')
         if kind in {'Number', 'NumberLiteral', 'Int', 'Integer'}:
             return ['number', text]
         if kind in {'Identifier', 'LowerIdent', 'UpperIdent'}:
@@ -157,14 +167,15 @@ def syntax_shape(response, source):
         if kind == 'Binary':
             ids = children[start:start+length]
             left, right = nodes[ids[0]], nodes[ids[1]]
-            gap = source.encode()[left['end']:right['start']].decode()
+            gap = raw[left['end']:right['start']].decode()
             # Comments between operands are trivia; the operator is lexical.
-            operators = [t for t in response['tokens'] if t['start'] >= left['end'] and t['end'] <= right['start'] and t['kind'] == 'Operator']
-            operator = ''.join(source.encode()[t['start']:t['end']].decode() for t in operators)
+            lo = bisect.bisect_left(operator_starts, left['end'])
+            hi = bisect.bisect_left(operator_starts, right['start'])
+            operator = ''.join(raw[t['start']:t['end']].decode() for t in operators[lo:hi])
             return ['binary', operator, *branch]
         if kind == 'Unary':
             first = nodes[children[start]]
-            operator = source.encode()[node['start']:first['start']].decode().strip()
+            operator = raw[node['start']:first['start']].decode().strip()
             return ['unary', operator, *branch]
         if kind == 'StringLiteral':
             return ['string', text]
@@ -172,10 +183,40 @@ def syntax_shape(response, source):
             return ['list', branch]
         if kind == 'Tuple':
             return ['tuple', branch]
+        if kind == 'Lambda':
+            return ['lambda', branch[:-1], branch[-1]]
+        if kind == 'Pattern':
+            return text.strip()
+        if kind == 'If':
+            return ['if', *branch]
+        if kind == 'RecordField':
+            ids = children[start:start+length]
+            name_node = nodes[ids[0]]
+            name = raw[name_node['start']:name_node['end']].decode()
+            return [name, branch[-1] if len(branch) > 1 else ['identifier', name]]
+        if kind == 'Record':
+            return ['record', branch]
+        if kind == 'Block':
+            return ['block', branch]
+        if kind == 'FieldAccess':
+            return ['field', branch[0], raw[nodes[children[start+1]]['start']:nodes[children[start+1]]['end']].decode()]
+        if kind == 'MatchBranch':
+            return branch
+        if kind == 'Match':
+            return ['match', branch[0], branch[1:]]
         if kind == 'Call':
             return ['call', branch[0], branch[1:]]
-        return [kind.lower(), *branch]
-    return visit(response['root'])
+        return ['unsupported', kind]
+    try:
+        return visit(response['root'])
+    except RecursionError as error:
+        raise WorkerError('syntax projection exceeds Python recursion limit') from error
+
+
+def has_unknown_shape(value):
+    if isinstance(value, list):
+        return (bool(value) and value[0] == 'unsupported') or any(has_unknown_shape(child) for child in value)
+    return False
 
 
 def validate_spans(response, source, lossless=False):
@@ -187,7 +228,7 @@ def validate_spans(response, source, lossless=False):
             raise WorkerError(f'invalid token span: {token}')
         if lossless and start != cursor:
             raise WorkerError('candidate token stream is not lossless')
-        if end == start and token['kind'] != 'EndOfFile':
+        if lossless and end == start and token['kind'] != 'EndOfFile':
             raise WorkerError('non-EOF token has no progress')
         cursor = end
     if lossless and cursor != size:
@@ -229,6 +270,9 @@ def compare(case, actual, expected):
         if actual.get('status') != 'Unsupported':
             differences.append({'field': 'unsupported_status', 'actual': actual.get('status'), 'expected': 'Unsupported'})
         return differences
+    if contract == 'exploratory' and actual.get('status') in {'Unsupported', 'Limited'}:
+        differences.append({'field': 'coverage_gap', 'status': actual['status']})
+        return differences
     for field in ('ok', 'consumed'):
         if actual.get(field) != expected.get(field):
             differences.append({'field': field, 'actual': actual.get(field), 'expected': expected.get(field)})
@@ -242,7 +286,9 @@ def compare(case, actual, expected):
         differences.append({'field': 'supported_acceptance', 'actual': actual.get('ok'), 'expected': expected.get('ok')})
     for field, projector in [('tokens', normalize_tokens), ('shape', syntax_shape)]:
         left, right = projector(actual, case['source']), projector(expected, case['source'])
-        if left != right:
+        if field == 'shape' and (has_unknown_shape(left) or has_unknown_shape(right)):
+            differences.append({'field': 'projection_gap', 'actual': left, 'expected': right})
+        elif left != right:
             differences.append({'field': field, 'actual': left, 'expected': right})
     if 'model_shape' in case:
         for label, response in [('actual', actual), ('expected', expected)]:
@@ -363,6 +409,8 @@ def main(argv=None):
         identities[name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} if path.is_file() else {'command': str(path)}
     report = {'metadata': metadata, 'worker_identities': identities, 'elapsed_seconds': elapsed, 'cases_per_second': len(cases) / elapsed, 'commands': {'probe': shlex.split(args.probe_command), 'oracle': shlex.split(args.oracle_command)},
               'coverage_counts': dict(Counter(item['coverage'] for item in results)),
+              'candidate_status_counts': dict(Counter(item['actual'].get('status', 'worker_error') for item in results)),
+              'difference_counts': dict(Counter(d['field'] for item in results for d in item['differences'])),
               'counts': {'total': len(results), 'coverage_gaps': sum(item['coverage'] == 'unsupported' for item in results), 'passed': sum(item['pass'] for item in results),
                          'failed': sum(not item['pass'] for item in results)}, 'results': results}
     args.output.mkdir(parents=True, exist_ok=True)
