@@ -285,6 +285,14 @@ def calibrate_common(workers, case, mode, window_ns, max_iterations, expected):
     return min(max_iterations,max(1,math.ceil(window_ns / max(max(elapsed),1) * 1.15)))
 
 
+class TimingQualificationError(ValueError):
+    """A failed timing qualification with its completed raw sample attempts."""
+
+    def __init__(self, message, measurement_attempts):
+        super().__init__(message)
+        self.measurement_attempts = measurement_attempts
+
+
 def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterations, expected,
                 *, screen=False, clock_floor_ns=100000, max_ratio=1.0):
     """Use short common batches only with stable, conservatively clear headroom.
@@ -327,9 +335,9 @@ def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterati
                   if clear else window_ns / max(minimum,1))
         increased = min(max_iterations,max(iterations+1,iterations*2 if noisy_qualified else math.ceil(iterations * factor * 1.15)))
         if increased <= iterations:
-            raise ValueError('timing noise: qualified sample duration unavailable at iteration cap')
+            raise TimingQualificationError('timing noise: qualified sample duration unavailable at iteration cap', attempts)
         iterations = increased
-    raise ValueError('timing noise: repeated samples could not qualify duration/headroom')
+    raise TimingQualificationError('timing noise: repeated samples could not qualify duration/headroom', attempts)
 
 
 def distribution(values, iterations, window_ns):
@@ -526,6 +534,8 @@ def main(argv=None):
                         report['failures'].append({'id':case['id'],'mode':mode,'kind':row['status']})
                 except Exception as error:
                     row['status'] = 'error'; row['error'] = str(error)
+                    if isinstance(error, TimingQualificationError):
+                        row['measurement_attempts'] = error.measurement_attempts
                     report['failures'].append({'id':case['id'],'mode':mode,'kind':'error','message':str(error)})
                     for worker in workers:
                         worker.close()

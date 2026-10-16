@@ -249,6 +249,80 @@ class Performance(unittest.TestCase):
         self.assertEqual([item['iterations']for item in attempts],[10,20,40,80])
         self.assertLessEqual(values[0]['iterations'],1000)
 
+    def test_duration_exhaustion_preserves_all_raw_attempts(self):
+        class Worker:
+            def request(self, request):
+                return {'version':1, 'id':'x', 'iterations':request['iterations'],
+                        'successes':request['iterations'], 'elapsed_ns':999,
+                        'checksum':request['iterations'],
+                        'projection':{'title':'', 'blocks':[]}, 'html':''}
+        expected={'projection':{'title':'', 'blocks':[]}, 'html':''}
+        with self.assertRaisesRegex(ValueError, 'repeated samples') as caught:
+            perf.sample_pair([Worker(),Worker()], {'id':'x','source':'x'},
+                             'parse', 1, 1000, 5, 100, expected)
+        attempts=caught.exception.measurement_attempts
+        self.assertEqual(len(attempts),4)
+        for attempt in attempts:
+            self.assertEqual(attempt['candidate_elapsed_ns'],[999]*5)
+            self.assertEqual(attempt['reference_elapsed_ns'],[999]*5)
+            self.assertEqual(attempt['qualification'],'refine-duration')
+        self.assertEqual([attempt['iterations']for attempt in attempts],[1,2,3,4])
+
+    def test_iteration_cap_preserves_the_unqualified_samples(self):
+        class Worker:
+            def request(self, request):
+                return {'version':1, 'id':'x', 'iterations':request['iterations'],
+                        'successes':request['iterations'], 'elapsed_ns':1,
+                        'checksum':request['iterations'],
+                        'projection':{'title':'', 'blocks':[]}, 'html':''}
+        expected={'projection':{'title':'', 'blocks':[]}, 'html':''}
+        with self.assertRaisesRegex(ValueError, 'iteration cap') as caught:
+            perf.sample_pair([Worker(),Worker()], {'id':'x','source':'x'},
+                             'render', 8, 1000, 5, 8, expected)
+        attempts=caught.exception.measurement_attempts
+        self.assertEqual(len(attempts),1)
+        self.assertEqual(attempts[0]['iterations'],8)
+        self.assertEqual(attempts[0]['candidate_elapsed_ns'],[1]*5)
+        self.assertEqual(attempts[0]['reference_elapsed_ns'],[1]*5)
+
+    def test_qualification_failure_retains_attempts_in_report_journal_and_replay(self):
+        class Worker:
+            def __init__(self, command, timeout, env=None):
+                pass
+            def request(self, request):
+                return {'version':1, 'id':request['id'], 'iterations':request['iterations'],
+                        'successes':request['iterations'], 'elapsed_ns':999999,
+                        'checksum':request['iterations'],
+                        'projection':{'title':'', 'blocks':[]}, 'html':'',
+                        'oracle_version':'2.0.23', 'oracle_code_sha256':'a'*64,
+                        'include_io':'caller-map-memory', 'include_path_metadata':{}}
+            def close(self):
+                pass
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(perf.time, 'monotonic', return_value=0), \
+             mock.patch.object(perf.platform, 'platform', return_value='test OS'), \
+             mock.patch.object(perf.platform, 'processor', return_value='test CPU'), \
+             mock.patch.multiple(perf,
+                 Worker=Worker,
+                 build=mock.Mock(return_value=(pathlib.Path('/fake-worker'), {'source_identity':'same','compiler':{'sha256':'compiler-hash'}})),
+                 digest=mock.Mock(return_value='a'*64), source_identity=mock.Mock(return_value='same'),
+                 corpus=mock.Mock(return_value=[{'id':'x','family':'test','source':'hello'}]),
+                 calibrate=mock.Mock(return_value=1)), \
+             mock.patch.object(perf.subprocess, 'run', return_value=SimpleNamespace(stdout='Ruby test')):
+            self.assertEqual(perf.main(['--smoke','--modes','render','--output',tmp]),1)
+            output=pathlib.Path(tmp)
+            report=json.loads((output/'results.json').read_text())
+            row=report['records'][0]
+            self.assertEqual(row['status'],'error')
+            self.assertIn('repeated samples',row['error'])
+            self.assertEqual(row['correctness'],{'projection':True,'rendered_dom':True})
+            self.assertEqual(len(row['measurement_attempts']),4)
+            retained=json.loads(next((output/'retained').glob('*.json')).read_text())
+            journal=json.loads((output/'measurements.jsonl').read_text())
+            self.assertEqual(retained['measurement']['measurement_attempts'],row['measurement_attempts'])
+            self.assertEqual(journal['measurement_attempts'],row['measurement_attempts'])
+            self.assertIn('--replay',retained['measurement']['replay'])
+
     def test_prefix_families_retain_trailing_syntax(self):
         cases={case['family']:case for case in perf.geometric([8])}
         self.assertTrue(cases['long-prefix-strong']['source'].endswith('*strong*'))
