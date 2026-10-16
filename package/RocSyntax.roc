@@ -141,6 +141,7 @@ lex = |source| {
 		} else if is_lower(b) or is_upper(b) or b == '_' or b == '$' or b == '@' {
 			while $i < source.len() and is_ident(byte(source, $i)) { $i = $i + 1 }
 			$kind = if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or b == '@' UpperIdent else LowerIdent
+			if b == '_' and byte(source, start + 1) == '_' { $diagnostics = push_diagnostic($diagnostics, UnexpectedToken, start, $i) }
 			var $j = start + 1
 			while $j < $i {
 				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 { $diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1) }
@@ -150,7 +151,8 @@ lex = |source| {
 			$kind = Number
 			number = scan_number(source, start + if b == '-' 1 else 0)
 			$i = number.end
-			if !number.valid { $diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i) }
+			tuple_index = start > 0 and byte(source, start - 1) == '.' and source.sublist({ start, len: $i - start }).all(is_digit)
+			if !number.valid and !tuple_index { $diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i) }
 		} else if b == '"' {
 			width = 1
 			$tokens = $tokens.append({ kind: StringStart, start, end: start + width })
@@ -324,10 +326,12 @@ expression = |initial, minimum, depth| {
 				{ state: call_state, node: call_node } = add_node(args_state, Call, start, args_end, ids)
 				$s = call_state
 				$left = call_node
-			} else if spelling(look, ".") and t.start == node_end(look, $left) {
+			} else if spelling(look, ".") {
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
-				if (field.kind == LowerIdent or field.kind == UpperIdent or field.kind == Number) and byte(field_state.source, field.start) != '@' {
+				valid_name = field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))
+				valid_index = field.kind == Number and field_state.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
+				if valid_name or valid_index {
 					start = node_start(field_state, $left)
 					{ state: leaf_state, node: leaf_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
 					{ state: access_state, node: access_node } = add_node(leaf_state, FieldAccess, start, field.end, [$left, leaf_node])
@@ -396,7 +400,7 @@ primary = |s, depth| {
 			bad = issue(at_pos(s, s.pos + 1), UnexpectedToken, t.start, t.end)
 			add_node(bad, ErrorNode, t.start, t.end, [])
 		}
-		UpperIdent if spelling(s, "@") => {
+		UpperIdent if byte(s.source, t.start) == '@' => {
 			bad = issue(at_pos(s, s.pos + 1), UnexpectedToken, t.start, t.end)
 			add_node(bad, ErrorNode, t.start, t.end, [])
 		}
@@ -676,7 +680,8 @@ type_expression = |initial, depth| {
 		look = skip_trivia(left_state)
 		if spelling(look, "->") {
 			start = node_start(look, left_node)
-			{ state: right_state, node: right_node } = type_expression(at_pos(look, look.pos + 1), depth + 1)
+			validated = if type_tree_supported(look, left_node) look else issue(look, UnsupportedSyntax, start, node_end(look, left_node))
+			{ state: right_state, node: right_node } = type_expression(at_pos(validated, validated.pos + 1), depth + 1)
 			end = node_end(right_state, right_node)
 			add_node(right_state, TypeExpression, start, end, [left_node, right_node])
 		} else {
@@ -994,6 +999,18 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("- value").status == Recovered and RocSyntax.parse_str("x : 42").status == Unsupported
+}
+
+expect {
+	["x.1e3", "x.0xff", "x.Foo", "x._", "x. field", "@Foo", "@a", "__", "__a"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+}
+
+expect {
+	["x .field", "x\n.field", "x.01", "x.a!", "_a"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["x : 1 -> U64", "x : \"hi\" -> U64", "x : [1] -> U64", "x : U64 -> 1 -> U64"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_str("x : U64 -> U64").status == Complete
 }
 
 # Empty lists own no buffers. Loop parsers move their old state into a local,
