@@ -185,7 +185,6 @@ lex : List(U8) -> Lexed
 lex = |source| {
 	var $tokens = []
 	var $diagnostics = utf8_diagnostics(source)
-	var $last_significant = EndOfFile
 	var $i = 0
 	var $contexts = []
 	var $resume = False
@@ -233,11 +232,9 @@ lex = |source| {
 				$tokens = $tokens.append({ kind: InterpolationStart, start: $i, end: $i + 2 })
 				$contexts = $contexts.append({ multiline, depth: 0.U64 })
 				$i = $i + 2
-				$last_significant = InterpolationStart
 			} else if !multiline and $i < source.len() and byte(source, $i) == '"' {
 				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + 1 })
 				$i = $i + 1
-				$last_significant = StringEnd
 			} else if !multiline {
 				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
 			}
@@ -284,7 +281,7 @@ lex = |source| {
 				}
 				$j = $j + 1
 			}
-		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_expression($last_significant))) {
+		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_token(source, $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }))) {
 			$kind = Number
 			number = scan_number(source, start + if b == '-' 1 else 0)
 			$i = number.end
@@ -372,9 +369,6 @@ lex = |source| {
 			context = $contexts.last() ?? { multiline: False, depth: 0 }
 			next_depth = if $kind == OpenCurly context.depth + 1 else if context.depth > 0 context.depth - 1 else 0
 			$contexts = $contexts.set(index, { multiline: context.multiline, depth: next_depth }) ?? $contexts
-		}
-		if $kind != Invalid and $kind != Whitespace and $kind != Comment {
-			$last_significant = $kind
 		}
 	}
 	if !$contexts.is_empty() {
@@ -2119,8 +2113,11 @@ expect {
 
 can_end_expression : RocSyntax.TokenKind -> Bool
 can_end_expression = |kind| {
-	kind == LowerIdent or kind == UpperIdent or kind == Number or kind == StringEnd or kind == SingleQuote or kind == CloseRound or kind == CloseSquare or kind == CloseCurly
+	kind == LowerIdent or kind == UpperIdent or kind == Number or kind == StringEnd or kind == SingleQuote or kind == CloseRound or kind == CloseSquare or kind == CloseCurly or kind == InterpolationEnd
 }
+
+can_end_token : List(U8), RocSyntax.Token -> Bool
+can_end_token = |source, token| can_end_expression(token.kind) or token_spelling(source, token, "...")
 
 binary_minus : State -> Bool
 binary_minus = |s| {
@@ -2128,9 +2125,9 @@ binary_minus = |s| {
 	next = byte(s.source, t.end)
 	previous = s.tokens.get(if s.pos > 0 s.pos - 1 else 0) ?? t
 	if matches(s.source, t.end, "...") {
-		return previous.end == t.start and can_end_expression(previous.kind)
+		return previous.end == t.start and can_end_token(s.source, previous)
 	}
-	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_expression(previous.kind)) or (!is_digit(next) and !is_lower(next) and !is_upper(next) and next != '_' and next != '(' and next < 0x80)
+	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_token(s.source, previous)) or (!is_digit(next) and !is_lower(next) and !is_upper(next) and next != '_' and next != '(' and next < 0x80)
 }
 
 expect {
@@ -3419,4 +3416,8 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("-...").status == Complete and RocSyntax.parse_expr_str("x-...").status == Complete and RocSyntax.parse_expr_str("x -...").status == Recovered and RocSyntax.parse_expr_str("- ...").status == Recovered
+}
+
+expect {
+	["...-1", "...-...", "{ _ = 1\n-... }", "a - -...", "a - ..."].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
 }
