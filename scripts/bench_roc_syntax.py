@@ -14,6 +14,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def source_identity(root=ROOT):
+    identity = hashlib.sha256()
+    paths = sorted([*(root / 'package').glob('*.roc'), *(root / 'bench' / 'roc').glob('roc-syntax*.roc')])
+    for path in paths:
+        identity.update(path.relative_to(root).as_posix().encode() + b'\0' + path.read_bytes() + b'\0')
+    return identity.hexdigest()
+
 def corpus(sizes=(256, 512, 1024, 2048)):
     for family, make in {
         'definitions': lambda n: 'module []\n' + ''.join(f'x{i} = {i} + 2 * 3\n' for i in range(n)),
@@ -48,10 +55,17 @@ def scaling_failures(records, max_ratio):
     prior = {}
     for record in records:
         family = record['family']
+        valid_outcome = (record.get('status') in {'Recovered', 'Limited'} and record.get('accepted') is False
+                         if family == 'unclosed'
+                         else record.get('status') == 'Complete' and record.get('accepted') is True)
+        if not valid_outcome:
+            failures.append({'family': family, 'size': record['size'], 'metric': 'parse_outcome',
+                             'status': record.get('status'), 'accepted': record.get('accepted'),
+                             'expected': 'rejected incomplete source' if family == 'unclosed' else 'Complete and accepted'})
         if family in prior:
             previous = prior[family]
             # Normalize by actual source-byte growth, not generator parameter.
-            if record.get('status') == 'Limited' or previous.get('status') == 'Limited':
+            if family == 'unclosed' and (record.get('status') == 'Limited' or previous.get('status') == 'Limited'):
                 prior[family] = record
                 continue
             ratio = record['median_ns'] / previous['median_ns']
@@ -61,12 +75,14 @@ def scaling_failures(records, max_ratio):
         prior[family] = record
     return failures
 
-def baseline_failures(records, baseline, max_regression, max_allocation_regression=1.25):
+def baseline_failures(records, baseline, max_regression, max_allocation_regression=1.25, *, comparison=None):
     old = {(r['family'], r['size']): r for r in baseline['records']}
     failures = []
+    matched = 0
     for record in records:
         previous = old.get((record['family'], record['size']))
         if previous and previous['sha256'] == record['sha256']:
+            matched += 1
             if record['median_ns'] > previous['median_ns'] * max_regression:
                 failures.append({'family': record['family'], 'size': record['size'],
                                  'metric': 'median_ns', 'ratio': record['median_ns'] / previous['median_ns']})
@@ -75,6 +91,12 @@ def baseline_failures(records, baseline, max_regression, max_allocation_regressi
                 if after > before * max_allocation_regression:
                     failures.append({'family': record['family'], 'size': record['size'], 'metric': 'allocation_calls',
                                      'before': before, 'after': after, 'ratio': after / before if before else None})
+    counts = {'matched': matched, 'skipped': len(records) - matched, 'baseline_records': len(old)}
+    if comparison is not None:
+        comparison.update(counts)
+    if matched == 0:
+        failures.append({'metric': 'baseline_corpus_overlap', **counts,
+                         'error': 'baseline has no matching family, size and source checksum'})
     return failures
 
 def allocations(binary, data):
@@ -143,7 +165,7 @@ def main(argv=None):
     ap.add_argument('--repetitions', type=int, default=5)
     ap.add_argument('--target-ms', type=float, default=50)
     args = ap.parse_args(argv)
-    source_hash = hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest()
+    source_hash = source_identity(ROOT)
     binary = args.binary or ROOT / '.roc-parser-tmp/roc-syntax-bench/driver'
     binary = binary.resolve()
     if not args.binary:
@@ -171,13 +193,15 @@ def main(argv=None):
                 'candidate_commit': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip(),
                 'reused_binary': bool(args.binary), 'input_ownership': 'shared in-memory source across iterations; fresh parse result each iteration', 'allocation_metric': 'roc_alloc + roc_realloc calls; not byte volume or peak memory'}
     failures = scaling_failures(records, args.max_scaling_overhead)
+    baseline_comparison = None
     if args.baseline:
+        baseline_comparison = {}
         baseline = json.loads(args.baseline.read_text())
         validate_baseline(metadata, baseline['metadata'], args.allow_unverified_baseline)
-        failures += baseline_failures(records, baseline, args.max_regression, args.max_allocation_regression)
-    if source_hash != hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest():
+        failures += baseline_failures(records, baseline, args.max_regression, args.max_allocation_regression, comparison=baseline_comparison)
+    if source_hash != source_identity(ROOT):
         raise RuntimeError('candidate source changed during benchmark; rebuild and rerun')
-    report = {'metadata': metadata, 'records': records, 'failures': failures}
+    report = {'metadata': metadata, 'records': records, 'baseline_comparison': baseline_comparison, 'failures': failures}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({'cases': len(records), 'failures': len(failures), 'output': str(args.output)}))
