@@ -2,8 +2,10 @@
 ## `.roc-version`. Byte spans are half-open. Comments and whitespace are tokens.
 ##
 ## Expressions support identifiers, numbers, strings without interpolation,
-## calls, field access, lists, tuples, unary and binary operators. Files support
-## simple value declarations and expression statements. Other constructs remain
+## calls, field access, lists, tuples, records, blocks, simple lambdas, if/else,
+## simple match branches, unary and binary operators. Files support module
+## headers, simple imports, value declarations and simple type annotations.
+## Other constructs remain
 ## source-backed `UnsupportedNode` values with an `UnsupportedSyntax` diagnostic.
 ## This is an evolving syntax API, not a complete Roc validity checker.
 ##
@@ -31,7 +33,7 @@ RocSyntax :: [].{
 	## It does not establish type correctness or complete language conformance.
 	Status : [Complete, Recovered, Unsupported, Limited]
 	## Source-backed tokens and a flat, indexed syntax tree with recovery status.
-	Parsed : { source : List(U8), tokens : List(Token), nodes : List(Node), children : List(U64), diagnostics : List(Diagnostic), status : Status, root : U64 }
+	Parsed : { source : List(U8), tokens : List(Token), nodes : List(Node), children : List(U64), diagnostics : List(Diagnostic), status : Status, root : U64, consumed : Bool }
 
 	## Parse source text; offsets refer to UTF-8 bytes, not Unicode characters.
 	parse_str : Str -> Parsed
@@ -74,22 +76,18 @@ is_ident = |b| is_lower(b) or is_upper(b) or is_digit(b) or b == '_' or b == '!'
 
 matches : List(U8), U64, Str -> Bool
 matches = |bytes, at, text| {
-	wanted = text.to_utf8()
-	var $yes = at + wanted.len() <= bytes.len()
-	var $i = 0
-	while $yes and $i < wanted.len() {
-		$yes = byte(bytes, at + $i) == byte(wanted, $i)
-		$i = $i + 1
-	}
-	$yes
+	len = text.count_utf8_bytes()
+	at + len <= bytes.len() and Str.from_utf8_lossy(bytes.sublist({ start: at, len })) == text
 }
 
 keyword : List(U8), U64, U64 -> Bool
 keyword = |source, start, end| {
-	# Fixed table: at most 34 short comparisons per identifier, independent of
-	# input size. No lexeme strings are allocated during classification.
-	words = ["app", "as", "crash", "dbg", "else", "expect", "exposes", "exposing", "for", "for!", "generates", "has", "hosted", "if", "implements", "import", "imports", "in", "interface", "match", "module", "package", "packages", "platform", "provides", "requires", "return", "targets", "var", "where", "while", "with", "break"]
-	words.any(|word| word.to_utf8().len() == end - start and matches(source, start, word))
+	# All keywords fit Roc's inline string representation. No per-keyword
+	# byte-list conversion or heap-built table is needed in this hot path.
+	if end - start > 10 False else match Str.from_utf8_lossy(source.sublist({ start, len: end - start })) {
+		"app" | "as" | "crash" | "dbg" | "else" | "expect" | "exposes" | "exposing" | "for" | "for!" | "generates" | "has" | "hosted" | "if" | "implements" | "import" | "imports" | "in" | "interface" | "match" | "module" | "package" | "packages" | "platform" | "provides" | "requires" | "return" | "targets" | "var" | "where" | "while" | "with" | "break" => True
+		_ => False
+	}
 }
 
 push_diagnostic : List(RocSyntax.Diagnostic), RocSyntax.DiagnosticCode, U64, U64 -> List(RocSyntax.Diagnostic)
@@ -127,6 +125,7 @@ lex = |source| {
 	var $tokens = []
 	var $diagnostics = utf8_diagnostics(source)
 	var $unsupported = False
+	var $last_significant = EndOfFile
 	var $i = 0
 	while $i < source.len() {
 		start = $i
@@ -147,13 +146,13 @@ lex = |source| {
 				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 { $diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1) }
 				$j = $j + 1
 			}
-		} else if is_digit(b) {
+		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_expression($last_significant))) {
 			$kind = Number
-			number = scan_number(source, start)
+			number = scan_number(source, start + if b == '-' 1 else 0)
 			$i = number.end
 			if !number.valid { $diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i) }
 		} else if b == '"' {
-			width = if matches(source, start, "\"\"\"") 3 else 1
+			width = 1
 			$tokens = $tokens.append({ kind: StringStart, start, end: start + width })
 			$i = start + width
 			part = $i
@@ -163,9 +162,12 @@ lex = |source| {
 					escape = scan_escape(source, $i)
 					if !escape.valid { $diagnostics = push_diagnostic($diagnostics, InvalidEscape, $i, escape.end) }
 					$i = escape.end
-				} else if matches(source, $i, if width == 3 "\"\"\"" else "\"") {
+				} else if byte(source, $i) == '\n' or byte(source, $i) == '\r' {
+					$closed = True
+				} else if matches(source, $i, "\"") {
 					$closed = True
 				} else {
+					if nonprintable(source, $i) { $diagnostics = push_diagnostic($diagnostics, InvalidCharacter, $i, $i + 1) }
 					if matches(source, $i, "\${") {
 						$unsupported = True
 						$diagnostics = push_diagnostic($diagnostics, UnsupportedSyntax, $i, $i + 2)
@@ -174,7 +176,7 @@ lex = |source| {
 				}
 			}
 			if $i > part { $tokens = $tokens.append({ kind: StringPart, start: part, end: $i }) }
-			if $closed {
+			if $closed and byte(source, $i) == '"' {
 				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + width })
 				$i = $i + width
 			} else { $diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i) }
@@ -217,18 +219,16 @@ lex = |source| {
 				_ => Invalid
 			}
 			# Longest known spelling, never an unbounded punctuation run.
-			operators = ["..<", "..=", "...", "->", "=>", "<-", "|>", "==", "!=", "<=", ">=", "??", "//", ":=", "::", "..", ".*", ".?"]
-			var $found = False
-			for op in operators {
-				if !$found and matches(source, start, op) {
-					$i = start + op.to_utf8().len()
-					$kind = if b == '.' or b == ':' Punctuation else Operator
-					$found = True
-				}
+			width = operator_width(source, start)
+			if width > 1 {
+				$i = start + width
+				$kind = if b == '.' or b == ':' Punctuation else Operator
 			}
 			if $kind == Invalid { $diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i) }
 		}
 		if b != '"' { $tokens = $tokens.append({ kind: $kind, start, end: $i }) }
+		if b == '"' { $last_significant = StringEnd }
+		else if $kind != Whitespace and $kind != Comment { $last_significant = $kind }
 	}
 	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: $unsupported }
 }
@@ -250,7 +250,7 @@ skip_trivia = |s| {
 spelling : State, Str -> Bool
 spelling = |s, text| {
 	t = peek(s)
-	t.end - t.start == text.to_utf8().len() and matches(s.source, t.start, text)
+	t.end - t.start == text.count_utf8_bytes() and matches(s.source, t.start, text)
 }
 
 issue : State, RocSyntax.DiagnosticCode, U64, U64 -> State
@@ -273,20 +273,25 @@ node_end = |s, id| (s.nodes.get(id) ?? { kind: ErrorNode, start: 0, end: 0, chil
 # Exact binding powers from src/parse/Parser.zig at 7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5.
 binding : State -> { left : U64, right : U64 }
 binding = |s| {
-	if spelling(s, "*") or spelling(s, "/") or spelling(s, "//") or spelling(s, "%") { { left: 32, right: 33 } }
-	else if spelling(s, "+") or (spelling(s, "-") and is_space(byte(s.source, peek(s).end))) { { left: 22, right: 23 } }
-	else if spelling(s, "??") { { left: 20, right: 21 } }
-	else if spelling(s, "?") { { left: 18, right: 19 } }
-	else if spelling(s, "==") { { left: 17, right: 17 } }
-	else if spelling(s, "!=") { { left: 15, right: 15 } }
-	else if spelling(s, "<") { { left: 13, right: 13 } }
-	else if spelling(s, ">") { { left: 11, right: 11 } }
-	else if spelling(s, "<=") { { left: 9, right: 9 } }
-	else if spelling(s, ">=") { { left: 7, right: 7 } }
-	else if spelling(s, "and") { { left: 6, right: 5 } }
-	else if spelling(s, "or") { { left: 4, right: 3 } }
-	else if spelling(s, "..<") or spelling(s, "..=") { { left: 2, right: 3 } }
-	else { { left: 0, right: 0 } }
+	t = peek(s)
+	text = if t.end - t.start <= 3 Str.from_utf8_lossy(s.source.sublist({ start: t.start, len: t.end - t.start })) else ""
+	match text {
+		"*" | "/" | "//" | "%" => { left: 32, right: 33 }
+		"+" => { left: 22, right: 23 }
+		"-" if binary_minus(s) => { left: 22, right: 23 }
+		"??" => { left: 20, right: 21 }
+		"?" => { left: 18, right: 19 }
+		"==" => { left: 17, right: 17 }
+		"!=" => { left: 15, right: 15 }
+		"<" => { left: 13, right: 13 }
+		">" => { left: 11, right: 11 }
+		"<=" => { left: 9, right: 9 }
+		">=" => { left: 7, right: 7 }
+		"and" => { left: 6, right: 5 }
+		"or" => { left: 4, right: 3 }
+		"..<" | "..=" => { left: 2, right: 3 }
+		_ => { left: 0, right: 0 }
+	}
 }
 
 expression : State, U64, U64 -> Built
@@ -465,7 +470,7 @@ parse_source = |source, expression_only| {
 	finished = root.state
 	has_error = finished.diagnostics.any(|d| d.code != UnsupportedSyntax)
 	status = if finished.limited Limited else if has_error Recovered else if finished.unsupported Unsupported else Complete
-	{ source: finished.source, tokens: finished.tokens, nodes: finished.nodes, children: finished.children, diagnostics: finished.diagnostics, status, root: root.node }
+	{ source: finished.source, tokens: finished.tokens, nodes: finished.nodes, children: finished.children, diagnostics: finished.diagnostics, status, root: root.node, consumed: peek(skip_trivia(finished)).kind == EndOfFile }
 }
 
 expect {
@@ -588,7 +593,10 @@ statement = |initial, depth| {
 	s = skip_trivia(initial)
 	t = peek(s)
 	after_name = skip_trivia({ ..s, pos: s.pos + 1 })
-	if t.kind == LowerIdent and spelling(after_name, "=") {
+	if depth >= 128 {
+		bad = issue(s, ResourceLimit, t.start, t.end)
+		add_node({ ..bad, pos: bad.pos + if t.kind == EndOfFile 0 else 1 }, ErrorNode, t.start, t.end, [])
+	} else if t.kind == LowerIdent and spelling(after_name, "=") {
 		name = add_node(after_name, Identifier, t.start, t.end, [])
 		value = expression({ ..name.state, pos: name.state.pos + 1 }, 0, depth)
 		end = node_end(value.state, value.node)
@@ -670,20 +678,15 @@ parse_if : State, U64, U64 -> Built
 parse_if = |initial, start, depth| {
 	condition = expression(initial, 0, depth)
 	look = skip_trivia(condition.state)
-	if peek(look).kind != OpenCurly {
-		bad = issue(look, UnexpectedToken, peek(look).start, peek(look).end)
-		add_node(bad, If, start, node_end(bad, condition.node), [condition.node])
+	then_branch = expression(look, 0, depth)
+	after = skip_trivia(then_branch.state)
+	if spelling(after, "else") {
+		other = expression({ ..after, pos: after.pos + 1 }, 0, depth)
+		end = node_end(other.state, other.node)
+		add_node(other.state, If, start, end, [condition.node, then_branch.node, other.node])
 	} else {
-		then_branch = expression(look, 0, depth)
-		after = skip_trivia(then_branch.state)
-		if spelling(after, "else") {
-			other = expression({ ..after, pos: after.pos + 1 }, 0, depth)
-			end = node_end(other.state, other.node)
-			add_node(other.state, If, start, end, [condition.node, then_branch.node, other.node])
-		} else {
-			end = node_end(after, then_branch.node)
-			add_node(after, If, start, end, [condition.node, then_branch.node])
-		}
+		end = node_end(after, then_branch.node)
+		add_node(after, If, start, end, [condition.node, then_branch.node])
 	}
 }
 
@@ -840,4 +843,62 @@ expect {
 
 expect {
 	RocSyntax.parse_str("a b").status == Recovered and RocSyntax.parse_expression("1 2").status == Recovered
+}
+
+can_end_expression : RocSyntax.TokenKind -> Bool
+can_end_expression = |kind| {
+	kind == LowerIdent or kind == UpperIdent or kind == Number or kind == StringEnd or kind == SingleQuote or kind == CloseRound or kind == CloseSquare or kind == CloseCurly
+}
+
+binary_minus : State -> Bool
+binary_minus = |s| {
+	t = peek(s)
+	next = byte(s.source, t.end)
+	previous = s.tokens.get(if s.pos > 0 s.pos - 1 else 0) ?? t
+	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_expression(previous.kind))
+}
+
+expect {
+	p = RocSyntax.parse_expr_str("-1")
+	p.status == Complete and p.tokens.first().map_ok(|t| (t.kind, t.start, t.end)) == Ok((Number, 0, 2)) and p.nodes.any(|n| n.kind == NumberLiteral)
+}
+
+expect {
+	p = RocSyntax.parse_expr_str("x-1")
+	p.status == Complete and p.nodes.any(|n| n.kind == Binary) and p.tokens.keep_if(|t| t.kind == Number).map(|t| (t.start, t.end)) == [(2, 3)]
+}
+
+expect {
+	p = RocSyntax.parse_expr_str("1.0e3")
+	p.status == Complete and p.tokens.first().map_ok(|t| t.end) == Ok(5) and p.consumed
+}
+
+expect {
+	RocSyntax.parse_expr_str("(1 +").consumed and !RocSyntax.parse_expr_str("1 2").consumed
+}
+
+nonprintable : List(U8), U64 -> Bool
+nonprintable = |source, at| {
+	b = byte(source, at)
+	(b < 0x20 and b != '\t') or b == 0x7F or (b == 0xC2 and byte(source, at + 1) >= 0x80 and byte(source, at + 1) <= 0x9F) or (b == 0xEF and byte(source, at + 1) == 0xBF and byte(source, at + 2) >= 0xBE)
+}
+
+expect {
+	p = RocSyntax.parse_expr_str("if s.is_empty() \"empty\" else \"not empty\"")
+	p.status == Complete and p.nodes.any(|n| n.kind == If)
+}
+
+expect {
+	p = RocSyntax.parse_str("x = \"unfinished\ny = 42\n")
+	p.status == Recovered and p.nodes.keep_if(|n| n.kind == Declaration).len() == 2
+}
+
+operator_width : List(U8), U64 -> U64
+operator_width = |source, at| {
+	a = byte(source, at)
+	b = byte(source, at + 1)
+	c = byte(source, at + 2)
+	if a == '.' and b == '.' and (c == '.' or c == '<' or c == '=') 3
+	else if (a == '-' and b == '>') or (a == '=' and (b == '>' or b == '=')) or (a == '<' and (b == '-' or b == '=')) or (a == '>' and b == '=') or (a == '|' and b == '>') or (a == '!' and b == '=') or (a == '?' and b == '?') or (a == '/' and b == '/') or (a == ':' and (b == '=' or b == ':')) or (a == '.' and (b == '.' or b == '*' or b == '?')) 2
+	else 1
 }
