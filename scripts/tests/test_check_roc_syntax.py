@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -50,6 +51,51 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual((output / "package-check.stdout").read_text(), "check output")
             self.assertEqual((output / "package-check.stderr").read_text(), "check error")
             self.assertEqual(record["status"], "failed")
+
+    def test_corpus_repository_matches_builder_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / 'parser'
+            cache = root / 'oracle'
+            self.assertEqual(check.corpus_repository(None, cache, root), cache / 'upstream.git')
+            sibling = base / 'roc'
+            (sibling / '.git').mkdir(parents=True)
+            self.assertEqual(check.corpus_repository(None, cache, root), sibling)
+            explicit = base / 'other-bare.git'
+            self.assertEqual(check.corpus_repository(explicit, cache, root), explicit.resolve())
+
+    def test_full_corpus_failure_prevents_fuzz_and_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            oracle = output / 'oracle/install/bin/oracle'
+            oracle.parent.mkdir(parents=True)
+            oracle.write_bytes(b'fresh oracle')
+            oracle.with_suffix('.json').write_text(json.dumps({'binary_sha256': hashlib.sha256(oracle.read_bytes()).hexdigest()}))
+            version = 'Roc compiler version ' + (check.ROOT / '.roc-version').read_text().strip()
+            calls = []
+            def command(args, **kwargs):
+                calls.append(args)
+                if args[1:] == ['version']:
+                    return subprocess.CompletedProcess(args, 0, version, '')
+                if 'scripts/roc_syntax/build_oracle.py' in args:
+                    return subprocess.CompletedProcess(args, 0, str(oracle), '')
+                if 'scripts/check_roc_syntax_corpus.py' in args:
+                    return subprocess.CompletedProcess(args, 1, '{"missing_grammar":1}', 'corpus rejection')
+                if 'build' in args:
+                    for item in args:
+                        if item.startswith('--output='):
+                            Path(item.removeprefix('--output=')).write_bytes(b'fresh probe')
+                return subprocess.CompletedProcess(args, 0, '', '')
+            with patch.object(check.subprocess, 'run', side_effect=command):
+                self.assertEqual(check.main(['--output', tmp, '--roc-source', str(output / 'compiler.git')]), 1)
+            record = json.loads((output / 'validation.json').read_text())
+            self.assertEqual(record['status'], 'failed')
+            self.assertIn('type-differential', [step['name'] for step in record['steps']])
+            self.assertEqual(record['steps'][-1]['name'], 'full-corpus')
+            self.assertFalse(any('scripts/run_fuzz.py' in call for call in calls))
+            self.assertEqual((output / 'full-corpus.stderr').read_text(), 'corpus rejection')
+            typed = next(call for call in calls if 'scripts/roc_syntax/type-fixtures.json' in call)
+            self.assertEqual(typed[typed.index('--generated') + 1], '0')
 
 
 if __name__ == "__main__":
