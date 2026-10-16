@@ -72,7 +72,7 @@ matches = |parsed, id, expr| {
 				}
 				Function(body) => {
 					parameter = parsed.nodes.get(child(parsed, node, 0)) ?? node
-					node.kind == Lambda and node.children_len == 2 and parameter.kind == Pattern and lexeme(parsed, parameter) == "x" and matches(parsed, child(parsed, node, 1), body)
+					node.kind == Lambda and node.children_len == 2 and parameter.kind == IdentifierPattern and lexeme(parsed, parameter) == "x" and matches(parsed, child(parsed, node, 1), body)
 				}
 				Conditional(a, b) => node.kind == If and node.children_len == 3 and matches(parsed, child(parsed, node, 0), Name("True")) and matches(parsed, child(parsed, node, 1), a) and matches(parsed, child(parsed, node, 2), b)
 				Fields(a, b) => node.kind == Record and node.children_len == 2 and matches_field(parsed, child(parsed, node, 0), "first", a) and matches_field(parsed, child(parsed, node, 1), "second", b)

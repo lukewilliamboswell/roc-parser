@@ -102,4 +102,16 @@ node_kind_code = |kind| match kind {
 	Return => 33
 	Break => 34
 	Ellipsis => 35
+	IdentifierPattern => 36
+	WildcardPattern => 37
+	MutablePattern => 38
+	TagPattern => 39
+	NominalPattern => 40
+	TuplePattern => 41
+	ListPattern => 42
+	RecordPattern => 43
+	PatternField => 44
+	RestPattern => 45
+	AliasPattern => 46
+	AlternativePattern => 47
 }

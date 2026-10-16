@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Import, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -838,31 +838,246 @@ type_expression = |initial, depth| {
 	}
 }
 
+# Patterns have their own grammar: expression operators and value-only postfixes
+# must never make an invalid binding pattern appear complete.
+parse_pattern : State, Bool, U64 -> Built
+parse_pattern = |initial, alternatives, depth| {
+	s = skip_trivia(initial)
+	t = peek(s)
+	if depth >= 128 {
+		bad = issue(s, ResourceLimit, t.start, t.end)
+		add_node(bad, ErrorNode, t.start, t.start, [])
+	} else {
+		{ state: first_state, node: first_node } = pattern_primary(s, alternatives, depth + 1)
+		var $s = skip_trivia(first_state)
+		var $node = first_node
+		if alternatives and spelling($s, "|") {
+			var $ids = [first_node]
+			while spelling($s, "|") {
+				{ state: next_state, node: next_node } = pattern_primary(skip_trivia(at_pos($s, $s.pos + 1)), alternatives, depth + 1)
+				$ids = $ids.append(next_node)
+				$s = skip_trivia(next_state)
+			}
+			end = node_end($s, $ids.last() ?? first_node)
+			{ state: alt_state, node: alt_node } = add_node($s, AlternativePattern, t.start, end, $ids)
+			$s = alt_state
+			$node = alt_node
+		} else if spelling($s, "as") {
+			name_state = skip_trivia(at_pos($s, $s.pos + 1))
+			name = peek(name_state)
+			if name.kind == LowerIdent and is_lower(byte(name_state.source, name.start)) {
+				{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
+				{ state: alias_state, node: alias_node } = add_node(named_state, AliasPattern, t.start, name.end, [first_node, named_node])
+				$s = alias_state
+				$node = alias_node
+			} else {
+				$s = issue(name_state, UnexpectedToken, name.start, name.end)
+			}
+		}
+		{ state: $s, node: $node }
+	}
+}
+
+pattern_primary : State, Bool, U64 -> Built
+pattern_primary = |s, alternatives, depth| {
+	t = peek(s)
+	if t.kind == LowerIdent {
+		add_node(at_pos(s, s.pos + 1), if spelling(s, "_") WildcardPattern else IdentifierPattern, t.start, t.end, [])
+	} else if spelling(s, "var") {
+		look = skip_trivia(at_pos(s, s.pos + 1))
+		name = peek(look)
+		if name.kind == LowerIdent and is_lower(byte(look.source, name.start)) {
+			{ state: name_state, node: name_node } = add_node(at_pos(look, look.pos + 1), Identifier, name.start, name.end, [])
+			add_node(name_state, MutablePattern, t.start, name.end, [name_node])
+		} else {
+			bad = issue(look, UnexpectedToken, name.start, name.end)
+			add_node(bad, ErrorNode, t.start, name.start, [])
+		}
+	} else if spelling(s, "..") {
+		look = skip_trivia(at_pos(s, s.pos + 1))
+		if spelling(look, "as") {
+			name_state = skip_trivia(at_pos(look, look.pos + 1))
+			name = peek(name_state)
+			if name.kind == LowerIdent and !spelling(name_state, "_") {
+				{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
+				add_node(named_state, RestPattern, t.start, name.end, [named_node])
+			} else {
+				bad = issue(name_state, UnexpectedToken, name.start, name.end)
+				add_node(bad, RestPattern, t.start, t.end, [])
+			}
+		} else {
+			validated = if peek(look).kind == LowerIdent issue(look, UnexpectedToken, peek(look).start, peek(look).end) else look
+			add_node(validated, RestPattern, t.start, t.end, [])
+		}
+	} else if t.kind == UpperIdent {
+		{ state: name_state, node: name_node } = add_node(at_pos(s, s.pos + 1), Identifier, t.start, t.end, [])
+		var $s = name_state
+		var $name = name_node
+		var $done = False
+		while !$done {
+			look = skip_trivia($s)
+			if spelling(look, ".") and peek(at_pos(look, look.pos + 1)).kind == UpperIdent {
+				field_state = at_pos(look, look.pos + 1)
+				field = peek(field_state)
+				{ state: field_built, node: field_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
+				{ state: access_state, node: access_node } = add_node(field_built, FieldAccess, t.start, field.end, [$name, field_node])
+				$s = access_state
+				$name = access_node
+			} else {
+				$s = look
+				$done = True
+			}
+		}
+		var $nominal = False
+		if spelling($s, ".") {
+			$nominal = True
+			$s = skip_trivia(at_pos($s, $s.pos + 1))
+		}
+		if peek($s).kind == NoSpaceOpenRound {
+			{ state: args_state, ids: args, end, comma: _ } = pattern_collection(at_pos($s, $s.pos + 1), CloseRound, True, depth)
+			add_node(args_state, if $nominal NominalPattern else TagPattern, t.start, end, [$name].concat(args))
+		} else if $nominal and peek($s).kind == OpenCurly {
+			{ state: record_state, node: record_node } = pattern_record($s, alternatives, depth)
+			end = node_end(record_state, record_node)
+			add_node(record_state, NominalPattern, t.start, end, [$name, record_node])
+		} else {
+			validated = if $nominal issue($s, UnexpectedToken, peek($s).start, peek($s).end) else $s
+			add_node(validated, TagPattern, t.start, node_end(validated, $name), [$name])
+		}
+	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare {
+		closing = if t.kind == OpenSquare CloseSquare else CloseRound
+		{ state: items_state, ids, end, comma: _ } = pattern_collection(at_pos(s, s.pos + 1), closing, True, depth)
+		add_node(items_state, if t.kind == OpenSquare ListPattern else TuplePattern, t.start, end, ids)
+	} else if t.kind == OpenCurly {
+		pattern_record(s, alternatives, depth)
+	} else if t.kind == Number or t.kind == StringStart or t.kind == SingleQuote {
+		primary(s, depth)
+	} else {
+		bad = issue(s, UnexpectedToken, t.start, t.end)
+		add_node(at_pos(bad, bad.pos + if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly 0 else 1), ErrorNode, t.start, t.end, [])
+	}
+}
+
+pattern_collection : State, RocSyntax.TokenKind, Bool, U64 -> Collection
+pattern_collection = |initial, closing, alternatives, depth| {
+	var $s = initial
+	var $ids = []
+	var $end = peek(initial).start
+	var $done = False
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == closing {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			{ state: item_state, node: item_node } = parse_pattern(look, alternatives, depth + 1)
+			$ids = $ids.append(item_node)
+			$end = node_end(item_state, item_node)
+			$s = skip_trivia(item_state)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			} else if peek($s).kind != closing and peek($s).kind != EndOfFile {
+				$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+			}
+			if $s.pos <= look.pos {
+				$s = at_pos($s, look.pos + 1)
+			}
+		}
+	}
+	{ state: $s, ids: $ids, end: $end, comma: False }
+}
+
+pattern_record : State, Bool, U64 -> Built
+pattern_record = |initial, alternatives, depth| {
+	start = peek(initial).start
+	var $s = at_pos(initial, initial.pos + 1)
+	var $ids = []
+	var $end = peek(initial).end
+	var $done = False
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			{ state: field_state, node: field_node } = if spelling(look, "..") {
+				name_state = skip_trivia(at_pos(look, look.pos + 1))
+				name = peek(name_state)
+				if name.kind == LowerIdent and is_lower(byte(name_state.source, name.start)) {
+					{ state: named_state, node: named_node } = add_node(at_pos(name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
+					add_node(named_state, RestPattern, t.start, name.end, [named_node])
+				} else {
+					add_node(name_state, RestPattern, t.start, t.end, [])
+				}
+			} else if t.kind == LowerIdent and is_lower(byte(look.source, t.start)) {
+				{ state: name_state, node: name_node } = add_node(at_pos(look, look.pos + 1), Identifier, t.start, t.end, [])
+				after = skip_trivia(name_state)
+				if spelling(after, ":") {
+					{ state: value_state, node: value_node } = parse_pattern(at_pos(after, after.pos + 1), alternatives, depth + 1)
+					end = node_end(value_state, value_node)
+					add_node(value_state, PatternField, t.start, end, [name_node, value_node])
+				} else {
+					validated = if spelling(after, ",") or peek(after).kind == CloseCurly after else issue(after, UnexpectedToken, peek(after).start, peek(after).end)
+					add_node(validated, PatternField, t.start, t.end, [name_node])
+				}
+			} else {
+				bad = issue(at_pos(look, look.pos + 1), UnexpectedToken, t.start, t.end)
+				add_node(bad, ErrorNode, t.start, t.end, [])
+			}
+			$ids = $ids.append(field_node)
+			$end = node_end(field_state, field_node)
+			$s = skip_trivia(field_state)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+			if $s.pos <= look.pos {
+				$s = at_pos($s, look.pos + 1)
+			}
+		}
+	}
+	add_node($s, RecordPattern, start, $end, $ids)
+}
+
 parse_lambda : State, U64, U64 -> Built
 parse_lambda = |initial, start, depth| {
 	var $s = initial
 	var $ids = []
 	var $done = False
 	while !$done {
-		$s = skip_trivia($s)
-		t = peek($s)
-		if spelling($s, "|") {
-			$s = at_pos($s, $s.pos + 1)
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if spelling(look, "|") {
+			$s = at_pos(look, look.pos + 1)
 			$done = True
-		} else if t.kind == LowerIdent {
-			{ state: param_state, node: param_node } = add_node(at_pos($s, $s.pos + 1), Pattern, t.start, t.end, [])
+		} else if t.kind == EndOfFile {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$done = True
+		} else {
+			before = look.pos
+			{ state: param_state, node: param_node } = parse_pattern(look, False, depth + 1)
 			$ids = $ids.append(param_node)
 			$s = skip_trivia(param_state)
 			if spelling($s, ",") {
 				$s = at_pos($s, $s.pos + 1)
 			}
-				else if !spelling($s, "|") {
-					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
-					$done = True
-				}
-		} else {
-			$s = issue($s, if t.kind == EndOfFile UnclosedDelimiter else UnsupportedSyntax, t.start, t.end)
-			$done = True
+			if $s.pos <= before {
+				$s = issue(at_pos($s, before + 1), UnexpectedToken, t.start, t.end)
+			}
 		}
 	}
 	{ state: body_state, node: body_node } = expression($s, 0, depth)
@@ -982,15 +1197,19 @@ parse_match = |initial, start, depth| {
 				$done = True
 			} else {
 				before = $s.pos
-				{ state: pattern_value_state, node: pattern_value_node } = expression($s, 0, depth)
-				pattern_end = node_end(pattern_value_state, pattern_value_node)
-				pattern_validated = if valid_pattern(pattern_value_state, pattern_value_node) pattern_value_state else issue(pattern_value_state, UnexpectedToken, t.start, pattern_end)
-				{ state: pattern_state, node: pattern_node } = add_node(pattern_validated, Pattern, t.start, pattern_end, [pattern_value_node])
-				arrow = skip_trivia(pattern_state)
+				{ state: pattern_state, node: pattern_node } = parse_pattern($s, True, depth + 1)
+				var $arrow = skip_trivia(pattern_state)
+				var $branch_ids = [pattern_node]
+				if spelling($arrow, "if") {
+					{ state: guard_state, node: guard_node } = expression(at_pos($arrow, $arrow.pos + 1), 0, depth + 1)
+					$arrow = skip_trivia(guard_state)
+					$branch_ids = $branch_ids.append(guard_node)
+				}
+				arrow = $arrow
 				if spelling(arrow, "=>") {
 					{ state: branch_value_state, node: branch_value_node } = expression(at_pos(arrow, arrow.pos + 1), 0, depth)
 					branch_end = node_end(branch_value_state, branch_value_node)
-					{ state: branch_state, node: branch_node } = add_node(branch_value_state, MatchBranch, t.start, branch_end, [pattern_node, branch_value_node])
+					{ state: branch_state, node: branch_node } = add_node(branch_value_state, MatchBranch, t.start, branch_end, $branch_ids.append(branch_value_node))
 					$ids = $ids.append(branch_node)
 					$s = skip_trivia(branch_state)
 					$end = branch_end
@@ -1303,4 +1522,12 @@ contains_optional_access = |s, root| {
 		}
 	}
 	$found
+}
+
+expect {
+	["|_| 1", "|Some(x), (a, b), {name}, [first, .. as rest]| x", "|var count| count", "|| {}", "match x { _ => 0 }", "match x { Some(a) | Other(a) => a, None => 0 }", "match x { {a: Some(v), ..rest} => v }", "match x { [first, .. as rest] if first > 0 => rest, _ => [] }", "|Thing.(value)| value", "|Thing.{field}| field", "|(a, _) as pair| pair"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["|1 + 2| 0", "match x { 1 + 2 => 0 }", "match x { [a b] => 0 }", "|var _| 0", "match x { [.. old] => 0 }", "match x { _ as Upper => 0 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
 }
