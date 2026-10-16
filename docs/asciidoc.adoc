@@ -110,7 +110,11 @@ python3 scripts/check_asciidoc_performance.py --roc "$ROC"
 The default campaign generates 2,000 seeded documents plus 500 raw mutations,
 runs the authored fixtures, and tests geometric sizes from 32 to 1,024 for
 paragraphs, sections, footnotes, cross references, lists, tables, attributes
-and delimiters. Nested containers use depths from 2 to 32. Scaling checks
+and delimiters. Footnotes (including table cells), named references, growing
+counter state (including formatted paragraphs and underscored names) and chained
+attribute definitions also run at 2,048 and 4,096 entries. Conditional presence
+and value tests exercise repeated lookups in a growing attribute environment.
+Nested containers use depths from 2 to 32. Scaling checks
 flag growth above the configured exponent. Reports record source hashes,
 compiler, machine, samples and replay commands. Failing inputs and scaling
 pairs are retained under `.roc-parser-tmp/asciidoc-performance/`.

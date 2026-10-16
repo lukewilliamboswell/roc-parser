@@ -113,8 +113,13 @@ python3 scripts/check_asciidoc_performance.py --smoke --roc "$ROC"
 ----
 
 The full local campaign defaults to 2,000 generated documents plus 500 mutations,
-all fixture suites and geometric scaling families. Sizes run from 32 to 1,024;
-nested lists and containers use depths from 2 to 32. It measures parse and parse
+all fixture suites and geometric scaling families, including repeated condition
+checks against growing attribute sets, named footnotes, distinct counters and
+attribute aliases. State is exercised both within and across paragraphs. Sizes
+run from 32 to 1,024;
+nested lists and containers use depths from 2 to 32. Footnote, counter and alias
+workloads extend to 4,096 entries to expose copying that small documents can
+hide. It measures parse and parse
 plus render with optimized code and persistent workers. Every input must meet
 the 1.0-times-oracle ceiling; uncertain timings escalate to longer batches.
 Scaling families use full timing windows. Correctness, warmup, IPC and JSON

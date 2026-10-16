@@ -23,13 +23,13 @@ class WorkerError(RuntimeError):
 
 class Worker:
     """A bounded, persistent JSONL exchange. stderr cannot fill a pipe."""
-    def __init__(self, command, timeout=5.0, max_response=16 * 1024 * 1024):
+    def __init__(self, command, timeout=5.0, max_response=16 * 1024 * 1024, env=None):
         self.command = list(command)
         self.timeout = timeout
         self.max_response = max_response
         self.stderr = tempfile.TemporaryFile()
         self.proc = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=self.stderr, bufsize=0)
+                                     stderr=self.stderr, bufsize=0, env=env)
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.proc.stdout, selectors.EVENT_READ)
         self.pending = bytearray()

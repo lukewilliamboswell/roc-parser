@@ -7,6 +7,8 @@ import json
 import shlex
 import tempfile
 import unittest
+from unittest import mock
+from types import SimpleNamespace
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -22,6 +24,63 @@ class Performance(unittest.TestCase):
 
     def test_default_ratio_is_one(self):
         self.assertEqual(perf.parser().parse_args([]).max_ratio, 1.0)
+
+    def test_worker_request_uses_remaining_deadline(self):
+        clock = [9.75]
+        worker = mock.Mock()
+        with mock.patch.object(perf, 'Worker', return_value=worker), mock.patch.object(perf.time, 'monotonic', side_effect=lambda: clock[0]):
+            bounded = perf.DeadlineWorker(['worker'], timeout=30, deadline=10)
+            bounded.request({})
+            self.assertEqual(worker.timeout, 0.25)
+            worker.request.side_effect = lambda _: clock.__setitem__(0, 10.1)
+            with self.assertRaisesRegex(TimeoutError, 'full-run deadline'):
+                bounded.request({})
+
+    def test_final_row_overrun_fails_and_retains_replay_provenance(self):
+        clock = [0.0]
+        environments = []
+        reply = {'oracle_version': '2.0.23', 'oracle_code_sha256': 'a'*64,
+                 'include_io': 'caller-map-memory', 'include_path_metadata': {}, 'projection': {}, 'html': ''}
+        class FakeWorker:
+            def __init__(self, command, timeout, env=None):
+                environments.append(env)
+            def request(self, value):
+                return reply
+            def close(self):
+                pass
+        measured = perf.distribution([100,100,100],1,1)
+        def finish_after_deadline(*args, **kwargs):
+            clock[0] = 10.1
+            return [measured,measured], [{'qualification': {}}]
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.dict(perf.os.environ, {'RUBYOPT':'ambient options', 'RUBYLIB':'ambient library', 'GEM_HOME':'ambient gems'}), \
+             mock.patch.object(perf.time, 'monotonic', side_effect=lambda: clock[0]), \
+             mock.patch.object(perf.platform, 'platform', return_value='test OS'), \
+             mock.patch.object(perf.platform, 'processor', return_value='test CPU'), \
+             mock.patch.multiple(perf,
+                 Worker=FakeWorker,
+                 build=mock.Mock(return_value=(pathlib.Path('/fake-worker'), {'source_identity':'same','compiler':{'sha256':'compiler-hash'}})),
+                 digest=mock.Mock(return_value='a'*64), source_identity=mock.Mock(return_value='same'),
+                 corpus=mock.Mock(return_value=[{'id':'last','family':'test','source':'hello'}]),
+                 validate_reply=mock.Mock(side_effect=lambda value,*_: value), equivalent=mock.Mock(),
+                 calibrate=mock.Mock(return_value=1), sample_pair=finish_after_deadline), \
+             mock.patch.object(perf.subprocess, 'run', return_value=SimpleNamespace(stdout='Ruby test')):
+            output=pathlib.Path(tmp)
+            self.assertEqual(perf.main(['--smoke','--modes','render','--deadline-seconds','10','--output',tmp]),1)
+            report=json.loads((output/'results.json').read_text())
+            self.assertEqual(len(report['records']),1)
+            self.assertEqual(report['records'][0]['status'],'error')
+            self.assertIn('full-run deadline',report['records'][0]['error'])
+            retained=json.loads(next((output/'retained').glob('*.json')).read_text())
+            self.assertIn('--replay',retained['measurement']['replay'])
+            self.assertEqual(retained['run']['candidate_build']['compiler']['sha256'],'compiler-hash')
+            self.assertEqual(retained['run']['reference']['version'],'2.0.23')
+            self.assertIsNone(environments[0])
+            self.assertNotIn('RUBYOPT',environments[1])
+            self.assertNotIn('RUBYLIB',environments[1])
+            self.assertEqual(environments[1]['GEM_HOME'],str(perf.parser().parse_args([]).gem_home.resolve()))
+            self.assertEqual(environments[1]['TZ'],'UTC')
+            self.assertEqual(perf.os.environ['GEM_HOME'],'ambient gems')
 
     def test_default_oracle_home_matches_the_local_installer(self):
         from asciidoc.setup_oracle import DEFAULT_HOME as installed_home
@@ -76,6 +135,11 @@ class Performance(unittest.TestCase):
         self.assertEqual(len(deep),10)
         self.assertEqual(max(case['size'] for case in deep),32)
         self.assertEqual({case['size'] for case in deep},{2,4,8,16,32})
+
+    def test_default_scaling_sources_fit_the_parser_input_limit(self):
+        for case in perf.geometric(perf.parser().parse_args([]).sizes):
+            with self.subTest(case=case['id']):
+                self.assertLessEqual(len(case['source'].encode()), 262144)
 
     def test_geometric_modes_are_independent(self):
         rows=[]

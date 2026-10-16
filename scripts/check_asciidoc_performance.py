@@ -34,6 +34,48 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def enforce_deadline(deadline):
+    if time.monotonic() >= deadline:
+        raise TimeoutError('full-run deadline exceeded; campaign not qualified')
+
+
+class DeadlineWorker:
+    """Bound every protocol exchange by the remaining campaign budget."""
+    def __init__(self, command, timeout, deadline, env=None):
+        self.worker = Worker(command, timeout=timeout, env=env)
+        self.timeout = timeout
+        self.deadline = deadline
+
+    def request(self, value):
+        enforce_deadline(self.deadline)
+        self.worker.timeout = min(self.timeout, self.deadline - time.monotonic())
+        try:
+            result = self.worker.request(value)
+        except Exception:
+            enforce_deadline(self.deadline)
+            raise
+        enforce_deadline(self.deadline)
+        return result
+
+    def close(self):
+        self.worker.close()
+
+
+def oracle_environment(gem_home):
+    env = {key: value for key, value in os.environ.items()
+           if key not in ('RUBYOPT', 'RUBYLIB', 'GEM_HOME', 'GEM_PATH', 'BUNDLE_GEMFILE')}
+    env.update(TZ='UTC', LANG='C.UTF-8', LC_ALL='C.UTF-8', SOURCE_DATE_EPOCH='946684800')
+    if gem_home:
+        env.update(GEM_HOME=str(gem_home.resolve()), GEM_PATH=str(gem_home.resolve()))
+    return env
+
+
+def retained_run(report):
+    return {key: report[key] for key in (
+        'command', 'machine', 'seed', 'driver_sha256', 'worker_transport_sha256',
+        'candidate_build', 'reference', 'measurement_policy', 'max_ratio', 'deadline_seconds') if key in report}
+
+
 def source_identity(root):
     paths = sorted((root / 'package').glob('*.roc')) + [root / 'scripts/asciidoc/performance.roc', root / 'scripts/asciidoc/performance_oracle.rb', root / 'scripts/asciidoc/oracle.rb', root / 'scripts/review_asciidoc.py']
     h = hashlib.sha256()
@@ -69,6 +111,35 @@ def generated(seed, count):
                    'provenance': {'seed': seed, 'parent': f'model-{seed}-{index}', 'position': position, 'insert': insert}}
 
 
+def conditional_document(size, *, values):
+    definitions = '\n'.join(f':key{i}: value{i}' for i in range(size))
+    name = f'key{size - 1}'
+    directive = (f'ifeval::["{{{name}}}" == "value{size - 1}"]'
+                 if values else f'ifdef::{name}[]')
+    return definitions + '\n\n' + f'{directive}\nword\nendif::[]\n' * size
+
+
+def named_footnotes(size, *, blocks):
+    separator = '\n\n' if blocks else ' '
+    definitions = separator.join(f'footnote:note{i}[Note {i}.]' for i in range(size))
+    references = ' '.join(f'footnote:note{i}[]' for i in range(size))
+    return definitions + separator + references
+
+
+def counter_document(size, *, blocks, formatted=False, underscored=False):
+    separator = '\n\n' if blocks else ' '
+    names = [f'key_{i}' if underscored else f'key{i}' for i in range(size)]
+    prefix = '*bold* ' if formatted else ''
+    counters = separator.join(prefix + f'{{counter:{name}}}' for name in names)
+    references = ' '.join(f'{{{name}}}' for name in names)
+    return counters + '\n\n' + references
+
+
+def attribute_aliases(size):
+    definitions = ':key0: value\n' + '\n'.join(f':key{i}: {{key{i - 1}}}' for i in range(1, size))
+    return definitions + f'\n\n{{key{size - 1}}}'
+
+
 def geometric(sizes):
     families = {
         'long-paragraph': lambda n: 'alpha café ' * n,
@@ -78,25 +149,42 @@ def geometric(sizes):
         'many-paragraphs': lambda n: '\n\n'.join('paragraph ' + str(i) for i in range(n)),
         'many-sections': lambda n: '\n\n'.join('== Section ' + str(i) + '\n\nBody.' for i in range(n)),
         'many-footnotes': lambda n: ' '.join('word footnote:[note ' + str(i) + ']' for i in range(n)),
+        'named-footnotes': lambda n: named_footnotes(n, blocks=False),
+        'named-footnote-blocks': lambda n: named_footnotes(n, blocks=True),
+        'distinct-counters': lambda n: counter_document(n, blocks=False),
+        'counter-blocks': lambda n: counter_document(n, blocks=True),
+        'formatted-counter-blocks': lambda n: counter_document(n, blocks=True, formatted=True),
+        'underscored-counter-blocks': lambda n: counter_document(n, blocks=True, underscored=True),
+        'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
         'attribute-redefinitions': lambda n: '\n\n'.join(':name: value' + str(i) + '\n\n{name}' for i in range(n)),
         'plain-punctuation-adversary': lambda n: '( . - = ' * n,
         'many-list-items': lambda n: '\n'.join('* item ' + str(i) for i in range(n)),
         'nested-lists': lambda n: '\n'.join('*' * (i + 1) + ' item' for i in range(n)),
         'table-cells': lambda n: '|===\n' + '\n'.join('|one |two' for _ in range(n)) + '\n|===',
+        'table-footnotes': lambda n: '[cols="a"]\n|===\n' + '\n'.join(f'|footnote:[Note {i}.]' for i in range(n)) + '\n|===',
         'many-delimiters': lambda n: '\n\n'.join('----\nline\n----' for _ in range(n)),
         'attribute-definitions': lambda n: '\n'.join(':key' + str(i) + ': value' for i in range(n)) + '\n\n{key0}',
+        'conditional-presence': lambda n: conditional_document(n, values=False),
+        'conditional-value': lambda n: conditional_document(n, values=True),
         'formatting-adversary': lambda n: ('*a _b `c ' * n) + 'tail',
         'unclosed-delimiter': lambda n: '----\n' + 'x\n' * n,
         'nested-containers': lambda n: '\n'.join('=' * (4 + i) for i in range(n)) + '\ntext\n' + '\n'.join('=' * (4 + i) for i in reversed(range(n))),
     }
-    priority = ['many-sections','many-footnotes','many-crossrefs','attribute-redefinitions','plain-punctuation-adversary']
+    priority = ['many-sections','many-footnotes','many-crossrefs','attribute-redefinitions','plain-punctuation-adversary',
+                'conditional-presence','conditional-value','distinct-counters','counter-blocks',
+                'formatted-counter-blocks','underscored-counter-blocks',
+                'named-footnotes','named-footnote-blocks','attribute-aliases','table-footnotes']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
         # Depth uses a separate legal geometric range. Size ratchets must time
         # accepted documents; the parser's explicit 64-level rejection contract
         # is exercised by package tests, rather than mistaken for oracle drift.
         family_sizes = [2,4,8,16,32] if family in ('nested-lists','nested-containers') else sizes
+        if family in ('many-footnotes','named-footnotes','named-footnote-blocks',
+                      'distinct-counters','counter-blocks','formatted-counter-blocks',
+                      'underscored-counter-blocks','attribute-aliases','table-footnotes') and max(sizes) >= 1024:
+            family_sizes = sorted(set(sizes) | {2048,4096})
         for size in family_sizes:
             yield {'id': f'scaling-{family}-{size}', 'family': family, 'size': size, 'source': make(size),
                    'provenance': {'generator': family, 'parameter': size, 'geometric': True}}
@@ -163,6 +251,8 @@ def validate_reply(value, case, iterations):
 def equivalent(candidate, reference):
     if canonical_projection(candidate['projection']) != canonical_projection(reference['projection']):
         raise ValueError('candidate/reference block projections differ')
+    if candidate['html'] == reference['html']:
+        return
     if canonical_html(candidate['html']) != canonical_html(reference['html']):
         raise ValueError('candidate/reference rendered DOM differs')
 
@@ -372,30 +462,37 @@ def main(argv=None):
     journal = args.output / 'measurements.jsonl'
     journal.write_text('')
     report = {'schema_version': 1, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
-              'timed_operations': args.modes, 'resource_policy': 'nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
+              'timed_operations': args.modes, 'deadline_seconds': args.deadline_seconds,
+              'resource_policy': 'nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
               'command': [sys.executable, str(Path(__file__).resolve()), *(argv if argv is not None else sys.argv[1:])],
               'machine': {'system': platform.platform(), 'processor': platform.processor(), 'cores': os.cpu_count()},
               'measurement_policy': 'strict per-input1.0x median gate; short shared batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',
-              'driver_sha256': digest(__file__), 'host_monotonic_nominal_resolution_ns': max(1,math.ceil(time.get_clock_info('monotonic').resolution*1000000000))}
+              'driver_sha256': digest(__file__), 'worker_transport_sha256': digest(ROOT / 'scripts/review_roc_syntax.py'),
+              'host_monotonic_nominal_resolution_ns': max(1,math.ceil(time.get_clock_info('monotonic').resolution*1000000000))}
     workers = []
     started = time.monotonic()
+    deadline = started + args.deadline_seconds
     try:
         binary, build_info = build(args, args.output)
         report['candidate_build'] = build_info
+        enforce_deadline(deadline)
         oracle = args.root / 'scripts/asciidoc/performance_oracle.rb'
+        reference_env = oracle_environment(args.gem_home)
         report['reference'] = {'version': '2.0.23', 'worker_sha256': digest(oracle), 'oracle_sha256': digest(oracle.with_name('oracle.rb')),
-                               'ruby': subprocess.run([args.ruby,'--version'], capture_output=True,text=True,check=True).stdout.strip()}
-        if args.gem_home:
-            os.environ['GEM_HOME'] = str(args.gem_home.resolve()); os.environ['GEM_PATH'] = str(args.gem_home.resolve())
+                               'ruby': subprocess.run([args.ruby,'--version'], capture_output=True,text=True,check=True,env=reference_env,
+                                                      timeout=max(1e-9, min(args.timeout, deadline-time.monotonic()))).stdout.strip(),
+                               'environment': {key: reference_env.get(key) for key in ('GEM_HOME','GEM_PATH','TZ','LANG','LC_ALL','SOURCE_DATE_EPOCH','RUBYOPT','RUBYLIB','BUNDLE_GEMFILE')}}
         commands = [[str(binary.resolve())], [args.ruby,str(oracle)]]
-        workers = [Worker(command,timeout=args.timeout) for command in commands]
-        deadline = time.monotonic() + args.deadline_seconds
+        def start_workers():
+            enforce_deadline(deadline)
+            return [DeadlineWorker(command, args.timeout, deadline, env=reference_env if index == 1 else None)
+                    for index, command in enumerate(commands)]
+        workers = start_workers()
         for case in corpus(args):
             for mode in args.modes:
                 row = {'case': case, 'mode': mode, 'source_sha256': hashlib.sha256(case['source'].encode()).hexdigest(), 'request_sha256': case_identity(case)}
                 try:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError('full-run deadline exceeded; remaining corpus unverified')
+                    enforce_deadline(deadline)
                     checks = [validate_reply(worker.request(request(case,mode,0)),case,0) for worker in workers]
                     equivalent(*checks)
                     if checks[1].get('oracle_version') != '2.0.23' or len(checks[1].get('oracle_code_sha256','')) != 64:
@@ -420,6 +517,7 @@ def main(argv=None):
                     row['timing_qualification'] = attempts[-1]['qualification']
                     row['comparison'] = ratchet(row['candidate'],row['reference'],args.max_ratio)
                     row['status'] = 'protocol-smoke' if args.smoke else 'noisy' if row['comparison']['noisy'] else 'slow' if row['comparison']['regression'] else 'pass'
+                    enforce_deadline(deadline)
                     if not args.smoke and row['status'] != 'pass':
                         report['failures'].append({'id':case['id'],'mode':mode,'kind':row['status']})
                 except Exception as error:
@@ -427,12 +525,13 @@ def main(argv=None):
                     report['failures'].append({'id':case['id'],'mode':mode,'kind':'error','message':str(error)})
                     for worker in workers:
                         worker.close()
-                    workers = [Worker(command,timeout=args.timeout) for command in commands]
+                    workers = [] if row['error'].startswith('full-run deadline') else start_workers()
                 report['records'].append(row)
                 if row['status'] in ('error','slow','noisy'):
                     failure = args.output / 'retained' / (row['request_sha256'] + '-' + mode + '.json')
-                    failure.parent.mkdir(exist_ok=True); failure.write_text(json.dumps({'case':case,'measurement':row},indent=2)+'\n')
                     row['replay'] = replay_command(args,failure,[mode])
+                    failure.parent.mkdir(exist_ok=True)
+                    failure.write_text(json.dumps({'case':case,'measurement':row,'run':retained_run(report)},indent=2)+'\n')
                 # Append durable partial evidence without rewriting an O(n²) report.
                 with journal.open('a') as checkpoint:
                     checkpoint.write(json.dumps(row)+'\n')
@@ -449,9 +548,10 @@ def main(argv=None):
                     retained = args.output / 'retained' / (row['request_sha256'] + '-scaling-' + row['mode'] + '.json')
                     retained.parent.mkdir(exist_ok=True)
                     before = next(item for item in report['records'] if item['mode']==check['mode'] and item['case']['id']==check['from'])
-                    retained.write_text(json.dumps({'cases':[before['case'],row['case']],'measurement':row,'scaling':check},indent=2)+'\n')
                     check['retained'] = str(retained)
                     check['replay'] = replay_command(args,retained,[row['mode']])
+                    retained.write_text(json.dumps({'cases':[before['case'],row['case']],'measurement':row,'scaling':check,'run':retained_run(report)},indent=2)+'\n')
+        enforce_deadline(deadline)
     except Exception as error:
         report['failures'].append({'kind':'workflow','message':str(error)})
     finally:
@@ -460,6 +560,8 @@ def main(argv=None):
     report['workspace_source_identity_at_end'] = source_identity(args.root)
     if 'candidate_build' in report and report['candidate_build'].get('source_identity') and report['candidate_build']['source_identity'] != report['workspace_source_identity_at_end']:
         report['failures'].append({'kind':'workflow','message':'sources changed after native build; current checkout not verified'})
+    if time.monotonic() >= deadline and not any('full-run deadline' in item.get('message','') for item in report['failures']):
+        report['failures'].append({'kind':'workflow','message':'full-run deadline exceeded; campaign not qualified'})
     (args.output/'results.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps({'records':len(report['records']),'failures':len(report['failures']),'report':str(args.output/'results.json'),'smoke':args.smoke}))
     return 1 if report['failures'] else 0
