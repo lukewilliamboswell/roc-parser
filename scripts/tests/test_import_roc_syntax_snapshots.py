@@ -101,6 +101,15 @@ class PinnedExtractionTests(unittest.TestCase):
         self.assertIsNone(reason)
         self.assertEqual([c['source'] for c in cases], ['a', '\u00a0b\u00a0'])
 
+    def test_repl_carriage_return_decode_precedes_trimming(self):
+        data = snapshot('repl', '» first\\r» a\\rb\\r\n', 'source_escapes=true\n')
+        cases, reason = snapshot_cases('escaped.md', 'blob', data)
+        self.assertIsNone(reason)
+        self.assertEqual([c['source'] for c in cases], ['first', 'a\rb'])
+        audit = cases[1]['upstream']['extraction']
+        self.assertEqual(data[audit['snapshot_byte_start']:audit['snapshot_byte_end']], b'a\\rb')
+        self.assertTrue(audit['source_escapes'])
+
     def test_broken_multifile_or_empty_repl_is_not_silent_success(self):
         data = b'# META\n~~~ini\ntype=docs\n~~~\n# SOURCE\n## broken.roc\n'
         with self.assertRaisesRegex(ValueError, 'unhandled multi-file'):

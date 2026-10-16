@@ -99,9 +99,22 @@ def snapshot_cases(path: str, blob: str, contents: bytes) -> tuple[list[dict], s
         if kind != 'repl':
             add(raw, kind, '', match.start(1), match.end(1), kind)
         else:
+            # Content applies source_escapes before the REPL runner trims inputs.
+            # Keep an index map so audit spans still refer to original blob bytes.
+            decoded, boundaries = [], [0]
+            offset = 0
+            while offset < len(raw):
+                if metadata.get('source_escapes') == 'true' and raw[offset:offset + 2] == '\\r':
+                    decoded.append('\r')
+                    offset += 2
+                else:
+                    decoded.append(raw[offset])
+                    offset += 1
+                boundaries.append(offset)
+            decoded = ''.join(decoded)
             # splitSequence is intentionally not restricted to line starts.
             cursor = 0
-            for index, part in enumerate(raw.split('»')):
+            for index, part in enumerate(decoded.split('»')):
                 start = cursor
                 cursor += len(part) + 1
                 if index == 0:
@@ -109,9 +122,11 @@ def snapshot_cases(path: str, blob: str, contents: bytes) -> tuple[list[dict], s
                 source = part.strip(' \t\r\n')
                 if not source:
                     continue
-                offset = len(part) - len(part.lstrip(' \t\r\n'))
-                absolute = match.start(1) + start + offset
-                add(source, 'repl', f'/input-{index}', absolute, absolute + len(source), 'repl_ascii_trim')
+                trim = len(part) - len(part.lstrip(' \t\r\n'))
+                first = boundaries[start + trim]
+                last = boundaries[start + trim + len(source)]
+                add(raw[first:last], 'repl', f'/input-{index}', match.start(1) + first,
+                    match.start(1) + last, 'repl_ascii_trim')
     else:
         marker = '# SOURCE\n'
         if marker not in text:
