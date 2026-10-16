@@ -1563,7 +1563,7 @@ parse_type_declaration = |initial, depth| {
 		$s = associated_end
 		$ids = $ids.append(associated_node)
 	}
-	end = if $ids.is_empty() first.end else node_end($s, $ids.last() ?? header_node)
+	end = $ids.fold(first.end, |furthest, id| U64.max(furthest, node_end($s, id)))
 	add_node($s, TypeDeclaration, first.start, end, $ids)
 }
 
@@ -2778,7 +2778,7 @@ expect {
 
 expect {
 	# Error recovery keeps all type children within their parent source spans.
-	["Pair(a, b+ : (", "f : U8 where [a.method -> b]", "f : {a: U8 + 1}", "f : [A, ..r, B]"].all(
+	["Pair(a, b+ : (", "a.Sort := where [a.foo : a]", "f : U8 where [a.method -> b]", "f : {a: U8 + 1}", "f : [A, ..r, B]"].all(
 		|source| {
 			p = RocSyntax.parse_str(source)
 			p.status != Complete and p.nodes.all(
