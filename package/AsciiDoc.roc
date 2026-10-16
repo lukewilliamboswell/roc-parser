@@ -1087,18 +1087,29 @@ prepare_blocks = |blocks, state| {
 				$state,
 				|text, cell_state| AsciiDocInline.render_state(text, node.attrs, { subs: "normal" }, cell_state),
 				|text, cell_state| {
+					{ emitted_footnotes: prior_emitted, footnotes, note_index, indexed_note_count, refs, ref_index, indexed_ref_count, attributes, removed, snapshot, snapshot_index, tag_prefix } = cell_state
+					start = footnotes.len()
+					# Every prior emission is at or below start. Child footers only
+					# consider newer notes; detach the old list before child mutation.
+					child_state = { emitted_footnotes: [], footnotes, note_index, indexed_note_count, refs, ref_index, indexed_ref_count, attributes, removed, snapshot, snapshot_index, tag_prefix }
 					lines = text.split_on("\n").map(|line| { text: line, attrs: table_cell_attributes(node.attrs) })
-					identified = identify_blocks(parse_blocks(lines, 98).blocks, { ids: cell_state.refs.fold(Dict.empty(), |index, ref| index.insert(ref.id, True)), refs: cell_state.refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
-					content = prepare_blocks(identified.blocks, if cell_state.refs.len() == identified.state.refs.len() cell_state else AsciiDocInline.with_refs(cell_state, identified.state.refs))
-					prepared = { blocks: if identified.state.toc attach_toc(content.blocks, content.blocks) else content.blocks, state: content.state }
-					footer = footnote_footer(prepared.state, node.attrs, cell_state.footnotes.len())
-					var $emitted = []
-					var $note_index = cell_state.footnotes.len()
-					while $note_index < prepared.state.footnotes.len() {
+					identified = identify_blocks(parse_blocks(lines, 98).blocks, { ids: refs.fold(Dict.empty(), |index, ref| index.insert(ref.id, True)), refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
+					content = prepare_blocks(identified.blocks, if refs.len() == identified.state.refs.len() child_state else AsciiDocInline.with_refs(child_state, identified.state.refs))
+					prepared_blocks = if identified.state.toc attach_toc(content.blocks, content.blocks) else content.blocks
+					# Nested cells emit their own definitions before this cell's
+					# footer. Keep that suppression state until the footer is built.
+					footer = footnote_footer(content.state, node.attrs, start)
+					end = content.state.footnotes.len()
+					# Nested emissions are a subset of the new range. Replace them
+					# with that whole range, dropping aliases before growing the list.
+					next_state = { ..content.state, emitted_footnotes: [] }
+					var $emitted = prior_emitted
+					var $note_index = start
+					while $note_index < end {
 						$note_index = $note_index + 1
 						$emitted = $emitted.append($note_index)
 					}
-					{ html: "${render_blocks(prepared.blocks)}${footer}", state: { ..prepared.state, emitted_footnotes: prepared.state.emitted_footnotes.concat($emitted) } }
+					{ html: "${render_blocks(prepared_blocks)}${footer}", state: { ..next_state, emitted_footnotes: $emitted } }
 				},
 			)
 			$state = table.state
@@ -1146,18 +1157,43 @@ without_header_snapshots = |blocks| {
 
 footnote_footer : AsciiDocInline.State, List(AsciiDoc.Attribute), U64 -> Str
 footnote_footer = |state, attrs, start| {
+	if has_attr(attrs, "nofootnotes") {
+		return ""
+	}
 	var $notes = []
-	var $index = 0.U64
-	if !has_attr(attrs, "nofootnotes") {
-		for note in state.footnotes {
-			$index = $index + 1
-			if $index > start and !state.emitted_footnotes.contains($index) {
-				n = $index.to_str()
-				$notes = $notes.append("<div class=\"footnote\" id=\"_footnotedef_${n}\">\n<a href=\"#_footnoteref_${n}\">${n}</a>. ${note.text}\n</div>\n")
-			}
+	var $index = start
+	var $cursor = first_emission_after(state.emitted_footnotes, start)
+	for note in state.footnotes.drop_first(start) {
+		$index = $index + 1
+		while $cursor < state.emitted_footnotes.len() and (state.emitted_footnotes.get($cursor) ?? 0) < $index {
+			$cursor = $cursor + 1
+		}
+		if state.emitted_footnotes.get($cursor) != Ok($index) {
+			n = $index.to_str()
+			$notes = $notes.append("<div class=\"footnote\" id=\"_footnotedef_${n}\">\n<a href=\"#_footnoteref_${n}\">${n}</a>. ${note.text}\n</div>\n")
 		}
 	}
 	if $notes.is_empty() "" else "\n<div id=\"footnotes\">\n<hr>\n${Str.join_with($notes, "")}</div>"
+}
+
+# Core rendering starts with an empty emission list. Each cell appends exactly
+# its newly allocated note range, making this list sorted and duplicate-free.
+first_emission_after : List(U64), U64 -> U64
+first_emission_after = |emitted, start| {
+	if (emitted.last() ?? 0) <= start {
+		return emitted.len()
+	}
+	var $low = 0.U64
+	var $high = emitted.len()
+	while $low < $high {
+		middle = $low + ($high - $low) / 2
+		if (emitted.get(middle) ?? 0) <= start {
+			$low = middle + 1
+		} else {
+			$high = middle
+		}
+	}
+	$low
 }
 
 attach_toc : List(AsciiDoc.Block), List(AsciiDoc.Block) -> List(AsciiDoc.Block)
@@ -1799,4 +1835,24 @@ ascii_id_text = |source| {
 				}
 	}
 	Str.from_utf8_lossy($out)
+}
+
+expect {
+	state = { ..AsciiDocInline.initial_state, footnotes: [{ name: "", text: "one" }, { name: "", text: "two" }, { name: "", text: "three" }, { name: "", text: "four" }, { name: "", text: "five" }], emitted_footnotes: [1, 3, 5] }
+	footer = footnote_footer(state, [], 2)
+	footer.contains("id=\"_footnotedef_4\"") and !footer.contains("_footnotedef_1") and !footer.contains("_footnotedef_2") and !footer.contains("_footnotedef_3") and !footer.contains("_footnotedef_5") and footnote_footer(state, [], 5) == "" and footnote_footer(state, [{ name: "nofootnotes", value: "" }], 0) == ""
+}
+expect first_emission_after([1, 3, 5], 0) == 0 and first_emission_after([1, 3, 5], 1) == 1 and first_emission_after([1, 3, 5], 2) == 1 and first_emission_after([1, 3, 5], 3) == 2 and first_emission_after([1, 3, 5], 5) == 3 and first_emission_after([], 0) == 0
+
+expect {
+	source = "Before footnote:[Root before].\n\n[cols=\"a\"]\n|===\n|Outer before footnote:[Outer before].\n\n[cols=\"a\"]\n!===\n!Inner footnote:[Inner].\n!===\n\nOuter after footnote:[Outer after].\n|===\n\nAfter footnote:[Root after]."
+	match AsciiDoc.parse_str(source) {
+		Ok(doc) => {
+			identified = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
+			prepared = prepare_blocks(identified.blocks, AsciiDocInline.initial_state)
+			html = AsciiDoc.render(doc)
+			prepared.state.emitted_footnotes == [2, 3, 4] and [1.U64, 2, 3, 4, 5].all(|n| html.split_on("id=\"_footnotedef_${n.to_str()}\"").len() == 2)
+		}
+		_ => False
+	}
 }
