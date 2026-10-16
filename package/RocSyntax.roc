@@ -86,19 +86,27 @@ RocSyntax :: [].{
 
 	## Parse arbitrary source bytes, retaining invalid bytes and incomplete syntax.
 	parse_bytes : List(U8) -> Parsed
-	parse_bytes = |source| parse_source(source, False)
+	parse_bytes = |source| parse_source(source, FileMode)
 
 	## Parse one expression. Extra significant tokens produce a diagnostic.
 	parse_expression : Str -> Parsed
-	parse_expression = |source| parse_source(source.to_utf8(), True)
+	parse_expression = |source| parse_source(source.to_utf8(), ExpressionMode)
 
 	## Parse one expression from UTF-8 text.
 	parse_expr_str : Str -> Parsed
-	parse_expr_str = |source| parse_source(source.to_utf8(), True)
+	parse_expr_str = |source| parse_source(source.to_utf8(), ExpressionMode)
 
 	## Parse one expression from arbitrary bytes, preserving malformed input.
 	parse_expr_bytes : List(U8) -> Parsed
-	parse_expr_bytes = |source| parse_source(source, True)
+	parse_expr_bytes = |source| parse_source(source, ExpressionMode)
+
+	## Parse one statement in a body, including expression statements and locals.
+	parse_statement_str : Str -> Parsed
+	parse_statement_str = |source| parse_source(source.to_utf8(), StatementMode)
+
+	## Parse one file header and require complete input consumption.
+	parse_header_str : Str -> Parsed
+	parse_header_str = |source| parse_source(source.to_utf8(), HeaderMode)
 }
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
@@ -598,8 +606,12 @@ primary = |s, depth, punned| {
 	}
 }
 
-parse_source : List(U8), Bool -> RocSyntax.Parsed
-parse_source = |source, expression_only| {
+ParseMode : [FileMode, ExpressionMode, StatementMode, HeaderMode]
+
+parse_source : List(U8), ParseMode -> RocSyntax.Parsed
+parse_source = |source, mode| {
+	expression_only = mode == ExpressionMode
+	single = mode != FileMode
 	lexed = lex(source)
 	initial = State.{ source, tokens: lexed.tokens, pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False }
 	var $s = initial
@@ -618,10 +630,10 @@ parse_source = |source, expression_only| {
 				$done = True
 			} else {
 				before = look.pos
-				{ state: built_state, node: built_node } = if expression_only expression(look, 0, 0, False) else statement(look, 0)
+				{ state: built_state, node: built_node } = if expression_only expression(look, 0, 0, False) else statement(look, if mode == StatementMode 1 else 0)
 				$roots = $roots.append(built_node)
 				$s = built_state
-				if !expression_only {
+				if mode == FileMode or mode == HeaderMode {
 					if ($s.nodes.get(built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
 						$s = issue($s, UnexpectedToken, t.start, node_end($s, built_node))
 					}
@@ -635,7 +647,10 @@ parse_source = |source, expression_only| {
 					$s = issue($s, UnexpectedToken, t.start, t.end)
 					$s = at_pos($s, before + 1)
 				}
-				if expression_only {
+				if mode == HeaderMode and ($s.nodes.get(built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind != Header {
+					$s = issue($s, UnexpectedToken, t.start, node_end($s, built_node))
+				}
+				if single {
 					$s = skip_trivia($s)
 					if peek($s).kind != EndOfFile {
 						extra = peek($s)
@@ -645,6 +660,9 @@ parse_source = |source, expression_only| {
 				}
 			}
 		}
+	}
+	if single and $roots.is_empty() {
+		$s = issue($s, UnexpectedToken, source.len(), source.len())
 	}
 	{ state: root_state, node: root_node } = add_node($s, File, 0, source.len(), $roots)
 	nodes = root_state.nodes.to_list()
@@ -1961,4 +1979,8 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("value.?field.other(1)").status == Complete and RocSyntax.parse_expr_str("value.?field.0(1)").status == Complete
+}
+
+expect {
+	RocSyntax.parse_statement_str("var count = 0").status == Complete and RocSyntax.parse_statement_str("1 + 2").status == Complete and RocSyntax.parse_statement_str("x = 1\ny = 2").status == Recovered and RocSyntax.parse_header_str("module [run]").status == Complete and RocSyntax.parse_header_str("x = 1").status == Recovered and RocSyntax.parse_header_str("module []\nx = 1").status == Recovered
 }
