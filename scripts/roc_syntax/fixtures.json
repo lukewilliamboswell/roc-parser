@@ -29,7 +29,8 @@
     "fields",
     "tuples",
     "control-expressions",
-    "optional-fields"
+    "optional-fields",
+    "patterns"
   ],
   "cases": [
     {
@@ -427,7 +428,10 @@
         [
           "lambda",
           [
-            "x"
+            [
+              "p_identifier",
+              "x"
+            ]
           ],
           [
             "if",
@@ -900,6 +904,385 @@
       "source": "a=(0\r.e)\n",
       "rule": "spacing",
       "coverage": "recovery"
+    },
+    {
+      "id": "pattern-wildcard",
+      "mode": "expr",
+      "source": "|_| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-mutable",
+      "mode": "expr",
+      "source": "|var count| count",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_mutable",
+              "count"
+            ]
+          ],
+          [
+            "identifier",
+            "count"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-mutable-dollar",
+      "mode": "expr",
+      "source": "|var $count| $count",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_mutable",
+              "$count"
+            ]
+          ],
+          [
+            "identifier",
+            "$count"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-tag",
+      "mode": "expr",
+      "source": "|Some(x)| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_tag",
+              [
+                "identifier",
+                "Some"
+              ],
+              true,
+              [
+                [
+                  "p_identifier",
+                  "x"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-nominal",
+      "mode": "expr",
+      "source": "|Box.(x)| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_nominal",
+              [
+                "identifier",
+                "Box"
+              ],
+              true,
+              [
+                [
+                  "p_identifier",
+                  "x"
+                ]
+              ],
+              false
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-record",
+      "mode": "expr",
+      "source": "|{ value: Some(x), other }| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_record",
+              [
+                [
+                  "p_field",
+                  "value",
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "Some"
+                    ],
+                    true,
+                    [
+                      [
+                        "p_identifier",
+                        "x"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "p_field",
+                  "other",
+                  null
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-list-rest",
+      "mode": "expr",
+      "source": "|[first, .. as rest]| first",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_list",
+              [
+                [
+                  "p_identifier",
+                  "first"
+                ],
+                [
+                  "p_rest",
+                  "rest"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "first"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-alias",
+      "mode": "expr",
+      "source": "|Some(x) as item| item",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_alias",
+              [
+                "p_tag",
+                [
+                  "identifier",
+                  "Some"
+                ],
+                true,
+                [
+                  [
+                    "p_identifier",
+                    "x"
+                  ]
+                ]
+              ],
+              "item"
+            ]
+          ],
+          [
+            "identifier",
+            "item"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-tuple",
+      "mode": "expr",
+      "source": "|(a, b)| a",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_tuple",
+              [
+                [
+                  "p_identifier",
+                  "a"
+                ],
+                [
+                  "p_identifier",
+                  "b"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "a"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-match-alternatives",
+      "mode": "expr",
+      "source": "match value { Some(x) | None => 1 }",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "match",
+          [
+            "identifier",
+            "value"
+          ],
+          [
+            [
+              "branch",
+              [
+                "p_alternative",
+                [
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "Some"
+                    ],
+                    true,
+                    [
+                      [
+                        "p_identifier",
+                        "x"
+                      ]
+                    ]
+                  ],
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "None"
+                    ],
+                    false,
+                    []
+                  ]
+                ]
+              ],
+              null,
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-match-guard",
+      "mode": "expr",
+      "source": "match value { Some(x) if x > 0 => x }",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "match",
+          [
+            "identifier",
+            "value"
+          ],
+          [
+            [
+              "branch",
+              [
+                "p_tag",
+                [
+                  "identifier",
+                  "Some"
+                ],
+                true,
+                [
+                  [
+                    "p_identifier",
+                    "x"
+                  ]
+                ]
+              ],
+              [
+                "binary",
+                ">",
+                [
+                  "identifier",
+                  "x"
+                ],
+                [
+                  "number",
+                  "0"
+                ]
+              ],
+              [
+                "identifier",
+                "x"
+              ]
+            ]
+          ]
+        ]
+      ]
     }
   ]
 }

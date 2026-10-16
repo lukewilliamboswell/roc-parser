@@ -69,5 +69,16 @@
   "value.?Upper",
   "value.?field(1)",
   "value.?field.other(1)",
-  "a=(0\r.e)\n"
+  "a=(0\r.e)\n",
+  "|_| 1",
+  "|var count| count",
+  "|var $count| $count",
+  "|Some(x)| x",
+  "|Box.(x)| x",
+  "|{ value: Some(x), other }| x",
+  "|[first, .. as rest]| first",
+  "|Some(x) as item| item",
+  "|(a, b)| a",
+  "match value { Some(x) | None => 1 }",
+  "match value { Some(x) if x > 0 => x }"
 ]
