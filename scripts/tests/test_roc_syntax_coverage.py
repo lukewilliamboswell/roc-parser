@@ -47,6 +47,28 @@ class CoverageEvidenceTests(unittest.TestCase):
                     case = next(c for c in suite['cases'] if c['id'] == reference['id'])
                     self.assertEqual(case['coverage'], 'recovery' if entry['variant'] == 'malformed' else 'supported')
 
+    def test_native_observed_witnesses_keep_exact_inputs_and_fixture_provenance(self):
+        ledger = json.loads((ROOT / 'scripts/roc_syntax/grammar-evidence.json').read_text())
+        audit = ledger['execution_audit']
+        self.assertEqual(audit['inputs'], 3052)
+        self.assertEqual(audit['counts'], {'accepted': 2599, 'rejected': 453, 'failed': 0})
+        self.assertEqual(audit['observed_valid_variants'], 95)
+        observed = [entry for entry in ledger['variants'] if entry.get('observed_witnesses')]
+        self.assertEqual(len(observed), 95)
+        remaining = {(entry['category'], entry['variant']) for entry in ledger['variants'] if not entry.get('observed_witnesses')}
+        self.assertEqual(remaining, {(entry['category'], entry['variant']) for entry in ledger['variants']
+                                    if entry['variant'] == 'malformed' or entry['status'] == 'compiler-only-unconstructed'} | {('Expr', 'string_part')})
+        for entry in observed:
+            for witness in entry['observed_witnesses']:
+                self.assertTrue(witness['accepted'])
+                self.assertTrue(witness['structural_match'])
+                self.assertEqual(witness['source_sha256'], hashlib.sha256(witness['source'].encode()).hexdigest())
+                if 'fixture' in witness:
+                    ref = witness['fixture']
+                    suite = json.loads((ROOT / 'scripts/roc_syntax' / ref['suite']).read_text())
+                    case = next(c for c in suite['cases'] if c['id'] == ref['id'])
+                    self.assertEqual((case['mode'], case['source']), (witness['mode'], witness['source']))
+
     @unittest.skipUnless(os.environ.get('ROC_SYNTAX_REFERENCE_SOURCE'), 'set ROC_SYNTAX_REFERENCE_SOURCE for immutable source-construction audit')
     def test_pinned_source_constructor_receipts(self):
         ledger = json.loads((ROOT / 'scripts/roc_syntax/grammar-evidence.json').read_text())
