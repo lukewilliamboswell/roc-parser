@@ -1,0 +1,130 @@
+= Local Roc ownership reproduction
+
+This is a reviewable local compiler report and experiment, not a published
+issue. It does not change the parser or establish its performance target.
+
+== Observed behavior
+
+On `nightly-2026-10-15-38e6c42` (source revision
+`38e6c42c889cc7ffd97beea9199186790cc848f5`), optimized binary recursion can
+copy growing node/child arrays even though the caller does not retain their
+old values. The self-contained `ownership-nesting.roc` differs in the result
+layout of two functions taking the same arguments:
+
+* `nested` returns `{ cursor, builder: { nodes, children }, node }`.
+* `flat` returns `{ cursor, nodes, children, node }`.
+
+Both append the same binary tree in postorder, retain the same immutable cursor
+for a later source lookup, return the root index, and explicitly destructure
+child results. They append child IDs individually, so there is no transient
+`[left, right]` list allocation to explain the difference. A Roc expectation
+compares the complete node/child arrays. The native runner also checks each
+result against an independent postorder model, including counts and a checksum
+covering every field and child ID.
+
+The immutable cursor is part of this reproduction. These results do not assert
+that every nested return causes copying. Additional controls removing the
+cursor/source eliminated this particular difference; the interaction with
+borrowed fields across recursive calls matters.
+
+== Reproduce
+
+The only Roc dependency of the allocation example is pinned `roc-fuzz` 0.4.3.
+Python orchestrates fresh builds and native measurements; the workload and both
+implementations are pure Roc. Use the installed nightly without building a new
+compiler:
+
+[source,shell]
+----
+python3 scripts/roc_syntax/repros/run_ownership_nesting.py \
+  --roc "$HOME/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc" \
+  --timings
+
+python3 scripts/roc_syntax/repros/run_ownership_nesting.py \
+  --roc "$HOME/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc" \
+  --matrix --output .roc-parser-tmp/ownership-matrix
+----
+
+The first command builds with `--no-cache --opt=speed`; allocation instrumentation
+also adds `--fuzz`. The timing driver uses pinned `basic-cli` 0.25.0 and is
+generated from the same model functions. Reports retain compiler identity,
+source/executable hashes, flags, platform, exact counts and timing samples.
+Source preparation is outside measurement. Timing includes construction and a
+complete output checksum. Allocation counts include `roc_alloc + roc_realloc`
+inside construction, excluding source preparation and checksumming.
+
+The allocation worker intentionally crashes to emit its diagnostic; exit 77 is
+expected and checked by the runner. This target is a controlled measurement,
+not a general raw-input fuzz campaign. Input bytes select mode and a depth
+bounded to 0..16. `--allow-other-compiler` records a future compiler version for
+comparison. The report's `reproduced` flag then indicates whether the measured
+allocation difference still exists; exact output correctness remains mandatory.
+
+== Native observations
+
+Measured on macOS arm64, with the pinned nightly and dependencies above:
+
+[cols="1,1,1,1,1,1",options="header"]
+|===
+|Depth |Nodes / edges |Nested allocations |Flat allocations |Nested median |Flat median
+|8 |511 / 510 |766 |19 |198 microseconds |4.81 microseconds
+|10 |2,047 / 2,046 |3,070 |26 |5.17 milliseconds |17.9 microseconds
+|12 |8,191 / 8,190 |12,286 |32 |60.2 milliseconds |83.2 microseconds
+|===
+
+The flat case's allocation growth is consistent with geometric list capacity
+growth rather than an allocation per appended node. These finite samples
+identify a missed reuse pattern; they do not formally prove a complexity bound
+for the whole compiler or parser. Absolute timing depends on hardware and run
+conditions. These diagnostic timings were recorded on a shared development
+host and are not a regression baseline. Use the retained five-sample reports
+when assessing the measurements.
+
+`ownership-variants.roc` retains the eight controls used to separate input
+layout, result layout and append-helper boundaries. Every mode constructs the
+same complete arrays; its Roc expectation compares all eight. Native allocation
+counts for 2,047 nodes / 2,046 edges were:
+
+[cols="1,2,2,1,1",options="header"]
+|===
+|Mode |Input builder |Result builder |Append helper |Allocations
+|0 |Bound record |Nested record |Yes |3,070
+|1 |Destructured record |Nested record |No |1,604
+|2 |Destructured record |Flat fields |No |26
+|3 |Separate lists |Nested record |No |3,070
+|4 |Separate lists |Flat fields |No |26
+|5 |Bound record |Flat fields |No |26
+|6 |Destructured record |Nested record |Yes |1,604
+|7 |Bound record |Nested record |No |3,070
+|===
+
+The corresponding three-depth allocation matrix is retained in
+`ownership-observed.json`. The code and runner permit fresh independent
+measurement; saved observations are not used as expected parser output.
+
+== Compiler investigation
+
+The result layout affects ownership reuse in this example. This is an observed
+optimization issue, not a change in Roc value semantics: every variant produces
+the same values. The parser's actual call graph, additional fields and mutually
+recursive procedures can introduce further ownership constraints, so this
+minimal result alone does not justify a mechanical production migration.
+
+In a separate parser-shaped control on the same installed compiler, the final
+LIR for its recursive binary procedure projects `State -> Buffer -> List`
+without `take`, emits `incref leaf x1` immediately before
+`list_reserve_for_append`, and decrements the original buffer only after the
+append. That sequence makes append observe a shared allocation. Other state
+fields, including source and tokens, are taken, so this is not simply a wholly
+borrowed caller snapshot. A specialization accepting flat list leaves exists,
+but the recursive calls in that control use the nested-record procedure.
+
+These ARC operations were observed in the independent `ownership-binary`
+control, not yet attributed to individual procedures in this minimal source.
+Attributing the missed reuse to aggregate ownership solving or recursive
+specialization remains an inference. Other controls with nominal state,
+identical flat input/output state layouts, or additional readonly metadata can
+still reuse geometrically; none of those features alone explains the full
+parser's remaining copies. Preserve the immutable cursor when reducing this
+particular example. The reproduction demonstrates a performance problem with
+correct values, and does not claim a semantic miscompilation.

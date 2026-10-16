@@ -1,0 +1,337 @@
+{
+  "minimal": {
+    "compiler": "Roc compiler version nightly-2026-10-15-38e6c42",
+    "build_flags": [
+      "build",
+      "--no-cache",
+      "--opt=speed",
+      "--fuzz"
+    ],
+    "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "source": "ownership-nesting.roc",
+    "source_sha256": "3c8f0c9ed6a242aa7a81b1640bb4de6c9949eb62ac49e5b170472ff59cfffaf0",
+    "runner_sha256": "4a7a4901ec79a2656b6a1fa05fdff6023a081b211e96ffa94273ac3837361fe5",
+    "worker_sha256": "940307be61d1b6e00d577496a72c9990966b101bf23273d688123c51310756bf",
+    "allocation_metric": "roc_alloc + roc_realloc calls inside output construction; source preparation and checksum excluded",
+    "records": [
+      {
+        "mode": 0,
+        "depth": 8,
+        "allocations": 766,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510,
+        "median_ns": 198418.36486486485,
+        "samples_ns": [
+          205187.5,
+          198418.36486486485,
+          190317.56756756757,
+          191777.02702702704,
+          244273.64864864864
+        ],
+        "iterations": 74
+      },
+      {
+        "mode": 1,
+        "depth": 8,
+        "allocations": 19,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510,
+        "median_ns": 4806.458,
+        "samples_ns": [
+          5052.875,
+          4806.458,
+          4616.959,
+          4563.709,
+          5386.25
+        ],
+        "iterations": 1000
+      },
+      {
+        "mode": 0,
+        "depth": 10,
+        "allocations": 3070,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046,
+        "median_ns": 5172402.666666667,
+        "samples_ns": [
+          5172402.666666667,
+          6079472.333333333,
+          5691069.333333333,
+          4720986.0,
+          4993666.666666667
+        ],
+        "iterations": 3
+      },
+      {
+        "mode": 1,
+        "depth": 10,
+        "allocations": 26,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046,
+        "median_ns": 17911.864197530864,
+        "samples_ns": [
+          16349.022633744857,
+          19763.117283950618,
+          17911.864197530864,
+          24921.98148148148,
+          16573.730452674896
+        ],
+        "iterations": 486
+      },
+      {
+        "mode": 0,
+        "depth": 12,
+        "allocations": 12286,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190,
+        "median_ns": 60249083.0,
+        "samples_ns": [
+          59624625.0,
+          56163584.0,
+          71234167.0,
+          60249083.0,
+          67514583.0
+        ],
+        "iterations": 1
+      },
+      {
+        "mode": 1,
+        "depth": 12,
+        "allocations": 32,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190,
+        "median_ns": 83162.7358490566,
+        "samples_ns": [
+          118122.89937106919,
+          73166.14465408806,
+          81020.44025157233,
+          124126.0503144654,
+          83162.7358490566
+        ],
+        "iterations": 159
+      }
+    ],
+    "timing_driver_sha256": "30b8203c968e948489a176aecc7e03a0ec1cdbc99e0c07c1b62cfd2bfb04d3ca",
+    "timing_source_sha256": "efa6bfde5ce5890ee68562c923940d4d00ddc1711089c6e293bcd94660d8dc26",
+    "timing_scope": "recursive output construction plus complete output checksum, source prepared outside timer",
+    "reproduced": true
+  },
+  "matrix": {
+    "compiler": "Roc compiler version nightly-2026-10-15-38e6c42",
+    "build_flags": [
+      "build",
+      "--no-cache",
+      "--opt=speed",
+      "--fuzz"
+    ],
+    "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "source": "ownership-variants.roc",
+    "source_sha256": "7199cd4eda1f0130de854e42e5dd5ec298ad4a3193fb71aed5e1b33fc4360956",
+    "runner_sha256": "4a7a4901ec79a2656b6a1fa05fdff6023a081b211e96ffa94273ac3837361fe5",
+    "worker_sha256": "437dc142fc108f0280b3ccefebe62239c43839de98e923a8ee18d62249f9196f",
+    "allocation_metric": "roc_alloc + roc_realloc calls inside output construction; source preparation and checksum excluded",
+    "records": [
+      {
+        "mode": 0,
+        "depth": 8,
+        "allocations": 766,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 1,
+        "depth": 8,
+        "allocations": 407,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 2,
+        "depth": 8,
+        "allocations": 19,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 3,
+        "depth": 8,
+        "allocations": 766,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 4,
+        "depth": 8,
+        "allocations": 19,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 5,
+        "depth": 8,
+        "allocations": 19,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 6,
+        "depth": 8,
+        "allocations": 407,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 7,
+        "depth": 8,
+        "allocations": 766,
+        "checksum": 392700,
+        "nodes": 511,
+        "edges": 510
+      },
+      {
+        "mode": 0,
+        "depth": 10,
+        "allocations": 3070,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 1,
+        "depth": 10,
+        "allocations": 1604,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 2,
+        "depth": 10,
+        "allocations": 26,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 3,
+        "depth": 10,
+        "allocations": 3070,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 4,
+        "depth": 10,
+        "allocations": 26,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 5,
+        "depth": 10,
+        "allocations": 26,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 6,
+        "depth": 10,
+        "allocations": 1604,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 7,
+        "depth": 10,
+        "allocations": 3070,
+        "checksum": 6287356,
+        "nodes": 2047,
+        "edges": 2046
+      },
+      {
+        "mode": 0,
+        "depth": 12,
+        "allocations": 12286,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 1,
+        "depth": 12,
+        "allocations": 6385,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 2,
+        "depth": 12,
+        "allocations": 32,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 3,
+        "depth": 12,
+        "allocations": 12286,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 4,
+        "depth": 12,
+        "allocations": 32,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 5,
+        "depth": 12,
+        "allocations": 32,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 6,
+        "depth": 12,
+        "allocations": 6385,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      },
+      {
+        "mode": 7,
+        "depth": 12,
+        "allocations": 12286,
+        "checksum": 100638716,
+        "nodes": 8191,
+        "edges": 8190
+      }
+    ],
+    "reproduced": true
+  }
+}
