@@ -92,5 +92,14 @@
   "{ var count = 1\n count }",
   "{ expect True\n 1 }",
   "{ while True { break }\n 1 }",
-  "{ for x in items { dbg x }\n 1 }"
+  "{ for x in items { dbg x }\n 1 }",
+  "module [foo, Bar]",
+  "hosted [foo]",
+  "app [main!] { pf: platform \"./platform.roc\", roc: \"nightly-2026-July-31-123c5d7\" }",
+  "package [Foo] { roc: \"nightly-2026-July-31-123c5d7\" }",
+  "var count = 1",
+  "expect True",
+  "x = 1",
+  "1 + 2",
+  "import Foo as Bar exposing [value, Baz]"
 ]

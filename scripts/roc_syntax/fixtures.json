@@ -31,7 +31,9 @@
     "optional-fields",
     "patterns",
     "literal-types",
-    "statements"
+    "statements",
+    "headers",
+    "direct-goals"
   ],
   "cases": [
     {
@@ -201,6 +203,11 @@
       "coverage": "supported",
       "model_shape": [
         [
+          "header",
+          "module",
+          []
+        ],
+        [
           "decl",
           [
             "p_identifier",
@@ -240,6 +247,11 @@
       "coverage": "supported",
       "model_shape": [
         [
+          "header",
+          "module",
+          []
+        ],
+        [
           "import",
           "Foo",
           null,
@@ -265,6 +277,11 @@
       "rule": "type-annotations",
       "coverage": "supported",
       "model_shape": [
+        [
+          "header",
+          "module",
+          []
+        ],
         [
           "decl",
           [
@@ -474,7 +491,7 @@
       "mode": "file",
       "source": "x : 42",
       "rule": "type-annotations",
-      "coverage": "unsupported"
+      "coverage": "recovery"
     },
     {
       "id": "nested-record-list-call",
@@ -700,21 +717,21 @@
       "mode": "file",
       "source": "x : 1 -> U64",
       "rule": "type-annotations",
-      "coverage": "unsupported"
+      "coverage": "recovery"
     },
     {
       "id": "unsupported-annotation-operand-11",
       "mode": "file",
       "source": "x : \"hi\" -> U64",
       "rule": "type-annotations",
-      "coverage": "unsupported"
+      "coverage": "recovery"
     },
     {
       "id": "unsupported-annotation-operand-12",
       "mode": "file",
       "source": "x : [1] -> U64",
       "rule": "type-annotations",
-      "coverage": "unsupported"
+      "coverage": "recovery"
     },
     {
       "id": "qualified-field-13",
@@ -1716,6 +1733,249 @@
             [
               "number",
               "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-module-exposes",
+      "mode": "header",
+      "source": "module [foo, Bar]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "foo"
+              ],
+              null
+            ],
+            [
+              "exposed",
+              [
+                "identifier",
+                "Bar"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-hosted-exposes",
+      "mode": "header",
+      "source": "hosted [foo]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "hosted",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "foo"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-app-version",
+      "mode": "header",
+      "source": "app [main!] { pf: platform \"./platform.roc\", roc: \"nightly-2026-July-31-123c5d7\" }",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "app",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "main!"
+              ],
+              null
+            ],
+            [
+              "dependencies",
+              [
+                [
+                  "dependency",
+                  "pf",
+                  [
+                    "platform",
+                    [
+                      "string",
+                      "\"./platform.roc\""
+                    ]
+                  ]
+                ],
+                [
+                  "dependency",
+                  "roc",
+                  [
+                    "string",
+                    "\"nightly-2026-July-31-123c5d7\""
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-package-version",
+      "mode": "header",
+      "source": "package [Foo] { roc: \"nightly-2026-July-31-123c5d7\" }",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "package",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "Foo"
+              ],
+              null
+            ],
+            [
+              "dependencies",
+              [
+                [
+                  "dependency",
+                  "roc",
+                  [
+                    "string",
+                    "\"nightly-2026-July-31-123c5d7\""
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-variable-goal",
+      "mode": "statement",
+      "source": "var count = 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "var",
+          "count",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-expect-goal",
+      "mode": "statement",
+      "source": "expect True",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "expect",
+          [
+            "identifier",
+            "True"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "repl-declaration-goal",
+      "mode": "repl",
+      "source": "x = 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "decl",
+          [
+            "p_identifier",
+            "x"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "repl-expression-goal",
+      "mode": "repl",
+      "source": "1 + 2",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "+",
+          [
+            "number",
+            "1"
+          ],
+          [
+            "number",
+            "2"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "import-alias-exposing",
+      "mode": "file",
+      "source": "import Foo as Bar exposing [value, Baz]",
+      "rule": "imports",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "import",
+          "Foo",
+          "Bar",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "value"
+              ],
+              null
+            ],
+            [
+              "exposed",
+              [
+                "identifier",
+                "Baz"
+              ],
+              null
             ]
           ]
         ]

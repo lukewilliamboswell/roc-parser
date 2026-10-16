@@ -12,17 +12,17 @@ Acceptance agreement does not establish AST equivalence. The curated differentia
 
 == Grammar checklist
 
-Every entry below starts unverified. Completion requires valid and malformed examples where applicable, candidate structural assertions, pinned-oracle evidence, and inclusion in regression tests. A full green corpus alone cannot prove all grammar productions or nesting combinations.
+Every entry below remains unchecked until the full production is audited. Representative regression evidence names exact fixtures in `scripts/roc_syntax/fixtures.json`, with their rule and coverage contracts; these examples do not prove all forms or nesting combinations. Entries without examples are explicit evidence gaps. Completion requires valid and malformed examples where applicable, candidate structural assertions, pinned-oracle evidence, and inclusion in regression tests. A full green corpus alone cannot prove all grammar productions or nesting combinations.
 
 === Header
 
 Source: `src/parse/AST.zig`, line 1945.
 
-* [ ] `app`
-* [ ] `module`
-* [ ] `package`
+* [ ] `app` — fixture `header-app-version` (`headers`, `supported`).
+* [ ] `module` — fixture `header-module-exposes` (`headers`, `supported`).
+* [ ] `package` — fixture `header-package-version` (`headers`, `supported`).
 * [ ] `platform`
-* [ ] `hosted`
+* [ ] `hosted` — fixture `header-hosted-exposes` (`headers`, `supported`).
 * [ ] `type_module`
 * [ ] `default_app`
 * [ ] `malformed`
@@ -31,63 +31,63 @@ Source: `src/parse/AST.zig`, line 1945.
 
 Source: `src/parse/AST.zig`, line 1015.
 
-* [ ] `decl`
-* [ ] `@"var"`
+* [ ] `decl` — fixture `file-definitions` (`file-headers`, `supported`); fixture `block` (`blocks`, `supported`).
+* [ ] `@"var"` — fixture `mutable-block` (`statements`, `supported`); fixture `statement-variable-goal` (`direct-goals`, `supported`).
 * [ ] `expr`
 * [ ] `crash`
 * [ ] `dbg`
-* [ ] `expect`
-* [ ] `@"for"`
-* [ ] `@"while"`
+* [ ] `expect` — fixture `expect-block` (`statements`, `supported`); fixture `statement-expect-goal` (`direct-goals`, `supported`).
+* [ ] `@"for"` — fixture `for-block` (`statements`, `supported`).
+* [ ] `@"while"` — fixture `while-block` (`statements`, `supported`).
 * [ ] `@"return"`
 * [ ] `@"break"`
-* [ ] `import`
+* [ ] `import` — fixture `file-import` (`imports`, `supported`); fixture `import-alias-exposing` (`imports`, `supported`).
 * [ ] `file_import`
 * [ ] `type_decl`
-* [ ] `type_anno`
+* [ ] `type_anno` — fixture `file-type` (`type-annotations`, `supported`).
 * [ ] `malformed`
 
 === Expr
 
 Source: `src/parse/AST.zig`, line 2947.
 
-* [ ] `int`
-* [ ] `frac`
-* [ ] `typed_int`
-* [ ] `typed_frac`
-* [ ] `single_quote`
+* [ ] `int` — fixture `integer` (`integers`, `supported`).
+* [ ] `frac` — fixture `float` (`numbers-boundaries`, `supported`).
+* [ ] `typed_int` — fixture `typed-integer` (`literal-types`, `supported`).
+* [ ] `typed_frac` — fixture `typed-fraction` (`literal-types`, `supported`).
+* [ ] `single_quote` — fixture `typed-character` (`literal-types`, `supported`).
 * [ ] `string_part`
-* [ ] `string`
-* [ ] `multiline_string`
-* [ ] `typed_string`
+* [ ] `string` — fixture `string` (`strings`, `supported`); fixture `interpolated-string` (`strings`, `supported`).
+* [ ] `multiline_string` — fixture `multiline-string` (`strings`, `supported`); fixture `multiline-interpolation` (`strings`, `supported`).
+* [ ] `typed_string` — fixture `typed-string` (`literal-types`, `supported`).
 * [ ] `typed_multiline_string`
-* [ ] `list`
-* [ ] `tuple`
-* [ ] `record`
-* [ ] `tag`
-* [ ] `lambda`
-* [ ] `apply`
+* [ ] `list` — fixture `nested-string-tuple-list` (`tuples`, `supported`).
+* [ ] `tuple` — fixture `pair-tuple` (`tuples`, `supported`).
+* [ ] `record` — fixture `record` (`records`, `supported`).
+* [ ] `tag` — fixture `if` (`conditionals`, `supported`).
+* [ ] `lambda` — fixture `pattern-tag` (`patterns`, `supported`); fixture `nested-lambda-if-fields` (`lambdas`, `supported`).
+* [ ] `apply` — fixture `call` (`calls`, `supported`).
 * [ ] `record_updater`
-* [ ] `field_access`
-* [ ] `method_call`
-* [ ] `tuple_access`
+* [ ] `field_access` — fixture `field` (`fields`, `supported`); fixture `current-optional-field` (`optional-fields`, `supported`).
+* [ ] `method_call` — fixture `optional-receiver-method-call` (`optional-fields`, `supported`).
+* [ ] `tuple_access` — fixture `qualified-field-14` (`fields`, `supported`).
 * [ ] `arrow_call`
-* [ ] `bin_op`
-* [ ] `suffix_single_question`
-* [ ] `unary_op`
-* [ ] `if_then_else`
+* [ ] `bin_op` — fixture `precedence` (`precedence`, `supported`).
+* [ ] `suffix_single_question` — fixture `current-optional-field-suffix` (`optional-fields`, `supported`).
+* [ ] `unary_op` — fixture `unary` (`unary`, `supported`).
+* [ ] `if_then_else` — fixture `if` (`conditionals`, `supported`).
 * [ ] `if_without_else`
-* [ ] `match`
-* [ ] `ident`
-* [ ] `dbg`
-* [ ] `crash`
+* [ ] `match` — fixture `pattern-match-guard` (`patterns`, `supported`); fixture `pattern-match-alternatives` (`patterns`, `supported`).
+* [ ] `ident` — fixture `identifier` (`identifiers`, `supported`).
+* [ ] `dbg` — fixture `current-debug` (`control-expressions`, `supported`).
+* [ ] `crash` — fixture `current-crash` (`control-expressions`, `supported`).
 * [ ] `record_builder`
 * [ ] `nominal_record`
 * [ ] `nominal_apply`
-* [ ] `ellipsis`
-* [ ] `@"break"`
-* [ ] `@"return"`
-* [ ] `block`
+* [ ] `ellipsis` — fixture `current-ellipsis` (`control-expressions`, `supported`).
+* [ ] `@"break"` — fixture `current-break` (`control-expressions`, `supported`).
+* [ ] `@"return"` — fixture `current-return` (`control-expressions`, `supported`).
+* [ ] `block` — fixture `block` (`blocks`, `supported`).
 * [ ] `for_expr`
 * [ ] `malformed`
 
@@ -95,22 +95,22 @@ Source: `src/parse/AST.zig`, line 2947.
 
 Source: `src/parse/AST.zig`, line 1431.
 
-* [ ] `ident`
-* [ ] `var_ident`
-* [ ] `tag`
+* [ ] `ident` — fixture `lambda` (`lambdas`, `supported`).
+* [ ] `var_ident` — fixture `pattern-mutable` (`patterns`, `supported`); fixture `pattern-mutable-dollar` (`patterns`, `supported`).
+* [ ] `tag` — fixture `pattern-tag` (`patterns`, `supported`).
 * [ ] `int`
 * [ ] `frac`
 * [ ] `typed_int`
 * [ ] `typed_frac`
 * [ ] `string`
 * [ ] `single_quote`
-* [ ] `record`
-* [ ] `list`
-* [ ] `list_rest`
-* [ ] `tuple`
-* [ ] `underscore`
-* [ ] `alternatives`
-* [ ] `as`
+* [ ] `record` — fixture `pattern-record` (`patterns`, `supported`).
+* [ ] `list` — fixture `pattern-list-rest` (`patterns`, `supported`).
+* [ ] `list_rest` — fixture `pattern-list-rest` (`patterns`, `supported`).
+* [ ] `tuple` — fixture `pattern-tuple` (`patterns`, `supported`).
+* [ ] `underscore` — fixture `pattern-wildcard` (`patterns`, `supported`).
+* [ ] `alternatives` — fixture `pattern-match-alternatives` (`patterns`, `supported`).
+* [ ] `as` — fixture `pattern-alias` (`patterns`, `supported`).
 * [ ] `malformed`
 
 === TypeAnno
@@ -141,8 +141,8 @@ Source: `src/parse/AST.zig`, line 2846.
 
 Source: `src/parse/AST.zig`, line 2299.
 
-* [ ] `lower_ident`
-* [ ] `upper_ident`
+* [ ] `lower_ident` — fixture `header-module-exposes` (`headers`, `supported`).
+* [ ] `upper_ident` — fixture `header-module-exposes` (`headers`, `supported`).
 * [ ] `upper_ident_star`
 * [ ] `malformed`
 
