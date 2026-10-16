@@ -3,12 +3,16 @@
 ## Retaining parser snapshots copies bounded paths, never the growing output.
 ## Fixed levels also avoid recursive generic type expansion in the compiler.
 RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.{
+
+	## Empty construction buffer; its element type is inferred from appends.
 	empty : {} -> RocSyntaxBuffer(a)
 	empty = |_| RocSyntaxBuffer.{ count: 0, blocks: [] }
 
+	## Number of appended values.
 	len : RocSyntaxBuffer(a) -> U64
 	len = |buffer| buffer.count
 
+	## Preserve old snapshots and copy only the bounded radix path to a new value.
 	append : RocSyntaxBuffer(a), a -> RocSyntaxBuffer(a)
 	append = |buffer, value| {
 		index = buffer.count
@@ -26,6 +30,7 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.
 		RocSyntaxBuffer.{ count: index + 1, blocks: put(buffer.blocks, i4, next3) }
 	}
 
+	## Append a list in order, without flattening previous contents.
 	concat_list : RocSyntaxBuffer(a), List(a) -> RocSyntaxBuffer(a)
 	concat_list = |buffer, values| values.fold(buffer, |acc, value| acc.append(value))
 

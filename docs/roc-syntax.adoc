@@ -61,6 +61,11 @@ punctuation. Syntax structure adds context for declarations, calls and expressio
 Preserved tokens continue to be useful when a node is malformed or its syntax is
 not yet supported.
 
+Use `RocSyntax.tokenize_str` or `tokenize_bytes` when only lexical highlighting is
+needed. They return source-backed tokens and diagnostics without constructing a
+tree. `RocSyntax.highlight_category(token.kind)` maps each token to a presentation
+category without allocating strings or choosing theme colors.
+
 Lint rules can traverse the tree and report diagnostics at source spans. Grouping
 and operator precedence are represented structurally. Rules that need binding or
 type information must add scope analysis or use compiler information; parsing
@@ -74,8 +79,9 @@ complete tree. Code completion and highlighting should tolerate partial results.
 == Compatibility and validation
 
 The syntax reference is compiler commit
-`7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, corresponding to the repository's
-`nightly-2026-09-29-7f11a82` pin. This identifies a changing language implementation,
+`7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, corresponding to
+`nightly-2026-09-29-7f11a82`. The implementation compiler is pinned separately to
+`nightly-2026-10-15-38e6c42` in `.roc-version`. This identifies a changing language implementation,
 rather than a stable language specification. Updating the implementation compiler
 and updating the syntax reference are separate maintenance decisions.
 
