@@ -93,6 +93,17 @@ class ProjectionTests(unittest.TestCase):
         actual['status'] = 'Complete'
         self.assertEqual(review.compare(case,actual,expected)[0]['field'],'unsupported_status')
 
+    def test_matching_unknown_shapes_are_projection_gap_not_agreement(self):
+        response = {'ok':True,'consumed':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':['unsupported','future_syntax']}
+        differences = review.compare({'source':'','coverage':'supported'},response,response)
+        self.assertEqual([d['field'] for d in differences],['projection_gap'])
+
+    def test_exploratory_unsupported_is_coverage_gap_not_false_rejection(self):
+        actual = {'status':'Unsupported','ok':False,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
+        expected = {'ok':True,'tokens':[], 'shape':[]}
+        differences = review.compare({'source':'','coverage':'exploratory'},actual,expected)
+        self.assertEqual([d['field'] for d in differences],['coverage_gap'])
+
     def test_generated_models_reproducible_and_varied(self):
         first=review.generated_cases(100,7)
         self.assertEqual(first,review.generated_cases(100,7))

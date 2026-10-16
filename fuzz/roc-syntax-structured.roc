@@ -82,8 +82,8 @@ test = |input| {
 		crash "generated syntax tree mismatch: ${input.source}\nexpected=${Str.inspect(input.expected)}\nactual=${Str.inspect(parsed)}"
 	}
 	# Ungrouped arithmetic independently requires multiplication below addition.
-	precedence = RocSyntax.parse_expr_str("1 + 2 * 3")
-	if !matches(precedence, precedence.root, Add(Number("1"), Mul(Number("2"), Number("3")))) { crash "wrong multiplication precedence" }
+	precedence = RocSyntax.parse_expr_str("${input.source} + 2 * 3")
+	if !matches(precedence, precedence.root, Add(input.expected, Mul(Number("2"), Number("3")))) { crash "wrong multiplication precedence" }
 	Fuzz.keep
 }
 

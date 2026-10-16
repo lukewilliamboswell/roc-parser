@@ -26,7 +26,8 @@
     "records",
     "blocks",
     "matches",
-    "fields"
+    "fields",
+    "tuples"
   ],
   "cases": [
     {
@@ -244,6 +245,20 @@
       "mode": "expr",
       "source": "x-1",
       "rule": "spacing",
+      "coverage": "supported"
+    },
+    {
+      "id": "singleton-tuple",
+      "mode": "expr",
+      "source": "(1,)",
+      "rule": "tuples",
+      "coverage": "supported"
+    },
+    {
+      "id": "pair-tuple",
+      "mode": "expr",
+      "source": "(1, 2)",
+      "rule": "tuples",
       "coverage": "supported"
     }
   ]

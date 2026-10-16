@@ -99,7 +99,7 @@ def main(argv=None):
     binary = binary.resolve()
     if not args.binary:
         binary.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([args.roc, 'build', '--opt=speed', str(ROOT/'bench/roc/roc-syntax.roc'), f'--output={binary}'], check=True)
+        subprocess.run([args.roc, 'build', '--no-cache', '--opt=speed', str(ROOT/'bench/roc/roc-syntax.roc'), f'--output={binary}'], check=True)
     records = []
     documents = list(corpus(sorted(args.sizes)))
     for target in args.document_bytes:
@@ -116,7 +116,10 @@ def main(argv=None):
     metadata = {'machine': platform.platform(), 'cpu': platform.machine(), 'timestamp': time.time(),
                 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
                 'compiler': subprocess.run([args.roc, 'version'], capture_output=True, text=True, check=True).stdout.strip(),
-                'build_flags': ['--opt=speed'], 'input_ownership': 'shared in-memory source across iterations; fresh parse result each iteration', 'allocation_metric': 'roc_alloc + roc_realloc calls; not byte volume or peak memory'}
+                'build_flags': None if args.binary else ['--no-cache', '--opt=speed'],
+                'candidate_source_sha256': hashlib.sha256((ROOT / 'package/RocSyntax.roc').read_bytes()).hexdigest(),
+                'candidate_commit': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip(),
+                'reused_binary': bool(args.binary), 'input_ownership': 'shared in-memory source across iterations; fresh parse result each iteration', 'allocation_metric': 'roc_alloc + roc_realloc calls; not byte volume or peak memory'}
     failures = scaling_failures(records, args.max_scaling_overhead)
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())

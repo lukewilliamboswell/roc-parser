@@ -182,10 +182,23 @@ def run_directory(target_name: str) -> Path:
     return WORK_ROOT / "runs" / target_name
 
 
+def build_identity(target_name: str, roc: str) -> dict:
+    config = TARGETS[target_name]
+    digest = hashlib.sha256()
+    for path in [config.source, *sorted((ROOT / "package").glob("*.roc"))]:
+        digest.update(str(path.relative_to(ROOT)).encode())
+        digest.update(path.read_bytes())
+    return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT),
+            "flags": ["--no-cache", "--opt=speed", "--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE}
+
+
 def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]:
     config = TARGETS[target_name]
     output = binary_path(target_name)
 
+    manifest_path = output.with_suffix(".build.json")
+    syntax_target = target_name.startswith("roc-syntax-")
+    identity = build_identity(target_name, roc) if syntax_target else None
     if no_build:
         if not output.is_file():
             print(
@@ -193,16 +206,31 @@ def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]
                 file=sys.stderr,
             )
             return 2, output
+        if syntax_target:
+            try:
+                saved = json.loads(manifest_path.read_text())
+            except (OSError, ValueError):
+                print("error: syntax fuzz binary has no build identity; rebuild without --no-build", file=sys.stderr)
+                return 2, output
+            actual_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+            if saved.get("identity") != identity or saved.get("binary_sha256") != actual_hash:
+                print("error: syntax fuzz binary identity differs from source/compiler; rebuild without --no-build", file=sys.stderr)
+                return 2, output
         return 0, output
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [roc, "build", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
+    command = [roc, "build", "--no-cache", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
     print(f"+ {shlex.join(command)}", flush=True)
     try:
         completed = subprocess.run(command, cwd=ROOT, check=False)
     except OSError as problem:
         print(f"error: could not run Roc: {problem}", file=sys.stderr)
         return 2, output
+    if completed.returncode == 0 and syntax_target:
+        if identity != build_identity(target_name, roc):
+            print("error: syntax fuzz sources changed while building; rebuild", file=sys.stderr)
+            return 2, output
+        manifest_path.write_text(json.dumps({"identity": identity, "binary_sha256": hashlib.sha256(output.read_bytes()).hexdigest()}, indent=2) + "\n")
     return completed.returncode, output
 
 

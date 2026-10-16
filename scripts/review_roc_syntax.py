@@ -182,7 +182,7 @@ def syntax_shape(response, source):
         if kind == 'ListLiteral':
             return ['list', branch]
         if kind == 'Tuple':
-            return ['tuple', branch]
+            return branch[0] if len(branch) == 1 else ['tuple', branch]
         if kind == 'Lambda':
             return ['lambda', branch[:-1], branch[-1]]
         if kind == 'Pattern':
