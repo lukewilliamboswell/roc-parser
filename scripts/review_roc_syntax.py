@@ -579,47 +579,14 @@ def run_cases(cases, probe_command, oracle_command, artifact_dir, timeout=5):
     return results
 
 
-def generated_cases(count, seed):
-    import random
-    rng = random.Random(seed)
-    def expression(depth):
-        # Build the model before printing source. Every recursive constructor can
-        # contain every other constructor, without deriving expectations from
-        # either implementation under test. Depth bounds total work per case.
-        choice = rng.randrange(12 if depth else 3)
-        if choice == 0:
-            value = str(rng.randrange(100000))
-            return value, ['number', value]
-        if choice == 1:
-            value = 'v' + str(rng.randrange(100))
-            return value, ['identifier', value]
-        if choice == 2:
-            value = json.dumps(rng.choice(['', 'hello', 'two words', 'λ', 'line\\nend']), ensure_ascii=False)
-            return value, ['string', value]
-        left, lshape = expression(depth - 1)
-        if choice == 3:
-            return f'f({left})', ['call', ['identifier', 'f'], [lshape]]
-        if choice == 4:
-            return f'(|x| {left})', ['lambda', [['p_identifier', 'x']], lshape]
-        if choice == 5:
-            return f'({left}).value', ['field', lshape, 'value']
-        right, rshape = expression(depth - 1)
-        if choice in {6, 7}:
-            op = '+' if choice == 6 else '*'
-            return f'({left} {op} {right})', ['binary', op, lshape, rshape]
-        if choice == 8:
-            return f'[{left}, {right}]', ['list', [lshape, rshape]]
-        if choice == 9:
-            return f'({left}, {right})', ['tuple', [lshape, rshape]]
-        if choice == 10:
-            return f'(if True ({left}) else ({right}))', ['if', ['identifier', 'True'], lshape, rshape]
-        return f'{{ first: {left}, second: {right} }}', ['record', [['first', lshape], ['second', rshape]]]
-    result = []
-    for index in range(count):
-        source, shape = expression(rng.randrange(1, 5))
-        result.append({'id': f'generated-{seed}-{index}', 'mode': 'expr', 'source': source,
-                       'rule': 'generated-expressions', 'coverage': 'supported', 'model_shape': [shape]})
-    return result
+def generated_cases(count, seed, **budgets):
+    # Resolve relative to this script for both direct CLI and importlib-based
+    # test callers; do not depend on the caller's working directory/sys.path.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('roc_syntax_models', DATA / 'model_cases.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.generated_cases(count, seed, **budgets)
 
 
 def main(argv=None):
@@ -627,8 +594,12 @@ def main(argv=None):
     parser.add_argument('--probe-command', required=True, help='persistent probe command, shell quoting accepted without shell execution')
     parser.add_argument('--oracle-command', required=True)
     parser.add_argument('--fixtures', type=Path, default=DATA / 'fixtures.json')
-    parser.add_argument('--generated', type=int, default=0, help='independent deterministic expression cases')
+    parser.add_argument('--generated', type=int, default=0, help='independent deterministic file/block/type/expression cases')
     parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--expression-depth', type=int, default=5)
+    parser.add_argument('--pattern-depth', type=int, default=3)
+    parser.add_argument('--type-depth', type=int, default=4)
+    parser.add_argument('--statements', type=int, default=4, help='generated block statements before the final expression')
     parser.add_argument('--replay', type=Path, help='replay a retained mismatch artifact')
     parser.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp' / 'roc-syntax-review')
     parser.add_argument('--timeout', type=float, default=5)
@@ -640,7 +611,11 @@ def main(argv=None):
         for contract_field in ('model_shape', 'expect_consumed'):
             if contract_field in saved:
                 cases[0][contract_field] = saved[contract_field]
-    cases += generated_cases(args.generated, args.seed)
+    try:
+        cases += generated_cases(args.generated, args.seed, expression_depth=args.expression_depth,
+                                 pattern_depth=args.pattern_depth, type_depth=args.type_depth, statements=args.statements)
+    except ValueError as error:
+        parser.error(str(error))
     started = time.monotonic()
     results = run_cases(cases, shlex.split(args.probe_command), shlex.split(args.oracle_command), args.output / 'failures', args.timeout)
     elapsed = time.monotonic() - started
@@ -648,7 +623,9 @@ def main(argv=None):
     for name, command in [('probe', args.probe_command), ('oracle', args.oracle_command)]:
         path = Path(shlex.split(command)[0])
         identities[name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} if path.is_file() else {'command': str(path)}
-    report = {'metadata': metadata, 'worker_identities': identities, 'elapsed_seconds': elapsed, 'cases_per_second': len(cases) / elapsed, 'commands': {'probe': shlex.split(args.probe_command), 'oracle': shlex.split(args.oracle_command)},
+    report = {'metadata': metadata, 'generation': {'count': args.generated, 'seed': args.seed,
+              'expression_depth': args.expression_depth, 'pattern_depth': args.pattern_depth,
+              'type_depth': args.type_depth, 'statements': args.statements}, 'worker_identities': identities, 'elapsed_seconds': elapsed, 'cases_per_second': len(cases) / elapsed, 'commands': {'probe': shlex.split(args.probe_command), 'oracle': shlex.split(args.oracle_command)},
               'coverage_counts': dict(Counter(item['coverage'] for item in results)),
               'candidate_status_counts': dict(Counter(item['actual'].get('status', 'worker_error') for item in results)),
               'difference_counts': dict(Counter(d['field'] for item in results for d in item['differences'])),
