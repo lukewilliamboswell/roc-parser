@@ -164,7 +164,7 @@
     {
       "id": "unicode",
       "mode": "expr",
-      "source": "\"\u03bb\"",
+      "source": "\"λ\"",
       "rule": "unicode",
       "coverage": "supported"
     },
@@ -1572,7 +1572,7 @@
     {
       "id": "typed-character",
       "mode": "expr",
-      "source": "'\u00e9'.U8",
+      "source": "'é'.U8",
       "rule": "literal-types",
       "coverage": "supported",
       "model_shape": [
@@ -1580,7 +1580,7 @@
           "typed",
           [
             "character",
-            "'\u00e9'"
+            "'é'"
           ],
           [
             "U8"
@@ -2534,6 +2534,362 @@
       "mode": "expr",
       "source": "{ ..base }",
       "rule": "nominal-records",
+      "coverage": "recovery"
+    },
+    {
+      "id": "typed-multiline",
+      "mode": "expr",
+      "source": "\"\"\"hello\n.Str",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "multiline_string",
+            [
+              [
+                "text",
+                "hello"
+              ]
+            ]
+          ],
+          [
+            "Str"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "if-without-else",
+      "mode": "expr",
+      "source": "if True 1",
+      "rule": "conditionals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "if",
+          [
+            "identifier",
+            "True"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-implicit-type-module",
+      "mode": "header",
+      "source": "",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "type_module",
+          []
+        ]
+      ]
+    },
+    {
+      "id": "file-import-string",
+      "mode": "file",
+      "source": "import \"data.txt\" as text : Str",
+      "rule": "imports",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "file_import",
+          "data.txt",
+          "text",
+          "Str"
+        ]
+      ]
+    },
+    {
+      "id": "exposed-type-wildcard",
+      "mode": "header",
+      "source": "module [Foo.*]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          [
+            [
+              "exposed_wildcard",
+              [
+                "identifier",
+                "Foo"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-integer",
+      "mode": "expr",
+      "source": "|1| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "number",
+              "1"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-fraction",
+      "mode": "expr",
+      "source": "|1.25| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "number",
+              "1.25"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-typed-integer",
+      "mode": "expr",
+      "source": "|1.U8| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "typed",
+              [
+                "number",
+                "1"
+              ],
+              [
+                "U8"
+              ]
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-typed-fraction",
+      "mode": "expr",
+      "source": "|1.25.Dec| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "typed",
+              [
+                "number",
+                "1.25"
+              ],
+              [
+                "Dec"
+              ]
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-string",
+      "mode": "expr",
+      "source": "|\"hello\"| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "string",
+              "\"hello\""
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-character",
+      "mode": "expr",
+      "source": "|'a'| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "character",
+              "'a'"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-debug",
+      "mode": "statement",
+      "source": "dbg 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "dbg",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-return",
+      "mode": "statement",
+      "source": "return 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "return",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-break",
+      "mode": "statement",
+      "source": "break",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "statement-crash",
+      "mode": "statement",
+      "source": "crash \"bad\"",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "crash",
+          [
+            "string",
+            "\"bad\""
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-expression",
+      "mode": "statement",
+      "source": "1 + 2",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "+",
+          [
+            "number",
+            "1"
+          ],
+          [
+            "number",
+            "2"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "for-expression",
+      "mode": "expr",
+      "source": "for item in items { item }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "for",
+          [
+            "p_identifier",
+            "item"
+          ],
+          [
+            "identifier",
+            "items"
+          ],
+          [
+            "block",
+            [
+              [
+                "identifier",
+                "item"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-pattern-alias-name",
+      "mode": "expr",
+      "source": "|Some(x) as 1| 1",
+      "rule": "patterns",
       "coverage": "recovery"
     }
   ]

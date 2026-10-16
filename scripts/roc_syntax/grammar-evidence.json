@@ -1,0 +1,2017 @@
+{
+  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "authority": {
+    "AST.zig": "e86f6878be0f41d7360cacfdb66e066b41f44f2f1ab55f618256b7b1e8aafb63",
+    "Parser.zig": "f4f482e81805bd69994739e8acc14edf353b36a331b9c9272f1961cc3c33cf64",
+    "NodeStore.zig": "78e43607b92343d7b8780a383e9c1633a9af07783ee39c843da7e1237e22fe2a"
+  },
+  "variants": [
+    {
+      "category": "Header",
+      "variant": "app",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1760
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-app-version"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "module",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1483
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "package",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1526
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-package-version"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "platform",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2356
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/60a3c51c42fd"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "hosted",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1497
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-hosted-exposes"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "type_module",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1355
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-implicit-type-module"
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "default_app",
+      "status": "compiler-only-unconstructed",
+      "constructors": [],
+      "fixtures": []
+    },
+    {
+      "category": "Header",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-expression"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "decl",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 609
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-definitions"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "block"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"var\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4714
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6390
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "mutable-block"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "statement-variable-goal"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "expr",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4699
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-expression"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "crash",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4777
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-crash"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "dbg",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4786
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-debug"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "expect",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4724
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "expect-block"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "statement-expect-goal"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"for\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4745
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "for-block"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"while\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4767
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "while-block"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"return\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4795
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-return"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"break\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6465
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-break"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "import",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1321
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-import"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "import-alias-exposing"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "file_import",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1203
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-import-string"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "type_decl",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 748
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6121
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6553
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/declaration/a4950f1906ac"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "type_anno",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5569
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6046
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-type"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "import-number"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3610
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "integer"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3641
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "float"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3596
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3603
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-integer"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3627
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3634
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-fraction"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "single_quote",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3665
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-character"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "string_part",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4940
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "interpolated-string"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4965
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5001
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "string"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "interpolated-string"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "multiline_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4995
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5027
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "multiline-string"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "multiline-interpolation"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4958
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-string"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_multiline_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5021
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-multiline"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4850
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nested-string-tuple-list"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4856
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pair-tuple"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7407
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7448
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "record"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tag",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3691
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3965
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4184
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4286
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7433
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "lambda",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4687
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tag"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "nested-lambda-if-fields"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4862
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4902
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "call"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record_updater",
+      "status": "compiler-only-unconstructed",
+      "constructors": [],
+      "fixtures": []
+    },
+    {
+      "category": "Expr",
+      "variant": "field_access",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4082
+        },
+        {
+          "file": "NodeStore.zig",
+          "line": 1428
+        },
+        {
+          "file": "NodeStore.zig",
+          "line": 1460
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "field"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "current-optional-field"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "method_call",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4879
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "optional-receiver-method-call"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tuple_access",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4054
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "qualified-field-14"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "arrow_call",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4388
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4401
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4830
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "grammar-fixtures.json",
+          "id": "arrows/52e2f5eabcf4"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "bin_op",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4347
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "precedence"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "suffix_single_question",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4245
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-optional-field-suffix"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "unary_op",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4359
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "unary"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "if_then_else",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4556
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "if_without_else",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4545
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if-without-else"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "match",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5142
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-guard"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-alternatives"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1587
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3678
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3697
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3958
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4166
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4190
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4292
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "identifier"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "dbg",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4630
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-debug"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "crash",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4640
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-crash"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record_builder",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7439
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "record-builder"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "nominal_record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7414
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nominal-record"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "nominal_apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4891
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nominal-apply"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "ellipsis",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-ellipsis"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "@\"break\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3937
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-break"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "@\"return\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4650
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-return"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "block",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5190
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "block"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "for_expr",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4673
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "for-expression"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "unfinished"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6202
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6736
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "lambda"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "var_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6805
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-mutable"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-mutable-dollar"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "tag",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6725
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6973
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7055
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tag"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6661
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-integer"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6616
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-fraction"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "typed_int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6647
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6654
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-typed-integer"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "typed_frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6602
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6609
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-typed-fraction"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1940
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-string"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "single_quote",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6632
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-character"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7225
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-record"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7128
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-list-rest"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "list_rest",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6789
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7098
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-list-rest"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7259
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tuple"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "underscore",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6237
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6745
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-wildcard"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "alternatives",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6576
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6956
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-alternatives"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "as",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2427
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-alias"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "reject-pattern-alias-name"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5627
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/f4ab12b0e499"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "ty_var",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5211
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6179
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/417cf521cf2a"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "underscore_type_var",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5241
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/4112ae5376f2"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "underscore",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5286
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/62474fcd584a"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "ty",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5216
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5948
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/44111eb99854"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "tag_union",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5870
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/463530e67c49"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5684
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/111530f0bd5b"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5812
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/9e1e867302bc"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "@\"fn\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5386
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5402
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5525
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/b8f8038504d2"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "parens",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5393
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5679
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/556677ace890"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/2e2e7525d03c"
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "mod_method",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5546
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/08c2ec8e2c84"
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "mod_alias",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5536
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5969
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/57fd5b1689a2"
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/166715cd8386"
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "lower_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1002
+        },
+        {
+          "file": "Parser.zig",
+          "line": 1038
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "upper_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1045
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "upper_ident_star",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1031
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "exposed-type-wildcard"
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-expression"
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "string_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1977
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "special_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1980
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/2a251d4bd1e3"
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/02013b4de784"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "int_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2034
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "string_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2053
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "tag_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2056
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2059
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2096
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2084
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "files",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2110
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "malformed",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2047
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2067
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2077
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/a4305287d713"
+        }
+      ]
+    }
+  ]
+}
