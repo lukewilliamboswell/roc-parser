@@ -262,6 +262,21 @@ fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pa
     };
 }
 
+fn recordFieldsShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, fields: parse.AST.RecordField.Span, depth: usize) Allocator.Error!std.json.Value {
+    var out = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.recordFieldSlice(fields)) |field_idx| {
+        const field = store.getRecordField(field_idx);
+        const name = tokenText(tokens, source, field.name);
+        const value = switch (field.value) {
+            .supplied => |expr| try shape(gpa, store, tokens, source, expr, depth + 1),
+            .punned => try array(gpa, &.{ string("identifier"), string(name) }),
+            .unset => try array(gpa, &.{string("unset")}),
+        };
+        try out.append(try array(gpa, &.{ string(name), value }));
+    }
+    return .{ .array = out };
+}
+
 fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Expr.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("depth_limit") });
     const expr = store.getExpr(idx);
@@ -300,20 +315,20 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             break :blk array(gpa, &.{ string("match"), try shape(gpa, store, tokens, source, value.expr, depth + 1), .{ .array = branches } });
         },
         .record => |value| blk: {
-            if (value.ext != null) break :blk array(gpa, &.{ string("unsupported"), string("record_extension") });
-            var fields = std.array_list.Managed(std.json.Value).init(gpa);
-            for (store.recordFieldSlice(value.fields)) |idx_field| {
-                const field = store.getRecordField(idx_field);
-                const name = tokenText(tokens, source, field.name);
-                const child = switch (field.value) {
-                    .supplied => |child| try shape(gpa, store, tokens, source, child, depth + 1),
-                    .punned => try array(gpa, &.{ string("identifier"), string(name) }),
-                    .unset => try array(gpa, &.{ string("unsupported"), string("unset_field") }),
-                };
-                try fields.append(try array(gpa, &.{ string(name), child }));
-            }
-            break :blk array(gpa, &.{ string("record"), .{ .array = fields } });
+            const fields = try recordFieldsShape(gpa, store, tokens, source, value.fields, depth + 1);
+            if (value.ext) |ext| break :blk array(gpa, &.{ string("record_update"), try shape(gpa, store, tokens, source, ext, depth + 1), fields });
+            break :blk array(gpa, &.{ string("record"), fields });
         },
+        .record_builder => |value| array(gpa, &.{ string("record_builder"), try shape(gpa, store, tokens, source, value.mapper, depth + 1), try recordFieldsShape(gpa, store, tokens, source, value.fields, depth + 1) }),
+        .nominal_record => |value| array(gpa, &.{ string("nominal_record"), try shape(gpa, store, tokens, source, value.mapper, depth + 1), try shape(gpa, store, tokens, source, value.backing, depth + 1) }),
+        .nominal_apply => |value| blk: {
+            var args = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.exprSlice(value.args)) |arg| try args.append(try shape(gpa, store, tokens, source, arg, depth + 1));
+            break :blk array(gpa, &.{ string("nominal_apply"), try shape(gpa, store, tokens, source, value.mapper, depth + 1), .{ .array = args } });
+        },
+        .record_updater => |value| array(gpa, &.{ string("record_updater"), string(fieldName(tokenText(tokens, source, value.token))) }),
+        .string_part => |value| array(gpa, &.{ string("text"), string(tokenText(tokens, source, value.token)) }),
+        .malformed => |value| array(gpa, &.{ string("malformed"), string(@tagName(value.reason)) }),
         .block => |value| blk: {
             var statements = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.statementSlice(value.statements)) |idx_stmt| {
@@ -355,7 +370,6 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             for (store.exprSlice(value.args)) |arg| try args.append(try shape(gpa, store, tokens, source, arg, depth + 1));
             break :blk array(gpa, &.{ string("call"), try shape(gpa, store, tokens, source, value.@"fn", depth + 1), .{ .array = args } });
         },
-        else => array(gpa, &.{ string("unsupported"), string(@tagName(expr)) }),
     };
 }
 fn replParseMode(gpa: Allocator, source: []const u8) Allocator.Error![]const u8 {

@@ -55,6 +55,31 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_record_updates_unset_fields_and_nominal_forms(self):
+        number = ['number', '1']
+        fields = [['x', number]]
+        foo = ['identifier', 'Foo']
+        cases = [
+            ('{x: _}', ['record', [['x', ['unset']]]]),
+            ('{..base,x:1}', ['record_update', ['identifier', 'base'], fields]),
+            ('{x:1}.Foo', ['record_builder', foo, fields]),
+            ('Foo.{x:1}', ['nominal_record', foo, ['record', fields]]),
+            ('Foo.({x:1})', ['nominal_apply', foo, [['record', fields]]]),
+            ('Foo.(1)', ['nominal_apply', foo, [number]]),
+            ('Foo.()', ['nominal_apply', foo, []]),
+            ('Foo.(1,2)', ['nominal_apply', foo, [number, ['number', '2']]]),
+            ('Module.Foo.(1)', ['nominal_apply', ['field', ['identifier', 'Module'], 'Foo'], [number]]),
+            ('Module.Foo.{..base,x:_}', ['nominal_record', ['field', ['identifier', 'Module'], 'Foo'], ['record_update', ['identifier', 'base'], [['x', ['unset']]]]]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': 'expr', 'source': source}) + '\n' for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], [expected])
+
     def test_current_reference_source_policy_and_dependency_rules(self):
         cases = [
             ('expr', '{1\n...}', True),

@@ -363,6 +363,16 @@ def syntax_shape(response, source):
             return [name, branch[-1] if len(branch) > 1 else ['identifier', name]]
         if kind == 'Record':
             return ['record', branch]
+        if kind == 'RecordUpdate':
+            return ['record_update', branch[0], branch[1:]]
+        if kind == 'UnsetField':
+            return [branch[0][1], ['unset']]
+        if kind == 'RecordBuilder':
+            return ['record_builder', branch[0], branch[1:]]
+        if kind == 'NominalRecord':
+            return ['nominal_record', *branch]
+        if kind == 'NominalApply':
+            return ['nominal_apply', branch[0], branch[1:]]
         if kind == 'Block':
             return ['block', branch]
         if kind in {'FieldAccess', 'OptionalFieldAccess'}:
