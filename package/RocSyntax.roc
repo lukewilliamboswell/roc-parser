@@ -353,7 +353,7 @@ lex = |source| {
 			width = operator_width(source, start)
 			if width > 1 {
 				$i = start + width
-				$kind = if b == '.' or b == ':' Punctuation else Operator
+				$kind = if b == '.' and width == 3 and (byte(source, start + 2) == '<' or byte(source, start + 2) == '=') Operator else if b == '.' or b == ':' Punctuation else Operator
 			}
 			if $kind == Invalid {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
@@ -464,7 +464,8 @@ expression = |initial, minimum, depth, punned| {
 			$s = vacant
 			t = peek(look)
 			bp = binding(look)
-			if ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and ($target_done or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !$qualified))) {
+			pipe_boundary = minimum == 100 and t.start > node_end(look, $left) and ((spelling(look, ".") and (peek(at_pos(look, look.pos + 1)).kind == LowerIdent or peek(at_pos(look, look.pos + 1)).kind == Number)) or spelling(look, ".?"))
+			if pipe_boundary or ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !$qualified))) {
 				$s = look
 				$done = True
 			} else if spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>") {
@@ -472,7 +473,7 @@ expression = |initial, minimum, depth, punned| {
 				rhs = skip_trivia(at_pos(look, look.pos + 1))
 				rhs_token = peek(rhs)
 				literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
-				valid_start = rhs_token.kind == LowerIdent or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
+				valid_start = (rhs_token.kind == LowerIdent and byte(rhs.source, rhs_token.start) != '_') or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
 				validated = if valid_start rhs else issue(rhs, UnexpectedToken, rhs_token.start, rhs_token.end)
 				{ state: target_state, node: target_node } = expression(validated, if pipe 100 else 101, depth + 1, False)
 				method = pipe and method_target(target_state, target_node)
@@ -608,7 +609,18 @@ primary = |s, depth, punned| {
 			add_node(bad, ErrorNode, t.start, t.end, [])
 		}
 		LowerIdent | UpperIdent => add_node(at_pos(s, s.pos + 1), Identifier, t.start, t.end, [])
-		Number => literal_suffix(add_node(at_pos(s, s.pos + 1), NumberLiteral, t.start, t.end, []), False)
+		Number => {
+			after = at_pos(s, s.pos + 1)
+			dot = peek(after)
+			field_state = at_pos(after, after.pos + 1)
+			field = peek(field_state)
+			if integer_token(s.source, t) and spelling(after, ".") and dot.start == t.end and field.kind == Number and s.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit) {
+				bad = issue(at_pos(field_state, field_state.pos + 1), UnexpectedToken, dot.start, field.end)
+				add_node(bad, ErrorNode, t.start, field.end, [])
+			} else {
+				literal_suffix(add_node(after, NumberLiteral, t.start, t.end, []), False)
+			}
+		}
 		SingleQuote => literal_suffix(add_node(at_pos(s, s.pos + 1), CharacterLiteral, t.start, t.end, []), False)
 		StringStart | MultilineStringStart => parse_string(s, depth + 1)
 		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1, punned, False)
@@ -977,7 +989,7 @@ exposed_collection = |initial| {
 			var $qualified = t.kind == UpperIdent
 			var $chain_done = False
 			while !$chain_done {
-				if $qualified and spelling($s, ".") and (is_upper(byte($s.source, peek(at_pos($s, $s.pos + 1)).start)) or is_lower(byte($s.source, peek(at_pos($s, $s.pos + 1)).start))) {
+				if $qualified and spelling($s, ".") and peek($s).start == node_end($s, $name) and (is_upper(byte($s.source, peek(at_pos($s, $s.pos + 1)).start)) or is_lower(byte($s.source, peek(at_pos($s, $s.pos + 1)).start))) {
 					field_state = at_pos($s, $s.pos + 1)
 					field = peek(field_state)
 					{ state: named_state, node: named_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
@@ -996,7 +1008,7 @@ exposed_collection = |initial| {
 			if spelling($s, "as") {
 				alias_state = skip_trivia(at_pos($s, $s.pos + 1))
 				alias = peek(alias_state)
-				valid_alias = if $upper alias.kind == UpperIdent else if t.kind == UpperIdent alias.kind == LowerIdent or alias.kind == UpperIdent else alias.kind == LowerIdent
+				valid_alias = if $upper alias.kind == UpperIdent and byte(alias_state.source, alias.start) != '@' else alias.kind == LowerIdent and byte(alias_state.source, alias.start) != '_'
 				checked = if valid_alias alias_state else issue(alias_state, UnexpectedToken, alias.start, alias.end)
 				{ state: alias_built, node: alias_node } = add_node(at_pos(checked, checked.pos + if alias.kind == EndOfFile 0 else 1), Identifier, alias.start, alias.end, [])
 				$s = alias_built
@@ -1604,7 +1616,7 @@ parse_associated_block = |initial, depth| {
 			{ state: item_state, node: item_node } = statement(if spelling(look, "var") issue(look, UnexpectedToken, t.start, t.end) else look, depth + 1)
 			$ids = $ids.append(item_node)
 			$s = item_state
-			if (item_state.nodes.get(item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
+			if peek(skip_trivia(item_state)).kind == CloseCurly and (item_state.nodes.get(item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
 				$s = issue($s, UnexpectedToken, t.start, node_end($s, item_node))
 			}
 			if $s.pos <= before {
@@ -1686,6 +1698,9 @@ pattern_primary = |s, alternatives, depth| {
 			validated = if peek(look).kind == LowerIdent issue(look, UnexpectedToken, peek(look).start, peek(look).end) else look
 			add_node(validated, RestPattern, t.start, t.end, [])
 		}
+	} else if t.kind == UpperIdent and byte(s.source, t.start) == '@' {
+		bad = issue(at_pos(s, s.pos + 1), UnexpectedToken, t.start, t.end)
+		add_node(bad, ErrorNode, t.start, t.end, [])
 	} else if t.kind == UpperIdent {
 		{ state: name_state, node: name_node } = add_node(at_pos(s, s.pos + 1), Identifier, t.start, t.end, [])
 		var $s = name_state
@@ -1693,7 +1708,7 @@ pattern_primary = |s, alternatives, depth| {
 		var $done = False
 		while !$done {
 			look = skip_trivia($s)
-			if spelling(look, ".") and peek(at_pos(look, look.pos + 1)).kind == UpperIdent {
+			if spelling(look, ".") and peek(look).start == node_end(look, $name) and peek(at_pos(look, look.pos + 1)).kind == UpperIdent {
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
 				{ state: field_built, node: field_node } = add_node(at_pos(field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
@@ -2325,35 +2340,53 @@ expect {
 # Only inspect potential destructuring starts; ordinary definitions take the
 # constant-lookahead path above. Delimiters shield nested assignments.
 has_pattern_assignment : State -> Bool
-has_pattern_assignment = |s| {
-	var $pos = s.pos
-	var $nesting = 0.U64
-	var $found = False
-	var $done = False
-	while !$done {
-		t = source_token(s, $pos)
-		if t.kind == EndOfFile {
-			$done = True
-		} else if $nesting == 0 and token_spelling(s.source, t, "=") {
-			$found = True
-			$done = True
-		} else if $nesting == 0 and ((t.kind == Whitespace and line_break(s.source, t.start, t.end)) or t.kind == CloseCurly) {
-			$done = True
-		} else {
-			if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
-				$nesting = $nesting + 1
+has_pattern_assignment = |initial| {
+	var $s = initial
+	first = peek($s)
+	if first.kind == UpperIdent {
+		if byte($s.source, first.start) == '@' {
+			return False
+		}
+		$s = skip_trivia(at_pos($s, $s.pos + 1))
+		var $name_end = first.end
+		var $done = False
+		while !$done and spelling($s, ".") {
+			field_state = at_pos($s, $s.pos + 1)
+			field = peek(field_state)
+			if peek($s).start == $name_end and field.kind == UpperIdent {
+				$name_end = field.end
+				$s = skip_trivia(at_pos(field_state, field_state.pos + 1))
+			} else {
+				$done = True
 			}
-			if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-				if $nesting > 0 {
-					$nesting = $nesting - 1
-				} else {
-					$done = True
-				}
-			}
-			$pos = $pos + 1
+		}
+		if spelling($s, ".") {
+			$s = skip_trivia(at_pos($s, $s.pos + 1))
+		}
+		if peek($s).kind != NoSpaceOpenRound and peek($s).kind != OpenCurly {
+			return False
 		}
 	}
-	$found
+	opening = peek($s)
+	if opening.kind != OpenRound and opening.kind != NoSpaceOpenRound and opening.kind != OpenCurly {
+		return False
+	}
+	var $pos = $s.pos + 1
+	var $nesting = 1.U64
+	while $nesting > 0 {
+		t = source_token($s, $pos)
+		if t.kind == EndOfFile {
+			return False
+		}
+		if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
+			$nesting = $nesting + 1
+		}
+		if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$nesting = $nesting - 1
+		}
+		$pos = $pos + 1
+	}
+	token_spelling($s.source, source_token($s, significant_position($s.tokens, $pos)), "=")
 }
 
 parse_for : State, U64, Bool, U64 -> Built
@@ -3418,4 +3451,28 @@ expect {
 
 expect {
 	["...-1", "...-...", "{ _ = 1\n-... }", "a - -...", "a - ..."].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+integer_token : List(U8), RocSyntax.Token -> Bool
+integer_token = |source, t| {
+	start = t.start + if byte(source, t.start) == '-' 1 else 0
+	if byte(source, start) == '0' {
+		var $base = start + 1
+		while byte(source, $base) == '_' {
+			$base = $base + 1
+		}
+		b = byte(source, $base)
+		if b == 'x' or b == 'b' or b == 'o' {
+			return True
+		}
+	}
+	!source.sublist({ start, len: t.end - start }).any(|b| b == '.' or b == 'e' or b == 'E')
+}
+
+expect {
+	["0xff.0", "0b10.00", "x -> _name", "x |> _", "match value { @Foo => 1 }", "|@A| 0", "match value { A .B => 0 }", "module [A .b]", "module [A .B]", "module [x as _name]", "module [x as _]", "module [A as @A]"].all(|source| (if source.starts_with("module") RocSyntax.parse_str(source) else RocSyntax.parse_expr_str(source)).status != Complete)
+}
+
+expect {
+	["0xff .0", "1.0.0", "x->f(1)(2)", "x |> f .field", "x |> f .?field", "{ A() A() A() 0 }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete) and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 }").status == Complete and RocSyntax.parse_str("Foo := U64.{ 1 x = 2 3 }").status != Complete
 }
