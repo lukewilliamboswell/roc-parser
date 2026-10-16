@@ -11,6 +11,7 @@
 package
 	[
 		Parser,
+		RocSyntax,
 		Utf8,
 		CSV,
 		HTTP,
