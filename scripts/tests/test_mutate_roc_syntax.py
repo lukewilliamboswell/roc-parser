@@ -92,6 +92,13 @@ class MutationTests(unittest.TestCase):
                 self.assertTrue(mutation.main(replay))
             saved = json.loads((root / 'replay/cases.jsonl').read_text())
             self.assertEqual(saved['mutation'], json.loads(failure.read_text())['mutation'])
+            worker.write_text('import json,sys\nfor line in sys.stdin:\n r=json.loads(line); print(json.dumps({"version":1,"id":r["id"],"tokens":[],"shape":[]}),flush=True)\n')
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertTrue(mutation.main(args[:4] + ['--replay', str(failure), '--output', str(root / 'malformed')]))
+            malformed = json.loads((root / 'malformed/report.json').read_text())
+            self.assertEqual(malformed['counts']['oracle_invalid_response'], 1)
+            self.assertEqual(malformed['counts']['failed'], 1)
+            self.assertEqual(len(malformed['failure_files']), 1)
 
     def test_timeout_is_a_failure(self):
         with tempfile.TemporaryDirectory() as folder:

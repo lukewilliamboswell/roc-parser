@@ -238,7 +238,8 @@ def main(argv=None):
                 counts['total'] += 1
                 counts['passed' if record['passed'] else 'failed'] += 1
                 if 'oracle' in record:
-                    counts['oracle_accepted' if record['oracle']['ok'] else 'oracle_rejected'] += 1
+                    oracle_ok = record['oracle'].get('ok')
+                    counts['oracle_accepted' if oracle_ok is True else 'oracle_rejected' if oracle_ok is False else 'oracle_invalid_response'] += 1
                 modes[case['request']['mode']] += 1
                 operations.update(edit['kind'] for edit in case['mutation']['edits'])
                 differences.update(error['field'] for error in record['differences'])
