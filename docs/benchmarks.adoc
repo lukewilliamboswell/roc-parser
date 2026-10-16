@@ -369,15 +369,13 @@ Batches calibrate to at least 20 milliseconds, warm up, and collect five samples
 Reports retain every sample, source hash, build receipt, median ratio and a
 conservative ratio lower bound (fastest Roc sample / slowest reference sample).
 A one-microsecond reference floor avoids division by zero and exaggerated tiny
-input ratios. The initial `--max-reference-ratio 64` is a configurable ceiling,
-not a claim of performance parity. Exceeding its lower-bound ratio returns a
+input ratios. The default `--max-reference-ratio 1.5` requires runtime within 1.5 times
+the optimized reference on every input. Exceeding its lower-bound ratio returns a
 nonzero exit and saves the exact request and timings under `failures/` for replay.
 Initial local measurements showed roughly 34–42 times the reference runtime
-on adjacent-statement families, so 64 is a conservative initial ceiling. This
-records the current performance gap; it does not establish parity. Setting
-`--max-reference-ratio 20` demonstrates the regression path on those inputs.
-Use `--replay failures/<hash>-<mode>.json` to time a saved input again. Lower the
-ceiling as local results improve.
+on adjacent-statement families. These inputs fail the required 1.5 ratio and
+remain optimization work; increasing the threshold does not resolve them.
+Use `--replay failures/<hash>-<mode>.json` to time a saved input again.
 
 `--smoke` selects only two tiny inputs and one one-millisecond sample, checks the
 protocol and correctness, and disables ratio assertions. This is the intended CI

@@ -137,7 +137,7 @@ def parser():
     ap.add_argument('--fixtures', type=Path, action='append', default=[])
     ap.add_argument('--sizes', type=int, nargs='+', default=[256, 512, 1024, 2048, 4096])
     ap.add_argument('--document-bytes', type=int, nargs='+', default=[4096, 65536, 262144])
-    ap.add_argument('--max-reference-ratio', type=positive_finite, default=64.0)
+    ap.add_argument('--max-reference-ratio', type=positive_finite, default=1.5)
     ap.add_argument('--reference-floor-ns', type=positive_finite, default=1000.0)
     ap.add_argument('--window-ms', type=positive_finite, default=20.0)
     ap.add_argument('--samples', type=bounded_samples, default=5)
