@@ -32,6 +32,14 @@ class SnapshotImportTests(unittest.TestCase):
         self.assertEqual(escaped["source"], '"\r\\n\\t"\n')
         self.assertEqual(escaped["mode"], "expr")
 
+    def test_named_file_snapshot_uses_file_parser_without_source_rewriting(self):
+        source = 'Thing := [Ready].{\n value = 1\n}\n'
+        case, reason = snapshot_case('named.md', 'blob', snapshot('file:Thing.roc', source))
+        self.assertIsNone(reason)
+        self.assertEqual(case['mode'], 'file')
+        self.assertEqual(case['source'], source)
+        self.assertEqual(case['upstream']['type'], 'file:Thing.roc')
+
     def test_reports_unhandled_snapshot_modes(self):
         case, reason = snapshot_case("repl.md", "blob", snapshot("repl", "1 + 2\n"))
         self.assertIsNone(case)

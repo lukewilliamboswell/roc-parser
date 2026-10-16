@@ -40,7 +40,7 @@ def snapshot_case(path: str, blob: str, contents: bytes) -> tuple[dict | None, s
     kind = metadata.get("type")
     if kind == "expr":
         mode = "expr"
-    elif kind in FILE_TYPES:
+    elif kind in FILE_TYPES or (kind is not None and kind.startswith("file:")):
         mode = "file"
     else:
         return None, f"unsupported_snapshot_mode:{kind}"
