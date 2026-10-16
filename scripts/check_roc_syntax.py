@@ -131,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
         step("full-corpus", [sys.executable, "scripts/check_roc_syntax_corpus.py", "--roc-source", str(corpus_repo),
                              "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),
                              "--output", str(output / "corpus.json")])
+        step("editor-recovery", [sys.executable, "scripts/check_roc_syntax_recovery.py",
+                                "--probe-command", shlex.quote(str(probe)), "--oracle-command", shlex.quote(str(oracle)),
+                                "--output", str(output / "recovery.json")])
         if not args.skip_fuzz:
             step("fuzz", [sys.executable, "scripts/run_fuzz.py", "smoke", "roc-syntax-raw",
                           "roc-syntax-structured", "--runs", str(args.fuzz_runs)])

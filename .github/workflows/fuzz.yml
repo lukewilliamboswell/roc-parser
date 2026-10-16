@@ -183,7 +183,11 @@ jobs:
           version: 0.17.0
           use-cache: false
       - name: Validate syntax and scaling
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
         run: python3 scripts/check_roc_syntax.py --skip-fuzz
+      - name: Explore syntax with a new reproducible seed
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        run: python3 scripts/check_roc_syntax.py --skip-fuzz --seed "$GITHUB_RUN_ID"
       - name: Upload syntax validation evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

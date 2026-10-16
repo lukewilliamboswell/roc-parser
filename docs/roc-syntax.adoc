@@ -104,8 +104,10 @@ ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 
 The command checks the package, builds the pinned compiler oracle and optimized
 Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
-expression trees, checks dedicated type, platform and adversarial grammar fixtures and the complete pinned snapshot
-acceptance corpus, runs both fuzz smoke campaigns and checks performance scaling.
+expression trees, checks dedicated type, platform and adversarial grammar fixtures,
+compares acceptance across the complete pinned snapshot corpus, and compares tokens
+and normalized trees for every compiler-accepted input. It checks editor recovery,
+runs both fuzz smoke campaigns and checks performance scaling.
 It rebuilds candidate probes and records source and executable hashes. Its
 `validation.json`, step logs, differential failures and performance results live
 under `.roc-parser-tmp/roc-syntax-validation/`.
@@ -120,6 +122,21 @@ to collect allocation/reallocation call counts. For performance comparisons, sav
 the first run's `performance.json` and pass it as `--baseline /path/to/before.json`
 on a later run on the same machine and compiler. An allocation call count does
 not measure bytes copied or peak memory; inspect timing growth too.
+
+Pull requests use seed `1` for reproducible differential generation. Scheduled
+and manual exploration use the GitHub run ID as a fresh reproducible seed;
+`--seed RUN_ID` reproduces that run locally. Reports retain complete source,
+models, commands and failures in the syntax validation artifact for 14 days.
+Promote minimized failures into committed fixtures before that artifact expires.
+Fresh seeds explore additional combinations; they do not prove grammar coverage.
+
+The editor recovery gate checks damaged files with healthy declarations before
+and after each edit, including UTF-8 comments and headers. Surviving declarations
+must retain their exact byte spans and independently specified trees. Diagnostics
+must stay inside the damaged region. Compiler rejection confirms that an edit is
+malformed; compiler recovery layout is not used as the candidate's expected tree.
+These contracts cover specific edit classes rather than promising recovery from
+every possible incomplete program.
 
 To import the larger upstream source corpus, run:
 
