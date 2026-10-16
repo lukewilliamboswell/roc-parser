@@ -433,15 +433,15 @@ binding = |s| {
 	}
 }
 
-expression : State, U64, U64 -> Built
-expression = |initial, minimum, depth| {
+expression : State, U64, U64, Bool -> Built
+expression = |initial, minimum, depth, punned| {
 	s = skip_trivia(initial)
 	first = peek(s)
 	if depth >= 128 {
 		limited = issue(s, ResourceLimit, first.start, first.end)
 		add_node(at_pos(limited, limited.pos + if first.kind == EndOfFile 0 else 1), ErrorNode, first.start, first.end, [])
 	} else {
-		{ state: built_state, node: built_node } = primary(s, depth)
+		{ state: built_state, node: built_node } = primary(s, depth, punned)
 		var $s = built_state
 		var $left = built_node
 		var $qualified = first.kind == UpperIdent
@@ -486,7 +486,7 @@ expression = |initial, minimum, depth| {
 				}
 			} else if bp.left > 0 and bp.left >= minimum {
 				start = node_start(look, $left)
-				{ state: right_state, node: right_node } = expression(at_pos(look, look.pos + 1), bp.right, depth + 1)
+				{ state: right_state, node: right_node } = expression(at_pos(look, look.pos + 1), bp.right, depth + 1, False)
 				end = node_end(right_state, right_node)
 				{ state: binary_state, node: binary_node } = add_node(right_state, Binary, start, end, [$left, right_node])
 				$s = binary_state
@@ -524,7 +524,7 @@ collection = |initial, closing, depth| {
 			$done = True
 		} else {
 			before = look.pos
-			{ state: item_state, node: item_node } = expression(look, 0, depth)
+			{ state: item_state, node: item_node } = expression(look, 0, depth, False)
 			$ids = $ids.append(item_node)
 			$end = node_end(item_state, item_node)
 			$s = skip_trivia(item_state)
@@ -543,8 +543,8 @@ collection = |initial, closing, depth| {
 	{ state: $s, ids: $ids, end: $end, comma: $comma }
 }
 
-primary : State, U64 -> Built
-primary = |s, depth| {
+primary : State, U64, Bool -> Built
+primary = |s, depth, punned| {
 	t = peek(s)
 	match t.kind {
 		LowerIdent if spelling(s, "_") => {
@@ -559,10 +559,10 @@ primary = |s, depth| {
 		Number => literal_suffix(add_node(at_pos(s, s.pos + 1), NumberLiteral, t.start, t.end, []), False)
 		SingleQuote => literal_suffix(add_node(at_pos(s, s.pos + 1), CharacterLiteral, t.start, t.end, []), False)
 		StringStart | MultilineStringStart => parse_string(s, depth + 1)
-		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1)
+		OpenCurly => curly(at_pos(s, s.pos + 1), t.start, depth + 1, punned)
 		Keyword if spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") => {
 			kind = if spelling(s, "dbg") Debug else if spelling(s, "crash") Crash else Return
-			{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
+			{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1, False)
 			end = node_end(value_state, value_node)
 			add_node(value_state, kind, t.start, end, [value_node])
 		}
@@ -582,7 +582,7 @@ primary = |s, depth| {
 			add_node(bad, ErrorNode, t.start, t.end, [])
 		}
 		Operator if spelling(s, "-") or spelling(s, "!") => {
-			{ state: operand_state, node: operand_node } = expression(at_pos(s, s.pos + 1), 40, depth + 1)
+			{ state: operand_state, node: operand_node } = expression(at_pos(s, s.pos + 1), 40, depth + 1, False)
 			end = node_end(operand_state, operand_node)
 			add_node(operand_state, Unary, t.start, end, [operand_node])
 		}
@@ -618,7 +618,7 @@ parse_source = |source, expression_only| {
 				$done = True
 			} else {
 				before = look.pos
-				{ state: built_state, node: built_node } = if expression_only expression(look, 0, 0) else statement(look, 0)
+				{ state: built_state, node: built_node } = if expression_only expression(look, 0, 0, False) else statement(look, 0)
 				$roots = $roots.append(built_node)
 				$s = built_state
 				if !expression_only {
@@ -817,7 +817,7 @@ statement = |initial, depth| {
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, "=") {
 		{ state: name_state, node: name_node } = parse_pattern(s, False, depth + 1)
 		after_name = skip_trivia(name_state)
-		{ state: value_state, node: value_node } = expression(at_pos(after_name, after_name.pos + 1), 0, depth)
+		{ state: value_state, node: value_node } = expression(at_pos(after_name, after_name.pos + 1), 0, depth, False)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [name_node, value_node])
 	} else if t.kind == LowerIdent and token_spelling(s.source, following, ":") {
@@ -832,7 +832,7 @@ statement = |initial, depth| {
 		{ state: named_state, node: named_node } = add_node(at_pos(validated, validated.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
 		look = skip_trivia(named_state)
 		if spelling(look, "=") {
-			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1)
+			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1, False)
 			end = node_end(value_state, value_node)
 			add_node(value_state, VariableDeclaration, t.start, end, [named_node, value_node])
 		} else if spelling(look, ":") {
@@ -843,21 +843,21 @@ statement = |initial, depth| {
 			add_node(look, VariableDeclaration, t.start, name.end, [named_node])
 		}
 	} else if spelling(s, "expect") {
-		{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
+		{ state: value_state, node: value_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1, False)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Expect, t.start, end, [value_node])
 	} else if spelling(s, "while") {
-		{ state: condition_state, node: condition_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1)
-		{ state: body_state, node: body_node } = expression(condition_state, 0, depth + 1)
+		{ state: condition_state, node: condition_node } = expression(at_pos(s, s.pos + 1), 0, depth + 1, False)
+		{ state: body_state, node: body_node } = expression(condition_state, 0, depth + 1, False)
 		end = node_end(body_state, body_node)
 		add_node(body_state, While, t.start, end, [condition_node, body_node])
 	} else if spelling(s, "for") or spelling(s, "for!") or spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") or spelling(s, "break") {
-		primary(s, depth + 1)
+		primary(s, depth + 1, False)
 	} else if (t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(s) {
 		{ state: pattern_state, node: pattern_node } = parse_pattern(s, False, depth + 1)
 		look = skip_trivia(pattern_state)
 		validated = if spelling(look, "=") look else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
-		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1)
+		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1, False)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [pattern_node, value_node])
 	} else if spelling(s, "module") or spelling(s, "hosted") {
@@ -868,7 +868,7 @@ statement = |initial, depth| {
 		validated = if depth == 0 s else issue(s, UnexpectedToken, t.start, t.end)
 		parse_import(validated, depth + 1)
 	} else {
-		{ state: value_state, node: value_node } = expression(s, 0, depth)
+		{ state: value_state, node: value_node } = expression(s, 0, depth, True)
 		end = node_end(value_state, value_node)
 		add_node(value_state, ExpressionStatement, t.start, end, [value_node])
 	}
@@ -1054,7 +1054,7 @@ type_expression = |initial, depth| {
 		bad = issue(initial, ResourceLimit, t.start, t.end)
 		add_node(bad, ErrorNode, t.start, t.start, [])
 	} else {
-		{ state: left_state, node: left_node } = expression(initial, 40, depth + 1)
+		{ state: left_state, node: left_node } = expression(initial, 40, depth + 1, False)
 		look = skip_trivia(left_state)
 		if spelling(look, "->") {
 			start = node_start(look, left_node)
@@ -1188,7 +1188,7 @@ pattern_primary = |s, alternatives, depth| {
 	} else if t.kind == OpenCurly {
 		pattern_record(s, alternatives, depth)
 	} else if t.kind == Number or t.kind == StringStart or t.kind == SingleQuote {
-		primary(s, depth)
+		primary(s, depth, False)
 	} else {
 		bad = issue(s, UnexpectedToken, t.start, t.end)
 		add_node(at_pos(bad, bad.pos + if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly 0 else 1), ErrorNode, t.start, t.end, [])
@@ -1317,19 +1317,19 @@ parse_lambda = |initial, start, depth| {
 			}
 		}
 	}
-	{ state: body_state, node: body_node } = expression($s, 0, depth)
+	{ state: body_state, node: body_node } = expression($s, 0, depth, False)
 	end = node_end(body_state, body_node)
 	add_node(body_state, Lambda, start, end, $ids.append(body_node))
 }
 
 parse_if : State, U64, U64 -> Built
 parse_if = |initial, start, depth| {
-	{ state: condition_state, node: condition_node } = expression(initial, 0, depth)
+	{ state: condition_state, node: condition_node } = expression(initial, 0, depth, False)
 	look = skip_trivia(condition_state)
-	{ state: then_branch_state, node: then_branch_node } = expression(look, 0, depth)
+	{ state: then_branch_state, node: then_branch_node } = expression(look, 0, depth, False)
 	after = skip_trivia(then_branch_state)
 	if spelling(after, "else") {
-		{ state: other_state, node: other_node } = expression(at_pos(after, after.pos + 1), 0, depth)
+		{ state: other_state, node: other_node } = expression(at_pos(after, after.pos + 1), 0, depth, False)
 		end = node_end(other_state, other_node)
 		add_node(other_state, If, start, end, [condition_node, then_branch_node, other_node])
 	} else {
@@ -1338,12 +1338,12 @@ parse_if = |initial, start, depth| {
 	}
 }
 
-curly : State, U64, U64 -> Built
-curly = |initial, start, depth| {
+curly : State, U64, U64, Bool -> Built
+curly = |initial, start, depth, punned| {
 	look = skip_trivia(initial)
 	first = peek(look)
 	after = skip_trivia(at_pos(look, look.pos + 1))
-	record = first.kind == CloseCurly or (first.kind == LowerIdent and (spelling(after, ":") or spelling(after, ",") or peek(after).kind == CloseCurly))
+	record = first.kind == CloseCurly or (first.kind == LowerIdent and (spelling(after, ":") or spelling(after, ",") or (punned and peek(after).kind == CloseCurly)))
 	var $s = initial
 	var $ids = []
 	var $end = first.start
@@ -1372,7 +1372,7 @@ curly = |initial, start, depth| {
 					$field_state = next_field_state
 					$field_node = next_field_node
 				} else if spelling(field_look, ":") {
-					{ state: value_state, node: value_node } = expression(at_pos(field_look, field_look.pos + 1), 0, depth)
+					{ state: value_state, node: value_node } = expression(at_pos(field_look, field_look.pos + 1), 0, depth, True)
 					end = node_end(value_state, value_node)
 					{ state: next_field_state, node: next_field_node } = add_node(value_state, RecordField, t.start, end, [name_node, value_node])
 					$field_state = next_field_state
@@ -1411,7 +1411,7 @@ curly = |initial, start, depth| {
 
 parse_match : State, U64, U64 -> Built
 parse_match = |initial, start, depth| {
-	{ state: value_state, node: value_node } = expression(initial, 0, depth)
+	{ state: value_state, node: value_node } = expression(initial, 0, depth, False)
 	look = skip_trivia(value_state)
 	if peek(look).kind != OpenCurly {
 		bad = issue(look, UnexpectedToken, peek(look).start, peek(look).end)
@@ -1438,13 +1438,13 @@ parse_match = |initial, start, depth| {
 				var $arrow = skip_trivia(pattern_state)
 				var $branch_ids = [pattern_node]
 				if spelling($arrow, "if") {
-					{ state: guard_state, node: guard_node } = expression(at_pos($arrow, $arrow.pos + 1), 0, depth + 1)
+					{ state: guard_state, node: guard_node } = expression(at_pos($arrow, $arrow.pos + 1), 0, depth + 1, False)
 					$arrow = skip_trivia(guard_state)
 					$branch_ids = $branch_ids.append(guard_node)
 				}
 				arrow = $arrow
 				if spelling(arrow, "=>") {
-					{ state: branch_value_state, node: branch_value_node } = expression(at_pos(arrow, arrow.pos + 1), 0, depth)
+					{ state: branch_value_state, node: branch_value_node } = expression(at_pos(arrow, arrow.pos + 1), 0, depth, False)
 					branch_end = node_end(branch_value_state, branch_value_node)
 					{ state: branch_state, node: branch_node } = add_node(branch_value_state, MatchBranch, t.start, branch_end, $branch_ids.append(branch_value_node))
 					$ids = $ids.append(branch_node)
@@ -1808,8 +1808,8 @@ parse_for = |initial, start, stream, depth| {
 	{ state: pattern_state, node: pattern_node } = parse_pattern(initial, False, depth + 1)
 	look = skip_trivia(pattern_state)
 	validated = if spelling(look, "in") at_pos(look, look.pos + 1) else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
-	{ state: list_state, node: list_node } = expression(validated, 0, depth + 1)
-	{ state: body_state, node: body_node } = expression(list_state, 0, depth + 1)
+	{ state: list_state, node: list_node } = expression(validated, 0, depth + 1, False)
+	{ state: body_state, node: body_node } = expression(list_state, 0, depth + 1, False)
 	end = node_end(body_state, body_node)
 	add_node(body_state, if stream ForStream else For, start, end, [pattern_node, list_node, body_node])
 }
@@ -1872,7 +1872,7 @@ parse_string = |initial, depth| {
 			$ids = $ids.append(part_node)
 			$end = t.end
 		} else if t.kind == InterpolationStart {
-			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1)
+			{ state: value_state, node: value_node } = expression(at_pos(look, look.pos + 1), 0, depth + 1, False)
 			after = skip_trivia(value_state)
 			close = peek(after)
 			closed = close.kind == InterpolationEnd
@@ -1966,4 +1966,8 @@ expect {
 
 expect {
 	["import lower", "import pkg.lower", "import json.Json as lower", "import Foo exposing [1]", "import Foo exposing [a b]", "import \"data\" as text : U64", "import \"data\" as text : List(U16)", "import \"\${name}\" as text : Str", "module [1 + 2]", "module [value as Type]"].all(|source| RocSyntax.parse_str(source).status != Complete)
+}
+
+expect {
+	RocSyntax.parse_expr_str("{ x }").nodes.any(|n| n.kind == Block) and RocSyntax.parse_expr_str("{ { x } }").nodes.any(|n| n.kind == Record) and RocSyntax.parse_expr_str("{ field: { x } }").nodes.keep_if(|n| n.kind == Record).len() == 2
 }
