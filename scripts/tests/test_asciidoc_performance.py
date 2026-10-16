@@ -23,6 +23,12 @@ class Performance(unittest.TestCase):
     def test_default_ratio_is_one(self):
         self.assertEqual(perf.parser().parse_args([]).max_ratio, 1.0)
 
+    def test_default_oracle_home_matches_the_local_installer(self):
+        from asciidoc.setup_oracle import DEFAULT_HOME as installed_home
+        self.assertEqual(perf.parser().parse_args([]).gem_home, installed_home)
+        self.assertEqual(perf.parser().parse_args(['--gem-home', '/tmp/custom-oracle']).gem_home,
+                         pathlib.Path('/tmp/custom-oracle'))
+
     def test_ratchet_has_no_floor_or_aggregate_exception(self):
         faster = perf.distribution([900,900,900], 10, 1)
         reference = perf.distribution([1000,1000,1000], 10, 1)

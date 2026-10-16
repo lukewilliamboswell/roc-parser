@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.setrecursionlimit(10000)
 sys.path.insert(0, str(ROOT / 'scripts'))
 from review_roc_syntax import Worker
-from review_asciidoc import canonical_projection, canonical_html
+from review_asciidoc import DEFAULT_HOME, canonical_projection, canonical_html
 
 
 def digest(path):
@@ -323,7 +323,7 @@ def parser():
     ap.add_argument('--root', type=Path, default=ROOT, help='source root; defaults to this checkout')
     ap.add_argument('--roc', default='roc')
     ap.add_argument('--candidate-binary', type=Path)
-    ap.add_argument('--gem-home', type=Path)
+    ap.add_argument('--gem-home', type=Path, default=DEFAULT_HOME, help='pinned gem installation from scripts/asciidoc/setup_oracle.py')
     ap.add_argument('--ruby', default='ruby')
     ap.add_argument('--generated', type=int, default=2000)
     ap.add_argument('--seed', type=int, default=719)
