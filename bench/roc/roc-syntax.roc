@@ -6,7 +6,7 @@ app [main!] {
 import cli.OsStr
 import cli.Stdin
 import cli.Stdout
-import cli.Utc
+import cli.Monotonic
 import parser.RocSyntax
 
 ## In-process optimized full parse with shared input. Input/output and the
@@ -23,17 +23,19 @@ main! = |args| {
 	var $successes = 0.U64
 	var $status = Complete
 	var $i = 0
-	start = Utc.now!()
+	start = Monotonic.now!()
 	while $i < iterations {
 		parsed = RocSyntax.parse_str(input)
 		$checksum = $checksum + parsed.tokens.fold(0, |sum, token| sum + token.start + token.end + token_kind_code(token.kind))
 			+ parsed.nodes.fold(0, |sum, node| sum + node.start + node.end + node.children_start + node.children_len + node_kind_code(node.kind))
 			+ parsed.children.fold(0, |sum, child| (sum * 31 + child) % 1000000007)
 		$status = parsed.status
-		if parsed.status == Complete { $successes = $successes + 1 }
+		if parsed.status == Complete {
+			$successes = $successes + 1
+		}
 		$i = $i + 1
 	}
-	elapsed = Utc.delta_as_nanos(Utc.now!(), start)
+	elapsed = Monotonic.now!() - start
 	Stdout.line!(Json.to_str({ iterations, elapsed_ns: elapsed, successes: $successes, checksum: $checksum, status: Str.inspect($status) }))?
 	Ok({})
 }
