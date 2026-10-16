@@ -1,0 +1,577 @@
+{
+  "version": 1,
+  "syntax": "current-zig",
+  "reference_commit": "7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5",
+  "coverage": [
+    "headers/platform"
+  ],
+  "cases": [
+    {
+      "id": "platform/60a3c51c42fd",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/1ec2827afff9",
+      "mode": "header",
+      "source": "platform \"\" requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/a34cbdf4af5e",
+      "mode": "header",
+      "source": "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/f4259cf208a5",
+      "mode": "header",
+      "source": "platform \"${x}\" requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/2f0e07971f78",
+      "mode": "header",
+      "source": "platform \"\"\"name requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/97c0b1dc6668",
+      "mode": "header",
+      "source": "platform p requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/da0b5341b4e7",
+      "mode": "header",
+      "source": "platform \"p\" requires {}{} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/aad6fa34bb2a",
+      "mode": "header",
+      "source": "platform \"p\" requires {main : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/76b40181fbd0",
+      "mode": "header",
+      "source": "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/c6da67976d9d",
+      "mode": "header",
+      "source": "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/94fe960e55fe",
+      "mode": "header",
+      "source": "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/6c8b06ca2918",
+      "mode": "header",
+      "source": "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/705bb1ed9e9f",
+      "mode": "header",
+      "source": "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/7c3735ff9680",
+      "mode": "header",
+      "source": "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/e70f22abffee",
+      "mode": "header",
+      "source": "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/4da141c4d672",
+      "mode": "header",
+      "source": "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/d8b6cd67bac9",
+      "mode": "header",
+      "source": "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/bafadac3bc07",
+      "mode": "header",
+      "source": "platform \"p\" requires {run U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/d0aab23d963e",
+      "mode": "header",
+      "source": "platform \"p\" requires {run : 1} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/6c6c4e9c842f",
+      "mode": "header",
+      "source": "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/1d09d5b9ad30",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/76e220126cf0",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [1] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/cb0d0f76e802",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes {} packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/621249ae0e86",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposing [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/953e2c4f381b",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/fd0311f8d2ff",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {dep} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/a060093f1d2d",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {dep: 1} provides {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/6b791c333602",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/a7f294611777",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/fe64523866ba",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/acfa3b02a5c0",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {roc} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/9d3b79068f85",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/ae011eceefdf",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/28042fc43f5b",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {dep: _} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/31569aad137c",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/a2403d3ca82b",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/623e6e803447",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/bab3c2955dae",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"${x}\": run}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/00b9b994b88a",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/a4486250a98a",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/708cec2df8d8",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/780afb23fede",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/1eb888a1330e",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {x: run}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/2ff67827ea1f",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/39408f76e821",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/f2218e53df4b",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/39d8ebe13e17",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/9db0e62b6339",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/15cad8735253",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted []",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/ec52412de623",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/c692a090735a",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/5c4a50857b28",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/5142e84d019e",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/59f758d99733",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/880364cc9ebc",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/ee9da5b7077e",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/1038f54d4a03",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/eb022185ad09",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/1aef827c1fb4",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/18fed672ee03",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/0d7d98468117",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/02013b4de784",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/075d01932937",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/2a251d4bd1e3",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/19db07951e93",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/a4305287d713",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/487f61bf8b8b",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/77ba733317a8",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/8c7e432c2953",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/3982aca99237",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/c00fa0f5ad1f",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/fdc12d7f0b86",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"${x}\"}}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/d7a71a76129d",
+      "mode": "header",
+      "source": "platform \"p\" missing_requires {} exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/4748319c9233",
+      "mode": "header",
+      "source": "platform \"p\" requires {} missing_exposes [] packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/c847aaaf413c",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] missing_packages {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/569d383869e2",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} missing_provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/5624ed1c321c",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}",
+      "rule": "headers/platform",
+      "coverage": "supported"
+    },
+    {
+      "id": "platform/5112c8f67004",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/266baec052fd",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/7b063f4c0e1a",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    },
+    {
+      "id": "platform/821c19b74fd7",
+      "mode": "header",
+      "source": "platform \"p\" requires {} exposes [] packages {} provides {} provides {}",
+      "rule": "headers/platform",
+      "coverage": "recovery"
+    }
+  ]
+}

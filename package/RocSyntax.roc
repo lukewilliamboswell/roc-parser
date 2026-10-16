@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordUpdate, UnsetField, RecordBuilder, NominalRecord, NominalApply, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, ArrowCall, MethodArrowCall, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode, TypeName, TypeVariable, TypeWildcard, TypeApply, TypeFunction, TypeTuple, TypeRecord, TypeField, TypeTagUnion, TypeExtension, TypeParenthesized, TypeDeclaration, TypeHeader, WhereClause, WhereMethod, WhereAlias, AssociatedBlock]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordUpdate, UnsetField, RecordBuilder, NominalRecord, NominalApply, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, ArrowCall, MethodArrowCall, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode, TypeName, TypeVariable, TypeWildcard, TypeApply, TypeFunction, TypeTuple, TypeRecord, TypeField, TypeTagUnion, TypeExtension, TypeParenthesized, TypeDeclaration, TypeHeader, WhereClause, WhereMethod, WhereAlias, AssociatedBlock, PlatformRequires, RequiredValue, RequiredType, PlatformProvides, PlatformHosted, SymbolMapping, PlatformTargets, TargetInputsDirectory, TargetEntry, TargetConfig, TargetField, TargetList, TargetFile]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -927,6 +927,9 @@ statement = |initial, depth| {
 		{ state: value_state, node: value_node } = expression(at_pos(validated, validated.pos + if spelling(validated, "=") 1 else 0), 0, depth + 1, False)
 		end = node_end(value_state, value_node)
 		add_node(value_state, Declaration, t.start, end, [pattern_node, value_node])
+	} else if spelling(s, "platform") {
+		validated = if depth == 0 s else issue(s, UnexpectedToken, t.start, t.end)
+		parse_platform_header(validated, depth + 1)
 	} else if spelling(s, "app") or spelling(s, "package") {
 		{ state: exposed_state, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(at_pos(s, s.pos + 1))
 		look = skip_trivia(exposed_state)
@@ -2920,4 +2923,454 @@ expect {
 
 expect {
 	["module[Foo.bar as lower]", "module[Foo._]", "module[Foo._a]", "module[Foo.$bar]"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("x.$field").status != Complete
+}
+
+# Platform headers use dedicated collections: target configuration is data,
+# and its atoms deliberately do not inherit value expression operators.
+parse_platform_header : State, U64 -> Built
+parse_platform_header = |initial, depth| {
+	start = peek(initial).start
+	{ state: name_state, node: name_node } = platform_header_string(skip_trivia(at_pos(initial, initial.pos + 1)), True)
+	{ state: requires_state, node: requires_node } = platform_requires(platform_header_keyword(name_state, "requires"), depth + 1)
+	exposed_start = platform_header_keyword(requires_state, "exposes")
+	exposed = exposed_collection(exposed_start)
+	packages_start = platform_header_keyword(exposed.state, "packages")
+	checked_packages = if peek(packages_start).kind == OpenCurly packages_start else issue(packages_start, UnexpectedToken, peek(packages_start).start, peek(packages_start).end)
+	{ state: packages_state, node: packages_node } = dependency_record(checked_packages, False, depth + 1)
+	package_info = packages_state.nodes.get(packages_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
+	var $s = packages_state
+	var $index = 0.U64
+	while $index < package_info.children_len {
+		field_id = $s.children.get(package_info.children_start + $index) ?? packages_node
+		field = $s.nodes.get(field_id) ?? package_info
+		if field.children_len > 1 {
+			value_id = $s.children.get(field.children_start + 1) ?? field_id
+			value = $s.nodes.get(value_id) ?? field
+			if value.kind == PlatformReference {
+				$s = issue($s, UnexpectedToken, value.start, value.end)
+			}
+		}
+		$index = $index + 1
+	}
+	{ state: provides_state, node: provides_node } = platform_symbol_map(platform_header_keyword($s, "provides"), PlatformProvides, depth + 1)
+	$s = skip_trivia(provides_state)
+	var $ids = [name_node, requires_node].concat(exposed.ids).append(packages_node).append(provides_node)
+	if spelling($s, "hosted") {
+		{ state: hosted_state, node: hosted_node } = platform_symbol_map(skip_trivia(at_pos($s, $s.pos + 1)), PlatformHosted, depth + 1)
+		$s = skip_trivia(hosted_state)
+		$ids = $ids.append(hosted_node)
+	}
+	if spelling($s, "targets") {
+		{ state: targets_state, node: targets_node } = platform_targets(platform_header_keyword(at_pos($s, $s.pos + 1), ":"), depth + 1)
+		$s = targets_state
+		$ids = $ids.append(targets_node)
+	}
+	end = $ids.fold(start, |furthest, id| U64.max(furthest, node_end($s, id)))
+	add_node($s, Header, start, end, $ids)
+}
+
+platform_header_keyword : State, Str -> State
+platform_header_keyword = |initial, text| {
+	s = skip_trivia(initial)
+	if spelling(s, text) skip_trivia(at_pos(s, s.pos + 1)) else issue(s, UnexpectedToken, peek(s).start, peek(s).end)
+}
+
+# Platform names and symbol keys must be plain strings (empty is valid).
+# Target strings intentionally consume uninterpreted tokens like the compiler.
+platform_header_string : State, Bool -> Built
+platform_header_string = |initial, plain| {
+	s = skip_trivia(initial)
+	opening = peek(s)
+	if opening.kind != StringStart {
+		bad = issue(s, UnexpectedToken, opening.start, opening.end)
+		return add_node(at_pos(bad, bad.pos + if opening.kind == EndOfFile 0 else 1), ErrorNode, opening.start, opening.end, [])
+	}
+	var $s = at_pos(s, s.pos + 1)
+	var $end = opening.end
+	var $parts = 0.U64
+	var $plain = True
+	while peek($s).kind != StringEnd and peek($s).kind != EndOfFile {
+		t = peek($s)
+		$plain = $plain and t.kind == StringPart
+		$parts = $parts + 1
+		$end = t.end
+		$s = at_pos($s, $s.pos + 1)
+	}
+	var $ids = []
+	if $end > opening.end {
+		{ state: part_state, node: part_node } = add_node($s, StringSegment, opening.end, $end, [])
+		$s = part_state
+		$ids = [part_node]
+	}
+	closing = peek($s)
+	if closing.kind == StringEnd {
+		$end = closing.end
+		$s = at_pos($s, $s.pos + 1)
+	} else {
+		$s = issue($s, UnclosedString, opening.start, $end)
+	}
+	if plain and (!$plain or $parts > 1) {
+		$s = issue($s, UnexpectedToken, opening.start, $end)
+	}
+	add_node($s, StringLiteral, opening.start, $end, $ids)
+}
+
+platform_requires : State, U64 -> Built
+platform_requires = |initial, depth| {
+	opening = peek(initial)
+	var $s = if opening.kind == OpenCurly at_pos(initial, initial.pos + 1) else issue(initial, UnexpectedToken, opening.start, opening.end)
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128
+	if depth >= 128 {
+		$s = issue($s, ResourceLimit, opening.start, opening.end)
+	}
+	initial_look = skip_trivia($s)
+	if peek(initial_look).kind == CloseCurly {
+		$end = peek(initial_look).end
+		$s = skip_trivia(at_pos(initial_look, initial_look.pos + 1))
+		if peek($s).kind == OpenCurly {
+			$s = at_pos($s, $s.pos + 1)
+		}
+			else {
+				$done = True
+			}
+	}
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$end = t.end
+			$s = at_pos(look, look.pos + 1)
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseSquare or t.kind == CloseRound {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			before = look.pos
+			var $entry_ids = []
+			$s = look
+			if t.kind == OpenSquare {
+				$s = skip_trivia(at_pos($s, $s.pos + 1))
+				var $aliases_done = False
+				while !$aliases_done {
+					alias = peek($s)
+					if alias.kind == CloseSquare {
+						$s = at_pos($s, $s.pos + 1)
+						$aliases_done = True
+					} else if alias.kind == EndOfFile or alias.kind == CloseCurly or alias.kind == CloseRound {
+						$s = issue($s, UnclosedDelimiter, alias.start, alias.end)
+						$aliases_done = True
+					} else {
+						checked = if alias.kind == UpperIdent and byte($s.source, alias.start) != '@' $s else issue($s, UnexpectedToken, alias.start, alias.end)
+						{ state: alias_state, node: alias_node } = add_node(at_pos(checked, checked.pos + 1), TypeName, alias.start, alias.end, [])
+						rigid_state = platform_header_keyword(alias_state, ":")
+						rigid = peek(rigid_state)
+						checked_rigid = if rigid.kind == LowerIdent and byte(rigid_state.source, rigid.start) != '_' rigid_state else issue(rigid_state, UnexpectedToken, rigid.start, rigid.end)
+						{ state: rigid_built, node: rigid_node } = add_node(at_pos(checked_rigid, checked_rigid.pos + if rigid.kind == EndOfFile 0 else 1), TypeVariable, rigid.start, rigid.end, [])
+						{ state: built_state, node: built_node } = add_node(rigid_built, RequiredType, alias.start, rigid.end, [alias_node, rigid_node])
+						$s = skip_trivia(built_state)
+						$entry_ids = $entry_ids.append(built_node)
+						if spelling($s, ",") {
+							$s = skip_trivia(at_pos($s, $s.pos + 1))
+						}
+							else if peek($s).kind != CloseSquare {
+								$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+								$aliases_done = True
+							}
+					}
+				}
+				$s = platform_header_keyword($s, "for")
+			}
+			name = peek(skip_trivia($s))
+			checked = if name.kind == LowerIdent and byte($s.source, name.start) != '_' skip_trivia($s) else issue(skip_trivia($s), UnexpectedToken, name.start, name.end)
+			{ state: named_state, node: named_node } = add_node(at_pos(checked, checked.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
+			{ state: type_state, node: type_node } = type_expression(platform_header_keyword(named_state, ":"), FullType, depth + 1)
+			$entry_ids = $entry_ids.append(named_node).append(type_node)
+			entry_end = $entry_ids.fold(t.end, |furthest, id| U64.max(furthest, node_end(type_state, id)))
+			{ state: entry_state, node: entry_node } = add_node(type_state, RequiredValue, t.start, entry_end, $entry_ids)
+			$s = skip_trivia(entry_state)
+			$ids = $ids.append(entry_node)
+			$end = entry_end
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+				else if peek($s).kind != CloseCurly {
+					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					$done = True
+				}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, PlatformRequires, opening.start, $end, $ids)
+}
+
+platform_symbol_map : State, RocSyntax.NodeKind, U64 -> Built
+platform_symbol_map = |initial, kind, depth| {
+	opening = peek(initial)
+	var $s = if opening.kind == OpenCurly at_pos(initial, initial.pos + 1) else issue(initial, UnexpectedToken, opening.start, opening.end)
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128
+	if depth >= 128 {
+		$s = issue($s, ResourceLimit, opening.start, opening.end)
+	}
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			before = look.pos
+			{ state: symbol_state, node: symbol_node } = platform_header_string(look, True)
+			target_state = platform_header_keyword(symbol_state, ":")
+			target = peek(target_state)
+			var $target_state = target_state
+			var $target_end = target.end
+			if target.kind == UpperIdent and byte(target_state.source, target.start) != '@' {
+				$target_state = at_pos(target_state, target_state.pos + 1)
+				var $path_done = False
+				var $lower = False
+				while !$path_done {
+					dot = peek($target_state)
+					name_state = at_pos($target_state, $target_state.pos + 1)
+					name = peek(name_state)
+					if token_spelling($target_state.source, dot, ".") and dot.start == $target_end and name.start == dot.end and (name.kind == UpperIdent or name.kind == LowerIdent) and (is_lower(byte(name_state.source, name.start)) or is_upper(byte(name_state.source, name.start))) {
+						$target_end = name.end
+						$target_state = at_pos(name_state, name_state.pos + 1)
+						if name.kind == LowerIdent {
+							$lower = True
+							$path_done = True
+						}
+					} else {
+						$path_done = True
+					}
+				}
+				if !$lower {
+					$target_state = issue($target_state, UnexpectedToken, target.start, $target_end)
+				}
+			} else if target.kind == LowerIdent and byte(target_state.source, target.start) != '_' {
+				$target_state = at_pos(target_state, target_state.pos + 1)
+			} else {
+				$target_state = issue(at_pos(target_state, target_state.pos + if target.kind == EndOfFile 0 else 1), UnexpectedToken, target.start, target.end)
+			}
+			{ state: named_state, node: named_node } = add_node($target_state, Identifier, target.start, $target_end, [])
+			entry_end = U64.max(node_end(named_state, symbol_node), $target_end)
+			{ state: entry_state, node: entry_node } = add_node(named_state, SymbolMapping, t.start, entry_end, [symbol_node, named_node])
+			$s = skip_trivia(entry_state)
+			$ids = $ids.append(entry_node)
+			$end = entry_end
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+				else if peek($s).kind != CloseCurly {
+					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					$done = True
+				}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, kind, opening.start, $end, $ids)
+}
+
+platform_targets : State, U64 -> Built
+platform_targets = |initial, depth| {
+	opening = peek(initial)
+	var $s = if opening.kind == OpenCurly at_pos(initial, initial.pos + 1) else issue(initial, UnexpectedToken, opening.start, opening.end)
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128
+	if depth >= 128 {
+		$s = issue($s, ResourceLimit, opening.start, opening.end)
+	}
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			before = look.pos
+			valid_name = t.kind == LowerIdent and byte(look.source, t.start) != '_'
+			checked = if valid_name look else issue(look, UnexpectedToken, t.start, t.end)
+			{ state: named_state, node: named_node } = add_node(at_pos(checked, checked.pos + 1), Identifier, t.start, t.end, [])
+			value_state = platform_header_keyword(named_state, ":")
+			if spelling(look, "inputs_dir") and peek(value_state).kind == StringStart {
+				{ state: path_state, node: path_node } = platform_header_string(value_state, False)
+				{ state: entry_state, node: entry_node } = add_node(path_state, TargetInputsDirectory, t.start, node_end(path_state, path_node), [path_node])
+				$s = skip_trivia(entry_state)
+				$ids = $ids.append(entry_node)
+				$end = node_end($s, entry_node)
+			} else if peek(value_state).kind == OpenCurly {
+				{ state: config_state, node: config_node } = platform_target_config(value_state, depth + 1)
+				{ state: entry_state, node: entry_node } = add_node(config_state, TargetEntry, t.start, node_end(config_state, config_node), [named_node, config_node])
+				$s = skip_trivia(entry_state)
+				$ids = $ids.append(entry_node)
+				$end = node_end($s, entry_node)
+			} else {
+				$s = issue(value_state, UnexpectedToken, peek(value_state).start, peek(value_state).end)
+				$done = True
+			}
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, PlatformTargets, opening.start, $end, $ids)
+}
+
+platform_target_config : State, U64 -> Built
+platform_target_config = |initial, depth| {
+	opening = peek(initial)
+	var $s = at_pos(initial, initial.pos + 1)
+	var $ids = []
+	var $end = opening.end
+	var $done = depth >= 128
+	if depth >= 128 {
+		$s = issue($s, ResourceLimit, opening.start, opening.end)
+	}
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseCurly {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			before = look.pos
+			checked = if t.kind == LowerIdent and byte(look.source, t.start) != '_' look else issue(look, UnexpectedToken, t.start, t.end)
+			{ state: name_state, node: name_node } = add_node(at_pos(checked, checked.pos + 1), Identifier, t.start, t.end, [])
+			after = skip_trivia(name_state)
+			var $field_ids = [name_node]
+			$s = after
+			$end = t.end
+			if peek(after).kind != CloseCurly and !spelling(after, ",") {
+				value_state = platform_header_keyword(after, ":")
+				files = spelling(look, "inputs")
+				{ state: built_state, node: built_node } = if files platform_target_list(value_state, True, depth + 1) else platform_target_value(value_state, False, depth + 1)
+				$s = built_state
+				$field_ids = $field_ids.append(built_node)
+				$end = node_end(built_state, built_node)
+			}
+			{ state: field_state, node: field_node } = add_node($s, TargetField, t.start, $end, $field_ids)
+			$s = skip_trivia(field_state)
+			$ids = $ids.append(field_node)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+				else if peek($s).kind != CloseCurly {
+					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					$done = True
+				}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, TargetConfig, opening.start, $end, $ids)
+}
+
+platform_target_list : State, Bool, U64 -> Built
+platform_target_list = |initial, files, depth| {
+	opening = peek(initial)
+	var $s = if opening.kind == OpenSquare at_pos(initial, initial.pos + 1) else issue(initial, UnexpectedToken, opening.start, opening.end)
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenSquare or depth >= 128
+	if depth >= 128 {
+		$s = issue($s, ResourceLimit, opening.start, opening.end)
+	}
+	while !$done {
+		look = skip_trivia($s)
+		$s = vacant
+		t = peek(look)
+		if t.kind == CloseSquare {
+			$s = at_pos(look, look.pos + 1)
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
+			$s = issue(look, UnclosedDelimiter, t.start, t.end)
+			$end = t.start
+			$done = True
+		} else {
+			before = look.pos
+			{ state: item_state, node: item_node } = platform_target_value(look, files, depth + 1)
+			$ids = $ids.append(item_node)
+			$s = skip_trivia(item_state)
+			$end = node_end(item_state, item_node)
+			if spelling($s, ",") {
+				$s = at_pos($s, $s.pos + 1)
+			}
+				else if peek($s).kind != CloseSquare {
+					$s = issue($s, UnexpectedToken, peek($s).start, peek($s).end)
+					$done = True
+				}
+			if $s.pos <= before {
+				$s = at_pos($s, before + 1)
+			}
+		}
+	}
+	add_node($s, TargetList, opening.start, $end, $ids)
+}
+
+platform_target_value : State, Bool, U64 -> Built
+platform_target_value = |initial, file, depth| {
+	s = skip_trivia(initial)
+	t = peek(s)
+	if depth >= 128 {
+		return add_node(issue(s, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.start, [])
+	}
+	if t.kind == StringStart {
+		{ state: string_state, node: string_node } = platform_header_string(s, False)
+		if file add_node(string_state, TargetFile, t.start, node_end(string_state, string_node), [string_node]) else { state: string_state, node: string_node }
+	} else if !file and t.kind == OpenSquare {
+		platform_target_list(s, False, depth + 1)
+	} else if (t.kind == LowerIdent and byte(s.source, t.start) != '_') or (file and spelling(s, "app")) or (!file and t.kind == UpperIdent and byte(s.source, t.start) != '@') {
+		{ state: name_state, node: name_node } = add_node(at_pos(s, s.pos + 1), Identifier, t.start, t.end, [])
+		if file add_node(name_state, TargetFile, t.start, t.end, [name_node]) else { state: name_state, node: name_node }
+	} else if !file and t.kind == Number {
+		raw = s.source.sublist({ start: t.start, len: t.end - t.start })
+		is_int = raw.any(|b| b == 'x' or b == 'o' or b == 'b') or !raw.any(|b| b == '.' or b == 'e' or b == 'E')
+		checked = if is_int s else issue(s, UnexpectedToken, t.start, t.end)
+		add_node(at_pos(checked, checked.pos + 1), NumberLiteral, t.start, t.end, [])
+	} else {
+		add_node(at_pos(issue(s, UnexpectedToken, t.start, t.end), s.pos + if t.kind == EndOfFile 0 else 1), ErrorNode, t.start, t.end, [])
+	}
+}
+
+expect {
+	# Empty names, requires type aliases, symbol paths, and target configuration.
+	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep} provides {}", "platform \"p\" requires {} exposes [] packages {dep: 1} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+}
+
+expect {
+	# Platform sections are ordered and their data atoms have restricted grammars.
+	["platform \"\${x}\" requires {} exposes [] packages {} provides {}", "platform \"\"\"name requires {} exposes [] packages {} provides {}", "platform p requires {} exposes [] packages {} provides {}", "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {run U8} exposes [] packages {} provides {}", "platform \"p\" requires {run : 1} exposes [] packages {} provides {}", "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [1] packages {} provides {}", "platform \"p\" requires {} exposes {} packages {} provides {}", "platform \"p\" requires {} exposing [] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc} provides {}", "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep: _} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}", "platform \"p\" requires {} exposes [] packages {} provides {\"\${x}\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}", "platform \"p\" requires {} exposes [] packages {} provides {x: run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted []", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}", "platform \"p\" missing_requires {} exposes [] packages {} provides {}", "platform \"p\" requires {} missing_exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [] missing_packages {} provides {}", "platform \"p\" requires {} exposes [] packages {} missing_provides {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {", "platform \"p\" requires {} exposes [] packages {} provides {} provides {}"].all(|source| RocSyntax.parse_header_str(source).status != Complete)
 }

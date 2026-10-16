@@ -160,4 +160,17 @@ node_kind_code = |kind| match kind {
 	WhereMethod => 114
 	WhereAlias => 115
 	AssociatedBlock => 116
+	PlatformRequires => 117
+	RequiredValue => 118
+	RequiredType => 119
+	PlatformProvides => 120
+	PlatformHosted => 121
+	SymbolMapping => 122
+	PlatformTargets => 123
+	TargetInputsDirectory => 124
+	TargetEntry => 125
+	TargetConfig => 126
+	TargetField => 127
+	TargetList => 128
+	TargetFile => 129
 }
