@@ -1,12 +1,13 @@
-## Internal persistent radix-32 append vector. Each path contains five lists
+## Internal persistent radix-32 append vector with a bounded active tail.
+## Full tails are archived once per 32 appends. Each archived path contains five lists
 ## of at most 32 entries under the parser's 1,048,576-token resource budget.
 ## Retaining parser snapshots copies bounded paths, never the growing output.
 ## Fixed levels also avoid recursive generic type expansion in the compiler.
-RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.{
+RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), tail : List(a) }.{
 
 	## Empty construction buffer; its element type is inferred from appends.
 	empty : {} -> RocSyntaxBuffer(a)
-	empty = |_| RocSyntaxBuffer.{ count: 0, blocks: [] }
+	empty = |_| RocSyntaxBuffer.{ count: 0, blocks: [], tail: [] }
 
 	## Number of appended values.
 	len : RocSyntaxBuffer(a) -> U64
@@ -16,18 +17,24 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.
 	append : RocSyntaxBuffer(a), a -> RocSyntaxBuffer(a)
 	append = |buffer, value| {
 		index = buffer.count
-		i4 = index // 1048576
-		i3 = (index // 32768) % 32
-		i2 = (index // 1024) % 32
-		i1 = (index // 32) % 32
-		b3 = buffer.blocks.get(i4) ?? []
-		b2 = b3.get(i3) ?? []
-		b1 = b2.get(i2) ?? []
-		leaf = b1.get(i1) ?? []
-		next1 = put(b1, i1, leaf.append(value))
-		next2 = put(b2, i2, next1)
-		next3 = put(b3, i3, next2)
-		RocSyntaxBuffer.{ count: index + 1, blocks: put(buffer.blocks, i4, next3) }
+		if buffer.tail.len() < 32 {
+			RocSyntaxBuffer.{ count: index + 1, blocks: buffer.blocks, tail: buffer.tail.append(value) }
+		} else {
+			# Archive a complete leaf once per 32 appends. The active tail only
+			# copies its bounded leaf when a parser snapshot still retains it.
+			full_start = index - 32
+			i4 = full_start // 1048576
+			i3 = (full_start // 32768) % 32
+			i2 = (full_start // 1024) % 32
+			i1 = (full_start // 32) % 32
+			{ list: root, prev: b3 } = extract(buffer.blocks, i4)
+			{ list: rest3, prev: b2 } = extract(b3, i3)
+			{ list: rest2, prev: b1 } = extract(b2, i2)
+			next1 = put(b1, i1, buffer.tail)
+			next2 = put(rest2, i2, next1)
+			next3 = put(rest3, i3, next2)
+			RocSyntaxBuffer.{ count: index + 1, blocks: put(root, i4, next3), tail: [value] }
+		}
 	}
 
 	## Append a list in order, without flattening previous contents.
@@ -39,6 +46,8 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.
 		if index >= buffer.count {
 			return Err(OutOfBounds)
 		}
+		tail_start = buffer.count - buffer.tail.len()
+		if index >= tail_start { return buffer.tail.get(index - tail_start) }
 		b3 = buffer.blocks.get(index // 1048576)?
 		b2 = b3.get((index // 32768) % 32)?
 		b1 = b2.get((index // 1024) % 32)?
@@ -60,13 +69,21 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))) }.
 				}
 			}
 		}
+		for value in buffer.tail { $out = $out.append(value) }
 		$out
 	}
 }
 
+# Indices are either an existing active path or exactly the next append slot.
+# The placeholder is restored by put before this path can escape to a caller.
+extract : List(List(a)), U64 -> { list : List(List(a)), prev : List(a) }
+extract = |values, index| {
+	if index < values.len() values.replace(index, []) ?? { list: [], prev: [] } else { list: values, prev: [] }
+}
+
 put : List(a), U64, a -> List(a)
 put = |values, index, value| {
-	if index == values.len() values.append(value) else values.set(index, value) ?? values
+	if index == values.len() values.append(value) else values.set(index, value) ?? []
 }
 
 expect {
@@ -122,4 +139,27 @@ expect {
 		$i = $i + 1
 	}
 	$buffer.len() == 32769 and $buffer.get(31) == Ok(31) and $buffer.get(32) == Ok(32) and $buffer.get(1023) == Ok(1023) and $buffer.get(1024) == Ok(1024) and $buffer.get(32767) == Ok(32767) and $buffer.get(32768) == Ok(32768) and $buffer.to_list().last() == Ok(32768)
+}
+
+expect {
+	# Saved paths remain shared across both internal carry boundaries.
+	var $buffer = RocSyntaxBuffer.empty({})
+	var $prefixes = []
+	var $i = 0.U64
+	while $i < 32770 {
+		if $i == 1023 or $i == 1024 or $i == 32767 or $i == 32768 {
+			$prefixes = $prefixes.append($buffer)
+		}
+		$buffer = $buffer.append($i)
+		$i = $i + 1
+	}
+	final_values = $buffer.to_list()
+	$prefixes.all(|prefix| prefix.to_list() == final_values.take_first(prefix.len()) and prefix.get(prefix.len()) == Err(OutOfBounds)) and $buffer.get(32769) == Ok(32769)
+}
+
+expect {
+	# Ownership transfer preserves nested reference-counted leaf elements too.
+	before = RocSyntaxBuffer.empty({}).concat_list(["alpha", "beta"])
+	after = before.append("gamma")
+	before.to_list() == ["alpha", "beta"] and after.to_list() == ["alpha", "beta", "gamma"]
 }
