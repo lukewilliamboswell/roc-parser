@@ -10,13 +10,12 @@
     "calls",
     "comments",
     "recovery",
-    "unsupported",
+    "strings",
     "spacing",
     "associativity",
     "unary",
     "trailing",
     "unicode",
-    "strings",
     "numbers-boundaries",
     "file-headers",
     "imports",
@@ -30,7 +29,8 @@
     "tuples",
     "control-expressions",
     "optional-fields",
-    "patterns"
+    "patterns",
+    "literal-types"
   ],
   "cases": [
     {
@@ -97,11 +97,29 @@
       "coverage": "recovery"
     },
     {
-      "id": "unsupported",
+      "id": "interpolated-string",
       "mode": "expr",
       "source": "\"hello ${name}\"",
-      "rule": "unsupported",
-      "coverage": "unsupported"
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "interpolated_string",
+          [
+            [
+              "text",
+              "hello "
+            ],
+            [
+              "interpolation",
+              [
+                "identifier",
+                "name"
+              ]
+            ]
+          ]
+        ]
+      ]
     },
     {
       "id": "call-space",
@@ -1280,6 +1298,182 @@
                 "x"
               ]
             ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "arithmetic-interpolation",
+      "mode": "expr",
+      "source": "\"a ${1 + 2} b\"",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "interpolated_string",
+          [
+            [
+              "text",
+              "a "
+            ],
+            [
+              "interpolation",
+              [
+                "binary",
+                "+",
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ],
+            [
+              "text",
+              " b"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "multiline-string",
+      "mode": "expr",
+      "source": "\"\"\"hello",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "multiline_string",
+          [
+            [
+              "text",
+              "hello"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "multiline-interpolation",
+      "mode": "expr",
+      "source": "\"\"\"hello ${name}",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "multiline_string",
+          [
+            [
+              "text",
+              "hello "
+            ],
+            [
+              "interpolation",
+              [
+                "identifier",
+                "name"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-integer",
+      "mode": "expr",
+      "source": "123.U64",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "123"
+          ],
+          [
+            "U64"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-fraction",
+      "mode": "expr",
+      "source": "3.14.Dec",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "3.14"
+          ],
+          [
+            "Dec"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-character",
+      "mode": "expr",
+      "source": "'\u00e9'.U8",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "character",
+            "'\u00e9'"
+          ],
+          [
+            "U8"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-string",
+      "mode": "expr",
+      "source": "\"hello\".Str",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "string",
+            "\"hello\""
+          ],
+          [
+            "Str"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-qualified",
+      "mode": "expr",
+      "source": "123.Module.Integer",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "123"
+          ],
+          [
+            "Module",
+            "Integer"
           ]
         ]
       ]

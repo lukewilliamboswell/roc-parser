@@ -80,5 +80,13 @@
   "|Some(x) as item| item",
   "|(a, b)| a",
   "match value { Some(x) | None => 1 }",
-  "match value { Some(x) if x > 0 => x }"
+  "match value { Some(x) if x > 0 => x }",
+  "\"a ${1 + 2} b\"",
+  "\"\"\"hello",
+  "\"\"\"hello ${name}",
+  "123.U64",
+  "3.14.Dec",
+  "'\u00e9'.U8",
+  "\"hello\".Str",
+  "123.Module.Integer"
 ]
