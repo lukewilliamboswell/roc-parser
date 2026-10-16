@@ -1,8 +1,6 @@
 import RocSyntaxBuffer
 
-## Lossless syntax scaffolding for the Zig Roc compiler syntax at
-## revision `7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`.
-## `.roc-version` pins the implementation toolchain separately.
+## Lossless parsing of Roc source into tokens, syntax trees and diagnostics.
 ## Byte spans are half-open. Comments and whitespace are tokens.
 ##
 ## Expressions support identifiers, numbers, strings without interpolation,
