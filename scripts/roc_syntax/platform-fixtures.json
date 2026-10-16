@@ -186,14 +186,14 @@
       "mode": "header",
       "source": "platform \"p\" requires {} exposes [] packages {dep} provides {}",
       "rule": "headers/platform",
-      "coverage": "supported"
+      "coverage": "recovery"
     },
     {
       "id": "platform/a060093f1d2d",
       "mode": "header",
       "source": "platform \"p\" requires {} exposes [] packages {dep: 1} provides {}",
       "rule": "headers/platform",
-      "coverage": "supported"
+      "coverage": "recovery"
     },
     {
       "id": "platform/6b791c333602",

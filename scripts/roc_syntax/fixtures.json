@@ -1982,11 +1982,25 @@
       ]
     },
     {
-      "id": "reject-ellipsis-suffix-across-newline",
+      "id": "ellipsis-statement-after-value",
       "mode": "expr",
       "source": "{ tag\n ... }",
       "rule": "control-expressions",
-      "coverage": "recovery"
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "identifier",
+              "tag"
+            ],
+            [
+              "ellipsis"
+            ]
+          ]
+        ]
+      ]
     },
     {
       "id": "ellipsis-first-block",
@@ -2016,6 +2030,49 @@
           ]
         ]
       ]
+    },
+    {
+      "id": "unary-ellipsis",
+      "mode": "expr",
+      "source": "-...",
+      "rule": "unary",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "unary",
+          "-",
+          [
+            "ellipsis"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "subtract-ellipsis",
+      "mode": "expr",
+      "source": "x-...",
+      "rule": "unary",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "-",
+          [
+            "identifier",
+            "x"
+          ],
+          [
+            "ellipsis"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "spaced-unary-ellipsis",
+      "mode": "expr",
+      "source": "x -...",
+      "rule": "unary",
+      "coverage": "recovery"
     }
   ]
 }

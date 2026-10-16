@@ -541,7 +541,7 @@ expression = |initial, minimum, depth, punned| {
 					$s = look
 					$done = True
 				}
-			} else if spelling(look, "...") or spelling(look, "..") or spelling(look, ".*") {
+			} else if spelling(look, "..") or spelling(look, ".*") {
 				$s = issue(at_pos(look, look.pos + 1), UnexpectedToken, t.start, t.end)
 				$done = True
 			} else if bp.left > 0 and bp.left >= minimum {
@@ -2127,6 +2127,9 @@ binary_minus = |s| {
 	t = peek(s)
 	next = byte(s.source, t.end)
 	previous = s.tokens.get(if s.pos > 0 s.pos - 1 else 0) ?? t
+	if matches(s.source, t.end, "...") {
+		return previous.end == t.start and can_end_expression(previous.kind)
+	}
 	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_expression(previous.kind)) or (!is_digit(next) and !is_lower(next) and !is_upper(next) and next != '_' and next != '(' and next < 0x80)
 }
 
@@ -2543,6 +2546,7 @@ dependency_record = |initial, strict, depth| {
 	var $end = peek(initial).end
 	var $platform = False
 	var $version = False
+	var $seen = Set.empty()
 	var $done = False
 	while !$done {
 		look = skip_trivia($s)
@@ -2564,6 +2568,13 @@ dependency_record = |initial, strict, depth| {
 			$s = skip_trivia(name_state)
 			$end = t.end
 			is_version = token_spelling($s.source, t, "roc")
+			if !is_version {
+				dependency_name = Str.from_utf8_lossy($s.source.sublist({ start: t.start, len: t.end - t.start }))
+				if $seen.contains(dependency_name) {
+					$s = issue($s, UnexpectedToken, t.start, t.end)
+				}
+				$seen = $seen.insert(dependency_name)
+			}
 			if spelling($s, ":") {
 				value_start = skip_trivia(at_pos($s, $s.pos + 1))
 				is_platform = spelling(value_start, "platform")
@@ -2583,6 +2594,9 @@ dependency_record = |initial, strict, depth| {
 				}
 				$s = $value_state
 				$field_ids = $field_ids.append($value_node)
+				if !is_version and !(is_platform and token_spelling($s.source, value_token, "glue")) and !plain_dependency_path($s, parsed_node) {
+					$s = issue($s, UnexpectedToken, t.start, $end)
+				}
 				if is_version {
 					n = $s.nodes.get(parsed_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
 					part_id = $s.children.get(n.children_start) ?? $s.nodes.len()
@@ -2592,7 +2606,7 @@ dependency_record = |initial, strict, depth| {
 						$s = issue($s, UnexpectedToken, t.start, $end)
 					}
 				}
-			} else if strict or is_version {
+			} else {
 				$s = issue($s, UnexpectedToken, t.start, $end)
 			}
 			$version = $version or is_version
@@ -2651,7 +2665,7 @@ valid_roc_version = |text| {
 }
 
 expect {
-	["app [main!] { pf: platform \"../platform/main.roc\" }", "app [] {}", "app [] { pf: platform glue }", "package [Parser, parse]", "package [parse] { util, other: value }", "app [] { roc: \"nightly-2026-July-31-123c5d7\" }", "package [] { roc: \"1.0.0-rc1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+	["app [main!] { pf: platform \"../platform/main.roc\" }", "app [] {}", "app [] { pf: platform glue }", "package [Parser, parse]", "package [parse] { util: \"util.roc\", other: \"other.roc\" }", "app [] { roc: \"nightly-2026-July-31-123c5d7\" }", "package [] { roc: \"1.0.0-rc1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
 }
 
 expect {
@@ -2901,7 +2915,7 @@ expect {
 }
 
 expect {
-	RocSyntax.parse_expr_str("...").status == Complete and RocSyntax.parse_expr_str("value\n...").status == Recovered and RocSyntax.parse_expr_str("{ return Tag\n... }").status == Recovered
+	RocSyntax.parse_expr_str("...").status == Complete and RocSyntax.parse_expr_str("value\n...").status == Recovered and RocSyntax.parse_expr_str("{ return Tag\n... }").status == Complete
 }
 
 expect {
@@ -3367,10 +3381,42 @@ platform_target_value = |initial, file, depth| {
 
 expect {
 	# Empty names, requires type aliases, symbol paths, and target configuration.
-	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep} provides {}", "platform \"p\" requires {} exposes [] packages {dep: 1} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
 }
 
 expect {
 	# Platform sections are ordered and their data atoms have restricted grammars.
 	["platform \"\${x}\" requires {} exposes [] packages {} provides {}", "platform \"\"\"name requires {} exposes [] packages {} provides {}", "platform p requires {} exposes [] packages {} provides {}", "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {run U8} exposes [] packages {} provides {}", "platform \"p\" requires {run : 1} exposes [] packages {} provides {}", "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [1] packages {} provides {}", "platform \"p\" requires {} exposes {} packages {} provides {}", "platform \"p\" requires {} exposing [] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc} provides {}", "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep: _} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}", "platform \"p\" requires {} exposes [] packages {} provides {\"\${x}\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}", "platform \"p\" requires {} exposes [] packages {} provides {x: run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted []", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}", "platform \"p\" missing_requires {} exposes [] packages {} provides {}", "platform \"p\" requires {} missing_exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [] missing_packages {} provides {}", "platform \"p\" requires {} exposes [] packages {} missing_provides {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {", "platform \"p\" requires {} exposes [] packages {} provides {} provides {}"].all(|source| RocSyntax.parse_header_str(source).status != Complete)
+}
+
+plain_dependency_path : State, U64 -> Bool
+plain_dependency_path = |s, id| {
+	match s.nodes.get(id) {
+		Ok(n) if n.kind == StringLiteral => {
+			var $valid = True
+			var $i = 0.U64
+			while $i < n.children_len and $valid {
+				child_id = s.children.get(n.children_start + $i) ?? s.nodes.len()
+				match s.nodes.get(child_id) {
+					Ok(child) if child.kind == StringSegment => {
+						$valid = !s.source.sublist({ start: child.start, len: child.end - child.start }).contains('\\')
+					}
+					_ => {
+						$valid = False
+					}
+				}
+				$i = $i + 1
+			}
+			$valid
+		}
+		_ => False
+	}
+}
+
+expect {
+	["package [] {dep}", "package [] {dep:1}", "app [] {dep: \"a\", dep: \"b\"}", "package [] {dep: \"\${path}\"}", "package [] {dep: \"a\\nb\"}", "platform \"p\" requires {} exposes [] packages {dep} provides {}", "platform \"p\" requires {} exposes [] packages {dep:1} provides {}"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
+}
+
+expect {
+	RocSyntax.parse_expr_str("-...").status == Complete and RocSyntax.parse_expr_str("x-...").status == Complete and RocSyntax.parse_expr_str("x -...").status == Recovered and RocSyntax.parse_expr_str("- ...").status == Recovered
 }
