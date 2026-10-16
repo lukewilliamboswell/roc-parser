@@ -147,10 +147,12 @@ take = |s, n| Str.from_utf8_lossy(s.to_utf8().take_first(n))
 
 trim_blank_lines : Str -> Str
 trim_blank_lines = |source| {
-	bytes=source.to_utf8()
-	first=bytes.first() ?? 0
-	last=bytes.last() ?? 0
-	if first > 32 and first < 127 and last > 32 and last < 127 { return source }
+	bytes = source.to_utf8()
+	first = bytes.first() ?? 0
+	last = bytes.last() ?? 0
+	if first > 32 and first < 127 and last > 32 and last < 127 {
+		return source
+	}
 	var $lines = source.split_on("\n")
 	while !$lines.is_empty() and ($lines.first() ?? "").trim() == "" {
 		$lines = $lines.drop_first(1)
@@ -220,10 +222,10 @@ expect AsciiDocBlockHtml.verbatim("x <!--1-->", []) == "x &lt;!--<b class=\"conu
 # Verbatim's default substitutions only escape the three special HTML bytes.
 # Avoid building a general inline pipeline for every plain listing block.
 escape_verbatim : Str -> Str
-escape_verbatim = |text| text.replace_each("&","&amp;").replace_each("<","&lt;").replace_each(">","&gt;")
-expect AsciiDocBlockHtml.verbatim("plain 'quoted' \\source & <tag>",[]) == "plain 'quoted' \\source &amp; &lt;tag&gt;"
+escape_verbatim = |text| text.replace_each("&", "&amp;").replace_each("<", "&lt;").replace_each(">", "&gt;")
+expect AsciiDocBlockHtml.verbatim("plain 'quoted' \\source & <tag>", []) == "plain 'quoted' \\source &amp; &lt;tag&gt;"
 
 expect {
- source="\\< \\> \\& \\\\ \\* \\' \\\" café 東京 🦊"
- AsciiDocBlockHtml.verbatim(source,[{name:"subs",value:"specialcharacters"}]) == AsciiDocInline.render_with(source,[],{subs:"specialcharacters"})
+	source = "\\< \\> \\& \\\\ \\* \\' \\\" café 東京 🦊"
+	AsciiDocBlockHtml.verbatim(source, [{ name: "subs", value: "specialcharacters" }]) == AsciiDocInline.render_with(source, [], { subs: "specialcharacters" })
 }
