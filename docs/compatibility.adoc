@@ -22,7 +22,7 @@ with one Roc nightly:
 
 * `.roc-version` at the repository root names the nightly for the package,
   its tests, the examples, the property tests, the conformance reviews and the
-  benchmarks, for example `nightly-2026-09-29-7f11a82`.
+  benchmarks, for example `nightly-2026-10-15-38e6c42`.
 * An automated workflow proposes an update to a newer nightly when one is
   published, and merges it only when the tests pass with it.
 

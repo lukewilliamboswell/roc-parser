@@ -22,7 +22,7 @@ named in the report.
 
 [source,console]
 ----
-$ export ROC=~/roc_nightly-macos_apple_silicon-2026-09-29-7f11a82/roc
+$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc
 $ python3 scripts/bench.py --quick             # about two minutes
 $ python3 scripts/bench.py --allocations       # the full comparison
 ----
@@ -286,9 +286,10 @@ along with `.roc-version`, and a test fails if the two disagree. After a nightly
 update, run `blueprint update` so that `Blueprint.lock` records a roc-overlay
 revision that has the new nightly; until then a blueprint run fails with a
 missing `rocpkgs` attribute instead of using another compiler. The roc-overlay
-input is currently pinned to the commit of its pending pull request that adds
-`nightly-2026-09-29-7f11a82`; switch it back to `github:roc-lang/roc-overlay`
-once that is merged. The shell sets `ROC=roc`, so the scripts use the pinned
+lock currently uses the publisher's immutable metadata update commit
+`702616cd012fd57dc16d64ba4cf7b7021614a0ae`, which includes the October 15
+nightly. The overlay's default branch may lag published compiler releases;
+verify that an updated lock actually contains the requested nightly. The shell sets `ROC=roc`, so the scripts use the pinned
 compiler rather than the older one the blueprint CLI runs on.
 
 Go, Rust and Python follow the nixpkgs revision in `Blueprint.lock`. Library

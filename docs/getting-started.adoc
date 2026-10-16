@@ -24,7 +24,7 @@ You need:
   https://github.com/roc-lang/nightlies/releases[Roc nightlies page] and put
   the `roc` executable on your `PATH`.
 * A platform for your app. The examples in this manual use
-  https://github.com/roc-lang/basic-cli[basic-cli] 0.23.0, which provides
+  https://github.com/roc-lang/basic-cli[basic-cli] 0.25.0, which provides
   `main!` and printing to the terminal. roc-parser itself is pure Roc and
   works with any platform.
 
