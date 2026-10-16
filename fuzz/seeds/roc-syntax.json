@@ -56,5 +56,17 @@
   "Foo.Bar",
   "Foo.Bar.Baz",
   "Foo .Bar",
-  "Foo.Bar.baz"
+  "Foo.Bar.baz",
+  "dbg 1 + 2",
+  "crash \"oops\"",
+  "return f(1)",
+  "break",
+  "...",
+  "value.?field",
+  "value.?field.other?",
+  "(value.?field)(1)",
+  "value.?0",
+  "value.?Upper",
+  "value.?field(1)",
+  "value.?field.other(1)"
 ]

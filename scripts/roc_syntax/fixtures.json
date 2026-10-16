@@ -27,7 +27,9 @@
     "blocks",
     "matches",
     "fields",
-    "tuples"
+    "tuples",
+    "control-expressions",
+    "optional-fields"
   ],
   "cases": [
     {
@@ -706,6 +708,191 @@
           "baz"
         ]
       ]
+    },
+    {
+      "id": "current-debug",
+      "mode": "expr",
+      "source": "dbg 1 + 2",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "dbg",
+          [
+            "binary",
+            "+",
+            [
+              "number",
+              "1"
+            ],
+            [
+              "number",
+              "2"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-crash",
+      "mode": "expr",
+      "source": "crash \"oops\"",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "crash",
+          [
+            "string",
+            "\"oops\""
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-return",
+      "mode": "expr",
+      "source": "return f(1)",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "return",
+          [
+            "call",
+            [
+              "identifier",
+              "f"
+            ],
+            [
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-break",
+      "mode": "expr",
+      "source": "break",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "current-ellipsis",
+      "mode": "expr",
+      "source": "...",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "ellipsis"
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field",
+      "mode": "expr",
+      "source": "value.?field",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "value"
+          ],
+          "field"
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field-suffix",
+      "mode": "expr",
+      "source": "value.?field.other?",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "suffix",
+          "?",
+          [
+            "field",
+            [
+              "optional_field",
+              [
+                "identifier",
+                "value"
+              ],
+              "field"
+            ],
+            "other"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field-group-call",
+      "mode": "expr",
+      "source": "(value.?field)(1)",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "call",
+          [
+            "optional_field",
+            [
+              "identifier",
+              "value"
+            ],
+            "field"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-optional-field-0",
+      "mode": "expr",
+      "source": "value.?0",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-optional-field-1",
+      "mode": "expr",
+      "source": "value.?Upper",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-optional-field-2",
+      "mode": "expr",
+      "source": "value.?field(1)",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-optional-field-3",
+      "mode": "expr",
+      "source": "value.?field.other(1)",
+      "rule": "optional-fields",
+      "coverage": "recovery"
     }
   ]
 }
