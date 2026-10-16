@@ -47,7 +47,9 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), t
 			return Err(OutOfBounds)
 		}
 		tail_start = buffer.count - buffer.tail.len()
-		if index >= tail_start { return buffer.tail.get(index - tail_start) }
+		if index >= tail_start {
+			return buffer.tail.get(index - tail_start)
+		}
 		b3 = buffer.blocks.get(index // 1048576)?
 		b2 = b3.get((index // 32768) % 32)?
 		b1 = b2.get((index // 1024) % 32)?
@@ -69,7 +71,9 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), t
 				}
 			}
 		}
-		for value in buffer.tail { $out = $out.append(value) }
+		for value in buffer.tail {
+			$out = $out.append(value)
+		}
 		$out
 	}
 }
