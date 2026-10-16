@@ -86,6 +86,23 @@ fn beforeSuffix(store: *const parse.NodeStore, region: parse.AST.TokenizedRegion
         .deprecated_builtin => region,
     };
 }
+fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Statement.Idx, depth: usize) Allocator.Error!std.json.Value {
+    if (depth > 256) return array(gpa, &.{ string("unsupported"), string("statement_depth_limit") });
+    const stmt = store.getStatement(idx);
+    return switch (stmt) {
+        .decl => |value| array(gpa, &.{ string("decl"), try patternShape(gpa, store, tokens, source, value.pattern, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        .@"var" => |value| array(gpa, &.{ string("var"), string(tokenText(tokens, source, value.name)), if (value.body) |body| try shape(gpa, store, tokens, source, body, depth + 1) else .null }),
+        .expr => |value| shape(gpa, store, tokens, source, value.expr, depth + 1),
+        .expect => |value| array(gpa, &.{ string("expect"), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        .dbg => |value| array(gpa, &.{ string("dbg"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .crash => |value| array(gpa, &.{ string("crash"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .@"return" => |value| array(gpa, &.{ string("return"), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .@"break" => array(gpa, &.{string("break")}),
+        .@"for" => |value| array(gpa, &.{ string(if (value.kind == .iter) "for" else "for!"), try patternShape(gpa, store, tokens, source, value.patt, depth + 1), try shape(gpa, store, tokens, source, value.expr, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        .@"while" => |value| array(gpa, &.{ string("while"), try shape(gpa, store, tokens, source, value.cond, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        else => array(gpa, &.{ string("unsupported"), string(@tagName(stmt)) }),
+    };
+}
 fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Pattern.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("pattern_depth_limit") });
     const pattern = store.getPattern(idx);
@@ -213,13 +230,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
         .block => |value| blk: {
             var statements = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.statementSlice(value.statements)) |idx_stmt| {
-                const stmt = store.getStatement(idx_stmt);
-                const child = switch (stmt) {
-                    .decl => |decl| try shape(gpa, store, tokens, source, decl.body, depth + 1),
-                    .expr => |child| try shape(gpa, store, tokens, source, child.expr, depth + 1),
-                    else => try array(gpa, &.{ string("unsupported"), string(@tagName(stmt)) }),
-                };
-                try statements.append(child);
+                try statements.append(try statementShape(gpa, store, tokens, source, idx_stmt, depth + 1));
             }
             break :blk array(gpa, &.{ string("block"), .{ .array = statements } });
         },
@@ -304,9 +315,9 @@ fn handle(gpa: Allocator, req: Request) !Response {
         } else {
             for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
                 const stmt = parser.store.getStatement(idx);
-                if (stmt == .decl) {
+                if (stmt != .import and stmt != .file_import and stmt != .type_anno and stmt != .type_decl) {
                     const region = stmt.to_tokenized_region();
-                    try facts.append(gpa, .{ .kind = "definition", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = "decl", .shape = try shape(gpa, &parser.store, &result.tokens, req.source, stmt.decl.body, 0) });
+                    try facts.append(gpa, .{ .kind = if (stmt == .decl) "definition" else "statement", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(stmt), .shape = try statementShape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
                 }
             }
         }

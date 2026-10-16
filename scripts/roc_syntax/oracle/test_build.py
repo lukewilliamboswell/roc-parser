@@ -55,6 +55,26 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_statement_binding_and_control_structure(self):
+        cases = [
+            ('file', 'module []\nx = 1', [['decl', ['p_identifier', 'x'], ['number', '1']]]),
+            ('file', 'expect True', [['expect', ['identifier', 'True']]]),
+            ('file', 'dbg 1', [['dbg', ['number', '1']]]),
+            ('expr', '{var x = 1\nx}', [['block', [['var', 'x', ['number', '1']], ['identifier', 'x']]]]),
+            ('expr', '{var x\nx}', [['block', [['var', 'x', None], ['identifier', 'x']]]]),
+            ('expr', '{expect True\n1}', [['block', [['expect', ['identifier', 'True']], ['number', '1']]]]),
+            ('expr', '{while True { break }\n1}', [['block', [['while', ['identifier', 'True'], ['block', [['break']]]], ['number', '1']]]]),
+            ('expr', '{for x in items { dbg x }\n1}', [['block', [['for', ['p_identifier', 'x'], ['identifier', 'items'], ['block', [['dbg', ['identifier', 'x']]]]], ['number', '1']]]]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': mode, 'source': source}) + '\n' for i, (mode, source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (_, source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], expected)
+
     def test_structural_pattern_projections(self):
         identifier = ['p_identifier', 'x']
         cases = [
@@ -152,7 +172,7 @@ class WorkerTests(unittest.TestCase):
             ("if True { 1 } else { 2 }", ["if", ["identifier", "True"], ["block", [["number", "1"]]], ["block", [["number", "2"]]]]),
             ("{name: 1}", ["record", [["name", ["number", "1"]]]]),
             ("{name,}", ["record", [["name", ["identifier", "name"]]]]),
-            ("{x = 1\nx + 1}", ["block", [["number", "1"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]]),
+            ("{x = 1\nx + 1}", ["block", [["decl", ["p_identifier", "x"], ["number", "1"]], ["binary", "+", ["identifier", "x"], ["number", "1"]]]]),
             ("point.x", ["field", ["identifier", "point"], "x"]),
             ("point.x.y", ["field", ["field", ["identifier", "point"], "x"], "y"]),
             ("Foo.Bar", ["field", ["identifier", "Foo"], "Bar"]),

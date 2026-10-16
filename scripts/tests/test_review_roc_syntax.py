@@ -68,6 +68,14 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_declaration_projection_preserves_binding(self):
+        response = {'nodes': [
+            {'kind': 'IdentifierPattern', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
+            {'kind': 'NumberLiteral', 'start': 2, 'end': 3, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Declaration', 'start': 0, 'end': 3, 'children_start': 0, 'children_len': 2},
+        ], 'children': [0, 1], 'root': 2}
+        self.assertEqual(review.syntax_shape(response, 'x=1'), ['decl', ['p_identifier', 'x'], ['number', '1']])
+
     def test_interpolation_and_typed_literal_project_children(self):
         response = {'nodes': [
             {'kind': 'Identifier', 'start': 3, 'end': 4, 'children_start': 0, 'children_len': 0},

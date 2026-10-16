@@ -181,7 +181,13 @@ def syntax_shape(response, source):
         if kind in {'Identifier', 'LowerIdent', 'UpperIdent'}:
             return ['identifier', text]
         if kind == 'Declaration':
-            return branch[-1]
+            return ['decl', branch[0], branch[-1]]
+        if kind == 'VariableDeclaration':
+            return ['var', branch[0][1], branch[1] if len(branch) > 1 else None]
+        if kind == 'Expect':
+            return ['expect', branch[0]]
+        if kind == 'While':
+            return ['while', *branch]
         if kind == 'ExpressionStatement':
             return branch[0]
         if kind == 'Binary':
