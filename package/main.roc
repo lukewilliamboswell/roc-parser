@@ -10,6 +10,7 @@
 ## https://lukewilliamboswell.github.io/roc-parser/
 package
 	[
+		AsciiDoc,
 		CSV,
 		HTTP,
 		Markdown,
