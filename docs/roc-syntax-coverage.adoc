@@ -1,0 +1,168 @@
+= Current Roc syntax coverage inventory
+
+The authority is `roc-lang/roc` revision `7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, `src/parse/AST.zig` and its parser/tokenizer. Legacy Rust grammar is excluded. This inventory lists compiler syntax variants; it does not assert that this parser implements them. Some variants represent malformed input or parser desugaring rather than a distinct valid surface production.
+
+== Acceptance gate
+
+Run `python3 scripts/check_roc_syntax_corpus.py --roc-source /path/to/roc --probe-command /path/to/probe --oracle-command /path/to/roc-syntax-oracle --output /path/to/corpus-report.json`. The workers must be freshly built from their pinned sources. The report records their executable hashes.
+
+The gate imports the entire immutable snapshot inventory without a filter or limit. Oracle-accepted inputs require a Complete candidate parse and full consumption. Oracle-rejected inputs require candidate rejection; these include intentional errors and possibly obsolete examples, and are never treated as missing valid grammar. Worker failures, malformed protocols, source invariant failures and unhandled snapshot modes are explicit unknown failures. Every imported source and response is retained.
+
+Acceptance agreement does not establish AST equivalence. The curated differential and independent-model lanes remain necessary. The report can be red while parser coverage is being expanded; unsupported source must never be relabelled as passing.
+
+== Grammar checklist
+
+Every entry below starts unverified. Completion requires valid and malformed examples where applicable, candidate structural assertions, pinned-oracle evidence, and inclusion in regression tests. A full green corpus alone cannot prove all grammar productions or nesting combinations.
+
+=== Header
+
+Source: `src/parse/AST.zig`, line 1945.
+
+* [ ] `app`
+* [ ] `module`
+* [ ] `package`
+* [ ] `platform`
+* [ ] `hosted`
+* [ ] `type_module`
+* [ ] `default_app`
+* [ ] `malformed`
+
+=== Statement
+
+Source: `src/parse/AST.zig`, line 1015.
+
+* [ ] `decl`
+* [ ] `@"var"`
+* [ ] `expr`
+* [ ] `crash`
+* [ ] `dbg`
+* [ ] `expect`
+* [ ] `@"for"`
+* [ ] `@"while"`
+* [ ] `@"return"`
+* [ ] `@"break"`
+* [ ] `import`
+* [ ] `file_import`
+* [ ] `type_decl`
+* [ ] `type_anno`
+* [ ] `malformed`
+
+=== Expr
+
+Source: `src/parse/AST.zig`, line 2947.
+
+* [ ] `int`
+* [ ] `frac`
+* [ ] `typed_int`
+* [ ] `typed_frac`
+* [ ] `single_quote`
+* [ ] `string_part`
+* [ ] `string`
+* [ ] `multiline_string`
+* [ ] `typed_string`
+* [ ] `typed_multiline_string`
+* [ ] `list`
+* [ ] `tuple`
+* [ ] `record`
+* [ ] `tag`
+* [ ] `lambda`
+* [ ] `apply`
+* [ ] `record_updater`
+* [ ] `field_access`
+* [ ] `method_call`
+* [ ] `tuple_access`
+* [ ] `arrow_call`
+* [ ] `bin_op`
+* [ ] `suffix_single_question`
+* [ ] `unary_op`
+* [ ] `if_then_else`
+* [ ] `if_without_else`
+* [ ] `match`
+* [ ] `ident`
+* [ ] `dbg`
+* [ ] `crash`
+* [ ] `record_builder`
+* [ ] `nominal_record`
+* [ ] `nominal_apply`
+* [ ] `ellipsis`
+* [ ] `@"break"`
+* [ ] `@"return"`
+* [ ] `block`
+* [ ] `for_expr`
+* [ ] `malformed`
+
+=== Pattern
+
+Source: `src/parse/AST.zig`, line 1431.
+
+* [ ] `ident`
+* [ ] `var_ident`
+* [ ] `tag`
+* [ ] `int`
+* [ ] `frac`
+* [ ] `typed_int`
+* [ ] `typed_frac`
+* [ ] `string`
+* [ ] `single_quote`
+* [ ] `record`
+* [ ] `list`
+* [ ] `list_rest`
+* [ ] `tuple`
+* [ ] `underscore`
+* [ ] `alternatives`
+* [ ] `as`
+* [ ] `malformed`
+
+=== TypeAnno
+
+Source: `src/parse/AST.zig`, line 2539.
+
+* [ ] `apply`
+* [ ] `ty_var`
+* [ ] `underscore_type_var`
+* [ ] `underscore`
+* [ ] `ty`
+* [ ] `tag_union`
+* [ ] `tuple`
+* [ ] `record`
+* [ ] `@"fn"`
+* [ ] `parens`
+* [ ] `malformed`
+
+=== WhereClause
+
+Source: `src/parse/AST.zig`, line 2846.
+
+* [ ] `mod_method`
+* [ ] `mod_alias`
+* [ ] `malformed`
+
+=== ExposedItem
+
+Source: `src/parse/AST.zig`, line 2299.
+
+* [ ] `lower_ident`
+* [ ] `upper_ident`
+* [ ] `upper_ident_star`
+* [ ] `malformed`
+
+=== TargetFile
+
+Source: `src/parse/AST.zig`, line 2461.
+
+* [ ] `string_literal`
+* [ ] `special_ident`
+* [ ] `malformed`
+
+=== TargetConfigValue
+
+Source: `src/parse/AST.zig`, line 2489.
+
+* [ ] `int_literal`
+* [ ] `string_literal`
+* [ ] `tag_literal`
+* [ ] `ident`
+* [ ] `list`
+* [ ] `files`
+* [ ] `malformed`
+
