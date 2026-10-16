@@ -1,0 +1,152 @@
+//! Persistent, parse-only reference oracle. Protocol details are in ../README.md.
+const std = @import("std");
+const parse = @import("parse");
+const base = @import("base");
+pub const roc_disable_tracy = true;
+extern "c" fn getchar() c_int;
+extern "c" fn write(c_int, [*]const u8, usize) isize;
+const Allocator = std.mem.Allocator;
+const Request = struct { version: u32 = 1, id: []const u8, mode: []const u8, source: []const u8 };
+const Token = struct { kind: []const u8, start: u32, end: u32 };
+const Diagnostic = struct { stage: []const u8, kind: []const u8, start: u32, end: u32 };
+const Fact = struct { kind: []const u8, start: u32, end: u32, node_kind: []const u8, shape: std.json.Value };
+const Response = struct {
+    version: u32 = 1,
+    id: []const u8,
+    ok: bool,
+    consumed: bool,
+    tokens: []const Token,
+    diagnostics: []const Diagnostic,
+    facts: []const Fact,
+};
+fn span(region: base.Region, kind: []const u8) Token {
+    return .{ .kind = kind, .start = region.start.offset, .end = region.end.offset };
+}
+fn array(gpa: Allocator, values: []const std.json.Value) !std.json.Value {
+    var items = std.array_list.Managed(std.json.Value).init(gpa);
+    try items.appendSlice(values);
+    return .{ .array = items };
+}
+fn string(value: []const u8) std.json.Value {
+    return .{ .string = value };
+}
+fn tokenText(tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: u32) []const u8 {
+    const region = tokens.resolve(idx);
+    return source[region.start.offset..region.end.offset];
+}
+fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Expr.Idx, depth: usize) Allocator.Error!std.json.Value {
+    if (depth > 256) return array(gpa, &.{ string("unsupported"), string("depth_limit") });
+    const expr = store.getExpr(idx);
+    return switch (expr) {
+        .int => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
+        .frac => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
+        .ident => |value| if (value.qualifiers.span.len == 0) array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, value.token)) }) else array(gpa, &.{ string("unsupported"), string("qualified_identifier") }),
+        .bin_op => |value| array(gpa, &.{ string("binary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.left, depth + 1), try shape(gpa, store, tokens, source, value.right, depth + 1) }),
+        .tuple, .list => blk: {
+            const children = store.exprSlice(if (expr == .tuple) expr.tuple.items else expr.list.items);
+            if (expr == .tuple and children.len == 1) break :blk try shape(gpa, store, tokens, source, children[0], depth + 1);
+            var items = std.array_list.Managed(std.json.Value).init(gpa);
+            for (children) |child| try items.append(try shape(gpa, store, tokens, source, child, depth + 1));
+            break :blk array(gpa, &.{ string(if (expr == .tuple) "tuple" else "list"), .{ .array = items } });
+        },
+        .string => |value| blk: {
+            for (store.exprSlice(value.parts)) |part| {
+                if (store.getExpr(part) != .string_part) break :blk array(gpa, &.{ string("unsupported"), string("interpolated_string") });
+            }
+            const start = tokens.resolve(value.region.start).start.offset;
+            const end = tokens.resolve(value.region.end - 1).end.offset;
+            break :blk array(gpa, &.{ string("string"), string(source[start..end]) });
+        },
+        .unary_op => |value| array(gpa, &.{ string("unary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.expr, depth + 1) }),
+        .apply => |value| blk: {
+            var args = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.exprSlice(value.args)) |arg| try args.append(try shape(gpa, store, tokens, source, arg, depth + 1));
+            break :blk array(gpa, &.{ string("call"), try shape(gpa, store, tokens, source, value.@"fn", depth + 1), .{ .array = args } });
+        },
+        else => array(gpa, &.{ string("unsupported"), string(@tagName(expr)) }),
+    };
+}
+fn handle(gpa: Allocator, req: Request) !Response {
+    if (req.version != 1) return error.UnsupportedVersion;
+    const is_file = std.mem.eql(u8, req.mode, "file");
+    if (!is_file and !std.mem.eql(u8, req.mode, "expr")) return error.UnsupportedMode;
+    var env = try base.CommonEnv.init(gpa, req.source);
+    defer env.deinit(gpa);
+    var messages: [128]parse.tokenize.Diagnostic = undefined;
+    var tokenizer = try parse.tokenize.Tokenizer.init(&env, gpa, req.source, &messages);
+    try tokenizer.tokenize(gpa);
+    var result = tokenizer.finishAndDeinit();
+    defer result.tokens.deinit(gpa);
+    var parser = try parse.Parser.init(result.tokens, gpa);
+    defer parser.deinit();
+    defer parser.store.deinit();
+    defer parser.decl_index.deinit();
+    defer parser.diagnostics.deinit(gpa);
+    var expression: ?parse.AST.Expr.Idx = null;
+    if (is_file) try parser.runFile() else expression = try parser.runExpr();
+    const consumed = parser.peekAt(parser.pos) == .EndOfFile;
+    var tokens: std.ArrayList(Token) = .empty;
+    for (result.tokens.tokens.items(.tag), 0..) |tag, i| {
+        try tokens.append(gpa, span(result.tokens.resolve(i), @tagName(tag)));
+    }
+    var diagnostics: std.ArrayList(Diagnostic) = .empty;
+    for (result.messages) |diag| try diagnostics.append(gpa, .{ .stage = "tokenize", .kind = @tagName(diag.tag), .start = diag.region.start.offset, .end = diag.region.end.offset });
+    if (result.extra_messages_dropped > 0) try diagnostics.append(gpa, .{ .stage = "tokenize", .kind = "TooManyTokenizationErrors", .start = 0, .end = 0 });
+    for (parser.diagnostics.items) |diag| {
+        const start = @min(@as(usize, diag.region.start), result.tokens.tokens.len - 1);
+        const end = @min(@as(usize, if (diag.region.end > diag.region.start) diag.region.end - 1 else diag.region.start), result.tokens.tokens.len - 1);
+        try diagnostics.append(gpa, .{ .stage = "parse", .kind = @tagName(diag.tag), .start = result.tokens.resolve(start).start.offset, .end = result.tokens.resolve(end).end.offset });
+    }
+    if (!consumed) {
+        const region = result.tokens.resolve(@min(parser.pos, result.tokens.tokens.len - 1));
+        try diagnostics.append(gpa, .{ .stage = "parse", .kind = "UnconsumedInput", .start = region.start.offset, .end = @intCast(req.source.len) });
+    }
+    var facts: std.ArrayList(Fact) = .empty;
+    if (diagnostics.items.len == 0) {
+        if (expression) |idx| {
+            const expr = parser.store.getExpr(idx);
+            const region = expr.to_tokenized_region();
+            try facts.append(gpa, .{ .kind = "expression", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(expr), .shape = try shape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
+        } else {
+            for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
+                const stmt = parser.store.getStatement(idx);
+                if (stmt == .decl) {
+                    const region = stmt.to_tokenized_region();
+                    try facts.append(gpa, .{ .kind = "definition", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = "decl", .shape = try shape(gpa, &parser.store, &result.tokens, req.source, stmt.decl.body, 0) });
+                }
+            }
+        }
+    }
+    return .{ .id = req.id, .ok = consumed and diagnostics.items.len == 0, .consumed = consumed, .tokens = tokens.items, .diagnostics = diagnostics.items, .facts = facts.items };
+}
+fn writeAll(bytes: []const u8) !void {
+    var offset: usize = 0;
+    while (offset < bytes.len) {
+        const count = write(1, bytes[offset..].ptr, bytes.len - offset);
+        if (count <= 0) return error.WriteFailed;
+        offset += @intCast(count);
+    }
+}
+pub fn main() !void {
+    var line: std.ArrayList(u8) = .empty;
+    defer line.deinit(std.heap.page_allocator);
+    while (true) {
+        const c = getchar();
+        if (c < 0 and line.items.len == 0) break;
+        if (c != 10 and c >= 0) {
+            if (line.items.len >= 16 * 1024 * 1024) return error.RequestTooLarge;
+            try line.append(std.heap.page_allocator, @intCast(c));
+            continue;
+        }
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const gpa = arena.allocator();
+        const request = std.json.parseFromSlice(Request, gpa, line.items, .{ .ignore_unknown_fields = true }) catch return error.InvalidRequest;
+        const response = try handle(gpa, request.value);
+        const encoded = try std.json.Stringify.valueAlloc(gpa, response, .{});
+        try writeAll(encoded);
+        try writeAll("\n");
+        line.clearRetainingCapacity();
+        if (c < 0) break;
+    }
+}
