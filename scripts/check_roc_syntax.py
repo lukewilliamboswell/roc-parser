@@ -51,6 +51,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--generated", type=positive, default=1000)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--mutation-runs", type=positive, default=1000)
+    parser.add_argument("--expression-depth", type=int, choices=range(9), default=5)
+    parser.add_argument("--pattern-depth", type=int, choices=range(7), default=3)
+    parser.add_argument("--type-depth", type=int, choices=range(7), default=4)
+    parser.add_argument("--statements", type=int, choices=range(1, 17), default=4)
     parser.add_argument("--fuzz-runs", type=positive, default=2000)
     parser.add_argument("--skip-fuzz", action="store_true", help="omit campaigns already run separately")
     parser.add_argument("--allocations", action="store_true", help="also build/run the allocation probe")
@@ -66,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     manifest = {"schema": 1, "started": time.time(), "source_sha256": source_identity(ROOT),
                 "generated": args.generated, "seed": args.seed, "mutation_runs": args.mutation_runs, "fuzz_runs": args.fuzz_runs,
                 "fuzz_omitted": args.skip_fuzz, "allocations": args.allocations, "steps": []}
+    manifest["generation_budgets"] = {key: getattr(args, key) for key in
+                                      ("expression_depth", "pattern_depth", "type_depth", "statements")}
 
     def save() -> None:
         (output / "validation.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -114,7 +120,9 @@ def main(argv: list[str] | None = None) -> int:
              extra_env={"ORACLE_BINARY": str(oracle)})
         step("differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                               "--oracle-command", shlex.quote(str(oracle)), "--generated", str(args.generated),
-                              "--seed", str(args.seed), "--output", str(output / "review")])
+                              "--seed", str(args.seed), "--expression-depth", str(args.expression_depth),
+                              "--pattern-depth", str(args.pattern_depth), "--type-depth", str(args.type_depth),
+                              "--statements", str(args.statements), "--output", str(output / "review")])
         step("type-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                                    "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/type-fixtures.json",
                                    "--generated", "0", "--output", str(output / "types")])

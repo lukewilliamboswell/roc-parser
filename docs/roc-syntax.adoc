@@ -103,8 +103,9 @@ ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 ----
 
 The command checks the package, builds the pinned compiler oracle and optimized
-Roc probe, checks the live protocol, compares curated cases plus 1,000 generated
-expression trees, checks dedicated type, platform and adversarial grammar fixtures,
+Roc probe, checks the live protocol, compares curated cases plus 1,000 independently
+generated files, blocks, annotations and expressions, checks dedicated type,
+platform and adversarial grammar fixtures,
 compares acceptance across the complete pinned snapshot corpus, and compares tokens
 and normalized trees for every compiler-accepted input. It checks editor recovery,
 runs both fuzz smoke campaigns, compares mutated inputs with the compiler oracle,
@@ -130,6 +131,15 @@ and manual exploration use the GitHub run ID as a fresh reproducible seed;
 models, commands and failures in the syntax validation artifact for 14 days.
 Promote minimized failures into committed fixtures before that artifact expires.
 Fresh seeds explore additional combinations; they do not prove grammar coverage.
+Scheduled exploration runs 10,000 generated cases and 10,000 mutations, restores
+the raw fuzz corpus and runs a fresh smoke campaign before oracle comparisons.
+
+Generated models include headers, imports, type declarations, constraints and
+statement sequences. Six arithmetic operators use only the parentheses needed
+to preserve the independently constructed model. Use `--expression-depth`,
+`--pattern-depth`, `--type-depth` and `--statements` to tune bounded generation;
+reports record those budgets. See
+{src}/docs/roc-syntax-generation.adoc[the model families and remaining omissions].
 
 The editor recovery gate checks damaged files with healthy declarations before
 and after each edit, including UTF-8 comments and headers. Surviving declarations
