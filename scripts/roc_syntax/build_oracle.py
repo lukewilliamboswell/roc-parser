@@ -93,6 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roc-repo", type=Path, help="Local Git object source (working tree ignored)")
     parser.add_argument("--zig", default=os.environ.get("ZIG", "zig"))
+    parser.add_argument("--optimize", choices=("ReleaseSafe", "ReleaseFast"), default="ReleaseSafe")
     parser.add_argument("--cache-dir", type=Path, default=ROOT / ".roc-parser-tmp" / "syntax-oracle")
     args = parser.parse_args()
     version = run([args.zig, "version"], capture_output=True, text=True).stdout.strip()
@@ -107,7 +108,7 @@ def main() -> None:
     source = source_tree(cache, local_repo.resolve() if local_repo else None)
     install = cache / "install"
     build_env = {**os.environ, "ZIG_GLOBAL_CACHE_DIR": str(cache / "zig-global-cache")}
-    run([args.zig, "build", "--build-file", str(Path(__file__).parent / "oracle" / "build.zig"), f"-Droc-source={source}", "-Doptimize=ReleaseSafe", "--cache-dir", str(cache / "zig-cache"), "--prefix", str(install)], stdout=sys.stderr, env=build_env)
+    run([args.zig, "build", "--build-file", str(Path(__file__).parent / "oracle" / "build.zig"), f"-Droc-source={source}", f"-Doptimize={args.optimize}", "--cache-dir", str(cache / "zig-cache"), "--prefix", str(install)], stdout=sys.stderr, env=build_env)
     binary = install / "bin" / "roc-syntax-oracle"
     worker_files = [Path(__file__), Path(__file__).parent / "oracle" / "main.zig", Path(__file__).parent / "oracle" / "build.zig"]
     worker_hash = hashlib.sha256()
@@ -118,7 +119,7 @@ def main() -> None:
         "compiler_revision": ROC_REVISION,
         "source_git": str(local_repo or cache / "upstream.git"),
         "zig_version": version,
-        "optimize": "ReleaseSafe",
+        "optimize": args.optimize,
         "worker_sha256": worker_hash.hexdigest(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
     }

@@ -6,7 +6,7 @@ pub const roc_disable_tracy = true;
 extern "c" fn getchar() c_int;
 extern "c" fn write(c_int, [*]const u8, usize) isize;
 const Allocator = std.mem.Allocator;
-const Request = struct { version: u32 = 1, id: []const u8, mode: []const u8, source: []const u8 };
+const Request = struct { version: u32 = 1, id: []const u8, mode: []const u8, source: []const u8, benchmark_iterations: ?u32 = null, benchmark_warmup: u32 = 10 };
 const Token = struct { kind: []const u8, start: u32, end: u32 };
 const Diagnostic = struct { stage: []const u8, kind: []const u8, start: u32, end: u32 };
 const Fact = struct { kind: []const u8, start: u32, end: u32, node_kind: []const u8, shape: std.json.Value };
@@ -583,6 +583,74 @@ fn handle(gpa: Allocator, req: Request) !Response {
     }
     return .{ .id = req.id, .ok = consumed and diagnostics.items.len == 0, .consumed = consumed, .tokens = tokens.items, .diagnostics = diagnostics.items, .facts = facts.items };
 }
+const BenchmarkResponse = struct {
+    version: u32 = 1,
+    id: []const u8,
+    requested_iterations: u32,
+    iterations: u32,
+    warmup: u32,
+    elapsed_ns: u64,
+    successes: u32,
+    consumed: u32,
+    checksum: u64,
+    capped: bool,
+};
+fn monotonicNs() !u64 {
+    var now: std.c.timespec = undefined;
+    if (std.c.clock_gettime(.MONOTONIC, &now) != 0) return error.ClockFailed;
+    return @as(u64, @intCast(now.sec)) * 1_000_000_000 + @as(u64, @intCast(now.nsec));
+}
+const ParseMeasure = struct { ok: bool, consumed: bool, checksum: u64 };
+fn parseMeasure(source: []const u8, requested_mode: []const u8) !ParseMeasure {
+    const gpa = std.heap.c_allocator;
+    const mode = if (std.mem.eql(u8, requested_mode, "repl")) try replParseMode(gpa, source) else requested_mode;
+    var env = try base.CommonEnv.init(gpa, source);
+    defer env.deinit(gpa);
+    var messages: [128]parse.tokenize.Diagnostic = undefined;
+    var tokenizer = try parse.tokenize.Tokenizer.init(&env, gpa, source, &messages);
+    try tokenizer.tokenize(gpa);
+    var result = tokenizer.finishAndDeinit();
+    defer result.tokens.deinit(gpa);
+    var parser = try parse.Parser.init(result.tokens, gpa);
+    defer parser.deinit();
+    defer parser.store.deinit();
+    defer parser.decl_index.deinit();
+    defer parser.diagnostics.deinit(gpa);
+    if (std.mem.eql(u8, mode, "file")) try parser.runFile() else if (std.mem.eql(u8, mode, "header")) {
+        _ = try parser.runHeader();
+    } else if (std.mem.eql(u8, mode, "statement")) {
+        _ = try parser.runStatement();
+    } else if (std.mem.eql(u8, mode, "expr")) {
+        _ = try parser.runExpr();
+    } else return error.UnsupportedMode;
+    const consumed = parser.peekAt(parser.pos) == .EndOfFile;
+    return .{
+        .ok = consumed and !result.has_errors and !result.source_rejected and result.messages.len == 0 and result.extra_messages_dropped == 0 and parser.diagnostics.items.len == 0,
+        .consumed = consumed,
+        .checksum = @as(u64, @intCast(parser.store.nodes.len())) *% 65537 +% @as(u64, @intCast(result.tokens.tokens.len)),
+    };
+}
+fn benchmark(req: Request) !BenchmarkResponse {
+    const iterations = req.benchmark_iterations.?;
+    if (req.version != 1) return error.UnsupportedVersion;
+    if (iterations == 0 or iterations > 100000 or req.benchmark_warmup > 10000) return error.InvalidBenchmarkBounds;
+    const deadline = try monotonicNs() + 10_000_000_000;
+    var warmup: u32 = 0;
+    while (warmup < req.benchmark_warmup and try monotonicNs() < deadline) : (warmup += 1) {
+        _ = try parseMeasure(req.source, req.mode);
+    }
+    const started = try monotonicNs();
+    var response: BenchmarkResponse = .{ .id = req.id, .requested_iterations = iterations, .iterations = 0, .warmup = warmup, .elapsed_ns = 0, .successes = 0, .consumed = 0, .checksum = 0, .capped = false };
+    while (response.iterations < iterations and try monotonicNs() < deadline) : (response.iterations += 1) {
+        const measured = try parseMeasure(req.source, req.mode);
+        response.successes += @intFromBool(measured.ok);
+        response.consumed += @intFromBool(measured.consumed);
+        response.checksum +%= measured.checksum;
+    }
+    response.elapsed_ns = try monotonicNs() - started;
+    response.capped = response.iterations != iterations or warmup != req.benchmark_warmup;
+    return response;
+}
 fn writeAll(bytes: []const u8) !void {
     var offset: usize = 0;
     while (offset < bytes.len) {
@@ -606,8 +674,10 @@ pub fn main() !void {
         defer arena.deinit();
         const gpa = arena.allocator();
         const request = std.json.parseFromSlice(Request, gpa, line.items, .{ .ignore_unknown_fields = true }) catch return error.InvalidRequest;
-        const response = try handle(gpa, request.value);
-        const encoded = try std.json.Stringify.valueAlloc(gpa, response, .{});
+        const encoded = if (request.value.benchmark_iterations != null)
+            try std.json.Stringify.valueAlloc(gpa, try benchmark(request.value), .{})
+        else
+            try std.json.Stringify.valueAlloc(gpa, try handle(gpa, request.value), .{});
         try writeAll(encoded);
         try writeAll("\n");
         line.clearRetainingCapacity();

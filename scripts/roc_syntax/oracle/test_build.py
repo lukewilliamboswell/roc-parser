@@ -1,5 +1,7 @@
 """Archive trust boundary and optional live worker contract checks."""
 import importlib.util
+import contextlib
+import sys
 import io
 import json
 import os
@@ -28,6 +30,24 @@ def archive(name, kind=tarfile.REGTYPE):
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_build_optimization_matches_command_and_receipt(self):
+        for optimize in ('ReleaseSafe', 'ReleaseFast'):
+            with self.subTest(optimize=optimize), tempfile.TemporaryDirectory() as folder:
+                cache = Path(folder)
+                binary = cache / 'install/bin/roc-syntax-oracle'
+                binary.parent.mkdir(parents=True)
+                binary.write_bytes(b'optimized-binary')
+                argv = ['build_oracle.py', '--cache-dir', folder, '--optimize', optimize]
+                with patch.object(sys, 'argv', argv), patch.object(module, 'source_tree', return_value=cache), \
+                     patch.object(module, 'select_git_source', return_value=cache), \
+                     patch.object(module, 'run', side_effect=[SimpleNamespace(stdout=module.ZIG_VERSION), None]) as run, \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    module.main()
+                self.assertIn('-Doptimize=' + optimize, run.call_args_list[1].args[0])
+                receipt = json.loads(binary.with_suffix('.json').read_text())
+                self.assertEqual(receipt['optimize'], optimize)
+                self.assertEqual(receipt['binary_sha256'], __import__('hashlib').sha256(binary.read_bytes()).hexdigest())
+
     def test_extracts_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             module.extract_source(archive("src/parse/mod.zig"), Path(tmp))
@@ -55,6 +75,41 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_parse_only_benchmark_and_worker_reuse(self):
+        sources = [('expr', '[1, 2 + 3]'), ('file', 'answer = 42'), ('header', 'module []'),
+                   ('statement', 'expect True'), ('repl', 'answer = 42'), ('expr', '[)')]
+        requests = [{'version': 1, 'id': str(i), 'mode': mode, 'source': source,
+                     'benchmark_iterations': 25, 'benchmark_warmup': 3}
+                    for i, (mode, source) in enumerate(sources)]
+        requests.append({'id': 'normal', 'mode': 'expr', 'source': '42'})
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=''.join(json.dumps(r) + '\n' for r in requests),
+                                text=True, capture_output=True, check=True, timeout=30)
+        responses = [json.loads(line) for line in result.stdout.splitlines()]
+        for request, response in zip(requests[:-1], responses[:-1]):
+            self.assertEqual(response['id'], request['id'])
+            self.assertEqual(response['iterations'], 25)
+            self.assertEqual(response['warmup'], 3)
+            self.assertFalse(response['capped'])
+            self.assertGreater(response['elapsed_ns'], 0)
+            self.assertGreater(response['checksum'], 0)
+            self.assertEqual(response['successes'], 0 if request['source'] == '[)' else 25)
+            if request['source'] != '[)':
+                self.assertEqual(response['consumed'], 25)
+        self.assertTrue(responses[-1]['ok'])
+        # Fixed-size parse produces a linear accumulator; AST traversal is absent.
+        doubled = dict(requests[0], benchmark_iterations=50, benchmark_warmup=0)
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=json.dumps(doubled) + '\n',
+                                text=True, capture_output=True, check=True, timeout=30)
+        self.assertEqual(json.loads(result.stdout)['checksum'], responses[0]['checksum'] * 2)
+
+    def test_parse_only_benchmark_rejects_unbounded_iteration_requests(self):
+        for count in (0, 100001):
+            request = {'id': 'bounds', 'mode': 'expr', 'source': '42', 'benchmark_iterations': count}
+            result = subprocess.run([os.environ['ORACLE_BINARY']], input=json.dumps(request) + '\n',
+                                    text=True, capture_output=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('InvalidBenchmarkBounds', result.stderr)
+
     def test_platform_requires_symbols_and_target_configuration(self):
         base = 'platform "p" requires {} exposes [] packages {} provides {}'
         prefix = [['string', '"p"'], ['platform_requires', []], ['dependencies', []], ['platform_provides', []]]

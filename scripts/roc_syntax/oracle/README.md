@@ -133,3 +133,36 @@ Target configurations retain file-list wrappers and raw string spelling. The
 compiler stores only the last `inputs_dir` and separates it from target entries;
 the normalized candidate view follows that ordering and last-value behavior.
 The candidate syntax tree and lossless tokens still retain every occurrence.
+
+### Parse-only runtime measurement
+
+The same persistent JSONL worker accepts optional `benchmark_iterations` and
+`benchmark_warmup` fields. For example:
+
+```json
+{"version":1,"id":"speed","mode":"file","source":"answer = 42","benchmark_iterations":1000,"benchmark_warmup":10}
+```
+
+The response contains `requested_iterations`, actual completed `iterations`,
+completed `warmup`, `elapsed_ns`, accepted `successes`, fully `consumed` count,
+an O(1) `checksum` of token/node counts, and `capped`. All five parsing modes
+use the correctness worker's dispatch, including REPL classification. The source
+is immutable across iterations. Timing includes tokenization, parser setup,
+AST construction, and disposal with Zig's libc allocator. It excludes process
+startup, input/JSON decoding, warmup, AST projection/traversal, serialization, and
+output. A monotonic clock bounds the request and measures the parse loop; its
+constant per-iteration deadline check is included.
+
+Iterations must be 1–100000, warmup 0–10000 (default 10), and the existing
+16 MiB JSONL request cap still applies. A ten-second deadline spans warmup and
+measurement; `capped=true` reports partial runs and must never pass a speed gate.
+The caller must validate successes/consumption and separately establish token/tree
+correctness on the identical input. Use the builder's optimized `ReleaseFast`
+executable and retain its build receipt. Timing an arbitrary debug build or an
+unverified old executable is not comparable evidence.
+
+Build this measurement worker with
+`python3 scripts/roc_syntax/build_oracle.py --optimize ReleaseFast --cache-dir .roc-parser-tmp/syntax-speed-oracle`.
+The default correctness build remains `ReleaseSafe`; the receipt records the
+chosen optimization mode and hashes the executable. Allow at least 15 seconds
+for the benchmark worker request so its ten-second internal cap can be reported.
