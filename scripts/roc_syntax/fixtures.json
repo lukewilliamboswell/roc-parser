@@ -86,7 +86,7 @@
     {
       "id": "unsupported",
       "mode": "expr",
-      "source": "if True 1 else 2",
+      "source": "\"hello ${name}\"",
       "rule": "unsupported",
       "coverage": "unsupported"
     },
@@ -95,7 +95,7 @@
       "mode": "expr",
       "source": "add (1, 2)",
       "rule": "spacing",
-      "coverage": "supported"
+      "coverage": "recovery"
     },
     {
       "id": "left-assoc",

@@ -47,27 +47,51 @@ class WorkerTests(unittest.TestCase):
                 with self.assertRaisesRegex(review.WorkerError, 'ID'):
                     worker.request({'id':'correct'})
 
+    def test_crash_case_saved_and_later_cases_continue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(7)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":[]}),flush=True)\n')
+            cases = [{'id':'bad','mode':'expr','source':'crash'}, {'id':'good','mode':'expr','source':''}]
+            records = review.run_cases(cases, command, command, Path(tmp)/'failures')
+            self.assertFalse(records[0]['pass'])
+            self.assertTrue(records[1]['pass'])
+            self.assertEqual(len(list((Path(tmp)/'failures').glob('*.json'))), 1)
+
     def test_mismatch_retained_and_request_replayable(self):
         with tempfile.TemporaryDirectory() as tmp:
-            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line); print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[],"shape":["wrong"]}),flush=True)\n')
-            case = {'id':'deliberate/mismatch','source':'1','mode':'expr','model_shape':[['number','1']]}
+            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line); print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":["wrong"]}),flush=True)\n')
+            case = {'id':'deliberate/mismatch','source':'','mode':'expr','model_shape':[['number','1']]}
             result = review.run_cases([case], command, command, Path(tmp)/'failures')
             self.assertFalse(result[0]['pass'])
             saved = json.loads(next((Path(tmp)/'failures').glob('*.json')).read_text())
-            self.assertEqual(saved['request']['source'], '1')
+            self.assertEqual(saved['request']['source'], '')
             self.assertEqual(saved['model_shape'], case['model_shape'])
-            self.assertEqual(saved['differences'][0]['field'], 'actual_model_shape')
+            self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
     def test_precedence_disagreement_detected(self):
         first = {'ok':True,'consumed':True,'tokens':[], 'shape':['binary','+',1,['binary','*',2,3]]}
         second = {**first,'shape':['binary','*',['binary','+',1,2],3]}
-        self.assertEqual(review.compare({'source':'1+2*3'},first,second)[0]['field'], 'shape')
+        self.assertTrue(any(d['field']=='shape' for d in review.compare({'source':'1+2*3'},first,second)))
 
     def test_call_adjacency_preserved(self):
         first={'tokens':[{'kind':'NoSpaceOpenRound','start':1,'end':2}]}
         second={'tokens':[{'kind':'OpenRound','start':1,'end':2}]}
         self.assertNotEqual(review.normalize_tokens(first,'f('),review.normalize_tokens(second,'f('))
+
+    def test_recovery_tree_placement_is_not_language_mismatch(self):
+        actual = {'ok':False,'consumed':True,'tokens':[{'kind':'Number','start':0,'end':1},{'kind':'EndOfFile','start':1,'end':1}], 'shape':['partial']}
+        expected = {'ok':False,'consumed':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
+        self.assertEqual(review.compare({'source':'1','coverage':'recovery'},actual,expected),[])
+        expected['ok'] = True
+        self.assertTrue(any(d['field']=='ok' for d in review.compare({'source':'1','coverage':'recovery'},actual,expected)))
+
+    def test_unsupported_gap_requires_status_and_detects_stale_inventory(self):
+        actual = {'status':'Unsupported','ok':False,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
+        expected = {'ok':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':[]}
+        case = {'source':'','coverage':'unsupported'}
+        self.assertEqual(review.compare(case,actual,expected),[])
+        actual['status'] = 'Complete'
+        self.assertEqual(review.compare(case,actual,expected)[0]['field'],'unsupported_status')
 
     def test_generated_models_reproducible_and_varied(self):
         first=review.generated_cases(100,7)

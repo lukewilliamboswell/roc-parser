@@ -40,5 +40,5 @@ respond = |request| {
 	tokens = parsed.tokens.map(|token| { kind: Str.inspect(token.kind), start: token.start, end: token.end })
 	nodes = parsed.nodes.map(|node| { kind: Str.inspect(node.kind), start: node.start, end: node.end, children_start: node.children_start, children_len: node.children_len })
 	diagnostics = parsed.diagnostics.map(|diagnostic| { stage: "parse", kind: Str.inspect(diagnostic.code), start: diagnostic.start, end: diagnostic.end })
-	Json.to_str({ version: 1.U64, id: request.id, mode: request.mode, ok: parsed.status == Complete, consumed: parsed.status == Complete, status: Str.inspect(parsed.status), tokens, nodes, children: parsed.children, root: parsed.root, diagnostics })
+	Json.to_str({ version: 1.U64, id: request.id, mode: request.mode, ok: parsed.status == Complete, consumed: parsed.consumed, status: Str.inspect(parsed.status), tokens, nodes, children: parsed.children, root: parsed.root, diagnostics })
 }

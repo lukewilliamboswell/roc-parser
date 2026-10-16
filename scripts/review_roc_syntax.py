@@ -166,17 +166,80 @@ def syntax_shape(response, source):
             first = nodes[children[start]]
             operator = source.encode()[node['start']:first['start']].decode().strip()
             return ['unary', operator, *branch]
+        if kind == 'StringLiteral':
+            return ['string', text]
+        if kind == 'ListLiteral':
+            return ['list', branch]
+        if kind == 'Tuple':
+            return ['tuple', branch]
         if kind == 'Call':
             return ['call', branch[0], branch[1:]]
         return [kind.lower(), *branch]
     return visit(response['root'])
 
 
+def validate_spans(response, source, lossless=False):
+    size = len(source.encode())
+    cursor = 0
+    for token in response.get('tokens', []):
+        start, end = token['start'], token['end']
+        if not 0 <= start <= end <= size:
+            raise WorkerError(f'invalid token span: {token}')
+        if lossless and start != cursor:
+            raise WorkerError('candidate token stream is not lossless')
+        if end == start and token['kind'] != 'EndOfFile':
+            raise WorkerError('non-EOF token has no progress')
+        cursor = end
+    if lossless and cursor != size:
+        raise WorkerError('candidate token stream omits source bytes')
+    for item in response.get('diagnostics', []) + response.get('nodes', []):
+        if not 0 <= item['start'] <= item['end'] <= size:
+            raise WorkerError(f'invalid syntax/diagnostic span: {item}')
+    nodes, children = response.get('nodes', []), response.get('children', [])
+    for node in nodes:
+        start, length = node['children_start'], node['children_len']
+        if start < 0 or length < 0 or start + length > len(children):
+            raise WorkerError('child range outside child table')
+        for index in children[start:start+length]:
+            if not isinstance(index, int) or not 0 <= index < len(nodes):
+                raise WorkerError('child index outside node table')
+            child = nodes[index]
+            if child['start'] < node['start'] or child['end'] > node['end']:
+                raise WorkerError('child span outside parent')
+    if lossless:
+        tokens = response.get('tokens', [])
+        if not tokens or tokens[-1]['kind'] != 'EndOfFile' or tokens[-1]['start'] != size:
+            raise WorkerError('missing terminal EOF')
+    # Recursion also validates child indices and detects cycles.
+    if response.get('nodes'):
+        syntax_shape(response, source)
+
+
 def compare(case, actual, expected):
     differences = []
+    for label, response in [('actual', actual), ('expected', expected)]:
+        try:
+            validate_spans(response, case['source'], lossless=label == 'actual')
+        except WorkerError as error:
+            differences.append({'field': label + '_invariants', 'error': str(error)})
+    contract = case.get('coverage', 'supported')
+    if contract == 'unsupported':
+        # Unsupported is an explicit coverage gap, never a validity answer.
+        # A completed implementation makes this inventory entry stale.
+        if actual.get('status') != 'Unsupported':
+            differences.append({'field': 'unsupported_status', 'actual': actual.get('status'), 'expected': 'Unsupported'})
+        return differences
     for field in ('ok', 'consumed'):
         if actual.get(field) != expected.get(field):
             differences.append({'field': field, 'actual': actual.get(field), 'expected': expected.get(field)})
+    if contract == 'recovery':
+        if actual.get('ok') or expected.get('ok'):
+            differences.append({'field': 'recovery_acceptance', 'actual': actual.get('ok'), 'expected': False})
+        # Recovery tree placements are implementation-specific. Each worker's
+        # bounds/progress invariants still apply; rejection must agree.
+        return differences
+    if contract == 'supported' and (not actual.get('ok') or not expected.get('ok')):
+        differences.append({'field': 'supported_acceptance', 'actual': actual.get('ok'), 'expected': expected.get('ok')})
     for field, projector in [('tokens', normalize_tokens), ('shape', syntax_shape)]:
         left, right = projector(actual, case['source']), projector(expected, case['source'])
         if left != right:
@@ -300,7 +363,7 @@ def main(argv=None):
         identities[name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} if path.is_file() else {'command': str(path)}
     report = {'metadata': metadata, 'worker_identities': identities, 'elapsed_seconds': elapsed, 'cases_per_second': len(cases) / elapsed, 'commands': {'probe': shlex.split(args.probe_command), 'oracle': shlex.split(args.oracle_command)},
               'coverage_counts': dict(Counter(item['coverage'] for item in results)),
-              'counts': {'total': len(results), 'passed': sum(item['pass'] for item in results),
+              'counts': {'total': len(results), 'coverage_gaps': sum(item['coverage'] == 'unsupported' for item in results), 'passed': sum(item['pass'] for item in results),
                          'failed': sum(not item['pass'] for item in results)}, 'results': results}
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
