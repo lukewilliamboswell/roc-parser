@@ -65,6 +65,8 @@ Use `RocSyntax.tokenize_str` or `tokenize_bytes` when only lexical highlighting 
 needed. They return source-backed tokens and diagnostics without constructing a
 tree. `RocSyntax.highlight_category(token.kind)` maps each token to a presentation
 category without allocating strings or choosing theme colors.
+The runnable `examples/roc-syntax.roc` demonstrates both entry points and ships
+in the examples archive, where it is also checked against the bundled package.
 
 Lint rules can traverse the tree and report diagnostics at source spans. Grouping
 and operator precedence are represented structurally. Rules that need binding or
