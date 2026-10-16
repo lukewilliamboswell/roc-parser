@@ -1728,7 +1728,7 @@ pattern_primary = |s, alternatives, depth| {
 				add_node(bad, RestPattern, t.start, t.end, [])
 			}
 		} else {
-			validated = if peek(look).kind == LowerIdent issue(look, UnexpectedToken, peek(look).start, peek(look).end) else look
+			validated = if peek(look).kind == LowerIdent and !spelling(look, "_") issue(look, UnexpectedToken, peek(look).start, peek(look).end) else look
 			add_node(validated, RestPattern, t.start, t.end, [])
 		}
 	} else if t.kind == UpperIdent and byte(s.source, t.start) == '@' {

@@ -2891,6 +2891,84 @@
       "source": "|Some(x) as 1| 1",
       "rule": "patterns",
       "coverage": "recovery"
+    },
+    {
+      "id": "pattern-rest-followed-by-wildcard",
+      "mode": "expr",
+      "source": "|.._|1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_rest",
+              null
+            ],
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-rest-followed-by-spaced-wildcard",
+      "mode": "expr",
+      "source": "|.. _|1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_rest",
+              null
+            ],
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-rest-followed-by-name",
+      "mode": "expr",
+      "source": "|..rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-rest-followed-by-named-underscore",
+      "mode": "expr",
+      "source": "|.._rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-rest-followed-by-spaced-named-underscore",
+      "mode": "expr",
+      "source": "|.. _rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-list-rest-followed-by-wildcard",
+      "mode": "expr",
+      "source": "|[first, .._]|1",
+      "rule": "patterns",
+      "coverage": "recovery"
     }
   ]
 }
