@@ -136,4 +136,6 @@ node_kind_code = |kind| match kind {
 	PlatformReference => 64
 	PatternStringLiteral => 65
 	CapturePattern => 66
+	ArrowCall => 67
+	MethodArrowCall => 68
 }

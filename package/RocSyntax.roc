@@ -29,7 +29,7 @@ RocSyntax :: [].{
 	Token : { kind : TokenKind, start : U64, end : U64 }
 
 	## Syntax categories. Children are indices into `Parsed.nodes`.
-	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
+	NodeKind : [File, Declaration, VariableDeclaration, Expect, For, ForStream, While, ExpressionStatement, Lambda, If, Match, MatchBranch, Pattern, IdentifierPattern, WildcardPattern, PatternStringLiteral, CapturePattern, MutablePattern, TagPattern, NominalPattern, TuplePattern, ListPattern, RecordPattern, PatternField, RestPattern, AliasPattern, AlternativePattern, Block, Record, RecordField, Header, Dependencies, DependencyField, PlatformReference, Import, FileImport, ImportPath, ImportAlias, ExposedItem, ExposedWildcard, TypeAnnotation, TypeExpression, Identifier, NumberLiteral, StringLiteral, MultilineStringLiteral, StringSegment, Interpolation, TypedLiteral, ArrowCall, MethodArrowCall, CharacterLiteral, Unary, Binary, Call, FieldAccess, OptionalFieldAccess, Suffix, Debug, Crash, Return, Break, Ellipsis, ListLiteral, Tuple, Parenthesized, ErrorNode, UnsupportedNode]
 
 	## Flat node. Its children occupy a contiguous interval in `Parsed.children`.
 	Node : { kind : NodeKind, start : U64, end : U64, children_start : U64, children_len : U64 }
@@ -111,7 +111,7 @@ RocSyntax :: [].{
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
 
-State := { source : List(U8), tokens : List(RocSyntax.Token), pos : U64, nodes : RocSyntaxBuffer(RocSyntax.Node), children : RocSyntaxBuffer(U64), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool, limited : Bool }
+State := { source : List(U8), tokens : List(RocSyntax.Token), pos : U64, nodes : RocSyntaxBuffer(RocSyntax.Node), children : RocSyntaxBuffer(U64), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool, limited : Bool, in_guard : Bool }
 
 Built : { state : State, node : U64 }
 
@@ -288,6 +288,15 @@ lex = |source| {
 			$kind = Number
 			number = scan_number(source, start + if b == '-' 1 else 0)
 			$i = number.end
+			if start > 0 and byte(source, start - 1) == '.' and is_digit(b) {
+				var $digits_end = start
+				while is_digit(byte(source, $digits_end)) {
+					$digits_end = $digits_end + 1
+				}
+				if byte(source, $digits_end) == '.' {
+					$i = $digits_end
+				}
+			}
 			tuple_index = start > 0 and byte(source, start - 1) == '.' and source.sublist({ start, len: $i - start }).all(is_digit)
 			if !number.valid and !tuple_index {
 				$diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i)
@@ -379,7 +388,7 @@ peek : State -> RocSyntax.Token
 peek = |s| s.tokens.get(s.pos) ?? { kind: EndOfFile, start: s.source.len(), end: s.source.len() }
 
 skip_trivia : State -> State
-skip_trivia = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }| {
+skip_trivia = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited, in_guard }| {
 	var $pos = pos
 	var $done = False
 	while !$done {
@@ -390,7 +399,7 @@ skip_trivia = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupp
 			$done = True
 		}
 	}
-	State.{ source, tokens, pos: $pos, nodes, children, diagnostics, unsupported, limited }
+	State.{ source, tokens, pos: $pos, nodes, children, diagnostics, unsupported, limited, in_guard }
 }
 
 spelling : State, Str -> Bool
@@ -405,10 +414,10 @@ issue = |s, code, start, end| {
 }
 
 add_node : State, RocSyntax.NodeKind, U64, U64, List(U64) -> Built
-add_node = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited }, kind, start, end, ids| {
+add_node = |State.{ source, tokens, pos, nodes, children, diagnostics, unsupported, limited, in_guard }, kind, start, end, ids| {
 	index = nodes.len()
 	node = { kind, start, end, children_start: children.len(), children_len: ids.len() }
-	{ state: State.{ source, tokens, pos, nodes: nodes.append(node), children: children.concat_list(ids), diagnostics, unsupported, limited }, node: index }
+	{ state: State.{ source, tokens, pos, nodes: nodes.append(node), children: children.concat_list(ids), diagnostics, unsupported, limited, in_guard }, node: index }
 }
 
 node_start : State, U64 -> U64
@@ -449,18 +458,40 @@ expression = |initial, minimum, depth, punned| {
 		limited = issue(s, ResourceLimit, first.start, first.end)
 		add_node(at_pos(limited, limited.pos + if first.kind == EndOfFile 0 else 1), ErrorNode, first.start, first.end, [])
 	} else {
+		next_pos = significant_position(s.tokens, s.pos + 1)
+		package_qualified = (minimum == 100 or minimum == 101) and first.kind == LowerIdent and token_spelling(s.source, source_token(s, next_pos), ".") and source_token(s, next_pos + 1).kind == UpperIdent
 		{ state: built_state, node: built_node } = primary(s, depth, punned)
 		var $s = built_state
 		var $left = built_node
-		var $qualified = first.kind == UpperIdent
+		var $qualified = first.kind == UpperIdent or package_qualified
 		var $done = False
+		var $target_done = False
 		while !$done {
 			look = skip_trivia($s)
 			# Drop the previous loop-state owner before builders grow its buffers.
 			$s = vacant
 			t = peek(look)
 			bp = binding(look)
-			if spelling(look, "?") and t.start == node_end(look, $left) {
+			if ((minimum >= 100 or look.in_guard) and (spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>"))) or (minimum == 101 and ($target_done or spelling(look, "?") or ((spelling(look, ".") or spelling(look, ".?")) and !$qualified))) {
+				$s = look
+				$done = True
+			} else if spelling(look, "->") or spelling(look, "=>") or spelling(look, "|>") {
+				pipe = spelling(look, "|>")
+				rhs = skip_trivia(at_pos(look, look.pos + 1))
+				rhs_token = peek(rhs)
+				literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
+				valid_start = rhs_token.kind == LowerIdent or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
+				validated = if valid_start rhs else issue(rhs, UnexpectedToken, rhs_token.start, rhs_token.end)
+				{ state: target_state, node: target_node } = expression(validated, if pipe 100 else 101, depth + 1, False)
+				method = pipe and method_target(target_state, target_node)
+				checked = if !pipe or !literal or method target_state else issue(target_state, UnexpectedToken, rhs_token.start, node_end(target_state, target_node))
+				start = node_start(checked, $left)
+				end = node_end(checked, target_node)
+				{ state: arrow_state, node: arrow_node } = add_node(checked, if method MethodArrowCall else ArrowCall, start, end, [$left, target_node])
+				$s = arrow_state
+				$left = arrow_node
+				$qualified = False
+			} else if spelling(look, "?") and t.start == node_end(look, $left) {
 				start = node_start(look, $left)
 				{ state: suffix_state, node: suffix_node } = add_node(at_pos(look, look.pos + 1), Suffix, start, t.end, [$left])
 				$s = suffix_state
@@ -475,6 +506,7 @@ expression = |initial, minimum, depth, punned| {
 				$s = call_state
 				$left = call_node
 				$qualified = False
+				$target_done = minimum == 101
 			} else if spelling(look, ".") or spelling(look, ".?") {
 				optional = spelling(look, ".?")
 				field_state = at_pos(look, look.pos + 1)
@@ -613,7 +645,7 @@ parse_source = |source, mode| {
 	expression_only = mode == ExpressionMode
 	single = mode != FileMode
 	lexed = lex(source)
-	initial = State.{ source, tokens: lexed.tokens, pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False }
+	initial = State.{ source, tokens: lexed.tokens, pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False, in_guard: False }
 	var $s = initial
 	var $roots = []
 	if $s.tokens.len() > 1048576 {
@@ -1088,7 +1120,7 @@ type_expression = |initial, depth| {
 		bad = issue(initial, ResourceLimit, t.start, t.end)
 		add_node(bad, ErrorNode, t.start, t.start, [])
 	} else {
-		{ state: left_state, node: left_node } = expression(initial, 40, depth + 1, False)
+		{ state: left_state, node: left_node } = expression(initial, 102, depth + 1, False)
 		look = skip_trivia(left_state)
 		if spelling(look, "->") {
 			start = node_start(look, left_node)
@@ -1474,8 +1506,10 @@ parse_match = |initial, start, depth| {
 				var $arrow = skip_trivia(pattern_state)
 				var $branch_ids = [pattern_node]
 				if spelling($arrow, "if") {
-					{ state: guard_state, node: guard_node } = expression(at_pos($arrow, $arrow.pos + 1), 0, depth + 1, False)
-					$arrow = skip_trivia(guard_state)
+					outer_guard = $arrow.in_guard
+					guard_start = at_pos({ ..$arrow, in_guard: True }, $arrow.pos + 1)
+					{ state: guard_state, node: guard_node } = expression(guard_start, 0, depth + 1, False)
+					$arrow = skip_trivia({ ..guard_state, in_guard: outer_guard })
 					$branch_ids = $branch_ids.append(guard_node)
 				}
 				arrow = $arrow
@@ -1672,7 +1706,7 @@ expect {
 # then clear the loop variable before invoking a growing builder. Keeping both
 # records alive would force copy-on-write at every append in native Roc builds.
 vacant : State
-vacant = State.{ source: [], tokens: [], pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: [], unsupported: False, limited: False }
+vacant = State.{ source: [], tokens: [], pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), diagnostics: [], unsupported: False, limited: False, in_guard: False }
 
 expect {
 	["-!h", "-'i'", "match 42 {}", "person.@"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and ["F\n", "modu\n", "S\n0\n", "x = _\n\ny = { a: _ + 1 }"].all(|source| RocSyntax.parse_str(source).status != Complete)
@@ -1681,8 +1715,8 @@ expect {
 # Consume a state when advancing. Avoid a record spread retaining an alias to
 # its growing buffers across a recursive parse call.
 at_pos : State, U64 -> State
-at_pos = |State.{ source, tokens, pos: _, nodes, children, diagnostics, unsupported, limited }, position| {
-	State.{ source, tokens, pos: position, nodes, children, diagnostics, unsupported, limited }
+at_pos = |State.{ source, tokens, pos: _, nodes, children, diagnostics, unsupported, limited, in_guard }, position| {
+	State.{ source, tokens, pos: position, nodes, children, diagnostics, unsupported, limited, in_guard }
 }
 
 significant_position : List(RocSyntax.Token), U64 -> U64
@@ -2172,4 +2206,63 @@ pattern_string = |initial| {
 
 expect {
 	RocSyntax.parse_header_str("").status == Complete and RocSyntax.parse_expr_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }").status == Complete and RocSyntax.parse_expr_str("match text { \"\${a + b}\" => 0 }").status != Complete and RocSyntax.parse_expr_str("match text { \"x\".Str => 0 }").status != Complete
+}
+
+method_target : State, U64 -> Bool
+method_target = |s, root| {
+	match s.nodes.get(root) {
+		Ok(call) if call.kind == Call => {
+			callee_id = s.children.get(call.children_start) ?? s.nodes.len()
+			match s.nodes.get(callee_id) {
+				Ok(callee) if callee.kind == FieldAccess => {
+					receiver = s.children.get(callee.children_start) ?? s.nodes.len()
+					!namespace_receiver(s, receiver)
+				}
+				_ => False
+			}
+		}
+		_ => False
+	}
+}
+
+namespace_receiver : State, U64 -> Bool
+namespace_receiver = |s, root| {
+	var $id = root
+	var $upper_segment = False
+	var $done = False
+	var $qualified = False
+	while !$done {
+		match s.nodes.get($id) {
+			Ok(n) if n.kind == Identifier => {
+				$qualified = is_upper(byte(s.source, n.start)) or $upper_segment
+				$done = True
+			}
+			Ok(n) if n.kind == FieldAccess => {
+				field_id = s.children.get(n.children_start + 1) ?? s.nodes.len()
+				field = s.nodes.get(field_id) ?? n
+				if is_upper(byte(s.source, field.start)) {
+					$upper_segment = True
+					$id = s.children.get(n.children_start) ?? s.nodes.len()
+				} else {
+					$done = True
+				}
+			}
+			_ => {
+				$done = True
+			}
+		}
+	}
+	$qualified
+}
+
+expect {
+	["value->f", "value->f(1)", "value->Str.concat(\"x\")", "value->(|x| x + 1)", "value |> f(1).field", "value |> receiver.method(1)", "value |> (f)(1)", "value |> [1, 2].map(f)", "value->f(1).field", "1 + 2->f |> g"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["value->.f(1)", "value |> .f(1)", "value->1", "value |> [1, 2]", "value |> 1 + 2"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
+}
+
+expect {
+	RocSyntax.parse_expr_str("tuple.0.1").status == Complete and RocSyntax.parse_expr_str("tuple.01.002").status == Complete
 }
