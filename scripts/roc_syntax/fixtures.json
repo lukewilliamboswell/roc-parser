@@ -139,7 +139,7 @@
     {
       "id": "unicode",
       "mode": "expr",
-      "source": "\"λ\"",
+      "source": "\"\u03bb\"",
       "rule": "unicode",
       "coverage": "supported"
     },
@@ -359,6 +359,152 @@
       "source": "x : 42",
       "rule": "type-annotations",
       "coverage": "unsupported"
+    },
+    {
+      "id": "nested-record-list-call",
+      "mode": "expr",
+      "source": "f({ first: [1, 2], second: (3, 4) })",
+      "rule": "records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "call",
+          [
+            "identifier",
+            "f"
+          ],
+          [
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "list",
+                    [
+                      [
+                        "number",
+                        "1"
+                      ],
+                      [
+                        "number",
+                        "2"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "second",
+                  [
+                    "tuple",
+                    [
+                      [
+                        "number",
+                        "3"
+                      ],
+                      [
+                        "number",
+                        "4"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nested-lambda-if-fields",
+      "mode": "expr",
+      "source": "(|x| (if True ({ value: x }).value else ([1, 2])))",
+      "rule": "lambdas",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            "x"
+          ],
+          [
+            "if",
+            [
+              "identifier",
+              "True"
+            ],
+            [
+              "field",
+              [
+                "record",
+                [
+                  [
+                    "value",
+                    [
+                      "identifier",
+                      "x"
+                    ]
+                  ]
+                ]
+              ],
+              "value"
+            ],
+            [
+              "list",
+              [
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nested-string-tuple-list",
+      "mode": "expr",
+      "source": "[(\"hello\", \"world\"), (\"\", \"two words\")]",
+      "rule": "tuples",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "list",
+          [
+            [
+              "tuple",
+              [
+                [
+                  "string",
+                  "\"hello\""
+                ],
+                [
+                  "string",
+                  "\"world\""
+                ]
+              ]
+            ],
+            [
+              "tuple",
+              [
+                [
+                  "string",
+                  "\"\""
+                ],
+                [
+                  "string",
+                  "\"two words\""
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
     }
   ]
 }

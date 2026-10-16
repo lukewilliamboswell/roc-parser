@@ -73,6 +73,12 @@ class ProjectionTests(unittest.TestCase):
         second = {**first,'shape':['binary','*',['binary','+',1,2],3]}
         self.assertTrue(any(d['field']=='shape' for d in review.compare({'source':'1+2*3'},first,second)))
 
+    def test_empty_string_part_is_not_a_lexical_difference(self):
+        empty = {'tokens': [{'kind': 'StringPart', 'start': 1, 'end': 1}]}
+        self.assertEqual(review.normalize_tokens(empty, '""'), [])
+        content = {'tokens': [{'kind': 'StringPart', 'start': 1, 'end': 2}]}
+        self.assertEqual(review.normalize_tokens(content, '"x"'), [['StringPart', 1, 2]])
+
     def test_call_adjacency_preserved(self):
         first={'tokens':[{'kind':'NoSpaceOpenRound','start':1,'end':2}]}
         second={'tokens':[{'kind':'OpenRound','start':1,'end':2}]}
@@ -112,6 +118,26 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(first,review.generated_cases(100,7))
         self.assertGreater(len({case['source'] for case in first}),80)
         self.assertTrue(any('binary' in str(c['model_shape']) for c in first))
+
+    def test_generated_models_cross_nest_all_expression_families(self):
+        cases = review.generated_cases(1000, 91)
+        families = {'number', 'identifier', 'string', 'binary', 'call', 'list',
+                    'tuple', 'lambda', 'if', 'record', 'field'}
+        observed, nested = set(), set()
+        def visit(value, depth=0):
+            if not isinstance(value, list):
+                return
+            if value and isinstance(value[0], str) and value[0] in families:
+                observed.add(value[0])
+                if depth > 1:
+                    nested.add(value[0])
+            for child in value:
+                visit(child, depth + 1)
+        for case in cases:
+            visit(case['model_shape'])
+            self.assertLess(len(case['source'].encode()), 4096)
+        self.assertEqual(observed, families)
+        self.assertEqual(nested, families)
 
     def test_fixture_rule_inventory_checked(self):
         metadata,cases=review.load_cases(review.DATA/'fixtures.json')

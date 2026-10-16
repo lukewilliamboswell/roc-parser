@@ -108,6 +108,10 @@ def normalize_tokens(response, source):
         start, end = token['start'], token['end']
         if not isinstance(start, int) or not isinstance(end, int) or not 0 <= start <= end <= len(raw):
             raise WorkerError(f'invalid token span: {token}')
+        # The compiler emits an empty StringPart for \"\"; the lossless
+        # candidate omits zero-byte tokens to retain its progress invariant.
+        if kind == 'StringPart' and start == end:
+            continue
         if kind in {'DotLowerIdent', 'DotUpperIdent', 'NoSpaceDotLowerIdent', 'NoSpaceDotUpperIdent'}:
             out.append(['Punctuation', start, start + 1])
             out.append(['LowerIdent' if kind.endswith('LowerIdent') else 'UpperIdent', start + 1, end])
@@ -365,20 +369,37 @@ def generated_cases(count, seed):
     import random
     rng = random.Random(seed)
     def expression(depth):
-        choice = rng.randrange(5 if depth else 2)
+        # Build the model before printing source. Every recursive constructor can
+        # contain every other constructor, without deriving expectations from
+        # either implementation under test. Depth bounds total work per case.
+        choice = rng.randrange(12 if depth else 3)
         if choice == 0:
             value = str(rng.randrange(100000))
             return value, ['number', value]
         if choice == 1:
             value = 'v' + str(rng.randrange(100))
             return value, ['identifier', value]
-        if choice in {2, 3}:
-            left, lshape = expression(depth - 1)
-            right, rshape = expression(depth - 1)
-            op = '+' if choice == 2 else '*'
+        if choice == 2:
+            value = json.dumps(rng.choice(['', 'hello', 'two words', 'λ', 'line\\nend']), ensure_ascii=False)
+            return value, ['string', value]
+        left, lshape = expression(depth - 1)
+        if choice == 3:
+            return f'f({left})', ['call', ['identifier', 'f'], [lshape]]
+        if choice == 4:
+            return f'(|x| {left})', ['lambda', ['x'], lshape]
+        if choice == 5:
+            return f'({left}).value', ['field', lshape, 'value']
+        right, rshape = expression(depth - 1)
+        if choice in {6, 7}:
+            op = '+' if choice == 6 else '*'
             return f'({left} {op} {right})', ['binary', op, lshape, rshape]
-        arg, ashape = expression(depth - 1)
-        return f'f({arg})', ['call', ['identifier', 'f'], [ashape]]
+        if choice == 8:
+            return f'[{left}, {right}]', ['list', [lshape, rshape]]
+        if choice == 9:
+            return f'({left}, {right})', ['tuple', [lshape, rshape]]
+        if choice == 10:
+            return f'(if True ({left}) else ({right}))', ['if', ['identifier', 'True'], lshape, rshape]
+        return f'{{ first: {left}, second: {right} }}', ['record', [['first', lshape], ['second', rshape]]]
     result = []
     for index in range(count):
         source, shape = expression(rng.randrange(1, 5))

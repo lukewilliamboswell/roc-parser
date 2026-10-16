@@ -8,32 +8,40 @@ import parser.RocSyntax
 
 ## The generator constructs its own expression tree, then prints it. Parsing
 ## must recover that tree; no parser output is used to compute expectations.
-Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr)]
+Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr)]
 Case : { source : Str, expected : Expr }
 
 build : List(U8), U64, U64 -> (Expr, U64)
 build = |bytes, pos, depth| {
 	choice = bytes.get(pos) ?? 0
-	kind = if depth == 0 { choice % 2 } else { choice % 5 }
+	kind = if depth == 0 { choice % 3 } else { choice % 12 }
 	if kind == 0 {
 		(Number(U8.to_str(bytes.get(pos + 1) ?? 0)), pos + 2)
 	} else if kind == 1 {
 		(Name("v${U8.to_str(bytes.get(pos + 1) ?? 0)}"), pos + 2)
+	} else if kind == 2 {
+		(Text(if choice % 2 == 0 { "\"hello\"" } else { "\"two words\"" }), pos + 1)
 	} else {
 		(left, next) = build(bytes, pos + 1, depth - 1)
-		if kind == 4 { (Call(left), next) } else {
+		if kind == 3 { (Call(left), next) } else if kind == 4 { (Function(left), next) } else if kind == 5 { (Access(left), next) } else {
 			(right, end) = build(bytes, next, depth - 1)
-			(if kind == 2 { Add(left, right) } else { Mul(left, right) }, end)
+			(if kind == 6 { Add(left, right) } else if kind == 7 { Mul(left, right) } else if kind == 8 { Sequence(left, right) } else if kind == 9 { Pair(left, right) } else if kind == 10 { Conditional(left, right) } else { Fields(left, right) }, end)
 		}
 	}
 }
 
 render : Expr -> Str
 render = |expr| match expr {
-	Number(text) | Name(text) => text
+	Number(text) | Name(text) | Text(text) => text
 	Add(a, b) => "(${render(a)} + ${render(b)})"
 	Mul(a, b) => "(${render(a)} * ${render(b)})"
 	Call(arg) => "f(${render(arg)})"
+	Sequence(a, b) => "[${render(a)}, ${render(b)}]"
+	Pair(a, b) => "(${render(a)}, ${render(b)})"
+	Function(body) => "(|x| ${render(body)})"
+	Conditional(a, b) => "(if True (${render(a)}) else (${render(b)}))"
+	Fields(a, b) => "{ first: ${render(a)}, second: ${render(b)} }"
+	Access(base) => "(${render(base)}).value"
 }
 
 generate : List(U8) -> Case
@@ -57,6 +65,18 @@ matches = |parsed, id, expr| {
 			match expr {
 				Number(text) => node.kind == NumberLiteral and lexeme(parsed, node) == text
 				Name(text) => node.kind == Identifier and lexeme(parsed, node) == text
+				Text(text) => node.kind == StringLiteral and lexeme(parsed, node) == text
+				Sequence(a, b) | Pair(a, b) => {
+					kind = match expr { Sequence(_, _) => ListLiteral _ => Tuple }
+					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), a) and matches(parsed, child(parsed, node, 1), b)
+				}
+				Function(body) => {
+					parameter = parsed.nodes.get(child(parsed, node, 0)) ?? node
+					node.kind == Lambda and node.children_len == 2 and parameter.kind == Pattern and lexeme(parsed, parameter) == "x" and matches(parsed, child(parsed, node, 1), body)
+				}
+				Conditional(a, b) => node.kind == If and node.children_len == 3 and matches(parsed, child(parsed, node, 0), Name("True")) and matches(parsed, child(parsed, node, 1), a) and matches(parsed, child(parsed, node, 2), b)
+				Fields(a, b) => node.kind == Record and node.children_len == 2 and matches_field(parsed, child(parsed, node, 0), "first", a) and matches_field(parsed, child(parsed, node, 1), "second", b)
+				Access(base) => node.kind == FieldAccess and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches(parsed, child(parsed, node, 1), Name("value"))
 				Add(a, b) | Mul(a, b) => {
 					left_id = child(parsed, node, 0)
 					right_id = child(parsed, node, 1)
@@ -75,6 +95,14 @@ matches = |parsed, id, expr| {
 	}
 }
 
+matches_field : RocSyntax.Parsed, U64, Str, Expr -> Bool
+matches_field = |parsed, id, name, expr| {
+	match parsed.nodes.get(id) {
+		Err(_) => False
+		Ok(node) => node.kind == RecordField and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name(name)) and matches(parsed, child(parsed, node, 1), expr)
+	}
+}
+
 test : Case -> Fuzz.Outcome
 test = |input| {
 	parsed = RocSyntax.parse_expr_str(input.source)
@@ -82,7 +110,7 @@ test = |input| {
 		crash "generated syntax tree mismatch: ${input.source}\nexpected=${Str.inspect(input.expected)}\nactual=${Str.inspect(parsed)}"
 	}
 	# Ungrouped arithmetic independently requires multiplication below addition.
-	precedence = RocSyntax.parse_expr_str("${input.source} + 2 * 3")
+	precedence = RocSyntax.parse_expr_str("(${input.source}) + 2 * 3")
 	if !matches(precedence, precedence.root, Add(input.expected, Mul(Number("2"), Number("3")))) { crash "wrong multiplication precedence" }
 	Fuzz.keep
 }

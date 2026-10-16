@@ -34,5 +34,8 @@
   "import f(1)",
   "module []\nmodule []",
   "match x { 1 + 2 => 3 }",
-  "x : 42"
+  "x : 42",
+  "f({ first: [1, 2], second: (3, 4) })",
+  "(|x| (if True ({ value: x }).value else ([1, 2])))",
+  "[(\"hello\", \"world\"), (\"\", \"two words\")]"
 ]
