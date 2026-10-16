@@ -55,6 +55,29 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_import_target_alias_exposes_and_file_content_type(self):
+        cases = [
+            ('import Foo', ['import', 'Foo', None, []]),
+            ('import json.Json', ['import', 'json.Json', None, []]),
+            ('import json.Json as MyJson exposing [parse, Value]', ['import', 'json.Json', 'MyJson', [
+                ['exposed', ['identifier', 'parse'], None], ['exposed', ['identifier', 'Value'], None]]]),
+            ('import http.Client.Auth as Auth exposing [get as fetch, Request.*]', ['import', 'http.Client.Auth', 'Auth', [
+                ['exposed', ['identifier', 'get'], 'fetch'], ['exposed_wildcard', ['identifier', 'Request']]]]),
+            ('import ../../lib/Parser.Config', ['import', '../../lib/Parser.Config', None, []]),
+            ('import /root/Module', ['import', '/root/Module', None, []]),
+            ('import ./relative/Module', ['import', './relative/Module', None, []]),
+            ('import "data.txt" as text : Str', ['file_import', 'data.txt', 'text', 'Str']),
+            ('import "bytes.bin" as data : List ( U8 )', ['file_import', 'bytes.bin', 'data', 'List(U8)']),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': 'file', 'source': source}) + '\n' for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], [expected])
+
     def test_statement_binding_and_control_structure(self):
         cases = [
             ('file', 'module []\nx = 1', [['decl', ['p_identifier', 'x'], ['number', '1']]]),

@@ -100,7 +100,23 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
         .@"break" => array(gpa, &.{string("break")}),
         .@"for" => |value| array(gpa, &.{ string(if (value.kind == .iter) "for" else "for!"), try patternShape(gpa, store, tokens, source, value.patt, depth + 1), try shape(gpa, store, tokens, source, value.expr, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
         .@"while" => |value| array(gpa, &.{ string("while"), try shape(gpa, store, tokens, source, value.cond, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
+        .import => |value| blk: {
+            var exposed = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.exposedItemSlice(value.exposes)) |item| try exposed.append(try exposedShape(gpa, store, tokens, source, item));
+            const target = value.target;
+            const path = source[tokens.resolve(target.start_tok).start.offset..tokens.resolve(target.lastToken()).end.offset];
+            break :blk array(gpa, &.{ string("import"), string(path), if (value.alias_tok) |alias| string(tokenText(tokens, source, alias)) else .null, .{ .array = exposed } });
+        },
+        .file_import => |value| array(gpa, &.{ string("file_import"), string(tokenText(tokens, source, value.path_tok)), string(tokenText(tokens, source, value.name_tok)), string(if (value.is_bytes) "List(U8)" else "Str") }),
         else => array(gpa, &.{ string("unsupported"), string(@tagName(stmt)) }),
+    };
+}
+fn exposedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.ExposedItem.Idx) Allocator.Error!std.json.Value {
+    return switch (store.getExposedItem(idx)) {
+        .lower_ident => |item| array(gpa, &.{ string("exposed"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident), if (item.as) |alias| string(tokenText(tokens, source, alias)) else .null }),
+        .upper_ident => |item| array(gpa, &.{ string("exposed"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident), if (item.as) |alias| string(tokenText(tokens, source, alias)) else .null }),
+        .upper_ident_star => |item| array(gpa, &.{ string("exposed_wildcard"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident) }),
+        .malformed => |item| array(gpa, &.{ string("malformed_exposed"), string(@tagName(item.reason)) }),
     };
 }
 fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Pattern.Idx, depth: usize) Allocator.Error!std.json.Value {
@@ -315,7 +331,7 @@ fn handle(gpa: Allocator, req: Request) !Response {
         } else {
             for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
                 const stmt = parser.store.getStatement(idx);
-                if (stmt != .import and stmt != .file_import and stmt != .type_anno and stmt != .type_decl) {
+                if (stmt != .type_anno and stmt != .type_decl) {
                     const region = stmt.to_tokenized_region();
                     try facts.append(gpa, .{ .kind = if (stmt == .decl) "definition" else "statement", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(stmt), .shape = try statementShape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
                 }

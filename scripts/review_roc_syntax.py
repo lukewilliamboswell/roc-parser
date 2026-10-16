@@ -171,7 +171,7 @@ def syntax_shape(response, source):
         branch = [visit(child) for child in children[start:start+length]]
         active.remove(index)
         if kind in {'File', 'Module'}:
-            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in {'Header', 'Import', 'TypeAnnotation'}]
+            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in {'Header', 'TypeAnnotation'}]
         # Parentheses are concrete syntax; grouping already determines topology.
         if kind in {'Group', 'Parenthesized'} and len(branch) == 1:
             return branch[0]
@@ -188,6 +188,22 @@ def syntax_shape(response, source):
             return ['expect', branch[0]]
         if kind == 'While':
             return ['while', *branch]
+        if kind == 'ImportPath':
+            return ['import_path', text]
+        if kind == 'ImportAlias':
+            return ['import_alias', branch[0][1]]
+        if kind == 'Import':
+            alias = next((value[1] for value in branch[1:] if value[0] == 'import_alias'), None)
+            exposed = [value for value in branch[1:] if value[0] in {'exposed', 'exposed_wildcard'}]
+            return ['import', branch[0][1], alias, exposed]
+        if kind == 'ExposedItem':
+            return ['exposed', branch[0], branch[1][1] if len(branch) > 1 else None]
+        if kind == 'ExposedWildcard':
+            return ['exposed_wildcard', branch[0]]
+        if kind == 'FileImport':
+            type_node = nodes[children[start+2]]
+            type_name = ''.join(raw[type_node['start']:type_node['end']].decode().split())
+            return ['file_import', branch[0][1][1:-1], branch[1][1], type_name]
         if kind == 'ExpressionStatement':
             return branch[0]
         if kind == 'Binary':

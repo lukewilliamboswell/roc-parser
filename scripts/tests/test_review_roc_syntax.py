@@ -68,6 +68,14 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_file_retains_import_structure(self):
+        response = {'nodes': [
+            {'kind': 'ImportPath', 'start': 7, 'end': 10, 'children_start': 0, 'children_len': 0},
+            {'kind': 'Import', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 1},
+            {'kind': 'File', 'start': 0, 'end': 10, 'children_start': 1, 'children_len': 1},
+        ], 'children': [0, 1], 'root': 2}
+        self.assertEqual(review.syntax_shape(response, 'import Foo'), [['import', 'Foo', None, []]])
+
     def test_declaration_projection_preserves_binding(self):
         response = {'nodes': [
             {'kind': 'IdentifierPattern', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
