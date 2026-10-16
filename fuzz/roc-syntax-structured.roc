@@ -8,26 +8,28 @@ import parser.RocSyntax
 
 ## The generator constructs its own expression tree, then prints it. Parsing
 ## must recover that tree; no parser output is used to compute expectations.
-Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Pat, Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr), OptionalAccess(Expr), DebugExpr(Expr), CrashExpr(Expr), ReturnExpr(Expr), Guarded(Pat, Expr, Expr), Alternatives(Expr)]
+Expr := [Number(Str), Name(Str), Add(Expr, Expr), Mul(Expr, Expr), Call(Expr), Text(Str), Sequence(Expr, Expr), Pair(Expr, Expr), Function(Pat, Expr), Conditional(Expr, Expr), Fields(Expr, Expr), Access(Expr), OptionalAccess(Expr), DebugExpr(Expr), CrashExpr(Expr), ReturnExpr(Expr), Guarded(Pat, Expr, Expr), Alternatives(Expr), Interpolated(Expr), TypedNumber(Str)]
 Pat := [Bind(Str), Wild, Mutable(Str), Tagged(Pat), Nominal(Pat), PatPair(Pat, Pat), PatList(Pat), PatRecord(Pat), Alias(Pat)]
 Case : { source : Str, expected : Expr }
 
 build : List(U8), U64, U64 -> (Expr, U64)
 build = |bytes, pos, depth| {
 	choice = bytes.get(pos) ?? 0
-	kind = if depth == 0 { choice % 3 } else { choice % 18 }
+	kind = if depth == 0 { choice % 4 } else { choice % 20 }
 	if kind == 0 {
 		(Number(U8.to_str(bytes.get(pos + 1) ?? 0)), pos + 2)
 	} else if kind == 1 {
 		(Name("v${U8.to_str(bytes.get(pos + 1) ?? 0)}"), pos + 2)
 	} else if kind == 2 {
 		(Text(if choice % 2 == 0 { "\"hello\"" } else { "\"two words\"" }), pos + 1)
+	} else if depth == 0 or kind == 19 {
+		(TypedNumber(U8.to_str(bytes.get(pos + 1) ?? 0)), pos + 2)
 	} else {
 		(left, next) = build(bytes, pos + 1, depth - 1)
 		if kind == 3 { (Call(left), next) } else if kind == 4 {
 			(pattern, end) = build_pattern(bytes, next, 2)
 			(Function(pattern, left), end)
-		} else if kind == 5 { (Access(left), next) } else if kind == 12 { (DebugExpr(left), next) } else if kind == 13 { (CrashExpr(left), next) } else if kind == 14 { (ReturnExpr(left), next) } else if kind == 15 { (OptionalAccess(left), next) } else if kind == 17 { (Alternatives(left), next) } else {
+		} else if kind == 5 { (Access(left), next) } else if kind == 12 { (DebugExpr(left), next) } else if kind == 13 { (CrashExpr(left), next) } else if kind == 14 { (ReturnExpr(left), next) } else if kind == 15 { (OptionalAccess(left), next) } else if kind == 17 { (Alternatives(left), next) } else if kind == 18 { (Interpolated(left), next) } else {
 			(right, end) = build(bytes, next, depth - 1)
 			(if kind == 16 {
 				(pattern, _) = build_pattern(bytes, end, 2)
@@ -70,6 +72,8 @@ render_pattern = |pattern| match pattern {
 render : Expr -> Str
 render = |expr| match expr {
 	Number(text) | Name(text) | Text(text) => text
+	TypedNumber(text) => "${text}.U64"
+	Interpolated(value) => "\"prefix \${${render(value)}} suffix\""
 	Add(a, b) => "(${render(a)} + ${render(b)})"
 	Mul(a, b) => "(${render(a)} * ${render(b)})"
 	Call(arg) => "f(${render(arg)})"
@@ -104,11 +108,18 @@ matches = |parsed, id, expr| {
 	match parsed.nodes.get(id) {
 		Err(_) => False
 		Ok(node) => {
-			if node.kind == File or node.kind == Parenthesized { return matches(parsed, child(parsed, node, 0), expr) }
+			if node.kind == File or node.kind == Parenthesized { return node.children_len == 1 and matches(parsed, child(parsed, node, 0), expr) }
 			match expr {
 				Number(text) => node.kind == NumberLiteral and lexeme(parsed, node) == text
 				Name(text) => node.kind == Identifier and lexeme(parsed, node) == text
 				Text(text) => node.kind == StringLiteral and lexeme(parsed, node) == text
+				TypedNumber(text) => node.kind == TypedLiteral and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Number(text)) and matches(parsed, child(parsed, node, 1), Name("U64"))
+				Interpolated(value) => {
+					first = parsed.nodes.get(child(parsed, node, 0)) ?? node
+					interpolation = parsed.nodes.get(child(parsed, node, 1)) ?? node
+					last = parsed.nodes.get(child(parsed, node, 2)) ?? node
+					node.kind == StringLiteral and node.children_len == 3 and first.kind == StringSegment and lexeme(parsed, first) == "prefix " and interpolation.kind == Interpolation and interpolation.children_len == 1 and matches(parsed, child(parsed, interpolation, 0), value) and last.kind == StringSegment and lexeme(parsed, last) == " suffix"
+				}
 				Sequence(a, b) | Pair(a, b) => {
 					kind = match expr { Sequence(_, _) => ListLiteral _ => Tuple }
 					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), a) and matches(parsed, child(parsed, node, 1), b)
