@@ -160,10 +160,43 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  roc-syntax:
+    name: Roc syntax correctness and performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Install pinned Zig toolchain
+        uses: xyzzylabs/setup-zig@09d85d9dbb73308882e7a26e61a8f706eed40df1 # v1.0.2, also used by Roc CI
+        with:
+          version: 0.16.0
+          use-cache: false
+      - name: Validate syntax and scaling
+        run: python3 scripts/check_roc_syntax.py --skip-fuzz
+      - name: Upload syntax validation evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: roc-syntax-validation
+          path: .roc-parser-tmp/roc-syntax-validation/
+          if-no-files-found: warn
+          retention-days: 14
+
   property-quality:
     name: property-quality
     if: always()
-    needs: [fuzz, conformance]
+    needs: [fuzz, conformance, roc-syntax]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper

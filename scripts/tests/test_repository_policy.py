@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -10,15 +11,27 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
 
 
+def repository_files() -> list[Path]:
+    # Imported oracle source and build output live in ignored scratch folders.
+    # Check repository-owned files, including new untracked changes, rather
+    # than third-party files generated underneath the working directory.
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT, check=True, capture_output=True,
+    )
+    return [ROOT / path.decode("utf-8") for path in result.stdout.split(b"\0") if path]
+
+
 class RepositoryPolicyTests(unittest.TestCase):
     def test_repo_owned_automation_is_python_under_scripts(self) -> None:
-        shell_scripts = sorted(path for path in ROOT.rglob("*.sh") if ".git" not in path.parts)
+        paths = repository_files()
+        shell_scripts = sorted(path for path in paths if path.suffix == ".sh")
         self.assertEqual(shell_scripts, [], "repository-owned Bash scripts are not allowed")
 
         python_outside_scripts = sorted(
             path
-            for path in ROOT.rglob("*.py")
-            if ".git" not in path.parts and "scripts" not in path.relative_to(ROOT).parts
+            for path in paths
+            if path.suffix == ".py" and "scripts" not in path.relative_to(ROOT).parts
         )
         self.assertEqual(
             python_outside_scripts,
