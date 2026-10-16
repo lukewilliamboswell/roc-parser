@@ -307,6 +307,7 @@ expression = |initial, minimum, depth| {
 		{ state: built_state, node: built_node } = primary(s, depth)
 		var $s = built_state
 		var $left = built_node
+		var $qualified = first.kind == UpperIdent
 		var $done = False
 		while !$done {
 			look = skip_trivia($s)
@@ -319,6 +320,7 @@ expression = |initial, minimum, depth| {
 				{ state: suffix_state, node: suffix_node } = add_node(at_pos(look, look.pos + 1), Suffix, start, t.end, [$left])
 				$s = suffix_state
 				$left = suffix_node
+				$qualified = False
 			} else if t.kind == NoSpaceOpenRound {
 				start = node_start(look, $left)
 				{ state: args_state, ids: args_ids, end: args_end, comma: _ } = collection(at_pos(look, look.pos + 1), CloseRound, depth + 1)
@@ -326,10 +328,11 @@ expression = |initial, minimum, depth| {
 				{ state: call_state, node: call_node } = add_node(args_state, Call, start, args_end, ids)
 				$s = call_state
 				$left = call_node
+				$qualified = False
 			} else if spelling(look, ".") {
 				field_state = at_pos(look, look.pos + 1)
 				field = peek(field_state)
-				valid_name = field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))
+				valid_name = (field.kind == LowerIdent and is_lower(byte(field_state.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(field_state.source, field.start)))
 				valid_index = field.kind == Number and field_state.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
 				if valid_name or valid_index {
 					start = node_start(field_state, $left)
@@ -337,6 +340,7 @@ expression = |initial, minimum, depth| {
 					{ state: access_state, node: access_node } = add_node(leaf_state, FieldAccess, start, field.end, [$left, leaf_node])
 					$s = access_state
 					$left = access_node
+					$qualified = $qualified and field.kind == UpperIdent
 				} else { $s = look
 					$done = True }
 			} else if bp.left > 0 and bp.left >= minimum {
@@ -346,6 +350,7 @@ expression = |initial, minimum, depth| {
 				{ state: binary_state, node: binary_node } = add_node(right_state, Binary, start, end, [$left, right_node])
 				$s = binary_state
 				$left = binary_node
+				$qualified = False
 			} else { $s = look
 				$done = True }
 		}
@@ -1007,6 +1012,10 @@ expect {
 
 expect {
 	["x .field", "x\n.field", "x.01", "x.a!", "_a"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
+}
+
+expect {
+	["Foo.Bar", "Foo.Bar.Baz", "Foo .Bar", "Foo.Bar.baz"].all(|source| RocSyntax.parse_expr_str(source).status == Complete) and ["Foo.bar.Bar", "Foo.0.Bar", "Foo().Bar", "(Foo).Bar"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
 }
 
 expect {
