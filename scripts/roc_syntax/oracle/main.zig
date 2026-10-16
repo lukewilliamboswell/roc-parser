@@ -9,7 +9,76 @@ const Allocator = std.mem.Allocator;
 const Request = struct { version: u32 = 1, id: []const u8, mode: []const u8, source: []const u8, benchmark_iterations: ?u32 = null, benchmark_warmup: u32 = 10 };
 const Token = struct { kind: []const u8, start: u32, end: u32 };
 const Diagnostic = struct { stage: []const u8, kind: []const u8, start: u32, end: u32 };
-const Fact = struct { kind: []const u8, start: u32, end: u32, node_kind: []const u8, shape: std.json.Value };
+// Zig 0.17 Stringify's ReleaseSafe grammar stack is fixed at 256 levels.
+// A legal normalized AST can exceed that JSON depth (one syntax node emits
+// several arrays). Serialize dynamic values with an explicit depth stack,
+// while retaining std's escaping and scalar formatting.
+fn writeDeepValue(writer: *std.Io.Writer, root: std.json.Value) std.Io.Writer.Error!void {
+    const Frame = union(enum) {
+        value: std.json.Value,
+        array: struct { items: []const std.json.Value, index: usize },
+        object: struct { entries: std.json.ObjectMap, index: usize },
+    };
+    const gpa = std.heap.c_allocator;
+    var stack: std.ArrayList(Frame) = .empty;
+    defer stack.deinit(gpa);
+    stack.append(gpa, .{ .value = root }) catch return error.WriteFailed;
+    while (stack.pop()) |frame| {
+        switch (frame) {
+            .value => |value| switch (value) {
+                .array => |items| {
+                    try writer.writeByte('[');
+                    stack.append(gpa, .{ .array = .{ .items = items.items, .index = 0 } }) catch return error.WriteFailed;
+                },
+                .object => |entries| {
+                    try writer.writeByte('{');
+                    stack.append(gpa, .{ .object = .{ .entries = entries, .index = 0 } }) catch return error.WriteFailed;
+                },
+                else => try std.json.Stringify.value(value, .{}, writer),
+            },
+            .array => |items| {
+                if (items.index == items.items.len) {
+                    try writer.writeByte(']');
+                } else {
+                    if (items.index != 0) try writer.writeByte(',');
+                    stack.append(gpa, .{ .array = .{ .items = items.items, .index = items.index + 1 } }) catch return error.WriteFailed;
+                    stack.append(gpa, .{ .value = items.items[items.index] }) catch return error.WriteFailed;
+                }
+            },
+            .object => |entries| {
+                if (entries.index == entries.entries.count()) {
+                    try writer.writeByte('}');
+                } else {
+                    if (entries.index != 0) try writer.writeByte(',');
+                    try std.json.Stringify.value(entries.entries.keys()[entries.index], .{}, writer);
+                    try writer.writeByte(':');
+                    stack.append(gpa, .{ .object = .{ .entries = entries.entries, .index = entries.index + 1 } }) catch return error.WriteFailed;
+                    stack.append(gpa, .{ .value = entries.entries.values()[entries.index] }) catch return error.WriteFailed;
+                }
+            },
+        }
+    }
+}
+const Fact = struct {
+    kind: []const u8,
+    start: u32,
+    end: u32,
+    node_kind: []const u8,
+    shape: std.json.Value,
+
+    pub fn jsonStringify(self: Fact, json: *std.json.Stringify) std.Io.Writer.Error!void {
+        try json.beginObject();
+        inline for (.{ "kind", "start", "end", "node_kind" }) |field| {
+            try json.objectField(field);
+            try json.write(@field(self, field));
+        }
+        try json.objectField("shape");
+        try json.beginWriteRaw();
+        try writeDeepValue(json.writer, self.shape);
+        json.endWriteRaw();
+        try json.endObject();
+    }
+};
 const Response = struct {
     version: u32 = 1,
     id: []const u8,

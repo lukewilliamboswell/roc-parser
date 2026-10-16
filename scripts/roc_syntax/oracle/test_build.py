@@ -75,6 +75,29 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_deep_accepted_shapes_serialize_and_worker_remains_usable(self):
+        # Each list adds two JSON array levels. This stays within the oracle's
+        # syntax projection budget while exceeding Zig Stringify's fixed 256.
+        depth = 140
+        source = '[' * depth + '"escaped\\n\\\"text"' + ']' * depth
+        requests = [
+            {'id': 'deep-list', 'mode': 'expr', 'source': source},
+            {'id': 'after-deep', 'mode': 'expr', 'source': '42'},
+        ]
+        result = subprocess.run([os.environ['ORACLE_BINARY']],
+                                input=''.join(json.dumps(r) + '\n' for r in requests),
+                                text=True, capture_output=True, check=True, timeout=30)
+        responses = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual([r['id'] for r in responses], ['deep-list', 'after-deep'])
+        self.assertTrue(all(r['ok'] and r['consumed'] for r in responses))
+        shape = responses[0]['facts'][0]['shape']
+        for _ in range(depth):
+            self.assertEqual(shape[0], 'list')
+            self.assertEqual(len(shape[1]), 1)
+            shape = shape[1][0]
+        self.assertEqual(shape, ['string', '"escaped\\n\\\"text"'])
+        self.assertEqual(responses[1]['facts'][0]['shape'], ['number', '42'])
+
     def test_parse_only_benchmark_and_worker_reuse(self):
         sources = [('expr', '[1, 2 + 3]'), ('file', 'answer = 42'), ('header', 'module []'),
                    ('statement', 'expect True'), ('repl', 'answer = 42'), ('expr', '[)')]
