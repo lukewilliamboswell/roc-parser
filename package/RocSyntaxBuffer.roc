@@ -6,6 +6,7 @@ RocSyntaxBuffer(a) :: { count : U64, forest : Forest(a) }.{
 	empty : {} -> RocSyntaxBuffer(a)
 	empty = |_| { count: 0, forest: Empty }
 
+	## Number of appended values, without traversing the forest.
 	len : RocSyntaxBuffer(a) -> U64
 	len = |buffer| buffer.count
 
@@ -16,6 +17,7 @@ RocSyntaxBuffer(a) :: { count : U64, forest : Forest(a) }.{
 		{ count: buffer.count + 1, forest: carry(Leaf(value), buffer.forest) }
 	}
 
+	## Append a flat list in order while preserving the original buffer.
 	concat_list : RocSyntaxBuffer(a), List(a) -> RocSyntaxBuffer(a)
 	concat_list = |buffer, values| values.fold(buffer, |acc, value| acc.append(value))
 
@@ -135,7 +137,13 @@ expect {
 		$i = $i + 1
 	}
 	actual = $buffer.to_list()
-	actual == $expected and $buffer.len() == 4097 and $buffer.get(0) == Ok(0) and $buffer.get(2048) == Ok(2048) and $buffer.get(4096) == Ok(4096) and $buffer.get(4097) == Err(OutOfBounds)
+	var $lookups = True
+	$i = 0
+	while $i < 4097 {
+		$lookups = $lookups and $buffer.get($i) == Ok($i)
+		$i = $i + 1
+	}
+	$lookups and actual == $expected and $buffer.len() == 4097 and $buffer.get(0) == Ok(0) and $buffer.get(2048) == Ok(2048) and $buffer.get(4096) == Ok(4096) and $buffer.get(4097) == Err(OutOfBounds)
 }
 
 expect {
@@ -148,5 +156,6 @@ expect {
 		$buffer = $buffer.append($i)
 		$i = $i + 1
 	}
-	$prefixes.all(|prefix| prefix.to_list().len() == prefix.len() and (prefix.len() == 0 or prefix.get(prefix.len() - 1) == Ok(prefix.len() - 1)))
+	final_values = $buffer.to_list()
+	$prefixes.all(|prefix| prefix.to_list() == final_values.take_first(prefix.len()) and (prefix.len() == 0 or prefix.get(prefix.len() - 1) == Ok(prefix.len() - 1)))
 }
