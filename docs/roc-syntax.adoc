@@ -1,0 +1,79 @@
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#roc-syntax]
+= Parsing Roc source
+
+This chapter is for authors of highlighters and source analysis tools. `RocSyntax`
+reads current Zig compiler syntax and returns source tokens, a syntax tree and
+diagnostics. The implementation is pure Roc; the compiler reference worker is
+development tooling and is not a dependency of applications using the module.
+Legacy Rust compiler syntax is outside its scope.
+
+== Parse and inspect tokens
+
+This complete example prints the parse status and the byte ranges of numeric
+tokens. The documentation check compiles and runs it against the package source.
+
+[source,roc]
+----
+include::examples/roc-syntax.roc[tag=parse]
+----
+
+Output:
+
+[source,text]
+----
+include::examples/roc-syntax.expected[]
+----
+
+== Source locations and trees
+
+Tokens retain half-open UTF-8 byte spans: `start` includes the first byte and
+`end` points immediately after the token. Comments and whitespace remain in the
+token stream, so tooling can preserve the exact source even when it is incomplete.
+Keep the original source alongside the result when resolving spans.
+
+The tree uses node indices and a separate child-index buffer. Follow a node's
+child range through that buffer to visit its children; do not assume adjacent
+nodes are siblings. This representation supports large inputs without allocating
+a separate recursive container for every syntax construct.
+
+Byte offsets are not character columns. An editor adapter must convert positions
+to the coordinate convention requested by its client. Build a line-start index
+once when converting many locations in the same source.
+
+== Highlighting and lint rules
+
+A highlighter can start from tokens for comments, keywords, strings, literals and
+punctuation. Syntax structure adds context for declarations, calls and expressions.
+Preserved tokens continue to be useful when a node is malformed or its syntax is
+not yet supported.
+
+Lint rules can traverse the tree and report diagnostics at source spans. Grouping
+and operator precedence are represented structurally. Rules that need binding or
+type information must add scope analysis or use compiler information; parsing
+alone does not establish that a program typechecks.
+
+Treat recovery diagnostics and implementation coverage separately. A construct
+outside the implemented grammar does not establish that the source is invalid Roc.
+Check the parse status and diagnostics before applying a rule that assumes a
+complete tree. Code completion and highlighting should tolerate partial results.
+
+== Compatibility and validation
+
+The syntax reference is compiler commit
+`7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5`, corresponding to the repository's
+`nightly-2026-09-29-7f11a82` pin. This identifies a changing language implementation,
+rather than a stable language specification. Updating the implementation compiler
+and updating the syntax reference are separate maintenance decisions.
+
+The differential corpus records individual syntax rules and their coverage.
+Raw fuzzing checks source preservation and structural invariants; structured
+generation checks independently constructed syntax. Performance runs use optimized
+builds and measure scaling as documents grow. See
+{src}/docs/research/roc-syntax.adoc[the architecture research] for the reference
+selection and allocation constraints behind these choices.

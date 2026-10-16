@@ -67,6 +67,8 @@ include::markdown.adoc[leveloffset=+1]
 
 include::http.adoc[leveloffset=+1]
 
+include::roc-syntax.adoc[leveloffset=+1]
+
 include::combinators.adoc[leveloffset=+1]
 
 include::custom-format.adoc[leveloffset=+1]
