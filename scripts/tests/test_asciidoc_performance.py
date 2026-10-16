@@ -179,6 +179,24 @@ class Performance(unittest.TestCase):
         self.assertEqual(len(small),6)
         self.assertEqual({case['size'] for case in small},{4,8})
 
+    def test_default_scaling_retains_attribute_growth_with_immediate_macros(self):
+        families={'immediate-quote-pass-counter-blocks':'pass:q[*word*]',
+                  'immediate-math-counter-blocks':'stem:[x]',
+                  'set-passthrough-blocks':'pass:a[{key4095}]',
+                  'url-counter-blocks':'https://example.test'}
+        cases=list(perf.geometric(perf.parser().parse_args([]).sizes))
+        for family, marker in families.items():
+            with self.subTest(family=family):
+                selected=[case for case in cases if case['family']==family]
+                self.assertEqual({case['size'] for case in selected},{32,64,128,256,512,1024,2048,4096})
+                source=next(case['source'] for case in selected if case['size']==4096)
+                self.assertIn(marker,source)
+                self.assertTrue(source.endswith('{key0} {key4095}'))
+                if family=='set-passthrough-blocks':
+                    self.assertEqual(source.count('{set:key'),4096)
+                else:
+                    self.assertEqual(source.count('{counter:key'),4096)
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})

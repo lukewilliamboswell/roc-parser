@@ -117,6 +117,8 @@ and value tests exercise repeated lookups in a growing attribute environment.
 Explicit attribute substitutions, attribute passthroughs and explicit macro
 footnotes also run through 4,096 entries to exercise growing state in fallback
 substitution paths.
+Counter and set state mixed with immediate quoted passes, math and ordinary
+URLs also runs through 4,096 entries to catch repeated attribute materialization.
 Table footnotes also run at 8,192 entries to check footer scaling.
 Nested containers use depths from 2 to 32. Scaling checks
 flag growth above the configured exponent. Reports record source hashes,

@@ -151,6 +151,16 @@ def explicit_macro_footnote_blocks(size):
     return '\n\n'.join(blocks) + f'\n\n[subs="macros"]\nfootnote:note0[] footnote:note{size - 1}[]'
 
 
+def counter_macro_blocks(size, macro):
+    blocks = [f'{{counter:key{i}}} {macro}' for i in range(size)]
+    return '\n\n'.join(blocks) + f'\n\n{{key0}} {{key{size - 1}}}'
+
+
+def set_passthrough_blocks(size):
+    blocks = [f'{{set:key{i}:value}} pass:a[{{key{i}}}]' for i in range(size)]
+    return '\n\n'.join(blocks) + f'\n\n{{key0}} {{key{size - 1}}}'
+
+
 def geometric(sizes):
     families = {
         'long-paragraph': lambda n: 'alpha café ' * n,
@@ -169,6 +179,10 @@ def geometric(sizes):
         'explicit-attribute-counter-blocks': lambda n: substitution_counter_blocks(n, passthrough=False),
         'passthrough-counter-blocks': lambda n: substitution_counter_blocks(n, passthrough=True),
         'explicit-macro-footnote-blocks': explicit_macro_footnote_blocks,
+        'immediate-quote-pass-counter-blocks': lambda n: counter_macro_blocks(n, 'pass:q[*word*]'),
+        'immediate-math-counter-blocks': lambda n: counter_macro_blocks(n, 'stem:[x]'),
+        'set-passthrough-blocks': set_passthrough_blocks,
+        'url-counter-blocks': lambda n: counter_macro_blocks(n, 'https://example.test'),
         'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
         'attribute-redefinitions': lambda n: '\n\n'.join(':name: value' + str(i) + '\n\n{name}' for i in range(n)),
@@ -189,7 +203,9 @@ def geometric(sizes):
                 'conditional-presence','conditional-value','distinct-counters','counter-blocks',
                 'formatted-counter-blocks','underscored-counter-blocks',
                 'named-footnotes','named-footnote-blocks','attribute-aliases','table-footnotes',
-                'explicit-attribute-counter-blocks','passthrough-counter-blocks','explicit-macro-footnote-blocks']
+                'explicit-attribute-counter-blocks','passthrough-counter-blocks','explicit-macro-footnote-blocks',
+                'immediate-quote-pass-counter-blocks','immediate-math-counter-blocks',
+                'set-passthrough-blocks','url-counter-blocks']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
         # Depth uses a separate legal geometric range. Size ratchets must time
@@ -200,7 +216,9 @@ def geometric(sizes):
                       'distinct-counters','counter-blocks','formatted-counter-blocks',
                       'underscored-counter-blocks','attribute-aliases','table-footnotes',
                       'explicit-attribute-counter-blocks','passthrough-counter-blocks',
-                      'explicit-macro-footnote-blocks') and max(sizes) >= 1024:
+                      'explicit-macro-footnote-blocks','immediate-quote-pass-counter-blocks',
+                      'immediate-math-counter-blocks','set-passthrough-blocks',
+                      'url-counter-blocks') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
         if family == 'table-footnotes' and max(sizes) >= 1024:
             # The footer's repeated prior-note scans become clear at 8,192
