@@ -68,6 +68,19 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
 
 class ProjectionTests(unittest.TestCase):
+    def test_type_function_effect_comes_from_arrow_token(self):
+        response = {'nodes': [
+            {'kind': 'TypeVariable', 'start': 0, 'end': 1, 'children_start': 0, 'children_len': 0},
+            {'kind': 'TypeVariable', 'start': 10, 'end': 11, 'children_start': 0, 'children_len': 0},
+            {'kind': 'TypeFunction', 'start': 0, 'end': 11, 'children_start': 0, 'children_len': 2},
+        ], 'children': [0, 1], 'root': 2, 'tokens': [
+            {'kind': 'LowerIdent', 'start': 0, 'end': 1},
+            {'kind': 'Comment', 'start': 2, 'end': 5},
+            {'kind': 'Operator', 'start': 7, 'end': 9},
+            {'kind': 'LowerIdent', 'start': 10, 'end': 11},
+        ]}
+        self.assertEqual(review.syntax_shape(response, 'a #=>\n -> b'), ['t_fn', False, [['t_var', 'a']], ['t_var', 'b']])
+
     def test_file_retains_header_and_implicit_package_dependencies(self):
         response = {'nodes': [
             {'kind': 'Header', 'start': 0, 'end': 10, 'children_start': 0, 'children_len': 0},

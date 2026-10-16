@@ -86,6 +86,62 @@ fn beforeSuffix(store: *const parse.NodeStore, region: parse.AST.TokenizedRegion
         .deprecated_builtin => region,
     };
 }
+fn typeShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TypeAnno.Idx, depth: usize) Allocator.Error!std.json.Value {
+    if (depth > 256) return array(gpa, &.{ string("unsupported"), string("type_depth_limit") });
+    const ty = store.getTypeAnno(idx);
+    return switch (ty) {
+        .ty => |value| array(gpa, &.{ string("t_named"), try qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token) }),
+        .ty_var => |value| array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.tok)) }),
+        .underscore_type_var => |value| array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.tok)) }),
+        .underscore => array(gpa, &.{string("t_wildcard")}),
+        .parens => |value| typeShape(gpa, store, tokens, source, value.anno, depth + 1),
+        .apply => |value| array(gpa, &.{ string("t_apply"), try typeListShape(gpa, store, tokens, source, value.args, depth + 1) }),
+        .tuple => |value| array(gpa, &.{ string("t_tuple"), try typeListShape(gpa, store, tokens, source, value.annos, depth + 1) }),
+        .@"fn" => |value| array(gpa, &.{ string("t_fn"), .{ .bool = value.effectful }, try typeListShape(gpa, store, tokens, source, value.args, depth + 1), try typeShape(gpa, store, tokens, source, value.ret, depth + 1) }),
+        .tag_union => |value| blk: {
+            const ext: std.json.Value = switch (value.ext) {
+                .closed => .null,
+                .open => try array(gpa, &.{string("t_open")}),
+                .named => |named| try array(gpa, &.{ string("t_extension"), try typeShape(gpa, store, tokens, source, named.anno, depth + 1) }),
+            };
+            break :blk array(gpa, &.{ string("t_union"), try typeListShape(gpa, store, tokens, source, value.tags, depth + 1), ext });
+        },
+        .record => |value| blk: {
+            var fields = std.array_list.Managed(std.json.Value).init(gpa);
+            for (store.annoRecordFieldSlice(value.fields)) |field_idx| {
+                const field = store.getAnnoRecordField(field_idx) catch return array(gpa, &.{string("malformed_type_field")});
+                try fields.append(try array(gpa, &.{ string("t_field"), string(tokenText(tokens, source, field.name)), .{ .bool = field.optional_mark != null }, try typeShape(gpa, store, tokens, source, field.ty, depth + 1), if (field.default_value) |expr| try shape(gpa, store, tokens, source, expr, depth + 1) else .null }));
+            }
+            const ext: std.json.Value = switch (value.ext) {
+                .closed => .null,
+                .open => try array(gpa, &.{string("t_open")}),
+                .named => |named| try array(gpa, &.{ string("t_extension"), try typeShape(gpa, store, tokens, source, named.anno, depth + 1) }),
+            };
+            break :blk array(gpa, &.{ string("t_record"), .{ .array = fields }, ext });
+        },
+        .malformed => |value| array(gpa, &.{ string("malformed_type"), string(@tagName(value.reason)) }),
+    };
+}
+fn typeListShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, items: parse.AST.TypeAnno.Span, depth: usize) Allocator.Error!std.json.Value {
+    var out = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.typeAnnoSlice(items)) |item| try out.append(try typeShape(gpa, store, tokens, source, item, depth + 1));
+    return .{ .array = out };
+}
+fn whereShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, collection: ?parse.AST.Collection.Idx, depth: usize) Allocator.Error!std.json.Value {
+    const idx = collection orelse return .null;
+    var out = std.array_list.Managed(std.json.Value).init(gpa);
+    for (store.whereClauseSlice(.{ .span = store.getCollection(idx).span })) |item_idx| {
+        const item = store.getWhereClause(item_idx);
+        const projected = switch (item) {
+            .mod_method => |value| try array(gpa, &.{ string("where_method"), try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.var_tok)) }), string(fieldName(tokenText(tokens, source, value.name_tok))), try typeShape(gpa, store, tokens, source, value.anno, depth + 1) }),
+            .mod_alias => |value| try array(gpa, &.{ string("where_alias"), try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.var_tok)) }), try typeShape(gpa, store, tokens, source, value.alias, depth + 1) }),
+            .malformed => |value| try array(gpa, &.{ string("malformed_where"), string(@tagName(value.reason)) }),
+        };
+        try out.append(projected);
+    }
+    return array(gpa, &.{ string("where"), .{ .array = out } });
+}
+
 fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Statement.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("statement_depth_limit") });
     const stmt = store.getStatement(idx);
@@ -108,6 +164,18 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
             break :blk array(gpa, &.{ string("import"), string(path), if (value.alias_tok) |alias| string(tokenText(tokens, source, alias)) else .null, .{ .array = exposed } });
         },
         .file_import => |value| array(gpa, &.{ string("file_import"), string(tokenText(tokens, source, value.path_tok)), string(tokenText(tokens, source, value.name_tok)), string(if (value.is_bytes) "List(U8)" else "Str") }),
+        .type_anno => |value| array(gpa, &.{ string("annotation"), string(tokenText(tokens, source, value.name)), try typeShape(gpa, store, tokens, source, value.anno, depth + 1), try whereShape(gpa, store, tokens, source, value.where, depth + 1), .{ .bool = value.is_var } }),
+        .type_decl => |value| blk: {
+            const header = store.getTypeHeader(value.header) catch return array(gpa, &.{string("malformed_type_header")});
+            const projected_header = try array(gpa, &.{ string("type_header"), string(fieldName(tokenText(tokens, source, header.name))), try typeListShape(gpa, store, tokens, source, header.args, depth + 1) });
+            var associated: std.json.Value = .null;
+            if (value.associated) |block| {
+                var statements = std.array_list.Managed(std.json.Value).init(gpa);
+                for (store.statementSlice(block.statements)) |stmt_idx| try statements.append(try statementShape(gpa, store, tokens, source, stmt_idx, depth + 1));
+                associated = try array(gpa, &.{ string("associated"), .{ .array = statements } });
+            }
+            break :blk array(gpa, &.{ string("type_decl"), string(@tagName(value.kind)), projected_header, try typeShape(gpa, store, tokens, source, value.anno, depth + 1), try whereShape(gpa, store, tokens, source, value.where, depth + 1), associated });
+        },
         else => array(gpa, &.{ string("unsupported"), string(@tagName(stmt)) }),
     };
 }
@@ -398,7 +466,7 @@ fn handle(gpa: Allocator, req: Request) !Response {
             }
             for (parser.store.statementSlice(parser.store.getFile().statements)) |idx| {
                 const stmt = parser.store.getStatement(idx);
-                if (stmt != .type_anno and stmt != .type_decl) {
+                {
                     const region = stmt.to_tokenized_region();
                     try facts.append(gpa, .{ .kind = if (stmt == .decl) "definition" else "statement", .start = result.tokens.resolve(region.start).start.offset, .end = result.tokens.resolve(region.end - 1).end.offset, .node_kind = @tagName(stmt), .shape = try statementShape(gpa, &parser.store, &result.tokens, req.source, idx, 0) });
                 }

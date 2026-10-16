@@ -55,8 +55,44 @@ class ArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("ORACLE_BINARY"), "set ORACLE_BINARY for live worker tests")
 class WorkerTests(unittest.TestCase):
+    def test_types_extensions_constraints_and_associated_definitions(self):
+        named = lambda name: ['t_named', ['identifier', name]]
+        var = lambda name: ['t_var', name]
+        cases = [
+            ('f : a', ['annotation', 'f', var('a'), None, False]),
+            ('f : _a', ['annotation', 'f', var('_a'), None, False]),
+            ('f : _', ['annotation', 'f', ['t_wildcard'], None, False]),
+            ('f : List(U8)', ['annotation', 'f', ['t_apply', [named('List'), named('U8')]], None, False]),
+            ('f : a -> b', ['annotation', 'f', ['t_fn', False, [var('a')], var('b')], None, False]),
+            ('f : () => U8', ['annotation', 'f', ['t_fn', True, [], named('U8')], None, False]),
+            ('f : (U8, Str)', ['annotation', 'f', ['t_tuple', [named('U8'), named('Str')]], None, False]),
+            ('f : (U8)', ['annotation', 'f', named('U8'), None, False]),
+            ('f : Foo.Bar', ['annotation', 'f', ['t_named', ['field', ['identifier', 'Foo'], 'Bar']], None, False]),
+            ('f : {a?: U8, b: Str ?? "x", ..ext}', ['annotation', 'f', ['t_record', [
+                ['t_field', 'a', True, named('U8'), None], ['t_field', 'b', False, named('Str'), ['string', '"x"']]], ['t_extension', var('ext')]], None, False]),
+            ('f : [A, B(U8), ..]', ['annotation', 'f', ['t_union', [named('A'), ['t_apply', [named('B'), named('U8')]]], ['t_open']], None, False]),
+            ('Foo : U8', ['type_decl', 'alias', ['type_header', 'Foo', []], named('U8'), None, None]),
+            ('Foo(a) := {value: a}', ['type_decl', 'nominal', ['type_header', 'Foo', [var('a')]], ['t_record', [['t_field', 'value', False, var('a'), None]], None], None, None]),
+            ('Foo :: [A]', ['type_decl', 'opaque', ['type_header', 'Foo', []], ['t_union', [named('A')], None], None, None]),
+            ('f : a -> a where [a.copy : a -> a]', ['annotation', 'f', ['t_fn', False, [var('a')], var('a')], ['where', [
+                ['where_method', var('a'), 'copy', ['t_fn', False, [var('a')], var('a')]]]], False]),
+            ('f : a where [a.Sort]', ['annotation', 'f', var('a'), ['where', [['where_alias', var('a'), named('Sort')]]], False]),
+            ('a.Sort : where [a.copy : a -> a]', ['type_decl', 'where_alias', ['type_header', 'Sort', []], var('a'), ['where', [
+                ['where_method', var('a'), 'copy', ['t_fn', False, [var('a')], var('a')]]]], None]),
+            ('Foo := [A].{ make = A }', ['type_decl', 'nominal', ['type_header', 'Foo', []], ['t_union', [named('A')], None], None, ['associated', [['decl', ['p_identifier', 'make'], ['identifier', 'A']]]]]),
+        ]
+        requests = ''.join(json.dumps({'id': str(i), 'mode': 'file', 'source': source}) + '\n' for i, (source, _) in enumerate(cases))
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=requests, text=True, capture_output=True, check=True, timeout=30)
+        rows = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(rows), len(cases))
+        for (source, expected), row in zip(cases, rows):
+            with self.subTest(source=source):
+                self.assertTrue(row['ok'], row['diagnostics'])
+                self.assertEqual([fact['shape'] for fact in row['facts']], [expected])
+
     def test_app_package_headers_and_string_pattern_captures(self):
         cases = [
+            ('header', '', ['header', 'type_module', []]),
             ('header', 'app [] {}', ['header', 'app', [['dependencies', []]]]),
             ('header', 'package [Foo]', ['header', 'package', [['exposed', ['identifier', 'Foo'], None], ['dependencies', []]]]),
             ('header', 'app [main!] {pf: platform "x"}', ['header', 'app', [['exposed', ['identifier', 'main!'], None], ['dependencies', [['dependency', 'pf', ['platform', ['string', '"x"']]]]]]]),

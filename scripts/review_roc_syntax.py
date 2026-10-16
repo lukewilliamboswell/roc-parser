@@ -126,7 +126,7 @@ def normalize_tokens(response, source):
             continue
         if kind in {'Int', 'Float', 'Number', 'MalformedNumber', 'MalformedUnicodeEscape'}:
             kind = 'Number'
-        elif kind == 'OpColon':
+        elif kind in {'OpColon', 'OpColonEqual', 'OpDoubleColon'}:
             kind = 'Punctuation'
         elif (kind.startswith('Op') and kind[2:3].isupper()) or kind in {'Operator', 'NoSpaceOpQuestion'}:
             kind = 'Operator'
@@ -154,6 +154,10 @@ def syntax_shape(response, source):
     import bisect
     operators = [t for t in response.get('tokens', []) if t['kind'] == 'Operator']
     operator_starts = [t['start'] for t in operators]
+    source_tokens = response.get('tokens', [])
+    token_starts = [token['start'] for token in source_tokens]
+    name_tokens = [token for token in source_tokens if token['kind'] in {'UpperIdent', 'LowerIdent'}]
+    name_starts = [token['start'] for token in name_tokens]
     nodes, children = response.get('nodes', []), response.get('children', [])
     if not nodes:
         return [fact.get('shape', ['unsupported', fact.get('node_kind', fact['kind'])])
@@ -171,8 +175,7 @@ def syntax_shape(response, source):
         branch = [visit(child) for child in children[start:start+length]]
         active.remove(index)
         if kind in {'File', 'Module'}:
-            omitted = {'TypeAnnotation'}
-            return [value for index, value in zip(children[start:start+length], branch) if nodes[index]['kind'] not in omitted]
+            return branch
         # Parentheses are concrete syntax; grouping already determines topology.
         if kind in {'Group', 'Parenthesized'} and len(branch) == 1:
             return branch[0]
@@ -181,6 +184,75 @@ def syntax_shape(response, source):
             return ['number', text]
         if kind in {'Identifier', 'LowerIdent', 'UpperIdent'}:
             return ['identifier', text]
+        if kind == 'TypeName':
+            lo = bisect.bisect_left(name_starts, node['start'])
+            hi = bisect.bisect_left(name_starts, node['end'])
+            names = [raw[token['start']:token['end']].decode() for token in name_tokens[lo:hi]]
+            if not names:
+                return ['malformed_type_name', text]
+            qualified = ['identifier', names[0]]
+            for name in names[1:]:
+                qualified = ['field', qualified, name]
+            return ['t_named', qualified]
+        if kind == 'TypeVariable':
+            return ['t_var', text]
+        if kind == 'TypeWildcard':
+            return ['t_wildcard']
+        if kind == 'TypeParenthesized':
+            return branch[0]
+        if kind == 'TypeApply':
+            return ['t_apply', branch]
+        if kind == 'TypeTuple':
+            return ['t_tuple', branch]
+        if kind == 'TypeFunction':
+            ids = children[start:start+length]
+            return_start = nodes[ids[-1]]['start']
+            gap_start = nodes[ids[-2]]['end'] if length > 1 else node['start']
+            lo = bisect.bisect_left(operator_starts, gap_start)
+            hi = bisect.bisect_left(operator_starts, return_start)
+            effectful = any(raw[token['start']:token['end']] == b'=>' for token in operators[lo:hi])
+            return ['t_fn', effectful, branch[:-1], branch[-1]]
+        if kind in {'TypeRecord', 'TypeTagUnion'}:
+            extension = branch[-1] if branch and branch[-1][0] in {'t_open', 't_extension'} else None
+            fields = branch[:-1] if extension is not None else branch
+            return ['t_record' if kind == 'TypeRecord' else 't_union', fields, extension]
+        if kind == 'TypeExtension':
+            return ['t_extension', branch[0]] if branch else ['t_open']
+        if kind == 'TypeField':
+            ids = children[start:start+length]
+            name_node, type_node = nodes[ids[0]], nodes[ids[1]]
+            lo = bisect.bisect_left(operator_starts, name_node['end'])
+            hi = bisect.bisect_left(operator_starts, type_node['start'])
+            optional = any(raw[token['start']:token['end']] == b'?' for token in operators[lo:hi])
+            return ['t_field', branch[0][1], optional, branch[1], branch[2] if length > 2 else None]
+        if kind == 'TypeHeader':
+            name_node = nodes[children[start]]
+            name = raw[name_node['start']:name_node['end']].decode()
+            return ['type_header', name, branch[1:]]
+        if kind == 'WhereMethod':
+            return ['where_method', branch[0], branch[1][1], branch[2]]
+        if kind == 'WhereAlias':
+            return ['where_alias', *branch]
+        if kind == 'WhereClause':
+            return ['where', branch]
+        if kind == 'AssociatedBlock':
+            return ['associated', branch]
+        if kind == 'TypeAnnotation':
+            first_token = source_tokens[bisect.bisect_left(token_starts, node['start'])]
+            is_var = raw[first_token['start']:first_token['end']] == b'var'
+            return ['annotation', branch[0][1], branch[1], branch[2] if length > 2 else None, is_var]
+        if kind == 'TypeDeclaration':
+            ids = children[start:start+length]
+            lo = bisect.bisect_left(token_starts, nodes[ids[0]]['end'])
+            hi = bisect.bisect_left(token_starts, nodes[ids[1]]['start'])
+            spellings = {raw[token['start']:token['end']] for token in source_tokens[lo:hi] if token['kind'] in {'Operator', 'Punctuation'}}
+            declaration_kind = 'nominal' if b':=' in spellings else 'opaque' if b'::' in spellings else 'alias'
+            if nodes[ids[1]]['kind'] == 'TypeVariable' and len(branch) > 2 and branch[2][0] == 'where':
+                declaration_kind = 'where_alias'
+            where = next((item for item in branch[2:] if item[0] == 'where'), None)
+            associated = next((item for item in branch[2:] if item[0] == 'associated'), None)
+            return ['type_decl', declaration_kind, branch[0], branch[1], where, associated]
+
         if kind == 'Declaration':
             return ['decl', branch[0], branch[-1]]
         if kind == 'VariableDeclaration':

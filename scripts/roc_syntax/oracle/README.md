@@ -99,8 +99,11 @@ characters, suffix propagation, arrows, loops and control expressions. Patterns
 retain their structure, argument-list presence and nominal record shorthand.
 Variable declarations preserve their name and optional initializer. Imports
 preserve source targets, aliases, exposed qualified names and file content type.
-Headers currently project module and hosted exposure lists; file-mode header/type
-facts and additional record/nominal forms still have explicit projection gaps.
+Explicit file headers and all statements retain source order. Module, hosted,
+app and package headers preserve exposure lists and dependencies. Type annotations,
+declarations, constraints, associated definitions and open type extensions retain
+their structure. Platform headers and additional record/nominal forms still have
+explicit projection gaps.
 
 `statement` invokes the pinned parser's in-body statement entry point; it can
 accept a variable declaration that file mode rejects. `header` invokes its header
