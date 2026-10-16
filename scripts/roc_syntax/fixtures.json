@@ -2969,6 +2969,185 @@
       "source": "|[first, .._]|1",
       "rule": "patterns",
       "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-00",
+      "mode": "file",
+      "source": "A:b(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-01",
+      "mode": "file",
+      "source": "A:b{x}=y",
+      "rule": "type-annotations",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "type_decl",
+          "alias",
+          [
+            "type_header",
+            "A",
+            []
+          ],
+          [
+            "t_var",
+            "b"
+          ],
+          null,
+          null
+        ],
+        [
+          "decl",
+          [
+            "p_record",
+            [
+              [
+                "p_field",
+                "x",
+                null
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "y"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "type-statement-boundary-02",
+      "mode": "file",
+      "source": "A:b1",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-03",
+      "mode": "file",
+      "source": "A:bexpect True",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-04",
+      "mode": "file",
+      "source": "A:bdbg 1",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-05",
+      "mode": "file",
+      "source": "A:bvar x=1",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-06",
+      "mode": "file",
+      "source": "A:b (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "type_decl",
+          "alias",
+          [
+            "type_header",
+            "A",
+            []
+          ],
+          [
+            "t_var",
+            "b"
+          ],
+          null,
+          null
+        ],
+        [
+          "decl",
+          [
+            "p_tuple",
+            [
+              [
+                "p_identifier",
+                "x"
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "y"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "type-statement-boundary-07",
+      "mode": "file",
+      "source": "A:b\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-08",
+      "mode": "file",
+      "source": "A:B(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-09",
+      "mode": "file",
+      "source": "A:B (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-10",
+      "mode": "file",
+      "source": "A:B\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-11",
+      "mode": "file",
+      "source": "x:U64(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-12",
+      "mode": "file",
+      "source": "x:U64 (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-13",
+      "mode": "file",
+      "source": "x:U64\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-rest-wildcard-original",
+      "mode": "file",
+      "source": "# Type var alias allows static dispatch oariables\n# When a function has a type parameter, you can bind it to an uppercase\n# alias and call methods on that type.\n\n# Simple example: calling a method on a type variable\ncall_default : {} -> thing where [thing.default : () -> thing]\ncall_default = |.._| {\n    Thing : thing\n    Thing.default()\n}\n\n# Multiple type variables with different constraints\ncombine : a, b -> a where [a.from_b : b -> a]\ncombine = |_first, second| {\n    A : a\n    A.from_b(second)\n}\n\n# Multiple methods on same type variable\nprocess_value : val -> val where [val.transform : val -> val, val.validate : val -> Bool]\nprocess_value = |input| {\n    V : val\n    if V.validate(input) {\n        V.transform(input)\n    } else {\n        input\n    }\n}\n\n# Chaining method results - pass result of one dispatch to another\nchain_methods : x -> x where [x.second : x -> x, x.first : () -> x]\nchain_methods = |_| {\n    X : x\n    initial = X.first()\n    X.second(initial)\n}\n\n# Multiple type var aliases in same scope with different type vars\nmulti_alias : a, b -> (a, b) where [a.convert : a -> a, b.convert : b -> b]\nnamei_alias = |x, y| {\n    A : a\n    B : b\n    (A.convert(x), B.convert(y))\n}\n\n# Method taking multiple arguments\nmethod_with_args : t, Str -> t where [t.create : Str, U64 -> t]\nmethod_with_args = |_, name| {\n    T : t\n    T.create(name, 42)\n}\n\n# Method that takes a function argument and returns the type variable\nfrom_str : Str -> thing where [thing.from_str : Str -> thing]\nfrom_str = |str| {\n    Thing : thing\n    Thing.from_str(str)\n}\n",
+      "rule": "recovery",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-type-statement-boundary-original",
+      "mode": "file",
+      "source": "So:me(x) = vmatch ",
+      "rule": "recovery",
+      "coverage": "recovery"
     }
   ]
 }

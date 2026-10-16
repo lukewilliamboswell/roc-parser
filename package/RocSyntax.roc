@@ -952,7 +952,7 @@ statement = |initial, depth| {
 		add_node(body_state, While, t.start, end, [condition_node, body_node])
 	} else if spelling(s, "for") or spelling(s, "for!") or spelling(s, "dbg") or spelling(s, "crash") or spelling(s, "return") or spelling(s, "break") {
 		primary(s, depth + 1, False)
-	} else if (t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(s) {
+	} else if (t.kind == OpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(s) {
 		{ state: pattern_state, node: pattern_node } = parse_pattern(s, False, depth + 1)
 		look = skip_trivia(pattern_state)
 		validated = if spelling(look, "=") look else issue(look, UnexpectedToken, peek(look).start, peek(look).end)
