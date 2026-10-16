@@ -41,13 +41,22 @@ fn patternText(store: *const parse.NodeStore, tokens: *const parse.tokenize.Toke
 fn fieldName(text: []const u8) []const u8 {
     return if (std.mem.startsWith(u8, text, ".")) text[1..] else text;
 }
+fn qualifiedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, qualifiers: parse.tokenize.Token.Span, final_token: u32) !std.json.Value {
+    var receiver: ?std.json.Value = null;
+    for (store.tokenSlice(qualifiers)) |raw_token| {
+        const name = fieldName(tokenText(tokens, source, @intCast(raw_token)));
+        receiver = if (receiver) |base_shape| try array(gpa, &.{ string("field"), base_shape, string(name) }) else try array(gpa, &.{ string("identifier"), string(name) });
+    }
+    const name = fieldName(tokenText(tokens, source, final_token));
+    return if (receiver) |base_shape| array(gpa, &.{ string("field"), base_shape, string(name) }) else array(gpa, &.{ string("identifier"), string(name) });
+}
 fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Expr.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("depth_limit") });
     const expr = store.getExpr(idx);
     return switch (expr) {
         .int => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
         .frac => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
-        .ident => |value| if (value.qualifiers.span.len == 0) array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, value.token)) }) else array(gpa, &.{ string("unsupported"), string("qualified_identifier") }),
+        .ident => |value| qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token),
         .bin_op => |value| array(gpa, &.{ string("binary"), string(tokenText(tokens, source, value.operator)), try shape(gpa, store, tokens, source, value.left, depth + 1), try shape(gpa, store, tokens, source, value.right, depth + 1) }),
         .tuple, .list => blk: {
             const children = store.exprSlice(if (expr == .tuple) expr.tuple.items else expr.list.items);
@@ -56,7 +65,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             for (children) |child| try items.append(try shape(gpa, store, tokens, source, child, depth + 1));
             break :blk array(gpa, &.{ string(if (expr == .tuple) "tuple" else "list"), .{ .array = items } });
         },
-        .tag => |value| if (value.qualifiers.span.len == 0) array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, value.token)) }) else array(gpa, &.{ string("unsupported"), string("qualified_tag") }),
+        .tag => |value| qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token),
         .lambda => |value| blk: {
             var args = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.patternSlice(value.args)) |arg| try args.append(string(patternText(store, tokens, source, arg)));
@@ -109,6 +118,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             }
             break :blk receiver;
         },
+        .tuple_access => |value| array(gpa, &.{ string("field"), try shape(gpa, store, tokens, source, value.expr, depth + 1), string(fieldName(tokenText(tokens, source, value.elem_token))) }),
         .method_call => |value| blk: {
             var args = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.exprSlice(value.args)) |arg| try args.append(try shape(gpa, store, tokens, source, arg, depth + 1));

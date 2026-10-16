@@ -100,6 +100,12 @@ class WorkerTests(unittest.TestCase):
             ("{x = 1\nx + 1}", ["block", [["number", "1"], ["binary", "+", ["identifier", "x"], ["number", "1"]]]]),
             ("point.x", ["field", ["identifier", "point"], "x"]),
             ("point.x.y", ["field", ["field", ["identifier", "point"], "x"], "y"]),
+            ("Foo.Bar", ["field", ["identifier", "Foo"], "Bar"]),
+            ("Foo.Bar.Baz", ["field", ["field", ["identifier", "Foo"], "Bar"], "Baz"]),
+            ("Foo .Bar", ["field", ["identifier", "Foo"], "Bar"]),
+            ("Foo.Bar.baz", ["field", ["field", ["identifier", "Foo"], "Bar"], "baz"]),
+            ("x.01", ["field", ["identifier", "x"], "01"]),
+            ("x .01", ["field", ["identifier", "x"], "01"]),
             ("point.move(1)", ["call", ["field", ["identifier", "point"], "move"], [["number", "1"]]]),
             ("match x { A => 1, B => 2 }", ["match", ["identifier", "x"], [["A", ["number", "1"]], ["B", ["number", "2"]]]]),
         ]
