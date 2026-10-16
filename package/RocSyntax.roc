@@ -507,8 +507,8 @@ expression = |initial, minimum, depth, punned| {
 				$left = call_node
 				$qualified = False
 				$target_done = minimum == 101
-			} else if spelling(look, ".") and peek(at_pos(look, look.pos + 1)).kind == OpenCurly {
-				opening_state = at_pos(look, look.pos + 1)
+			} else if spelling(look, ".") and peek(skip_trivia(at_pos(look, look.pos + 1))).kind == OpenCurly {
+				opening_state = skip_trivia(at_pos(look, look.pos + 1))
 				{ state: backing_state, node: backing_node } = curly(at_pos(opening_state, opening_state.pos + 1), peek(opening_state).start, depth + 1, True, True)
 				start = node_start(backing_state, $left)
 				end = node_end(backing_state, backing_node)
@@ -541,6 +541,9 @@ expression = |initial, minimum, depth, punned| {
 					$s = look
 					$done = True
 				}
+			} else if spelling(look, "...") or spelling(look, "..") or spelling(look, ".*") {
+				$s = issue(at_pos(look, look.pos + 1), UnexpectedToken, t.start, t.end)
+				$done = True
 			} else if bp.left > 0 and bp.left >= minimum {
 				start = node_start(look, $left)
 				{ state: right_state, node: right_node } = expression(at_pos(look, look.pos + 1), bp.right, depth + 1, False)
@@ -2901,4 +2904,8 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("match person { { $name } => $name }").status == Complete
+}
+
+expect {
+	RocSyntax.parse_expr_str("...").status == Complete and RocSyntax.parse_expr_str("value\n...").status == Recovered and RocSyntax.parse_expr_str("{ return Tag\n... }").status == Recovered
 }
