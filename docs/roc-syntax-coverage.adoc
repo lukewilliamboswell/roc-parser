@@ -12,159 +12,277 @@ Accepted inputs additionally require token boundaries/classes and normalized par
 
 == Grammar checklist
 
-Every entry below remains unchecked until the full production is audited. Representative regression evidence names exact fixtures in `scripts/roc_syntax/fixtures.json`, with their rule and coverage contracts; these examples do not prove all forms or nesting combinations. Entries without examples are explicit evidence gaps. Completion requires valid and malformed examples where applicable, candidate structural assertions, pinned-oracle evidence, and inclusion in regression tests. A full green corpus alone cannot prove all grammar productions or nesting combinations.
+The 107 entries below record source constructors and executable witnesses.
+They do not mark full production/context review as complete. Each parser-constructed variant links to a concrete fixture in one
+of the four mandatory differential suites and to its pinned source constructor.
+The machine-readable ledger is `scripts/roc_syntax/grammar-evidence.json`;
+its tests verify fixture contracts, all 107 identities and source receipts.
+Representative examples establish an executable structural regression contract;
+they do not establish every production branch or nesting combination.
+
+== Construction and branch audit
+
+The pinned `Parser.zig` directly constructs 95 distinct variants across these
+nine unions. `Statement.type_decl` uses `addTypeDeclStatement`
+(`Parser.zig:748`, calls at 6121 and 6553); `Expr.field_access` uses
+`addOrExtendFieldAccess` (`Parser.zig:4082`, `NodeStore.zig:1428`, constructor
+at 1460). Eight additional malformed variants use the generic `pushMalformed`
+helper (`Parser.zig:877`); `TargetConfigValue.malformed` is counted among the
+95 direct constructors. Those 105 constructed variants all have regression
+references below. Malformed variants link to rejection/invariant contracts;
+recovery tree topology is deliberately implementation-specific.
+
+The remaining two variants, `Expr.record_updater` and `Header.default_app`,
+have no constructor or even variant reference in this pinned Parser.zig.
+They are compiler representations without a current parser surface production.
+The ledger records this distinction explicitly; it does not invent passing
+source inputs. `Header.type_module` is the implicit fallback actually
+constructed by `parseHeaderTokens` (`Parser.zig:1355`). `Expr.string_part`
+is an internal segment constructed while parsing a string, exercised through
+interpolation fixtures rather than as a standalone expression.
+
+[cols="2,3,3",options="header"]
+|===
+|Reviewed source branches |Durable branch-directed evidence |Remaining proof limits
+|Expression prefix/suffix, record continuations, arrow continuations and qualification modes (`runExprRoot`, `runExprStatementKernel`, `readQualificationChain`)
+|`grammar-fixtures.json:postfix`, `grammar-fixtures.json:arrows`, `grammar-fixtures.json:composed-postfix`, `grammar-fixtures.json:optional-grouping`, `grammar-fixtures.json:pipe-postfix-spacing`, plus independent precedence models
+|Context-sensitive compositions continue to be checked by mutation and generated files. Passing examples do not exhaust trivia/line-boundary combinations.
+|Pattern primary, alias, alternatives, rest, nominal and string-capture dispatch
+|`grammar-fixtures.json:pattern-branches`, `grammar-fixtures.json:pattern-composition`, `grammar-fixtures.json:declaration-tag-boundaries`, `grammar-fixtures.json:lambda-patterns` and literal-pattern fixtures
+|Binding contexts differ; a form accepted in a lambda need not be accepted as a bare declaration. The generators retain these distinctions.
+|Type application, parenthesized/function arguments, record/union extensions, optional/default fields, associated blocks and where clauses
+|136 `type-fixtures.json` cases; `grammar-fixtures.json:type-boundaries` and `grammar-fixtures.json:type-composition`; independent recursive file/type models
+|Associated/body/annotation dispatch is context-sensitive. Broad composition and malformed contexts remain necessary alongside branch examples.
+|Import/exposed qualification and renaming, header dependencies, platform requirements/provides/hosted/targets/configuration variants
+|`grammar-fixtures.json:headers-imports`, `grammar-fixtures.json:exposed-aliases`, 81 platform fixtures, dependency rejection fixtures, all nine target value/file variants below
+|Platform combinations and all invalid ordering/duplicate contexts are not exhaustively enumerated by one fixture per variant.
+|===
+
+The independent production audit generated 2,635 branch-composition cases
+against pinned `0d4b0ab`, including both valid and invalid inputs. Its retained
+regressions are in `grammar-fixtures.json`. Subsequent mutation campaigns found
+additional dispatch and span-context defects, so this ledger intentionally does
+not equate that campaign, enum coverage, or a green snapshot corpus with grammar
+completeness. Durable reports contain the actual source identity and outcomes.
+The parser bounds nesting at 128, syntax construction at 1,048,576 tokens,
+and diagnostics at 256. The oracle JSONL request and host response limits are
+16 MiB protocol bounds, not a parser source-size guarantee. Resource-limited
+inputs cannot count as accepted grammar coverage.
+
+== Variant evidence
+
+== Executed variant witnesses
+
+An independent audit ran all four differential fixture suites and all 2,191
+upstream inputs: 3,052 inputs in total, including 2,599 oracle-accepted and 453
+oracle-rejected sources. There were zero token, normalized structure, acceptance,
+or source-invariant differences against the candidate used for that audit.
+These counts include the 18 explicit inventory fixtures added after the first
+trace audit; later edits must establish their own results.
+
+A scratch build of the same oracle logged the exact union tag whenever its
+existing structural projection read an expression, statement, pattern, type,
+header, where clause, exposed item, target file, or configuration value. It
+used the immutable compiler sources unchanged. This directly witnessed 95
+valid variant discriminators on accepted, structurally matching inputs.
+`Expr.string_part` is the remaining constructed valid discriminator: the
+`stringShape` function reads it directly while emitting text segments rather
+than invoking the general expression projector. Its constructor is
+`Parser.zig:4940`; string and interpolation fixtures exercise that branch.
+
+Thus all 96 parser-constructed valid discriminators have a concrete executable
+witness. Nine `malformed` discriminators belong to rejection/recovery paths;
+their fixture references establish rejection and source invariants, not equality
+of recovered compiler and candidate tree topology. Two unconstructed compiler
+representations complete the 107-entry inventory. The per-variant references
+below and machine-readable source receipts make this finite accounting
+reviewable. They do not establish that every branch leading to a discriminator,
+its flags, or all nested/contextual combinations have been exhausted.
+
+The projection switches for all nine unions are exhaustive in Zig. Accepted
+unknown/depth-limited projections still fail the structural gate, even when both
+workers emit the same unknown marker. Runtime enumeration and source receipts
+complement these compile-time checks; they do not replace independent expected
+models or oracle differential mutations.
+
+== Open production review
+
+The finite variant inventory is accounted for. Full production/context review
+remains open in the following areas and must not be inferred from one witness:
+
+* Trivia and line boundaries around qualification, arrow/pipe receivers, call
+  continuations, optional fields, and suffix operators.
+* Statement dispatch and legal binding names in top-level, associated, loop,
+  lambda, and ordinary block contexts.
+* Record field separators, punned/default/unset fields, extension forms,
+  nominal/builders, and nested container recovery.
+* Nested patterns, aliases/alternatives, string captures, typed literals, and
+  the distinct binding contexts which permit them.
+* Type/default-expression boundaries, where clauses, function effects,
+  associated definitions, and all malformed delimiter combinations.
+* Header dependency validation and platform target/configuration nesting,
+  including ordering, duplicates, empty strings and unusual string contents.
+* Recovery locality and preservation of following declarations after edits;
+  invalid-input invariants alone do not establish editor-quality recovery.
+
+The mandatory generated-model, full upstream, editor-recovery, raw-fuzz and
+oracle-mutation lanes address these risks independently. Fixed pull-request
+seeds provide a replayable baseline; scheduled campaigns vary the seed and
+retain full requests, edit provenance, worker identities, and mismatches. A
+passing finite campaign is evidence for its recorded inputs and resource bounds,
+not a mathematical proof of grammar completeness or asymptotic performance.
 
 === Header
 
 Source: `src/parse/AST.zig`, line 1798.
 
-* [ ] `app` — fixture `header-app-version` (`headers`, `supported`).
-* [ ] `module` — fixture `header-module-exposes` (`headers`, `supported`).
-* [ ] `package` — fixture `header-package-version` (`headers`, `supported`).
-* [ ] `platform`
-* [ ] `hosted` — fixture `header-hosted-exposes` (`headers`, `supported`).
-* [ ] `type_module`
-* [ ] `default_app`
-* [ ] `malformed`
+* `app` — fixture `header-app-version` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1760`.
+* `module` — fixture `header-module-exposes` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1483`.
+* `package` — fixture `header-package-version` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1526`.
+* `platform` — fixture `platform/60a3c51c42fd` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2356`.
+* `hosted` — fixture `header-hosted-exposes` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1497`.
+* `type_module` — fixture `header-implicit-type-module` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1355`.
+* `default_app` — compiler representation; no constructor in the pinned Parser.zig. See construction audit below.
+* `malformed` — fixture `header-expression` (`file-headers`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === Statement
 
 Source: `src/parse/AST.zig`, line 1043.
 
-* [ ] `decl` — fixture `file-definitions` (`file-headers`, `supported`); fixture `block` (`blocks`, `supported`).
-* [ ] `@"var"` — fixture `mutable-block` (`statements`, `supported`); fixture `statement-variable-goal` (`direct-goals`, `supported`).
-* [ ] `expr`
-* [ ] `crash`
-* [ ] `dbg`
-* [ ] `expect` — fixture `expect-block` (`statements`, `supported`); fixture `statement-expect-goal` (`direct-goals`, `supported`).
-* [ ] `@"for"` — fixture `for-block` (`statements`, `supported`).
-* [ ] `@"while"` — fixture `while-block` (`statements`, `supported`).
-* [ ] `@"return"`
-* [ ] `@"break"`
-* [ ] `import` — fixture `file-import` (`imports`, `supported`); fixture `import-alias-exposing` (`imports`, `supported`).
-* [ ] `file_import`
-* [ ] `type_decl`
-* [ ] `type_anno` — fixture `file-type` (`type-annotations`, `supported`).
-* [ ] `malformed`
+* `decl` — fixture `file-definitions` (`file-headers`, `supported`); fixture `block` (`blocks`, `supported`). Source constructors: `src/parse/Parser.zig:609`.
+* `@"var"` — fixture `mutable-block` (`statements`, `supported`); fixture `statement-variable-goal` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4714`; `src/parse/Parser.zig:6390`.
+* `expr` — fixture `statement-expression` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4699`.
+* `crash` — fixture `statement-crash` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4777`.
+* `dbg` — fixture `statement-debug` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4786`.
+* `expect` — fixture `expect-block` (`statements`, `supported`); fixture `statement-expect-goal` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4724`.
+* `@"for"` — fixture `for-block` (`statements`, `supported`). Source constructors: `src/parse/Parser.zig:4745`.
+* `@"while"` — fixture `while-block` (`statements`, `supported`). Source constructors: `src/parse/Parser.zig:4767`.
+* `@"return"` — fixture `statement-return` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:4795`.
+* `@"break"` — fixture `statement-break` (`direct-goals`, `supported`). Source constructors: `src/parse/Parser.zig:6465`.
+* `import` — fixture `file-import` (`imports`, `supported`); fixture `import-alias-exposing` (`imports`, `supported`). Source constructors: `src/parse/Parser.zig:1321`.
+* `file_import` — fixture `file-import-string` (`imports`, `supported`). Source constructors: `src/parse/Parser.zig:1203`.
+* `type_decl` — fixture `types/declaration/a4950f1906ac` (`types/declaration`, `supported`). Source constructors: `src/parse/Parser.zig:748`; `src/parse/Parser.zig:6121`; `src/parse/Parser.zig:6553`.
+* `type_anno` — fixture `file-type` (`type-annotations`, `supported`). Source constructors: `src/parse/Parser.zig:5569`; `src/parse/Parser.zig:6046`.
+* `malformed` — fixture `import-number` (`imports`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === Expr
 
 Source: `src/parse/AST.zig`, line 2663.
 
-* [ ] `int` — fixture `integer` (`integers`, `supported`).
-* [ ] `frac` — fixture `float` (`numbers-boundaries`, `supported`).
-* [ ] `typed_int` — fixture `typed-integer` (`literal-types`, `supported`).
-* [ ] `typed_frac` — fixture `typed-fraction` (`literal-types`, `supported`).
-* [ ] `single_quote` — fixture `typed-character` (`literal-types`, `supported`).
-* [ ] `string_part`
-* [ ] `string` — fixture `string` (`strings`, `supported`); fixture `interpolated-string` (`strings`, `supported`).
-* [ ] `multiline_string` — fixture `multiline-string` (`strings`, `supported`); fixture `multiline-interpolation` (`strings`, `supported`).
-* [ ] `typed_string` — fixture `typed-string` (`literal-types`, `supported`).
-* [ ] `typed_multiline_string`
-* [ ] `list` — fixture `nested-string-tuple-list` (`tuples`, `supported`).
-* [ ] `tuple` — fixture `pair-tuple` (`tuples`, `supported`).
-* [ ] `record` — fixture `record` (`records`, `supported`).
-* [ ] `tag` — fixture `if` (`conditionals`, `supported`).
-* [ ] `lambda` — fixture `pattern-tag` (`patterns`, `supported`); fixture `nested-lambda-if-fields` (`lambdas`, `supported`).
-* [ ] `apply` — fixture `call` (`calls`, `supported`).
-* [ ] `record_updater`
-* [ ] `field_access` — fixture `field` (`fields`, `supported`); fixture `current-optional-field` (`optional-fields`, `supported`).
-* [ ] `method_call` — fixture `optional-receiver-method-call` (`optional-fields`, `supported`).
-* [ ] `tuple_access` — fixture `qualified-field-14` (`fields`, `supported`).
-* [ ] `arrow_call`
-* [ ] `bin_op` — fixture `precedence` (`precedence`, `supported`).
-* [ ] `suffix_single_question` — fixture `current-optional-field-suffix` (`optional-fields`, `supported`).
-* [ ] `unary_op` — fixture `unary` (`unary`, `supported`).
-* [ ] `if_then_else` — fixture `if` (`conditionals`, `supported`).
-* [ ] `if_without_else`
-* [ ] `match` — fixture `pattern-match-guard` (`patterns`, `supported`); fixture `pattern-match-alternatives` (`patterns`, `supported`).
-* [ ] `ident` — fixture `identifier` (`identifiers`, `supported`).
-* [ ] `dbg` — fixture `current-debug` (`control-expressions`, `supported`).
-* [ ] `crash` — fixture `current-crash` (`control-expressions`, `supported`).
-* [ ] `record_builder`
-* [ ] `nominal_record`
-* [ ] `nominal_apply`
-* [ ] `ellipsis` — fixture `current-ellipsis` (`control-expressions`, `supported`).
-* [ ] `@"break"` — fixture `current-break` (`control-expressions`, `supported`).
-* [ ] `@"return"` — fixture `current-return` (`control-expressions`, `supported`).
-* [ ] `block` — fixture `block` (`blocks`, `supported`).
-* [ ] `for_expr`
-* [ ] `malformed`
+* `int` — fixture `integer` (`integers`, `supported`). Source constructors: `src/parse/Parser.zig:3610`.
+* `frac` — fixture `float` (`numbers-boundaries`, `supported`). Source constructors: `src/parse/Parser.zig:3641`.
+* `typed_int` — fixture `typed-integer` (`literal-types`, `supported`). Source constructors: `src/parse/Parser.zig:3596`; `src/parse/Parser.zig:3603`.
+* `typed_frac` — fixture `typed-fraction` (`literal-types`, `supported`). Source constructors: `src/parse/Parser.zig:3627`; `src/parse/Parser.zig:3634`.
+* `single_quote` — fixture `typed-character` (`literal-types`, `supported`). Source constructors: `src/parse/Parser.zig:3665`.
+* `string_part` — fixture `interpolated-string` (`strings`, `supported`). Source constructors: `src/parse/Parser.zig:4940`.
+* `string` — fixture `string` (`strings`, `supported`); fixture `interpolated-string` (`strings`, `supported`). Source constructors: `src/parse/Parser.zig:4965`; `src/parse/Parser.zig:5001`.
+* `multiline_string` — fixture `multiline-string` (`strings`, `supported`); fixture `multiline-interpolation` (`strings`, `supported`). Source constructors: `src/parse/Parser.zig:4995`; `src/parse/Parser.zig:5027`.
+* `typed_string` — fixture `typed-string` (`literal-types`, `supported`). Source constructors: `src/parse/Parser.zig:4958`.
+* `typed_multiline_string` — fixture `typed-multiline` (`literal-types`, `supported`). Source constructors: `src/parse/Parser.zig:5021`.
+* `list` — fixture `nested-string-tuple-list` (`tuples`, `supported`). Source constructors: `src/parse/Parser.zig:4850`.
+* `tuple` — fixture `pair-tuple` (`tuples`, `supported`). Source constructors: `src/parse/Parser.zig:4856`.
+* `record` — fixture `record` (`records`, `supported`). Source constructors: `src/parse/Parser.zig:7407`; `src/parse/Parser.zig:7448`.
+* `tag` — fixture `if` (`conditionals`, `supported`). Source constructors: `src/parse/Parser.zig:3691`; `src/parse/Parser.zig:3965`; `src/parse/Parser.zig:4184`; `src/parse/Parser.zig:4286`; `src/parse/Parser.zig:7433`.
+* `lambda` — fixture `pattern-tag` (`patterns`, `supported`); fixture `nested-lambda-if-fields` (`lambdas`, `supported`). Source constructors: `src/parse/Parser.zig:4687`.
+* `apply` — fixture `call` (`calls`, `supported`). Source constructors: `src/parse/Parser.zig:4862`; `src/parse/Parser.zig:4902`.
+* `record_updater` — compiler representation; no constructor in the pinned Parser.zig. See construction audit below.
+* `field_access` — fixture `field` (`fields`, `supported`); fixture `current-optional-field` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4082`; `src/parse/NodeStore.zig:1428`; `src/parse/NodeStore.zig:1460`.
+* `method_call` — fixture `optional-receiver-method-call` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4879`.
+* `tuple_access` — fixture `qualified-field-14` (`fields`, `supported`). Source constructors: `src/parse/Parser.zig:4054`.
+* `arrow_call` — fixture `arrows/52e2f5eabcf4` (`grammar-fixtures.json:arrows`, `supported`). Source constructors: `src/parse/Parser.zig:4388`; `src/parse/Parser.zig:4401`; `src/parse/Parser.zig:4830`.
+* `bin_op` — fixture `precedence` (`precedence`, `supported`). Source constructors: `src/parse/Parser.zig:4347`.
+* `suffix_single_question` — fixture `current-optional-field-suffix` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4245`.
+* `unary_op` — fixture `unary` (`unary`, `supported`). Source constructors: `src/parse/Parser.zig:4359`.
+* `if_then_else` — fixture `if` (`conditionals`, `supported`). Source constructors: `src/parse/Parser.zig:4556`.
+* `if_without_else` — fixture `if-without-else` (`conditionals`, `supported`). Source constructors: `src/parse/Parser.zig:4545`.
+* `match` — fixture `pattern-match-guard` (`patterns`, `supported`); fixture `pattern-match-alternatives` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:5142`.
+* `ident` — fixture `identifier` (`identifiers`, `supported`). Source constructors: `src/parse/Parser.zig:1587`; `src/parse/Parser.zig:3678`; `src/parse/Parser.zig:3697`; `src/parse/Parser.zig:3958`; `src/parse/Parser.zig:4166`; `src/parse/Parser.zig:4190`; `src/parse/Parser.zig:4292`.
+* `dbg` — fixture `current-debug` (`control-expressions`, `supported`). Source constructors: `src/parse/Parser.zig:4630`.
+* `crash` — fixture `current-crash` (`control-expressions`, `supported`). Source constructors: `src/parse/Parser.zig:4640`.
+* `record_builder` — fixture `record-builder` (`nominal-records`, `supported`). Source constructors: `src/parse/Parser.zig:7439`.
+* `nominal_record` — fixture `nominal-record` (`nominal-records`, `supported`). Source constructors: `src/parse/Parser.zig:7414`.
+* `nominal_apply` — fixture `nominal-apply` (`nominal-records`, `supported`). Source constructors: `src/parse/Parser.zig:4891`.
+* `ellipsis` — fixture `current-ellipsis` (`control-expressions`, `supported`). Source constructors: `src/parse/Parser.zig:3877`.
+* `@"break"` — fixture `current-break` (`control-expressions`, `supported`). Source constructors: `src/parse/Parser.zig:3937`.
+* `@"return"` — fixture `current-return` (`control-expressions`, `supported`). Source constructors: `src/parse/Parser.zig:4650`.
+* `block` — fixture `block` (`blocks`, `supported`). Source constructors: `src/parse/Parser.zig:5190`.
+* `for_expr` — fixture `for-expression` (`statements`, `supported`). Source constructors: `src/parse/Parser.zig:4673`.
+* `malformed` — fixture `unfinished` (`recovery`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === Pattern
 
 Source: `src/parse/AST.zig`, line 1389.
 
-* [ ] `ident` — fixture `lambda` (`lambdas`, `supported`).
-* [ ] `var_ident` — fixture `pattern-mutable` (`patterns`, `supported`); fixture `pattern-mutable-dollar` (`patterns`, `supported`).
-* [ ] `tag` — fixture `pattern-tag` (`patterns`, `supported`).
-* [ ] `int`
-* [ ] `frac`
-* [ ] `typed_int`
-* [ ] `typed_frac`
-* [ ] `string`
-* [ ] `single_quote`
-* [ ] `record` — fixture `pattern-record` (`patterns`, `supported`).
-* [ ] `list` — fixture `pattern-list-rest` (`patterns`, `supported`).
-* [ ] `list_rest` — fixture `pattern-list-rest` (`patterns`, `supported`).
-* [ ] `tuple` — fixture `pattern-tuple` (`patterns`, `supported`).
-* [ ] `underscore` — fixture `pattern-wildcard` (`patterns`, `supported`).
-* [ ] `alternatives` — fixture `pattern-match-alternatives` (`patterns`, `supported`).
-* [ ] `as` — fixture `pattern-alias` (`patterns`, `supported`).
-* [ ] `malformed`
+* `ident` — fixture `lambda` (`lambdas`, `supported`). Source constructors: `src/parse/Parser.zig:6202`; `src/parse/Parser.zig:6736`.
+* `var_ident` — fixture `pattern-mutable` (`patterns`, `supported`); fixture `pattern-mutable-dollar` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6805`.
+* `tag` — fixture `pattern-tag` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6725`; `src/parse/Parser.zig:6973`; `src/parse/Parser.zig:7055`.
+* `int` — fixture `pattern-literal-integer` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6661`.
+* `frac` — fixture `pattern-literal-fraction` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6616`.
+* `typed_int` — fixture `pattern-literal-typed-integer` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6647`; `src/parse/Parser.zig:6654`.
+* `typed_frac` — fixture `pattern-literal-typed-fraction` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6602`; `src/parse/Parser.zig:6609`.
+* `string` — fixture `pattern-literal-string` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:1940`.
+* `single_quote` — fixture `pattern-literal-character` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6632`.
+* `record` — fixture `pattern-record` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:7225`.
+* `list` — fixture `pattern-list-rest` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:7128`.
+* `list_rest` — fixture `pattern-list-rest` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6789`; `src/parse/Parser.zig:7098`.
+* `tuple` — fixture `pattern-tuple` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:7259`.
+* `underscore` — fixture `pattern-wildcard` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6237`; `src/parse/Parser.zig:6745`.
+* `alternatives` — fixture `pattern-match-alternatives` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:6576`; `src/parse/Parser.zig:6956`.
+* `as` — fixture `pattern-alias` (`patterns`, `supported`). Source constructors: `src/parse/Parser.zig:2427`.
+* `malformed` — fixture `arithmetic-pattern` (`matches`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === TypeAnno
 
 Source: `src/parse/AST.zig`, line 2321.
 
-* [ ] `apply`
-* [ ] `ty_var`
-* [ ] `underscore_type_var`
-* [ ] `underscore`
-* [ ] `ty`
-* [ ] `tag_union`
-* [ ] `tuple`
-* [ ] `record`
-* [ ] `@"fn"`
-* [ ] `parens`
-* [ ] `malformed`
+* `apply` — fixture `types/annotation/f4ab12b0e499` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5627`.
+* `ty_var` — fixture `types/annotation/417cf521cf2a` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5211`; `src/parse/Parser.zig:6179`.
+* `underscore_type_var` — fixture `types/annotation/4112ae5376f2` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5241`.
+* `underscore` — fixture `types/annotation/62474fcd584a` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5286`.
+* `ty` — fixture `types/annotation/44111eb99854` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5216`; `src/parse/Parser.zig:5948`.
+* `tag_union` — fixture `types/annotation/463530e67c49` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5870`.
+* `tuple` — fixture `types/annotation/111530f0bd5b` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5684`.
+* `record` — fixture `types/annotation/9e1e867302bc` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5812`.
+* `@"fn"` — fixture `types/annotation/b8f8038504d2` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5386`; `src/parse/Parser.zig:5402`; `src/parse/Parser.zig:5525`.
+* `parens` — fixture `types/annotation/556677ace890` (`types/annotation`, `supported`). Source constructors: `src/parse/Parser.zig:5393`; `src/parse/Parser.zig:5679`.
+* `malformed` — fixture `types/annotation/2e2e7525d03c` (`types/annotation`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === WhereClause
 
 Source: `src/parse/AST.zig`, line 2571.
 
-* [ ] `mod_method`
-* [ ] `mod_alias`
-* [ ] `malformed`
+* `mod_method` — fixture `types/where/08c2ec8e2c84` (`types/where`, `supported`). Source constructors: `src/parse/Parser.zig:5546`.
+* `mod_alias` — fixture `types/where/57fd5b1689a2` (`types/where`, `supported`). Source constructors: `src/parse/Parser.zig:5536`; `src/parse/Parser.zig:5969`.
+* `malformed` — fixture `types/where/166715cd8386` (`types/where`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === ExposedItem
 
 Source: `src/parse/AST.zig`, line 2099.
 
-* [ ] `lower_ident` — fixture `header-module-exposes` (`headers`, `supported`).
-* [ ] `upper_ident` — fixture `header-module-exposes` (`headers`, `supported`).
-* [ ] `upper_ident_star`
-* [ ] `malformed`
+* `lower_ident` — fixture `header-module-exposes` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1002`; `src/parse/Parser.zig:1038`.
+* `upper_ident` — fixture `header-module-exposes` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1045`.
+* `upper_ident_star` — fixture `exposed-type-wildcard` (`headers`, `supported`). Source constructors: `src/parse/Parser.zig:1031`.
+* `malformed` — fixture `header-expression` (`file-headers`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === TargetFile
 
 Source: `src/parse/AST.zig`, line 2243.
 
-* [ ] `string_literal`
-* [ ] `special_ident`
-* [ ] `malformed`
+* `string_literal` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:1977`.
+* `special_ident` — fixture `platform/2a251d4bd1e3` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:1980`.
+* `malformed` — fixture `platform/02013b4de784` (`headers/platform`, `recovery`). Source constructors: `src/parse/Parser.zig:877`.
 
 === TargetConfigValue
 
 Source: `src/parse/AST.zig`, line 2271.
 
-* [ ] `int_literal`
-* [ ] `string_literal`
-* [ ] `tag_literal`
-* [ ] `ident`
-* [ ] `list`
-* [ ] `files`
-* [ ] `malformed`
+* `int_literal` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2034`.
+* `string_literal` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2053`.
+* `tag_literal` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2056`.
+* `ident` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2059`; `src/parse/Parser.zig:2096`.
+* `list` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2084`.
+* `files` — fixture `platform/59f758d99733` (`headers/platform`, `supported`). Source constructors: `src/parse/Parser.zig:2110`.
+* `malformed` — fixture `platform/a4305287d713` (`headers/platform`, `recovery`). Source constructors: `src/parse/Parser.zig:2047`; `src/parse/Parser.zig:2067`; `src/parse/Parser.zig:2077`.
 
 
 == Snapshot extraction audit
