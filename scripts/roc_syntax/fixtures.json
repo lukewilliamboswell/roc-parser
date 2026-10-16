@@ -33,7 +33,8 @@
     "literal-types",
     "statements",
     "headers",
-    "direct-goals"
+    "direct-goals",
+    "nominal-records"
   ],
   "cases": [
     {
