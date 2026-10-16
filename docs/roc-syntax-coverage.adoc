@@ -189,7 +189,7 @@ Source: `src/parse/AST.zig`, line 2663.
 * `field_access` — fixture `field` (`fields`, `supported`); fixture `current-optional-field` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4082`; `src/parse/NodeStore.zig:1428`; `src/parse/NodeStore.zig:1460`.
 * `method_call` — fixture `optional-receiver-method-call` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4879`.
 * `tuple_access` — fixture `qualified-field-14` (`fields`, `supported`). Source constructors: `src/parse/Parser.zig:4054`.
-* `arrow_call` — fixture `arrows/52e2f5eabcf4` (`grammar-fixtures.json:arrows`, `supported`). Source constructors: `src/parse/Parser.zig:4388`; `src/parse/Parser.zig:4401`; `src/parse/Parser.zig:4830`.
+* `arrow_call` — fixture `arrows/52e2f5eabcf4` (`grammar/arrows`, `supported`). Source constructors: `src/parse/Parser.zig:4388`; `src/parse/Parser.zig:4401`; `src/parse/Parser.zig:4830`.
 * `bin_op` — fixture `precedence` (`precedence`, `supported`). Source constructors: `src/parse/Parser.zig:4347`.
 * `suffix_single_question` — fixture `current-optional-field-suffix` (`optional-fields`, `supported`). Source constructors: `src/parse/Parser.zig:4245`.
 * `unary_op` — fixture `unary` (`unary`, `supported`). Source constructors: `src/parse/Parser.zig:4359`.
