@@ -305,6 +305,93 @@ class Performance(unittest.TestCase):
         self.assertEqual(replay.max_ratio,1)
         self.assertEqual(replay.max_scaling_exponent,1.3)
 
+    def test_static_image_defaults_retain_exact_shared_and_varied_media_sources(self):
+        expected = {
+            'scaling-static-attributes-image-blocks-1024': 'e9fc2db292ee8602483779f03302e25c855f3914e7537be6807c1363840ed58b',
+            'scaling-static-attributes-image-blocks-2048': 'c2c6ddfcd4ca4a1d72533f3b9bb68d729e7fcad884c44bfbf85093b466aeb12b',
+            'scaling-static-attributes-image-blocks-4096': '5e7c36725b853060cd16fd5db452e67cf21b738a3dd7ecf000835b90bedbe1fc',
+            'scaling-static-attributes-varied-image-blocks-1024': 'c2a6353ca88ba8708f964f1a0309504477d49a0a4c01838f08fa18f947490ee9',
+            'scaling-static-attributes-varied-image-blocks-2048': 'bb3e5cc45d8180c6cca675e37edd78df3b5c9055a0d43939adf73738b2f053c1',
+            'scaling-static-attributes-varied-image-blocks-4096': '1f14139deaf43224b6371b13c1c0aacc8f3bea43921a2d7d684fc2c0bcd4aebf',
+        }
+        families={'static-attributes-image-blocks','static-attributes-varied-image-blocks'}
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes) if case['family']in families]
+        for family in families:
+            self.assertEqual({case['size']for case in cases if case['family']==family},
+                             {32,64,128,256,512,1024,2048,4096})
+        retained=[case for case in cases if case['id']in expected]
+        self.assertEqual(len(retained),6)
+        for case in retained:
+            with self.subTest(case=case['id']):
+                self.assertEqual(hashlib.sha256(case['source'].encode()).hexdigest(),expected[case['id']])
+                self.assertEqual(case['source'].count(':k'),case['size'])
+                self.assertEqual(case['source'].count('image::'),case['size'])
+                self.assertLessEqual(len(case['source'].encode()),262144)
+                self.assertEqual(case['provenance'],{'generator':case['family'],
+                                                    'parameter':case['size'],'geometric':True})
+        prefix=':k0: v\n:k1: v\n\n'
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'image'),
+                         prefix+'image::cat.png[Cat]\n\nimage::cat.png[Cat]\n\n')
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'varied-image'),
+                         prefix+'image::cat0.png[Cat 0]\n\nimage::cat1.png[Cat 1]\n\n')
+        rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
+              for mode in ('parse','render')for case in retained]
+        checks=perf.scaling(rows)
+        self.assertEqual(len(checks),8)
+        for check in checks:
+            self.assertFalse(check['regression'])
+            self.assertAlmostEqual(check['exponent'],1)
+
+    def test_bounded_snapshot_regressions_retain_exact_audited_sources(self):
+        expected = {
+            'scaling-static-attributes-many-tables-128': '1e6401ac3982855fe9f4525f1e933a8621e46082b82f67ed6a1c727a787dbfa1',
+            'scaling-static-attributes-many-tables-256': 'b820103707743e00383a58d0b52c4db0c0dd98a8f4fc42f91a61e20ded441065',
+            'scaling-static-attributes-many-tables-512': 'c342cc9996a0836efc38f4a1a0a7d5bade4afb7f42aee69381c73f217c39f844',
+            'scaling-static-base-attribute-revisions-text-128': 'c2121c63b73e8c810cd190042d71f1ababe209a4e576f020b812535c49295663',
+            'scaling-static-base-attribute-revisions-text-256': 'e9ed7c214955e2e7563a23c38dc93b73e3a2ef30afbea23da1f230516a06fe86',
+            'scaling-static-base-attribute-revisions-text-512': 'a240215bbcc5eeca549926f9839f4df2ab506ad6b460190c1cc26a34b2487a86',
+            'scaling-static-base-attribute-revisions-url-128': '97cd2e143783a1e6acb87f155a9a210b98b85bfd94e6931773dd12a19339984b',
+            'scaling-static-base-attribute-revisions-url-256': '0125fadb63caaab878981b06b38ed055ab05713f99c151555180f3d43b27c831',
+            'scaling-static-base-attribute-revisions-url-512': '60fb6f51a28c480933b7b53b9d937cef5fbc128f8e0dd3301f6952bc4d41d4f8',
+        }
+        families={'static-base-attribute-revisions-url','static-base-attribute-revisions-text',
+                  'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables'}
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes) if case['family']in families]
+        self.assertEqual(len(cases),12)
+        for family in families:
+            self.assertEqual({case['size']for case in cases if case['family']==family},{128,256,512})
+        retained=[case for case in cases if case['id']in expected]
+        self.assertEqual(len(retained),9)
+        for case in retained:
+            self.assertEqual(hashlib.sha256(case['source'].encode()).hexdigest(),expected[case['id']])
+            self.assertEqual(case['provenance'],{'generator':case['family'],
+                                                'parameter':case['size'],'geometric':True})
+        for case in cases:
+            self.assertLessEqual(len(case['source'].encode()),262144)
+        rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
+              for mode in ('parse','render')for case in cases]
+        self.assertEqual(len(perf.scaling(rows)),16)
+
+    def test_varied_source_revisions_unset_and_readd_each_name(self):
+        self.assertEqual(perf.static_base_revisions(2,varied=True),
+                         ':k0: initial\n:k1: initial\n\n:k0!:\n:k0: v0\n\n{k0}\n\n'
+                         ':k1!:\n:k1: v1\n\n{k1}\n\n')
+        source=perf.static_base_revisions(512,varied=True)
+        self.assertEqual(source.count('!:'),512)
+        self.assertIn(':k511!:\n:k511: v511\n\n{k511}',source)
+
+    def test_varied_source_revision_model_matches_pinned_oracle(self):
+        if not (perf.DEFAULT_HOME/'gems/asciidoctor-2.0.23').is_dir():
+            self.skipTest('run setup_oracle.py for pinned integration tests')
+        from review_asciidoc import Oracle
+        with Oracle() as oracle:
+            result=oracle.request(perf.static_base_revisions(3,varied=True))
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual([block['context']for block in result['projection']['blocks']],['paragraph']*3)
+        for value in ('v0','v1','v2'):
+            self.assertIn('<p>'+value+'</p>',result['html'])
+        self.assertEqual(result['warnings'],[])
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})

@@ -177,11 +177,30 @@ def static_attribute_nonparagraph(size, context):
         body = '* https://a.b\n' * size
     elif context == 'listing':
         body = '----\nx < y & z\n----\n\n' * size
+    elif context == 'image':
+        body = 'image::cat.png[Cat]\n\n' * size
+    elif context == 'varied-image':
+        body = ''.join(f'image::cat{i}.png[Cat {i}]\n\n' for i in range(size))
     elif context == 'asciidoc-table':
         body = '[cols="a",options=noheader]\n|===\n' + '|https://a.b\n\n' * size + '|===\n'
     else:
         body = ''.join(f'== *S{i}*\n\n' for i in range(size))
     return definitions + '\n\n' + body
+
+
+def static_base_revisions(size, *, varied=False, urls=False):
+    definitions = '\n'.join(f':k{i}: initial' for i in range(size))
+    if varied:
+        body = ''.join(f':k{i}!:\n:k{i}: v{i}\n\n{{k{i}}}\n\n' for i in range(size))
+    else:
+        paragraph = 'https://a.b' if urls else 'Value {k0}.'
+        body = ''.join(f':k0: value{i}\n\n{paragraph}\n\n' for i in range(size))
+    return definitions + '\n\n' + body
+
+
+def static_many_tables(size):
+    definitions = '\n'.join(f':k{i}: initial' for i in range(size))
+    return definitions + '\n\n' + '[cols="1",options=noheader]\n|===\n|x\n|===\n\n' * size
 
 
 def geometric(sizes):
@@ -212,6 +231,12 @@ def geometric(sizes):
         'static-attributes-listing-blocks': lambda n: static_attribute_nonparagraph(n, 'listing'),
         'static-attributes-formatted-sections': lambda n: static_attribute_nonparagraph(n, 'section'),
         'static-attributes-asciidoc-table-cells': lambda n: static_attribute_nonparagraph(n, 'asciidoc-table'),
+        'static-attributes-image-blocks': lambda n: static_attribute_nonparagraph(n, 'image'),
+        'static-attributes-varied-image-blocks': lambda n: static_attribute_nonparagraph(n, 'varied-image'),
+        'static-base-attribute-revisions-url': lambda n: static_base_revisions(n, urls=True),
+        'static-base-attribute-revisions-text': static_base_revisions,
+        'static-base-attribute-revisions-varied-unset-readd': lambda n: static_base_revisions(n, varied=True),
+        'static-attributes-many-tables': static_many_tables,
         'mailto-positional-query-counter-blocks': lambda n: counter_macro_blocks(n, 'mailto:x@y.z[N,S,B]'),
         'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
@@ -239,6 +264,9 @@ def geometric(sizes):
                 'mutating-preview-counter-blocks','static-attributes-url-blocks',
                 'static-attributes-url-list-items','static-attributes-listing-blocks',
                 'static-attributes-formatted-sections','static-attributes-asciidoc-table-cells',
+                'static-attributes-image-blocks','static-attributes-varied-image-blocks',
+                'static-base-attribute-revisions-url','static-base-attribute-revisions-text',
+                'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
                 'mailto-positional-query-counter-blocks']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
@@ -255,9 +283,14 @@ def geometric(sizes):
                       'url-counter-blocks','mutating-preview-counter-blocks',
                       'static-attributes-url-blocks','static-attributes-url-list-items',
                       'static-attributes-listing-blocks','static-attributes-formatted-sections',
-                      'static-attributes-asciidoc-table-cells',
+                      'static-attributes-asciidoc-table-cells','static-attributes-image-blocks',
+                      'static-attributes-varied-image-blocks',
                       'mailto-positional-query-counter-blocks') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
+        if family in ('static-base-attribute-revisions-url','static-base-attribute-revisions-text',
+                      'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables'):
+            # Larger runs wait for qualification of the persistent snapshot fix.
+            family_sizes = [size for size in sizes if size in (128,256,512)]
         if family == 'table-footnotes' and max(sizes) >= 1024:
             # The footer's repeated prior-note scans become clear at 8,192
             # cells, still within the default 256 KiB source bound.
@@ -621,7 +654,7 @@ def main(argv=None):
     journal.write_text('')
     report = {'schema_version': 2, 'batch_policy': args.batch_policy, 'progress': args.progress, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
               'timed_operations': args.modes, 'deadline_seconds': args.deadline_seconds,
-              'resource_policy': 'nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
+              'resource_policy': 'source-revision and many-small-table guards use bounded sizes 128/256/512 pending larger qualification; nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
               'command': [sys.executable, str(Path(__file__).resolve()), *(argv if argv is not None else sys.argv[1:])],
               'machine': {'system': platform.platform(), 'processor': platform.processor(), 'cores': os.cpu_count()},
               'measurement_policy': 'strict per-input1.0x median gate; recorded batch_policy selects shared or independent counts, each elapsed duration divided by its own operation count; short batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',

@@ -122,7 +122,15 @@ URLs also runs through 4,096 entries to catch repeated attribute materialization
 Static header attributes mixed with URL paragraphs, URL list items, listing
 blocks, formatted section titles and AsciiDoc table cells check shared snapshot
 copies and repeated option lookups through 4,096 entries. The table-cell family
-explicitly disables headers and starts cell contents immediately after `|`. Stateful pass previews mixed with unrelated sets
+explicitly disables headers and starts cell contents immediately after `|`. Static
+attribute environments with repeated and distinct image targets also run
+through 4,096 blocks to guard media option lookup and attribute sharing.
+Repeated source definitions followed by URLs or text, varied-name unset/readd
+cycles and many tiny tables currently use the bounded audit sizes 128, 256 and
+512. These families guard revision history and shared table scopes; larger
+sizes wait for qualification of the persistent snapshot implementation. Use
+`--sizes 128 256 512` for a bounded local scaling campaign, or `--replay` with a
+retained exact-source case to isolate a measured failure. Stateful pass previews mixed with unrelated sets
 check work that can otherwise be discarded before shared-state evaluation.
 Positional mail subjects and bodies exercise protected-tag restoration with
 growing counter state.
