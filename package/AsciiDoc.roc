@@ -1272,10 +1272,31 @@ prepared_attribution = |p| {
 	if author == "" and cite == "" "" else "\n<div class=\"attribution\">\n${if author == "" "" else "&#8212; ${inline(author)}"}${if cite == "" "" else "${if author == "" "" else "<br>\n"}<cite>${inline(cite)}</cite>"}\n</div>"
 }
 
+stateless_verbatim_block : AsciiDoc.Block -> Bool
+stateless_verbatim_block = |block| match block {
+	Listing(_) | Literal(_) | ThematicBreak => True
+	_ => False
+}
+
+render_stateless_verbatim_block : AsciiDoc.Block -> Str
+render_stateless_verbatim_block = |block| match block {
+	Listing(source) => "<div class=\"listingblock\">\n<div class=\"content\">\n<pre>${AsciiDocBlockHtml.verbatim(source, [])}</pre>\n</div>\n</div>"
+	Literal(source) => "<div class=\"literalblock\">\n<div class=\"content\">\n<pre>${AsciiDocBlockHtml.verbatim(source, [])}</pre>\n</div>\n</div>"
+	ThematicBreak => "<hr>"
+	_ => crash "non-verbatim block in stateless rendering"
+}
+
 render_document : AsciiDoc.Document -> Str
 render_document = |document| {
 	if document.blocks.is_empty() {
 		return ""
+	}
+	# These public variants have only fixed standard attributes and cannot
+	# create references, captions, section numbering or shared footnotes.
+	# Check the whole list before rendering so mixed documents keep one pass
+	# through the existing stateful renderer.
+	if document.blocks.all(stateless_verbatim_block) {
+		return Str.join_with(document.blocks.map(render_stateless_verbatim_block), "\n")
 	}
 	first_node = render_node(document.blocks.first() ?? AsciiDoc.empty_item)
 	document_id = attribute(first_node.attrs, "__document-id")
@@ -2507,4 +2528,16 @@ expect {
 	new_header = prepare_header(empty_node.attrs, [])
 	old_header = prepare_header(AsciiDoc.attributes(empty_bindings), [])
 	AsciiDocAttributes.header_parts(actual.attrs).is_err() and AsciiDoc.materialize_attributes(actual.attrs) == bindings and stored == [Rich({ ..render_node(manual), attrs: AsciiDoc.attributes(bindings) })] and empty_part and AsciiDoc.materialize_attributes(empty_node.attrs) == empty_bindings and empty_stored == legacy_empty and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render({ title: new_header.html, blocks: empty_stored }) == AsciiDoc.render({ title: old_header.html, blocks: legacy_empty })
+}
+
+# Verbatim blocks keep their text literal and number automatic callouts per block.
+expect {
+	html = AsciiDoc.render({ title: "Provided title", blocks: [Listing("code <.>"), Literal("footnote:[literal] <.>"), ThematicBreak] })
+	html == "<div class=\"listingblock\">\n<div class=\"content\">\n<pre>code <b class=\"conum\">(1)</b></pre>\n</div>\n</div>\n<div class=\"literalblock\">\n<div class=\"content\">\n<pre>footnote:[literal] <b class=\"conum\">(1)</b></pre>\n</div>\n</div>\n<hr>"
+}
+
+# Literal footnote-looking text cannot consume the following paragraph's number.
+expect {
+	html = AsciiDoc.render({ title: "", blocks: [Listing("footnote:[literal]"), Paragraph("Real footnote:[note]")] })
+	html.contains("<pre>footnote:[literal]</pre>") and html.contains("id=\"_footnoteref_1\"") and !html.contains("id=\"_footnoteref_2\"")
 }

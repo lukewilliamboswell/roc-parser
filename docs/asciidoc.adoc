@@ -207,7 +207,11 @@ The extended guards exercise missing and newline-rejected literal closers,
 shared quote-role closers, Unicode role prefixes, malformed title macros and
 listing callouts through 4,096 entries. Callout cases include missing `>`,
 Unicode HTML-like text, many numbered callouts on separate lines or one line,
-and a growing placeholder-prefix collision. Larger counter-preview, colliding
+and a growing placeholder-prefix collision. Two default-substitution families
+retain normal HTML-comment callouts and escaped numeric callouts through 4,096
+entries. Their fixed sources keep cached comparisons reproducible. These
+remain local scaling inputs and do not expand the two-case CI smoke.
+Larger counter-preview, colliding
 attribute-name and alternating Options inputs retain the exact requests that
 exposed repeated copying and rescanning.
 Source-scaled fixed guards above 512 load only when the largest requested size

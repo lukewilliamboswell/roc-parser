@@ -23,6 +23,9 @@ Earlier releases are described on the
 
 == Release candidates
 
+* {repo}/releases/tag/2.1.0-rc.2[2.1.0-rc.2]: AsciiDoc parsing, preprocessing and HTML rendering,
+  with cached oracle baselines and local performance and scaling checks.
+
 * {repo}/releases/tag/2.1.0-rc.1[2.1.0-rc.1]: current Roc syntax tooling for downstream testing,
   with performance optimization continuing on the feature branch.
 

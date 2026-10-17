@@ -290,6 +290,8 @@ def geometric(sizes):
         'conditional-value': lambda n: conditional_document(n, values=True),
         'formatting-adversary': lambda n: ('*a _b `c ' * n) + 'tail',
         'unclosed-delimiter': lambda n: '----\n' + 'x\n' * n,
+        'default-callout-comment': lambda n: '----\n' + 'code <!--1-->\n' * n + '----',
+        'default-callout-escaped': lambda n: '----\n' + 'code \\<1>\n' * n + '----',
         'nested-containers': lambda n: '\n'.join('=' * (4 + i) for i in range(n)) + '\ntext\n' + '\n'.join('=' * (4 + i) for i in reversed(range(n))),
     }
     priority = ['many-sections','many-footnotes','many-crossrefs','attribute-redefinitions','plain-punctuation-adversary',
@@ -327,7 +329,8 @@ def geometric(sizes):
                       'static-attributes-listing-blocks','static-attributes-formatted-sections',
                       'static-attributes-asciidoc-table-cells','static-attributes-image-blocks',
                       'static-attributes-varied-image-blocks',
-                      'mailto-positional-query-counter-blocks') and max(sizes) >= 1024:
+                      'mailto-positional-query-counter-blocks','default-callout-comment',
+                      'default-callout-escaped') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
         if family in ('static-base-attribute-revisions-url','static-base-attribute-revisions-text',
                       'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
@@ -347,6 +350,10 @@ def geometric(sizes):
             if family in ('alternating-rich-simple-counters','alternating-rich-simple-counters-option',
                           'alternating-rich-simple-counters-restored-standard-option'):
                 case['expect'] = {'html_contains':['<p>Counter 1.</p>','<p>Body.</p>','<p>Final 2 2.</p>']}
+            if family == 'default-callout-comment':
+                case['expect'] = {'contexts':['listing'], 'html_contains':['code &lt;!--<b class=\"conum\">(1)</b>--&gt;']}
+            elif family == 'default-callout-escaped':
+                case['expect'] = {'contexts':['listing'], 'html_contains':['code &lt;1&gt;'], 'html_excludes':['class=\"conum\"']}
             if family == 'alternating-rich-simple-counters-option':
                 case['id'] = f'scaling-alternating-rich-simple-counters-{size}-same-standard-option'
                 case['attributes'] = [{'name':'outfilesuffix','value':'.html'}]

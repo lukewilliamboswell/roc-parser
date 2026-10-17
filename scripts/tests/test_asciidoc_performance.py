@@ -1278,4 +1278,59 @@ class FixedPerformanceGuards(unittest.TestCase):
         self.assertEqual(len(cases[47:83]), 36)
 
 
+
+
+class DefaultCalloutGeometry(unittest.TestCase):
+    families = {'default-callout-comment','default-callout-escaped'}
+
+    def test_default_and_bounded_sizes_are_natural_legal_growth(self):
+        cases=[c for c in perf.geometric(perf.parser().parse_args([]).sizes) if c['family'] in self.families]
+        self.assertEqual(len(cases),16)
+        for family in self.families:
+            selected=[c for c in cases if c['family']==family]
+            self.assertEqual([c['size']for c in selected],[32,64,128,256,512,1024,2048,4096])
+            previous=0
+            for c in selected:
+                lines=c['source'].split('\n')
+                self.assertEqual(lines[0], '----');self.assertEqual(lines[-1], '----')
+                self.assertEqual(len(lines)-2,c['size'])
+                token='code <!--1-->' if family=='default-callout-comment' else 'code \\<1>'
+                self.assertEqual(set(lines[1:-1]),{token})
+                self.assertNotIn('\\<!--',c['source'])
+                self.assertTrue(c['provenance']['geometric']);self.assertNotIn('scaling_input',c)
+                size=len(c['source'].encode());self.assertGreater(size,previous);self.assertLessEqual(size,262144);previous=size
+        bounded=[c for c in perf.geometric([128,256,512]) if c['family'] in self.families]
+        self.assertEqual([c['size']for c in bounded],[128,256,512]*2)
+
+    def test_sources_match_six_fresh_reference_cached_requests(self):
+        expected={
+            ('default-callout-comment', 512): '9e9f52efc31b345a5295e9fb42e7c355e54addc572c728f7924c6f99947cbac3',
+            ('default-callout-comment', 1024): '96d582327018fb905dfa353c03f77d4d962fe7e1647416c25adb40e374efcf4e',
+            ('default-callout-comment', 4096): '6766d08631664f20bd8119b49ca8db852fd0c5d5031dbe1bd576761192633aef',
+            ('default-callout-escaped', 512): '618e895b95334d58a4b4f449fe302b692862a4a579d886f4bce9b5a96c9a6c0a',
+            ('default-callout-escaped', 1024): '3da50e55f79b52416d1bc2f6bb84e1110d9cfbec481f239e126137c85ca1ac16',
+            ('default-callout-escaped', 4096): '92de77099b9b5864cafade9707ae67bd06376e63933d29686d7715836a831460',
+        }
+        cases=[c for c in perf.geometric([512,1024]) if (c['family'],c['size']) in expected]
+        self.assertEqual({(c['family'],c['size']):perf.case_identity(c) for c in cases},expected)
+
+    def test_supported_authored_predicates_distinguish_numbered_and_escaped(self):
+        from review_asciidoc import expectation_errors
+        cases={c['family']:c for c in perf.geometric([2]) if c['family'] in self.families}
+        projection={'title':'','blocks':[{'context':'listing','blocks':[]}]}
+        numbered={'projection':projection,'html':'code &lt;!--<b class="conum">(1)</b>--&gt;'}
+        escaped={'projection':projection,'html':'code &lt;1&gt;'}
+        self.assertEqual(expectation_errors(cases['default-callout-comment'],numbered),[])
+        self.assertEqual(expectation_errors(cases['default-callout-escaped'],escaped),[])
+        self.assertTrue(expectation_errors(cases['default-callout-comment'],escaped))
+        self.assertTrue(expectation_errors(cases['default-callout-escaped'],numbered))
+
+    def test_smoke_early_return_keeps_exact_two_requests(self):
+        args=perf.parser().parse_args(['--smoke'])
+        with mock.patch.object(perf,'geometric',side_effect=AssertionError('no geometry in smoke')),mock.patch.object(perf,'fixed_performance_guards',side_effect=AssertionError('no guards in smoke')):
+            cases=list(perf.corpus(args))
+        self.assertEqual(cases,[{'id':'smoke-paragraph','family':'smoke','source':'Hello *Roc*.'},
+            {'id':'smoke-include-selectors','family':'smoke','source':'----\ninclude::part.adoc[lines=2..4]\ninclude::part.adoc[tag=chosen]\n----',
+             'includes':{'part.adoc':'omitted\n// tag::chosen[]\n<code>\n// end::chosen[]\nomitted'}}])
+
 if __name__ == '__main__': unittest.main()

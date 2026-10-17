@@ -61,8 +61,10 @@ AsciiDocBlockHtml :: [].{
 			if token.label == "." and !token.escaped {
 				$auto = $auto + 1
 			}
-			callout = if token.escaped render_inline("<${token.label}>", attrs, { subs: subs }) else "<b class=\"conum\">(${n})</b>"
-			replacement = if token.comment "${render_inline("<!--", attrs, { subs: subs })}${callout}${render_inline("-->", attrs, { subs: subs })}" else callout
+			callout = if token.escaped (if direct escape_verbatim("<${token.label}>") else render_inline("<${token.label}>", attrs, { subs: subs })) else "<b class=\"conum\">(${n})</b>"
+			replacement = if token.comment {
+				if direct "&lt;!--${callout}--&gt;" else "${render_inline("<!--", attrs, { subs: subs })}${callout}${render_inline("-->", attrs, { subs: subs })}"
+			} else callout
 			marker = if direct replacement else "${prefix}${$replacements.len().to_str()}END"
 			if !direct {
 				$replacements = $replacements.append(replacement)
@@ -422,3 +424,15 @@ restore_callouts = |html, prefix, replacements| {
 	$parts = $parts.append(callout_slice(bytes, $copied, bytes.len() - $copied))
 	Str.join_with($parts, "")
 }
+
+# Default fragments preserve escaped comments and dot labels while only real
+# automatic callouts advance numbering, including adjacent Unicode text.
+expect AsciiDocBlockHtml.verbatim("α \\<.>\nβ <!--.-->\nγ \\<!--2-->\nδ <.>", []) == "α &lt;.&gt;\nβ &lt;!--<b class=\"conum\">(1)</b>--&gt;\nγ &lt;!--&lt;2&gt;--&gt;\nδ <b class=\"conum\">(2)</b>"
+
+# Modified quote substitutions keep their existing general inline fragment
+# handling and whole-text formatting, rather than using the default shortcut.
+expect AsciiDocBlockHtml.verbatim("*bold* <!--1-->\n\\<2>", [{ name: "subs", value: "+quotes" }]) == "<strong>bold</strong> &lt;!--<b class=\"conum\">(1)</b>--&gt;\n&lt;2&gt;"
+
+# Explicit attribute-only/custom callouts do not escape comment wrappers or
+# escaped markers when specialcharacters is absent.
+expect AsciiDocBlockHtml.verbatim("{word} <!--1-->\n\\<2>", [{ name: "subs", value: "attributes,callouts" }, { name: "word", value: "Roc" }]) == "Roc <!--<b class=\"conum\">(1)</b>-->\n<2>"

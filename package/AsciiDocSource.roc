@@ -171,7 +171,7 @@ AsciiDocSource :: [].{
 	## Canonical seed only: all Tree buffers and bindings are immutable literals.
 	## Dynamic namespaces keep each parsed source lineage exact and separate.
 	new_standard_parsed : Str -> Store
-	new_standard_parsed = |namespace| Store({ names: standard_tree, seed_values: Ok(standard_attributes), baseline: Ok(standard_attributes), baseline_equal: True, tags: Empty, parsed_history: True, next: 54, count: 54, namespace, generation: 0, prefix: "\u(1)" })
+	new_standard_parsed = |namespace| Store({ names: standard_tree, seed_values: Ok(standard_attributes), baseline: Ok(standard_attributes), baseline_equal: True, tags: Tree([]), parsed_history: True, next: 54, count: 54, namespace, generation: 0, prefix: "\u(1)" })
 
 	## Canonical initial options share the generic builder with an exact
 	## known baseline; empty options retain the immutable standard tree.
@@ -383,9 +383,13 @@ first_overlay = |view, name| {
 
 Entry : { name : Str, name_hash : U64, value : Str, position : U64, active : Bool, run : U64 }
 
-# Recursion lives behind one owned two-element child buffer rather than two
-# automatically boxed recursive fields. The buffer length is private invariant.
-Tree := [Empty, Node({ entry : Entry, children : List(Tree), height : U64, longest : U64, max_position : U64 })]
+# The single tag contains a zero/one-element immutable node allocation.
+# Recursion remains behind List; child handles are fields of that allocation.
+# Tree([]) nodes allocate nothing. Constructors maintain the private length <= 1
+# invariant, checked by the existing independent tree model below.
+Tree := [Tree(List({ entry : Entry, left : Tree, right : Tree, height : U64, longest : U64, max_position : U64 }))]
+
+Children : { left : Tree, right : Tree }
 
 # Canonical ordered defaults moved byte-for-byte from preprocessing.
 standard_attributes : List(AsciiDocSource.Attribute)
@@ -448,118 +452,123 @@ standard_attributes = [
 
 # BEGIN GENERATED STANDARD TREE
 standard_tree : Tree
-standard_tree = Node({ entry: { name: "appendix-refsig", name_hash: 1846151851, value: "Appendix", position: 39, active: True, run: 0 }, children: [Node({ entry: { name: "note-caption", name_hash: 890389686, value: "Note", position: 46, active: True, run: 0 }, children: [Node({ entry: { name: "doctype", name_hash: 531439101, value: "article", position: 8, active: True, run: 0 }, children: [Node({ entry: { name: "safe-mode-level", name_hash: 444112411, value: "20", position: 13, active: True, run: 0 }, children: [Node({ entry: { name: "filetype-html", name_hash: 200271241, value: "", position: 11, active: True, run: 0 }, children: [Node({ entry: { name: "backend-html5-doctype-article", name_hash: 145058394, value: "", position: 6, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 6 }), Node({ entry: { name: "outdir", name_hash: 324151516, value: ".", position: 25, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 25 })], height: 2, longest: 0, max_position: 25 }), Node({ entry: { name: "doctime", name_hash: 531421578, value: "00:00:00 UTC", position: 18, active: True, run: 0 }, children: [Node({ entry: { name: "docdate", name_hash: 530838105, value: "2000-01-01", position: 16, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 16 }), Empty], height: 2, longest: 0, max_position: 18 })], height: 3, longest: 0, max_position: 25 }), Node({ entry: { name: "tip-caption", name_hash: 788222285, value: "Tip", position: 47, active: True, run: 0 }, children: [Node({ entry: { name: "notitle", name_hash: 580976676, value: "", position: 33, active: True, run: 0 }, children: [Node({ entry: { name: "docyear", name_hash: 531596524, value: "2000", position: 17, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 17 }), Node({ entry: { name: "outfilesuffix", name_hash: 653023314, value: ".html", position: 29, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 29 })], height: 2, longest: 0, max_position: 33 }), Node({ entry: { name: "filetype", name_hash: 870548263, value: "html", position: 10, active: True, run: 0 }, children: [Node({ entry: { name: "iconsdir", name_hash: 846005536, value: "./images/icons", position: 37, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 37 }), Empty], height: 2, longest: 0, max_position: 37 })], height: 3, longest: 0, max_position: 47 })], height: 4, longest: 0, max_position: 47 }), Node({ entry: { name: "attribute-missing", name_hash: 1453995968, value: "skip", position: 27, active: True, run: 0 }, children: [Node({ entry: { name: "version-label", name_hash: 1120047704, value: "Version", position: 52, active: True, run: 0 }, children: [Node({ entry: { name: "localtime", name_hash: 907356095, value: "00:00:00 UTC", position: 22, active: True, run: 0 }, children: [Node({ entry: { name: "localdate", name_hash: 906772622, value: "2000-01-01", position: 20, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 20 }), Node({ entry: { name: "localyear", name_hash: 907531041, value: "2000", position: 21, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 21 })], height: 2, longest: 0, max_position: 22 }), Node({ entry: { name: "part-refsig", name_hash: 1384067209, value: "Part", position: 41, active: True, run: 0 }, children: [Node({ entry: { name: "attribute-undefined", name_hash: 1203319768, value: "drop-line", position: 28, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 28 }), Empty], height: 2, longest: 0, max_position: 41 })], height: 3, longest: 0, max_position: 52 }), Node({ entry: { name: "embedded", name_hash: 1680730671, value: "", position: 32, active: True, run: 0 }, children: [Node({ entry: { name: "caution-caption", name_hash: 1571579475, value: "Caution", position: 50, active: True, run: 0 }, children: [Node({ entry: { name: "docdatetime", name_hash: 1524162536, value: "2000-01-01 00:00:00 UTC", position: 19, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 19 }), Node({ entry: { name: "toc-title", name_hash: 1631017370, value: "Table of Contents", position: 35, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 35 })], height: 2, longest: 0, max_position: 50 }), Node({ entry: { name: "basebackend", name_hash: 1813213704, value: "html", position: 4, active: True, run: 0 }, children: [Node({ entry: { name: "backend", name_hash: 1695229677, value: "html5", position: 2, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 2 }), Empty], height: 2, longest: 0, max_position: 4 })], height: 3, longest: 0, max_position: 50 })], height: 4, longest: 0, max_position: 52 })], height: 5, longest: 0, max_position: 52 }), Node({ entry: { name: "asciidoctor", name_hash: 3143719609, value: "", position: 0, active: True, run: 0 }, children: [Node({ entry: { name: "backend-html5", name_hash: 2592962340, value: "", position: 3, active: True, run: 0 }, children: [Node({ entry: { name: "safe-mode-secure", name_hash: 2044090346, value: "", position: 15, active: True, run: 0 }, children: [Node({ entry: { name: "asciidoctor-version", name_hash: 1893482028, value: "2.0.23", position: 1, active: True, run: 0 }, children: [Node({ entry: { name: "basebackend-html-doctype-article", name_hash: 1870153792, value: "", position: 7, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 7 }), Node({ entry: { name: "doctype-article", name_hash: 2033431822, value: "", position: 9, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 9 })], height: 2, longest: 0, max_position: 9 }), Node({ entry: { name: "sectids", name_hash: 2332217716, value: "", position: 30, active: True, run: 0 }, children: [Node({ entry: { name: "last-update-label", name_hash: 2107600022, value: "Last updated", position: 53, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 53 }), Empty], height: 2, longest: 0, max_position: 53 })], height: 3, longest: 0, max_position: 53 }), Node({ entry: { name: "appendix-caption", name_hash: 2751639833, value: "Appendix", position: 38, active: True, run: 0 }, children: [Node({ entry: { name: "section-refsig", name_hash: 2662871015, value: "Section", position: 42, active: True, run: 0 }, children: [Node({ entry: { name: "safe-mode-name", name_hash: 2616535652, value: "secure", position: 14, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 14 }), Node({ entry: { name: "toc-placement", name_hash: 2711544529, value: "auto", position: 34, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 34 })], height: 2, longest: 0, max_position: 42 }), Node({ entry: { name: "stylesdir", name_hash: 3111129352, value: ".", position: 36, active: True, run: 0 }, children: [Node({ entry: { name: "chapter-refsig", name_hash: 2987870329, value: "Chapter", position: 40, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 40 }), Empty], height: 2, longest: 0, max_position: 40 })], height: 3, longest: 0, max_position: 42 })], height: 4, longest: 0, max_position: 53 }), Node({ entry: { name: "warning-caption", name_hash: 3623748726, value: "Warning", position: 49, active: True, run: 0 }, children: [Node({ entry: { name: "untitled-label", name_hash: 3468070587, value: "Untitled", position: 51, active: True, run: 0 }, children: [Node({ entry: { name: "prewrap", name_hash: 3264030566, value: "", position: 31, active: True, run: 0 }, children: [Node({ entry: { name: "user-home", name_hash: 3164478906, value: ".", position: 26, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 26 }), Node({ entry: { name: "htmlsyntax", name_hash: 3372380097, value: "html", position: 12, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 12 })], height: 2, longest: 0, max_position: 31 }), Node({ entry: { name: "figure-caption", name_hash: 3554076066, value: "Figure", position: 44, active: True, run: 0 }, children: [Node({ entry: { name: "important-caption", name_hash: 3485626046, value: "Important", position: 48, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 48 }), Empty], height: 2, longest: 0, max_position: 48 })], height: 3, longest: 0, max_position: 51 }), Node({ entry: { name: "example-caption", name_hash: 3992284140, value: "Example", position: 43, active: True, run: 0 }, children: [Node({ entry: { name: "localdatetime", name_hash: 3967238301, value: "2000-01-01 00:00:00 UTC", position: 23, active: True, run: 0 }, children: [Node({ entry: { name: "table-caption", name_hash: 3725961352, value: "Table", position: 45, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 45 }), Empty], height: 2, longest: 0, max_position: 45 }), Node({ entry: { name: "docdir", name_hash: 4180903034, value: "", position: 24, active: True, run: 0 }, children: [Node({ entry: { name: "basebackend-html", name_hash: 4062005514, value: "", position: 5, active: True, run: 0 }, children: [Empty, Empty], height: 1, longest: 0, max_position: 5 }), Empty], height: 2, longest: 0, max_position: 24 })], height: 3, longest: 0, max_position: 45 })], height: 4, longest: 0, max_position: 51 })], height: 5, longest: 0, max_position: 53 })], height: 6, longest: 0, max_position: 53 })
+standard_tree = Tree([{ entry: { name: "appendix-refsig", name_hash: 1846151851, value: "Appendix", position: 39, active: True, run: 0 }, left: Tree([{ entry: { name: "note-caption", name_hash: 890389686, value: "Note", position: 46, active: True, run: 0 }, left: Tree([{ entry: { name: "doctype", name_hash: 531439101, value: "article", position: 8, active: True, run: 0 }, left: Tree([{ entry: { name: "safe-mode-level", name_hash: 444112411, value: "20", position: 13, active: True, run: 0 }, left: Tree([{ entry: { name: "filetype-html", name_hash: 200271241, value: "", position: 11, active: True, run: 0 }, left: Tree([{ entry: { name: "backend-html5-doctype-article", name_hash: 145058394, value: "", position: 6, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 6 }]), right: Tree([{ entry: { name: "outdir", name_hash: 324151516, value: ".", position: 25, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 25 }]), height: 2, longest: 0, max_position: 25 }]), right: Tree([{ entry: { name: "doctime", name_hash: 531421578, value: "00:00:00 UTC", position: 18, active: True, run: 0 }, left: Tree([{ entry: { name: "docdate", name_hash: 530838105, value: "2000-01-01", position: 16, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 16 }]), right: Tree([]), height: 2, longest: 0, max_position: 18 }]), height: 3, longest: 0, max_position: 25 }]), right: Tree([{ entry: { name: "tip-caption", name_hash: 788222285, value: "Tip", position: 47, active: True, run: 0 }, left: Tree([{ entry: { name: "notitle", name_hash: 580976676, value: "", position: 33, active: True, run: 0 }, left: Tree([{ entry: { name: "docyear", name_hash: 531596524, value: "2000", position: 17, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 17 }]), right: Tree([{ entry: { name: "outfilesuffix", name_hash: 653023314, value: ".html", position: 29, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 29 }]), height: 2, longest: 0, max_position: 33 }]), right: Tree([{ entry: { name: "filetype", name_hash: 870548263, value: "html", position: 10, active: True, run: 0 }, left: Tree([{ entry: { name: "iconsdir", name_hash: 846005536, value: "./images/icons", position: 37, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 37 }]), right: Tree([]), height: 2, longest: 0, max_position: 37 }]), height: 3, longest: 0, max_position: 47 }]), height: 4, longest: 0, max_position: 47 }]), right: Tree([{ entry: { name: "attribute-missing", name_hash: 1453995968, value: "skip", position: 27, active: True, run: 0 }, left: Tree([{ entry: { name: "version-label", name_hash: 1120047704, value: "Version", position: 52, active: True, run: 0 }, left: Tree([{ entry: { name: "localtime", name_hash: 907356095, value: "00:00:00 UTC", position: 22, active: True, run: 0 }, left: Tree([{ entry: { name: "localdate", name_hash: 906772622, value: "2000-01-01", position: 20, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 20 }]), right: Tree([{ entry: { name: "localyear", name_hash: 907531041, value: "2000", position: 21, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 21 }]), height: 2, longest: 0, max_position: 22 }]), right: Tree([{ entry: { name: "part-refsig", name_hash: 1384067209, value: "Part", position: 41, active: True, run: 0 }, left: Tree([{ entry: { name: "attribute-undefined", name_hash: 1203319768, value: "drop-line", position: 28, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 28 }]), right: Tree([]), height: 2, longest: 0, max_position: 41 }]), height: 3, longest: 0, max_position: 52 }]), right: Tree([{ entry: { name: "embedded", name_hash: 1680730671, value: "", position: 32, active: True, run: 0 }, left: Tree([{ entry: { name: "caution-caption", name_hash: 1571579475, value: "Caution", position: 50, active: True, run: 0 }, left: Tree([{ entry: { name: "docdatetime", name_hash: 1524162536, value: "2000-01-01 00:00:00 UTC", position: 19, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 19 }]), right: Tree([{ entry: { name: "toc-title", name_hash: 1631017370, value: "Table of Contents", position: 35, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 35 }]), height: 2, longest: 0, max_position: 50 }]), right: Tree([{ entry: { name: "basebackend", name_hash: 1813213704, value: "html", position: 4, active: True, run: 0 }, left: Tree([{ entry: { name: "backend", name_hash: 1695229677, value: "html5", position: 2, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 2 }]), right: Tree([]), height: 2, longest: 0, max_position: 4 }]), height: 3, longest: 0, max_position: 50 }]), height: 4, longest: 0, max_position: 52 }]), height: 5, longest: 0, max_position: 52 }]), right: Tree([{ entry: { name: "asciidoctor", name_hash: 3143719609, value: "", position: 0, active: True, run: 0 }, left: Tree([{ entry: { name: "backend-html5", name_hash: 2592962340, value: "", position: 3, active: True, run: 0 }, left: Tree([{ entry: { name: "safe-mode-secure", name_hash: 2044090346, value: "", position: 15, active: True, run: 0 }, left: Tree([{ entry: { name: "asciidoctor-version", name_hash: 1893482028, value: "2.0.23", position: 1, active: True, run: 0 }, left: Tree([{ entry: { name: "basebackend-html-doctype-article", name_hash: 1870153792, value: "", position: 7, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 7 }]), right: Tree([{ entry: { name: "doctype-article", name_hash: 2033431822, value: "", position: 9, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 9 }]), height: 2, longest: 0, max_position: 9 }]), right: Tree([{ entry: { name: "sectids", name_hash: 2332217716, value: "", position: 30, active: True, run: 0 }, left: Tree([{ entry: { name: "last-update-label", name_hash: 2107600022, value: "Last updated", position: 53, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 53 }]), right: Tree([]), height: 2, longest: 0, max_position: 53 }]), height: 3, longest: 0, max_position: 53 }]), right: Tree([{ entry: { name: "appendix-caption", name_hash: 2751639833, value: "Appendix", position: 38, active: True, run: 0 }, left: Tree([{ entry: { name: "section-refsig", name_hash: 2662871015, value: "Section", position: 42, active: True, run: 0 }, left: Tree([{ entry: { name: "safe-mode-name", name_hash: 2616535652, value: "secure", position: 14, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 14 }]), right: Tree([{ entry: { name: "toc-placement", name_hash: 2711544529, value: "auto", position: 34, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 34 }]), height: 2, longest: 0, max_position: 42 }]), right: Tree([{ entry: { name: "stylesdir", name_hash: 3111129352, value: ".", position: 36, active: True, run: 0 }, left: Tree([{ entry: { name: "chapter-refsig", name_hash: 2987870329, value: "Chapter", position: 40, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 40 }]), right: Tree([]), height: 2, longest: 0, max_position: 40 }]), height: 3, longest: 0, max_position: 42 }]), height: 4, longest: 0, max_position: 53 }]), right: Tree([{ entry: { name: "warning-caption", name_hash: 3623748726, value: "Warning", position: 49, active: True, run: 0 }, left: Tree([{ entry: { name: "untitled-label", name_hash: 3468070587, value: "Untitled", position: 51, active: True, run: 0 }, left: Tree([{ entry: { name: "prewrap", name_hash: 3264030566, value: "", position: 31, active: True, run: 0 }, left: Tree([{ entry: { name: "user-home", name_hash: 3164478906, value: ".", position: 26, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 26 }]), right: Tree([{ entry: { name: "htmlsyntax", name_hash: 3372380097, value: "html", position: 12, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 12 }]), height: 2, longest: 0, max_position: 31 }]), right: Tree([{ entry: { name: "figure-caption", name_hash: 3554076066, value: "Figure", position: 44, active: True, run: 0 }, left: Tree([{ entry: { name: "important-caption", name_hash: 3485626046, value: "Important", position: 48, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 48 }]), right: Tree([]), height: 2, longest: 0, max_position: 48 }]), height: 3, longest: 0, max_position: 51 }]), right: Tree([{ entry: { name: "example-caption", name_hash: 3992284140, value: "Example", position: 43, active: True, run: 0 }, left: Tree([{ entry: { name: "localdatetime", name_hash: 3967238301, value: "2000-01-01 00:00:00 UTC", position: 23, active: True, run: 0 }, left: Tree([{ entry: { name: "table-caption", name_hash: 3725961352, value: "Table", position: 45, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 45 }]), right: Tree([]), height: 2, longest: 0, max_position: 45 }]), right: Tree([{ entry: { name: "docdir", name_hash: 4180903034, value: "", position: 24, active: True, run: 0 }, left: Tree([{ entry: { name: "basebackend-html", name_hash: 4062005514, value: "", position: 5, active: True, run: 0 }, left: Tree([]), right: Tree([]), height: 1, longest: 0, max_position: 5 }]), right: Tree([]), height: 2, longest: 0, max_position: 24 }]), height: 3, longest: 0, max_position: 45 }]), height: 4, longest: 0, max_position: 51 }]), height: 5, longest: 0, max_position: 53 }]), height: 6, longest: 0, max_position: 53 }])
 
 # END GENERATED STANDARD TREE
 
-child : List(Tree), U64 -> Tree
-child = |children, index| children.get(index) ?? Empty
+child : Children, U64 -> Tree
+child = |children, index| if index == 0 children.left else if index == 1 children.right else Tree([])
+
+set_child : Children, U64, Tree -> Children
+set_child = |children, index, value| if index == 0 { ..children, left: value } else if index == 1 { ..children, right: value } else { left: Tree([]), right: Tree([]) }
 
 height : Tree -> U64
 height = |tree| match tree {
-	Empty => 0
-	Node(n) => n.height
+	Tree([]) => 0
+	Tree([n, ..]) => n.height
 }
 
 longest : Tree -> U64
 longest = |tree| match tree {
-	Empty => 0
-	Node(n) => n.longest
+	Tree([]) => 0
+	Tree([n, ..]) => n.longest
 }
 
 max_position : Tree -> U64
 max_position = |tree| match tree {
-	Empty => 0
-	Node(n) => n.max_position
+	Tree([]) => 0
+	Tree([n, ..]) => n.max_position
 }
 
-child_stats : List(Tree), U64 -> { height : U64, longest : U64, max_position : U64 }
+child_stats : Children, U64 -> { height : U64, longest : U64, max_position : U64 }
 child_stats = |children, index| match child(children, index) {
-	Empty => { height: 0, longest: 0, max_position: 0 }
-	Node(n) => { height: n.height, longest: n.longest, max_position: n.max_position }
+	Tree([]) => { height: 0, longest: 0, max_position: 0 }
+	Tree([n, ..]) => { height: n.height, longest: n.longest, max_position: n.max_position }
 }
 
-node_children : Entry, List(Tree) -> Tree
+node_children : Entry, Children -> Tree
 node_children = |entry, children| {
 	left = child_stats(children, 0)
 	right = child_stats(children, 1)
-	Node({ entry, children, height: U64.max(left.height, right.height) + 1, longest: U64.max(entry.run, U64.max(left.longest, right.longest)), max_position: U64.max(entry.position, U64.max(left.max_position, right.max_position)) })
+	Tree([{ entry, left: children.left, right: children.right, height: U64.max(left.height, right.height) + 1, longest: U64.max(entry.run, U64.max(left.longest, right.longest)), max_position: U64.max(entry.position, U64.max(left.max_position, right.max_position)) }])
 }
 
 node : Entry, Tree, Tree -> Tree
-node = |entry, left, right| node_children(entry, [left, right])
+node = |entry, left, right| node_children(entry, { left, right })
 
-rotate_left_children : Entry, List(Tree) -> Tree
+rotate_left_children : Entry, Children -> Tree
 rotate_left_children = |entry, children| {
 	selected = child(children, 1)
-	parent = children.set(1, Empty) ?? []
+	parent = set_child(children, 1, Tree([]))
 	match selected {
-		Empty => node_children(entry, parent)
-		Node({ entry: pivot, children: pivot_children, height: _, longest: _, max_position: _ }) => {
+		Tree([]) => node_children(entry, parent)
+		Tree([{ entry: pivot, left: pivot_left, right: pivot_right, height: _, longest: _, max_position: _ }, ..]) => {
+			pivot_children = { left: pivot_left, right: pivot_right }
 			middle = child(pivot_children, 0)
-			detached = pivot_children.set(0, Empty) ?? []
-			lower = node_children(entry, parent.set(1, middle) ?? [])
-			node_children(pivot, detached.set(0, lower) ?? [])
+			detached = set_child(pivot_children, 0, Tree([]))
+			lower = node_children(entry, set_child(parent, 1, middle))
+			node_children(pivot, set_child(detached, 0, lower))
 		}
 	}
 }
 
-rotate_right_children : Entry, List(Tree) -> Tree
+rotate_right_children : Entry, Children -> Tree
 rotate_right_children = |entry, children| {
 	selected = child(children, 0)
-	parent = children.set(0, Empty) ?? []
+	parent = set_child(children, 0, Tree([]))
 	match selected {
-		Empty => node_children(entry, parent)
-		Node({ entry: pivot, children: pivot_children, height: _, longest: _, max_position: _ }) => {
+		Tree([]) => node_children(entry, parent)
+		Tree([{ entry: pivot, left: pivot_left, right: pivot_right, height: _, longest: _, max_position: _ }, ..]) => {
+			pivot_children = { left: pivot_left, right: pivot_right }
 			middle = child(pivot_children, 1)
-			detached = pivot_children.set(1, Empty) ?? []
-			lower = node_children(entry, parent.set(0, middle) ?? [])
-			node_children(pivot, detached.set(1, lower) ?? [])
+			detached = set_child(pivot_children, 1, Tree([]))
+			lower = node_children(entry, set_child(parent, 0, middle))
+			node_children(pivot, set_child(detached, 1, lower))
 		}
 	}
 }
 
 rotate_left : Tree -> Tree
 rotate_left = |tree| match tree {
-	Empty => Empty
-	Node({ entry, children, height: _, longest: _, max_position: _ }) => rotate_left_children(entry, children)
+	Tree([]) => Tree([])
+	Tree([{ entry, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => rotate_left_children(entry, { left: node_left, right: node_right })
 }
 
 rotate_right : Tree -> Tree
 rotate_right = |tree| match tree {
-	Empty => Empty
-	Node({ entry, children, height: _, longest: _, max_position: _ }) => rotate_right_children(entry, children)
+	Tree([]) => Tree([])
+	Tree([{ entry, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => rotate_right_children(entry, { left: node_left, right: node_right })
 }
 
-child_heavy : List(Tree), U64, U64 -> Bool
+child_heavy : Children, U64, U64 -> Bool
 child_heavy = |children, outer, inner| match child(children, outer) {
-	Empty => False
-	Node(n) => child_stats(n.children, inner).height > child_stats(n.children, 1 - inner).height
+	Tree([]) => False
+	Tree([n, ..]) => child_stats({ left: n.left, right: n.right }, inner).height > child_stats({ left: n.left, right: n.right }, 1 - inner).height
 }
 
-balance_children : Entry, List(Tree) -> Tree
+balance_children : Entry, Children -> Tree
 balance_children = |entry, children| {
 	left_height = child_stats(children, 0).height
 	right_height = child_stats(children, 1).height
 	if left_height > right_height + 1 {
 		if child_heavy(children, 0, 1) {
 			selected = child(children, 0)
-			detached = children.set(0, Empty) ?? []
+			detached = set_child(children, 0, Tree([]))
 			changed = rotate_left(selected)
-			rotate_right_children(entry, detached.set(0, changed) ?? [])
+			rotate_right_children(entry, set_child(detached, 0, changed))
 		} else rotate_right_children(entry, children)
 	} else if right_height > left_height + 1 {
 		if child_heavy(children, 1, 0) {
 			selected = child(children, 1)
-			detached = children.set(1, Empty) ?? []
+			detached = set_child(children, 1, Tree([]))
 			changed = rotate_right(selected)
-			rotate_left_children(entry, detached.set(1, changed) ?? [])
+			rotate_left_children(entry, set_child(detached, 1, changed))
 		} else rotate_left_children(entry, children)
 	} else node_children(entry, children)
 }
 
 balance : Entry, Tree, Tree -> Tree
-balance = |entry, left, right| balance_children(entry, [left, right])
+balance = |entry, left, right| balance_children(entry, { left, right })
 
 compare_bytes : List(U8), List(U8) -> I64
 compare_bytes = |a, b| {
@@ -585,40 +594,42 @@ compare_entries = |a, b, by_position| if by_position {
 
 insert : Tree, Entry, Bool -> Tree
 insert = |tree, entry, by_position| match tree {
-	Empty => node(entry, Empty, Empty)
-	Node({ entry: previous, children, height: _, longest: _, max_position: _ }) => {
+	Tree([]) => node(entry, Tree([]), Tree([]))
+	Tree([{ entry: previous, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => {
+		children = { left: node_left, right: node_right }
 		order = compare_entries(entry, previous, by_position)
 		if order < 0 {
 			selected = child(children, 0)
-			detached = children.set(0, Empty) ?? []
+			detached = set_child(children, 0, Tree([]))
 			changed = insert(selected, entry, by_position)
-			balance_children(previous, detached.set(0, changed) ?? [])
+			balance_children(previous, set_child(detached, 0, changed))
 		} else if order > 0 {
 			selected = child(children, 1)
-			detached = children.set(1, Empty) ?? []
+			detached = set_child(children, 1, Tree([]))
 			changed = insert(selected, entry, by_position)
-			balance_children(previous, detached.set(1, changed) ?? [])
+			balance_children(previous, set_child(detached, 1, changed))
 		} else node_children(entry, children)
 	}
 }
 
 # The selected child is detached before recursion, so retaining its old slot
-# cannot force copies of otherwise unique descendant child buffers.
+# cannot force copies of otherwise unique descendant node lists.
 update_name : Tree, Entry, List(U8), Bool -> { tree : Tree, prior_active : Bool, prior_position : U64 }
 update_name = |tree, replacement, bytes, increment_revision| match tree {
-	Empty => { tree: node(replacement, Empty, Empty), prior_active: False, prior_position: 0 }
-	Node({ entry: previous, children, height: _, longest: _, max_position: _ }) => {
+	Tree([]) => { tree: node(replacement, Tree([]), Tree([])), prior_active: False, prior_position: 0 }
+	Tree([{ entry: previous, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => {
+		children = { left: node_left, right: node_right }
 		order = compare_query_key(replacement.name_hash, replacement.name, bytes, previous)
 		if order < 0 {
 			selected = child(children, 0)
-			detached = children.set(0, Empty) ?? []
+			detached = set_child(children, 0, Tree([]))
 			{ tree: changed, prior_active, prior_position } = update_name(selected, replacement, bytes, increment_revision)
-			{ tree: balance_children(previous, detached.set(0, changed) ?? []), prior_active, prior_position }
+			{ tree: balance_children(previous, set_child(detached, 0, changed)), prior_active, prior_position }
 		} else if order > 0 {
 			selected = child(children, 1)
-			detached = children.set(1, Empty) ?? []
+			detached = set_child(children, 1, Tree([]))
 			{ tree: changed, prior_active, prior_position } = update_name(selected, replacement, bytes, increment_revision)
-			{ tree: balance_children(previous, detached.set(1, changed) ?? []), prior_active, prior_position }
+			{ tree: balance_children(previous, set_child(detached, 1, changed)), prior_active, prior_position }
 		} else {
 			value = if increment_revision ((U64.from_str(previous.value) ?? 0) + 1).to_str() else replacement.value
 			entry = { ..replacement, value }
@@ -628,40 +639,42 @@ update_name = |tree, replacement, bytes, increment_revision| match tree {
 }
 
 # General join preserves the existing two-key AVL behavior while restoring
-# through the owned buffers on the taller path.
-join_children : Entry, List(Tree) -> Tree
+# through the child handles on the taller path.
+join_children : Entry, Children -> Tree
 join_children = |entry, children| {
 	left_height = child_stats(children, 0).height
 	right_height = child_stats(children, 1).height
 	if left_height > right_height + 1 {
 		selected = child(children, 0)
-		parent = children.set(0, Empty) ?? []
+		parent = set_child(children, 0, Tree([]))
 		match selected {
-			Empty => node_children(entry, parent)
-			Node({ entry: pivot, children: pivot_children, height: _, longest: _, max_position: _ }) => {
+			Tree([]) => node_children(entry, parent)
+			Tree([{ entry: pivot, left: pivot_left, right: pivot_right, height: _, longest: _, max_position: _ }, ..]) => {
+				pivot_children = { left: pivot_left, right: pivot_right }
 				middle = child(pivot_children, 1)
-				detached = pivot_children.set(1, Empty) ?? []
-				changed = join_children(entry, parent.set(0, middle) ?? [])
-				balance_children(pivot, detached.set(1, changed) ?? [])
+				detached = set_child(pivot_children, 1, Tree([]))
+				changed = join_children(entry, set_child(parent, 0, middle))
+				balance_children(pivot, set_child(detached, 1, changed))
 			}
 		}
 	} else if right_height > left_height + 1 {
 		selected = child(children, 1)
-		parent = children.set(1, Empty) ?? []
+		parent = set_child(children, 1, Tree([]))
 		match selected {
-			Empty => node_children(entry, parent)
-			Node({ entry: pivot, children: pivot_children, height: _, longest: _, max_position: _ }) => {
+			Tree([]) => node_children(entry, parent)
+			Tree([{ entry: pivot, left: pivot_left, right: pivot_right, height: _, longest: _, max_position: _ }, ..]) => {
+				pivot_children = { left: pivot_left, right: pivot_right }
 				middle = child(pivot_children, 0)
-				detached = pivot_children.set(0, Empty) ?? []
-				changed = join_children(entry, parent.set(1, middle) ?? [])
-				balance_children(pivot, detached.set(0, changed) ?? [])
+				detached = set_child(pivot_children, 0, Tree([]))
+				changed = join_children(entry, set_child(parent, 1, middle))
+				balance_children(pivot, set_child(detached, 0, changed))
 			}
 		}
 	} else node_children(entry, children)
 }
 
 join_name : Entry, Tree, Tree -> Tree
-join_name = |entry, left, right| join_children(entry, [left, right])
+join_name = |entry, left, right| join_children(entry, { left, right })
 
 NameUpdate : { entry : Entry, bytes : List(U8), increment_revision : Bool }
 
@@ -679,72 +692,74 @@ replacement_entry = |previous, update| {
 # divergence each child receives at most one ordinary AVL update.
 update_name_pair : Tree, NameUpdate, NameUpdate -> NamePairResult
 update_name_pair = |tree, low, high| match tree {
-	Empty => { tree: node(high.entry, node(low.entry, Empty, Empty), Empty), low_active: False, low_position: 0, high_active: False, high_position: 0 }
-	Node({ entry: previous, children, height: _, longest: _, max_position: _ }) => {
+	Tree([]) => { tree: node(high.entry, node(low.entry, Tree([]), Tree([])), Tree([])), low_active: False, low_position: 0, high_active: False, high_position: 0 }
+	Tree([{ entry: previous, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => {
+		children = { left: node_left, right: node_right }
 		low_order = compare_query_key(low.entry.name_hash, low.entry.name, low.bytes, previous)
 		high_order = compare_query_key(high.entry.name_hash, high.entry.name, high.bytes, previous)
 		if high_order < 0 {
 			selected = child(children, 0)
-			detached = children.set(0, Empty) ?? []
+			detached = set_child(children, 0, Tree([]))
 			{ tree: changed, low_active, low_position, high_active, high_position } = update_name_pair(selected, low, high)
-			{ tree: join_children(previous, detached.set(0, changed) ?? []), low_active, low_position, high_active, high_position }
+			{ tree: join_children(previous, set_child(detached, 0, changed)), low_active, low_position, high_active, high_position }
 		} else if low_order > 0 {
 			selected = child(children, 1)
-			detached = children.set(1, Empty) ?? []
+			detached = set_child(children, 1, Tree([]))
 			{ tree: changed, low_active, low_position, high_active, high_position } = update_name_pair(selected, low, high)
-			{ tree: join_children(previous, detached.set(1, changed) ?? []), low_active, low_position, high_active, high_position }
+			{ tree: join_children(previous, set_child(detached, 1, changed)), low_active, low_position, high_active, high_position }
 		} else {
 			left = child(children, 0)
-			without_left = children.set(0, Empty) ?? []
+			without_left = set_child(children, 0, Tree([]))
 			right = child(without_left, 1)
-			detached = without_left.set(1, Empty) ?? []
+			detached = set_child(without_left, 1, Tree([]))
 			{ tree: changed_left, prior_active: low_active, prior_position: low_position } = if low_order < 0 update_name(left, low.entry, low.bytes, low.increment_revision) else { tree: left, prior_active: previous.active, prior_position: previous.position }
 			{ tree: changed_right, prior_active: high_active, prior_position: high_position } = if high_order > 0 update_name(right, high.entry, high.bytes, high.increment_revision) else { tree: right, prior_active: previous.active, prior_position: previous.position }
 			entry = if low_order == 0 replacement_entry(previous, low) else if high_order == 0 replacement_entry(previous, high) else previous
-			restored = detached.set(0, changed_left) ?? []
-			{ tree: balance_children(entry, restored.set(1, changed_right) ?? []), low_active, low_position, high_active, high_position }
+			restored = set_child(detached, 0, changed_left)
+			{ tree: balance_children(entry, set_child(restored, 1, changed_right)), low_active, low_position, high_active, high_position }
 		}
 	}
 }
 
 smallest : Tree -> Entry
 smallest = |tree| match tree {
-	Node(n) => match child(n.children, 0) {
-		Empty => n.entry
+	Tree([n, ..]) => match child({ left: n.left, right: n.right }, 0) {
+		Tree([]) => n.entry
 		next => smallest(next)
 	}
-	Empty => { name: "", name_hash: 0, value: "", position: 0, active: False, run: 0 }
+	Tree([]) => { name: "", name_hash: 0, value: "", position: 0, active: False, run: 0 }
 }
 
 remove : Tree, Entry, Bool -> Tree
 remove = |tree, entry, by_position| match tree {
-	Empty => Empty
-	Node({ entry: previous, children, height: _, longest: _, max_position: _ }) => {
+	Tree([]) => Tree([])
+	Tree([{ entry: previous, left: node_left, right: node_right, height: _, longest: _, max_position: _ }, ..]) => {
+		children = { left: node_left, right: node_right }
 		order = compare_entries(entry, previous, by_position)
 		if order < 0 {
 			selected = child(children, 0)
-			detached = children.set(0, Empty) ?? []
+			detached = set_child(children, 0, Tree([]))
 			changed = remove(selected, entry, by_position)
-			return balance_children(previous, detached.set(0, changed) ?? [])
+			return balance_children(previous, set_child(detached, 0, changed))
 		}
 		if order > 0 {
 			selected = child(children, 1)
-			detached = children.set(1, Empty) ?? []
+			detached = set_child(children, 1, Tree([]))
 			changed = remove(selected, entry, by_position)
-			return balance_children(previous, detached.set(1, changed) ?? [])
+			return balance_children(previous, set_child(detached, 1, changed))
 		}
 		left = child(children, 0)
-		without_left = children.set(0, Empty) ?? []
+		without_left = set_child(children, 0, Tree([]))
 		right = child(without_left, 1)
-		detached = without_left.set(1, Empty) ?? []
+		detached = set_child(without_left, 1, Tree([]))
 		match (left, right) {
-			(Empty, other) => other
-			(other, Empty) => other
+			(Tree([]), other) => other
+			(other, Tree([])) => other
 			(present_left, present_right) => {
 				successor = smallest(present_right)
 				changed = remove(present_right, successor, by_position)
-				restored = detached.set(0, present_left) ?? []
-				balance_children(successor, restored.set(1, changed) ?? [])
+				restored = set_child(detached, 0, present_left)
+				balance_children(successor, set_child(restored, 1, changed))
 			}
 		}
 	}
@@ -758,10 +773,10 @@ find_name = |tree, name| {
 
 find_name_key : Tree, U64, Str, List(U8) -> Try(Entry, [Missing])
 find_name_key = |tree, hash, name, bytes| match tree {
-	Empty => Err(Missing)
-	Node(n) => {
+	Tree([]) => Err(Missing)
+	Tree([n, ..]) => {
 		order = compare_query_key(hash, name, bytes, n.entry)
-		if order < 0 find_name_key(child(n.children, 0), hash, name, bytes) else if order > 0 find_name_key(child(n.children, 1), hash, name, bytes) else Ok(n.entry)
+		if order < 0 find_name_key(child({ left: n.left, right: n.right }, 0), hash, name, bytes) else if order > 0 find_name_key(child({ left: n.left, right: n.right }, 1), hash, name, bytes) else Ok(n.entry)
 	}
 }
 
@@ -787,21 +802,21 @@ ordering = |comparison| if comparison < 0 Before else if comparison > 0 After el
 balanced_entries : List(Entry), U64, U64 -> Tree
 balanced_entries = |entries, start, end| {
 	if start >= end {
-		return Empty
+		return Tree([])
 	}
 	middle = start + (end - start) // 2
 	match entries.get(middle) {
 		Ok(entry) => node(entry, balanced_entries(entries, start, middle), balanced_entries(entries, middle + 1, end))
-		Err(_) => Empty
+		Err(_) => Tree([])
 	}
 }
 
 all_entries : Tree, List(Entry) -> List(Entry)
 all_entries = |tree, entries| match tree {
-	Empty => entries
-	Node(n) => {
-		before = all_entries(child(n.children, 0), entries)
-		all_entries(child(n.children, 1), if n.entry.active before.append(n.entry) else before)
+	Tree([]) => entries
+	Tree([n, ..]) => {
+		before = all_entries(child({ left: n.left, right: n.right }, 0), entries)
+		all_entries(child({ left: n.left, right: n.right }, 1), if n.entry.active before.append(n.entry) else before)
 	}
 }
 
@@ -942,14 +957,14 @@ certify_baseline = |store| {
 # also answers exact deltas without maintaining a second mutation journal.
 changed_since : Tree, U64, List(Str) -> List(Str)
 changed_since = |tree, cutoff, names| match tree {
-	Empty => names
-	Node(n) => {
+	Tree([]) => names
+	Tree([n, ..]) => {
 		if n.max_position < cutoff {
 			return names
 		}
-		before = changed_since(child(n.children, 0), cutoff, names)
+		before = changed_since(child({ left: n.left, right: n.right }, 0), cutoff, names)
 		current = if n.entry.position >= cutoff before.append(n.entry.name) else before
-		changed_since(child(n.children, 1), cutoff, current)
+		changed_since(child({ left: n.left, right: n.right }, 1), cutoff, current)
 	}
 }
 
@@ -962,8 +977,8 @@ refresh_prefix = |store| {
 
 ordered_values : Tree, List(AsciiDocSource.Attribute) -> List(AsciiDocSource.Attribute)
 ordered_values = |tree, values| match tree {
-	Empty => values
-	Node(n) => ordered_values(child(n.children, 1), ordered_values(child(n.children, 0), values).append({ name: n.entry.name, value: n.entry.value }))
+	Tree([]) => values
+	Tree([n, ..]) => ordered_values(child({ left: n.left, right: n.right }, 1), ordered_values(child({ left: n.left, right: n.right }, 0), values).append({ name: n.entry.name, value: n.entry.value }))
 }
 
 expect {
@@ -1289,8 +1304,8 @@ header_name = |name| name == "__header-source" or name.starts_with("__header-ini
 
 tree_has_header_names : Tree -> Bool
 tree_has_header_names = |tree| match tree {
-	Empty => False
-	Node(n) => (n.entry.active and header_name(n.entry.name)) or tree_has_header_names(child(n.children, 0)) or tree_has_header_names(child(n.children, 1))
+	Tree([]) => False
+	Tree([n, ..]) => (n.entry.active and header_name(n.entry.name)) or tree_has_header_names(child({ left: n.left, right: n.right }, 0)) or tree_has_header_names(child({ left: n.left, right: n.right }, 1))
 }
 
 # Equal composed scopes preserve live mutations across nested substitutions,
@@ -1386,20 +1401,20 @@ sequential_definition_model = |store, name, value, unset_value, parsed| {
 # tombstones and changed-name cutoff errors.
 model_entries : Tree -> List(Entry)
 model_entries = |tree| match tree {
-	Empty => []
-	Node(n) => model_entries(child(n.children, 0)).append(n.entry).concat(model_entries(child(n.children, 1)))
+	Tree([]) => []
+	Tree([n, ..]) => model_entries(child({ left: n.left, right: n.right }, 0)).append(n.entry).concat(model_entries(child({ left: n.left, right: n.right }, 1)))
 }
 
 model_tree_stats : Tree -> { valid : Bool, height : U64, run : U64, position : U64, active : U64 }
 model_tree_stats = |tree| match tree {
-	Empty => { valid: True, height: 0, run: 0, position: 0, active: 0 }
-	Node(n) => {
-		left = model_tree_stats(child(n.children, 0))
-		right = model_tree_stats(child(n.children, 1))
+	Tree([]) => { valid: True, height: 0, run: 0, position: 0, active: 0 }
+	Tree([n, .. as extra]) => {
+		left = model_tree_stats(child({ left: n.left, right: n.right }, 0))
+		right = model_tree_stats(child({ left: n.left, right: n.right }, 1))
 		h = U64.max(left.height, right.height) + 1
 		run = U64.max(value_run(n.entry.value), U64.max(left.run, right.run))
 		position = U64.max(n.entry.position, U64.max(left.position, right.position))
-		{ valid: n.children.len() == 2 and left.valid and right.valid and left.height <= right.height + 1 and right.height <= left.height + 1 and n.height == h and n.longest == run and n.max_position == position and n.entry.run == value_run(n.entry.value), height: h, run, position, active: left.active + right.active + (if n.entry.active 1 else 0) }
+		{ valid: extra.is_empty() and left.valid and right.valid and left.height <= right.height + 1 and right.height <= left.height + 1 and n.height == h and n.longest == run and n.max_position == position and n.entry.run == value_run(n.entry.value), height: h, run, position, active: left.active + right.active + (if n.entry.active 1 else 0) }
 	}
 }
 

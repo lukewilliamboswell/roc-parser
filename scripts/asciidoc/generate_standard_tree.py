@@ -46,14 +46,14 @@ def emit(bindings):
     entries=[dict(a,position=i,name_hash=name_hash(a['name']),run=run(a['value'])) for i,a in enumerate(bindings)]
     entries.sort(key=lambda a:(a['name_hash'],a['name'].encode('utf-8')))
     def subtree(start,end):
-        if start>=end:return 'Empty',0,0,0
+        if start>=end:return 'Tree([])',0,0,0
         middle=start+(end-start)//2
         left,lh,lr,lp=subtree(start,middle)
         right,rh,rr,rp=subtree(middle+1,end)
         a=entries[middle];height=max(lh,rh)+1;longest=max(a['run'],lr,rr);position=max(a['position'],lp,rp)
         quoted=lambda v:json.dumps(v,ensure_ascii=False)
         entry='{ name: '+quoted(a['name'])+', name_hash: '+str(a['name_hash'])+', value: '+quoted(a['value'])+', position: '+str(a['position'])+', active: True, run: '+str(a['run'])+' }'
-        tree='Node({ entry: '+entry+', children: ['+left+', '+right+'], height: '+str(height)+', longest: '+str(longest)+', max_position: '+str(position)+' })'
+        tree='Tree([{ entry: '+entry+', left: '+left+', right: '+right+', height: '+str(height)+', longest: '+str(longest)+', max_position: '+str(position)+' }])'
         return tree,height,longest,position
     tree,_,_,_=subtree(0,len(entries))
     return 'standard_tree : Tree\nstandard_tree = '+tree+'\n'
