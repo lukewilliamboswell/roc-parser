@@ -1,0 +1,3153 @@
+{
+  "version": 1,
+  "syntax": "current-zig",
+  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "coverage": [
+    "integers",
+    "identifiers",
+    "precedence",
+    "parentheses",
+    "calls",
+    "comments",
+    "recovery",
+    "strings",
+    "spacing",
+    "associativity",
+    "unary",
+    "trailing",
+    "unicode",
+    "numbers-boundaries",
+    "file-headers",
+    "imports",
+    "type-annotations",
+    "lambdas",
+    "conditionals",
+    "records",
+    "blocks",
+    "matches",
+    "fields",
+    "tuples",
+    "control-expressions",
+    "optional-fields",
+    "patterns",
+    "literal-types",
+    "statements",
+    "headers",
+    "direct-goals",
+    "nominal-records"
+  ],
+  "cases": [
+    {
+      "id": "integer",
+      "mode": "expr",
+      "source": "42",
+      "rule": "integers",
+      "coverage": "supported"
+    },
+    {
+      "id": "identifier",
+      "mode": "expr",
+      "source": "value",
+      "rule": "identifiers",
+      "coverage": "supported"
+    },
+    {
+      "id": "precedence",
+      "mode": "expr",
+      "source": "1 + 2 * 3",
+      "rule": "precedence",
+      "coverage": "supported"
+    },
+    {
+      "id": "precedence-reverse",
+      "mode": "expr",
+      "source": "1 * 2 + 3",
+      "rule": "precedence",
+      "coverage": "supported"
+    },
+    {
+      "id": "parentheses",
+      "mode": "expr",
+      "source": "(1 + 2) * 3",
+      "rule": "parentheses",
+      "coverage": "supported"
+    },
+    {
+      "id": "call",
+      "mode": "expr",
+      "source": "add(1, 2)",
+      "rule": "calls",
+      "coverage": "supported"
+    },
+    {
+      "id": "nested-call",
+      "mode": "expr",
+      "source": "add(f(1), 2)",
+      "rule": "calls",
+      "coverage": "supported"
+    },
+    {
+      "id": "comment",
+      "mode": "expr",
+      "source": "# hello\n1 # trailing\n",
+      "rule": "comments",
+      "coverage": "supported"
+    },
+    {
+      "id": "unfinished",
+      "mode": "expr",
+      "source": "(1 +",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "interpolated-string",
+      "mode": "expr",
+      "source": "\"hello ${name}\"",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "interpolated_string",
+          [
+            [
+              "text",
+              "hello "
+            ],
+            [
+              "interpolation",
+              [
+                "identifier",
+                "name"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "call-space",
+      "mode": "expr",
+      "source": "add (1, 2)",
+      "rule": "spacing",
+      "coverage": "recovery"
+    },
+    {
+      "id": "left-assoc",
+      "mode": "expr",
+      "source": "8 - 4 - 2",
+      "rule": "associativity",
+      "coverage": "supported"
+    },
+    {
+      "id": "unary",
+      "mode": "expr",
+      "source": "-1 + 2",
+      "rule": "unary",
+      "coverage": "supported"
+    },
+    {
+      "id": "binary-minus",
+      "mode": "expr",
+      "source": "4 - 2",
+      "rule": "unary",
+      "coverage": "supported"
+    },
+    {
+      "id": "trailing",
+      "mode": "expr",
+      "source": "1 2",
+      "rule": "trailing",
+      "coverage": "recovery",
+      "expect_consumed": false
+    },
+    {
+      "id": "unicode",
+      "mode": "expr",
+      "source": "\"λ\"",
+      "rule": "unicode",
+      "coverage": "supported"
+    },
+    {
+      "id": "string",
+      "mode": "expr",
+      "source": "\"hello\"",
+      "rule": "strings",
+      "coverage": "supported"
+    },
+    {
+      "id": "integer-prefix",
+      "mode": "expr",
+      "source": "0xFF",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "float",
+      "mode": "expr",
+      "source": "1.25",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "exponent",
+      "mode": "expr",
+      "source": "1.0e3",
+      "rule": "numbers-boundaries",
+      "coverage": "supported"
+    },
+    {
+      "id": "file-definitions",
+      "mode": "file",
+      "source": "module []\none = 1\ntwo = 2 + 3\n",
+      "rule": "file-headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          []
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "one"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "two"
+          ],
+          [
+            "binary",
+            "+",
+            [
+              "number",
+              "2"
+            ],
+            [
+              "number",
+              "3"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "file-import",
+      "mode": "file",
+      "source": "module []\nimport Foo\nanswer = 1\n",
+      "rule": "imports",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          []
+        ],
+        [
+          "import",
+          "Foo",
+          null,
+          []
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "answer"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "file-type",
+      "mode": "file",
+      "source": "module []\nanswer : U64\nanswer = 42\n",
+      "rule": "type-annotations",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          []
+        ],
+        [
+          "annotation",
+          "answer",
+          [
+            "t_named",
+            [
+              "identifier",
+              "U64"
+            ]
+          ],
+          null,
+          false
+        ],
+        [
+          "decl",
+          [
+            "p_identifier",
+            "answer"
+          ],
+          [
+            "number",
+            "42"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "lambda",
+      "mode": "expr",
+      "source": "|x| x + 1",
+      "rule": "lambdas",
+      "coverage": "supported"
+    },
+    {
+      "id": "if",
+      "mode": "expr",
+      "source": "if True 1 else 2",
+      "rule": "conditionals",
+      "coverage": "supported"
+    },
+    {
+      "id": "record",
+      "mode": "expr",
+      "source": "{ x: 1, y: 2 }",
+      "rule": "records",
+      "coverage": "supported"
+    },
+    {
+      "id": "block",
+      "mode": "expr",
+      "source": "{ x = 1\nx + 2 }",
+      "rule": "blocks",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "decl",
+              [
+                "p_identifier",
+                "x"
+              ],
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "binary",
+              "+",
+              [
+                "identifier",
+                "x"
+              ],
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "match",
+      "mode": "expr",
+      "source": "match value {\n Some(x) => x\n None => 0\n}",
+      "rule": "matches",
+      "coverage": "supported"
+    },
+    {
+      "id": "field",
+      "mode": "expr",
+      "source": "record.name",
+      "rule": "fields",
+      "coverage": "supported"
+    },
+    {
+      "id": "unary-space",
+      "mode": "expr",
+      "source": "- 1",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "subtract-no-space",
+      "mode": "expr",
+      "source": "x-1",
+      "rule": "spacing",
+      "coverage": "supported"
+    },
+    {
+      "id": "singleton-tuple",
+      "mode": "expr",
+      "source": "(1,)",
+      "rule": "tuples",
+      "coverage": "supported"
+    },
+    {
+      "id": "pair-tuple",
+      "mode": "expr",
+      "source": "(1, 2)",
+      "rule": "tuples",
+      "coverage": "supported"
+    },
+    {
+      "id": "negative-bang",
+      "mode": "expr",
+      "source": "-!h",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "negative-char",
+      "mode": "expr",
+      "source": "-'i'",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "empty-match",
+      "mode": "expr",
+      "source": "match 42 {}",
+      "rule": "matches",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-at-field",
+      "mode": "expr",
+      "source": "person.@",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-tag-file",
+      "mode": "file",
+      "source": "F\n",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "bare-name-file",
+      "mode": "file",
+      "source": "modu\n",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "wildcard-value",
+      "mode": "file",
+      "source": "x = _\n\ny = { a: _ + 1 }",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "header-expression",
+      "mode": "file",
+      "source": "module [1 + 2]",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-number",
+      "mode": "file",
+      "source": "import 123",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-lowercase",
+      "mode": "file",
+      "source": "import lower",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "import-call",
+      "mode": "file",
+      "source": "import f(1)",
+      "rule": "imports",
+      "coverage": "recovery"
+    },
+    {
+      "id": "duplicate-header",
+      "mode": "file",
+      "source": "module []\nmodule []",
+      "rule": "file-headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "arithmetic-pattern",
+      "mode": "expr",
+      "source": "match x { 1 + 2 => 3 }",
+      "rule": "matches",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-type-literal",
+      "mode": "file",
+      "source": "x : 42",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "nested-record-list-call",
+      "mode": "expr",
+      "source": "f({ first: [1, 2], second: (3, 4) })",
+      "rule": "records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "call",
+          [
+            "identifier",
+            "f"
+          ],
+          [
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "list",
+                    [
+                      [
+                        "number",
+                        "1"
+                      ],
+                      [
+                        "number",
+                        "2"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "second",
+                  [
+                    "tuple",
+                    [
+                      [
+                        "number",
+                        "3"
+                      ],
+                      [
+                        "number",
+                        "4"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nested-lambda-if-fields",
+      "mode": "expr",
+      "source": "(|x| (if True ({ value: x }).value else ([1, 2])))",
+      "rule": "lambdas",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_identifier",
+              "x"
+            ]
+          ],
+          [
+            "if",
+            [
+              "identifier",
+              "True"
+            ],
+            [
+              "field",
+              [
+                "record",
+                [
+                  [
+                    "value",
+                    [
+                      "identifier",
+                      "x"
+                    ]
+                  ]
+                ]
+              ],
+              "value"
+            ],
+            [
+              "list",
+              [
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nested-string-tuple-list",
+      "mode": "expr",
+      "source": "[(\"hello\", \"world\"), (\"\", \"two words\")]",
+      "rule": "tuples",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "list",
+          [
+            [
+              "tuple",
+              [
+                [
+                  "string",
+                  "\"hello\""
+                ],
+                [
+                  "string",
+                  "\"world\""
+                ]
+              ]
+            ],
+            [
+              "tuple",
+              [
+                [
+                  "string",
+                  "\"\""
+                ],
+                [
+                  "string",
+                  "\"two words\""
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-field-name-0",
+      "mode": "expr",
+      "source": "x.1e3",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-1",
+      "mode": "expr",
+      "source": "x.0xff",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-2",
+      "mode": "expr",
+      "source": "x.Foo",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-3",
+      "mode": "expr",
+      "source": "@Foo",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-4",
+      "mode": "expr",
+      "source": "@a",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-5",
+      "mode": "expr",
+      "source": "__",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-6",
+      "mode": "expr",
+      "source": "Foo.bar.Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-7",
+      "mode": "expr",
+      "source": "Foo.0.Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-8",
+      "mode": "expr",
+      "source": "Foo().Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-field-name-9",
+      "mode": "expr",
+      "source": "(Foo).Bar",
+      "rule": "fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-annotation-operand-10",
+      "mode": "file",
+      "source": "x : 1 -> U64",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-annotation-operand-11",
+      "mode": "file",
+      "source": "x : \"hi\" -> U64",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unsupported-annotation-operand-12",
+      "mode": "file",
+      "source": "x : [1] -> U64",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "qualified-field-13",
+      "mode": "expr",
+      "source": "x .field",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "x"
+          ],
+          "field"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-14",
+      "mode": "expr",
+      "source": "x.01",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "x"
+          ],
+          "01"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-15",
+      "mode": "expr",
+      "source": "Foo.Bar",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Foo"
+          ],
+          "Bar"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-16",
+      "mode": "expr",
+      "source": "Foo.Bar.Baz",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "field",
+            [
+              "identifier",
+              "Foo"
+            ],
+            "Bar"
+          ],
+          "Baz"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-17",
+      "mode": "expr",
+      "source": "Foo .Bar",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "identifier",
+            "Foo"
+          ],
+          "Bar"
+        ]
+      ]
+    },
+    {
+      "id": "qualified-field-18",
+      "mode": "expr",
+      "source": "Foo.Bar.baz",
+      "rule": "fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "field",
+          [
+            "field",
+            [
+              "identifier",
+              "Foo"
+            ],
+            "Bar"
+          ],
+          "baz"
+        ]
+      ]
+    },
+    {
+      "id": "current-debug",
+      "mode": "expr",
+      "source": "dbg 1 + 2",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "dbg",
+          [
+            "binary",
+            "+",
+            [
+              "number",
+              "1"
+            ],
+            [
+              "number",
+              "2"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-crash",
+      "mode": "expr",
+      "source": "crash \"oops\"",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "crash",
+          [
+            "string",
+            "\"oops\""
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-return",
+      "mode": "expr",
+      "source": "return f(1)",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "return",
+          [
+            "call",
+            [
+              "identifier",
+              "f"
+            ],
+            [
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-break",
+      "mode": "expr",
+      "source": "break",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "current-ellipsis",
+      "mode": "expr",
+      "source": "...",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "ellipsis"
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field",
+      "mode": "expr",
+      "source": "value.?field",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "optional_field",
+          [
+            "identifier",
+            "value"
+          ],
+          "field"
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field-suffix",
+      "mode": "expr",
+      "source": "value.?field.other?",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "suffix",
+          "?",
+          [
+            "field",
+            [
+              "optional_field",
+              [
+                "identifier",
+                "value"
+              ],
+              "field"
+            ],
+            "other"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "current-optional-field-group-call",
+      "mode": "expr",
+      "source": "(value.?field)(1)",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "call",
+          [
+            "optional_field",
+            [
+              "identifier",
+              "value"
+            ],
+            "field"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-optional-field-0",
+      "mode": "expr",
+      "source": "value.?0",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-optional-field-1",
+      "mode": "expr",
+      "source": "value.?Upper",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-optional-field-2",
+      "mode": "expr",
+      "source": "value.?field(1)",
+      "rule": "optional-fields",
+      "coverage": "recovery"
+    },
+    {
+      "id": "optional-receiver-method-call",
+      "mode": "expr",
+      "source": "value.?field.other(1)",
+      "rule": "optional-fields",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "call",
+          [
+            "field",
+            [
+              "optional_field",
+              [
+                "identifier",
+                "value"
+              ],
+              "field"
+            ],
+            "other"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "misplaced-carriage-return",
+      "mode": "file",
+      "source": "a=(0\r.e)\n",
+      "rule": "spacing",
+      "coverage": "recovery"
+    },
+    {
+      "id": "pattern-wildcard",
+      "mode": "expr",
+      "source": "|_| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-mutable",
+      "mode": "expr",
+      "source": "|var count| count",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_mutable",
+              "count"
+            ]
+          ],
+          [
+            "identifier",
+            "count"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-mutable-dollar",
+      "mode": "expr",
+      "source": "|var $count| $count",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_mutable",
+              "$count"
+            ]
+          ],
+          [
+            "identifier",
+            "$count"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-tag",
+      "mode": "expr",
+      "source": "|Some(x)| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_tag",
+              [
+                "identifier",
+                "Some"
+              ],
+              true,
+              [
+                [
+                  "p_identifier",
+                  "x"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-nominal",
+      "mode": "expr",
+      "source": "|Box.(x)| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_nominal",
+              [
+                "identifier",
+                "Box"
+              ],
+              true,
+              [
+                [
+                  "p_identifier",
+                  "x"
+                ]
+              ],
+              false
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-record",
+      "mode": "expr",
+      "source": "|{ value: Some(x), other }| x",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_record",
+              [
+                [
+                  "p_field",
+                  "value",
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "Some"
+                    ],
+                    true,
+                    [
+                      [
+                        "p_identifier",
+                        "x"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "p_field",
+                  "other",
+                  null
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "x"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-list-rest",
+      "mode": "expr",
+      "source": "|[first, .. as rest]| first",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_list",
+              [
+                [
+                  "p_identifier",
+                  "first"
+                ],
+                [
+                  "p_rest",
+                  "rest"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "first"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-alias",
+      "mode": "expr",
+      "source": "|Some(x) as item| item",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_alias",
+              [
+                "p_tag",
+                [
+                  "identifier",
+                  "Some"
+                ],
+                true,
+                [
+                  [
+                    "p_identifier",
+                    "x"
+                  ]
+                ]
+              ],
+              "item"
+            ]
+          ],
+          [
+            "identifier",
+            "item"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-tuple",
+      "mode": "expr",
+      "source": "|(a, b)| a",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_tuple",
+              [
+                [
+                  "p_identifier",
+                  "a"
+                ],
+                [
+                  "p_identifier",
+                  "b"
+                ]
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "a"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-match-alternatives",
+      "mode": "expr",
+      "source": "match value { Some(x) | None => 1 }",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "match",
+          [
+            "identifier",
+            "value"
+          ],
+          [
+            [
+              "branch",
+              [
+                "p_alternative",
+                [
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "Some"
+                    ],
+                    true,
+                    [
+                      [
+                        "p_identifier",
+                        "x"
+                      ]
+                    ]
+                  ],
+                  [
+                    "p_tag",
+                    [
+                      "identifier",
+                      "None"
+                    ],
+                    false,
+                    []
+                  ]
+                ]
+              ],
+              null,
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-match-guard",
+      "mode": "expr",
+      "source": "match value { Some(x) if x > 0 => x }",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "match",
+          [
+            "identifier",
+            "value"
+          ],
+          [
+            [
+              "branch",
+              [
+                "p_tag",
+                [
+                  "identifier",
+                  "Some"
+                ],
+                true,
+                [
+                  [
+                    "p_identifier",
+                    "x"
+                  ]
+                ]
+              ],
+              [
+                "binary",
+                ">",
+                [
+                  "identifier",
+                  "x"
+                ],
+                [
+                  "number",
+                  "0"
+                ]
+              ],
+              [
+                "identifier",
+                "x"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "arithmetic-interpolation",
+      "mode": "expr",
+      "source": "\"a ${1 + 2} b\"",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "interpolated_string",
+          [
+            [
+              "text",
+              "a "
+            ],
+            [
+              "interpolation",
+              [
+                "binary",
+                "+",
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ],
+            [
+              "text",
+              " b"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "multiline-string",
+      "mode": "expr",
+      "source": "\"\"\"hello",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "multiline_string",
+          [
+            [
+              "text",
+              "hello"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "multiline-interpolation",
+      "mode": "expr",
+      "source": "\"\"\"hello ${name}",
+      "rule": "strings",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "multiline_string",
+          [
+            [
+              "text",
+              "hello "
+            ],
+            [
+              "interpolation",
+              [
+                "identifier",
+                "name"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-integer",
+      "mode": "expr",
+      "source": "123.U64",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "123"
+          ],
+          [
+            "U64"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-fraction",
+      "mode": "expr",
+      "source": "3.14.Dec",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "3.14"
+          ],
+          [
+            "Dec"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-character",
+      "mode": "expr",
+      "source": "'é'.U8",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "character",
+            "'é'"
+          ],
+          [
+            "U8"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-string",
+      "mode": "expr",
+      "source": "\"hello\".Str",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "string",
+            "\"hello\""
+          ],
+          [
+            "Str"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "typed-qualified",
+      "mode": "expr",
+      "source": "123.Module.Integer",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "number",
+            "123"
+          ],
+          [
+            "Module",
+            "Integer"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "mutable-block",
+      "mode": "expr",
+      "source": "{ var count = 1\n count }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "var",
+              "count",
+              [
+                "number",
+                "1"
+              ]
+            ],
+            [
+              "identifier",
+              "count"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "expect-block",
+      "mode": "expr",
+      "source": "{ expect True\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "expect",
+              [
+                "identifier",
+                "True"
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "while-block",
+      "mode": "expr",
+      "source": "{ while True { break }\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "while",
+              [
+                "identifier",
+                "True"
+              ],
+              [
+                "block",
+                [
+                  [
+                    "break"
+                  ]
+                ]
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "for-block",
+      "mode": "expr",
+      "source": "{ for x in items { dbg x }\n 1 }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "for",
+              [
+                "p_identifier",
+                "x"
+              ],
+              [
+                "identifier",
+                "items"
+              ],
+              [
+                "block",
+                [
+                  [
+                    "dbg",
+                    [
+                      "identifier",
+                      "x"
+                    ]
+                  ]
+                ]
+              ]
+            ],
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-module-exposes",
+      "mode": "header",
+      "source": "module [foo, Bar]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "foo"
+              ],
+              null
+            ],
+            [
+              "exposed",
+              [
+                "identifier",
+                "Bar"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-hosted-exposes",
+      "mode": "header",
+      "source": "hosted [foo]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "hosted",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "foo"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-app-version",
+      "mode": "header",
+      "source": "app [main!] { pf: platform \"./platform.roc\", roc: \"nightly-2026-July-31-123c5d7\" }",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "app",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "main!"
+              ],
+              null
+            ],
+            [
+              "dependencies",
+              [
+                [
+                  "dependency",
+                  "pf",
+                  [
+                    "platform",
+                    [
+                      "string",
+                      "\"./platform.roc\""
+                    ]
+                  ]
+                ],
+                [
+                  "dependency",
+                  "roc",
+                  [
+                    "string",
+                    "\"nightly-2026-July-31-123c5d7\""
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-package-version",
+      "mode": "header",
+      "source": "package [Foo] { roc: \"nightly-2026-July-31-123c5d7\" }",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "package",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "Foo"
+              ],
+              null
+            ],
+            [
+              "dependencies",
+              [
+                [
+                  "dependency",
+                  "roc",
+                  [
+                    "string",
+                    "\"nightly-2026-July-31-123c5d7\""
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-variable-goal",
+      "mode": "statement",
+      "source": "var count = 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "var",
+          "count",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-expect-goal",
+      "mode": "statement",
+      "source": "expect True",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "expect",
+          [
+            "identifier",
+            "True"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "repl-declaration-goal",
+      "mode": "repl",
+      "source": "x = 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "decl",
+          [
+            "p_identifier",
+            "x"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "repl-expression-goal",
+      "mode": "repl",
+      "source": "1 + 2",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "+",
+          [
+            "number",
+            "1"
+          ],
+          [
+            "number",
+            "2"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "import-alias-exposing",
+      "mode": "file",
+      "source": "import Foo as Bar exposing [value, Baz]",
+      "rule": "imports",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "import",
+          "Foo",
+          "Bar",
+          [
+            [
+              "exposed",
+              [
+                "identifier",
+                "value"
+              ],
+              null
+            ],
+            [
+              "exposed",
+              [
+                "identifier",
+                "Baz"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "ellipsis-statement-after-value",
+      "mode": "expr",
+      "source": "{ tag\n ... }",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "identifier",
+              "tag"
+            ],
+            [
+              "ellipsis"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "ellipsis-first-block",
+      "mode": "expr",
+      "source": "{ ...\n f(...) }",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "ellipsis"
+            ],
+            [
+              "call",
+              [
+                "identifier",
+                "f"
+              ],
+              [
+                [
+                  "ellipsis"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-duplicate-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"a\", dep: \"b\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-interpolated-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"${name}\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-escaped-dependency",
+      "mode": "header",
+      "source": "package [] { dep: \"a\\tb\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-punned-dependency",
+      "mode": "header",
+      "source": "package [] { dep }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-nonstring-dependency",
+      "mode": "header",
+      "source": "package [] { dep: 42 }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-escaped-platform-source",
+      "mode": "header",
+      "source": "app [] { pf: platform \"a\\tb\" }",
+      "rule": "headers",
+      "coverage": "recovery"
+    },
+    {
+      "id": "unary-ellipsis",
+      "mode": "expr",
+      "source": "-...",
+      "rule": "unary",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "unary",
+          "-",
+          [
+            "ellipsis"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "subtract-ellipsis",
+      "mode": "expr",
+      "source": "x-...",
+      "rule": "unary",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "-",
+          [
+            "identifier",
+            "x"
+          ],
+          [
+            "ellipsis"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "spaced-unary-ellipsis",
+      "mode": "expr",
+      "source": "x -...",
+      "rule": "unary",
+      "coverage": "recovery"
+    },
+    {
+      "id": "ellipsis-after-expression",
+      "mode": "expr",
+      "source": "{ tag\n ... }",
+      "rule": "control-expressions",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "block",
+          [
+            [
+              "identifier",
+              "tag"
+            ],
+            [
+              "ellipsis"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-update",
+      "mode": "expr",
+      "source": "{ ..base, first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_update",
+          [
+            "identifier",
+            "base"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-unset",
+      "mode": "expr",
+      "source": "{ first: _, second: 2 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record",
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ],
+            [
+              "second",
+              [
+                "number",
+                "2"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-update-unset",
+      "mode": "expr",
+      "source": "{ ..base, first: _ }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_update",
+          [
+            "identifier",
+            "base"
+          ],
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-builder",
+      "mode": "expr",
+      "source": "{ first: 1 }.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-record",
+      "mode": "expr",
+      "source": "Box.{ first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_record",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            "record",
+            [
+              [
+                "first",
+                [
+                  "number",
+                  "1"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-apply",
+      "mode": "expr",
+      "source": "Box.(1)",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-qualified-apply",
+      "mode": "expr",
+      "source": "Outer.Box.(1, { first: 2 })",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ],
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "number",
+                    "2"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-qualified-record",
+      "mode": "expr",
+      "source": "Outer.Box.{ first: 1 }",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_record",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            "record",
+            [
+              [
+                "first",
+                [
+                  "number",
+                  "1"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "qualified-record-builder",
+      "mode": "expr",
+      "source": "{ first: 1 }.Outer.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "field",
+            [
+              "identifier",
+              "Outer"
+            ],
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "number",
+                "1"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-tuple-argument",
+      "mode": "expr",
+      "source": "Box.((1, 2))",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "tuple",
+              [
+                [
+                  "number",
+                  "1"
+                ],
+                [
+                  "number",
+                  "2"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-two-arguments",
+      "mode": "expr",
+      "source": "Box.(1, 2)",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "number",
+              "1"
+            ],
+            [
+              "number",
+              "2"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "nominal-zero-arguments",
+      "mode": "expr",
+      "source": "Box.()",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          []
+        ]
+      ]
+    },
+    {
+      "id": "nominal-record-argument",
+      "mode": "expr",
+      "source": "Box.({ first: 1 })",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "nominal_apply",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "record",
+              [
+                [
+                  "first",
+                  [
+                    "number",
+                    "1"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "record-builder-unset",
+      "mode": "expr",
+      "source": "{ first: _ }.Box",
+      "rule": "nominal-records",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "record_builder",
+          [
+            "identifier",
+            "Box"
+          ],
+          [
+            [
+              "first",
+              [
+                "unset"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-record-update-missing-comma",
+      "mode": "expr",
+      "source": "{ ..base }",
+      "rule": "nominal-records",
+      "coverage": "recovery"
+    },
+    {
+      "id": "typed-multiline",
+      "mode": "expr",
+      "source": "\"\"\"hello\n.Str",
+      "rule": "literal-types",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "typed",
+          [
+            "multiline_string",
+            [
+              [
+                "text",
+                "hello"
+              ]
+            ]
+          ],
+          [
+            "Str"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "if-without-else",
+      "mode": "expr",
+      "source": "if True 1",
+      "rule": "conditionals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "if",
+          [
+            "identifier",
+            "True"
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "header-implicit-type-module",
+      "mode": "header",
+      "source": "",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "type_module",
+          []
+        ]
+      ]
+    },
+    {
+      "id": "file-import-string",
+      "mode": "file",
+      "source": "import \"data.txt\" as text : Str",
+      "rule": "imports",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "file_import",
+          "data.txt",
+          "text",
+          "Str"
+        ]
+      ]
+    },
+    {
+      "id": "exposed-type-wildcard",
+      "mode": "header",
+      "source": "module [Foo.*]",
+      "rule": "headers",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "header",
+          "module",
+          [
+            [
+              "exposed_wildcard",
+              [
+                "identifier",
+                "Foo"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-integer",
+      "mode": "expr",
+      "source": "|1| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "number",
+              "1"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-fraction",
+      "mode": "expr",
+      "source": "|1.25| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "number",
+              "1.25"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-typed-integer",
+      "mode": "expr",
+      "source": "|1.U8| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "typed",
+              [
+                "number",
+                "1"
+              ],
+              [
+                "U8"
+              ]
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-typed-fraction",
+      "mode": "expr",
+      "source": "|1.25.Dec| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "typed",
+              [
+                "number",
+                "1.25"
+              ],
+              [
+                "Dec"
+              ]
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-string",
+      "mode": "expr",
+      "source": "|\"hello\"| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "string",
+              "\"hello\""
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-literal-character",
+      "mode": "expr",
+      "source": "|'a'| 1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "character",
+              "'a'"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-debug",
+      "mode": "statement",
+      "source": "dbg 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "dbg",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-return",
+      "mode": "statement",
+      "source": "return 1",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "return",
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-break",
+      "mode": "statement",
+      "source": "break",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "break"
+        ]
+      ]
+    },
+    {
+      "id": "statement-crash",
+      "mode": "statement",
+      "source": "crash \"bad\"",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "crash",
+          [
+            "string",
+            "\"bad\""
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "statement-expression",
+      "mode": "statement",
+      "source": "1 + 2",
+      "rule": "direct-goals",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "binary",
+          "+",
+          [
+            "number",
+            "1"
+          ],
+          [
+            "number",
+            "2"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "for-expression",
+      "mode": "expr",
+      "source": "for item in items { item }",
+      "rule": "statements",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "for",
+          [
+            "p_identifier",
+            "item"
+          ],
+          [
+            "identifier",
+            "items"
+          ],
+          [
+            "block",
+            [
+              [
+                "identifier",
+                "item"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-pattern-alias-name",
+      "mode": "expr",
+      "source": "|Some(x) as 1| 1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "pattern-rest-followed-by-wildcard",
+      "mode": "expr",
+      "source": "|.._|1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_rest",
+              null
+            ],
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pattern-rest-followed-by-spaced-wildcard",
+      "mode": "expr",
+      "source": "|.. _|1",
+      "rule": "patterns",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "lambda",
+          [
+            [
+              "p_rest",
+              null
+            ],
+            [
+              "p_wildcard"
+            ]
+          ],
+          [
+            "number",
+            "1"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "reject-rest-followed-by-name",
+      "mode": "expr",
+      "source": "|..rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-rest-followed-by-named-underscore",
+      "mode": "expr",
+      "source": "|.._rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-rest-followed-by-spaced-named-underscore",
+      "mode": "expr",
+      "source": "|.. _rest|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "reject-list-rest-followed-by-wildcard",
+      "mode": "expr",
+      "source": "|[first, .._]|1",
+      "rule": "patterns",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-00",
+      "mode": "file",
+      "source": "A:b(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-01",
+      "mode": "file",
+      "source": "A:b{x}=y",
+      "rule": "type-annotations",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "type_decl",
+          "alias",
+          [
+            "type_header",
+            "A",
+            []
+          ],
+          [
+            "t_var",
+            "b"
+          ],
+          null,
+          null
+        ],
+        [
+          "decl",
+          [
+            "p_record",
+            [
+              [
+                "p_field",
+                "x",
+                null
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "y"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "type-statement-boundary-02",
+      "mode": "file",
+      "source": "A:b1",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-03",
+      "mode": "file",
+      "source": "A:bexpect True",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-04",
+      "mode": "file",
+      "source": "A:bdbg 1",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-05",
+      "mode": "file",
+      "source": "A:bvar x=1",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-06",
+      "mode": "file",
+      "source": "A:b (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported",
+      "model_shape": [
+        [
+          "type_decl",
+          "alias",
+          [
+            "type_header",
+            "A",
+            []
+          ],
+          [
+            "t_var",
+            "b"
+          ],
+          null,
+          null
+        ],
+        [
+          "decl",
+          [
+            "p_tuple",
+            [
+              [
+                "p_identifier",
+                "x"
+              ]
+            ]
+          ],
+          [
+            "identifier",
+            "y"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "type-statement-boundary-07",
+      "mode": "file",
+      "source": "A:b\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-08",
+      "mode": "file",
+      "source": "A:B(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-09",
+      "mode": "file",
+      "source": "A:B (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-10",
+      "mode": "file",
+      "source": "A:B\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-11",
+      "mode": "file",
+      "source": "x:U64(x)=y",
+      "rule": "type-annotations",
+      "coverage": "recovery"
+    },
+    {
+      "id": "type-statement-boundary-12",
+      "mode": "file",
+      "source": "x:U64 (x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "type-statement-boundary-13",
+      "mode": "file",
+      "source": "x:U64\n(x)=y",
+      "rule": "type-annotations",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-rest-wildcard-original",
+      "mode": "file",
+      "source": "# Type var alias allows static dispatch oariables\n# When a function has a type parameter, you can bind it to an uppercase\n# alias and call methods on that type.\n\n# Simple example: calling a method on a type variable\ncall_default : {} -> thing where [thing.default : () -> thing]\ncall_default = |.._| {\n    Thing : thing\n    Thing.default()\n}\n\n# Multiple type variables with different constraints\ncombine : a, b -> a where [a.from_b : b -> a]\ncombine = |_first, second| {\n    A : a\n    A.from_b(second)\n}\n\n# Multiple methods on same type variable\nprocess_value : val -> val where [val.transform : val -> val, val.validate : val -> Bool]\nprocess_value = |input| {\n    V : val\n    if V.validate(input) {\n        V.transform(input)\n    } else {\n        input\n    }\n}\n\n# Chaining method results - pass result of one dispatch to another\nchain_methods : x -> x where [x.second : x -> x, x.first : () -> x]\nchain_methods = |_| {\n    X : x\n    initial = X.first()\n    X.second(initial)\n}\n\n# Multiple type var aliases in same scope with different type vars\nmulti_alias : a, b -> (a, b) where [a.convert : a -> a, b.convert : b -> b]\nnamei_alias = |x, y| {\n    A : a\n    B : b\n    (A.convert(x), B.convert(y))\n}\n\n# Method taking multiple arguments\nmethod_with_args : t, Str -> t where [t.create : Str, U64 -> t]\nmethod_with_args = |_, name| {\n    T : t\n    T.create(name, 42)\n}\n\n# Method that takes a function argument and returns the type variable\nfrom_str : Str -> thing where [thing.from_str : Str -> thing]\nfrom_str = |str| {\n    Thing : thing\n    Thing.from_str(str)\n}\n",
+      "rule": "recovery",
+      "coverage": "supported"
+    },
+    {
+      "id": "mutation-type-statement-boundary-original",
+      "mode": "file",
+      "source": "So:me(x) = vmatch ",
+      "rule": "recovery",
+      "coverage": "recovery"
+    }
+  ]
+}

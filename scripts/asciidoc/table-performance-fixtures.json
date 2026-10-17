@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded performance mutation sources retained unchanged; semantic predicates authored from the intended native table row and header rules.",
+    "native_reference": "Pinned Asciidoctor parser.rb parse_table and table.rb ParserContext#close_cell."
+  },
+  "coverage": [
+    {
+      "category": "tables-performance-regressions",
+      "required_cases": [
+        "table-performance-mutation-719-1112",
+        "table-performance-mutation-719-1152",
+        "table-performance-mutation-719-1676",
+        "table-performance-mutation-719-1760",
+        "table-performance-mutation-719-1804"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "table-performance-mutation-719-1112",
+      "source": "----\namber689\n----\n\nA *bold* _word_ quiet river4347\n\n|===\n|one |two\n|Delta101 |four\n|===\n\n|===\n|one |two\n|quiet river8166 |four\n|===\n\nDelta880\n\n== café7801\n\n|===\n|o\n\nne |two\n|東京345 |four\n|===\n\ncafé719\n\n|===\n|one |two\n|amber728 |four\n|===",
+      "category": "tables-performance-regressions",
+      "features": [
+        "inferred-logical-row",
+        "implicit-header-boundary"
+      ],
+      "support": "future",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1112",
+        "position": 164,
+        "insert": "\n\n"
+      },
+      "expect": {
+        "html_contains": [
+          "<p class=\"tableblock\">o</p>\n<p class=\"tableblock\">ne</p></td>\n<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">two</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
+      ]
+    },
+    {
+      "id": "table-performance-mutation-719-1152",
+      "source": "* 東京8066\n* sibling\n\n:value: amber1426\n\n{value}\n\nA *bold* _word_ 東京5341\n\n|===\n|o----\nne |two\n|Delta7418 |four\n|===\n\nA *bold* _word_ amber9646\n\n== amber9994\n\nNOTE: quiet river5200\n\nifdef::backend-html5[東京4082]\n\n|===\n|one |two\n|café3753 |four\n|===",
+      "category": "tables-performance-regressions",
+      "features": [
+        "inferred-logical-row",
+        "implicit-header-boundary"
+      ],
+      "support": "future",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1152",
+        "position": 79,
+        "insert": "----\n"
+      },
+      "expect": {
+        "html_contains": [
+          "o----\nne</p></td>\n<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">two</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
+      ]
+    },
+    {
+      "id": "table-performance-mutation-719-1676",
+      "source": "NOTE: Delta9666\n\n* Delta328\n* sibling\n\nA *bold* _word_ 東京9179\n\n|===\n|one |two\n|café4947 |four\n|===\n\nifdef::backend-html5[東京1607]\n\n....\ncafé7164\n....\n\n----\nRoc5890\n----\n\nifdef::backend-html5[quiet river7847]\n\n|===\n|one |two\n\\|quiet river4559 |four\n|===\n\n* Delta703\n* sibling",
+      "category": "tables-performance-regressions",
+      "features": [
+        "inferred-logical-row",
+        "implicit-header-boundary"
+      ],
+      "support": "future",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1676",
+        "position": 223,
+        "insert": "\\"
+      },
+      "expect": {
+        "html_contains": [
+          "<col style=\"width: 33.3333%;\">",
+          "two\n|quiet river4559</p></td>\n<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">four</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
+      ]
+    },
+    {
+      "id": "table-performance-mutation-719-1760",
+      "source": "== 東京6074\n\nNOTE: café9805\n\n|===\n|o\n\nne |two\n|café7083 |four\n|===",
+      "category": "tables-performance-regressions",
+      "features": [
+        "inferred-logical-row",
+        "implicit-header-boundary"
+      ],
+      "support": "future",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1760",
+        "position": 34,
+        "insert": "\n\n"
+      },
+      "expect": {
+        "html_contains": [
+          "<p class=\"tableblock\">o</p>\n<p class=\"tableblock\">ne</p></td>\n<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">two</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
+      ]
+    },
+    {
+      "id": "table-performance-mutation-719-1804",
+      "source": "A *bold* _word_ Roc6280\n\ncafé3731\n\n|===\n|one\n\n |two\n|quiet river2019 |four\n|===\n\n....\nquiet river9267\n....\n\n----\nquiet river5189\n----\n\nDelta7413\n\n....\nRoc6625\n....",
+      "category": "tables-performance-regressions",
+      "features": [
+        "inferred-logical-row",
+        "implicit-header-boundary"
+      ],
+      "support": "future",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1804",
+        "position": 44,
+        "insert": "\n\n"
+      },
+      "expect": {
+        "html_contains": [
+          "<thead>\n<tr>\n<th class=\"tableblock halign-left valign-top\">one</th>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
+      ]
+    }
+  ]
+}

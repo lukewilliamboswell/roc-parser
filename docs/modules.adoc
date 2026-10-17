@@ -17,12 +17,16 @@ documentation of every type and function, generated from the source.
 
 == The modules at a glance
 
-The package exposes seven modules. Two are general-purpose building blocks; the
-other five are ready-made parsers for one format each.
+The package exposes nine modules. Two are general-purpose building blocks; the
+others parse data formats or Roc source.
 
 [cols="1,3,3",options="header"]
 |===
 |Module |Use it to |Start from
+
+|{api}AsciiDoc/[`AsciiDoc`]
+|Parse and preprocess AsciiDoc, preserve source blocks and render embedded HTML
+|`AsciiDoc.parse_str`
 
 |{api}Parser/[`Parser`]
 |Combine small parsers into larger ones, for any input type
@@ -51,6 +55,10 @@ other five are ready-made parsers for one format each.
 |{api}Yaml/[`Yaml`]
 |Read a YAML configuration file or Markdown frontmatter
 |`Yaml.decode`, `Yaml.parse_str`, `Yaml.get_path`
+
+|{api}RocSyntax/[`RocSyntax`]
+|Preserve Roc source tokens and build a syntax tree for highlighting and analysis
+|`RocSyntax.parse_str`, `RocSyntax.parse_bytes`
 |===
 
 == How the modules fit together
@@ -75,6 +83,10 @@ Each format type module follows the same conventions:
   through the static dispatch method `parser_for`; the compiler infers the
   type from how you use the result.
 * Optional values are `Try(a, [Missing])`.
+
+`RocSyntax` returns a tolerant parse result directly, with diagnostics and an
+explicit coverage status. It retains tokens even when source is incomplete.
+See <<roc-syntax>> for its source-location conventions and tooling use.
 
 The following program uses one entry point from each module. It is
 `docs/examples/reference-modules.roc` in the repository, and CI runs it.

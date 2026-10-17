@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 from typing import Sequence
@@ -19,10 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FUZZ_ROOT = ROOT / "fuzz"
 WORK_ROOT = ROOT / ".roc-parser-tmp" / "fuzz"
 ROC_FUZZ_RELEASE = {
-    "version": "0.4.2",
-    "commit": "b37bb7dc0b6aa44390d4bfa84978404e94cec885",
-    "bundle": "9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
-    "sha256": "60d45f07a51515f2a49eadcf2163fb9c2801df5341c8b8685f81581010c7dd2c",
+    "version": "0.4.3",
+    "commit": "1abb6f0f76fc3ed6016cdf5da4e16e8ed1cfdfc4",
+    "bundle": "41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+    "sha256": "d9bae1e93e6e94f3fafb4040861402dbab90af247023461d8e5451db4a3ae0f2",
 }
 
 # How reviewed JSON seeds become corpus entries:
@@ -62,6 +63,8 @@ def target(
 
 TARGETS = dict(
     [
+        target("asciidoc-raw", "asciidoc", "raw", "asciidoc"),
+        target("asciidoc-structured", max_input_size=256),
         target("markdown-document", "markdown-document", "raw", "markdown-document"),
         target("markdown-blocks", max_input_size=1024),
         target("markdown-refdefs", max_input_size=256),
@@ -88,6 +91,8 @@ TARGETS = dict(
         target("parser-combinators", max_input_size=256),
         target("string-primitives", max_input_size=256, timeout=10),
         target("byte-scan", max_input_size=256, timeout=10),
+        target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
+        target("roc-syntax-structured", max_input_size=256),
     ]
 )
 
@@ -180,10 +185,25 @@ def run_directory(target_name: str) -> Path:
     return WORK_ROOT / "runs" / target_name
 
 
+def build_identity(target_name: str, roc: str) -> dict:
+    config = TARGETS[target_name]
+    digest = hashlib.sha256()
+    for path in [config.source, *sorted((ROOT / "package").glob("*.roc"))]:
+        digest.update(str(path.relative_to(ROOT)).encode())
+        digest.update(path.read_bytes())
+    compiler_path = Path(shutil.which(roc) or roc)
+    compiler_sha256 = hashlib.sha256(compiler_path.read_bytes()).hexdigest() if compiler_path.is_file() else None
+    return {"source_sha256": digest.hexdigest(), "compiler": command_output([roc, "version"], ROOT), "compiler_sha256": compiler_sha256,
+            "flags": ["--no-cache", "--opt=speed", "--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE}
+
+
 def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]:
     config = TARGETS[target_name]
     output = binary_path(target_name)
 
+    manifest_path = output.with_suffix(".build.json")
+    syntax_target = target_name.startswith("roc-syntax-")
+    identity = build_identity(target_name, roc) if syntax_target else None
     if no_build:
         if not output.is_file():
             print(
@@ -191,16 +211,31 @@ def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]
                 file=sys.stderr,
             )
             return 2, output
+        if syntax_target:
+            try:
+                saved = json.loads(manifest_path.read_text())
+            except (OSError, ValueError):
+                print("error: syntax fuzz binary has no build identity; rebuild without --no-build", file=sys.stderr)
+                return 2, output
+            actual_hash = hashlib.sha256(output.read_bytes()).hexdigest()
+            if saved.get("identity") != identity or saved.get("binary_sha256") != actual_hash:
+                print("error: syntax fuzz binary identity differs from source/compiler; rebuild without --no-build", file=sys.stderr)
+                return 2, output
         return 0, output
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = [roc, "build", "--fuzz", str(config.source), f"--output={output}"]
+    command = [roc, "build", "--no-cache", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
     print(f"+ {shlex.join(command)}", flush=True)
     try:
         completed = subprocess.run(command, cwd=ROOT, check=False)
     except OSError as problem:
         print(f"error: could not run Roc: {problem}", file=sys.stderr)
         return 2, output
+    if completed.returncode == 0 and syntax_target:
+        if identity != build_identity(target_name, roc):
+            print("error: syntax fuzz sources changed while building; rebuild", file=sys.stderr)
+            return 2, output
+        manifest_path.write_text(json.dumps({"identity": identity, "binary_sha256": hashlib.sha256(output.read_bytes()).hexdigest()}, indent=2) + "\n")
     return completed.returncode, output
 
 

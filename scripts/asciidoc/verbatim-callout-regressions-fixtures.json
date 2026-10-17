@@ -1,0 +1,557 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original exact small listing/callout controls; authored predicates unchanged. One existing exact request is mapped instead of duplicated.",
+    "status": "verified native/Ruby source0ef correctness; revalidate if source changes",
+    "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+    "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+    "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+    "retained_behaviors": [
+      {
+        "original_id": "verbatim-missing-closer-default-missing-closer",
+        "request_sha256": "da860db8324e451592ad0a549e54e0e1192279f89614ac139f3b3050180c9f50",
+        "source_sha256": "cdba3df38c99e9c286f9e02d702a07158e0fa91a85cc0f2f4c651a25002990a9",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>x &lt; y &amp; z</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-default-missing-closer",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-default-escaped-missing-closer",
+        "request_sha256": "c5bddc9bed9a9f9e584701add7d88acd184897a71895f6122585ffa0ea56708e",
+        "source_sha256": "923bb88277ba4d963e706fe4eb169ce24e4e14da019461056589aba7052e3ee6",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>x \\&lt;1 &amp; z</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-default-escaped-missing-closer",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-default-unicode-missing-closer",
+        "request_sha256": "a5d8b593e9c1abe77127016ca5ea749629d2b2cc94de1f5198f6defbde85a0de",
+        "source_sha256": "0360d7c21da270501b20a22bfc7380af9653b39351050443c4de5fb0882fc6d1",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>α &lt; β &amp; 🦊</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-default-unicode-missing-closer",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-default-multiline-missing-closer",
+        "request_sha256": "ff3871e664d601e665979147036279317734f2cdbd499c9ca35c8e6c6a271092",
+        "source_sha256": "1de589ab61bf9e3b3b427bd7c731bfff0dc8f646dedaab6e43d672a1b013cc1d",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>a &lt; b\nc &amp; d</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-default-multiline-missing-closer",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-explicit-specialcharacters",
+        "request_sha256": "1d98716da6e025aed6a73e13602ca15ba4ec920d47be5d21de9f7af3868590bd",
+        "source_sha256": "ededd0b53a9bf5b60ea6e52bae08597ae707b3ac5ddb2c38713c159c0f0e597d",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>x &lt; y &amp; z</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-explicit-specialcharacters",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-custom-quotes",
+        "request_sha256": "e0827b8fe2d3d739b43df8652df5c3c71e0fd9df09c6f39663a4dc91ec6a5fb0",
+        "source_sha256": "fdb0345c43a6649a2efe52a83a5eb89a7afcc77e607a6661df1ae0f6e4f4d0ec",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<strong>bold</strong>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-custom-quotes",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-modified-quotes",
+        "request_sha256": "4b8961a3e747902fb0945a3c1a8d283f16c556363f641a39f25d7d00357e88c5",
+        "source_sha256": "5511501820746ecebc3d02cdd64688bcf08c984c002c106c68d3d30eb6642fb7",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<strong>bold</strong> &lt; raw &amp;"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-modified-quotes",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-modified-no-callouts",
+        "request_sha256": "baab6eeda08c79529fb65a23444d612083d8f2f8c22fa9f14323329f67e54c51",
+        "source_sha256": "d8008df34afff51025af756748abb4d826ae0a3e69f8a93449012b8de1115940",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>x &lt; y &amp; z</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-modified-no-callouts",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-custom-none",
+        "request_sha256": "8c0318f86808360d0401dac4e3d05f29b5b9e45afa3960628720a7757a14d1d1",
+        "source_sha256": "60581ae0c57a4dc7187404ef407ec145dc2f60f1520c2862bc0e3f8ef59f3b9d",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>*raw* < tag</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-custom-none",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-valid-normal-callout",
+        "request_sha256": "967f6fdc2859bccf49f92b82bc3533dc675ff90a1aab47c55cd50f27887451dc",
+        "source_sha256": "3aa5f014a917cf5ce24b8214403f94c4925b5d8cf7218af643595d12136d7a97",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<b class=\"conum\">(1)</b>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-valid-normal-callout",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      },
+      {
+        "original_id": "verbatim-missing-closer-valid-comment-callout",
+        "request_sha256": "183096ac4b2ea4f4e5b7086331636a2fa58bf3e098c5f8d635c14ef75489cc06",
+        "source_sha256": "1dc0aa565ae32c5c4291e8aff16d49204730f6cc55075547be248943f0a0f800",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "&lt;!--<b class=\"conum\">(1)</b>--&gt;"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "deduplicated-exact-request",
+        "target_id": "block-callout-html-comment",
+        "target_fixture": "block-fixtures.json",
+        "existing_fixture_sha256": "cc65d58fb62586741ee25f626471fec11a2d24b0ba9934d8cc90536d899882fd"
+      },
+      {
+        "original_id": "verbatim-missing-closer-valid-escaped-callout",
+        "request_sha256": "024d919e4093a88c59497ba4574655e521f19db010045bbc6244696d96d1e4eb",
+        "source_sha256": "cb42a61ca0c0192907ca401740de05f51c5fe3698ae25a6093fa1fe9716c5b0a",
+        "authored_expect": {
+          "contexts": [
+            "listing"
+          ],
+          "html_contains": [
+            "<pre>x &lt;1&gt;</pre>"
+          ]
+        },
+        "verification": "verified native/Ruby source0ef correctness; revalidate if source changes",
+        "action": "retained-new",
+        "target_id": "verbatim-missing-closer-valid-escaped-callout",
+        "target_fixture": "verbatim-callout-regressions-fixtures.json"
+      }
+    ]
+  },
+  "coverage": [
+    {
+      "category": "delimited-blocks",
+      "required_cases": [
+        "verbatim-missing-closer-default-missing-closer",
+        "verbatim-missing-closer-default-escaped-missing-closer",
+        "verbatim-missing-closer-default-unicode-missing-closer",
+        "verbatim-missing-closer-default-multiline-missing-closer",
+        "verbatim-missing-closer-explicit-specialcharacters",
+        "verbatim-missing-closer-custom-quotes",
+        "verbatim-missing-closer-modified-quotes",
+        "verbatim-missing-closer-modified-no-callouts",
+        "verbatim-missing-closer-custom-none",
+        "verbatim-missing-closer-valid-normal-callout",
+        "verbatim-missing-closer-valid-escaped-callout"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "verbatim-missing-closer-default-missing-closer",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\nx < y & z\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x &lt; y &amp; z</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "cdba3df38c99e9c286f9e02d702a07158e0fa91a85cc0f2f4c651a25002990a9",
+        "request_sha256": "da860db8324e451592ad0a549e54e0e1192279f89614ac139f3b3050180c9f50",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-default-escaped-missing-closer",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\nx \\<1 & z\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x \\&lt;1 &amp; z</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "923bb88277ba4d963e706fe4eb169ce24e4e14da019461056589aba7052e3ee6",
+        "request_sha256": "c5bddc9bed9a9f9e584701add7d88acd184897a71895f6122585ffa0ea56708e",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-default-unicode-missing-closer",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\nα < β & 🦊\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>α &lt; β &amp; 🦊</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "0360d7c21da270501b20a22bfc7380af9653b39351050443c4de5fb0882fc6d1",
+        "request_sha256": "a5d8b593e9c1abe77127016ca5ea749629d2b2cc94de1f5198f6defbde85a0de",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-default-multiline-missing-closer",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\na < b\nc & d\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a &lt; b\nc &amp; d</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "1de589ab61bf9e3b3b427bd7c731bfff0dc8f646dedaab6e43d672a1b013cc1d",
+        "request_sha256": "ff3871e664d601e665979147036279317734f2cdbd499c9ca35c8e6c6a271092",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-explicit-specialcharacters",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "[subs=specialcharacters]\n----\nx < y & z\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x &lt; y &amp; z</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "ededd0b53a9bf5b60ea6e52bae08597ae707b3ac5ddb2c38713c159c0f0e597d",
+        "request_sha256": "1d98716da6e025aed6a73e13602ca15ba4ec920d47be5d21de9f7af3868590bd",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-custom-quotes",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "[subs=quotes]\n----\n*bold* < raw\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "fdb0345c43a6649a2efe52a83a5eb89a7afcc77e607a6661df1ae0f6e4f4d0ec",
+        "request_sha256": "e0827b8fe2d3d739b43df8652df5c3c71e0fd9df09c6f39663a4dc91ec6a5fb0",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-modified-quotes",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "[subs=\"+quotes\"]\n----\n*bold* < raw &\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<strong>bold</strong> &lt; raw &amp;"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "5511501820746ecebc3d02cdd64688bcf08c984c002c106c68d3d30eb6642fb7",
+        "request_sha256": "4b8961a3e747902fb0945a3c1a8d283f16c556363f641a39f25d7d00357e88c5",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-modified-no-callouts",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "[subs=\"-callouts\"]\n----\nx < y & z\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x &lt; y &amp; z</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "d8008df34afff51025af756748abb4d826ae0a3e69f8a93449012b8de1115940",
+        "request_sha256": "baab6eeda08c79529fb65a23444d612083d8f2f8c22fa9f14323329f67e54c51",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-custom-none",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "[subs=none]\n----\n*raw* < tag\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>*raw* < tag</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "60581ae0c57a4dc7187404ef407ec145dc2f60f1520c2862bc0e3f8ef59f3b9d",
+        "request_sha256": "8c0318f86808360d0401dac4e3d05f29b5b9e45afa3960628720a7757a14d1d1",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-valid-normal-callout",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\nx <1>\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<b class=\"conum\">(1)</b>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "3aa5f014a917cf5ce24b8214403f94c4925b5d8cf7218af643595d12136d7a97",
+        "request_sha256": "967f6fdc2859bccf49f92b82bc3533dc675ff90a1aab47c55cd50f27887451dc",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    },
+    {
+      "id": "verbatim-missing-closer-valid-escaped-callout",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\nx \\<1>\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x &lt;1&gt;</pre>"
+        ]
+      },
+      "provenance": {
+        "authored": true,
+        "source_sha256": "cb42a61ca0c0192907ca401740de05f51c5fe3698ae25a6093fa1fe9716c5b0a",
+        "request_sha256": "024d919e4093a88c59497ba4574655e521f19db010045bbc6244696d96d1e4eb",
+        "source_cohort_sha256": "89df651d05acc4014ff88c639f64a7e8d3962f0dd20da0d553e68e72c82403f0",
+        "verification_report_sha256": "052dc3a1a37c3b4240003d6dbb14b2a571abfc952d823da2f1724169b97a99bf",
+        "candidate_source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
+        "status": "verified native/Ruby source0ef correctness; revalidate if source changes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/callouts/"
+      ]
+    }
+  ]
+}

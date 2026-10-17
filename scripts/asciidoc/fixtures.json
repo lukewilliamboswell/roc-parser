@@ -1,0 +1,3172 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original short inputs authored for roc-parser; semantic expectations independently specified, never generated from oracle output.",
+    "reference_family": "Asciidoctor 2.0 documentation, retrieved 2026-10-16",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "SECURE safe mode; no ambient filesystem or URI expansion. Optional caller-supplied virtual include maps are interpreted by the pinned engine via a bounded registry; native selectors are excluded. Future means explicitly outside the minimal Roc subset."
+  },
+  "coverage": [
+    {
+      "category": "attributes",
+      "required_cases": [
+        "attribute-substitution",
+        "attribute-unset",
+        "attribute-body",
+        "attribute-missing",
+        "attribute-escaped",
+        "attribute-continuation"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "boundaries",
+      "required_cases": [
+        "unicode",
+        "crlf",
+        "boundary-unclosed-listing",
+        "boundary-unclosed-literal",
+        "boundary-dangling-attribute",
+        "boundary-unmatched-inline",
+        "boundary-no-space-heading",
+        "boundary-delimiter-near-miss",
+        "boundary-empty-list-marker",
+        "boundary-heading-eof",
+        "boundary-crlf-list",
+        "boundary-unicode-heading"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "breaks",
+      "required_cases": [
+        "thematic-break",
+        "page-break"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "comments",
+      "required_cases": [
+        "line-comment",
+        "comment-inline",
+        "comment-hidden"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "core",
+      "required_cases": [
+        "empty",
+        "blank-lines",
+        "paragraph-eof",
+        "paragraph-multiline",
+        "paragraph-separation"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "delimited-blocks",
+      "required_cases": [
+        "listing-raw",
+        "literal-raw",
+        "block-example",
+        "block-sidebar",
+        "block-quote",
+        "block-open",
+        "block-pass",
+        "block-comment",
+        "block-source",
+        "block-admonition",
+        "block-admonition-block",
+        "block-literal-paragraph",
+        "block-block-title",
+        "block-nesting"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "diagnostics",
+      "required_cases": [
+        "warning-section-skip",
+        "warning-comment-unclosed",
+        "warning-table-unclosed",
+        "warning-duplicate-id"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "headers",
+      "required_cases": [
+        "document-title",
+        "title-only",
+        "header-author",
+        "header-revision"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "inlines",
+      "required_cases": [
+        "inline-strong",
+        "inline-emphasis",
+        "inline-monospace",
+        "inline-unconstrained",
+        "inline-nested-formatting",
+        "inline-superscript",
+        "inline-subscript",
+        "inline-highlight",
+        "inline-escape-formatting",
+        "inline-inline-pass",
+        "inline-passthrough-macro",
+        "inline-hardbreak",
+        "inline-entities"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "lists",
+      "required_cases": [
+        "list-unordered",
+        "list-ordered",
+        "list-description",
+        "list-nested",
+        "list-mixed",
+        "list-continuation",
+        "list-continuation-listing",
+        "list-checklist",
+        "list-ordered-start",
+        "list-list-break",
+        "list-callouts",
+        "list-numbered-marker"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "macros",
+      "required_cases": [
+        "macro-url",
+        "macro-relative-link",
+        "macro-mailto",
+        "macro-inline-image",
+        "macro-block-image",
+        "macro-xref",
+        "macro-external-xref",
+        "macro-footnote",
+        "macro-kbd",
+        "macro-video",
+        "macro-audio"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "preprocessing",
+      "required_cases": [
+        "ifdef-enabled",
+        "ifdef-disabled",
+        "ifndef-enabled",
+        "ifeval",
+        "include-secure",
+        "include-uri-secure",
+        "conditional-nesting",
+        "conditional-inline",
+        "conditional-multiple"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "sections",
+      "required_cases": [
+        "section-siblings",
+        "section-nested",
+        "preamble",
+        "section-id",
+        "section-discrete",
+        "section-deep",
+        "section-inline"
+      ],
+      "scope": "minimal-and-future"
+    },
+    {
+      "category": "substitutions",
+      "required_cases": [
+        "subs-none",
+        "subs-attributes",
+        "subs-quotes",
+        "substitution-replacements"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "tables",
+      "required_cases": [
+        "table-simple",
+        "table-header",
+        "table-escaped-pipe",
+        "table-csv",
+        "table-asciidoc-cell",
+        "table-colspan"
+      ],
+      "scope": "future"
+    },
+    {
+      "category": "virtual-includes",
+      "required_cases": [
+        "virtual-include-basic",
+        "virtual-include-boundaries",
+        "virtual-include-paragraph-join",
+        "virtual-include-nested-relative",
+        "virtual-include-parent-relative",
+        "virtual-include-conditional-enabled",
+        "virtual-include-conditional-disabled",
+        "virtual-include-attribute-target",
+        "virtual-include-attribute-flow",
+        "virtual-include-sections",
+        "virtual-include-unicode-crlf",
+        "virtual-include-repeated",
+        "virtual-include-inside-listing",
+        "virtual-include-inside-literal",
+        "virtual-include-leveloffset",
+        "virtual-include-indent"
+      ],
+      "scope": "future"
+    }
+  ],
+  "cases": [
+    {
+      "id": "empty",
+      "category": "core",
+      "features": [
+        "empty"
+      ],
+      "source": "",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": []
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "blank-lines",
+      "category": "core",
+      "features": [
+        "blank-lines"
+      ],
+      "source": "\n\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": []
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "paragraph-eof",
+      "category": "core",
+      "features": [
+        "paragraph-eof"
+      ],
+      "source": "Simple words.",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Simple words.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "paragraph-multiline",
+      "category": "core",
+      "features": [
+        "paragraph-multiline"
+      ],
+      "source": "First line\nSecond line\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "First line\nSecond line",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "paragraph-separation",
+      "category": "core",
+      "features": [
+        "paragraph-separation"
+      ],
+      "source": "First\n\nSecond\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "First",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Second",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "document-title",
+      "category": "headers",
+      "features": [
+        "document-title"
+      ],
+      "source": "= Field Notes\n\nPlain text.\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "Field Notes",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Plain text.",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "title-only",
+      "category": "headers",
+      "features": [
+        "title-only"
+      ],
+      "source": "= Field Notes\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "Field Notes",
+          "blocks": []
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "section-siblings",
+      "category": "sections",
+      "features": [
+        "section-siblings"
+      ],
+      "source": "== Alpha\n\nOne\n\n== Beta\n\nTwo\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Alpha",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "One",
+                  "blocks": []
+                }
+              ]
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Beta",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Two",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "section-nested",
+      "category": "sections",
+      "features": [
+        "section-nested"
+      ],
+      "source": "== Alpha\n\n=== Beta\n\nWords\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Alpha",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "section",
+                  "level": 2,
+                  "title": "Beta",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "paragraph",
+                      "level": 0,
+                      "title": "",
+                      "source": "Words",
+                      "blocks": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "preamble",
+      "category": "sections",
+      "features": [
+        "preamble"
+      ],
+      "source": "= Notes\n\nBefore\n\n== Topic\n\nAfter",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "Notes",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Topic",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "After",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "listing-raw",
+      "category": "delimited-blocks",
+      "features": [
+        "listing-raw"
+      ],
+      "source": "----\n<a> *raw*\n  indented\n----\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "<a> *raw*\n  indented",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "literal-raw",
+      "category": "delimited-blocks",
+      "features": [
+        "literal-raw"
+      ],
+      "source": "....\n<a> *raw*\n....",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "<a> *raw*",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "line-comment",
+      "category": "comments",
+      "features": [
+        "line-comment"
+      ],
+      "source": "// omitted\n\nVisible\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Visible",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "thematic-break",
+      "category": "breaks",
+      "features": [
+        "thematic-break"
+      ],
+      "source": "Before\n\n'''\n\nAfter",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "After",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "unicode",
+      "category": "boundaries",
+      "features": [
+        "unicode"
+      ],
+      "source": "café 東京 Δοκιμή 🦊",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "café 東京 Δοκιμή 🦊",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "crlf",
+      "category": "boundaries",
+      "features": [
+        "crlf"
+      ],
+      "source": "= Notes\r\n\r\nA\r\nB\r\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "Notes",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "A\nB",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "header-author",
+      "category": "headers",
+      "features": [
+        "header-author"
+      ],
+      "source": "= Notes\nAda Example <ada@example.org>\n\nBody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "title": "Notes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "header-revision",
+      "category": "headers",
+      "features": [
+        "header-revision"
+      ],
+      "source": "= Notes\nAda Example\nv1.2, 2026-01-02: Draft\n\nBody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "title": "Notes"
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "attribute-substitution",
+      "category": "attributes",
+      "features": [
+        "attribute-substitution"
+      ],
+      "source": ":animal: fox\n\nThe {animal} rests.",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "The fox rests."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "attribute-unset",
+      "category": "attributes",
+      "features": [
+        "attribute-unset"
+      ],
+      "source": ":animal: fox\n:animal!:\n\nThe {animal} rests.",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "{animal}"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "attribute-body",
+      "category": "attributes",
+      "features": [
+        "attribute-body"
+      ],
+      "source": "First\n\n:animal: fox\n\nA {animal}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "A fox"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "attribute-missing",
+      "category": "attributes",
+      "features": [
+        "attribute-missing"
+      ],
+      "source": "A {missing_attribute} remains.",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "{missing_attribute}"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "attribute-escaped",
+      "category": "attributes",
+      "features": [
+        "attribute-escaped"
+      ],
+      "source": ":animal: fox\n\nA \\{animal}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "{animal}"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "attribute-continuation",
+      "category": "attributes",
+      "features": [
+        "attribute-continuation"
+      ],
+      "source": ":label: quiet \\\n river\n\n{label}",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "quiet"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "section-id",
+      "category": "sections",
+      "features": [
+        "section-id"
+      ],
+      "source": "[#named]\n== Named\n\nBody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "id=\"named\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "section-discrete",
+      "category": "sections",
+      "features": [
+        "section-discrete"
+      ],
+      "source": "[discrete]\n=== Separate\n\nBody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "floating_title",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Separate"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "section-deep",
+      "category": "sections",
+      "features": [
+        "section-deep"
+      ],
+      "source": "== One\n\n=== Two\n\n==== Three\n\n===== Four\n\n====== Five",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "section",
+          "section",
+          "section",
+          "section"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "section-inline",
+      "category": "sections",
+      "features": [
+        "section-inline"
+      ],
+      "source": "== A *strong* title\n\nBody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<strong>strong</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-strong",
+      "category": "inlines",
+      "features": [
+        "inline-strong"
+      ],
+      "source": "A *bold* word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-emphasis",
+      "category": "inlines",
+      "features": [
+        "inline-emphasis"
+      ],
+      "source": "A _quiet_ word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<em>quiet</em>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-monospace",
+      "category": "inlines",
+      "features": [
+        "inline-monospace"
+      ],
+      "source": "Type `code` now",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<code>code</code>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-unconstrained",
+      "category": "inlines",
+      "features": [
+        "inline-unconstrained"
+      ],
+      "source": "pre**bold**post",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-nested-formatting",
+      "category": "inlines",
+      "features": [
+        "inline-nested-formatting"
+      ],
+      "source": "A *_nested_* word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<strong><em>nested</em></strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-superscript",
+      "category": "inlines",
+      "features": [
+        "inline-superscript"
+      ],
+      "source": "x^2^",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<sup>2</sup>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-subscript",
+      "category": "inlines",
+      "features": [
+        "inline-subscript"
+      ],
+      "source": "H~2~O",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<sub>2</sub>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-highlight",
+      "category": "inlines",
+      "features": [
+        "inline-highlight"
+      ],
+      "source": "A #marked# word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<mark>marked</mark>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-escape-formatting",
+      "category": "inlines",
+      "features": [
+        "inline-escape-formatting"
+      ],
+      "source": "A \\*literal* word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "*literal*"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-inline-pass",
+      "category": "inlines",
+      "features": [
+        "inline-inline-pass"
+      ],
+      "source": "A +<tag>+ word",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "&lt;tag&gt;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-passthrough-macro",
+      "category": "inlines",
+      "features": [
+        "inline-passthrough-macro"
+      ],
+      "source": "pass:[<kbd>K</kbd>]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<kbd>K</kbd>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-hardbreak",
+      "category": "inlines",
+      "features": [
+        "inline-hardbreak"
+      ],
+      "source": "First +\nSecond",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<br>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "inline-entities",
+      "category": "inlines",
+      "features": [
+        "inline-entities"
+      ],
+      "source": "A & B < C",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "A &amp; B &lt; C"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-unordered",
+      "category": "lists",
+      "features": [
+        "list-unordered"
+      ],
+      "source": "* Alpha\n* Beta",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "Alpha",
+          "Beta"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-ordered",
+      "category": "lists",
+      "features": [
+        "list-ordered"
+      ],
+      "source": ". Alpha\n. Beta",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "olist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "Alpha",
+          "Beta"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-description",
+      "category": "lists",
+      "features": [
+        "list-description"
+      ],
+      "source": "Term:: Meaning",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "dlist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "Term",
+          "Meaning"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-nested",
+      "category": "lists",
+      "features": [
+        "list-nested"
+      ],
+      "source": "* Outer\n** Inner",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "ulist",
+          "list_item"
+        ],
+        "html_contains": [
+          "Outer",
+          "Inner"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-mixed",
+      "category": "lists",
+      "features": [
+        "list-mixed"
+      ],
+      "source": "* Outer\n. Inner",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "olist",
+          "list_item"
+        ],
+        "html_contains": [
+          "Outer",
+          "Inner"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-continuation",
+      "category": "lists",
+      "features": [
+        "list-continuation"
+      ],
+      "source": "* Item\n+\nAttached paragraph",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Attached paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-continuation-listing",
+      "category": "lists",
+      "features": [
+        "list-continuation-listing"
+      ],
+      "source": "* Item\n+\n----\ncode\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "listing"
+        ],
+        "html_contains": [
+          "code"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-checklist",
+      "category": "lists",
+      "features": [
+        "list-checklist"
+      ],
+      "source": "* [x] Done\n* [ ] Pending",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "Done",
+          "Pending"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-ordered-start",
+      "category": "lists",
+      "features": [
+        "list-ordered-start"
+      ],
+      "source": "[start=4]\n. Fourth",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "olist",
+          "list_item"
+        ],
+        "html_contains": [
+          "start=\"4\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "list-list-break",
+      "category": "lists",
+      "features": [
+        "list-list-break"
+      ],
+      "source": "* First\n\n//-\n\n* Second",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "ulist",
+          "list_item"
+        ],
+        "html_contains": [
+          "First",
+          "Second"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-example",
+      "category": "delimited-blocks",
+      "features": [
+        "block-example"
+      ],
+      "source": "====\nExample body\n====",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "example",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Example body"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-sidebar",
+      "category": "delimited-blocks",
+      "features": [
+        "block-sidebar"
+      ],
+      "source": "****\nAside body\n****",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "sidebar",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Aside body"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-quote",
+      "category": "delimited-blocks",
+      "features": [
+        "block-quote"
+      ],
+      "source": "____\nQuoted body\n____",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "quote",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Quoted body"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-open",
+      "category": "delimited-blocks",
+      "features": [
+        "block-open"
+      ],
+      "source": "--\nOpen body\n--",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "open",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Open body"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-pass",
+      "category": "delimited-blocks",
+      "features": [
+        "block-pass"
+      ],
+      "source": "++++\n<kbd>K</kbd>\n++++",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "pass"
+        ],
+        "html_contains": [
+          "<kbd>K</kbd>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-comment",
+      "category": "delimited-blocks",
+      "features": [
+        "block-comment"
+      ],
+      "source": "////\nHidden words\n////\n\nVisible",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-source",
+      "category": "delimited-blocks",
+      "features": [
+        "block-source"
+      ],
+      "source": "[source,python]\n----\nprint(1)\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "print(1)"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-admonition",
+      "category": "delimited-blocks",
+      "features": [
+        "block-admonition"
+      ],
+      "source": "NOTE: Remember this.",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "admonition"
+        ],
+        "html_contains": [
+          "Remember this."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-admonition-block",
+      "category": "delimited-blocks",
+      "features": [
+        "block-admonition-block"
+      ],
+      "source": "[WARNING]\n====\nBe careful.\n====",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "admonition",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Be careful."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-literal-paragraph",
+      "category": "delimited-blocks",
+      "features": [
+        "block-literal-paragraph"
+      ],
+      "source": " A preformatted line",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "literal"
+        ],
+        "html_contains": [
+          "A preformatted line"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "block-block-title",
+      "category": "delimited-blocks",
+      "features": [
+        "block-block-title"
+      ],
+      "source": ".Caption\n----\ncode\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "Caption"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "table-simple",
+      "category": "tables",
+      "features": [
+        "table-simple"
+      ],
+      "source": "|===\n|A |B\n\n|C |D\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A",
+          "D"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "table-header",
+      "category": "tables",
+      "features": [
+        "table-header"
+      ],
+      "source": "[cols=\"1,1\",options=\"header\"]\n|===\n|Name |Value\n\n|A |1\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<thead>",
+          "Name"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "table-escaped-pipe",
+      "category": "tables",
+      "features": [
+        "table-escaped-pipe"
+      ],
+      "source": "|===\n|A \\| B\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A | B"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "table-csv",
+      "category": "tables",
+      "features": [
+        "table-csv"
+      ],
+      "source": "[format=csv]\n|===\nA,B\nC,D\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "A",
+          "D"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "table-asciidoc-cell",
+      "category": "tables",
+      "features": [
+        "table-asciidoc-cell"
+      ],
+      "source": "[cols=\"a\"]\n|===\n|* One\n* Two\n|===",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "One",
+          "Two"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "macro-url",
+      "category": "macros",
+      "features": [
+        "macro-url"
+      ],
+      "source": "https://example.org[Example]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"https://example.org\"",
+          "Example"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-relative-link",
+      "category": "macros",
+      "features": [
+        "macro-relative-link"
+      ],
+      "source": "link:guide.html[Guide]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"guide.html\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-mailto",
+      "category": "macros",
+      "features": [
+        "macro-mailto"
+      ],
+      "source": "mailto:a@example.org[Mail]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"mailto:a@example.org\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-inline-image",
+      "category": "macros",
+      "features": [
+        "macro-inline-image"
+      ],
+      "source": "A image:fox.png[Fox] here",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "src=\"fox.png\"",
+          "alt=\"Fox\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-block-image",
+      "category": "macros",
+      "features": [
+        "macro-block-image"
+      ],
+      "source": "image::fox.png[Fox]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "image"
+        ],
+        "html_contains": [
+          "src=\"fox.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "macro-xref",
+      "category": "macros",
+      "features": [
+        "macro-xref"
+      ],
+      "source": "[[target]]\n== Target\n\nSee <<target>>.",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"#target\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-external-xref",
+      "category": "macros",
+      "features": [
+        "macro-external-xref"
+      ],
+      "source": "xref:other.adoc[Other]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"other.html\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-footnote",
+      "category": "macros",
+      "features": [
+        "macro-footnote"
+      ],
+      "source": "A footnote:[A note.]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "A note."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-kbd",
+      "category": "macros",
+      "features": [
+        "macro-kbd"
+      ],
+      "source": ":experimental:\n\nkbd:[Ctrl+C]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<kbd>Ctrl</kbd>",
+          "<kbd>C</kbd>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "ifdef-enabled",
+      "category": "preprocessing",
+      "features": [
+        "ifdef-enabled"
+      ],
+      "source": ":show:\n\nifdef::show[]\nVisible\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "ifdef-disabled",
+      "category": "preprocessing",
+      "features": [
+        "ifdef-disabled"
+      ],
+      "source": "ifdef::missing[]\nHidden\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [],
+        "html_excludes": [
+          "Hidden"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "ifndef-enabled",
+      "category": "preprocessing",
+      "features": [
+        "ifndef-enabled"
+      ],
+      "source": "ifndef::missing[]\nVisible\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "ifeval",
+      "category": "preprocessing",
+      "features": [
+        "ifeval"
+      ],
+      "source": ":count: 3\n\nifeval::[{count} > 2]\nVisible\nendif::[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "include-secure",
+      "category": "preprocessing",
+      "features": [
+        "include-secure"
+      ],
+      "source": "include::outside.adoc[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"outside.adoc\"",
+          "class=\"bare include\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "include-uri-secure",
+      "category": "preprocessing",
+      "features": [
+        "include-uri-secure"
+      ],
+      "source": "include::https://example.org/remote.adoc[]",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "href=\"https://example.org/remote.adoc\"",
+          "class=\"bare include\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "subs-none",
+      "category": "substitutions",
+      "features": [
+        "subs-none"
+      ],
+      "source": "[subs=none]\n----\n<raw> {missing} *bold*\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<raw> {missing} *bold*"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "subs-attributes",
+      "category": "substitutions",
+      "features": [
+        "subs-attributes"
+      ],
+      "source": ":animal: fox\n\n[subs=attributes]\n----\n{animal}\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "fox"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "subs-quotes",
+      "category": "substitutions",
+      "features": [
+        "subs-quotes"
+      ],
+      "source": "[subs=quotes]\n----\n*bold*\n----",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<strong>bold</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "comment-inline",
+      "category": "comments",
+      "features": [
+        "comment-inline"
+      ],
+      "source": "Visible // stays",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible // stays"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "comment-hidden",
+      "category": "comments",
+      "features": [
+        "comment-hidden"
+      ],
+      "source": "////\nHidden\n////\n\nShown",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Shown"
+        ],
+        "html_excludes": [
+          "Hidden"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "page-break",
+      "category": "breaks",
+      "features": [
+        "page-break"
+      ],
+      "source": "Before\n\n<<<\n\nAfter",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "page_break",
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-unclosed-listing",
+      "category": "boundaries",
+      "features": [
+        "boundary-unclosed-listing"
+      ],
+      "source": "----\nbody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "warnings_contains": [
+          "unterminated listing block"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-unclosed-literal",
+      "category": "boundaries",
+      "features": [
+        "boundary-unclosed-literal"
+      ],
+      "source": "....\nbody",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "literal"
+        ],
+        "warnings_contains": [
+          "unterminated literal block"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-dangling-attribute",
+      "category": "boundaries",
+      "features": [
+        "boundary-dangling-attribute"
+      ],
+      "source": "[role=aside]",
+      "support": "future",
+      "expect": {
+        "contexts": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-unmatched-inline",
+      "category": "boundaries",
+      "features": [
+        "boundary-unmatched-inline"
+      ],
+      "source": "A *dangling marker",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "boundary-no-space-heading",
+      "category": "boundaries",
+      "features": [
+        "boundary-no-space-heading"
+      ],
+      "source": "==Not a heading",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-delimiter-near-miss",
+      "category": "boundaries",
+      "features": [
+        "boundary-delimiter-near-miss"
+      ],
+      "source": "---\nwords",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "thematic_break",
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-empty-list-marker",
+      "category": "boundaries",
+      "features": [
+        "boundary-empty-list-marker"
+      ],
+      "source": "*",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "reject": true
+    },
+    {
+      "id": "boundary-heading-eof",
+      "category": "boundaries",
+      "features": [
+        "boundary-heading-eof"
+      ],
+      "source": "== Last",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "boundary-crlf-list",
+      "category": "boundaries",
+      "features": [
+        "boundary-crlf-list"
+      ],
+      "source": "* One\r\n* Two\r\n",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "list_item"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "boundary-unicode-heading",
+      "category": "boundaries",
+      "features": [
+        "boundary-unicode-heading"
+      ],
+      "source": "== 東京 café 🦊\n\nΔοκιμή",
+      "support": "future",
+      "expect": {
+        "contexts": [
+          "section",
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "warning-section-skip",
+      "category": "diagnostics",
+      "features": [
+        "diagnostic-recovery",
+        "warning-section-skip"
+      ],
+      "source": "== One\n\n==== Skipped",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "section",
+          "section"
+        ],
+        "warnings_contains": [
+          "section title out of sequence"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "warning-comment-unclosed",
+      "category": "diagnostics",
+      "features": [
+        "diagnostic-recovery",
+        "warning-comment-unclosed"
+      ],
+      "source": "////\nHidden",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [],
+        "warnings_contains": [
+          "unterminated comment block"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "warning-table-unclosed",
+      "category": "diagnostics",
+      "features": [
+        "diagnostic-recovery",
+        "warning-table-unclosed"
+      ],
+      "source": "|===\n|Cell",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "warnings_contains": [
+          "unterminated table block"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "warning-duplicate-id",
+      "category": "diagnostics",
+      "features": [
+        "diagnostic-recovery",
+        "warning-duplicate-id"
+      ],
+      "source": "[[same]]\n== Alpha\n\n[[same]]\n== Beta",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "section",
+          "section"
+        ],
+        "warnings_contains": [
+          "id assigned to section already in use"
+        ],
+        "warning_severities": [
+          "WARN"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-callouts",
+      "category": "lists",
+      "features": [
+        "list-callouts"
+      ],
+      "source": "----\ncode <1>\n----\n<1> Explanation",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "listing",
+          "colist",
+          "list_item"
+        ],
+        "html_contains": [
+          "Explanation"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-numbered-marker",
+      "category": "lists",
+      "features": [
+        "list-numbered-marker"
+      ],
+      "source": "1. First\n2. Second",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "olist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "First",
+          "Second"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "table-colspan",
+      "category": "tables",
+      "features": [
+        "table-colspan"
+      ],
+      "source": "|===\n|A |B\n\n2+|Wide\n|===",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "colspan=\"2\"",
+          "Wide"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-video",
+      "category": "macros",
+      "features": [
+        "macro-video"
+      ],
+      "source": "video::movie.mp4[]",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "video"
+        ],
+        "html_contains": [
+          "movie.mp4"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "macro-audio",
+      "category": "macros",
+      "features": [
+        "macro-audio"
+      ],
+      "source": "audio::sound.ogg[]",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "audio"
+        ],
+        "html_contains": [
+          "sound.ogg"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "block-nesting",
+      "category": "delimited-blocks",
+      "features": [
+        "block-nesting"
+      ],
+      "source": "====\n****\nNested body\n****\n====",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "example",
+          "sidebar",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Nested body"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "conditional-nesting",
+      "category": "preprocessing",
+      "features": [
+        "conditional-nesting"
+      ],
+      "source": ":show:\n\nifdef::show[]\nifndef::missing[]\nVisible\nendif::[]\nendif::[]",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "conditional-inline",
+      "category": "preprocessing",
+      "features": [
+        "conditional-inline"
+      ],
+      "source": ":show:\n\nifdef::show[Visible]",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "conditional-multiple",
+      "category": "preprocessing",
+      "features": [
+        "conditional-multiple"
+      ],
+      "source": ":alpha:\n:beta:\n\nifdef::alpha+beta[]\nBoth\nendif::[]",
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Both"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "substitution-replacements",
+      "category": "substitutions",
+      "features": [
+        "substitution-replacements"
+      ],
+      "source": "Copyright (C), trademark (TM), registered (R).",
+      "support": "future",
+      "reject": false,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "&#169;",
+          "&#8482;",
+          "&#174;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "virtual-include-basic",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "basic"
+      ],
+      "source": "include::part.adoc[]",
+      "includes": {
+        "part.adoc": "Included words."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Included words."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-boundaries",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "boundaries"
+      ],
+      "source": "Before\n\ninclude::part.adoc[]\n\nAfter",
+      "includes": {
+        "part.adoc": "Middle"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Before",
+          "Middle",
+          "After"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-paragraph-join",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "paragraph-join"
+      ],
+      "source": "Before\ninclude::part.adoc[]\nAfter",
+      "includes": {
+        "part.adoc": "Middle"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Before\nMiddle\nAfter"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-nested-relative",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "nested-relative"
+      ],
+      "source": "include::chapters/one.adoc[]",
+      "includes": {
+        "chapters/one.adoc": "include::two.adoc[]",
+        "chapters/two.adoc": "Nested words."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Nested words."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-parent-relative",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "parent-relative"
+      ],
+      "source": "include::chapters/one.adoc[]",
+      "includes": {
+        "chapters/one.adoc": "include::../shared.adoc[]",
+        "shared.adoc": "Shared words."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Shared words."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-conditional-enabled",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "conditional-enabled"
+      ],
+      "source": ":show:\n\nifdef::show[]\ninclude::part.adoc[]\nendif::[]",
+      "includes": {
+        "part.adoc": "Visible part."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Visible part."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-conditional-disabled",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "conditional-disabled"
+      ],
+      "source": "ifdef::missing[]\ninclude::not-supplied.adoc[]\nendif::[]",
+      "includes": {},
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [],
+        "html_contains": [],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-attribute-target",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "attribute-target"
+      ],
+      "source": ":part: chapter\n\ninclude::{part}.adoc[]",
+      "includes": {
+        "chapter.adoc": "Chosen chapter."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "Chosen chapter."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-attribute-flow",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "attribute-flow"
+      ],
+      "source": "include::attributes.adoc[]\n\nAn {animal}.",
+      "includes": {
+        "attributes.adoc": ":animal: otter\n"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "An otter."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-sections",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "sections"
+      ],
+      "source": "== Parent\n\ninclude::part.adoc[]",
+      "includes": {
+        "part.adoc": "=== Child\n\nChild body."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "section",
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Parent",
+          "Child body."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-unicode-crlf",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "unicode-crlf"
+      ],
+      "source": "include::part.adoc[]",
+      "includes": {
+        "part.adoc": "東京 café 🦊\r\n\r\nΔοκιμή\r\n"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "東京 café 🦊",
+          "Δοκιμή"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-repeated",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "repeated"
+      ],
+      "source": "include::part.adoc[]\n\ninclude::part.adoc[]",
+      "includes": {
+        "part.adoc": "Repeated words."
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "paragraph"
+        ],
+        "html_contains": [
+          "Repeated words."
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-inside-listing",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "inside-listing"
+      ],
+      "source": "----\ninclude::code.txt[]\n----",
+      "includes": {
+        "code.txt": "let value = 42"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "let value = 42"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-inside-literal",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "inside-literal"
+      ],
+      "source": "....\ninclude::code.txt[]\n....",
+      "includes": {
+        "code.txt": "<raw> *words*"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "literal"
+        ],
+        "html_contains": [
+          "&lt;raw&gt; *words*"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-leveloffset",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "native-leveloffset"
+      ],
+      "source": "== Parent\n\ninclude::part.adoc[leveloffset=+1]",
+      "includes": {
+        "part.adoc": "== Child\n\nBody"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "section",
+          "section",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<h3 id=\"_child\">Child</h3>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "virtual-include-indent",
+      "category": "virtual-includes",
+      "features": [
+        "caller-supplied-includes",
+        "native-indent"
+      ],
+      "source": "include::part.adoc[indent=0]",
+      "includes": {
+        "part.adoc": "    Text"
+      },
+      "support": "future",
+      "reject": true,
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>Text</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    }
+  ]
+}

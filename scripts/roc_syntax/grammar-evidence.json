@@ -1,0 +1,3268 @@
+{
+  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "authority": {
+    "AST.zig": "e86f6878be0f41d7360cacfdb66e066b41f44f2f1ab55f618256b7b1e8aafb63",
+    "Parser.zig": "f4f482e81805bd69994739e8acc14edf353b36a331b9c9272f1961cc3c33cf64",
+    "NodeStore.zig": "78e43607b92343d7b8780a383e9c1633a9af07783ee39c843da7e1237e22fe2a"
+  },
+  "variants": [
+    {
+      "category": "Header",
+      "variant": "app",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1760
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-app-version"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "app [] {pf:platform glue}",
+          "source_sha256": "2ab179bd0342b806fc5f98b578a5f26557497a577eaecbaf122927be2dc0824c",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "headers-imports/9c7217570bc8"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "module",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1483
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "module [Foo.*]",
+          "source_sha256": "75d00b3e57ee113ff22d828f7907b5e2303282c2252a741001d2056adc59d6f3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "exposed-type-wildcard"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "package",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1526
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-package-version"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "package [Foo] { roc: \"nightly-2026-July-31-123c5d7\" }",
+          "source_sha256": "380b2513a08e7a6951a84b7a703d77019495ad7f70c0669bbee588b81c9247ec",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "header-package-version"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "platform",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2356
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/60a3c51c42fd"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"\" requires {} exposes [] packages {} provides {}",
+          "source_sha256": "1ec2827afff9b56ecbf674539d0e97d36e273f23ad49c194d24fcdf2ab3e68c5",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/1ec2827afff9"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "hosted",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1497
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-hosted-exposes"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "hosted [foo]",
+          "source_sha256": "31093a857652ad8da5827046fd0796ea174933354c4367110f7a6aa7eb148aa8",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "header-hosted-exposes"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "type_module",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1355
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-implicit-type-module"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "",
+          "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "header-implicit-type-module"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Header",
+      "variant": "default_app",
+      "status": "compiler-only-unconstructed",
+      "constructors": [],
+      "fixtures": []
+    },
+    {
+      "category": "Header",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-expression"
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "decl",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 609
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-definitions"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "block"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "repl",
+          "source": "x = 1",
+          "source_sha256": "8ff436def1451285599a1b1ad70800493b8dcafde2912e1a38345633054e4c26",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "repl-declaration-goal"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"var\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4714
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6390
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "mutable-block"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "statement-variable-goal"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "var count = 1",
+          "source_sha256": "3169c8dcb569f7b439181b3f3c98f290669fc6f88c4f795caeafaa6a058cd7c6",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-variable-goal"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "expr",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4699
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-expression"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "repl",
+          "source": "1 + 2",
+          "source_sha256": "6212702c7a0d68f00b8b23b5aecfca631a96c20d2cad78cd874611ac87cdbce1",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "repl-expression-goal"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "crash",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4777
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-crash"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "crash \"bad\"",
+          "source_sha256": "5217016ea42bde335cf72f20b63d01b56e5176155ddc240fc18bec58766839f3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-crash"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "dbg",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4786
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-debug"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "dbg 1",
+          "source_sha256": "fa5cd3d846f0852dc48d85dcac987821decde99d6e7a0a83ce1d899b2f16f7ee",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-debug"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "expect",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4724
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "expect-block"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "statement-expect-goal"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "expect True",
+          "source_sha256": "3443120ddca45c56b33234d98e60065d6c5d6726d83e7d377df66b2b4dea6c41",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-expect-goal"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"for\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4745
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "for-block"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "{ for x in items { dbg x }\n 1 }",
+          "source_sha256": "5331dc956d8758d9bc62d01ee0f5de64128a3e58988e4050695121163f8b101b",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "for-block"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"while\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4767
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "while-block"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "{ while True { break }\n 1 }",
+          "source_sha256": "e9309569d7d31cf0b694589c7ce8a2893136375d7520cf3af7ad6b3b136745e9",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "while-block"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"return\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4795
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-return"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "return 1",
+          "source_sha256": "486d9affb60dbb0063b03d8e23a6ccf6364ce203dc3a9f56f20e750eb41ecade",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-return"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "@\"break\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6465
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "statement-break"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "statement",
+          "source": "break",
+          "source_sha256": "14ebe56a5008e7c251101e9e1fdbe281ab0a82bd6fa00a5cef746b9ee0dd31d1",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "statement-break"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "import",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1321
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-import"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "import-alias-exposing"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "import A .B",
+          "source_sha256": "ed08df014da352c024361b04ea993df29d4cb5d9252d87b81d07f348f3d1a85c",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "headers-imports/921f48e01bf2"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "file_import",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1203
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-import-string"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "import \"a\" as a : Str",
+          "source_sha256": "6711e2340372d49deed04222cd4e15e97b1f5da7476fc0e4d4a383bb66223863",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "headers-imports/d92c00a0672e"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "type_decl",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 748
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6121
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6553
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/declaration/a4950f1906ac"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "Foo : List(a)",
+          "source_sha256": "4a93fb6f4de7fc1c53e05f563affe1cbcaef11169d0a585ecc11d75053e6a7e5",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/declaration/4a93fb6f4de7"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "type_anno",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5569
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6046
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "file-type"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : a",
+          "source_sha256": "417cf521cf2a2a69a426cc3b39fde23ab4a61a3224788f810180ec123be9e629",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/417cf521cf2a"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Statement",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "import-number"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3610
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "integer"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "0",
+          "source_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/d31fac095ac7"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3641
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "float"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "1e3",
+          "source_sha256": "0b11ca015456e85e4a21de2d495f6bde1f3a7d8624c6d1ab181c4221bc1935eb",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/0bf385cc653a"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3596
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3603
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-integer"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "1.U8",
+          "source_sha256": "2c4d7c8202d3e18a1605f869aceeba19ba3182defedf2c1bea3916214b4e7500",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/f7127b10031c"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3627
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3634
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-fraction"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "1.0.F64",
+          "source_sha256": "58cfae5c4a9de3c7bd48e5a1d7586ff38b77af550be242e18509f9ec7bbaa05c",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/ba00ff4b920c"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "single_quote",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3665
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-character"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "'\u00e9'.U8",
+          "source_sha256": "d03e89c7fc34e6672cc3c34a4df8107eaf10bbfe579a36c12273a3a49f2b16b5",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "typed-character"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "string_part",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4940
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "interpolated-string"
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4965
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5001
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "string"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "interpolated-string"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "\"\u03bb\"",
+          "source_sha256": "2f41a8d4394e2476ebc91714bd664b93a5173034e5ac7ee6ab569fe938e23748",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "unicode"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "multiline_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4995
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5027
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "multiline-string"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "multiline-interpolation"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "\"\"\"hello",
+          "source_sha256": "a1f11042c03c3c2c38c8c2b4386f3455280914323a9934032a68d12881d29255",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "multiline-string"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4958
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-string"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "\"hello\".Str",
+          "source_sha256": "fbc6c3088512a32cc71b76d02662471e52509a7e0b075b1aff7968000180ac28",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "typed-string"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "typed_multiline_string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5021
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "typed-multiline"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "\"\"\"hello\n.Str",
+          "source_sha256": "ba7d32e13ca86ce7c51650895c7154c97cb1975e9c191b110ce69f77a5bc49cc",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "typed-multiline"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4850
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nested-string-tuple-list"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "\"pre${[x]}post\"",
+          "source_sha256": "957278846cc96d816edee7a0b1da99b2c4514f213bf42a10074c87c4a91fa930",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "interpolation/e65282275d19"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4856
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pair-tuple"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "(1,)",
+          "source_sha256": "28cb03b06c288e88c6a880eeba293bf9c9bb9fa586128586459a486a511f832f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "singleton-tuple"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7407
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7448
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "record"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "{ x: 1, y: 2 }",
+          "source_sha256": "f979baa36a24443d561e9008399e5a86e9c395fd45002adfc9546910060e14c6",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "record"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tag",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3691
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3965
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4184
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4286
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7433
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "Box.()",
+          "source_sha256": "c59109598c2544450111390a2ab67c12f41e02be35708eaf610c1c06bfe72c96",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "nominal-zero-arguments"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "lambda",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4687
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tag"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "nested-lambda-if-fields"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|A| 1",
+          "source_sha256": "591ffd0c600000edd98426fdd1610736e85010cf4888869bbacbc41c95696e6f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/43c35dc1f43d"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4862
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4902
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "call"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "f(1)?",
+          "source_sha256": "393fa9fbca32d495e340d16a6163dbc2a3b63df459e37f933d9c020c40b134a3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "composed-postfix/3dfdf7d025bd"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record_updater",
+      "status": "compiler-only-unconstructed",
+      "constructors": [],
+      "fixtures": []
+    },
+    {
+      "category": "Expr",
+      "variant": "field_access",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4082
+        },
+        {
+          "file": "NodeStore.zig",
+          "line": 1428
+        },
+        {
+          "file": "NodeStore.zig",
+          "line": 1460
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "field"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "current-optional-field"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "x!.foo",
+          "source_sha256": "a4da3f0cf215029500b6f259c5a196773574a4d277d65c64af964370c27d18c3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "identifiers/02a3a4d0be54"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "method_call",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4879
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "optional-receiver-method-call"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "x.?a .m(1)",
+          "source_sha256": "acf7d9b054477d96be4a0c470f51b3fdb6608221f7461ad048cf16c1c18dd6b2",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "optional-grouping/0a11c2ae5ea7"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "tuple_access",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4054
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "qualified-field-14"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "x.01",
+          "source_sha256": "2315bed72a881d8341f621b3c6d816890f824f1e220d7a79a14a227388d95c2d",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "qualified-field-14"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "arrow_call",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4388
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4401
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4830
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "grammar-fixtures.json",
+          "id": "arrows/52e2f5eabcf4"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "1 => f",
+          "source_sha256": "09d6e95b9254f8af02339693c05c76e620fd1907b84f2e213f8e55f49f24051f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "arrows/0026e3ed5ff1"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "bin_op",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4347
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "precedence"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "1+2",
+          "source_sha256": "829e4d66733e1268db3a611506004902305a493ba3c4b613b8d595f5dd6531f3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/d42c0083a157"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "suffix_single_question",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4245
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-optional-field-suffix"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "f(1)?",
+          "source_sha256": "393fa9fbca32d495e340d16a6163dbc2a3b63df459e37f933d9c020c40b134a3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "composed-postfix/3dfdf7d025bd"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "unary_op",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4359
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "unary"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "-x",
+          "source_sha256": "a420962426d711880258b007d6767792992f6700fa93f127dafe1f7333e50466",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/635acde95757"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "if_then_else",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4556
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "if True 1 else 2",
+          "source_sha256": "e14f62f3cd554b87d049db343168ad84ce8b97a692570680cdddeaa1ac1eb011",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "if"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "if_without_else",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4545
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "if-without-else"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "if True 1",
+          "source_sha256": "e239014fa9ad891e3ffc5b48e6f8cbd84a9bcacf6742f3bc4e0f8a854fb13ee4",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "if-without-else"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "match",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5142
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-guard"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-alternatives"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "match x {$A => 0}",
+          "source_sha256": "5621fd9ad47a0c4854a3a3a27fdf95488436d520184e9d539bcb887e7d2bf50b",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "identifiers/106f0a2886b2"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1587
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3678
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3697
+        },
+        {
+          "file": "Parser.zig",
+          "line": 3958
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4166
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4190
+        },
+        {
+          "file": "Parser.zig",
+          "line": 4292
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "identifier"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "-x",
+          "source_sha256": "a420962426d711880258b007d6767792992f6700fa93f127dafe1f7333e50466",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "numbers-unary/635acde95757"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "dbg",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4630
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-debug"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "dbg 1.foo",
+          "source_sha256": "3975c2f9565bfc3407bb022ec6b2313222c016e8bee900c1de1a9a2058ea524c",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "keyword-context/14abd20576df"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "crash",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4640
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-crash"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "crash 1 -> f",
+          "source_sha256": "2d5c1538bc2ec4d30e90e3e358f3664dbe8dec8808de8ea69acdfbf08c18e89c",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "keyword-context/05eecc0c93b6"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "record_builder",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7439
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "record-builder"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "{ first: 1 }.Box",
+          "source_sha256": "43f342ef1b532a3857ba30022a7fd83dabc9adc53ff4a22f49974fb579adca30",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "record-builder"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "nominal_record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7414
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nominal-record"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "Box.{ first: 1 }",
+          "source_sha256": "82d04fa12c810d1773406db334ac0ac8e96a13512602dc56a9d6370daf267cf3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "nominal-record"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "nominal_apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4891
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "nominal-apply"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "Box.()",
+          "source_sha256": "c59109598c2544450111390a2ab67c12f41e02be35708eaf610c1c06bfe72c96",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "nominal-zero-arguments"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "ellipsis",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-ellipsis"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "...",
+          "source_sha256": "ab5df625bc76dbd4e163bed2dd888df828f90159bb93556525c31821b6541d46",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "current-ellipsis"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "@\"break\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 3937
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-break"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "break",
+          "source_sha256": "14ebe56a5008e7c251101e9e1fdbe281ab0a82bd6fa00a5cef746b9ee0dd31d1",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "current-break"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "@\"return\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4650
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "current-return"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "return 1",
+          "source_sha256": "486d9affb60dbb0063b03d8e23a6ccf6364ce203dc3a9f56f20e750eb41ecade",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "keyword-context/1b5bae4a4da4"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "block",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5190
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "block"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "{x}.?foo?(1)",
+          "source_sha256": "844e7230dc4ea8ec3c38f88441004d4e0413f16e3d0c9d8abfdef68d1c49908e",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "postfix/0243335e45aa"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "for_expr",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 4673
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "for-expression"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "for A.B(x) in xs { 0 }",
+          "source_sha256": "3fe4dd1c198e06d7daa7d6c5cc45cf17449a8ed64636f6206c0269c64865c6ee",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "pattern-branches/02ce471d9502"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Expr",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "unfinished"
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6202
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6736
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "lambda"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "repl",
+          "source": "x = 1",
+          "source_sha256": "8ff436def1451285599a1b1ad70800493b8dcafde2912e1a38345633054e4c26",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "repl-declaration-goal"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "var_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6805
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-mutable"
+        },
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-mutable-dollar"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|[var x]| 1",
+          "source_sha256": "87ede362c87c93fc048f2623650d07db91aba03bab118adb4197bafdc1ce95f6",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/2f62de8f2564"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "tag",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6725
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6973
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7055
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tag"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|A| 1",
+          "source_sha256": "591ffd0c600000edd98426fdd1610736e85010cf4888869bbacbc41c95696e6f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/43c35dc1f43d"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6661
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-integer"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|1| 1",
+          "source_sha256": "12dd66800df09e42c664a938345918884c778cf0cec3ebf1fa627bfb178cf0b4",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-literal-integer"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6616
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-fraction"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|1.25| 1",
+          "source_sha256": "81ad90dba56ff7360154320ae11be0cdd277b7d65ba9dbdf5bcd7984558cbb1f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-literal-fraction"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "typed_int",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6647
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6654
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-typed-integer"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|1.U8| 1",
+          "source_sha256": "d1a1b0379b39a2e5bc3d1fecd77339663d3b35db3f6ff3c10abe8bb102fbe92f",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/24e9ecc695e8"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "typed_frac",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6602
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6609
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-typed-fraction"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|1.25.Dec| 1",
+          "source_sha256": "5743e090f336f24f47eae04a0c25742620e8ee1d12b001a3c42e4dc173da1246",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-literal-typed-fraction"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "string",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1940
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-string"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|\"x\"| 1",
+          "source_sha256": "17f956047681a33b003a5a2ffc8d90425b1af419a83f05b340e375763ee864e0",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/24b326effa30"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "single_quote",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6632
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-literal-character"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|'x'| 1",
+          "source_sha256": "c83d12c1cf1959ff100f7d3cc84540bc422d9da89dec2adaade54bd8f768d994",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/4448afba7918"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7225
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-record"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|{x: y}| 1",
+          "source_sha256": "53b48863bdceb2038bb9fdb2ecd894cec71c3bd21cb335dff14b88c2593ce572",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/0bcecd871955"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7128
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-list-rest"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|[]| 1",
+          "source_sha256": "fa0b9cbb7e879f60bfd61e687dd01711e4912a875e0d58f4412df6ad585c9d4d",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/3dae1d3d192e"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "list_rest",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6789
+        },
+        {
+          "file": "Parser.zig",
+          "line": 7098
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-list-rest"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|[first, .. as rest]| first",
+          "source_sha256": "1f2d35abb638ac2e42a0affd420c780dbb4220136d194f48eb0ab5968bc2942b",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-list-rest"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 7259
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-tuple"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|(x,)| 1",
+          "source_sha256": "05dd3746562fd6ea835af614666fba35682b07057a1b5b714afe01a4458d23be",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "lambda-patterns/0776f88baf07"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "underscore",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6237
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6745
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-wildcard"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|_| 1",
+          "source_sha256": "4e72c29e6189574316819205cdc6a7df60068a2a61d77fc4e780cad41fa0b6c8",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-wildcard"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "alternatives",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 6576
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6956
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-match-alternatives"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "match v { {x: A | B} => 0 }",
+          "source_sha256": "d766989573f599a3c8979b98f437a2a2512ed7be4a7b8c227fdfc5a2d7daa2c8",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "pattern-branches/289a7edef3b0"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "as",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2427
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "pattern-alias"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "expr",
+          "source": "|Some(x) as item| item",
+          "source_sha256": "2767f6b3373b8bb068a813401812a4ff7f6147bbcd1c973a3f8e97f5938eeeca",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "pattern-alias"
+          }
+        }
+      ]
+    },
+    {
+      "category": "Pattern",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "reject-pattern-alias-name"
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "apply",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5627
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/f4ab12b0e499"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : a.A(b)",
+          "source_sha256": "76a19c07c40e0bf469aa23939af228b9cf2e54f32af6640aefcec639698bf3c6",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/76a19c07c40e"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "ty_var",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5211
+        },
+        {
+          "file": "Parser.zig",
+          "line": 6179
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/417cf521cf2a"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : a",
+          "source_sha256": "417cf521cf2a2a69a426cc3b39fde23ab4a61a3224788f810180ec123be9e629",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/417cf521cf2a"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "underscore_type_var",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5241
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/4112ae5376f2"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : _a",
+          "source_sha256": "4112ae5376f2ab4a3cc22a13e6e71a19dca8f0a2cbda5b8bb921f198bbd76a7d",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/4112ae5376f2"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "underscore",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5286
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/62474fcd584a"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : _",
+          "source_sha256": "62474fcd584ae50784668ad7e6ed031f9bde2d49abd22f50dc5ee9fa74b14144",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/62474fcd584a"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "ty",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5216
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5948
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/44111eb99854"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : U8",
+          "source_sha256": "383b56376de26fcac039f9407edeeb36a58e8fab7aeab05b2cd2c09b9ee1ac06",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/383b56376de2"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "tag_union",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5870
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/463530e67c49"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : []",
+          "source_sha256": "cf8db07121a2cc2fd4f0c46c991ebd5091e280706c8556671161e9dac5950373",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/cf8db07121a2"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "tuple",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5684
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/111530f0bd5b"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : ()",
+          "source_sha256": "b22f6b48aedc0495451662ea9c478ae181d69c45ac023e90d50a7fe65a1910a9",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/b22f6b48aedc"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "record",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5812
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/9e1e867302bc"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : {}",
+          "source_sha256": "5efaa1c4c8a0cd4964318a68a017b5603ec8feef86dab2817bdcff02080bb5d9",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/5efaa1c4c8a0"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "@\"fn\"",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5386
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5402
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5525
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/b8f8038504d2"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : (->a)",
+          "source_sha256": "fe470d4a50d9c1063ae27ed3df0d1b8df354985416d1ab85f91ceb776d1907c1",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/fe470d4a50d9"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "parens",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5393
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5679
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/556677ace890"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : (a)",
+          "source_sha256": "556677ace8906b266e1f65a91e4bf3358fa2208e69140b97b5e8c252e960413d",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/annotation/556677ace890"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TypeAnno",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/annotation/2e2e7525d03c"
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "mod_method",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5546
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/08c2ec8e2c84"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : U8 where [a.foo : U8,]",
+          "source_sha256": "4db8ad318c6e4c0a2497eae4f645c7645b3b30beba12d2e1eb3c5e87b161af1a",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/where/4db8ad318c6e"
+          }
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "mod_alias",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 5536
+        },
+        {
+          "file": "Parser.zig",
+          "line": 5969
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/57fd5b1689a2"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "file",
+          "source": "f : a -> b where [a.Foo]",
+          "source_sha256": "cca79e8acfa0ed9907225b20e990dc6a359819ce1ddd6f512fea5070160c31a6",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "type-fixtures.json",
+            "id": "types/where/cca79e8acfa0"
+          }
+        }
+      ]
+    },
+    {
+      "category": "WhereClause",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "type-fixtures.json",
+          "id": "types/where/166715cd8386"
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "lower_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1002
+        },
+        {
+          "file": "Parser.zig",
+          "line": 1038
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "hosted [foo]",
+          "source_sha256": "31093a857652ad8da5827046fd0796ea174933354c4367110f7a6aa7eb148aa8",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "header-hosted-exposes"
+          }
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "upper_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1045
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-module-exposes"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "module [A.b as C]",
+          "source_sha256": "79bedbc2c56def120ccfb3619115ef1364005d179783d010ff5f1b7a09601e28",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "grammar-fixtures.json",
+            "id": "headers-imports/8582dc66e2bf"
+          }
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "upper_ident_star",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1031
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "exposed-type-wildcard"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "module [Foo.*]",
+          "source_sha256": "75d00b3e57ee113ff22d828f7907b5e2303282c2252a741001d2056adc59d6f3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "fixtures.json",
+            "id": "exposed-type-wildcard"
+          }
+        }
+      ]
+    },
+    {
+      "category": "ExposedItem",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "fixtures.json",
+          "id": "header-expression"
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "string_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1977
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}",
+          "source_sha256": "2a251d4bd1e3ab2de63f2a1e049b20482315fd0e94b194550d729ece50dd18cc",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/2a251d4bd1e3"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "special_ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 1980
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/2a251d4bd1e3"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}",
+          "source_sha256": "2a251d4bd1e3ab2de63f2a1e049b20482315fd0e94b194550d729ece50dd18cc",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/2a251d4bd1e3"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetFile",
+      "variant": "malformed",
+      "status": "generic-recovery",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 877
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/02013b4de784"
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "int_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2034
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}",
+          "source_sha256": "ee9da5b7077e3bb9298f0f9caff9685928845df99d504d995bf9188a5f436f2e",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/ee9da5b7077e"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "string_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2053
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"${x}\"}}",
+          "source_sha256": "fdc12d7f0b86afaecf9815ce4a2924cdfb47682bfef5237ca89a5a8634428e87",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/fdc12d7f0b86"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "tag_literal",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2056
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}",
+          "source_sha256": "59f758d99733e85db3a484ea05977a3d370c1d22042cf8d954ca3ac2fe0b9318",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/59f758d99733"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "ident",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2059
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2096
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}",
+          "source_sha256": "59f758d99733e85db3a484ea05977a3d370c1d22042cf8d954ca3ac2fe0b9318",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/59f758d99733"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "list",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2084
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}",
+          "source_sha256": "8c7e432c2953b0d10182623732da590b7e7e65121150bef4dad7707ef2105ff3",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/8c7e432c2953"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "files",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2110
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/59f758d99733"
+        }
+      ],
+      "observed_witnesses": [
+        {
+          "mode": "header",
+          "source": "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}",
+          "source_sha256": "2a251d4bd1e3ab2de63f2a1e049b20482315fd0e94b194550d729ece50dd18cc",
+          "accepted": true,
+          "structural_match": true,
+          "fixture": {
+            "suite": "platform-fixtures.json",
+            "id": "platform/2a251d4bd1e3"
+          }
+        }
+      ]
+    },
+    {
+      "category": "TargetConfigValue",
+      "variant": "malformed",
+      "status": "source-mapped",
+      "constructors": [
+        {
+          "file": "Parser.zig",
+          "line": 2047
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2067
+        },
+        {
+          "file": "Parser.zig",
+          "line": 2077
+        }
+      ],
+      "fixtures": [
+        {
+          "suite": "platform-fixtures.json",
+          "id": "platform/a4305287d713"
+        }
+      ]
+    }
+  ],
+  "execution_audit": {
+    "counts": {
+      "accepted": 2599,
+      "failed": 0,
+      "rejected": 453
+    },
+    "inputs": 3052,
+    "observed_valid_variants": 95,
+    "evidence_sha256": "7491a66c55d10d3539300dda6a5cb6b1516a4c2d032920d752233360bc8c5c85",
+    "trace_worker_sha256": "f7b48230cdd460fb813da1791f13b9cefe45d40359a8f12d56b00de25b2adb8c",
+    "trace_sources_sha256": {
+      "main.zig": "9a6feecf74389520a2c485dffc3baa863f73158fe97578f728444d094e5e8c2b",
+      "build.zig": "631fd3181f5760143a046195f9b0f362894a67b84645ee100521752abde93243"
+    },
+    "scope": "Native instrumented projection helper; accepted-input witnesses only. Does not prove every grammar branch or cross-composition."
+  }
+}

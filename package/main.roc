@@ -10,11 +10,13 @@
 ## https://lukewilliamboswell.github.io/roc-parser/
 package
 	[
-		Parser,
-		Utf8,
+		AsciiDoc,
 		CSV,
 		HTTP,
 		Markdown,
+		Parser,
+		RocSyntax,
+		Utf8,
 		Xml,
 		Yaml,
 	]

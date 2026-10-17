@@ -29,6 +29,8 @@ jobs:
       matrix:
         # Every target registered in scripts/run_fuzz.py.
         target:
+          - asciidoc-raw
+          - asciidoc-structured
           - markdown-document
           - markdown-blocks
           - markdown-refdefs
@@ -55,6 +57,8 @@ jobs:
           - parser-combinators
           - string-primitives
           - byte-scan
+          - roc-syntax-raw
+          - roc-syntax-structured
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,10 +162,92 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  roc-syntax:
+    name: Roc syntax correctness and performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Install pinned Zig toolchain
+        uses: xyzzylabs/setup-zig@09d85d9dbb73308882e7a26e61a8f706eed40df1 # v1.0.2, also used by Roc CI
+        with:
+          version: 0.17.0
+          use-cache: false
+      - name: Restore raw inputs for oracle exploration
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/fuzz/corpus/roc-syntax-raw
+          key: fuzz-${{ runner.os }}-roc-syntax-raw-${{ steps.roc-version.outputs.nightly-tag }}-${{ hashFiles('fuzz/**') }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ runner.os }}-roc-syntax-raw-${{ steps.roc-version.outputs.nightly-tag }}-
+      - name: Validate syntax and scaling
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
+        run: python3 scripts/check_roc_syntax.py --skip-fuzz --reference-performance smoke
+      - name: Explore syntax with a new reproducible seed
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        run: python3 scripts/check_roc_syntax.py --seed "$GITHUB_RUN_ID" --generated 10000 --mutation-runs 10000 --reference-performance smoke
+      - name: Upload syntax validation evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: roc-syntax-validation
+          path: .roc-parser-tmp/roc-syntax-validation/
+          if-no-files-found: warn
+          retention-days: 14
+
+  asciidoc:
+    name: AsciiDoc oracle and performance smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read Roc version
+        id: roc-version
+        run: python3 scripts/workflow_helpers.py roc-version --github-output "$GITHUB_OUTPUT"
+      - name: Install Roc
+        uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.roc-version.outputs.nightly-tag }}
+      - name: Install hash-pinned Asciidoctor
+        run: python3 scripts/asciidoc/setup_oracle.py
+      - name: Build public API probe
+        run: roc build --no-cache --opt=speed scripts/asciidoc/probe.roc --output=.roc-parser-tmp/asciidoc/probe
+      - name: Check fixtures, generated trees and exploratory edits
+        if: (github.event_name == 'pull_request' || inputs.nightly_validation)
+        run: python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 200 --mutations 200 --corpus docs
+      - name: Explore with a recorded rotating seed
+        if: (github.event_name != 'pull_request' && !inputs.nightly_validation)
+        run: python3 scripts/review_asciidoc.py check --require-complete --compare-html --probe .roc-parser-tmp/asciidoc/probe --generated 2000 --mutations 2000 --seed "$GITHUB_RUN_ID" --corpus docs
+      - name: Smoke test local performance harness
+        run: python3 scripts/check_asciidoc_performance.py --smoke --output .roc-parser-tmp/asciidoc/performance-smoke
+      - name: Upload oracle evidence and reproducers
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asciidoc-validation
+          path: .roc-parser-tmp/asciidoc/
+          if-no-files-found: warn
+          retention-days: 14
+
   property-quality:
     name: property-quality
     if: always()
-    needs: [fuzz, conformance]
+    needs: [fuzz, conformance, roc-syntax, asciidoc]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper
@@ -172,3 +258,7 @@ jobs:
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.fuzz.result }}"
       - name: Require conformance checks
         run: python3 scripts/workflow_helpers.py require-success "${{ needs.conformance.result }}"
+      - name: Require Roc syntax validation
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.roc-syntax.result }}"
+      - name: Require AsciiDoc oracle validation
+        run: python3 scripts/workflow_helpers.py require-success "${{ needs.asciidoc.result }}"

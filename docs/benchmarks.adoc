@@ -22,7 +22,7 @@ named in the report.
 
 [source,console]
 ----
-$ export ROC=~/roc_nightly-macos_apple_silicon-2026-09-29-7f11a82/roc
+$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc
 $ python3 scripts/bench.py --quick             # about two minutes
 $ python3 scripts/bench.py --allocations       # the full comparison
 ----
@@ -286,9 +286,10 @@ along with `.roc-version`, and a test fails if the two disagree. After a nightly
 update, run `blueprint update` so that `Blueprint.lock` records a roc-overlay
 revision that has the new nightly; until then a blueprint run fails with a
 missing `rocpkgs` attribute instead of using another compiler. The roc-overlay
-input is currently pinned to the commit of its pending pull request that adds
-`nightly-2026-09-29-7f11a82`; switch it back to `github:roc-lang/roc-overlay`
-once that is merged. The shell sets `ROC=roc`, so the scripts use the pinned
+lock currently uses the publisher's immutable metadata update commit
+`702616cd012fd57dc16d64ba4cf7b7021614a0ae`, which includes the October 15
+nightly. The overlay's default branch may lag published compiler releases;
+verify that an updated lock actually contains the requested nightly. The shell sets `ROC=roc`, so the scripts use the pinned
 compiler rather than the older one the blueprint CLI runs on.
 
 Go, Rust and Python follow the nixpkgs revision in `Blueprint.lock`. Library
@@ -331,3 +332,54 @@ revisions of the YAML parser with `--replace-dep`
 (`--parser-root <checkout>/package`) on the YAML microbenchmark fixtures, and
 for its allocation counter, `fuzz/yaml-alloc.roc`. Its reports go to
 `.roc-parser-tmp/yaml-bench/<label>/`.
+
+== Roc syntax reference runtime comparison
+
+Run `scripts/compare_roc_syntax_performance.py` locally to compare the pure Roc
+parser with the pinned compiler parser on each identical input. Build the oracle
+with `scripts/roc_syntax/build_oracle.py --optimize ReleaseFast` first, then pass
+its executable through `--oracle-command` and the ordinary Roc syntax correctness
+worker through `--probe-command`. The comparison builds its own Roc driver using
+`--opt=speed`; `--candidate-binary` explicitly reuses an existing optimized driver
+and marks its build provenance unverified in the report.
+
+[source,sh]
+----
+python3 scripts/compare_roc_syntax_performance.py \
+  --roc /path/to/roc \
+  --probe-command '/path/to/roc scripts/roc_syntax/probe.roc' \
+  --oracle-command .roc-parser-tmp/syntax-oracle/install/bin/roc-syntax-oracle
+----
+
+The default local run covers 33 geometric and document inputs. Repeat
+`--fixtures path.json` to include selected curated or extracted corpora, retaining
+each mode. Every input must first agree on acceptance and complete consumption;
+accepted inputs must also agree on their normalized tree. The oracle bounds
+its projection depth at 256; documented depth cutoffs match the corresponding
+candidate subtree and are counted explicitly in the report. Those inputs are
+labelled `partial_depth_limited`, not complete structural validation; this
+local timing eligibility rule does not relax the ordinary grammar gates. Unknown grammar
+variants remain errors. Timing excludes
+JSON, source encoding, startup and I/O. Each parser repeatedly tokenizes, parses,
+and releases its result while observing only constant-time result counts.
+Neither parser performs a full AST traversal inside this timing lane; the
+existing geometric benchmark remains separate.
+
+Batches calibrate to at least 20 milliseconds, warm up, and collect five samples.
+Reports retain every sample, source hash, build receipt, median ratio and a
+conservative ratio lower bound (fastest Roc sample / slowest reference sample).
+A one-microsecond reference floor avoids division by zero and exaggerated tiny
+input ratios. The default `--max-reference-ratio 1.5` requires runtime within 1.5 times
+the optimized reference on every input. Exceeding its lower-bound ratio returns a
+nonzero exit and saves the exact request and timings under `failures/` for replay.
+Initial local measurements showed roughly 34–42 times the reference runtime
+on adjacent-statement families. These inputs fail the required 1.5 ratio and
+remain optimization work; increasing the threshold does not resolve them.
+Use `--replay failures/<hash>-<mode>.json` to time a saved input again.
+
+`--smoke` selects only two tiny inputs and one one-millisecond sample, checks the
+protocol and correctness, and disables ratio assertions. This is the intended CI
+freshness check. Broad runtime ratchets remain an explicit local activity because
+shared CI timing is noisy. The smoke also permits a verified `ReleaseSafe`
+oracle; a full ratio comparison requires a `ReleaseFast` build receipt matching
+the binary hash and immutable compiler revision.

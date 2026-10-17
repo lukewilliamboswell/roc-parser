@@ -1,0 +1,448 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original inputs and semantic predicates for immutable source snapshots; native projection and HTML are compared independently at runtime."
+  },
+  "coverage": [
+    {
+      "category": "core-snapshot-cache",
+      "required_cases": [
+        "core-snapshot-urls",
+        "core-snapshot-local-metadata",
+        "core-snapshot-toc-notes",
+        "core-snapshot-redefinitions",
+        "core-snapshot-hidden-footnotes",
+        "core-snapshot-local-subs",
+        "core-snapshot-table-inheritance",
+        "core-prepared-empty-title",
+        "core-prepared-checklist",
+        "core-prepared-numbered-sections",
+        "core-prepared-listing-indent",
+        "core-prepared-description",
+        "core-layered-media-images",
+        "core-layered-media-image-link",
+        "core-layered-media-audio",
+        "core-layered-media-video",
+        "core-persistent-source-revisions",
+        "core-persistent-source-counter-resets",
+        "core-persistent-source-include-state",
+        "core-persistent-table-origin"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "core-snapshot-urls",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\nhttps://example.test[One]\n\nhttps://example.test[Two]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.test\">One</a>",
+          "<a href=\"https://example.test\">Two</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-local-metadata",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n[#first.red]\n.First title\nhttps://example.test[First]\n\n[#second.blue]\n.Second title\nhttps://example.test[Second]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "id=\"first\" class=\"paragraph red\"",
+          "id=\"second\" class=\"paragraph blue\"",
+          "<div class=\"title\">Second title</div>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-toc-notes",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": "= Guide\n:unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n:toc:\n\n== Start\n\n[options=hardbreaks]\nOne\nTwo footnote:[Shared]\n\nAfter",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "id=\"toc\"",
+          "One<br>\nTwo",
+          "id=\"_footnotedef_1\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-redefinitions",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n{counter:n}\n\n--\n{counter:n}\n\n:n: 8\n\n{counter:n}\n--\n\n{counter:n}",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<p>1</p>",
+          "<p>2</p>",
+          "<p>9</p>",
+          "<p>10</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-hidden-footnotes",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n:nofootnotes:\n\nParagraph footnote:[Hidden].",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<sup class=\"footnote\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-local-subs",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n[subs=none,role=raw]\n<b> *Raw*\n\n[role=normal]\n*Bold*",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "class=\"paragraph raw\"",
+          "<b> *Raw*",
+          "class=\"paragraph normal\"",
+          "<strong>Bold</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-snapshot-table-inheritance",
+      "category": "core-snapshot-cache",
+      "features": [
+        "immutable-snapshot-cache",
+        "asciidoc-table-cell"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n:value: DOC\n\n[cols=\"a\"]\n|===\n|{value} footnote:[Cell]\n|===\n\nAfter footnote:[After]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "DOC",
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/add-cells-and-rows/"
+      ]
+    },
+    {
+      "id": "core-prepared-empty-title",
+      "category": "core-snapshot-cache",
+      "features": [
+        "private-prepared-tree"
+      ],
+      "source": ".{blank}\nBody",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<div class=\"title\"></div>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ]
+    },
+    {
+      "id": "core-prepared-checklist",
+      "category": "core-snapshot-cache",
+      "features": [
+        "private-prepared-tree"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n.Items\n* [x] Done footnote:[Checked]\n* [ ] Next\n\nAfter footnote:[After]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "class=\"ulist checklist\"",
+          "&#10003;",
+          "&#10063;",
+          "id=\"_footnotedef_2\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ]
+    },
+    {
+      "id": "core-prepared-numbered-sections",
+      "category": "core-snapshot-cache",
+      "features": [
+        "private-prepared-tree"
+      ],
+      "source": "= Guide\n:unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n:sectnums:\n:toc:\n\n== *First*\n\nBody footnote:[Section]\n\n=== _Child_\n\nChild body\n\n== *Second*\n\nSee <<_first>>.",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "class=\"sectlevel1\"",
+          "1. <strong>First</strong>",
+          "1.1. <em>Child</em>",
+          "2. <strong>Second</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ]
+    },
+    {
+      "id": "core-prepared-listing-indent",
+      "category": "core-snapshot-cache",
+      "features": [
+        "private-prepared-tree"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n[indent=0]\n----\n    x < y & z\n----\n\n[indent=2]\n----\n    z\n----",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<pre>x &lt; y &amp; z</pre>",
+          "<pre>  z</pre>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ]
+    },
+    {
+      "id": "core-prepared-description",
+      "category": "core-snapshot-cache",
+      "features": [
+        "private-prepared-tree"
+      ],
+      "source": ":unused0: value\n:unused1: value\n:unused2: value\n:unused3: value\n:unused4: value\n:unused5: value\n:unused6: value\n:unused7: value\n:unused8: value\n:unused9: value\n:unused10: value\n:unused11: value\n:unused12: value\n:unused13: value\n:unused14: value\n:unused15: value\n:unused16: value\n:unused17: value\n:unused18: value\n:unused19: value\n:unused20: value\n:unused21: value\n:unused22: value\n:unused23: value\n:unused24: value\n:unused25: value\n:unused26: value\n:unused27: value\n:unused28: value\n:unused29: value\n:unused30: value\n:unused31: value\n:unused32: value\n:unused33: value\n:unused34: value\n:unused35: value\n:unused36: value\n:unused37: value\n:unused38: value\n:unused39: value\n:unused40: value\n:unused41: value\n:unused42: value\n:unused43: value\n:unused44: value\n:unused45: value\n:unused46: value\n:unused47: value\n:unused48: value\n:unused49: value\n:unused50: value\n:unused51: value\n:unused52: value\n:unused53: value\n:unused54: value\n:unused55: value\n:unused56: value\n:unused57: value\n:unused58: value\n:unused59: value\n:unused60: value\n:unused61: value\n:unused62: value\n:unused63: value\n:unused64: value\n:unused65: value\n:unused66: value\n:unused67: value\n:unused68: value\n:unused69: value\n\n.Terms\nA:: First footnote:[Term]\nB:: Second\n\nAfter footnote:[After]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "<dt class=\"hdlist1\">A</dt>",
+          "<dt class=\"hdlist1\">B</dt>",
+          "id=\"_footnotedef_2\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ]
+    },
+    {
+      "id": "core-layered-media-images",
+      "category": "core-snapshot-cache",
+      "features": [
+        "layered-media-attributes",
+        "immutable-snapshot-cache"
+      ],
+      "source": ":mediaunused0: value0\n:mediaunused1: value1\n:mediaunused2: value2\n:mediaunused3: value3\n:mediaunused4: value4\n:mediaunused5: value5\n:mediaunused6: value6\n:mediaunused7: value7\n:mediaunused8: value8\n:mediaunused9: value9\n:mediaunused10: value10\n:mediaunused11: value11\n:mediaunused12: value12\n:mediaunused13: value13\n:mediaunused14: value14\n:mediaunused15: value15\n:mediaunused16: value16\n:mediaunused17: value17\n:mediaunused18: value18\n:mediaunused19: value19\n:mediaunused20: value20\n:mediaunused21: value21\n:mediaunused22: value22\n:mediaunused23: value23\n:mediaunused24: value24\n:mediaunused25: value25\n:mediaunused26: value26\n:mediaunused27: value27\n:mediaunused28: value28\n:mediaunused29: value29\n:mediaunused30: value30\n:mediaunused31: value31\n:mediaunused32: value32\n:mediaunused33: value33\n:mediaunused34: value34\n:mediaunused35: value35\n:mediaunused36: value36\n:mediaunused37: value37\n:mediaunused38: value38\n:mediaunused39: value39\n:mediaunused40: value40\n:mediaunused41: value41\n:mediaunused42: value42\n:mediaunused43: value43\n:mediaunused44: value44\n:mediaunused45: value45\n:mediaunused46: value46\n:mediaunused47: value47\n:mediaunused48: value48\n:mediaunused49: value49\n:mediaunused50: value50\n:mediaunused51: value51\n:mediaunused52: value52\n:mediaunused53: value53\n:mediaunused54: value54\n:mediaunused55: value55\n:mediaunused56: value56\n:mediaunused57: value57\n:mediaunused58: value58\n:mediaunused59: value59\n:mediaunused60: value60\n:mediaunused61: value61\n:mediaunused62: value62\n:mediaunused63: value63\n:mediaunused64: value64\n:mediaunused65: value65\n:mediaunused66: value66\n:mediaunused67: value67\n:mediaunused68: value68\n:mediaunused69: value69\n:imagesdir: assets\n:captionword: Shared\n\n.{captionword} first\nimage::first.png[First cat,120,80,role=first,link=https://example.test/first]\n\n.{captionword} second\nimage::second.png[Second cat,240,160,role=second,link=https://example.test/second]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/first.png\"",
+          "alt=\"First cat\"",
+          "width=\"120\"",
+          "height=\"80\"",
+          "imageblock first",
+          "href=\"https://example.test/first\"",
+          "Shared first",
+          "src=\"assets/second.png\"",
+          "alt=\"Second cat\"",
+          "width=\"240\"",
+          "height=\"160\"",
+          "imageblock second",
+          "Shared second"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/images/"
+      ]
+    },
+    {
+      "id": "core-layered-media-image-link",
+      "category": "core-snapshot-cache",
+      "features": [
+        "layered-media-attributes",
+        "immutable-snapshot-cache"
+      ],
+      "source": ":mediaunused0: value0\n:mediaunused1: value1\n:mediaunused2: value2\n:mediaunused3: value3\n:mediaunused4: value4\n:mediaunused5: value5\n:mediaunused6: value6\n:mediaunused7: value7\n:mediaunused8: value8\n:mediaunused9: value9\n:mediaunused10: value10\n:mediaunused11: value11\n:mediaunused12: value12\n:mediaunused13: value13\n:mediaunused14: value14\n:mediaunused15: value15\n:mediaunused16: value16\n:mediaunused17: value17\n:mediaunused18: value18\n:mediaunused19: value19\n:mediaunused20: value20\n:mediaunused21: value21\n:mediaunused22: value22\n:mediaunused23: value23\n:mediaunused24: value24\n:mediaunused25: value25\n:mediaunused26: value26\n:mediaunused27: value27\n:mediaunused28: value28\n:mediaunused29: value29\n:mediaunused30: value30\n:mediaunused31: value31\n:mediaunused32: value32\n:mediaunused33: value33\n:mediaunused34: value34\n:mediaunused35: value35\n:mediaunused36: value36\n:mediaunused37: value37\n:mediaunused38: value38\n:mediaunused39: value39\n:mediaunused40: value40\n:mediaunused41: value41\n:mediaunused42: value42\n:mediaunused43: value43\n:mediaunused44: value44\n:mediaunused45: value45\n:mediaunused46: value46\n:mediaunused47: value47\n:mediaunused48: value48\n:mediaunused49: value49\n:mediaunused50: value50\n:mediaunused51: value51\n:mediaunused52: value52\n:mediaunused53: value53\n:mediaunused54: value54\n:mediaunused55: value55\n:mediaunused56: value56\n:mediaunused57: value57\n:mediaunused58: value58\n:mediaunused59: value59\n:mediaunused60: value60\n:mediaunused61: value61\n:mediaunused62: value62\n:mediaunused63: value63\n:mediaunused64: value64\n:mediaunused65: value65\n:mediaunused66: value66\n:mediaunused67: value67\n:mediaunused68: value68\n:mediaunused69: value69\n:imagesdir: assets\n:captionword: Shared\n\nimage::linked.png[Linked cat,role=linked,link=https://example.test/link,window=_blank]\n\nimage::plain.png[Plain cat,role=plain]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/linked.png\"",
+          "alt=\"Linked cat\"",
+          "target=\"_blank\"",
+          "imageblock linked",
+          "src=\"assets/plain.png\"",
+          "alt=\"Plain cat\"",
+          "imageblock plain"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/images/"
+      ]
+    },
+    {
+      "id": "core-layered-media-audio",
+      "category": "core-snapshot-cache",
+      "features": [
+        "layered-media-attributes",
+        "immutable-snapshot-cache"
+      ],
+      "source": ":mediaunused0: value0\n:mediaunused1: value1\n:mediaunused2: value2\n:mediaunused3: value3\n:mediaunused4: value4\n:mediaunused5: value5\n:mediaunused6: value6\n:mediaunused7: value7\n:mediaunused8: value8\n:mediaunused9: value9\n:mediaunused10: value10\n:mediaunused11: value11\n:mediaunused12: value12\n:mediaunused13: value13\n:mediaunused14: value14\n:mediaunused15: value15\n:mediaunused16: value16\n:mediaunused17: value17\n:mediaunused18: value18\n:mediaunused19: value19\n:mediaunused20: value20\n:mediaunused21: value21\n:mediaunused22: value22\n:mediaunused23: value23\n:mediaunused24: value24\n:mediaunused25: value25\n:mediaunused26: value26\n:mediaunused27: value27\n:mediaunused28: value28\n:mediaunused29: value29\n:mediaunused30: value30\n:mediaunused31: value31\n:mediaunused32: value32\n:mediaunused33: value33\n:mediaunused34: value34\n:mediaunused35: value35\n:mediaunused36: value36\n:mediaunused37: value37\n:mediaunused38: value38\n:mediaunused39: value39\n:mediaunused40: value40\n:mediaunused41: value41\n:mediaunused42: value42\n:mediaunused43: value43\n:mediaunused44: value44\n:mediaunused45: value45\n:mediaunused46: value46\n:mediaunused47: value47\n:mediaunused48: value48\n:mediaunused49: value49\n:mediaunused50: value50\n:mediaunused51: value51\n:mediaunused52: value52\n:mediaunused53: value53\n:mediaunused54: value54\n:mediaunused55: value55\n:mediaunused56: value56\n:mediaunused57: value57\n:mediaunused58: value58\n:mediaunused59: value59\n:mediaunused60: value60\n:mediaunused61: value61\n:mediaunused62: value62\n:mediaunused63: value63\n:mediaunused64: value64\n:mediaunused65: value65\n:mediaunused66: value66\n:mediaunused67: value67\n:mediaunused68: value68\n:mediaunused69: value69\n:imagesdir: assets\n:captionword: Shared\n\n.{captionword} audio\naudio::first.ogg[options=\"autoplay,loop\",role=first]\n\naudio::second.ogg[options=controls,role=second]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "audioblock first",
+          "audioblock second",
+          "src=\"assets/first.ogg\"",
+          "src=\"assets/second.ogg\"",
+          "Shared audio"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/images/"
+      ]
+    },
+    {
+      "id": "core-layered-media-video",
+      "category": "core-snapshot-cache",
+      "features": [
+        "layered-media-attributes",
+        "immutable-snapshot-cache"
+      ],
+      "source": ":mediaunused0: value0\n:mediaunused1: value1\n:mediaunused2: value2\n:mediaunused3: value3\n:mediaunused4: value4\n:mediaunused5: value5\n:mediaunused6: value6\n:mediaunused7: value7\n:mediaunused8: value8\n:mediaunused9: value9\n:mediaunused10: value10\n:mediaunused11: value11\n:mediaunused12: value12\n:mediaunused13: value13\n:mediaunused14: value14\n:mediaunused15: value15\n:mediaunused16: value16\n:mediaunused17: value17\n:mediaunused18: value18\n:mediaunused19: value19\n:mediaunused20: value20\n:mediaunused21: value21\n:mediaunused22: value22\n:mediaunused23: value23\n:mediaunused24: value24\n:mediaunused25: value25\n:mediaunused26: value26\n:mediaunused27: value27\n:mediaunused28: value28\n:mediaunused29: value29\n:mediaunused30: value30\n:mediaunused31: value31\n:mediaunused32: value32\n:mediaunused33: value33\n:mediaunused34: value34\n:mediaunused35: value35\n:mediaunused36: value36\n:mediaunused37: value37\n:mediaunused38: value38\n:mediaunused39: value39\n:mediaunused40: value40\n:mediaunused41: value41\n:mediaunused42: value42\n:mediaunused43: value43\n:mediaunused44: value44\n:mediaunused45: value45\n:mediaunused46: value46\n:mediaunused47: value47\n:mediaunused48: value48\n:mediaunused49: value49\n:mediaunused50: value50\n:mediaunused51: value51\n:mediaunused52: value52\n:mediaunused53: value53\n:mediaunused54: value54\n:mediaunused55: value55\n:mediaunused56: value56\n:mediaunused57: value57\n:mediaunused58: value58\n:mediaunused59: value59\n:mediaunused60: value60\n:mediaunused61: value61\n:mediaunused62: value62\n:mediaunused63: value63\n:mediaunused64: value64\n:mediaunused65: value65\n:mediaunused66: value66\n:mediaunused67: value67\n:mediaunused68: value68\n:mediaunused69: value69\n:imagesdir: assets\n:captionword: Shared\n\n.{captionword} video\nvideo::first.mp4[poster.png,320,200,role=first,options=controls]\n\nvideo::second.mp4[other.png,640,400,role=second,options=loop]",
+      "support": "complete",
+      "expect": {
+        "html_contains": [
+          "videoblock first",
+          "videoblock second",
+          "src=\"assets/first.mp4\"",
+          "src=\"assets/second.mp4\"",
+          "width=\"320\"",
+          "width=\"640\"",
+          "Shared video",
+          "poster=\"assets/poster.png\"",
+          "poster=\"assets/other.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/images/"
+      ]
+    },
+    {
+      "id": "core-persistent-source-revisions",
+      "source": ":persistentunused0: value0\n:persistentunused1: value1\n:persistentunused2: value2\n:persistentunused3: value3\n:persistentunused4: value4\n:persistentunused5: value5\n:persistentunused6: value6\n:persistentunused7: value7\n:persistentunused8: value8\n:persistentunused9: value9\n:persistentunused10: value10\n:persistentunused11: value11\n:persistentunused12: value12\n:persistentunused13: value13\n:persistentunused14: value14\n:persistentunused15: value15\n:persistentunused16: value16\n:persistentunused17: value17\n:persistentunused18: value18\n:persistentunused19: value19\n:persistentunused20: value20\n:persistentunused21: value21\n:persistentunused22: value22\n:persistentunused23: value23\n:persistentunused24: value24\n:persistentunused25: value25\n:persistentunused26: value26\n:persistentunused27: value27\n:persistentunused28: value28\n:persistentunused29: value29\n:persistentunused30: value30\n:persistentunused31: value31\n:persistentunused32: value32\n:persistentunused33: value33\n:persistentunused34: value34\n:persistentunused35: value35\n:persistentunused36: value36\n:persistentunused37: value37\n:persistentunused38: value38\n:persistentunused39: value39\n:persistentunused40: value40\n:persistentunused41: value41\n:persistentunused42: value42\n:persistentunused43: value43\n:persistentunused44: value44\n:persistentunused45: value45\n:persistentunused46: value46\n:persistentunused47: value47\n:persistentunused48: value48\n:persistentunused49: value49\n:persistentunused50: value50\n:persistentunused51: value51\n:persistentunused52: value52\n:persistentunused53: value53\n:persistentunused54: value54\n:persistentunused55: value55\n:persistentunused56: value56\n:persistentunused57: value57\n:persistentunused58: value58\n:persistentunused59: value59\n:persistentunused60: value60\n:persistentunused61: value61\n:persistentunused62: value62\n:persistentunused63: value63\n:persistentunused64: value64\n:persistentunused65: value65\n:persistentunused66: value66\n:persistentunused67: value67\n:persistentunused68: value68\n:persistentunused69: value69\n:alpha: first\n:beta: old\n\n{alpha} {beta}\n\n:alpha: second\n\n{alpha} {beta}\n\n:beta!:\n\n{alpha}\n\n:beta: restored\n\n{alpha} {beta}",
+      "expect": {
+        "html_contains": [
+          "<p>first old</p>",
+          "<p>second old</p>",
+          "<p>second</p>",
+          "<p>second restored</p>"
+        ]
+      },
+      "category": "core-snapshot-cache",
+      "features": [
+        "persistent-source-scopes",
+        "source-revision-isolation"
+      ],
+      "support": "complete",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-persistent-source-counter-resets",
+      "source": ":persistentunused0: value0\n:persistentunused1: value1\n:persistentunused2: value2\n:persistentunused3: value3\n:persistentunused4: value4\n:persistentunused5: value5\n:persistentunused6: value6\n:persistentunused7: value7\n:persistentunused8: value8\n:persistentunused9: value9\n:persistentunused10: value10\n:persistentunused11: value11\n:persistentunused12: value12\n:persistentunused13: value13\n:persistentunused14: value14\n:persistentunused15: value15\n:persistentunused16: value16\n:persistentunused17: value17\n:persistentunused18: value18\n:persistentunused19: value19\n:persistentunused20: value20\n:persistentunused21: value21\n:persistentunused22: value22\n:persistentunused23: value23\n:persistentunused24: value24\n:persistentunused25: value25\n:persistentunused26: value26\n:persistentunused27: value27\n:persistentunused28: value28\n:persistentunused29: value29\n:persistentunused30: value30\n:persistentunused31: value31\n:persistentunused32: value32\n:persistentunused33: value33\n:persistentunused34: value34\n:persistentunused35: value35\n:persistentunused36: value36\n:persistentunused37: value37\n:persistentunused38: value38\n:persistentunused39: value39\n:persistentunused40: value40\n:persistentunused41: value41\n:persistentunused42: value42\n:persistentunused43: value43\n:persistentunused44: value44\n:persistentunused45: value45\n:persistentunused46: value46\n:persistentunused47: value47\n:persistentunused48: value48\n:persistentunused49: value49\n:persistentunused50: value50\n:persistentunused51: value51\n:persistentunused52: value52\n:persistentunused53: value53\n:persistentunused54: value54\n:persistentunused55: value55\n:persistentunused56: value56\n:persistentunused57: value57\n:persistentunused58: value58\n:persistentunused59: value59\n:persistentunused60: value60\n:persistentunused61: value61\n:persistentunused62: value62\n:persistentunused63: value63\n:persistentunused64: value64\n:persistentunused65: value65\n:persistentunused66: value66\n:persistentunused67: value67\n:persistentunused68: value68\n:persistentunused69: value69\n:n: 4\n\n{counter:n}\n\n:n: 4\n\n{counter:n}\n\n:n!:\n\n{counter:n}\n\n:n: 8\n\n{counter:n}",
+      "expect": {
+        "html_contains": [
+          "<p>5</p>",
+          "<p>1</p>",
+          "<p>9</p>"
+        ]
+      },
+      "category": "core-snapshot-cache",
+      "features": [
+        "persistent-source-scopes",
+        "source-revision-isolation"
+      ],
+      "support": "complete",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-persistent-source-include-state",
+      "source": ":persistentunused0: value0\n:persistentunused1: value1\n:persistentunused2: value2\n:persistentunused3: value3\n:persistentunused4: value4\n:persistentunused5: value5\n:persistentunused6: value6\n:persistentunused7: value7\n:persistentunused8: value8\n:persistentunused9: value9\n:persistentunused10: value10\n:persistentunused11: value11\n:persistentunused12: value12\n:persistentunused13: value13\n:persistentunused14: value14\n:persistentunused15: value15\n:persistentunused16: value16\n:persistentunused17: value17\n:persistentunused18: value18\n:persistentunused19: value19\n:persistentunused20: value20\n:persistentunused21: value21\n:persistentunused22: value22\n:persistentunused23: value23\n:persistentunused24: value24\n:persistentunused25: value25\n:persistentunused26: value26\n:persistentunused27: value27\n:persistentunused28: value28\n:persistentunused29: value29\n:persistentunused30: value30\n:persistentunused31: value31\n:persistentunused32: value32\n:persistentunused33: value33\n:persistentunused34: value34\n:persistentunused35: value35\n:persistentunused36: value36\n:persistentunused37: value37\n:persistentunused38: value38\n:persistentunused39: value39\n:persistentunused40: value40\n:persistentunused41: value41\n:persistentunused42: value42\n:persistentunused43: value43\n:persistentunused44: value44\n:persistentunused45: value45\n:persistentunused46: value46\n:persistentunused47: value47\n:persistentunused48: value48\n:persistentunused49: value49\n:persistentunused50: value50\n:persistentunused51: value51\n:persistentunused52: value52\n:persistentunused53: value53\n:persistentunused54: value54\n:persistentunused55: value55\n:persistentunused56: value56\n:persistentunused57: value57\n:persistentunused58: value58\n:persistentunused59: value59\n:persistentunused60: value60\n:persistentunused61: value61\n:persistentunused62: value62\n:persistentunused63: value63\n:persistentunused64: value64\n:persistentunused65: value65\n:persistentunused66: value66\n:persistentunused67: value67\n:persistentunused68: value68\n:persistentunused69: value69\n:value: Parent\n\nBefore {value}.\n\ninclude::part.adoc[]\n\nAfter {value}.",
+      "includes": {
+        "part.adoc": ":value: Child\n\nInside {value}."
+      },
+      "expect": {
+        "html_contains": [
+          "<p>Before Parent.</p>",
+          "<p>Inside Child.</p>",
+          "<p>After Child.</p>"
+        ]
+      },
+      "category": "core-snapshot-cache",
+      "features": [
+        "persistent-source-scopes",
+        "source-revision-isolation"
+      ],
+      "support": "complete",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    },
+    {
+      "id": "core-persistent-table-origin",
+      "source": ":persistentunused0: value0\n:persistentunused1: value1\n:persistentunused2: value2\n:persistentunused3: value3\n:persistentunused4: value4\n:persistentunused5: value5\n:persistentunused6: value6\n:persistentunused7: value7\n:persistentunused8: value8\n:persistentunused9: value9\n:persistentunused10: value10\n:persistentunused11: value11\n:persistentunused12: value12\n:persistentunused13: value13\n:persistentunused14: value14\n:persistentunused15: value15\n:persistentunused16: value16\n:persistentunused17: value17\n:persistentunused18: value18\n:persistentunused19: value19\n:persistentunused20: value20\n:persistentunused21: value21\n:persistentunused22: value22\n:persistentunused23: value23\n:persistentunused24: value24\n:persistentunused25: value25\n:persistentunused26: value26\n:persistentunused27: value27\n:persistentunused28: value28\n:persistentunused29: value29\n:persistentunused30: value30\n:persistentunused31: value31\n:persistentunused32: value32\n:persistentunused33: value33\n:persistentunused34: value34\n:persistentunused35: value35\n:persistentunused36: value36\n:persistentunused37: value37\n:persistentunused38: value38\n:persistentunused39: value39\n:persistentunused40: value40\n:persistentunused41: value41\n:persistentunused42: value42\n:persistentunused43: value43\n:persistentunused44: value44\n:persistentunused45: value45\n:persistentunused46: value46\n:persistentunused47: value47\n:persistentunused48: value48\n:persistentunused49: value49\n:persistentunused50: value50\n:persistentunused51: value51\n:persistentunused52: value52\n:persistentunused53: value53\n:persistentunused54: value54\n:persistentunused55: value55\n:persistentunused56: value56\n:persistentunused57: value57\n:persistentunused58: value58\n:persistentunused59: value59\n:persistentunused60: value60\n:persistentunused61: value61\n:persistentunused62: value62\n:persistentunused63: value63\n:persistentunused64: value64\n:persistentunused65: value65\n:persistentunused66: value66\n:persistentunused67: value67\n:persistentunused68: value68\n:persistentunused69: value69\n:word: shared\n\n[cols=\"a\",options=noheader]\n|===\n|Cell {word}.\n|===\n\n:word: revised\n\n[cols=\"a\",options=noheader]\n|===\n|Second {word}.\n|===",
+      "expect": {
+        "html_contains": [
+          "<p>Cell shared.</p>",
+          "<p>Second revised.</p>"
+        ]
+      },
+      "category": "core-snapshot-cache",
+      "features": [
+        "persistent-source-scopes",
+        "source-revision-isolation"
+      ],
+      "support": "complete",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entries/"
+      ]
+    }
+  ]
+}

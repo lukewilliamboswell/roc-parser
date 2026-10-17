@@ -104,6 +104,12 @@ section of the specification that settles them.
 
 == Run the property tests
 
+AsciiDoc adds `asciidoc-raw` for byte-input robustness and error locations,
+and `asciidoc-structured` for independently constructed block trees.
+Its broader oracle fixtures, generated corpus and mutation exploration are
+described in <<asciidoc>>. Inline source agreement alone does not establish
+agreement on Asciidoctor substitutions or rendered HTML.
+
 Run every target for a short, iteration-bounded smoke test. This is what CI
 runs on a pull request:
 

@@ -20,3 +20,31 @@ notice.
 
 Earlier releases are described on the
 {repo}/releases[roc-parser GitHub releases page].
+
+== Release candidates
+
+* {repo}/releases/tag/2.1.0-rc.2[2.1.0-rc.2]: AsciiDoc parsing, preprocessing and HTML rendering,
+  with cached oracle baselines and local performance and scaling checks.
+
+* {repo}/releases/tag/2.1.0-rc.1[2.1.0-rc.1]: current Roc syntax tooling for downstream testing,
+  with performance optimization continuing on the feature branch.
+
+== Unreleased
+
+`RocSyntax` adds source-backed tokens and a tolerant indexed syntax tree for
+highlighters and source analysis tools. Expressions, patterns, type declarations,
+constraints and all header forms retain their syntax structure. Parsing has
+explicit nesting and token limits and does not perform binding or type analysis.
+Legacy Rust syntax is outside scope. See <<roc-syntax>> for the supported tooling
+workflow and source-location conventions.
+
+Development tooling adds a persistent compiler reference worker, independent
+generated syntax checks, raw and structured fuzz targets, an upstream snapshot
+corpus importer, and runtime/allocation/scaling checks. The feedback loop is
+available through `scripts/check_roc_syntax.py`.
+
+`AsciiDoc` adds block parsing, virtual-source preprocessing and embedded HTML
+rendering. A pinned Asciidoctor oracle checks authored fixtures, independent
+generated models and reproducible mutations. Native fuzz targets and a local
+1.0-times-oracle performance gate exercise correctness and scaling. CI runs a
+minimal performance harness smoke check. See <<asciidoc>> for scope and commands.

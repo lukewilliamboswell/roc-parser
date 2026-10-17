@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Retained seeded mutations and independently authored raw-paragraph predicates; every native HTML result is compared to the live oracle.",
+    "reference_family": "AsciiDoc substitutions and macro boundaries",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/subs/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; source only."
+  },
+  "coverage": [
+    {
+      "category": "inline-retained-ordered-mutations",
+      "required_cases": [
+        "inline-retained-ordered-mutation-1-000037",
+        "inline-retained-ordered-mutation-1-000055",
+        "inline-retained-ordered-mutation-1-000111",
+        "inline-retained-ordered-mutation-1-000114",
+        "inline-retained-ordered-mutation-1-000199",
+        "inline-state-formatted-note-batch",
+        "inline-state-note-paragraph-state",
+        "inline-retained-expanded-mutation-1-000035",
+        "inline-retained-expanded-mutation-1-000039",
+        "inline-retained-expanded-mutation-1-000082",
+        "inline-retained-pipeline-mutation-1-000071",
+        "inline-retained-pipeline-mutation-1-000190"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "inline-retained-ordered-mutation-1-000037",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-macro-boundaries"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"quotes,post_replacements,macros,replacements,specialcharacters,attributes\"]\n*strong* <raw> &copy; ... https://exates\"]\n*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://exates\"]\n*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-retained-ordered-mutation-1-000055",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-macro-boundaries"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"attributes,replacements,macros,quotes,post_replacements,specialcharacters\"]\n*strong* <raw> &copy; ... https://exampl|label*] {value} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://exampl|label*] {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-retained-ordered-mutation-1-000111",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-macro-boundaries"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"quotes,replacements,post_replacements,attributes,specialcharacters,macros\"]\n*strong* <raw> &copy; ... https://exaue} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://exaue} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-retained-ordered-mutation-1-000114",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-macro-boundaries"
+      ],
+      "source": "mailto:a@example.test[Name,",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[Name,",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-retained-ordered-mutation-1-000199",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-macro-boundaries"
+      ],
+      "source": ":value: *attri<<target>>nts,post_replacements\"]\n*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-state-formatted-note-batch",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "footnote-state-scaling",
+        "formatted-note-batch"
+      ],
+      "source": "word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*] word footnote:[*note*]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "_footnoteref_128",
+          "<strong>note</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/footnote/"
+      ]
+    },
+    {
+      "id": "inline-state-note-paragraph-state",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "footnote-state-scaling",
+        "note-paragraph-state"
+      ],
+      "source": "word footnote:[note 0]\n\nword footnote:[note 1]\n\nword footnote:[note 2]\n\nword footnote:[note 3]\n\nword footnote:[note 4]\n\nword footnote:[note 5]\n\nword footnote:[note 6]\n\nword footnote:[note 7]\n\nword footnote:[note 8]\n\nword footnote:[note 9]\n\nword footnote:[note 10]\n\nword footnote:[note 11]\n\nword footnote:[note 12]\n\nword footnote:[note 13]\n\nword footnote:[note 14]\n\nword footnote:[note 15]\n\nword footnote:[note 16]\n\nword footnote:[note 17]\n\nword footnote:[note 18]\n\nword footnote:[note 19]\n\nword footnote:[note 20]\n\nword footnote:[note 21]\n\nword footnote:[note 22]\n\nword footnote:[note 23]\n\nword footnote:[note 24]\n\nword footnote:[note 25]\n\nword footnote:[note 26]\n\nword footnote:[note 27]\n\nword footnote:[note 28]\n\nword footnote:[note 29]\n\nword footnote:[note 30]\n\nword footnote:[note 31]\n\nword footnote:[note 32]\n\nword footnote:[note 33]\n\nword footnote:[note 34]\n\nword footnote:[note 35]\n\nword footnote:[note 36]\n\nword footnote:[note 37]\n\nword footnote:[note 38]\n\nword footnote:[note 39]\n\nword footnote:[note 40]\n\nword footnote:[note 41]\n\nword footnote:[note 42]\n\nword footnote:[note 43]\n\nword footnote:[note 44]\n\nword footnote:[note 45]\n\nword footnote:[note 46]\n\nword footnote:[note 47]\n\nword footnote:[note 48]\n\nword footnote:[note 49]\n\nword footnote:[note 50]\n\nword footnote:[note 51]\n\nword footnote:[note 52]\n\nword footnote:[note 53]\n\nword footnote:[note 54]\n\nword footnote:[note 55]\n\nword footnote:[note 56]\n\nword footnote:[note 57]\n\nword footnote:[note 58]\n\nword footnote:[note 59]\n\nword footnote:[note 60]\n\nword footnote:[note 61]\n\nword footnote:[note 62]\n\nword footnote:[note 63]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "_footnoteref_64",
+          "_footnotedef_64"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/footnote/"
+      ]
+    },
+    {
+      "id": "inline-retained-expanded-mutation-1-000035",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "nested-macro-boundaries"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"quotes,attributes,post_replacements,macros,replacements,specialcharacters\"]\n*strong* <raw> &copy; ... https://example.test[*labelw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://example.test[*labelw> &copy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-retained-expanded-mutation-1-000039",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "nested-macro-boundaries"
+      ],
+      "source": "xref:other.a<<target>>doc[Other]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xref:other.a<<target>>doc[Other]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-retained-expanded-mutation-1-000082",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "nested-macro-boundaries"
+      ],
+      "source": "mailto:a@example.test[N\r\ne,Subject,Body]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[N\ne,Subject,Body]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-retained-pipeline-mutation-1-000071",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-xref-boundary",
+        "quoted-attribute-boundary"
+      ],
+      "source": "image:cat.png[alt=\"A &amp; age:cat.png[alt=\"A &amp; B\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt=\"A &amp; age:cat.png[alt=\"A &amp; B\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-retained-pipeline-mutation-1-000190",
+      "category": "inline-retained-ordered-mutations",
+      "features": [
+        "ordered-xref-boundary",
+        "quoted-attribute-boundary"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"attributes,post_replacements,replacements,macros,quotes,specialcharacters\"]\n*strong* <raw> &c<<target>>opy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &c<<target>>opy; ... https://example.test[*label*] {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    }
+  ]
+}

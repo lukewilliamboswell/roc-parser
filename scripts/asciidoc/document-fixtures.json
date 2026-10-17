@@ -1,0 +1,573 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original cross-feature documents and independently specified semantic requirements."
+  },
+  "coverage": [
+    {
+      "category": "document-state",
+      "required_cases": [
+        "document-full-footnotes-sequence",
+        "document-full-footnotes-list",
+        "document-full-footnotes-table",
+        "document-full-footnotes-before-table",
+        "document-full-footnotes-asciidoc-cell",
+        "document-full-xref-forward",
+        "document-full-xref-custom",
+        "document-full-xref-generated",
+        "document-full-id-duplicate",
+        "document-full-id-unicode",
+        "document-full-id-custom",
+        "document-full-id-empty",
+        "document-full-numbers-tree",
+        "document-full-toc-tree",
+        "document-full-preamble-toc",
+        "document-full-captions-example",
+        "document-full-captions-image",
+        "document-full-captions-table",
+        "document-full-captions-reset",
+        "document-full-subs-paragraph",
+        "document-full-attrs-redefinition",
+        "document-full-counter-redefinition",
+        "document-full-nested-include-relative",
+        "document-full-nested-include-absolute",
+        "document-full-quoted-alt-empty",
+        "document-full-singlequoted-comma",
+        "document-full-paragraph-syntax-header",
+        "document-full-sectanchors",
+        "document-full-sectlinks",
+        "document-full-footnotes-asciidoc-cells-and-root",
+        "document-retained-mutation-13-000002",
+        "document-retained-mutation-13-000201",
+        "document-retained-mutation-13-000811",
+        "document-retained-mutation-13-000889",
+        "document-full-caption-equals",
+        "document-full-none-media-attribute",
+        "document-full-quoted-none-media-attribute",
+        "document-full-asciidoc-cell-section",
+        "document-full-asciidoc-cell-outer-reference",
+        "document-full-document-title-reference",
+        "document-full-document-title-custom-reference",
+        "document-full-toc-disabled-value",
+        "document-full-toc-disabled-unset"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "document-full-footnotes-sequence",
+      "category": "document-state",
+      "support": "full",
+      "source": "One footnote:[First].\n\nTwo footnote:[Second].",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-footnotes-list",
+      "category": "document-state",
+      "support": "full",
+      "source": "* One footnote:[First].\n* Two footnote:[Second].",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_2\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-footnotes-table",
+      "category": "document-state",
+      "support": "full",
+      "source": "[cols=\"1,1\"]\n|===\n|One footnote:[First]. |Two footnote:[Second].\n|===",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-footnotes-before-table",
+      "category": "document-state",
+      "support": "full",
+      "source": "Before footnote:[First].\n\n|===\n|Cell footnote:[Second].\n|===\n\nAfter footnote:[Third].",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_3\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-footnotes-asciidoc-cell",
+      "category": "document-state",
+      "support": "full",
+      "source": "[cols=\"a\"]\n|===\n|One footnote:[First].\n\nTwo footnote:[Second].\n|===",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_2\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-xref-forward",
+      "category": "document-state",
+      "support": "full",
+      "source": "See <<dest>>.\n\n[[dest]]\n== A _quiet_ title",
+      "expect": {
+        "html_contains": [
+          "<a href=\"#dest\">A <em>quiet</em> title</a>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-xref-custom",
+      "category": "document-state",
+      "support": "full",
+      "source": "[[dest,Custom *label*]]\n== Heading\n\nSee <<dest>>.",
+      "expect": {
+        "html_contains": [
+          "<a href=\"#dest\">Custom <strong>label</strong></a>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-xref-generated",
+      "category": "document-state",
+      "support": "full",
+      "source": "== A *bold* title\n\nSee <<_a_bold_title>>.",
+      "expect": {
+        "html_contains": [
+          "href=\"#_a_bold_title\">A <strong>bold</strong> title"
+        ]
+      }
+    },
+    {
+      "id": "document-full-id-duplicate",
+      "category": "document-state",
+      "support": "full",
+      "source": "== Same\n\n== Same\n\n== Same",
+      "expect": {
+        "html_contains": [
+          "id=\"_same\"",
+          "id=\"_same_2\"",
+          "id=\"_same_3\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-id-unicode",
+      "category": "document-state",
+      "support": "full",
+      "source": "== ÉCOLE ΔΟΚΙΜΉ 東京 😀",
+      "expect": {
+        "html_contains": [
+          "id=\"_école_δοκιμή_東京\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-id-custom",
+      "category": "document-state",
+      "support": "full",
+      "source": ":idprefix: topic-\n:idseparator: -\n\n== One Two",
+      "expect": {
+        "html_contains": [
+          "id=\"topic-one-two\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-id-empty",
+      "category": "document-state",
+      "support": "full",
+      "source": ":idprefix:\n:idseparator:\n\n== One Two",
+      "expect": {
+        "html_contains": [
+          "id=\"onetwo\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-numbers-tree",
+      "category": "document-state",
+      "support": "full",
+      "source": ":sectnums:\n\n== First\n\n=== Child\n\n== Last",
+      "expect": {
+        "html_contains": [
+          "1. First",
+          "1.1. Child",
+          "2. Last"
+        ]
+      }
+    },
+    {
+      "id": "document-full-toc-tree",
+      "category": "document-state",
+      "support": "full",
+      "source": ":toc:\n:toclevels: 3\n\n== First\n\n=== Child\n\n==== Leaf",
+      "expect": {
+        "html_contains": [
+          "sectlevel1",
+          "sectlevel2",
+          "sectlevel3",
+          "href=\"#_leaf\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-preamble-toc",
+      "category": "document-state",
+      "support": "full",
+      "source": "= Book\n:toc:\n\nIntroduction\n\n== First",
+      "expect": {
+        "html_contains": [
+          "id=\"toc\"",
+          "id=\"preamble\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-captions-example",
+      "category": "document-state",
+      "support": "full",
+      "source": ".First\n====\nOne\n====\n\n.Second\n====\nTwo\n====",
+      "expect": {
+        "html_contains": [
+          "Example 1. First",
+          "Example 2. Second"
+        ]
+      }
+    },
+    {
+      "id": "document-full-captions-image",
+      "category": "document-state",
+      "support": "full",
+      "source": ".First\nimage::one.png[]\n\n.Second\nimage::two.png[]",
+      "expect": {
+        "html_contains": [
+          "Figure 1. First",
+          "Figure 2. Second"
+        ]
+      }
+    },
+    {
+      "id": "document-full-captions-table",
+      "category": "document-state",
+      "support": "full",
+      "source": ".First\n|===\n|One\n|===\n\n.Second\n|===\n|Two\n|===",
+      "expect": {
+        "html_contains": [
+          "Table 1. First",
+          "Table 2. Second"
+        ]
+      }
+    },
+    {
+      "id": "document-full-captions-reset",
+      "category": "document-state",
+      "support": "full",
+      "source": ":figure-caption!:\n\n.No prefix\nimage::one.png[]",
+      "expect": {
+        "html_contains": [
+          "class=\"title\">No prefix"
+        ]
+      }
+    },
+    {
+      "id": "document-full-subs-paragraph",
+      "category": "document-state",
+      "support": "full",
+      "source": "[subs=none]\nA *literal* {missing}.",
+      "expect": {
+        "html_contains": [
+          "<p>A *literal* {missing}.</p>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-attrs-redefinition",
+      "category": "document-state",
+      "support": "full",
+      "source": ":name: First\n\n{name}\n\n:name: Second\n\n{name}",
+      "expect": {
+        "html_contains": [
+          "<p>First</p>",
+          "<p>Second</p>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-counter-redefinition",
+      "category": "document-state",
+      "support": "full",
+      "source": ":n: 1\n\n{counter:n}\n\n:n: 1\n\n{counter:n}",
+      "expect": {
+        "html_contains": [
+          "<p>2</p>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-nested-include-relative",
+      "category": "document-state",
+      "support": "full",
+      "source": "include::a.adoc[leveloffset=+1]",
+      "expect": {
+        "html_contains": [
+          "class=\"sect2\"",
+          "class=\"sect3\""
+        ]
+      },
+      "includes": {
+        "a.adoc": "== Parent\n\ninclude::b.adoc[leveloffset=+1]",
+        "b.adoc": "== Child"
+      }
+    },
+    {
+      "id": "document-full-nested-include-absolute",
+      "category": "document-state",
+      "support": "full",
+      "source": "include::a.adoc[leveloffset=+2]",
+      "expect": {
+        "html_contains": [
+          "class=\"sect3\"",
+          "class=\"sect1\""
+        ]
+      },
+      "includes": {
+        "a.adoc": "== Parent\n\ninclude::b.adoc[leveloffset=0]",
+        "b.adoc": "== Child"
+      }
+    },
+    {
+      "id": "document-full-quoted-alt-empty",
+      "category": "document-state",
+      "support": "full",
+      "source": "image::cat.png[\"\"]",
+      "expect": {
+        "html_contains": [
+          "alt=\"\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-singlequoted-comma",
+      "category": "document-state",
+      "support": "full",
+      "source": "image::cat.png['A, sleepy cat',100]",
+      "expect": {
+        "html_contains": [
+          "alt=\"A, sleepy cat\"",
+          "width=\"100\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-paragraph-syntax-header",
+      "category": "document-state",
+      "support": "full",
+      "source": "= A *bold* book\n\nText",
+      "expect": {
+        "html_contains": [
+          "<p>Text</p>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-sectanchors",
+      "category": "document-state",
+      "support": "full",
+      "source": ":sectanchors:\n\n== Heading",
+      "expect": {
+        "html_contains": [
+          "<a class=\"anchor\" href=\"#_heading\"></a>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-sectlinks",
+      "category": "document-state",
+      "support": "full",
+      "source": ":sectlinks:\n\n== Heading",
+      "expect": {
+        "html_contains": [
+          "<a class=\"link\" href=\"#_heading\">Heading</a>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-footnotes-asciidoc-cells-and-root",
+      "category": "document-state",
+      "support": "full",
+      "source": "Before footnote:[Root].\n\n[cols=\"a,a\"]\n|===\n|One footnote:[First].\n|Two footnote:[Second].\n|===\n\nAfter footnote:[Last].",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnotedef_4\""
+        ]
+      }
+    },
+    {
+      "id": "document-retained-mutation-13-000002",
+      "category": "document-state",
+      "support": "full",
+      "source": ":toc:\n:toclevels: 3\n\n== First\n\n===\n\n\n==== Leaf",
+      "expect": {
+        "html_contains": [
+          "<div id=\"toc\" class=\"toc\">\n<div id=\"toctitle\">Table of Contents</div>\n<ul class=\"sectlevel1\">\n<li><a href=\"#_first\">First</a>\n<ul class=\"sectlevel3\">\n<li><a href=\"#_leaf\">Leaf</a></li>\n</ul>\n</li>\n</ul>\n</div>\n<div class=\"sect1\">\n<h2 id=\"_first\">First</h2>\n<div class=\"sectionbody\">\n<div class=\"paragraph\">\n<p>===</p>\n</div>\n<div class=\"sect3\">\n<h4 id=\"_leaf\">Leaf</h4>\n\n</div>\n</div>\n</div>"
+        ]
+      },
+      "provenance": {
+        "campaign": "seed13-b31d558",
+        "original_id": "mutation-13-000002"
+      }
+    },
+    {
+      "id": "document-retained-mutation-13-000201",
+      "category": "document-state",
+      "support": "full",
+      "source": "video::abc[youtube,options=\"autoplay,loop,muted,ions=\"autoplay,loop,muted,nocontrols,nofullscreen,modest,related\"]",
+      "expect": {
+        "html_contains": [
+          "<div class=\"videoblock\">\n<div class=\"content\">\n<iframe height=\"autoplay\" src=\"https://www.youtube.com/embed/abc?rel=0&amp;autoplay=1&amp;loop=1&amp;mute=1&amp;playlist=abc\" frameborder=\"0\" allowfullscreen></iframe>\n</div>\n</div>"
+        ]
+      },
+      "provenance": {
+        "campaign": "seed13-b31d558",
+        "original_id": "mutation-13-000201"
+      }
+    },
+    {
+      "id": "document-retained-mutation-13-000811",
+      "category": "document-state",
+      "support": "full",
+      "source": "audio::song.mp3[options=\"autoplay,loop,nocontrol{name}]",
+      "expect": {
+        "html_contains": [
+          "<div class=\"audioblock\">\n<div class=\"content\">\n<audio src=\"song.mp3\" controls>\nYour browser does not support the audio tag.\n</audio>\n</div>\n</div>"
+        ]
+      },
+      "provenance": {
+        "campaign": "seed13-b31d558",
+        "original_id": "mutation-13-000811"
+      }
+    },
+    {
+      "id": "document-retained-mutation-13-000889",
+      "category": "document-state",
+      "support": "full",
+      "source": "[[target]]\n\n|===\n\"A\nB\",C\nD,E\n|===",
+      "expect": {
+        "html_contains": [
+          "<table id=\"target\" class=\"tableblock frame-all grid-all stretch\">\n<colgroup>\n<col style=\"width: 100%;\">\n</colgroup>\n<tbody>\n<tr>\n<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">\"A\nB\",C\nD,E</p></td>\n</tr>\n</tbody>\n</table>"
+        ]
+      },
+      "provenance": {
+        "campaign": "seed13-b31d558",
+        "original_id": "mutation-13-000889"
+      }
+    },
+    {
+      "id": "document-full-caption-equals",
+      "category": "document-state",
+      "support": "full",
+      "source": "[caption=\"Result = \"]\n.Title\n====\nText\n====",
+      "expect": {
+        "html_contains": [
+          "<div class=\"title\">Result = Title</div>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-none-media-attribute",
+      "category": "document-state",
+      "support": "full",
+      "source": "image::cat.png[width=None]",
+      "expect": {
+        "html_contains": [
+          "<img src=\"cat.png\" alt=\"cat\">"
+        ]
+      }
+    },
+    {
+      "id": "document-full-quoted-none-media-attribute",
+      "category": "document-state",
+      "support": "full",
+      "source": "image::cat.png[width=\"None\"]",
+      "expect": {
+        "html_contains": [
+          "width=\"None\""
+        ]
+      }
+    },
+    {
+      "id": "document-full-asciidoc-cell-section",
+      "category": "document-state",
+      "support": "full",
+      "source": "[cols=\"a\"]\n|===\n|== Cell\n\nText\n|===",
+      "expect": {
+        "html_contains": [
+          "<h2 id=\"_cell\">Cell</h2>"
+        ]
+      }
+    },
+    {
+      "id": "document-full-asciidoc-cell-outer-reference",
+      "category": "document-state",
+      "support": "full",
+      "source": "== Outer\n\n[cols=\"a\"]\n|===\n|See <<_outer>>.\n\n=== Cell\n\nText\n|===",
+      "expect": {
+        "html_contains": [
+          "See <a href=\"#_outer\">Outer</a>."
+        ]
+      }
+    },
+    {
+      "id": "document-full-document-title-reference",
+      "category": "document-state",
+      "support": "full",
+      "source": "[#guide]\n= A *Guide*\n\nSee <<guide>>.",
+      "expect": {
+        "html_contains": [
+          "See <a href=\"#guide\">A <strong>Guide</strong></a>."
+        ]
+      }
+    },
+    {
+      "id": "document-full-document-title-custom-reference",
+      "category": "document-state",
+      "support": "full",
+      "source": "[[guide,The guide]]\n= Guide\n\nSee <<guide>>.",
+      "expect": {
+        "html_contains": [
+          "See <a href=\"#guide\">The guide</a>."
+        ]
+      }
+    },
+    {
+      "id": "document-full-toc-disabled-value",
+      "category": "document-state",
+      "support": "full",
+      "source": ":toc: mao\n\ntoc::[]\n\n== One",
+      "expect": {
+        "html_contains": [
+          "<!-- toc disabled -->"
+        ]
+      }
+    },
+    {
+      "id": "document-full-toc-disabled-unset",
+      "category": "document-state",
+      "support": "full",
+      "source": "toc::[]\n\n== One",
+      "expect": {
+        "html_contains": [
+          "<!-- toc disabled -->"
+        ]
+      }
+    }
+  ]
+}

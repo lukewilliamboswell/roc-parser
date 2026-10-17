@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -7,6 +7,7 @@ import fuzz.Fuzz
 import parser.CSV
 import parser.HTTP
 import parser.Markdown
+import parser.RocSyntax
 import parser.Parser
 import parser.Utf8
 import parser.Xml
@@ -28,6 +29,7 @@ test! = |bytes| {
 parse : Str, Str -> Str
 parse = |format, input| {
 	accepted = match format {
+		"roc-syntax" => RocSyntax.parse_str(input).status == Complete
 		"csv" => CSV.parse_with(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()

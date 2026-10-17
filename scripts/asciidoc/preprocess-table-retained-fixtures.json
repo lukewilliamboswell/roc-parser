@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Retained seeded regression and original reader-context inputs with independently authored HTML predicates; native HTML also compares against the live pinned oracle.",
+    "reference_family": "AsciiDoc table reader context",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/tables/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; caller-provided virtual include only."
+  },
+  "coverage": [
+    {
+      "category": "preprocessing-table-context",
+      "required_cases": [
+        "preprocess-retained-malformed-table-1040",
+        "preprocess-table-close-attribute-entry",
+        "preprocess-table-body-conditional-entry",
+        "preprocess-table-body-include-entry"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "preprocess-retained-malformed-table-1040",
+      "category": "preprocessing-table-context",
+      "features": [
+        "table-body-reader",
+        "attribute-context"
+      ],
+      "source": "|==*=\n|one |two\n|quiet river3403 |four\n|===\n\nNOTE: quiet river9866\n\n:value: quiet river1381\n\n{value}\n\n* 東京3750\n* sibling\n\n== amber5823\n\n----\nquiet river6165\n----\n\n== Delta8706\n\n----\n東京1437\n----\n\n:value: quiet river3578\n\n{value}\n\nRoc3478",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          ":value: quiet river1381",
+          ":value: quiet river3578"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/add-cells-and-rows/"
+      ]
+    },
+    {
+      "id": "preprocess-table-close-attribute-entry",
+      "category": "preprocessing-table-context",
+      "features": [
+        "table-body-reader",
+        "attribute-context"
+      ],
+      "source": "|===\n|cell\n|===\n:value: outside\n\n{value}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<p>outside</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/add-cells-and-rows/"
+      ]
+    },
+    {
+      "id": "preprocess-table-body-conditional-entry",
+      "category": "preprocessing-table-context",
+      "features": [
+        "table-body-reader",
+        "attribute-context"
+      ],
+      "source": ":flag:\n\n|===\n|before\nifdef::flag[]\n:value: inner\n|after\nendif::[]\n|===",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "before\n:value: inner",
+          ">after</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/add-cells-and-rows/"
+      ]
+    },
+    {
+      "id": "preprocess-table-body-include-entry",
+      "category": "preprocessing-table-context",
+      "features": [
+        "table-body-reader",
+        "attribute-context"
+      ],
+      "source": "|===\n|before\ninclude::row.adoc[]\n|===\n\n{value}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          ":value: inner",
+          ">included</p>",
+          "<p>{value}</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/add-cells-and-rows/"
+      ],
+      "includes": {
+        "row.adoc": ":value: inner\n|included"
+      }
+    }
+  ]
+}

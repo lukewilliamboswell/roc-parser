@@ -1,0 +1,193 @@
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#roc-syntax]
+= Parsing Roc source
+
+This chapter is for authors of highlighters and source analysis tools. `RocSyntax`
+parses Roc source and returns source tokens, a syntax tree and diagnostics.
+The implementation is pure Roc; the compiler reference worker is
+development tooling and is not a dependency of applications using the module.
+Legacy Rust compiler syntax is outside its scope.
+
+The syntax tree represents expressions, interpolated and multiline strings,
+typed literals, binding patterns, declarations, control flow, records, nominal
+construction, imports, type annotations and declarations, constraints and
+associated items. Module, hosted, app, package and platform headers retain their
+exposures, dependencies and target configuration. The compatibility section
+identifies the changing compiler grammar used for validation.
+
+== Parse and inspect tokens
+
+This complete example prints the parse status and the byte ranges of numeric
+tokens. The documentation check compiles and runs it against the package source.
+
+[source,roc]
+----
+include::examples/roc-syntax.roc[tag=parse]
+----
+
+Output:
+
+[source,text]
+----
+include::examples/roc-syntax.expected[]
+----
+
+== Source locations and trees
+
+Tokens retain half-open UTF-8 byte spans: `start` includes the first byte and
+`end` points immediately after the token. Comments and whitespace remain in the
+token stream, so tooling can preserve the exact source even when it is incomplete.
+Keep the original source alongside the result when resolving spans.
+
+The tree uses node indices and a separate child-index buffer. Follow a node's
+child range through that buffer to visit its children; do not assume adjacent
+nodes are siblings. This representation supports large inputs without allocating
+a separate recursive container for every syntax construct.
+
+Byte offsets are not character columns. An editor adapter must convert positions
+to the coordinate convention requested by its client. Build a line-start index
+once when converting many locations in the same source.
+
+== Highlighting and lint rules
+
+A highlighter can start from tokens for comments, keywords, strings, literals and
+punctuation. Syntax structure adds context for declarations, calls and expressions.
+Preserved tokens continue to be useful when a node is malformed.
+
+Use `RocSyntax.tokenize_str` or `tokenize_bytes` when only lexical highlighting is
+needed. They return source-backed tokens and diagnostics without constructing a
+tree. `RocSyntax.highlight_category(token.kind)` maps each token to a presentation
+category without allocating strings or choosing theme colors.
+The runnable `examples/roc-syntax.roc` demonstrates both entry points and ships
+in the examples archive, where it is also checked against the bundled package.
+
+Lint rules can traverse the tree and report diagnostics at source spans. Grouping
+and operator precedence are represented structurally. Rules that need binding or
+type information must add scope analysis or use compiler information; parsing
+alone does not establish that a program typechecks.
+
+Check the parse status and diagnostics before applying a rule that assumes a
+complete tree. Recovery returns partial structure for malformed input. Nesting
+at the configured limit, or a document above the token limit, returns `Limited`;
+tokens remain available for highlighting. Code completion and highlighting
+should tolerate partial results.
+
+== Compatibility and validation
+
+The syntax reference is compiler commit
+`0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is pinned separately to
+`nightly-2026-10-15-38e6c42` in `.roc-version`. This identifies a changing language implementation,
+rather than a stable language specification. Updating the implementation compiler
+and updating the syntax reference are separate maintenance decisions.
+
+The differential corpus records individual syntax rules and their coverage.
+Raw fuzzing checks source preservation and structural invariants; structured
+generation checks independently constructed syntax. Performance runs use optimized
+builds and measure scaling as documents grow.
+
+== Run the feedback loop
+
+Install the Roc nightly named in `.roc-version`, Zig 0.17.0 and Python 3.
+From the repository root, run:
+
+[source,sh]
+----
+ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
+----
+
+The command checks the package, builds the pinned compiler oracle and optimized
+Roc probe, checks the live protocol, compares curated cases plus 1,000 independently
+generated files, blocks, annotations and expressions, checks dedicated type,
+platform and adversarial grammar fixtures,
+compares acceptance across the complete pinned snapshot corpus, and compares tokens
+and normalized trees for every compiler-accepted input. It checks editor recovery,
+runs both fuzz smoke campaigns, compares mutated inputs with the compiler oracle,
+and checks performance scaling.
+It rebuilds candidate probes and records source and executable hashes. Its
+`validation.json`, step logs, differential failures and performance results live
+under `.roc-parser-tmp/roc-syntax-validation/`.
+
+The first oracle build fetches the pinned compiler Git objects when no sibling
+compiler repository is available. `--roc-source /path/to/roc` selects an existing
+Git repository; its working files are ignored. Build caches stay under the
+validation output directory. Compiler backend libraries are not required.
+
+Use `--generated 10000 --mutation-runs 10000 --fuzz-runs 10000` for a larger campaign. Add `--allocations`
+to collect allocation/reallocation call counts. For performance comparisons, save
+the first run's `performance.json` and pass it as `--baseline /path/to/before.json`
+on a later run on the same machine and compiler. An allocation call count does
+not measure bytes copied or peak memory; inspect timing growth too.
+
+For the local per-input speed ratchet against the actual compiler parser, add
+`--reference-performance full`. Both workers parse the same immutable source
+repeatedly in optimized builds; startup, JSON transport and tree projection are
+outside the timed region. Reports contain per-input medians, samples and ratios,
+and retain failing inputs for replay. The target ceiling is
+`--max-reference-ratio 1.5`. The initial implementation substantially exceeds
+that target; the ratchet deliberately reports those failures for investigation.
+See {src}/docs/benchmarks.adoc[the measurement protocol and replay commands].
+
+CI uses only `--reference-performance smoke`: two tiny inputs with a short
+measurement window and no speed-ratio assertion. The full comparative ratchet is
+a local development tool. Deep synthetic operator chains explicitly report
+partial depth-limited structural eligibility checks; ordinary conformance gates
+continue to require complete normalized tree comparisons.
+
+Pull requests use seed `1` for reproducible differential generation. Scheduled
+and manual exploration use the GitHub run ID as a fresh reproducible seed;
+`--seed RUN_ID` reproduces that run locally. Reports retain complete source,
+models, commands and failures in the syntax validation artifact for 14 days.
+Promote minimized failures into committed fixtures before that artifact expires.
+Fresh seeds explore additional combinations; they do not prove grammar coverage.
+Scheduled exploration runs 10,000 generated cases and 10,000 mutations, restores
+the raw fuzz corpus and runs a fresh smoke campaign before oracle comparisons.
+
+Generated models include headers, imports, type declarations, constraints and
+statement sequences. Six arithmetic operators use only the parentheses needed
+to preserve the independently constructed model. Use `--expression-depth`,
+`--pattern-depth`, `--type-depth` and `--statements` to tune bounded generation;
+reports record those budgets. See
+{src}/docs/roc-syntax-generation.adoc[the model families and remaining omissions].
+
+The editor recovery gate checks damaged files with healthy declarations before
+and after each edit, including UTF-8 comments and headers. Surviving declarations
+must retain their exact byte spans and independently specified trees. Diagnostics
+must stay inside the damaged region. Compiler rejection confirms that an edit is
+malformed; compiler recovery layout is not used as the candidate's expected tree.
+These contracts cover specific edit classes rather than promising recovery from
+every possible incomplete program.
+
+The oracle mutation lane edits accepted seeds from all four fixture sets and the
+complete upstream corpus. Every mutation must agree on acceptance; accepted
+mutations must also agree on tokens and normalized trees. The lane additionally
+compares unchanged UTF-8 inputs harvested from the raw fuzz corpus when present.
+Invalid UTF-8 bytes remain in the raw robustness lane, and exclusions are counted
+explicitly. Mutation provenance records exact byte edits, seeds and original
+source so each failure can be replayed without the original corpus. See
+{src}/scripts/roc_syntax/MUTATIONS.md[mutation campaign commands and limits].
+
+To import the larger upstream source corpus, run:
+
+[source,sh]
+----
+python3 scripts/import_roc_syntax_snapshots.py --roc-source /path/to/roc
+----
+
+The importer reads the pinned commit's immutable snapshot blobs and records
+source hashes, parse modes and skipped snapshot kinds. This is an exploratory
+coverage corpus, including invalid and historical examples. It is not a list of
+programs the current compiler promises to accept. Feed the generated fixtures to
+`scripts/review_roc_syntax.py` with the built probe and oracle commands. Every
+disagreement remains available for inspection; unknown projections and unsupported
+syntax must not be presented as structural agreement.
+
+For each parser improvement, add a curated case for the relevant rule, check its
+normalized structure against the reference, extend the independent generator
+where useful, and rerun scaling when the parser's traversal or allocation changes.
+Preserve minimized fuzz failures as source fixtures so the check survives corpus
+and generator changes.

@@ -1,0 +1,1214 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "block-retained-b31-mutations",
+      "required_cases": [
+        "block-retained-b31-mutation-13-000059-2a52d737",
+        "block-retained-b31-mutation-13-000061-eb012c02",
+        "block-retained-b31-mutation-13-000089-ae4b49c0",
+        "block-retained-b31-mutation-13-000184-26b1e93f",
+        "block-retained-b31-mutation-13-000216-7e394d96",
+        "block-retained-b31-mutation-13-000253-2bc1a054",
+        "block-retained-b31-mutation-13-000270-0a260270",
+        "block-retained-b31-mutation-13-000315-5728324d",
+        "block-retained-b31-mutation-13-000380-d515fdce",
+        "block-retained-b31-mutation-13-000397-f4596bd7",
+        "block-retained-b31-mutation-13-000442-0d2dc56c",
+        "block-retained-b31-mutation-13-000491-0c6cc64f",
+        "block-retained-b31-mutation-13-000521-17bbba8d",
+        "block-retained-b31-mutation-13-000580-ccdadc98",
+        "block-retained-b31-mutation-13-000590-f45a7acc",
+        "block-retained-b31-mutation-13-000643-d7c0cefb",
+        "block-retained-b31-mutation-13-000660-2f43faaa",
+        "block-retained-b31-mutation-13-000689-dc9575ef",
+        "block-retained-b31-mutation-13-000703-d126850a",
+        "block-retained-b31-mutation-13-000746-7bfc2a2c",
+        "block-retained-b31-mutation-13-000756-ee359e82",
+        "block-retained-b31-mutation-13-000946-4d26595a",
+        "block-retained-b31-mutation-13-000983-8d4abb89",
+        "block-retained-b31-mutation-13-000984-9325ac2e",
+        "block-retained-ci-mutation-1-000023",
+        "block-retained-ci-mutation-1-000048",
+        "table-pipe-content-style-letter"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "block-retained-b31-mutation-13-000059-2a52d737",
+      "source": ":part: chapter\n\ninclude::{part}.ad****\n[]",
+      "parent_id": "virtual-include-attribute-target",
+      "sha256": "2a52d737518679c6dde285b980bbe09d5c69c1e348543b08bf5217cf9761e94b",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "includes": {
+        "chapter.adoc": "Chosen chapter."
+      },
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "include::{part}.ad****",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000059"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000061-eb012c02",
+      "source": "= 🦊 2282\n\n----\ncafé 5512\namber 6810\n🦊 7524\n----\n\n...ή 6000\n東京 2747\n....\n",
+      "parent_id": "model-13-855",
+      "sha256": "eb012c022a53506cd46fc146a88a2e523567eaee17eda96eb82675766d9c2b9a",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "🦊 2282",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "café 5512\namber 6810\n🦊 7524",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "...ή 6000\n東京 2747",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000061"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000089-ae4b49c0",
+      "source": "Last include::missing.adoc[]\n+",
+      "parent_id": "inline-full-eof-hardbreak",
+      "sha256": "ae4b49c03bdd0e7f9b627ad46008b8e3dfdfc6f791d8a7c530076de1563fba2a",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Last include::missing.adoc[]",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "+",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000089"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000184-26b1e93f",
+      "source": "= 東京 5235\r\n\r\n'''\r\n\r\n== naïve façade 564\r\n\r\nquiet river 1170\r\n🦊 6952\r\namber 1680\r\n\r\nnaïve façade 2620\r\namber 8462\r\n🦊 3651\r\n[source,roc]\n\r\n....\r\nΔοκιμή 6590\r\n東京 4675\r\n....\r\n",
+      "parent_id": "model-13-409",
+      "sha256": "26b1e93fbd2bd93421386ba3b2c193c80f1a5a874079449ab27788d7786ad372",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "東京 5235",
+          "blocks": [
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "naïve façade 564",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 1170\n🦊 6952\namber 1680",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "naïve façade 2620\namber 8462\n🦊 3651",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "Δοκιμή 6590\n東京 4675",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000184"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000216-7e394d96",
+      "source": "= naïve façade 8128\n....\n\n....\namber 9891\ncafé 4459\nnaïve façade 8170\n....\n\n----\namber 3771\namber 7251\n----\n\n== amber 7207\n\n....\nΔοκιμή 6046\n🦊 615\n....\n\n----\nnaïve façade 6641\n----\n",
+      "parent_id": "model-13-612",
+      "sha256": "7e394d9633ad350b71e3007edd642cc7129831ef898c40774d64e9a87b26e35a",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "naïve façade 8128",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "amber 9891\ncafé 4459\nnaïve façade 8170",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "amber 3771\namber 7251",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "amber 7207",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "Δοκιμή 6046\n🦊 615",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "naïve façade 6641",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000216"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000253-2bc1a054",
+      "source": "...+\n\nnaïve façade 5645\r\n....",
+      "parent_id": "model-13-883",
+      "sha256": "2bc1a0549f441f2fb476868c6f42a3c46ea359e41e189167931ac43934e113fc",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "...+",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "naïve façade 5645",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000253"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000270-0a260270",
+      "source": "= naïve façade ////\n 3634\n....\n\n== 🦊 9369\n\nnaïve façade 6030\n🦊 6588\n\nnaïve façade 4486\n\n'''\n\nΔοκιμή 9158\n東京 968\n",
+      "parent_id": "model-13-356",
+      "sha256": "0a26027088afef10e49a08993fba2a56f4712e8f29ecace00e698f6344987a9f",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "naïve façade ////",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "🦊 9369",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "naïve façade 6030\n🦊 6588",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "naïve façade 4486",
+                  "blocks": []
+                },
+                {
+                  "context": "thematic_break",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Δοκιμή 9158\n東京 968",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000270"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000315-5728324d",
+      "source": "== Sec\nTle\n-----",
+      "parent_id": "block-legacy-heading-after-section",
+      "sha256": "5728324d7d800b6875b95974636abdef104e537e082f21a64e703e15362ea717",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "Sec",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Tle",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000315"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000380-d515fdce",
+      "source": "= quiet riveer 2917\r\namber 206\r\n----",
+      "parent_id": "model-13-673",
+      "sha256": "d515fdce89c1f250c1921c7e50237b2bc26a13341651fed6e336016845ed49c7",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "quiet riveer 2917",
+          "blocks": []
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000380"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000397-f4596bd7",
+      "source": "= quiet river 772\r\n\r\n....\r\n🦊 7073\r\n....\r\n\r\n'''\r\n\r\nnaïve façade 4923\r\ncafé 782\r\nnaïve façade 6190\r\n\r\n== café 4922\r\n\r\n....\r\nnaïve façade 8079\r\n\n",
+      "parent_id": "model-13-456",
+      "sha256": "f4596bd7b652304c91b1bb353a23078c3fcc2b15a1d601adfaf86d449ec9d2d9",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "quiet river 772",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "🦊 7073",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "naïve façade 4923\ncafé 782\nnaïve façade 6190",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "café 4922",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "naïve façade 8079",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000397"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000442-0d2dc56c",
+      "source": "= café 3635\n\n....\nna////\n\n",
+      "parent_id": "model-13-968",
+      "sha256": "0d2dc56c5ce7461b6b4c9eda5fcda954b3ff741a0082afcb0bbb3e99a15618a7",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "café 3635",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "na////",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000442"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000491-0c6cc64f",
+      "source": "----\r\nΔοκιμή 5460\r\nΔοκιμή 2206\r\n----\r\n\r\n'''\r\n\r\n...*bold*07\r\nΔοκιμή 3107\r\n東京 4345\r\n....\r\n\r\n'''\r\n",
+      "parent_id": "model-13-377",
+      "sha256": "0c6cc64fa53116cb8209b3513e2b5337fd37d2c4c0e266ff0cdfa2bb0e627e95",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "Δοκιμή 5460\nΔοκιμή 2206",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "...*bold*07\nΔοκιμή 3107\n東京 4345",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n'''",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000491"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000521-17bbba8d",
+      "source": "[séource%nowrap,ruby]\n----\nx\n----",
+      "parent_id": "block-block-option-inline-style",
+      "sha256": "17bbba8d7c22b9cf94d21584f91d997c33bf3a6cafa0b8c87f054925e75e7419",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "x",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000521"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000580-ccdadc98",
+      "source": "= Δοκιμή 6[[target]]\n....\r\n🦊 3037\r\n....",
+      "parent_id": "model-13-32",
+      "sha256": "ccdadc988757243b1e99a07d5679c3a68e90d28a8a4e3d5c081bc0716999fedf",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Δοκιμή 6<a id=\"target\"></a>",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000580"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000590-f45a7acc",
+      "source": "café 8996\nnaïve façade 3612\n🦊 1295\n\n...[[target]]\n.\n🦊 1777\nΔοκιμή 1551\n....\n",
+      "parent_id": "model-13-718",
+      "sha256": "f45a7acc67de983cc2dafa7f00270bca219b31d34542dde34558fe2844cc3f32",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "café 8996\nnaïve façade 3612\n🦊 1295",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "...[[target]]\n.\n🦊 1777\nΔοκιμή 1551",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000590"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000643-d7c0cefb",
+      "source": ":leveloffset: +1leveloffset: +1\n\n== One",
+      "parent_id": "block-section-leveloffset",
+      "sha256": "d7c0cefb4c634f054ca9dd9b56b4f736e4da25e06dd166f45b342061bda55b49",
+      "operation": "duplicate",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 2,
+              "title": "One",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000643"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000660-2f43faaa",
+      "source": " 2690\n....\n\n----\n東京 732\n🦊 1615\n----\n\n....\nnaïve façade 1960\n🦊 4719\n....\n\n=== quiet river 3807\n\n....\ncafé 3063\n....\n\n....\nquiet river 8684\n....\n\n....\n🦊 1017\n東京 1440\n....\n\n== amber 5597\n\n....\namber 1409\n東京 8712\namber 13\n....\n\n----\n東京 2011\ncafé 3633\n----\n\n----\nquiet river 685\n🦊 3283\n----\n\nΔοκιμή 6261\n🦊 1798\nquiet river 9371",
+      "parent_id": "model-13-346",
+      "sha256": "2f43faaaedb7abdffed32eb6b113db2de002f6da54cd89fd78a99d98afaf1718",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "2690",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n----\n東京 732\n🦊 1615\n----\n",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "naïve façade 1960\n🦊 4719",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n=== quiet river 3807\n",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "café 3063",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "quiet river 8684",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "🦊 1017\n東京 1440",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n== amber 5597\n",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "amber 1409\n東京 8712\namber 13",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n----\n東京 2011\ncafé 3633\n----\n\n----\nquiet river 685\n🦊 3283\n----\n\nΔοκιμή 6261\n🦊 1798\nquiet river 9371",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000660"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000689-dc9575ef",
+      "source": "A:: A\n:::: B",
+      "parent_id": "block-description-level4",
+      "sha256": "dc9575ef572cb54340fc7962aa818dee39c5a9c8ee83e198ada40e0b4ed061a0",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "dlist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "dlist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000689"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000703-d126850a",
+      "source": "= quiet river 1510\r\n\r\n...\\*\r\namber 5841\r\n....\r\n\r\n----\r\namber 2917\r\namber 206\r\n----",
+      "parent_id": "model-13-673",
+      "sha256": "d126850a652c03bd95a3e3f32895c02751d285d69822467080ee7bd320bce42b",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "quiet river 1510",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "...\\*\namber 5841",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "\n----\namber 2917\namber 206\n----",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000703"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000746-7bfc2a2c",
+      "source": "🦊 7817\r\n====\n",
+      "parent_id": "model-13-922",
+      "sha256": "7bfc2a2c43cf8f8da1e3abeb177c48794ceb04407f7319650096291388e3a8f4",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "🦊 7817",
+              "blocks": []
+            },
+            {
+              "context": "example",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000746"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000756-ee359e82",
+      "source": "= naïve façade 95<<target>>\nΔοκιμή 8204\namber 9369\nΔοκιμή 598\n\n....\n東京 4108\n....\n\namber 9614\n東京 2613\n\n'''\n",
+      "parent_id": "model-13-476",
+      "sha256": "ee359e82aea947eccd2007af6de980b73fb9e5b103199bb9543ce3efa57d353e",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "naïve façade 95<a href=\"#target\">[target]</a>",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Δοκιμή 598",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "東京 4108",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "amber 9614\n東京 2613",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000756"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000946-4d26595a",
+      "source": "= amber 4844\r\n\r\n'''\r\n\r\n'''\r\n\r\n== café 1334\r\n\r\n'''\r\n\r\n----\r\nquiet river 8905\r\n----\r\n\r\n...日de 9477\r\nΔοκιμή 9202\r\namber 6346\r\n....",
+      "parent_id": "model-13-953",
+      "sha256": "4d26595aa9248eb03913a4488e48ead6071b12addd116bd5d228e94b5ab47f53",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "amber 4844",
+          "blocks": [
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "café 1334",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "thematic_break",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 8905",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "...日de 9477\nΔοκιμή 9202\namber 6346",
+                  "blocks": []
+                },
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000946"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000983-8d4abb89",
+      "source": "---->\n----",
+      "parent_id": "block-callout-multiple",
+      "sha256": "8d4abb8926a7a51f0df792d04bc796e56265d3db91c12b12f20ef481c539e478",
+      "operation": "delete",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "---->",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000983"
+      }
+    },
+    {
+      "id": "block-retained-b31-mutation-13-000984-9325ac2e",
+      "source": "= naïve façade 3963\r\n\r\n🦊 666\r\ncafé 6157\r\n\r\nquiet river 8029\r\nnaïve façade 8525\r\ncafé 5708\r\n\r\n== café 3029\r\n\r\n🦊 6958\r\n\r\nquiet river 2761\r\n🦊 9025\r\n🦊 131\r\n\r\n'''\r\n\r\n{name}\n----\r\n",
+      "parent_id": "model-13-971",
+      "sha256": "9325ac2e6c3077ad2231d1ab85990b2e3b3a29650f04e395584904daad6cd74a",
+      "operation": "replace",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "naïve façade 3963",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "🦊 666\ncafé 6157",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "quiet river 8029\nnaïve façade 8525\ncafé 5708",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "café 3029",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "🦊 6958",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 2761\n🦊 9025\n🦊 131",
+                  "blocks": []
+                },
+                {
+                  "context": "thematic_break",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "{name}",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "report": "seed13 expanded inventory b31d558",
+        "id": "mutation-13-000984"
+      }
+    },
+    {
+      "id": "block-retained-ci-mutation-1-000023",
+      "source": "include::dir/a.adoc|===\n[]",
+      "parent_id": "preprocess-include-nested-parent",
+      "sha256": "714e7dff692151ceb6c457425c141f819606e840f03ba3cd1c9f445ff7cfadec",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "includes": {
+        "dir/a.adoc": "include::../child.adoc[]",
+        "child.adoc": "root child"
+      },
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "include::dir/a.adoc|===",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "block-retained-ci-mutation-1-000048",
+      "source": "= Notes\nAda Example\nv1.2, 2026-01-0:name: value\n2: Draft\n\nBody",
+      "parent_id": "header-revision",
+      "sha256": "02e84d99eca9b468a3d7d0991be3591876f6406f488c298c6136e6a01c1cf48b",
+      "operation": "insert",
+      "category": "block-retained-b31-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "Notes",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "2: Draft",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Body",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "table-pipe-content-style-letter",
+      "category": "block-retained-b31-mutations",
+      "features": [
+        "table",
+        "inline-pipe-content"
+      ],
+      "source": "[cols=\"2,3\"]\n|===\n|`Parser.const(|a| |b| ...)`.\n|===",
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "table"
+        ]
+      }
+    }
+  ]
+}
