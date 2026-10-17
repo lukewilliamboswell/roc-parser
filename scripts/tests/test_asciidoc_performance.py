@@ -197,6 +197,28 @@ class Performance(unittest.TestCase):
                 else:
                     self.assertEqual(source.count('{counter:key'),4096)
 
+    def test_default_scaling_retains_static_snapshots_and_mutating_previews(self):
+        families={'static-attributes-url-blocks','mutating-preview-counter-blocks',
+                  'mailto-positional-query-counter-blocks'}
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes)
+               if case['family'] in families]
+        for family in families:
+            self.assertTrue({1024,2048,4096}.issubset({case['size'] for case in cases if case['family']==family}))
+        sources={case['family']:case['source'] for case in cases if case['size']==4096}
+        static=sources['static-attributes-url-blocks']
+        self.assertEqual(static.count(':key'),4096)
+        self.assertEqual(static.count('https://example.test'),4096)
+        self.assertTrue(static.endswith('{key0} {key4095}'))
+        preview=sources['mutating-preview-counter-blocks']
+        self.assertEqual(preview.count('pass:a[{counter:key'),4096)
+        self.assertEqual(preview.count('{set:last:value}'),4096)
+        self.assertTrue(preview.endswith('{key0} {key4095} {last}'))
+        query=sources['mailto-positional-query-counter-blocks']
+        self.assertEqual(query.count('mailto:x@y.z[N,S,B]'),4096)
+        self.assertEqual(query.count('{counter:key'),4096)
+        self.assertNotIn('subject=',query)
+        self.assertTrue(query.endswith('{key0} {key4095}'))
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})
