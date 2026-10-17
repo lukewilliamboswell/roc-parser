@@ -5,6 +5,7 @@ import sys
 import argparse
 import json
 import hashlib
+import io
 import shlex
 import tempfile
 import unittest
@@ -67,7 +68,7 @@ class Performance(unittest.TestCase):
                  calibrate=mock.Mock(return_value=1), sample_pair=finish_after_deadline), \
              mock.patch.object(perf.subprocess, 'run', return_value=SimpleNamespace(stdout='Ruby test')):
             output=pathlib.Path(tmp)
-            self.assertEqual(perf.main(['--smoke','--modes','render','--deadline-seconds','10','--output',tmp]),1)
+            self.assertEqual(perf.main(['--smoke','--batch-policy','common','--modes','render','--deadline-seconds','10','--output',tmp]),1)
             report=json.loads((output/'results.json').read_text())
             self.assertEqual(len(report['records']),1)
             self.assertEqual(report['records'][0]['status'],'error')
@@ -294,10 +295,12 @@ class Performance(unittest.TestCase):
     def test_oracle_response_budget_default_survives_replay(self):
         args=perf.parser().parse_args([])
         self.assertEqual(args.timeout,180)
+        self.assertEqual(args.batch_policy,'per-engine')
         self.assertEqual(args.deadline_seconds,7200)
         tokens=shlex.split(perf.replay_command(args,pathlib.Path('/tmp/slow oracle.json'),['parse']))
         replay=perf.parser().parse_args(tokens[2:])
         self.assertEqual(replay.timeout,180)
+        self.assertEqual(replay.batch_policy,'per-engine')
         self.assertEqual(replay.deadline_seconds,7200)
         self.assertEqual(replay.max_ratio,1)
         self.assertEqual(replay.max_scaling_exponent,1.3)
@@ -453,11 +456,14 @@ class Performance(unittest.TestCase):
                  digest=mock.Mock(return_value='a'*64), source_identity=mock.Mock(return_value='same'),
                  corpus=mock.Mock(return_value=[{'id':'x','family':'test','source':'hello'}]),
                  calibrate=mock.Mock(return_value=1)), \
-             mock.patch.object(perf.subprocess, 'run', return_value=SimpleNamespace(stdout='Ruby test')):
-            self.assertEqual(perf.main(['--smoke','--modes','render','--output',tmp]),1)
+             mock.patch.object(perf.subprocess, 'run', return_value=SimpleNamespace(stdout='Ruby test')), \
+             mock.patch.object(perf.sys, 'stderr', new_callable=io.StringIO) as progress_output:
+            self.assertEqual(perf.main(['--smoke','--progress','--modes','render','--output',tmp]),1)
             output=pathlib.Path(tmp)
             report=json.loads((output/'results.json').read_text())
             row=report['records'][0]
+            self.assertEqual(report['schema_version'],2)
+            self.assertEqual(report['batch_policy'],'per-engine')
             self.assertEqual(row['status'],'error')
             self.assertIn('repeated samples',row['error'])
             self.assertEqual(row['correctness'],{'projection':True,'rendered_dom':True})
@@ -466,7 +472,120 @@ class Performance(unittest.TestCase):
             journal=json.loads((output/'measurements.jsonl').read_text())
             self.assertEqual(retained['measurement']['measurement_attempts'],row['measurement_attempts'])
             self.assertEqual(journal['measurement_attempts'],row['measurement_attempts'])
+            self.assertEqual(retained['run']['batch_policy'],'per-engine')
+            self.assertTrue(retained['run']['progress'])
+            self.assertIn('--progress',retained['measurement']['replay'])
+            self.assertIn('[x render]: begin',progress_output.getvalue())
+            self.assertIn('sample=1/1 engine=candidate iterations=',progress_output.getvalue())
+            self.assertIn('qualification=refine-duration',progress_output.getvalue())
+            self.assertIn('complete status=error',progress_output.getvalue())
+            self.assertTrue(all('iteration_counts'in attempt for attempt in row['measurement_attempts']))
             self.assertIn('--replay',retained['measurement']['replay'])
+
+    def test_per_engine_batches_normalize_counts_and_alternate_all_seven_samples(self):
+        calls=[]
+        class Worker:
+            def __init__(self, name, period):self.name=name;self.period=period
+            def request(self, request):
+                calls.append((self.name,request['iterations']))
+                return {'version':1,'id':'x','iterations':request['iterations'],'successes':request['iterations'],
+                        'elapsed_ns':request['iterations']*self.period,'checksum':request['iterations'],
+                        'projection':{'title':'','blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        workers=[Worker('candidate',30000000),Worker('reference',32000000000)]
+        measured,attempts=perf.sample_pair_per_engine(workers,{'id':'x','source':'x'},'parse',
+                                                     [2,1],50000000,7,100000,expected)
+        self.assertEqual([item['iterations']for item in measured],[2,1])
+        self.assertEqual([item['median_ns']for item in measured],[30000000,32000000000])
+        self.assertAlmostEqual(perf.ratchet(*measured)['ratio'],30000000/32000000000)
+        self.assertTrue(all(item['observed_minimum_window_ns']>=50000000 for item in measured))
+        self.assertEqual(attempts[0]['iteration_counts'],{'candidate':2,'reference':1})
+        self.assertNotIn('iterations',attempts[0])
+        self.assertEqual(calls[2:],[('candidate',2),('reference',1),('reference',1),('candidate',2),
+                                   ('candidate',2),('reference',1),('reference',1),('candidate',2),
+                                   ('candidate',2),('reference',1),('reference',1),('candidate',2),
+                                   ('candidate',2),('reference',1)])
+
+    def test_per_engine_duration_refinement_does_not_repeat_qualified_oracle_work(self):
+        class Worker:
+            def __init__(self, period):self.period=period
+            def request(self, request):
+                return {'version':1,'id':'x','iterations':request['iterations'],'successes':request['iterations'],
+                        'elapsed_ns':request['iterations']*self.period,'checksum':request['iterations'],
+                        'projection':{'title':'','blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        measured,attempts=perf.sample_pair_per_engine([Worker(10),Worker(1000)],{'id':'x','source':'x'},
+                                                     'parse',[10,1],1000,5,10000,expected)
+        self.assertEqual(len(attempts),2)
+        self.assertGreater(measured[0]['iterations'],10)
+        self.assertEqual(measured[1]['iterations'],1)
+        self.assertTrue(all(item['observed_minimum_window_ns']>=1000 for item in measured))
+
+    def test_per_engine_noise_refines_only_noisy_batches_and_stays_bounded(self):
+        class Worker:
+            def __init__(self, noisy, settles):self.noisy=noisy;self.settles=settles;self.calls=0
+            def request(self, request):
+                self.calls+=1
+                period=(1000 if self.calls%2 else 3000) if self.noisy and (not self.settles or request['iterations']<20) else 4000
+                return {'version':1,'id':'x','iterations':request['iterations'],'successes':request['iterations'],
+                        'elapsed_ns':request['iterations']*period,'checksum':request['iterations'],
+                        'projection':{'title':'','blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        for settles in (True,False):
+            with self.subTest(settles=settles):
+                measured,attempts=perf.sample_pair_per_engine([Worker(True,settles),Worker(False,True)],
+                    {'id':'x','source':'x'},'parse',[10,10],10000,5,1000,expected)
+                self.assertEqual([attempt['iteration_counts']['reference']for attempt in attempts],[10]*len(attempts))
+                self.assertEqual(len(attempts),2 if settles else 4)
+                self.assertEqual(perf.ratchet(*measured)['noisy'],not settles)
+                self.assertEqual(attempts[-1]['qualification'],'both-duration-floor' if settles else 'both-duration-floor-noisy')
+
+    def test_per_engine_iteration_cap_retains_truthful_raw_counts(self):
+        class Worker:
+            def __init__(self, period):self.period=period
+            def request(self, request):
+                return {'version':1,'id':'x','iterations':request['iterations'],'successes':request['iterations'],
+                        'elapsed_ns':request['iterations']*self.period,'checksum':request['iterations'],
+                        'projection':{'title':'','blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        with self.assertRaisesRegex(ValueError,'iteration cap') as caught:
+            perf.sample_pair_per_engine([Worker(1),Worker(1000)],{'id':'x','source':'x'},
+                                        'render',[8,1],1000,5,8,expected)
+        attempt=caught.exception.measurement_attempts[0]
+        self.assertEqual(attempt['iteration_counts'],{'candidate':8,'reference':1})
+        self.assertEqual(attempt['candidate_elapsed_ns'],[8]*5)
+        self.assertEqual(attempt['reference_elapsed_ns'],[1000]*5)
+
+    def test_per_engine_sampling_checks_fresh_semantics_and_counts(self):
+        class Worker:
+            def __init__(self, failure):self.failure=failure;self.calls=0
+            def request(self, request):
+                self.calls+=1
+                fail=self.calls==3
+                return {'version':1,'id':'x','iterations':request['iterations'],
+                        'successes':0 if fail and self.failure=='count' else request['iterations'],
+                        'elapsed_ns':request['iterations']*1000,
+                        'checksum':0 if fail and self.failure=='checksum' else request['iterations'],
+                        'projection':{'title':'wrong' if fail and self.failure=='projection' else '', 'blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        for failure in ('count','projection','checksum'):
+            with self.subTest(failure=failure),self.assertRaises(ValueError):
+                perf.sample_pair_per_engine([Worker(failure),Worker('none')],{'id':'x','source':'x'},
+                                            'parse',[1,1],1000,7,100,expected)
+
+    def test_per_engine_screen_does_not_hide_near_threshold_regression(self):
+        class Worker:
+            def __init__(self, period):self.period=period
+            def request(self, request):
+                return {'version':1,'id':'x','iterations':request['iterations'],'successes':request['iterations'],
+                        'elapsed_ns':request['iterations']*self.period,'checksum':request['iterations'],
+                        'projection':{'title':'','blocks':[]},'html':''}
+        expected={'projection':{'title':'','blocks':[]},'html':''}
+        measured,attempts=perf.sample_pair_per_engine([Worker(110),Worker(100)],{'id':'x','source':'x'},
+            'parse',[1,1],1000,5,1000,expected,screen=True,clock_floor_ns=1)
+        self.assertTrue(perf.ratchet(*measured)['regression'])
+        self.assertTrue(all(item['observed_minimum_window_ns']>=1000 for item in measured))
+        self.assertEqual(attempts[-1]['qualification'],'both-duration-floor')
 
     def test_prefix_families_retain_trailing_syntax(self):
         cases={case['family']:case for case in perf.geometric([8])}
@@ -493,12 +612,12 @@ class Performance(unittest.TestCase):
 
     def test_replay_preserves_measurement_confidence_and_limits(self):
         args=perf.parser().parse_args(['--window-ms','50','--samples','7','--max-ratio','0.9',
-              '--max-scaling-exponent','1.2','--max-iterations','12345','--timeout','41',
+              '--max-scaling-exponent','1.2','--max-iterations','12345','--timeout','41','--batch-policy','common','--progress',
               '--ruby','/opt/ruby path/bin/ruby','--gem-home','/tmp/gem home'])
         tokens=shlex.split(perf.replay_command(args,pathlib.Path('/tmp/slow case.json'),['parse']))
         replay=perf.parser().parse_args(tokens[2:])
         for key in ('window_ms','samples','max_ratio','max_scaling_exponent','max_iterations',
-                    'timeout','build_timeout','deadline_seconds','ruby','roc','gem_home'):
+                    'timeout','build_timeout','deadline_seconds','ruby','roc','gem_home','batch_policy','progress'):
             self.assertEqual(getattr(args,key),getattr(replay,key),key)
         self.assertEqual(replay.replay,[pathlib.Path('/tmp/slow case.json')])
         self.assertEqual(replay.modes,['parse'])

@@ -73,7 +73,7 @@ def oracle_environment(gem_home):
 def retained_run(report):
     return {key: report[key] for key in (
         'command', 'machine', 'seed', 'driver_sha256', 'worker_transport_sha256',
-        'candidate_build', 'reference', 'measurement_policy', 'max_ratio', 'deadline_seconds') if key in report}
+        'candidate_build', 'reference', 'measurement_policy', 'batch_policy', 'progress', 'max_ratio', 'deadline_seconds') if key in report}
 
 
 def source_identity(root):
@@ -334,9 +334,10 @@ def equivalent(candidate, reference):
         raise ValueError('candidate/reference rendered DOM differs')
 
 
-def calibrate(worker, case, mode, window_ns, max_iterations, expected):
+def calibrate(worker, case, mode, window_ns, max_iterations, expected, *, progress=None, engine=None):
     iterations = 1
     for _ in range(24):
+        if progress: progress(f'calibration engine={engine} iterations={iterations} warmup=2')
         value = validate_reply(worker.request(request(case, mode, iterations, 2)), case, iterations)
         equivalent(value, expected)
         elapsed = value['elapsed_ns']
@@ -348,10 +349,11 @@ def calibrate(worker, case, mode, window_ns, max_iterations, expected):
     raise ValueError('calibration iteration limit')
 
 
-def calibrate_common(workers, case, mode, window_ns, max_iterations, expected):
+def calibrate_common(workers, case, mode, window_ns, max_iterations, expected, *, progress=None):
     """Calibrate shared work from the slower pilot, avoiding huge oracle batches."""
     elapsed = []
-    for worker in workers:
+    for index,worker in enumerate(workers):
+        if progress: progress(f'calibration engine={"candidate" if index==0 else "reference"} iterations=1 warmup=2')
         value = validate_reply(worker.request(request(case,mode,1,2)),case,1)
         equivalent(value,expected)
         elapsed.append(value['elapsed_ns'])
@@ -367,7 +369,7 @@ class TimingQualificationError(ValueError):
 
 
 def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterations, expected,
-                *, screen=False, clock_floor_ns=100000, max_ratio=1.0):
+                *, screen=False, clock_floor_ns=100000, max_ratio=1.0, progress=None):
     """Use short common batches only with stable, conservatively clear headroom.
 
     Near the threshold, noisy data, replay inputs and geometric families require
@@ -377,11 +379,13 @@ def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterati
     """
     attempts = []
     for attempt in range(4):
-        for worker in workers:
+        for index,worker in enumerate(workers):
+            if progress: progress(f'attempt={attempt+1} preheat engine={"candidate" if index==0 else "reference"} iterations={iterations}')
             validate_reply(worker.request(request(case,mode,iterations)),case,iterations)
         elapsed = [[],[]]
         for sample in range(samples):
             for index in ([0,1] if sample % 2 == 0 else [1,0]):
+                if progress: progress(f'attempt={attempt+1} sample={sample+1}/{samples} engine={"candidate" if index==0 else "reference"} iterations={iterations}')
                 value = validate_reply(workers[index].request(request(case,mode,iterations)),case,iterations)
                 equivalent(value,expected)
                 elapsed[index].append(value['elapsed_ns'])
@@ -395,10 +399,11 @@ def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterati
         noisy_qualified = both_qualified and comparison['noisy']
         noise_limit = attempt == 3 or iterations >= max_iterations
         qualification = ('both-duration-floor-noisy' if noise_limit else 'refine-noise') if noisy_qualified else 'both-duration-floor' if both_qualified else 'stable-headroom-screen' if screen_qualified else 'refine-duration'
-        attempts.append({'iterations':iterations,'candidate_elapsed_ns':elapsed[0],'reference_elapsed_ns':elapsed[1],
+        attempts.append({'iterations':iterations,'iteration_counts':{'candidate':iterations,'reference':iterations},'candidate_elapsed_ns':elapsed[0],'reference_elapsed_ns':elapsed[1],
                          'qualification':qualification,'ratio_interval':comparison['ratio_interval'],
                          'noisy':comparison['noisy'],'coefficients_of_variation':[item['coefficient_of_variation']for item in measured],
                          'headroom_minimum_batch_ns':clock_floor_ns if screen else None})
+        if progress: progress(f'attempt={attempt+1} qualification={qualification} ratio={comparison["ratio"]:.6g}')
         if (both_qualified and not comparison['noisy']) or screen_qualified or (noisy_qualified and noise_limit):
             return measured, attempts
         # Clear headroom may only need a slightly larger slower-engine or clock
@@ -410,6 +415,68 @@ def sample_pair(workers, case, mode, iterations, window_ns, samples, max_iterati
         if increased <= iterations:
             raise TimingQualificationError('timing noise: qualified sample duration unavailable at iteration cap', attempts)
         iterations = increased
+    raise TimingQualificationError('timing noise: repeated samples could not qualify duration/headroom', attempts)
+
+
+def sample_pair_per_engine(workers, case, mode, iterations, window_ns, samples, max_iterations, expected,
+                           *, screen=False, clock_floor_ns=100000, max_ratio=1.0, progress=None):
+    """Qualify independently sized batches without changing acceptance gates.
+
+    Every retry collects a fresh alternating sample set from both engines.
+    Duration-deficient or noisy engines increase work within the same four
+    attempts and per-engine iteration caps; all completed attempts survive errors.
+    """
+    counts = list(iterations)
+    if len(counts) != 2 or any(not 1 <= count <= max_iterations for count in counts):
+        raise ValueError('invalid per-engine iteration counts')
+    attempts = []
+    for attempt in range(4):
+        for index, worker in enumerate(workers):
+            if progress: progress(f'attempt={attempt+1} preheat engine={"candidate" if index==0 else "reference"} iterations={counts[index]}')
+            value = validate_reply(worker.request(request(case,mode,counts[index])),case,counts[index])
+            equivalent(value,expected)
+        elapsed = [[],[]]
+        for sample in range(samples):
+            for index in ([0,1] if sample % 2 == 0 else [1,0]):
+                if progress: progress(f'attempt={attempt+1} sample={sample+1}/{samples} engine={"candidate" if index==0 else "reference"} iterations={counts[index]}')
+                value = validate_reply(workers[index].request(request(case,mode,counts[index])),case,counts[index])
+                equivalent(value,expected)
+                elapsed[index].append(value['elapsed_ns'])
+        measured = [distribution(values,counts[index],window_ns) for index,values in enumerate(elapsed)]
+        comparison = ratchet(*measured,max_ratio)
+        minima = [min(values) for values in elapsed]
+        minimum = min(minima)
+        slower_minimum = max(minima)
+        both_qualified = minimum >= window_ns
+        screen_qualified = (screen and slower_minimum >= window_ns and minimum >= clock_floor_ns
+                            and not comparison['noisy'] and comparison['ratio_interval'][1] <= max_ratio)
+        noisy_indices = [index for index,item in enumerate(measured) if item['coefficient_of_variation'] > 0.25]
+        noisy_qualified = both_qualified and comparison['noisy']
+        noise_limit = attempt == 3 or any(counts[index] >= max_iterations for index in noisy_indices)
+        qualification = ('both-duration-floor-noisy' if noise_limit else 'refine-noise') if noisy_qualified else 'both-duration-floor' if both_qualified else 'stable-headroom-screen' if screen_qualified else 'refine-duration'
+        attempts.append({'iteration_counts':{'candidate':counts[0],'reference':counts[1]},
+                         'candidate_elapsed_ns':elapsed[0],'reference_elapsed_ns':elapsed[1],
+                         'qualification':qualification,'ratio_interval':comparison['ratio_interval'],
+                         'noisy':comparison['noisy'],'coefficients_of_variation':[item['coefficient_of_variation']for item in measured],
+                         'headroom_minimum_batch_ns':clock_floor_ns if screen else None})
+        if progress: progress(f'attempt={attempt+1} qualification={qualification} ratio={comparison["ratio"]:.6g}')
+        if (both_qualified and not comparison['noisy']) or screen_qualified or (noisy_qualified and noise_limit):
+            return measured, attempts
+        clear = screen and not comparison['noisy'] and comparison['ratio_interval'][1] <= max_ratio
+        targets = [window_ns,window_ns]
+        if clear:
+            targets = [clock_floor_ns,clock_floor_ns]
+            targets[minima.index(slower_minimum)] = window_ns
+        increased = list(counts)
+        for index in range(2):
+            if minima[index] < targets[index]:
+                increased[index] = max(counts[index]+1,math.ceil(counts[index]*targets[index]/max(minima[index],1)*1.15))
+            if index in noisy_indices:
+                increased[index] = max(increased[index],counts[index]*2)
+            increased[index] = min(max_iterations,increased[index])
+            if increased[index] <= counts[index] and (minima[index] < targets[index] or index in noisy_indices):
+                raise TimingQualificationError('timing noise: qualified sample duration unavailable at iteration cap', attempts)
+        counts = increased
     raise TimingQualificationError('timing noise: repeated samples could not qualify duration/headroom', attempts)
 
 
@@ -505,6 +572,8 @@ def parser():
     ap.add_argument('--sizes', type=int, nargs='+', default=[32,64,128,256,512,1024])
     ap.add_argument('--modes', choices=['parse','render'], nargs='+', default=['parse','render'])
     ap.add_argument('--samples', type=int, default=5)
+    ap.add_argument('--batch-policy', choices=['common','per-engine'], default='per-engine',
+                    help='calibrate independent engine counts, or retain historical shared-count batches')
     ap.add_argument('--window-ms', type=positive, default=20.0)
     ap.add_argument('--max-ratio', type=positive, default=1.0)
     ap.add_argument('--max-scaling-exponent', type=positive, default=1.3)
@@ -519,6 +588,7 @@ def parser():
     ap.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp/asciidoc-performance')
     ap.add_argument('--stable-all', action='store_true', help='require full duration for both engines on every input; default screens clear headroom and escalates near-threshold/noisy cases')
     ap.add_argument('--smoke', action='store_true')
+    ap.add_argument('--progress', action='store_true', help='flush case, engine, calibration and sample stages to stderr')
     return ap
 
 
@@ -528,11 +598,13 @@ def replay_command(args, retained, modes):
     command = [sys.executable, str(Path(__file__).resolve()), '--root', str(args.root),
                '--replay', str(retained), '--modes', *modes, '--roc', args.roc,
                '--ruby', args.ruby, '--window-ms', str(args.window_ms),
-               '--samples', str(args.samples), '--max-ratio', str(args.max_ratio),
+               '--samples', str(args.samples), '--batch-policy', args.batch_policy, '--max-ratio', str(args.max_ratio),
                '--max-scaling-exponent', str(args.max_scaling_exponent),
                '--max-iterations', str(args.max_iterations), '--timeout', str(args.timeout),
                '--build-timeout', str(args.build_timeout), '--deadline-seconds', str(args.deadline_seconds),
                '--output', str(args.output / 'replay')]
+    if args.progress:
+        command.append('--progress')
     if args.gem_home:
         command.extend(['--gem-home', str(args.gem_home)])
     return shlex.join(command)
@@ -547,12 +619,12 @@ def main(argv=None):
     args.root = args.root.resolve(); args.output.mkdir(parents=True, exist_ok=True)
     journal = args.output / 'measurements.jsonl'
     journal.write_text('')
-    report = {'schema_version': 1, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
+    report = {'schema_version': 2, 'batch_policy': args.batch_policy, 'progress': args.progress, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
               'timed_operations': args.modes, 'deadline_seconds': args.deadline_seconds,
               'resource_policy': 'nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
               'command': [sys.executable, str(Path(__file__).resolve()), *(argv if argv is not None else sys.argv[1:])],
               'machine': {'system': platform.platform(), 'processor': platform.processor(), 'cores': os.cpu_count()},
-              'measurement_policy': 'strict per-input1.0x median gate; short shared batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',
+              'measurement_policy': 'strict per-input1.0x median gate; recorded batch_policy selects shared or independent counts, each elapsed duration divided by its own operation count; short batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',
               'driver_sha256': digest(__file__), 'worker_transport_sha256': digest(ROOT / 'scripts/review_roc_syntax.py'),
               'host_monotonic_nominal_resolution_ns': max(1,math.ceil(time.get_clock_info('monotonic').resolution*1000000000))}
     workers = []
@@ -577,9 +649,14 @@ def main(argv=None):
         for case in corpus(args):
             for mode in args.modes:
                 row = {'case': case, 'mode': mode, 'source_sha256': hashlib.sha256(case['source'].encode()).hexdigest(), 'request_sha256': case_identity(case)}
+                progress = (lambda message: print(f"AsciiDoc performance [{case['id']} {mode}]: {message}", file=sys.stderr, flush=True)) if args.progress else None
+                if progress: progress('begin')
                 try:
                     enforce_deadline(deadline)
-                    checks = [validate_reply(worker.request(request(case,mode,0)),case,0) for worker in workers]
+                    checks = []
+                    for index,worker in enumerate(workers):
+                        if progress: progress(f'correctness engine={"candidate" if index==0 else "reference"} iterations=0')
+                        checks.append(validate_reply(worker.request(request(case,mode,0)),case,0))
                     equivalent(*checks)
                     if checks[1].get('oracle_version') != '2.0.23' or len(checks[1].get('oracle_code_sha256','')) != 64:
                         raise ValueError('pinned reference identity missing or wrong version')
@@ -593,11 +670,13 @@ def main(argv=None):
                     stable = args.smoke or args.stable_all or bool(args.replay) or case.get('provenance',{}).get('geometric',False)
                     row['measurement_strategy'] = 'full-duration' if stable else 'adaptive-headroom-screen'
                     if stable:
-                        counts = [calibrate(worker,case,mode,window,args.max_iterations,checks[1]) for worker in workers]
-                        iterations = max(counts)
+                        counts = [calibrate(worker,case,mode,window,args.max_iterations,checks[1],progress=progress,engine='candidate' if index==0 else 'reference') for index,worker in enumerate(workers)]
                     else:
-                        iterations = calibrate_common(workers,case,mode,window,args.max_iterations,checks[1])
-                    measured, attempts = sample_pair(workers,case,mode,iterations,window,1 if args.smoke else args.samples,args.max_iterations,checks[1],screen=not stable,max_ratio=args.max_ratio)
+                        count = calibrate_common(workers,case,mode,window,args.max_iterations,checks[1],progress=progress)
+                        counts = [count,count]
+                    sampler = sample_pair_per_engine if args.batch_policy == 'per-engine' else sample_pair
+                    iterations = counts if args.batch_policy == 'per-engine' else max(counts)
+                    measured, attempts = sampler(workers,case,mode,iterations,window,1 if args.smoke else args.samples,args.max_iterations,checks[1],screen=not stable,max_ratio=args.max_ratio,progress=progress)
                     row['candidate'],row['reference'] = measured
                     row['measurement_attempts'] = attempts
                     row['timing_qualification'] = attempts[-1]['qualification']
@@ -614,6 +693,7 @@ def main(argv=None):
                     for worker in workers:
                         worker.close()
                     workers = [] if row['error'].startswith('full-run deadline') else start_workers()
+                if progress: progress(f'complete status={row["status"]}' + (f' error={row["error"]}' if 'error' in row else ''))
                 report['records'].append(row)
                 if row['status'] in ('error','slow','noisy'):
                     failure = args.output / 'retained' / (row['request_sha256'] + '-' + mode + '.json')
