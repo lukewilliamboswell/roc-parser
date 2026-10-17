@@ -1,4 +1,5 @@
 import AsciiDocInline
+import AsciiDocAttributes
 import CSV
 
 ## Parse and render AsciiDoc PSV, CSV and DSV table contents.
@@ -31,26 +32,42 @@ AsciiDocTable :: [].{
 	## Render cells in document order, carrying caller state through inline and
 	## nested block content. Footnotes and mutable attributes can cross cells.
 	render_state : Str, List(Attribute), state, (Str, state -> { html : Str, state : state }), (Str, state -> { html : Str, state : state }) -> { html : Str, state : state }
-	render_state = |source, attrs, state, render_inline, render_blocks| render_table_state(parse_table(source, attrs), attrs, state, render_inline, render_blocks)
+	render_state = |source, attrs, state, render_inline, render_blocks| render_table_state(parse_table(source, attrs), Raw(attrs), state, render_inline, render_blocks)
+
+	## Internal renderer bridge. Table options read the immutable source view
+	## and its small last-winner overlays without flattening source bindings.
+	render_view_state : Str, AsciiDocAttributes.View, state, (Str, state -> { html : Str, state : state }), (Str, state -> { html : Str, state : state }) -> { html : Str, state : state }
+	render_view_state = |source, view, state, render_inline, render_blocks| render_table_state(parse_environment(source, Indexed(view)), Indexed(view), state, render_inline, render_blocks)
 }
 
-attr : List(AsciiDocTable.Attribute), Str, Str -> Str
+Environment : [Raw(List(AsciiDocTable.Attribute)), Indexed(AsciiDocAttributes.View)]
+
+attr : Environment, Str, Str -> Str
 attr = |attrs, name, fallback| lookup_attr(attrs, name) ?? fallback
 
-lookup_attr : List(AsciiDocTable.Attribute), Str -> Try(Str, [Missing])
-lookup_attr = |attrs, name| {
-	var $position = attrs.len()
-	while $position > 0 {
-		$position = $position - 1
-		match attrs.get($position) {
-			Ok(item) if item.name == name => return Ok(item.value)
-			_ => {}
+lookup_attr : Environment, Str -> Try(Str, [Missing])
+lookup_attr = |attrs, name| match attrs {
+	Indexed(view) => AsciiDocAttributes.lookup_last(view, name)
+	Raw(values) => {
+		var $position = values.len()
+		while $position > 0 {
+			$position = $position - 1
+			match values.get($position) {
+				Ok(item) if item.name == name => return Ok(item.value)
+				_ => {}
+			}
 		}
+		Err(Missing)
 	}
-	Err(Missing)
 }
 
-option : List(AsciiDocTable.Attribute), Str -> Bool
+render_caption : Str, Environment -> Str
+render_caption = |title, attrs| match attrs {
+	Raw(values) => AsciiDocInline.render(title, values)
+	Indexed(view) => AsciiDocInline.render_view(title, view)
+}
+
+option : Environment, Str -> Bool
 option = |attrs, name| {
 	flag = "${name}-option"
 	if lookup_attr(attrs, flag).is_ok() {
@@ -98,7 +115,10 @@ trim_cell = |text| {
 }
 
 parse_table : Str, List(AsciiDocTable.Attribute) -> AsciiDocTable.Table
-parse_table = |source, attrs| {
+parse_table = |source, attrs| parse_environment(source, Raw(attrs))
+
+parse_environment : Str, Environment -> AsciiDocTable.Table
+parse_environment = |source, attrs| {
 	format = attr(attrs, "format", "psv")
 	var $cells = []
 	var $first_row_count = 0
@@ -348,10 +368,10 @@ percent = |width, total| {
 
 render_table : AsciiDocTable.Table, List(AsciiDocTable.Attribute), (Str -> Str) -> Str
 render_table = |table, attrs, render_blocks| {
-	render_table_state(table, attrs, {}, |text, state| { html: AsciiDocInline.render(text, attrs), state }, |text, state| { html: render_blocks(text), state }).html
+	render_table_state(table, Raw(attrs), {}, |text, state| { html: AsciiDocInline.render(text, attrs), state }, |text, state| { html: render_blocks(text), state }).html
 }
 
-render_table_state : AsciiDocTable.Table, List(AsciiDocTable.Attribute), state, (Str, state -> { html : Str, state : state }), (Str, state -> { html : Str, state : state }) -> { html : Str, state : state }
+render_table_state : AsciiDocTable.Table, Environment, state, (Str, state -> { html : Str, state : state }), (Str, state -> { html : Str, state : state }) -> { html : Str, state : state }
 render_table_state = |table, attrs, state, render_inline, render_blocks| {
 	var $state = state
 	raw_frame = attr(attrs, "frame", attr(attrs, "table-frame", "all"))
@@ -373,7 +393,7 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 	if title != "" {
 		caption = match lookup_attr(attrs, "__rendered-title") {
 			Ok(cached) => cached
-			Err(_) => "Table ${attr(attrs, "__caption-number", "1")}. ${AsciiDocInline.render(title, attrs)}"
+			Err(_) => "Table ${attr(attrs, "__caption-number", "1")}. ${render_caption(title, attrs)}"
 		}
 		$html = Str.concat($html, "<caption class=\"title\">${caption}</caption>\n")
 	}
@@ -542,3 +562,52 @@ expect {
 
 expect AsciiDocTable.render("|A", [{ name: "autowidth-option", value: "" }]).contains("fit-content")
 expect AsciiDocTable.render("|A", [{ name: "options", value: " footer, autowidth " }]).contains("fit-content")
+
+# Table options use their last binding, while inline captions retain the
+# ordinary first-binding pipeline through the view-aware inline renderer.
+expect {
+	attrs = [{ name: "frame", value: "none" }, { name: "frame", value: "ends" }, { name: "title", value: "source" }, { name: "__rendered-title", value: "old" }, { name: "__rendered-title", value: "" }, { name: "options", value: "header" }, { name: "options", value: "footer,autowidth" }]
+	view = AsciiDocAttributes.indexed(AsciiDocAttributes.with_snapshot(attrs), AsciiDocAttributes.empty).view
+	inline = |text, count| { html: "inline:${text}", state: count + 1.U64 }
+	blocks = |text, count| { html: "block:${text}", state: count + 10.U64 }
+	raw = AsciiDocTable.render_state("|A |B\n|C |D", attrs, 0.U64, inline, blocks)
+	shared = AsciiDocTable.render_view_state("|A |B\n|C |D", view, 0.U64, inline, blocks)
+	view.indexed and raw == shared and shared.html.contains("frame-ends") and shared.html.contains("<tfoot>") and shared.html.contains("<caption class=\"title\"></caption>") and lookup_attr(Indexed(view), "__rendered-title") == Ok("") and lookup_attr(Indexed(view), "missing") == Err(Missing)
+}
+
+expect {
+	cases = [
+		{ source: "|A |B\n|C |D", attrs: [{ name: "options", value: "header,footer" }, { name: "cols", value: "a,s" }] },
+		{ source: "A,B\nC,D", attrs: [{ name: "format", value: "csv" }, { name: "options", value: "header" }] },
+		{ source: "A\tB\nC\tD", attrs: [{ name: "format", value: "tsv" }, { name: "options", value: "footer" }] },
+		{ source: "A:B\nC:D", attrs: [{ name: "format", value: "dsv" }, { name: "separator", value: ":" }, { name: "cols", value: "l,m" }] },
+		{ source: "", attrs: [{ name: "id", value: "old" }, { name: "id", value: "new" }, { name: "width", value: "" }] },
+	]
+	cases.all(
+		|case| {
+			view = AsciiDocAttributes.indexed(AsciiDocAttributes.with_snapshot(case.attrs), AsciiDocAttributes.empty).view
+			inline = |text, count| { html: "inline:${text}", state: count + 1.U64 }
+			blocks = |text, count| { html: "block:${text}", state: count + 10.U64 }
+			AsciiDocTable.render_state(case.source, case.attrs, 0.U64, inline, blocks) == AsciiDocTable.render_view_state(case.source, view, 0.U64, inline, blocks)
+		},
+	)
+}
+
+expect {
+	attrs = [{ name: "title", value: "{name}" }, { name: "name", value: "*First*" }, { name: "name", value: "*Last*" }]
+	view = AsciiDocAttributes.indexed(AsciiDocAttributes.with_snapshot(attrs), AsciiDocAttributes.empty).view
+	inline = |text, count| { html: text, state: count }
+	blocks = |text, count| { html: text, state: count }
+	AsciiDocTable.render_state("|A", attrs, 0.U64, inline, blocks) == AsciiDocTable.render_view_state("|A", view, 0.U64, inline, blocks)
+}
+
+expect {
+	base = [{ name: "id", value: "source" }, { name: "title", value: "Source title" }, { name: "__rendered-title", value: "Old caption" }]
+	overrides = [{ name: "id", value: "local" }, { name: "title", value: "Local title" }, { name: "__rendered-title", value: "" }]
+	view = AsciiDocAttributes.with_after(AsciiDocAttributes.indexed(AsciiDocAttributes.with_snapshot(base), AsciiDocAttributes.empty).view, overrides)
+	inline = |text, count| { html: text, state: count }
+	blocks = |text, count| { html: text, state: count }
+	raw = AsciiDocTable.render_state("|A", base.concat(overrides), 0.U64, inline, blocks)
+	shared = AsciiDocTable.render_view_state("|A", view, 0.U64, inline, blocks)
+	raw == shared and shared.html.contains("id=\"local\"") and shared.html.contains("<caption class=\"title\"></caption>")
+}

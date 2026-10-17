@@ -41,17 +41,27 @@ FIXED_ATTRIBUTES = {
  'stylesheet!'=>'','source-highlighter!'=>'','icons!'=>'','webfonts!'=>''
 }.freeze
 
-def load_document(source, sources, root)
+# API options seed the document; Roc permits later source redefinitions.
+# Asciidoctor's trailing @ marks a soft initial value (including literal @).
+# Applying the ordered entries in sequence preserves last duplicate wins.
+def request_attributes(item)
+ entries = item.fetch('attributes', [])
+ raise 'invalid attributes' unless entries.is_a?(Array) && entries.all? { |entry| entry.is_a?(Hash) && entry.keys.sort == %w[name value] && entry['name'].is_a?(String) && entry['value'].is_a?(String) }
+ return FIXED_ATTRIBUTES if entries.empty?
+ entries.each_with_object(FIXED_ATTRIBUTES.dup) { |entry, attrs| attrs[entry.fetch('name')] = entry.fetch('value') + '@' }.freeze
+end
+
+def load_document(source, sources, root, attributes)
  logger = Asciidoctor::MemoryLogger.new
  document = Asciidoctor.load(source, safe: :secure, backend: 'html5', header_footer: false, standalone: false,
-  sourcemap: false, parse: false, extensions: false, extension_registry: false, logger: logger, attributes: FIXED_ATTRIBUTES)
+  sourcemap: false, parse: false, extensions: false, extension_registry: false, logger: logger, attributes: attributes)
  document.instance_variable_set(:@reader, VirtualIncludeReader.new(document, source, sources, root)) if sources
  document.parse
  document
 end
 
-def operation(source, sources, root, mode)
- document = load_document(source, sources, root)
+def operation(source, sources, root, mode, attributes)
+ document = load_document(source, sources, root, attributes)
  mode == 'render' ? document.convert.bytesize + 1 : document.blocks.length + document.doctitle.to_s.bytesize + 1
 end
 STDOUT.sync = true
@@ -62,6 +72,7 @@ while (line = STDIN.gets(16000001))
   item = JSON.parse(line)
   source = item.fetch('source'); iterations = item.fetch('iterations'); warmup = item.fetch('warmup'); mode = item.fetch('mode')
   raise 'invalid request' unless source.is_a?(String) && source.valid_encoding? && source.bytesize <= 1048576 && iterations.is_a?(Integer) && (0..100000).cover?(iterations) && warmup.is_a?(Integer) && (0..10000).cover?(warmup) && %w[parse render].include?(mode)
+  attributes = request_attributes(item)
   sources = item['expand'] ? item.fetch('includes').to_h { |entry| [entry.fetch('path'), entry.fetch('source')] } : nil
   if sources
    root = MEMORY_ROOT
@@ -73,19 +84,28 @@ while (line = STDIN.gets(16000001))
    Thread.current[:roc_adoc_memory_sources] = memory_sources.freeze
   end
   checksum = 0
-  warmup.times { checksum += operation(source,sources,root,mode) }
+  warmup.times { checksum += operation(source,sources,root,mode,attributes) }
   start = Process.clock_gettime(Process::CLOCK_MONOTONIC, :nanosecond)
-  iterations.times { checksum += operation(source,sources,root,mode) }
+  iterations.times { checksum += operation(source,sources,root,mode,attributes) }
   elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC, :nanosecond) - start
-  document = load_document(source,sources,root)
-  projected = projection(document)
-  response = {version:1,id:item['id'],iterations:iterations,successes:iterations,checksum:checksum,elapsed_ns:elapsed,
-   projection:{title:document.header? ? document.doctitle.to_s : '',blocks:projected['blocks']},html:document.convert,
+  response = {version:2,phase:iterations.zero? ? 'correctness' : 'timing',mode:mode,id:item['id'],iterations:iterations,warmup:warmup,successes:iterations,checksum:checksum,elapsed_ns:elapsed,
    oracle_version:Asciidoctor::VERSION,oracle_code_sha256:REFERENCE_CODE_HASH,include_io:'caller-map-memory',include_path_metadata:'native path normalization and policy; no filesystem stat/read'}
+  if iterations.zero?
+   document = load_document(source,sources,root,attributes)
+   projected = projection(document)
+   response[:projection] = {title:document.header? ? document.doctitle.to_s : '',blocks:projected['blocks']}
+   response[:html] = document.convert
+   # A separate fresh document computes the exact per-engine timed metric;
+   # never call an extra doctitle/convert on the correctness document.
+   response[:operation_checksum] = operation(source,sources,root,mode,attributes)
+  end
   puts JSON.generate(response, max_nesting: false)
  rescue StandardError => error
   puts JSON.generate(error:error.class.to_s,message:error.message,id:item && item['id'])
  ensure
+  # Correctness-only roots must not survive into subsequent timed requests.
+  document = projected = response = nil
   Thread.current[:roc_adoc_memory_sources] = nil
+  memory_sources = nil
  end
 end
