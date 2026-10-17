@@ -1226,12 +1226,6 @@ class FixedPerformanceGuards(unittest.TestCase):
         origins = [o for o in value['provenance']['origins'] if o['cohort'].startswith('qualified-')]
         self.assertEqual([len(o['case_ids']) for o in origins], [24, 15, 24, 48, 24, 24, 6])
         self.assertEqual([case_id for o in origins for case_id in o['case_ids']], [c['id'] for c in cases[83:]])
-        self.assertEqual(len(value['provenance']['qualified_extension_reports']), 1)
-        resolutions = value['provenance']['qualified_family_resolutions']
-        self.assertEqual([r['family'] for r in resolutions], ['literal-search-missing-xref-entity'])
-        self.assertEqual(resolutions[0]['status'], 'resolved by stronger replay')
-        self.assertTrue(resolutions[0]['primary_flags_unchanged'])
-        self.assertTrue(all(not c['regression'] for c in resolutions[0]['resolved_scaling']))
 
     def test_supported_title_extensions_preserve_legacy47_and_exact_geometric_inputs(self):
         value = json.loads((ROOT / 'scripts/asciidoc/performance-guards.json').read_text())

@@ -7,7 +7,6 @@
     "origins": [
       {
         "cohort": "standard-controls",
-        "source_path": "/private/tmp/adoc-performance-lazy-standard-cases.json",
         "source_sha256": "9eab65fa80e18a1a79fb0d7e694f8d04f4f9f571241b74d57dca329c98cbc267",
         "case_ids": [
           "lazy-standard-empty-1",
@@ -35,11 +34,10 @@
           "lazy-standard-counters-512"
         ],
         "selection": "all original case objects",
-        "qualification": "Measured retained guards; qualification is determined by every future strict run."
+        "source_artifact": "adoc-performance-lazy-standard-cases.json"
       },
       {
         "cohort": "small-options-boundaries",
-        "source_path": "/private/tmp/adoc-composed-small-options-boundary-15-cases.json",
         "source_sha256": "34070ae24471b58873485e331a1c04d4e870171faab7641a91520486dccda00d",
         "case_ids": [
           "small-ordered-options-1",
@@ -59,11 +57,10 @@
           "small-ordered-options-boundary-48"
         ],
         "selection": "all original case objects",
-        "qualification": "Measured retained guards; qualification is determined by every future strict run."
+        "source_artifact": "adoc-composed-small-options-boundary-15-cases.json"
       },
       {
         "cohort": "ordered-options-request-growth",
-        "source_path": "/private/tmp/adoc-performance-ordered-options-source-writes-request-scaling-v2-cases.json",
         "source_sha256": "588c37f7fe115579c55c64fd5903e8c63bc478ab440ea0a873c99c93d5d2f760",
         "case_ids": [
           "ordered-options-source-writes-128",
@@ -71,11 +68,10 @@
           "ordered-options-source-writes-512"
         ],
         "selection": "all original case objects",
-        "qualification": "Measured retained guards; qualification is determined by every future strict run."
+        "source_artifact": "adoc-performance-ordered-options-source-writes-request-scaling-v2-cases.json"
       },
       {
         "cohort": "larger-counter-resets",
-        "source_path": "/private/tmp/adoc-each-counter-reset-larger-cases.json",
         "source_sha256": "d83db80985ef740e35aa11248b38ffacfa096573ed09b7f32612e1625d088bd5",
         "case_ids": [
           "scaling-live-dynamic-source-redefinitions-each-counter-reset-1024",
@@ -83,11 +79,10 @@
           "scaling-live-dynamic-source-redefinitions-each-counter-reset-4096"
         ],
         "selection": "sizes1024,2048,4096 only",
-        "qualification": "Measured retained guards; qualification is determined by every future strict run."
+        "source_artifact": "adoc-each-counter-reset-larger-cases.json"
       },
       {
         "cohort": "larger-header-quotes",
-        "source_path": "/private/tmp/adoc-quote-counter-larger-6-cases.json",
         "source_sha256": "fb130beb2952f6cfe0eacbad267105c5648b4194d662ec14990ee553eca520ea",
         "case_ids": [
           "scaling-header-first-section-quote-counters-body-1024",
@@ -95,11 +90,10 @@
           "scaling-header-first-section-quote-counters-body-4096"
         ],
         "selection": "sizes1024,2048,4096 only",
-        "qualification": "Measured retained performance targets; inclusion does not assert passing speed or scaling. Larger header quotes are known81a2e7c failures."
+        "source_artifact": "adoc-quote-counter-larger-6-cases.json"
       },
       {
         "cohort": "escaped-header-quotes",
-        "source_path": "/private/tmp/adoc-quote-counter-escaped-6-cases.json",
         "source_sha256": "fc71d3ab520607b01b471d820fb16e90b2253f326aa289faa56e311c29bbf11c",
         "case_ids": [
           "scaling-header-first-section-quote-counters-escaped-body-128",
@@ -120,11 +114,10 @@
           4096
         ],
         "max_source_utf8_bytes": 138197,
-        "qualification": "Measured supported geometric performance guards; storing a case does not assert a passing speed/scaling result."
+        "source_artifact": "adoc-quote-counter-escaped-6-cases.json"
       },
       {
         "cohort": "role-plus-header-quotes",
-        "source_path": "/private/tmp/adoc-quote-counter-role-plus-6-cases.json",
         "source_sha256": "43c45e2f723d988cd3a00ab852e60e3f7fc48a5eeaa70c3537df9f748b137ab8",
         "case_ids": [
           "scaling-header-first-section-quote-counters-role-plus-body-128",
@@ -145,11 +138,10 @@
           4096
         ],
         "max_source_utf8_bytes": 142293,
-        "qualification": "Measured supported geometric performance guards; storing a case does not assert a passing speed/scaling result."
+        "source_artifact": "adoc-quote-counter-role-plus-6-cases.json"
       },
       {
         "cohort": "explicit-header-links",
-        "source_path": "/private/tmp/adoc-link-counter-larger-6-cases.json",
         "source_sha256": "81f130c42956ec9df9afa0effaf9e6a8a4fb12352132fa225129bcd9fbe9f79a",
         "case_ids": [
           "scaling-header-first-section-link-counters-body-128",
@@ -170,11 +162,10 @@
           4096
         ],
         "max_source_utf8_bytes": 166869,
-        "qualification": "Fresh semantic parity is supported; these remain strict performance targets. Explicit links retain measured speed failures and are not claimed passing."
+        "source_artifact": "adoc-link-counter-larger-6-cases.json"
       },
       {
         "cohort": "angle-https-header-counters",
-        "source_path": "/private/tmp/adoc-angle-https-counter-larger-6-cases.json",
         "source_sha256": "fc669accea1ec1f5c25cca837ca0fcb40c440e2c15dcaa3e7cb090173e66654a",
         "case_ids": [
           "scaling-header-first-section-angle-https-counters-body-128",
@@ -195,11 +186,10 @@
           4096
         ],
         "max_source_utf8_bytes": 130005,
-        "qualification": "All six cases have measured oracle semantic parity. Performance failures remain retained targets; no passing speed/scaling claim."
+        "source_artifact": "adoc-angle-https-counter-larger-6-cases.json"
       },
       {
         "cohort": "angle-http-header-counters",
-        "source_path": "/private/tmp/adoc-angle-http-counter-larger-6-cases.json",
         "source_sha256": "cc0b16b8f5149aaca1aa6f58915451ce454429cd9b4835f7c1c9b59c3897c6d5",
         "case_ids": [
           "scaling-header-first-section-angle-http-counters-body-128",
@@ -220,11 +210,10 @@
           4096
         ],
         "max_source_utf8_bytes": 125909,
-        "qualification": "All six cases have measured oracle semantic parity. Performance failures remain retained targets; no passing speed/scaling claim."
+        "source_artifact": "adoc-angle-http-counter-larger-6-cases.json"
       },
       {
         "cohort": "angle-literal-header-counters",
-        "source_path": "/private/tmp/adoc-angle-literal-counter-larger-6-cases.json",
         "source_sha256": "18e6534e291725204330cd8d7d0a8c40b1ee475ab74f5187fa0311f8449db385",
         "case_ids": [
           "scaling-header-first-section-angle-literal-counters-body-128",
@@ -245,11 +234,10 @@
           4096
         ],
         "max_source_utf8_bytes": 84949,
-        "qualification": "All six cases have measured oracle semantic parity. Performance failures remain retained targets; no passing speed/scaling claim."
+        "source_artifact": "adoc-angle-literal-counter-larger-6-cases.json"
       },
       {
         "cohort": "qualified-adoc-target-search-adversarial-24-cases",
-        "source_path": "/private/tmp/adoc-target-search-adversarial-24-cases.json",
         "source_sha256": "2c602b01cd6308f2eb31e8c2397dc3cf3a8d4fa77d2a4184bdddd13c4f41a3e2",
         "case_ids": [
           "scaling-header-first-section-bare-https-counters-body-128",
@@ -419,11 +407,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-target-search-adversarial-24-cases.json"
       },
       {
         "cohort": "qualified-adoc-performance-larger-measured-guards-18-cases",
-        "source_path": "/private/tmp/adoc-performance-larger-measured-guards-18-cases.json",
         "source_sha256": "88c790fa11d13029cf1d73b37d481b641c70a02af8f7016fb8e1aed2f4bc02c8",
         "case_ids": [
           "scaling-header-first-section-mutating-previews-body-1024",
@@ -537,11 +524,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-performance-larger-measured-guards-18-cases.json"
       },
       {
         "cohort": "qualified-adoc-raw-role-shared-close-24-cases",
-        "source_path": "/private/tmp/adoc-raw-role-shared-close-24-cases.json",
         "source_sha256": "987161b1f49c53773780d509ac8b21a56eda41f95e3211920a01766cc59747cd",
         "case_ids": [
           "scaling-raw-role-shared-close-ascii-128",
@@ -711,11 +697,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-raw-role-shared-close-24-cases.json"
       },
       {
         "cohort": "qualified-adoc-literal-search-known-needles-48-cases",
-        "source_path": "/private/tmp/adoc-literal-search-known-needles-48-cases.json",
         "source_sha256": "8eb7e510be6cb4a7065b27ea1799c103c6b83c41b85c39e1dfc70e74230e7fda",
         "case_ids": [
           "scaling-literal-search-missing-indexterm-double-128",
@@ -1033,11 +1018,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-literal-search-known-needles-48-cases.json"
       },
       {
         "cohort": "qualified-adoc-quote-role-prefix-adjacent-24-cases",
-        "source_path": "/private/tmp/adoc-quote-role-prefix-adjacent-24-cases.json",
         "source_sha256": "ff50d11d442ff5e7754137d8a28c5134b38d03f69358f8110b01c1b1e43e2adf",
         "case_ids": [
           "scaling-quote-role-prefix-ascii-balanced-role-missing-body-128",
@@ -1207,11 +1191,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-quote-role-prefix-adjacent-24-cases.json"
       },
       {
         "cohort": "qualified-adoc-listing-callout-scanner-24-cases",
-        "source_path": "/private/tmp/adoc-listing-callout-scanner-24-cases.json",
         "source_sha256": "f4a28171ec57f89a579487da23807d4ee4e7a93d89e72e8eb024c81665f52793",
         "case_ids": [
           "scaling-listing-callout-missing-angle-closer-lines-128",
@@ -1381,11 +1364,10 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
+        "source_artifact": "adoc-listing-callout-scanner-24-cases.json"
       },
       {
         "cohort": "qualified-adoc-callout-long-collision-prefix6-cases",
-        "source_path": "/private/tmp/adoc-callout-long-collision-prefix6-cases.json",
         "source_sha256": "259eb57f33a7c2413be8592572952824a5a73618ed1a2983fbbf6f3ae7f6474c",
         "case_ids": [
           "scaling-listing-callout-long-collision-prefix-128",
@@ -1444,448 +1426,7 @@
           }
         ],
         "selection": "Only exact-request-novel cohort cases; deduplicated requests excluded from origin IDs.",
-        "qualification": "Selected-source native/oracle correctness and strict speed/scaling reports retained in qualified_extension_reports; every future run rechecks these targets."
-      }
-    ],
-    "qualified_extension_reports": [
-      {
-        "path": "/private/tmp/adoc-performance-final-selected-qualification476-attempt2/results.json",
-        "sha256": "ef6ee482fb3f767e5858be14949cad578f3950d96d66531fddcfc8a98218ae18"
-      }
-    ],
-    "qualified_family_resolutions": [
-      {
-        "family": "literal-search-missing-xref-entity",
-        "status": "resolved by stronger replay",
-        "primary_flags_unchanged": [
-          {
-            "primary_report": "/private/tmp/adoc-performance-final-selected-qualification476-attempt2/results.json",
-            "primary_report_sha256": "ef6ee482fb3f767e5858be14949cad578f3950d96d66531fddcfc8a98218ae18",
-            "flag": {
-              "mode": "parse",
-              "family": "literal-search-missing-xref-entity",
-              "from": "scaling-literal-search-missing-xref-entity-2048",
-              "to": "scaling-literal-search-missing-xref-entity-4096",
-              "scaling_input": "source",
-              "from_input_bytes": 24586,
-              "to_input_bytes": 49162,
-              "byte_growth": 1.9995932644594485,
-              "time_growth": 2.528800894373805,
-              "exponent": 1.3388463049399515,
-              "max_exponent": 1.3,
-              "regression": true,
-              "retained": "/private/tmp/adoc-performance-final-selected-qualification476-attempt2/retained/218a456fa9f7cea3e278c256d66994a8ab0df1f16228363e09591ca6e6713791-scaling-parse.json",
-              "replay": "/opt/homebrew/opt/python@3.14/bin/python3.14 /private/tmp/roc-adoc-perf-publish/scripts/check_asciidoc_performance.py --root /private/tmp/roc-adoc-perf-publish --replay /private/tmp/adoc-performance-final-selected-qualification476-attempt2/retained/218a456fa9f7cea3e278c256d66994a8ab0df1f16228363e09591ca6e6713791-scaling-parse.json --modes parse --roc /Users/luke/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc --ruby ruby --window-ms 50.0 --samples 7 --batch-policy per-engine --max-ratio 1.0 --max-scaling-exponent 1.3 --max-iterations 100000 --timeout 180.0 --build-timeout 180.0 --deadline-seconds 10800.0 --output /private/tmp/adoc-performance-final-selected-qualification476-attempt2/replay --progress --gem-home /private/tmp/roc-parser-asciidoc/.roc-parser-tmp/asciidoc/gems"
-            }
-          }
-        ],
-        "resolution_report": "/private/tmp/adoc-performance-final-strong-missing-xref-family6-attempt1/results.json",
-        "resolution_report_sha256": "48dfea13a564fba3aa29b6cfb304dc5df965ea456886ecbce1cb671aaf47da15",
-        "candidate_build": {
-          "schema_version": 1,
-          "compiler": {
-            "path": "/Users/luke/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc",
-            "version": "Roc compiler version nightly-2026-10-15-38e6c42",
-            "sha256": "980678b34f5099c0d576aa271572e0b58fd1c74868c989baced7fd15ace4bed8"
-          },
-          "build_flags": [
-            "--opt=speed"
-          ],
-          "source_identity": "0ef3946cdfe52267751ee5d0be531a0213a34b51a0133eb1e41c99e5c0a7dfd5",
-          "binary_sha256": "276de5d2d25d74f038a0dc5b9b40cc2016f6c09424d1c22a1b05afba90526083",
-          "command": [
-            "/Users/luke/roc_nightly-macos_apple_silicon-2026-10-15-38e6c42/roc",
-            "build",
-            "--opt=speed",
-            "/private/tmp/roc-adoc-perf-publish/scripts/asciidoc/performance.roc",
-            "--output=/private/tmp/adoc-perf-final-direct-source/performance-native"
-          ]
-        },
-        "coverage": "exact entire primary family ×both modes; IDs, semantic request, family, size, metric and geometric metadata identical",
-        "dimensions": [
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-128",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 181591125
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-128",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 159042000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-128",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 170741833
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-128",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 158749000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-256",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 165840625
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-256",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 159939000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-256",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 176520000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-256",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 162841000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-512",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 159573542
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-512",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 176450000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-512",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 158151750
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-512",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 156520000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-1024",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 160713958
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-1024",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 158698000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-1024",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 151278792
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-1024",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 200168000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-2048",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 160921791
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-2048",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 191796000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-2048",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 196400000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-2048",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 388122000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-4096",
-            "mode": "parse",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 166051042
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-4096",
-            "mode": "parse",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 181809000
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-4096",
-            "mode": "render",
-            "engine": "candidate",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 194386417
-          },
-          {
-            "case_id": "scaling-literal-search-missing-xref-entity-4096",
-            "mode": "render",
-            "engine": "reference",
-            "primary_minimum_window_ns": 50000000,
-            "primary_samples": 7,
-            "resolution_minimum_window_ns": 150000000,
-            "resolution_samples": 15,
-            "observed_minimum_window_ns": 1525341000
-          }
-        ],
-        "resolved_scaling": [
-          {
-            "mode": "parse",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-128",
-            "to": "scaling-literal-search-missing-xref-entity-256",
-            "scaling_input": "source",
-            "from_input_bytes": 1546,
-            "to_input_bytes": 3082,
-            "byte_growth": 1.9935316946959896,
-            "time_growth": 1.570884893120707,
-            "exponent": 0.6546368883775977,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "parse",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-256",
-            "to": "scaling-literal-search-missing-xref-entity-512",
-            "scaling_input": "source",
-            "from_input_bytes": 3082,
-            "to_input_bytes": 6154,
-            "byte_growth": 1.9967553536664504,
-            "time_growth": 1.7288091437954116,
-            "exponent": 0.7916329432467918,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "parse",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-512",
-            "to": "scaling-literal-search-missing-xref-entity-1024",
-            "scaling_input": "source",
-            "from_input_bytes": 6154,
-            "to_input_bytes": 12298,
-            "byte_growth": 1.9983750406239844,
-            "time_growth": 1.8196302285953012,
-            "exponent": 0.8646592379910403,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "parse",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-1024",
-            "to": "scaling-literal-search-missing-xref-entity-2048",
-            "scaling_input": "source",
-            "from_input_bytes": 12298,
-            "to_input_bytes": 24586,
-            "byte_growth": 1.999186859651976,
-            "time_growth": 1.928025651336746,
-            "exponent": 0.9476802272585504,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "parse",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-2048",
-            "to": "scaling-literal-search-missing-xref-entity-4096",
-            "scaling_input": "source",
-            "from_input_bytes": 24586,
-            "to_input_bytes": 49162,
-            "byte_growth": 1.9995932644594485,
-            "time_growth": 1.949423289532237,
-            "exponent": 0.9633300528533881,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "render",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-128",
-            "to": "scaling-literal-search-missing-xref-entity-256",
-            "scaling_input": "source",
-            "from_input_bytes": 1546,
-            "to_input_bytes": 3082,
-            "byte_growth": 1.9935316946959896,
-            "time_growth": 1.8847940240187104,
-            "exponent": 0.9187003771236201,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "render",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-256",
-            "to": "scaling-literal-search-missing-xref-entity-512",
-            "scaling_input": "source",
-            "from_input_bytes": 3082,
-            "to_input_bytes": 6154,
-            "byte_growth": 1.9967553536664504,
-            "time_growth": 1.9995365566967365,
-            "exponent": 1.0020127905620877,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "render",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-512",
-            "to": "scaling-literal-search-missing-xref-entity-1024",
-            "scaling_input": "source",
-            "from_input_bytes": 6154,
-            "to_input_bytes": 12298,
-            "byte_growth": 1.9983750406239844,
-            "time_growth": 1.9069026035825818,
-            "exponent": 0.9323244368426608,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "render",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-1024",
-            "to": "scaling-literal-search-missing-xref-entity-2048",
-            "scaling_input": "source",
-            "from_input_bytes": 12298,
-            "to_input_bytes": 24586,
-            "byte_growth": 1.999186859651976,
-            "time_growth": 1.9823477674248824,
-            "exponent": 0.9877895922338286,
-            "max_exponent": 1.3,
-            "regression": false
-          },
-          {
-            "mode": "render",
-            "family": "literal-search-missing-xref-entity",
-            "from": "scaling-literal-search-missing-xref-entity-2048",
-            "to": "scaling-literal-search-missing-xref-entity-4096",
-            "scaling_input": "source",
-            "from_input_bytes": 24586,
-            "to_input_bytes": 49162,
-            "byte_growth": 1.9995932644594485,
-            "time_growth": 2.0202365756408693,
-            "exponent": 1.014822023400353,
-            "max_exponent": 1.3,
-            "regression": false
-          }
-        ]
+        "source_artifact": "adoc-callout-long-collision-prefix6-cases.json"
       }
     ]
   },
