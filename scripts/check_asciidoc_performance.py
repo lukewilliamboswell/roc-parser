@@ -171,6 +171,17 @@ def static_attribute_url_blocks(size):
     return definitions + '\n\n' + '\n\n'.join('https://example.test' for _ in range(size)) + f'\n\n{{key0}} {{key{size - 1}}}'
 
 
+def static_attribute_nonparagraph(size, context):
+    definitions = '\n'.join(f':k{i}: v' for i in range(size))
+    if context == 'list':
+        body = '* https://a.b\n' * size
+    elif context == 'listing':
+        body = '----\nx < y & z\n----\n\n' * size
+    else:
+        body = ''.join(f'== *S{i}*\n\n' for i in range(size))
+    return definitions + '\n\n' + body
+
+
 def geometric(sizes):
     families = {
         'long-paragraph': lambda n: 'alpha café ' * n,
@@ -195,6 +206,9 @@ def geometric(sizes):
         'url-counter-blocks': lambda n: counter_macro_blocks(n, 'https://example.test'),
         'mutating-preview-counter-blocks': mutating_preview_counter_blocks,
         'static-attributes-url-blocks': static_attribute_url_blocks,
+        'static-attributes-url-list-items': lambda n: static_attribute_nonparagraph(n, 'list'),
+        'static-attributes-listing-blocks': lambda n: static_attribute_nonparagraph(n, 'listing'),
+        'static-attributes-formatted-sections': lambda n: static_attribute_nonparagraph(n, 'section'),
         'mailto-positional-query-counter-blocks': lambda n: counter_macro_blocks(n, 'mailto:x@y.z[N,S,B]'),
         'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
@@ -220,6 +234,8 @@ def geometric(sizes):
                 'immediate-quote-pass-counter-blocks','immediate-math-counter-blocks',
                 'set-passthrough-blocks','url-counter-blocks',
                 'mutating-preview-counter-blocks','static-attributes-url-blocks',
+                'static-attributes-url-list-items','static-attributes-listing-blocks',
+                'static-attributes-formatted-sections',
                 'mailto-positional-query-counter-blocks']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
@@ -234,7 +250,8 @@ def geometric(sizes):
                       'explicit-macro-footnote-blocks','immediate-quote-pass-counter-blocks',
                       'immediate-math-counter-blocks','set-passthrough-blocks',
                       'url-counter-blocks','mutating-preview-counter-blocks',
-                      'static-attributes-url-blocks',
+                      'static-attributes-url-blocks','static-attributes-url-list-items',
+                      'static-attributes-listing-blocks','static-attributes-formatted-sections',
                       'mailto-positional-query-counter-blocks') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
         if family == 'table-footnotes' and max(sizes) >= 1024:

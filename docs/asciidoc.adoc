@@ -119,8 +119,9 @@ footnotes also run through 4,096 entries to exercise growing state in fallback
 substitution paths.
 Counter and set state mixed with immediate quoted passes, math and ordinary
 URLs also runs through 4,096 entries to catch repeated attribute materialization.
-Static header attributes mixed with URL paragraphs check shared snapshot copies
-and repeated option lookups. Stateful pass previews mixed with unrelated sets
+Static header attributes mixed with URL paragraphs, URL list items, listing
+blocks and formatted section titles check shared snapshot copies and repeated
+option lookups through 4,096 entries. Stateful pass previews mixed with unrelated sets
 check work that can otherwise be discarded before shared-state evaluation.
 Positional mail subjects and bodies exercise protected-tag restoration with
 growing counter state.

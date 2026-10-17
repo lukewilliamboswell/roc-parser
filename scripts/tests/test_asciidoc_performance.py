@@ -4,6 +4,7 @@ import pathlib
 import sys
 import argparse
 import json
+import hashlib
 import shlex
 import tempfile
 import unittest
@@ -218,6 +219,50 @@ class Performance(unittest.TestCase):
         self.assertEqual(query.count('{counter:key'),4096)
         self.assertNotIn('subject=',query)
         self.assertTrue(query.endswith('{key0} {key4095}'))
+
+    def test_static_nonparagraph_defaults_retain_nine_measured_sources(self):
+        # Exact source identities from the retained static nonparagraph audit.
+        expected = {
+            'scaling-static-attributes-formatted-sections-1024': '70a11d6ede67017d202364c5652216bdfcecdc10487e3148f91da2dbc191c8c2',
+            'scaling-static-attributes-formatted-sections-2048': '41d92cb3c10054bee4bdabfa333e8286697fca498c706d59ed30767e561df924',
+            'scaling-static-attributes-formatted-sections-4096': '72e79b871fcd603136a24d4b6d752ae46399127d393e81337ed19dde12caabd2',
+            'scaling-static-attributes-listing-blocks-1024': '23ae2607cfe7da431a4499671bf0330a8b230ac42cc0b5cd8abe5e9a17f8389b',
+            'scaling-static-attributes-listing-blocks-2048': '38bf3656e1b8a98e99bf85602dd91c434ba922c7643c70994ce4821fab76ea09',
+            'scaling-static-attributes-listing-blocks-4096': 'ae3ad8bd8bd81cdab1dbd25c95e34643c029a921ba8ad48c6e5fc854fbe4fdba',
+            'scaling-static-attributes-url-list-items-1024': '843a59f9eccd0a5310140848af1140fc96fa2777f9eddde89d8dccbe712d1972',
+            'scaling-static-attributes-url-list-items-2048': '736be78aed1e591f0166b5d30454db3516d2e62e79b014ec7f8162b795cc3151',
+            'scaling-static-attributes-url-list-items-4096': 'b67fad64816bca78697f1a5d492176658025a5c7f180de1fe6397f1f5c00858c',
+        }
+        families={'static-attributes-url-list-items','static-attributes-listing-blocks',
+                  'static-attributes-formatted-sections'}
+        selected=[case for case in perf.geometric(perf.parser().parse_args([]).sizes)
+                  if case['family'] in families]
+        for family in families:
+            self.assertEqual({case['size'] for case in selected if case['family']==family},
+                             {32,64,128,256,512,1024,2048,4096})
+        retained=[case for case in selected if case['id'] in expected]
+        self.assertEqual(len(retained),9)
+        for case in retained:
+            with self.subTest(case=case['id']):
+                self.assertEqual(hashlib.sha256(case['source'].encode()).hexdigest(),expected[case['id']])
+                self.assertEqual(case['provenance'],{'generator':case['family'],
+                                                    'parameter':case['size'],'geometric':True})
+        rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
+              for mode in ('parse','render') for case in retained]
+        checks=perf.scaling(rows)
+        self.assertEqual(len(checks),12)
+        for check in checks:
+            self.assertFalse(check['regression'])
+            self.assertAlmostEqual(check['exponent'],1)
+
+    def test_static_nonparagraph_formulas_preserve_context_and_whitespace(self):
+        prefix=':k0: v\n:k1: v\n\n'
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'list'),
+                         prefix+'* https://a.b\n* https://a.b\n')
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'listing'),
+                         prefix+'----\nx < y & z\n----\n\n----\nx < y & z\n----\n\n')
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'section'),
+                         prefix+'== *S0*\n\n== *S1*\n\n')
 
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
