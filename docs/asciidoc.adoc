@@ -127,7 +127,10 @@ attribute environments with repeated and distinct image targets also run
 through 4,096 blocks to guard media option lookup and attribute sharing.
 Repeated source definitions followed by URLs or text, varied-name unset/readd
 cycles and many tiny tables currently use the bounded audit sizes 128, 256 and
-512. These families guard revision history and shared table scopes; larger
+512. Additional bounded families keep counters or set values live while
+unrelated source definitions change, including an explicit counter reset.
+These families guard revision history, dynamic-state reconciliation and shared
+table scopes; larger
 sizes wait for qualification of the persistent snapshot implementation. Use
 `--sizes 128 256 512` for a bounded local scaling campaign, or `--replay` with a
 retained exact-source case to isolate a measured failure. Stateful pass previews mixed with unrelated sets

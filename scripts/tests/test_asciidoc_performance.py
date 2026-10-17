@@ -392,6 +392,49 @@ class Performance(unittest.TestCase):
             self.assertIn('<p>'+value+'</p>',result['html'])
         self.assertEqual(result['warnings'],[])
 
+    def test_live_dynamic_redefinition_guards_retain_exact_bounded_sources(self):
+        expected = {
+            'scaling-live-dynamic-source-redefinitions-counter-reset-128': 'b2eee16dc34a82ec50bca7b2bab965eebf4acce1e23aec4830ec96fd80d80b81',
+            'scaling-live-dynamic-source-redefinitions-counter-reset-256': '2fb98a7906b953241a4e2244d81f3a78c1965321396a32ea361f3146035b602f',
+            'scaling-live-dynamic-source-redefinitions-counter-reset-512': '5be3a43bb47190c1bdbedc71fab5bae64d894ab26e9c1f1038bf559707d190a7',
+            'scaling-live-dynamic-source-redefinitions-counters-128': 'b0433bb9bc1014c7090d038e7abd3f4201c3eb09afa0ffeabe363b8604a7b513',
+            'scaling-live-dynamic-source-redefinitions-counters-256': 'fe3804cd725f43e2423ef436f294aedce88c457912aed15d03e5ebe8cd43ef74',
+            'scaling-live-dynamic-source-redefinitions-counters-512': '399027b34a837d268fe9c95bd46d4ce2fd3b62e5766d9c0f564a490f7033a848',
+            'scaling-live-dynamic-source-redefinitions-sets-128': '1b5956a74f5a6922d6d04ffa4247fcf065b639c6240ae5428900af10379bfbc2',
+            'scaling-live-dynamic-source-redefinitions-sets-256': '3863f35f6a30e9815ca094424402519497f20326008ee01faa57f5ab50574495',
+            'scaling-live-dynamic-source-redefinitions-sets-512': '70cce70bc97f3bd0ac89c6c9975f0cc2cb3f0212c4d0508cfd0e58e11330dba4',
+        }
+        families={'live-dynamic-source-redefinitions-counters','live-dynamic-source-redefinitions-sets',
+                  'live-dynamic-source-redefinitions-counter-reset'}
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes) if case['family']in families]
+        self.assertEqual(len(cases),9)
+        for family in families:
+            self.assertEqual({case['size']for case in cases if case['family']==family},{128,256,512})
+        for case in cases:
+            with self.subTest(case=case['id']):
+                self.assertEqual(hashlib.sha256(case['source'].encode()).hexdigest(),expected[case['id']])
+                self.assertLessEqual(len(case['source'].encode()),262144)
+                self.assertEqual(case['source'].count(':unrelated:'),case['size'])
+                self.assertEqual(case['provenance'],{'generator':case['family'],
+                                                    'parameter':case['size'],'geometric':True})
+        rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
+              for mode in ('parse','render')for case in cases]
+        self.assertEqual(len(perf.scaling(rows)),12)
+
+    def test_live_dynamic_redefinition_shapes_cover_sets_counters_and_reset(self):
+        source=perf.live_dynamic_source_redefinitions(4,'counters')
+        self.assertTrue(source.startswith('Begin.\n\nSeed {counter:key0} {counter:key1}'))
+        self.assertEqual(source.count('{counter:key'),6)
+        self.assertTrue(source.endswith('Final {counter:key0} {counter:key3} {unrelated}.\n'))
+        source=perf.live_dynamic_source_redefinitions(4,'sets')
+        self.assertEqual(source.count('{set:key'),4)
+        self.assertNotIn('{counter:',source)
+        self.assertTrue(source.endswith('Final {key0} {key3} {unrelated}.\n'))
+        source=perf.live_dynamic_source_redefinitions(4,'counter-reset')
+        self.assertEqual(source.count(':key0: 40'),1)
+        self.assertIn(':unrelated: 2\n:key0: 40\n\nProbe {counter:key0} {key3} {unrelated}.',source)
+        self.assertEqual(source.count('{counter:key'),7)
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})

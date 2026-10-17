@@ -203,6 +203,20 @@ def static_many_tables(size):
     return definitions + '\n\n' + '[cols="1",options=noheader]\n|===\n|x\n|===\n\n' * size
 
 
+def live_dynamic_source_redefinitions(size, kind):
+    sets = kind == 'sets'
+    seed = ' '.join(f'{{set:key{i}:value{i}}}' if sets else f'{{counter:key{i}}}' for i in range(size))
+    source = 'Begin.\n\nSeed ' + seed + (' done.\n\n' if sets else '.\n\n')
+    blocks = []
+    for index in range(size):
+        reset = kind == 'counter-reset' and index == size // 2
+        definition = f':unrelated: {index}\n' + (':key0: 40\n' if reset else '')
+        first = '{counter:key0}' if reset else '{key0}'
+        blocks.append(definition + f'\nProbe {first} {{key{size - 1}}} {{unrelated}}.\n\n')
+    final = f'Final {{key0}} {{key{size - 1}}} {{unrelated}}.\n' if sets else f'Final {{counter:key0}} {{counter:key{size - 1}}} {{unrelated}}.\n'
+    return source + ''.join(blocks) + final
+
+
 def geometric(sizes):
     families = {
         'long-paragraph': lambda n: 'alpha café ' * n,
@@ -237,6 +251,9 @@ def geometric(sizes):
         'static-base-attribute-revisions-text': static_base_revisions,
         'static-base-attribute-revisions-varied-unset-readd': lambda n: static_base_revisions(n, varied=True),
         'static-attributes-many-tables': static_many_tables,
+        'live-dynamic-source-redefinitions-counters': lambda n: live_dynamic_source_redefinitions(n, 'counters'),
+        'live-dynamic-source-redefinitions-sets': lambda n: live_dynamic_source_redefinitions(n, 'sets'),
+        'live-dynamic-source-redefinitions-counter-reset': lambda n: live_dynamic_source_redefinitions(n, 'counter-reset'),
         'mailto-positional-query-counter-blocks': lambda n: counter_macro_blocks(n, 'mailto:x@y.z[N,S,B]'),
         'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
@@ -267,6 +284,8 @@ def geometric(sizes):
                 'static-attributes-image-blocks','static-attributes-varied-image-blocks',
                 'static-base-attribute-revisions-url','static-base-attribute-revisions-text',
                 'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
+                'live-dynamic-source-redefinitions-counters','live-dynamic-source-redefinitions-sets',
+                'live-dynamic-source-redefinitions-counter-reset',
                 'mailto-positional-query-counter-blocks']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
@@ -288,7 +307,9 @@ def geometric(sizes):
                       'mailto-positional-query-counter-blocks') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
         if family in ('static-base-attribute-revisions-url','static-base-attribute-revisions-text',
-                      'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables'):
+                      'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
+                      'live-dynamic-source-redefinitions-counters','live-dynamic-source-redefinitions-sets',
+                      'live-dynamic-source-redefinitions-counter-reset'):
             # Larger runs wait for qualification of the persistent snapshot fix.
             family_sizes = [size for size in sizes if size in (128,256,512)]
         if family == 'table-footnotes' and max(sizes) >= 1024:
@@ -654,7 +675,7 @@ def main(argv=None):
     journal.write_text('')
     report = {'schema_version': 2, 'batch_policy': args.batch_policy, 'progress': args.progress, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
               'timed_operations': args.modes, 'deadline_seconds': args.deadline_seconds,
-              'resource_policy': 'source-revision and many-small-table guards use bounded sizes 128/256/512 pending larger qualification; nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
+              'resource_policy': 'source-revision, live-dynamic/source-redefinition and many-small-table guards use bounded sizes 128/256/512 pending larger qualification; nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
               'command': [sys.executable, str(Path(__file__).resolve()), *(argv if argv is not None else sys.argv[1:])],
               'machine': {'system': platform.platform(), 'processor': platform.processor(), 'cores': os.cpu_count()},
               'measurement_policy': 'strict per-input1.0x median gate; recorded batch_policy selects shared or independent counts, each elapsed duration divided by its own operation count; short batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',
