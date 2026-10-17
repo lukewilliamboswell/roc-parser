@@ -88,9 +88,7 @@ and updating the syntax reference are separate maintenance decisions.
 The differential corpus records individual syntax rules and their coverage.
 Raw fuzzing checks source preservation and structural invariants; structured
 generation checks independently constructed syntax. Performance runs use optimized
-builds and measure scaling as documents grow. See
-{src}/docs/research/roc-syntax.adoc[the architecture research] for the reference
-selection and allocation constraints behind these choices.
+builds and measure scaling as documents grow.
 
 == Run the feedback loop
 
