@@ -134,15 +134,18 @@ recorded; `--baseline-sha256` optionally pins an expected value.
 The cached runner starts only that native worker. It checks fresh projection and
 DOM against the saved Ruby correctness hashes before and after timing, using the
 complete request (including ordered attributes and virtual includes) and mode.
-It defaults to quick 20 ms / five-sample native batches. `--id ID` can select a
+It defaults to quick 5 ms / three-sample native batches. `--id ID` can select a
 saved case without writing a replay file; repeat it for several IDs.
 
 Treat ratios as rough internal guidance: large gains and geometric scaling
 warnings matter more than small near-parity differences. Saved Ruby sample
 quality, original failures, machine descriptions and reference code hashes remain
-visible; noisy or short historical samples receive warnings. New requests or changed semantics require a refresh. Noisy native
-samples remain visible too. Include several sizes of each geometric family in a
-replay to inspect scaling; isolated maximum-size cases cannot establish growth.
+visible; noisy or short historical samples receive warnings. New requests or
+changed semantics require a refresh. Noisy native samples remain visible too.
+Native requests time out after 10 seconds by default (`--timeout` overrides
+this). The first worker error is saved and stops the run; unprocessed inputs
+remain explicit. Include several sizes of each geometric family in a replay to
+inspect scaling; isolated maximum-size cases cannot establish growth.
 
 Refresh with the existing fresh `check_asciidoc_performance.py --replay ...`
 command. Cached runs never claim fresh paired Oracle timing qualification and do

@@ -87,9 +87,10 @@ class CacheTests(unittest.TestCase):
             row=baseline_row();saved={'schema_version':2,'smoke':False,'candidate_build':{'source_identity':'old-native'},'reference':{'version':'2.0.23','gem_code_sha256':'old-code','worker_sha256':c.sha(root/'scripts/asciidoc/performance_oracle.rb'),'oracle_sha256':c.sha(root/'scripts/asciidoc/oracle.rb')},'machine':c.machine(),'records':[row]}
             missing=baseline_row({'id':'unavailable','source':'other'});missing.pop('reference');missing['status']='error'
             saved['records'].append(missing);saved['full_campaign_complete']=False
-            baseline=root/'saved.json';baseline.write_text(json.dumps(saved));commands=[]
+            baseline=root/'saved.json';baseline.write_text(json.dumps(saved));commands=[];self_outer_timeouts=[]
             class Worker:
-                def __init__(self,command,**kwargs):commands.append(command)
+                def __init__(self,command,**kwargs):
+                    self_timeout=kwargs['timeout'];self_outer_timeouts.append(self_timeout);commands.append(command)
                 def request(self,req):return reply(CASE,req['iterations'])
                 def close(self):pass
             def build(args,out):
@@ -103,10 +104,47 @@ class CacheTests(unittest.TestCase):
                 code=c.main(['--root',str(root),'--baseline',str(baseline),'--baseline-sha256',c.sha(baseline),'--candidate-binary',str(binary),'--output',str(root/'out'),'--modes','parse'])
             self.assertEqual(code,0);self.assertEqual(commands,[[str(binary.resolve())]])
             result=json.loads((root/'out/results.json').read_text());self.assertFalse(result['fresh_strict_oracle_qualification']);self.assertEqual(result['reference'],saved['reference']);self.assertEqual(result['records'][0]['reference'],row['reference'])
-            self.assertEqual(result['baseline_report_sha256'],c.sha(baseline));self.assertTrue(result['exact_coverage']);self.assertEqual(len(result['reference_unavailable']),1);self.assertEqual(result['reference_unavailable'][0]['case']['id'],'unavailable');self.assertEqual(result['selected_requests'],2);self.assertFalse(result['original_run_metadata']['full_campaign_complete'])
+            self.assertEqual(result['records'][0]['candidate']['minimum_window_ns'],5_000_000);self.assertEqual(len(result['records'][0]['candidate']['samples_ns']),3);self.assertEqual(self_outer_timeouts,[10]);self.assertEqual(result['baseline_report_sha256'],c.sha(baseline));self.assertTrue(result['exact_coverage']);self.assertEqual(len(result['reference_unavailable']),1);self.assertEqual(result['reference_unavailable'][0]['case']['id'],'unavailable');self.assertEqual(result['selected_requests'],2);self.assertFalse(result['original_run_metadata']['full_campaign_complete'])
             with patch.object(c.importlib.util,'spec_from_file_location',return_value=spec),patch.object(c.importlib.util,'module_from_spec',return_value=types.ModuleType('fake2')),patch.object(subprocess,'Popen',side_effect=AssertionError('No external process allowed')):
-                code=c.main(['--root',str(root),'--baseline',str(baseline),'--roc','pinned-roc','--output',str(root/'auto'),'--modes','parse'])
-            self.assertEqual(code,0);self.assertEqual(commands[-1],[str((root/'auto/performance-native').resolve())])
+                code=c.main(['--root',str(root),'--baseline',str(baseline),'--roc','pinned-roc','--timeout','2.5','--output',str(root/'auto'),'--modes','parse'])
+            self.assertEqual(code,0);self.assertEqual(commands[-1],[str((root/'auto/performance-native').resolve())]);self.assertEqual(self_outer_timeouts,[10,2.5])
+
+    def test_native_timeout_stops_after_first_persisted_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'scripts/asciidoc').mkdir(parents=True)
+            for rel in ['scripts/check_asciidoc_performance.py','scripts/review_asciidoc.py','scripts/review_roc_syntax.py','scripts/asciidoc/oracle.rb','scripts/asciidoc/performance_oracle.rb']:(root/rel).write_text('fixture')
+            binary=root/'native';binary.write_bytes(b'native');compiler=root/'compiler';compiler.write_bytes(b'compiler')
+            receipt={'source_identity':'current-source','binary_sha256':c.sha(binary),'build_flags':['--opt=speed'],'compiler':{'path':str(compiler),'sha256':c.sha(compiler)}}
+            binary.with_suffix('.build.json').write_text(json.dumps(receipt))
+            second={'id':'second','source':'other'}
+            saved={'schema_version':2,'smoke':False,'candidate_build':{'source_identity':'old'},'reference':{'version':'2.0.23','gem_code_sha256':'old','worker_sha256':c.sha(root/'scripts/asciidoc/performance_oracle.rb'),'oracle_sha256':c.sha(root/'scripts/asciidoc/oracle.rb')},'machine':c.machine(),'records':[baseline_row(),baseline_row(second)]}
+            baseline=root/'saved.json';baseline.write_text(json.dumps(saved));requests=[];timeouts=[];closed=[]
+            class Worker:
+                def __init__(self,command,timeout):timeouts.append(timeout)
+                def request(self,req):
+                    requests.append(req)
+                    if len(requests)>1:raise TimeoutError('simulated native timeout')
+                    return reply(CASE,0)
+                def close(self):closed.append(True)
+            loader=types.SimpleNamespace(exec_module=lambda mod:mod.__dict__.update({k:getattr(FakeP,k) for k in dir(FakeP) if not k.startswith('_')},Worker=Worker,__file__=str(root/'scripts/check_asciidoc_performance.py')))
+            spec=types.SimpleNamespace(loader=loader)
+            with patch.object(c.importlib.util,'spec_from_file_location',return_value=spec),patch.object(c.importlib.util,'module_from_spec',return_value=types.ModuleType('fake_timeout')),patch.object(subprocess,'Popen',side_effect=AssertionError('No external process allowed')):
+                code=c.main(['--root',str(root),'--baseline',str(baseline),'--candidate-binary',str(binary),'--output',str(root/'out'),'--modes','parse'])
+            self.assertEqual(code,1);self.assertEqual(timeouts,[10]);self.assertTrue(closed)
+            self.assertEqual({r['id']for r in requests},{CASE['id']})
+            self.assertEqual(len(requests),3) # Fresh before, timed timeout, bounded post-check timeout.
+            result=json.loads((root/'out/results.json').read_text())
+            self.assertEqual(result['attempted_requests'],1);self.assertEqual(result['unprocessed_requests'],1);self.assertEqual(result['measured_requests'],0)
+            self.assertFalse(result['exact_coverage']);self.assertEqual(result['status'],'failed')
+            self.assertEqual(result['records'][0]['status'],'error');self.assertIn('TimeoutError',result['records'][0]['error'])
+            journal=(root/'out/records.jsonl').read_text().strip().splitlines()
+            self.assertEqual(len(journal),1);self.assertEqual(json.loads(journal[0])['status'],'error')
+
+    def test_nonfinite_native_timeout_is_rejected_before_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for timeout in ['nan','inf','0','-1']:
+                with self.subTest(timeout=timeout),self.assertRaisesRegex(ValueError,'sample policy'):
+                    c.main(['--baseline','unused','--output',str(Path(tmp)/'out'),'--timeout',timeout])
 
 class RequestIdentityTests(unittest.TestCase):
     @classmethod

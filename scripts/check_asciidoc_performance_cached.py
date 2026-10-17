@@ -86,12 +86,13 @@ def main(argv=None):
     ap.add_argument('--replay',type=Path)
     ap.add_argument('--id',action='append',default=[])
     ap.add_argument('--modes',nargs='+',choices=['parse','render'],default=['parse','render'])
-    ap.add_argument('--window-ms',type=float,default=20)
-    ap.add_argument('--samples',type=int,default=5)
+    ap.add_argument('--window-ms',type=float,default=5)
+    ap.add_argument('--samples',type=int,default=3)
+    ap.add_argument('--timeout',type=float,default=10,help='native response timeout in seconds; stop on first worker error')
     ap.add_argument('--max-iterations',type=int,default=100000)
     a=ap.parse_args(argv);a.root=a.root.resolve()
     require(not a.output.exists(),'new output required')
-    require(math.isfinite(a.window_ms) and a.window_ms>0 and math.isfinite(a.build_timeout) and a.build_timeout>0 and 1<=a.samples<=101 and 1<=a.max_iterations<=100000,'invalid sample policy')
+    require(math.isfinite(a.timeout) and a.timeout>0 and math.isfinite(a.window_ms) and a.window_ms>0 and math.isfinite(a.build_timeout) and a.build_timeout>0 and 1<=a.samples<=101 and 1<=a.max_iterations<=100000,'invalid sample policy')
     actual_baseline_sha=sha(a.baseline)
     require(a.baseline_sha256 is None or actual_baseline_sha==a.baseline_sha256,'saved report content address changed')
     a.baseline_sha256=actual_baseline_sha
@@ -138,7 +139,7 @@ def main(argv=None):
     out={'purpose':PURPOSE,'fresh_strict_oracle_qualification':False,'candidate_build':build,'original_candidate_build':original_build,'reference':reference,'baseline_report_sha256':a.baseline_sha256,'baseline_machine':old_machine,'current_machine':machine(),'original_run_metadata':original_scope,'reference_unavailable':unavailable,'warnings':warnings,'records':[],'errors':[],'checked_inputs_before':inputs}
     worker=None
     try:
-        worker=p.Worker([str(a.candidate_binary.resolve())],timeout=180)
+        worker=p.Worker([str(a.candidate_binary.resolve())],timeout=a.timeout)
         with (a.output/'records.jsonl').open('x') as journal:
             for ordinal,(case,mode,old,proof,quality,selection) in enumerate(selected):
                 row={'index':ordinal,'case':case,'mode':mode,'request_sha256':key(case,mode,p)[0],'reference':old['reference'],'reference_proof':proof,'reference_quality_warnings':quality,'reference_selection':selection,'original_status':old.get('status'),'original_error':old.get('error'),'original_qualification':old.get('timing_qualification'),'original_attempts':old.get('measurement_attempts')}
@@ -168,6 +169,8 @@ def main(argv=None):
                         v=row[field];row[field]={'full_reply_sha256':value_sha(v),'rpc_metadata':{k:z for k,z in v.items() if k not in ('html','projection')}}
                 out['records'].append(row);journal.write(json.dumps(row,ensure_ascii=False)+'\n');journal.flush()
                 print(case['id'],mode,row.get('guidance',row.get('error')),row.get('comparison',{}).get('ratio'),flush=True)
+                if row['status']=='error':
+                    break  # Persist the first failure and stop reusing a possibly hung transport.
     finally:
         if worker:worker.close()
         out['checked_inputs_after']={str(f):sha(f) for f in tracked}
@@ -176,6 +179,7 @@ def main(argv=None):
         out['exact_coverage']=[(r['index'],r['request_sha256'],r['mode']) for r in out['records']]==[(i,key(c,m,p)[0],m) for i,(c,m,*_) in enumerate(selected)]
         out['selected_requests']=len(selected)+len(unavailable)
         out['attempted_requests']=len(out['records'])
+        out['unprocessed_requests']=len(selected)-len(out['records'])
         out['measured_requests']=sum(r['status']=='measured' for r in out['records'])
         out['scaling']=p.scaling([r for r in out['records'] if r['status']=='measured'],1.3)
         out['scaling_warnings']=[c for c in out['scaling'] if c['regression']]
