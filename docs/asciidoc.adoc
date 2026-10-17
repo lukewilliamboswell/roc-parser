@@ -104,7 +104,7 @@ IPC, JSON serialization, warmup and correctness checks outside timed batches.
 
 [source,sh]
 ----
-python3 scripts/check_asciidoc_performance.py --roc "$ROC"
+python3 scripts/check_asciidoc_performance.py --roc "$ROC" --deadline-seconds 10800
 ----
 
 The default campaign generates 2,000 seeded documents plus 500 raw mutations,
@@ -120,8 +120,9 @@ substitution paths.
 Counter and set state mixed with immediate quoted passes, math and ordinary
 URLs also runs through 4,096 entries to catch repeated attribute materialization.
 Static header attributes mixed with URL paragraphs, URL list items, listing
-blocks and formatted section titles check shared snapshot copies and repeated
-option lookups through 4,096 entries. Stateful pass previews mixed with unrelated sets
+blocks, formatted section titles and AsciiDoc table cells check shared snapshot
+copies and repeated option lookups through 4,096 entries. The table-cell family
+explicitly disables headers and starts cell contents immediately after `|`. Stateful pass previews mixed with unrelated sets
 check work that can otherwise be discarded before shared-state evaluation.
 Positional mail subjects and bodies exercise protected-tag restoration with
 growing counter state.
@@ -134,3 +135,9 @@ Use `--seed` to explore another deterministic campaign, `--corpus` for local
 documents, and `--replay` to repeat a retained failure. `--smoke` runs two tiny
 correctness and protocol cases without asserting timing; CI runs this smoke
 check. The full timing gate is intended for a quiet local machine.
+The default per-response wall budget is 180 seconds, allowing slow oracle
+warmup, calibration and fresh projection/HTML checks outside the timed interval.
+This response budget does not change the 1.0 times speed ceiling or sampling.
+The default full-campaign deadline remains 7,200 seconds; the command above
+allows 10,800 seconds for the expanded local corpus. Every request retains its
+fresh correctness checks.

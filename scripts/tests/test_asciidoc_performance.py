@@ -264,6 +264,44 @@ class Performance(unittest.TestCase):
         self.assertEqual(perf.static_attribute_nonparagraph(2,'section'),
                          prefix+'== *S0*\n\n== *S1*\n\n')
 
+    def test_static_asciidoc_cells_retain_corrected_noheader_sources(self):
+        expected = {
+            'scaling-static-attributes-asciidoc-table-cells-1024': 'c70ace5be049b2667ec683644516da81dffff6a65d739ff093bca747de660e53',
+            'scaling-static-attributes-asciidoc-table-cells-2048': '02131fbb953fa9dbd1854d5e81c73071bd8c1e3f81cf41779982c46b6db97465',
+            'scaling-static-attributes-asciidoc-table-cells-4096': '86792223f8f4ca13fa55ddc7170308776df0fa905e9e59c210c200d018ec564d',
+        }
+        cases=[case for case in perf.geometric(perf.parser().parse_args([]).sizes)
+               if case['family']=='static-attributes-asciidoc-table-cells']
+        self.assertEqual({case['size']for case in cases},{32,64,128,256,512,1024,2048,4096})
+        retained=[case for case in cases if case['id']in expected]
+        self.assertEqual(len(retained),3)
+        for case in retained:
+            with self.subTest(case=case['id']):
+                self.assertEqual(hashlib.sha256(case['source'].encode()).hexdigest(),expected[case['id']])
+                self.assertEqual(case['provenance'],{'generator':case['family'],
+                                                    'parameter':case['size'],'geometric':True})
+        self.assertEqual(perf.static_attribute_nonparagraph(2,'asciidoc-table'),
+                         ':k0: v\n:k1: v\n\n[cols="a",options=noheader]\n|===\n'
+                         '|https://a.b\n\n|https://a.b\n\n|===\n')
+        rows=[{'case':case,'mode':mode,'candidate':{'median_ns':len(case['source'].encode())}}
+              for mode in ('parse','render')for case in retained]
+        checks=perf.scaling(rows)
+        self.assertEqual(len(checks),4)
+        for check in checks:
+            self.assertFalse(check['regression'])
+            self.assertAlmostEqual(check['exponent'],1)
+
+    def test_oracle_response_budget_default_survives_replay(self):
+        args=perf.parser().parse_args([])
+        self.assertEqual(args.timeout,180)
+        self.assertEqual(args.deadline_seconds,7200)
+        tokens=shlex.split(perf.replay_command(args,pathlib.Path('/tmp/slow oracle.json'),['parse']))
+        replay=perf.parser().parse_args(tokens[2:])
+        self.assertEqual(replay.timeout,180)
+        self.assertEqual(replay.deadline_seconds,7200)
+        self.assertEqual(replay.max_ratio,1)
+        self.assertEqual(replay.max_scaling_exponent,1.3)
+
     def test_projection_mismatch_rejected_before_timing(self):
         with self.assertRaises(ValueError):
             perf.equivalent({'projection':{'title':'','blocks':[]},'html':''},{'projection':{'title':'other','blocks':[]},'html':''})
