@@ -1084,6 +1084,10 @@ Ctx : { source : List(U8), tokens : List(RocSyntax.Token), texts : List(TokenTex
 R : { pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diags : List(RocSyntax.Diagnostic), node : U64 }
 
 ## Result of a delimited item collection.
+## Expression collection: the first item is kept apart so the common
+## one-item case (calls, parentheses) does not allocate an id list.
+X : { pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diags : List(RocSyntax.Diagnostic), count : U64, first : U64, rest : List(U64), end : U64, comma : Bool }
+
 C : { pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diags : List(RocSyntax.Diagnostic), ids : List(U64), end : U64, comma : Bool }
 
 ## Result of an emitted node.
@@ -1114,18 +1118,31 @@ diag = |diags, code, start, end| {
 	}
 }
 
+## Append `ids` one at a time: `concat` reallocates to an exact fit, so
+## appending through it gives up the geometric growth `append` keeps.
+append_ids : List(U64), List(U64) -> List(U64)
+append_ids = |children, ids| {
+	var $c = children
+	var $i = 0
+	while $i < ids.len() {
+		$c = $c.append(ids.get($i) ?? 0)
+		$i = $i + 1
+	}
+	$c
+}
+
 ## Append a node whose children are `ids`, returning its index.
 emit : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, List(U64) -> E
 emit = |nodes, children, kind, start, end, ids| {
 	index = nodes.len()
-	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: children.concat(ids), node: index }
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: append_ids(children, ids), node: index }
 }
 
 ## Append a node and return it as a parser result at `pos`.
 finish : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, List(U64) -> R
 finish = |pos, nodes, children, diags, kind, start, end, ids| {
 	index = nodes.len()
-	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: children.concat(ids), diags, node: index }
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: append_ids(children, ids), diags, node: index }
 }
 
 missing_node : RocSyntax.Node
@@ -1212,13 +1229,32 @@ is_text = |ctx, pos, text| (ctx.texts.get(pos) ?? OtherText) == text
 emit_after : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64, List(U64) -> E
 emit_after = |nodes, children, kind, start, end, first, rest| {
 	index = nodes.len()
-	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: children.append(first).concat(rest), node: index }
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: append_ids(children.append(first), rest), node: index }
+}
+
+## Append a node whose children are `lead` then a collection's items.
+emit_items : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64, U64, U64, List(U64) -> E
+emit_items = |nodes, children, kind, start, end, lead, count, first, rest| {
+	index = nodes.len()
+	children_start = children.len()
+	c1 = children.append(lead)
+	c2 = if count > 0 append_ids(c1.append(first), rest) else c1
+	{ nodes: nodes.append({ kind, start, end, children_start, children_len: count + 1 }), children: c2, node: index }
+}
+
+## Append a node whose children are a collection's items.
+finish_items : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, U64, U64, List(U64) -> R
+finish_items = |pos, nodes, children, diags, kind, start, end, count, first, rest| {
+	index = nodes.len()
+	children_start = children.len()
+	c1 = if count > 0 append_ids(children.append(first), rest) else children
+	{ pos, nodes: nodes.append({ kind, start, end, children_start, children_len: count }), children: c1, diags, node: index }
 }
 
 finish_after : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, U64, List(U64) -> R
 finish_after = |pos, nodes, children, diags, kind, start, end, first, rest| {
 	index = nodes.len()
-	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: children.append(first).concat(rest), diags, node: index }
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: append_ids(children.append(first), rest), diags, node: index }
 }
 
 ## Append a node with one child, without a transient child list.
@@ -1253,9 +1289,9 @@ source_token : Ctx, U64 -> RocSyntax.Token
 source_token = |ctx, pos| tok(ctx, pos)
 
 # Exact binding powers from src/parse/Parser.zig at 7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5.
-binding : Ctx, U64 -> { left : U64, right : U64 }
-binding = |ctx, pos| {
-	match ctx.texts.get(pos) ?? OtherText {
+binding : Ctx, U64, TokenText -> { left : U64, right : U64 }
+binding = |ctx, pos, text| {
+	match text {
 		Star | Slash | DoubleSlash | Percent => { left: 32, right: 33 }
 		Plus => { left: 22, right: 23 }
 		Minus if binary_minus(ctx, pos) => { left: 22, right: 23 }
@@ -1271,6 +1307,15 @@ binding = |ctx, pos| {
 		Or => { left: 4, right: 3 }
 		RangeExclusive | RangeInclusive => { left: 2, right: 3 }
 		_ => { left: 0, right: 0 }
+	}
+}
+
+## Texts that may extend an expression: suffixes, arrows and binary operators.
+continues_expression : TokenText -> Bool
+continues_expression = |text| {
+	match text {
+		Dot | DotQuestion | Arrow | FatArrow | Pipe | Question | DotDot | DotStar | Star | Slash | DoubleSlash | Percent | Plus | Minus | DoubleQuestion | EqEq | NotEq | Less | Greater | LessEq | GreaterEq | And | Or | RangeExclusive | RangeInclusive => True
+		_ => False
 	}
 }
 
@@ -1300,114 +1345,123 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
-		bp = binding(ctx, look)
-		arrow_name = tok(ctx, look + 1)
-		left_end = nend($n, $left)
-		arrow_field = is_text(ctx, look, Dot) and t.start == left_end and (($qualified and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent)) or (first.kind == LowerIdent and $left == built_node and arrow_name.kind == LowerIdent))
-		pipe_boundary = (minimum == 100 or minimum == 101) and t.start > left_end and ((is_text(ctx, look, Dot) and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent or arrow_name.kind == Number)) or is_text(ctx, look, DotQuestion))
-		if pipe_boundary or ((minimum >= 100 or ctx.in_guard) and (is_text(ctx, look, Arrow) or is_text(ctx, look, FatArrow) or is_text(ctx, look, Pipe))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or is_text(ctx, look, Question) or ((is_text(ctx, look, Dot) or is_text(ctx, look, DotQuestion)) and !arrow_field))) {
+		lt = ctx.texts.get(look) ?? OtherText
+		# Most operands end at a token no suffix or operator rule accepts.
+		if t.kind != NoSpaceOpenRound and !continues_expression(lt) {
 			$s = look
 			$done = True
-		} else if is_text(ctx, look, Arrow) or is_text(ctx, look, FatArrow) or is_text(ctx, look, Pipe) {
-			pipe = is_text(ctx, look, Pipe)
-			rhs = sig(ctx, look + 1)
-			rhs_token = tok(ctx, rhs)
-			literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
-			valid_start = (rhs_token.kind == LowerIdent and byte(ctx.source, rhs_token.start) != '_') or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
-			if !valid_start {
-				$d = diag($d, UnexpectedToken, rhs_token.start, rhs_token.end)
-			}
-			{ pos: target_state, nodes: $n, children: $c, diags: $d, node: target_node } = expression(ctx, rhs, $n, $c, $d, if pipe 100 else 101, depth + 1, False)
-			method = pipe and method_target(ctx, $n, $c, target_node)
-			if pipe and literal and !pipe_has_method(ctx, $n, $c, target_node) {
-				target_end = nend($n, target_node)
-				$d = diag($d, UnexpectedToken, rhs_token.start, target_end)
-			}
-			start = nstart($n, $left)
-			end = nend($n, target_node)
-			{ nodes: $n, children: $c, node: arrow_node } = emit2($n, $c, if method MethodArrowCall else ArrowCall, start, end, $left, target_node)
-			$s = target_state
-			$left = arrow_node
-			$qualified = False
-		} else if is_text(ctx, look, Question) and t.start == left_end {
-			start = nstart($n, $left)
-			{ nodes: $n, children: $c, node: suffix_node } = emit1($n, $c, Suffix, start, t.end, $left)
-			$s = look + 1
-			$left = suffix_node
-			$qualified = False
-		} else if t.kind == NoSpaceOpenRound {
-			if is_optional_access(ctx, $n, $c, $left) {
-				$d = diag($d, UnexpectedToken, t.start, t.end)
-			}
-			start = nstart($n, $left)
-			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args_ids, end: args_end, comma: _ } = collection(ctx, look + 1, $n, $c, $d, CloseRound, depth + 1)
-			{ nodes: $n, children: $c, node: call_node } = emit_after($n, $c, Call, start, args_end, $left, args_ids)
-			$s = args_state
-			$left = call_node
-			$qualified = False
-			$target_done = minimum == 101
-			question_state = sig(ctx, args_state)
-			if minimum == 100 and !method_target(ctx, $n, $c, call_node) and is_text(ctx, question_state, Question) and tok(ctx, question_state).start == args_end {
+		} else {
+			bp = binding(ctx, look, lt)
+			arrow_name = tok(ctx, look + 1)
+			left_end = nend($n, $left)
+			arrow_field = lt == Dot and t.start == left_end and (($qualified and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent)) or (first.kind == LowerIdent and $left == built_node and arrow_name.kind == LowerIdent))
+			pipe_boundary = (minimum == 100 or minimum == 101) and t.start > left_end and ((lt == Dot and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent or arrow_name.kind == Number)) or lt == DotQuestion)
+			if pipe_boundary or ((minimum >= 100 or ctx.in_guard) and (lt == Arrow or lt == FatArrow or lt == Pipe)) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or lt == Question or ((lt == Dot or lt == DotQuestion) and !arrow_field))) {
+				$s = look
 				$done = True
-			}
-		} else if is_text(ctx, look, Dot) and tok(ctx, sig(ctx, look + 1)).kind == OpenCurly {
-			opening_state = sig(ctx, look + 1)
-			{ pos: backing_state, nodes: $n, children: $c, diags: $d, node: backing_node } = curly(ctx, opening_state + 1, $n, $c, $d, tok(ctx, opening_state).start, depth + 1, True, True)
-			start = nstart($n, $left)
-			end = nend($n, backing_node)
-			{ nodes: $n, children: $c, node: nominal_node } = emit2($n, $c, NominalRecord, start, end, $left, backing_node)
-			$s = backing_state
-			$left = nominal_node
-			$qualified = False
-		} else if is_text(ctx, look, Dot) and $qualified and tok(ctx, look + 1).kind == NoSpaceOpenRound {
-			opening_state = look + 1
-			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args, end, comma: _ } = collection(ctx, opening_state + 1, $n, $c, $d, CloseRound, depth + 1)
-			start = nstart($n, $left)
-			{ nodes: $n, children: $c, node: nominal_node } = emit_after($n, $c, NominalApply, start, end, $left, args)
-			$s = args_state
-			$left = nominal_node
-			$qualified = False
-		} else if is_text(ctx, look, Dot) or is_text(ctx, look, DotQuestion) {
-			optional = is_text(ctx, look, DotQuestion)
-			field_state = look + 1
-			field = tok(ctx, field_state)
-			valid_name = (field.kind == LowerIdent and is_lower(byte(ctx.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(ctx.source, field.start)))
-			valid_index = field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
-			if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
+			} else if lt == Arrow or lt == FatArrow or lt == Pipe {
+				pipe = lt == Pipe
+				rhs = sig(ctx, look + 1)
+				rhs_token = tok(ctx, rhs)
+				literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
+				valid_start = (rhs_token.kind == LowerIdent and byte(ctx.source, rhs_token.start) != '_') or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
+				if !valid_start {
+					$d = diag($d, UnexpectedToken, rhs_token.start, rhs_token.end)
+				}
+				{ pos: target_state, nodes: $n, children: $c, diags: $d, node: target_node } = expression(ctx, rhs, $n, $c, $d, if pipe 100 else 101, depth + 1, False)
+				method = pipe and method_target(ctx, $n, $c, target_node)
+				if pipe and literal and !pipe_has_method(ctx, $n, $c, target_node) {
+					target_end = nend($n, target_node)
+					$d = diag($d, UnexpectedToken, rhs_token.start, target_end)
+				}
 				start = nstart($n, $left)
-				{ nodes: $n, children: $c, node: leaf_node } = emit($n, $c, Identifier, field.start, field.end, [])
-				{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, if optional OptionalFieldAccess else FieldAccess, start, field.end, $left, leaf_node)
-				$s = field_state + 1
-				$left = access_node
-				$qualified = $qualified and field.kind == UpperIdent
+				end = nend($n, target_node)
+				{ nodes: $n, children: $c, node: arrow_node } = emit2($n, $c, if method MethodArrowCall else ArrowCall, start, end, $left, target_node)
+				$s = target_state
+				$left = arrow_node
+				$qualified = False
+			} else if lt == Question and t.start == left_end {
+				start = nstart($n, $left)
+				{ nodes: $n, children: $c, node: suffix_node } = emit1($n, $c, Suffix, start, t.end, $left)
+				$s = look + 1
+				$left = suffix_node
+				$qualified = False
+			} else if t.kind == NoSpaceOpenRound {
+				if is_optional_access(ctx, $n, $c, $left) {
+					$d = diag($d, UnexpectedToken, t.start, t.end)
+				}
+				start = nstart($n, $left)
+				{ pos: args_state, nodes: $n, children: $c, diags: $d, count: args_count, first: args_first, rest: args_rest, end: args_end, comma: _ } = collection(ctx, look + 1, $n, $c, $d, CloseRound, depth + 1)
+				{ nodes: $n, children: $c, node: call_node } = emit_items($n, $c, Call, start, args_end, $left, args_count, args_first, args_rest)
+				$s = args_state
+				$left = call_node
+				$qualified = False
+				$target_done = minimum == 101
+				question_state = sig(ctx, args_state)
+				if minimum == 100 and !method_target(ctx, $n, $c, call_node) and is_text(ctx, question_state, Question) and tok(ctx, question_state).start == args_end {
+					$done = True
+				}
+			} else if lt == Dot and tok(ctx, sig(ctx, look + 1)).kind == OpenCurly {
+				opening_state = sig(ctx, look + 1)
+				{ pos: backing_state, nodes: $n, children: $c, diags: $d, node: backing_node } = curly(ctx, opening_state + 1, $n, $c, $d, tok(ctx, opening_state).start, depth + 1, True, True)
+				start = nstart($n, $left)
+				end = nend($n, backing_node)
+				{ nodes: $n, children: $c, node: nominal_node } = emit2($n, $c, NominalRecord, start, end, $left, backing_node)
+				$s = backing_state
+				$left = nominal_node
+				$qualified = False
+			} else if lt == Dot and $qualified and tok(ctx, look + 1).kind == NoSpaceOpenRound {
+				opening_state = look + 1
+				{ pos: args_state, nodes: $n, children: $c, diags: $d, count: args_count, first: args_first, rest: args_rest, end, comma: _ } = collection(ctx, opening_state + 1, $n, $c, $d, CloseRound, depth + 1)
+				start = nstart($n, $left)
+				{ nodes: $n, children: $c, node: nominal_node } = emit_items($n, $c, NominalApply, start, end, $left, args_count, args_first, args_rest)
+				$s = args_state
+				$left = nominal_node
+				$qualified = False
+			} else if lt == Dot or lt == DotQuestion {
+				optional = lt == DotQuestion
+				field_state = look + 1
+				field = tok(ctx, field_state)
+				valid_name = (field.kind == LowerIdent and is_lower(byte(ctx.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(ctx.source, field.start)))
+				valid_index = field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
+				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
+					start = nstart($n, $left)
+					{ nodes: $n, children: $c, node: leaf_node } = emit($n, $c, Identifier, field.start, field.end, [])
+					{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, if optional OptionalFieldAccess else FieldAccess, start, field.end, $left, leaf_node)
+					$s = field_state + 1
+					$left = access_node
+					$qualified = $qualified and field.kind == UpperIdent
+				} else {
+					$s = look
+					$done = True
+				}
+			} else if lt == DotDot or lt == DotStar {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+				$s = look + 1
+				$done = True
+			} else if bp.left > 0 and bp.left >= minimum {
+				start = nstart($n, $left)
+				{ pos: right_state, nodes: $n, children: $c, diags: $d, node: right_node } = expression(ctx, look + 1, $n, $c, $d, bp.right, depth + 1, False)
+				end = nend($n, right_node)
+				{ nodes: $n, children: $c, node: binary_node } = emit2($n, $c, Binary, start, end, $left, right_node)
+				$s = right_state
+				$left = binary_node
+				$qualified = False
 			} else {
 				$s = look
 				$done = True
 			}
-		} else if is_text(ctx, look, DotDot) or is_text(ctx, look, DotStar) {
-			$d = diag($d, UnexpectedToken, t.start, t.end)
-			$s = look + 1
-			$done = True
-		} else if bp.left > 0 and bp.left >= minimum {
-			start = nstart($n, $left)
-			{ pos: right_state, nodes: $n, children: $c, diags: $d, node: right_node } = expression(ctx, look + 1, $n, $c, $d, bp.right, depth + 1, False)
-			end = nend($n, right_node)
-			{ nodes: $n, children: $c, node: binary_node } = emit2($n, $c, Binary, start, end, $left, right_node)
-			$s = right_state
-			$left = binary_node
-			$qualified = False
-		} else {
-			$s = look
-			$done = True
 		}
 	}
 	{ pos: $s, nodes: $n, children: $c, diags: $d, node: $left }
 }
 
-collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.TokenKind, U64 -> C
+collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.TokenKind, U64 -> X
 collection = |ctx, initial, nodes, children, diags, closing, depth| {
 	var $s = initial
-	var $ids = []
+	var $count = 0
+	var $first = 0
+	var $rest = []
 	var $end = tok(ctx, initial).start
 	var $done = False
 	var $comma = False
@@ -1435,7 +1489,12 @@ collection = |ctx, initial, nodes, children, diags, closing, depth| {
 		} else {
 			before = look
 			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = expression(ctx, look, $n, $c, $d, 0, depth, False)
-			$ids = $ids.append(item_node)
+			if $count == 0 {
+				$first = item_node
+			} else {
+				$rest = $rest.append(item_node)
+			}
+			$count = $count + 1
 			$end = nend($n, item_node)
 			$s = sig(ctx, item_state)
 			if is_text(ctx, $s, Comma) {
@@ -1450,7 +1509,7 @@ collection = |ctx, initial, nodes, children, diags, closing, depth| {
 			}
 		}
 	}
-	{ pos: $s, nodes: $n, children: $c, diags: $d, ids: $ids, end: $end, comma: $comma }
+	{ pos: $s, nodes: $n, children: $c, diags: $d, count: $count, first: $first, rest: $rest, end: $end, comma: $comma }
 }
 
 primary : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool -> R
@@ -1491,9 +1550,9 @@ primary = |ctx, s, nodes, children, diags, depth, punned| {
 		Keyword if is_text(ctx, s, Match) => parse_match(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
 		Operator if is_text(ctx, s, Bar) => parse_lambda(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
 		OpenRound | NoSpaceOpenRound | OpenSquare => {
-			{ pos: items_state, nodes: n1, children: c1, diags: d1, ids: items_ids, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
-			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_ids.len() != 1 Tuple else Parenthesized
-			finish(items_state, n1, c1, d1, kind, t.start, items_end, items_ids)
+			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
+			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_count != 1 Tuple else Parenthesized
+			finish_items(items_state, n1, c1, d1, kind, t.start, items_end, items_count, items_first, items_rest)
 		}
 		Operator if is_text(ctx, s, Minus) and binary_minus(ctx, s) => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 		Operator if is_text(ctx, s, Minus) or is_text(ctx, s, Bang) => {
@@ -1601,21 +1660,23 @@ statement = |ctx, initial, nodes, children, diags, depth| {
 	t = tok(ctx, s)
 	following_pos = significant_position(ctx.tokens, s + 1)
 	following = ctx.tokens.get(following_pos) ?? t
+	text = ctx.texts.get(s) ?? OtherText
+	following_text = ctx.texts.get(following_pos) ?? OtherText
 	if depth >= 128 {
 		finish(s + if t.kind == EndOfFile 0 else 1, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.end, [])
-	} else if (t.kind == UpperIdent and (type_declaration_start(ctx, s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or is_text(ctx, following_pos, Dot)) and has_pattern_assignment(ctx, s))))) or (t.kind == LowerIdent and is_text(ctx, following_pos, Dot) and tok(ctx, following_pos + 1).kind == UpperIdent) {
+	} else if (t.kind == UpperIdent and (type_declaration_start(ctx, s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or following_text == Dot) and has_pattern_assignment(ctx, s))))) or (t.kind == LowerIdent and following_text == Dot and tok(ctx, following_pos + 1).kind == UpperIdent) {
 		parse_type_declaration(ctx, s, nodes, children, diags, depth + 1)
-	} else if t.kind == LowerIdent and is_text(ctx, following_pos, Equals) {
+	} else if t.kind == LowerIdent and following_text == Equals {
 		{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
 		after_name = sig(ctx, name_state)
 		{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = expression(ctx, after_name + 1, n1, c1, d1, 0, depth, False)
 		end = nend(n2, value_node)
 		finish2(value_state, n2, c2, d2, Declaration, t.start, end, name_node, value_node)
-	} else if t.kind == LowerIdent and is_text(ctx, following_pos, Colon) {
-		d1 = if is_text(ctx, s, Underscore) diag(diags, UnexpectedToken, t.start, t.end) else diags
+	} else if t.kind == LowerIdent and following_text == Colon {
+		d1 = if text == Underscore diag(diags, UnexpectedToken, t.start, t.end) else diags
 		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
 		parse_annotation_after_name(ctx, following_pos + 1, n1, c1, d1, name_node, t.start, depth)
-	} else if is_text(ctx, s, Var) {
+	} else if text == Var {
 		name_state = sig(ctx, s + 1)
 		name = tok(ctx, name_state)
 		d1 = if depth == 0 or name.kind != LowerIdent or !(is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') diag(diags, UnexpectedToken, name.start, name.end) else diags
@@ -1630,16 +1691,16 @@ statement = |ctx, initial, nodes, children, diags, depth| {
 		} else {
 			finish1(look, n1, c1, d1, VariableDeclaration, t.start, name.end, named_node)
 		}
-	} else if is_text(ctx, s, Expect) {
+	} else if text == Expect {
 		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
 		end = nend(n1, value_node)
 		finish1(value_state, n1, c1, d1, Expect, t.start, end, value_node)
-	} else if is_text(ctx, s, While) {
+	} else if text == While {
 		{ pos: condition_state, nodes: n1, children: c1, diags: d1, node: condition_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
 		{ pos: body_state, nodes: n2, children: c2, diags: d2, node: body_node } = expression(ctx, condition_state, n1, c1, d1, 0, depth + 1, False)
 		end = nend(n2, body_node)
 		finish2(body_state, n2, c2, d2, While, t.start, end, condition_node, body_node)
-	} else if is_text(ctx, s, For) or is_text(ctx, s, ForBang) or is_text(ctx, s, Dbg) or is_text(ctx, s, Crash) or is_text(ctx, s, Return) or is_text(ctx, s, Break) {
+	} else if text == For or text == ForBang or text == Dbg or text == Crash or text == Return or text == Break {
 		primary(ctx, s, nodes, children, diags, depth + 1, False)
 	} else if (t.kind == OpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(ctx, s) {
 		{ pos: pattern_state, nodes: n1, children: c1, diags: d1, node: pattern_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
@@ -1649,25 +1710,25 @@ statement = |ctx, initial, nodes, children, diags, depth| {
 		{ pos: value_state, nodes: n2, children: c2, diags: d3, node: value_node } = expression(ctx, look + if assigned 1 else 0, n1, c1, d2, 0, depth + 1, False)
 		end = nend(n2, value_node)
 		finish2(value_state, n2, c2, d3, Declaration, t.start, end, pattern_node, value_node)
-	} else if is_text(ctx, s, Platform) {
+	} else if text == Platform {
 		parse_platform_header(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
-	} else if is_text(ctx, s, App) or is_text(ctx, s, Package) {
+	} else if text == App or text == Package {
 		{ pos: exposed_state, nodes: n1, children: c1, diags: d1, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
 		look = sig(ctx, exposed_state)
 		if tok(ctx, look).kind == OpenCurly {
-			{ pos: deps_state, nodes: n2, children: c2, diags: d2, node: deps_node } = dependency_record(ctx, look, n1, c1, d1, is_text(ctx, s, App), depth + 1)
+			{ pos: deps_state, nodes: n2, children: c2, diags: d2, node: deps_node } = dependency_record(ctx, look, n1, c1, d1, text == App, depth + 1)
 			end = nend(n2, deps_node)
 			d3 = if depth != 0 diag(d2, UnexpectedToken, t.start, end) else d2
 			finish(deps_state, n2, c2, d3, Header, t.start, end, exposed_ids.append(deps_node))
 		} else {
-			d2 = if !(depth == 0 and is_text(ctx, s, Package)) diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d1
+			d2 = if !(depth == 0 and text == Package) diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d1
 			finish(look, n1, c1, d2, Header, t.start, exposed_end, exposed_ids)
 		}
-	} else if is_text(ctx, s, Module) or is_text(ctx, s, Hosted) {
+	} else if text == Module or text == Hosted {
 		{ pos: items_state, nodes: n1, children: c1, diags: d1, ids: items_ids, end: items_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
 		d2 = if depth != 0 diag(d1, UnexpectedToken, t.start, items_end) else d1
 		finish(items_state, n1, c1, d2, Header, t.start, items_end, items_ids)
-	} else if is_text(ctx, s, Import) {
+	} else if text == Import {
 		parse_import(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
 	} else {
 		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s, nodes, children, diags, 0, depth, True)
