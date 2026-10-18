@@ -131,12 +131,81 @@ matches = |bytes, at, text| {
 }
 
 keyword : List(U8), U64, U64 -> Bool
-keyword = |source, start, end| {
-	# All keywords fit Roc's inline string representation. No per-keyword
-	# byte-list conversion or heap-built table is needed in this hot path.
-	if end - start > 10 False else match Str.from_utf8_lossy(source.sublist({ start, len: end - start })) {
-		"app" | "as" | "crash" | "dbg" | "else" | "expect" | "exposes" | "exposing" | "for" | "for!" | "generates" | "has" | "hosted" | "if" | "implements" | "import" | "imports" | "in" | "interface" | "match" | "module" | "package" | "packages" | "platform" | "provides" | "requires" | "return" | "targets" | "var" | "where" | "while" | "with" | "break" => True
-		_ => False
+keyword = |source, start, end| keyword_bytes(source, start, end)
+
+keyword_bytes : List(U8), U64, U64 -> Bool
+keyword_bytes = |source, start, end| {
+	len = end - start
+	if len == 0 or len > 10 {
+		False
+	} else {
+		b0 = byte(source, start)
+		if len == 2 {
+			b1 = byte(source, start + 1)
+			if b0 == 'a' and b1 == 's' True else if b0 == 'i' and b1 == 'f' True else if b0 == 'i' and b1 == 'n' True else False
+		} else if len == 3 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			if b0 == 'a' and b1 == 'p' and b2 == 'p' True else if b0 == 'd' and b1 == 'b' and b2 == 'g' True else if b0 == 'f' and b1 == 'o' and b2 == 'r' True else if b0 == 'h' and b1 == 'a' and b2 == 's' True else if b0 == 'v' and b1 == 'a' and b2 == 'r' True else False
+		} else if len == 4 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			if b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e' True else if b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!' True else if b0 == 'w' and b1 == 'i' and b2 == 't' and b3 == 'h' True else False
+		} else if len == 5 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			if b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h' True else if b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h' True else if b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e' True else if b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e' True else if b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k' True else False
+		} else if len == 6 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't' True else if b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd' True else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' True else if b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e' True else if b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n' True else False
+		} else if len == 7 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's' True else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' and b6 == 's' True else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' True else if b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's' True else False
+		} else if len == 8 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			b7 = byte(source, start + 7)
+			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g' True else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's' True else if b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm' True else if b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's' True else if b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's' True else False
+		} else if len == 9 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			b7 = byte(source, start + 7)
+			b8 = byte(source, start + 8)
+			if b0 == 'g' and b1 == 'e' and b2 == 'n' and b3 == 'e' and b4 == 'r' and b5 == 'a' and b6 == 't' and b7 == 'e' and b8 == 's' True else if b0 == 'i' and b1 == 'n' and b2 == 't' and b3 == 'e' and b4 == 'r' and b5 == 'f' and b6 == 'a' and b7 == 'c' and b8 == 'e' True else False
+		} else if len == 10 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			b7 = byte(source, start + 7)
+			b8 = byte(source, start + 8)
+			b9 = byte(source, start + 9)
+			if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'l' and b4 == 'e' and b5 == 'm' and b6 == 'e' and b7 == 'n' and b8 == 't' and b9 == 's' True else False
+		} else {
+			False
+		}
 	}
 }
 
@@ -152,29 +221,34 @@ utf8_diagnostics = |source| {
 	var $i = 0
 	while $i < source.len() {
 		b = byte(source, $i)
-		width = if b < 0x80 1 else if b >= 0xC2 and b <= 0xDF 2 else if b >= 0xE0 and b <= 0xEF 3 else if b >= 0xF0 and b <= 0xF4 4 else 0
-		var $valid = width > 0 and $i + width <= source.len()
-		var $j = 1
-		while $valid and $j < width {
-			c = byte(source, $i + $j)
-			$valid = c >= 0x80 and c <= 0xBF
-			$j = $j + 1
-		}
-		second = byte(source, $i + 1)
-		$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
-		if $valid {
-			third = byte(source, $i + 2)
-			bidi = (b == 0xD8 and second == 0x9C) or (b == 0xE2 and ((second == 0x80 and (third == 0x8E or third == 0x8F or (third >= 0xAA and third <= 0xAE))) or (second == 0x81 and third >= 0xA6 and third <= 0xA9)))
-			if bidi {
-				$out = push_diagnostic($out, BidiControlInSource, $i, $i + width)
-			}
-			if $i == 0 and b == 0xEF and second == 0xBB and third == 0xBF {
-				$out = push_diagnostic($out, Utf8ByteOrderMark, 0, 3)
-			}
-			$i = $i + width
-		} else {
-			$out = push_diagnostic($out, InvalidUtf8, $i, $i + 1)
+		# ASCII is always valid and never a bidirectional control or byte-order mark.
+		if b < 0x80 {
 			$i = $i + 1
+		} else {
+			width = if b >= 0xC2 and b <= 0xDF 2 else if b >= 0xE0 and b <= 0xEF 3 else if b >= 0xF0 and b <= 0xF4 4 else 0
+			var $valid = width > 0 and $i + width <= source.len()
+			var $j = 1
+			while $valid and $j < width {
+				c = byte(source, $i + $j)
+				$valid = c >= 0x80 and c <= 0xBF
+				$j = $j + 1
+			}
+			second = byte(source, $i + 1)
+			$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
+			if $valid {
+				third = byte(source, $i + 2)
+				bidi = (b == 0xD8 and second == 0x9C) or (b == 0xE2 and ((second == 0x80 and (third == 0x8E or third == 0x8F or (third >= 0xAA and third <= 0xAE))) or (second == 0x81 and third >= 0xA6 and third <= 0xA9)))
+				if bidi {
+					$out = push_diagnostic($out, BidiControlInSource, $i, $i + width)
+				}
+				if $i == 0 and b == 0xEF and second == 0xBB and third == 0xBF {
+					$out = push_diagnostic($out, Utf8ByteOrderMark, 0, 3)
+				}
+				$i = $i + width
+			} else {
+				$out = push_diagnostic($out, InvalidUtf8, $i, $i + 1)
+				$i = $i + 1
+			}
 		}
 	}
 	$out
@@ -272,7 +346,7 @@ lex = |source| {
 			}
 			previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
 			field_name = previous.end == start and (token_spelling(source, previous, ".") or token_spelling(source, previous, ".?")) and is_lower(b)
-			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if matches(source, start, "and") and $i - start == 3 Operator else if matches(source, start, "or") and $i - start == 2 Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
+			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if $i - start == 3 and b == 'a' and byte(source, start + 1) == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and byte(source, start + 1) == 'r' Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
 			if bad_dollar or bad_opaque or b >= 0x80 {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
@@ -1071,80 +1145,81 @@ nend = |nodes, id| (nodes.get(id) ?? missing_node).end
 TokenText : [OtherText, Dot, Comma, Colon, Underscore, DotDot, FatArrow, Arrow, As, Equals, DotQuestion, Question, Bar, Slash, Where, Var, ForBang, Dbg, Crash, App, Pipe, Return, Platform, Package, If, Hosted, For, Break, DotStar, Ellipsis, ColonEquals, DoubleColon, Minus, While, Module, Match, In, Import, Exposing, Expect, Else, DoubleQuestion, Bang, Exposes, Packages, Provides, Requires, Targets, Star, DoubleSlash, Percent, Plus, EqEq, NotEq, Less, Greater, LessEq, GreaterEq, And, Or, RangeExclusive, RangeInclusive]
 
 token_text : List(U8), RocSyntax.Token -> TokenText
-token_text = |source, t| {
-	len = t.end - t.start
+token_text = |source, t| token_text_bytes(source, t.start, t.end)
+
+# Generated byte comparisons avoid building a string per token.
+token_text_bytes : List(U8), U64, U64 -> TokenText
+token_text_bytes = |source, start, end| {
+	len = end - start
 	if len == 0 or len > 8 {
 		OtherText
 	} else {
-		match Str.from_utf8_lossy(source.sublist({ start: t.start, len })) {
-		"." => Dot
-			"," => Comma
-			":" => Colon
-			"_" => Underscore
-			".." => DotDot
-			"=>" => FatArrow
-			"->" => Arrow
-			"as" => As
-			"=" => Equals
-			".?" => DotQuestion
-			"?" => Question
-			"|" => Bar
-			"/" => Slash
-			"where" => Where
-			"var" => Var
-			"for!" => ForBang
-			"dbg" => Dbg
-			"crash" => Crash
-			"app" => App
-			"|>" => Pipe
-			"return" => Return
-			"platform" => Platform
-			"package" => Package
-			"if" => If
-			"hosted" => Hosted
-			"for" => For
-			"break" => Break
-			".*" => DotStar
-			"..." => Ellipsis
-			":=" => ColonEquals
-			"::" => DoubleColon
-			"-" => Minus
-			"while" => While
-			"module" => Module
-			"match" => Match
-			"in" => In
-			"import" => Import
-			"exposing" => Exposing
-			"expect" => Expect
-			"else" => Else
-			"??" => DoubleQuestion
-			"!" => Bang
-			"exposes" => Exposes
-			"packages" => Packages
-			"provides" => Provides
-			"requires" => Requires
-			"targets" => Targets
-			"*" => Star
-			"//" => DoubleSlash
-			"%" => Percent
-			"+" => Plus
-			"==" => EqEq
-			"!=" => NotEq
-			"<" => Less
-			">" => Greater
-			"<=" => LessEq
-			">=" => GreaterEq
-			"and" => And
-			"or" => Or
-			"..<" => RangeExclusive
-			"..=" => RangeInclusive
-			_ => OtherText
+		b0 = byte(source, start)
+		if len == 1 {
+			if b0 == '.' Dot else if b0 == ',' Comma else if b0 == ':' Colon else if b0 == '_' Underscore else if b0 == '=' Equals else if b0 == '?' Question else if b0 == '|' Bar else if b0 == '/' Slash else if b0 == '-' Minus else if b0 == '!' Bang else if b0 == '*' Star else if b0 == '%' Percent else if b0 == '+' Plus else if b0 == '<' Less else if b0 == '>' Greater else OtherText
+		} else if len == 2 {
+			b1 = byte(source, start + 1)
+			if b0 == '.' and b1 == '.' DotDot else if b0 == '=' and b1 == '>' FatArrow else if b0 == '-' and b1 == '>' Arrow else if b0 == 'a' and b1 == 's' As else if b0 == '.' and b1 == '?' DotQuestion else if b0 == '|' and b1 == '>' Pipe else if b0 == 'i' and b1 == 'f' If else if b0 == '.' and b1 == '*' DotStar else if b0 == ':' and b1 == '=' ColonEquals else if b0 == ':' and b1 == ':' DoubleColon else if b0 == 'i' and b1 == 'n' In else if b0 == '?' and b1 == '?' DoubleQuestion else if b0 == '/' and b1 == '/' DoubleSlash else if b0 == '=' and b1 == '=' EqEq else if b0 == '!' and b1 == '=' NotEq else if b0 == '<' and b1 == '=' LessEq else if b0 == '>' and b1 == '=' GreaterEq else if b0 == 'o' and b1 == 'r' Or else OtherText
+		} else if len == 3 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			if b0 == 'v' and b1 == 'a' and b2 == 'r' Var else if b0 == 'd' and b1 == 'b' and b2 == 'g' Dbg else if b0 == 'a' and b1 == 'p' and b2 == 'p' App else if b0 == 'f' and b1 == 'o' and b2 == 'r' For else if b0 == '.' and b1 == '.' and b2 == '.' Ellipsis else if b0 == 'a' and b1 == 'n' and b2 == 'd' And else if b0 == '.' and b1 == '.' and b2 == '<' RangeExclusive else if b0 == '.' and b1 == '.' and b2 == '=' RangeInclusive else OtherText
+		} else if len == 4 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			if b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!' ForBang else if b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e' Else else OtherText
+		} else if len == 5 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			if b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e' Where else if b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h' Crash else if b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k' Break else if b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e' While else if b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h' Match else OtherText
+		} else if len == 6 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			if b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n' Return else if b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd' Hosted else if b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e' Module else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' Import else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't' Expect else OtherText
+		} else if len == 7 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' Package else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's' Exposes else if b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's' Targets else OtherText
+		} else if len == 8 {
+			b1 = byte(source, start + 1)
+			b2 = byte(source, start + 2)
+			b3 = byte(source, start + 3)
+			b4 = byte(source, start + 4)
+			b5 = byte(source, start + 5)
+			b6 = byte(source, start + 6)
+			b7 = byte(source, start + 7)
+			if b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm' Platform else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g' Exposing else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's' Packages else if b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's' Provides else if b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's' Requires else OtherText
+		} else {
+			OtherText
 		}
 	}
 }
 
 is_text : Ctx, U64, TokenText -> Bool
 is_text = |ctx, pos, text| (ctx.texts.get(pos) ?? OtherText) == text
+
+## Append a node whose children are `first` followed by `rest`.
+emit_after : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64, List(U64) -> E
+emit_after = |nodes, children, kind, start, end, first, rest| {
+	index = nodes.len()
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: children.append(first).concat(rest), node: index }
+}
+
+finish_after : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, U64, List(U64) -> R
+finish_after = |pos, nodes, children, diags, kind, start, end, first, rest| {
+	index = nodes.len()
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: rest.len() + 1 }), children: children.append(first).concat(rest), diags, node: index }
+}
 
 ## Append a node with one child, without a transient child list.
 emit1 : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64 -> E
@@ -1266,7 +1341,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 			}
 			start = nstart($n, $left)
 			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args_ids, end: args_end, comma: _ } = collection(ctx, look + 1, $n, $c, $d, CloseRound, depth + 1)
-			{ nodes: $n, children: $c, node: call_node } = emit($n, $c, Call, start, args_end, [$left].concat(args_ids))
+			{ nodes: $n, children: $c, node: call_node } = emit_after($n, $c, Call, start, args_end, $left, args_ids)
 			$s = args_state
 			$left = call_node
 			$qualified = False
@@ -1288,7 +1363,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 			opening_state = look + 1
 			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args, end, comma: _ } = collection(ctx, opening_state + 1, $n, $c, $d, CloseRound, depth + 1)
 			start = nstart($n, $left)
-			{ nodes: $n, children: $c, node: nominal_node } = emit($n, $c, NominalApply, start, end, [$left].concat(args))
+			{ nodes: $n, children: $c, node: nominal_node } = emit_after($n, $c, NominalApply, start, end, $left, args)
 			$s = args_state
 			$left = nominal_node
 			$qualified = False
@@ -1722,7 +1797,7 @@ literal_suffix = |ctx, built_state, nodes, children, diags, built_node, allow_tr
 	}
 	if $type_ids.is_empty() { pos: $s, nodes: $n, children: $c, diags, node: built_node } else {
 		start = nstart($n, built_node)
-		finish($s, $n, $c, diags, TypedLiteral, start, $end, [built_node].concat($type_ids))
+		finish_after($s, $n, $c, diags, TypedLiteral, start, $end, built_node, $type_ids)
 	}
 }
 
@@ -2263,7 +2338,7 @@ type_atom = |ctx, initial, nodes, children, diags, depth| {
 		look = sig(ctx, after)
 		if kind == TypeName and tok(ctx, look).kind == NoSpaceOpenRound {
 			{ pos: items_state, nodes: n2, children: c2, diags: d1, ids: items_ids, end: items_end, comma: _ } = type_collection(ctx, look + 1, n1, c1, diags, CloseRound, TypeItem, depth + 1)
-			finish(items_state, n2, c2, d1, TypeApply, t.start, items_end, [base_node].concat(items_ids))
+			finish_after(items_state, n2, c2, d1, TypeApply, t.start, items_end, base_node, items_ids)
 		} else {
 			{ pos: after, nodes: n1, children: c1, diags, node: base_node }
 		}
@@ -2775,7 +2850,7 @@ type_where_alias_name = |ctx, initial, nodes, children, diags, depth| {
 	look = sig(ctx, after)
 	if tok(ctx, look).kind == NoSpaceOpenRound {
 		{ pos: items_state, nodes: n2, children: c2, diags: d1, ids: items_ids, end: items_end, comma: _ } = type_collection(ctx, look + 1, n1, c1, diags, CloseRound, TypeItem, depth + 1)
-		finish(items_state, n2, c2, d1, TypeApply, first.start, items_end, [named_node].concat(items_ids))
+		finish_after(items_state, n2, c2, d1, TypeApply, first.start, items_end, named_node, items_ids)
 	} else {
 		{ pos: after, nodes: n1, children: c1, diags, node: named_node }
 	}
@@ -2884,7 +2959,7 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 		after = if nominal sig(ctx, after_name + 1) else after_name
 		if tok(ctx, after).kind == NoSpaceOpenRound {
 			{ pos: args_state, nodes: n3, children: c3, diags: d1, ids: args, end, comma: _ } = pattern_collection(ctx, after + 1, n2, c2, diags, CloseRound, True, depth)
-			finish(args_state, n3, c3, d1, if nominal NominalPattern else TagPattern, t.start, end, [qualified].concat(args))
+			finish_after(args_state, n3, c3, d1, if nominal NominalPattern else TagPattern, t.start, end, qualified, args)
 		} else if nominal and tok(ctx, after).kind == OpenCurly {
 			{ pos: record_state, nodes: n3, children: c3, diags: d1, node: record_node } = pattern_record(ctx, after, n2, c2, diags, alternatives, depth)
 			end = nend(n3, record_node)
@@ -3274,7 +3349,7 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 			$mapper = access_node
 			$index = $index + 1
 		}
-		finish($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, [$mapper].concat(ids2))
+		finish_after($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, $mapper, ids2)
 	} else {
 		finish(s2, n2, c2, d2, if extension RecordUpdate else if record Record else Block, start, end2, ids2)
 	}

@@ -341,6 +341,43 @@ these observations do not implicate every nested record return. The eight
 controls, native runner and pinned observations are retained alongside the
 reproduction. A flat result alone has not resolved production parser ownership.
 
+== Ownership rewrite, 18 October 2026
+
+Final LIR of the optimized parser showed why the persistent buffer only bounded
+the damage. The recursive parsers took one `State` record holding the source,
+tokens and growing buffers. Parameter modes are solved optimistically, and
+reading fields never demands the whole record, so most parsers borrowed their
+state: callers kept a reference across each call and every append copied a
+shared tail. With plain lists in that record, parsing became quadratic
+(85,000 to 1.75 million instructions per statement from 256 to 4,096 statements).
+
+The parser now passes the source and tokens in a borrowed context and the
+position, nodes, children and diagnostics as separate parameters, returning them
+in flat result records that callers destructure immediately. Two further rules
+were needed. A function-level `var` reassigned inside the branch that produces
+a function's value is carried into the join after that branch and keeps the old
+list alive, so buffers use immutable bindings outside loops and loop-local vars
+inside them. Ending an inlined parser with an `emit` and a result-record literal,
+rather than a helper that builds the record, also let callers move its fields.
+A per-function count of increments of the nodes list in final LIR is zero, and
+per-construct cost is flat from 128 to 1,024 repetitions in every family.
+
+Token spellings the grammar compares are classified once per token by generated
+byte comparisons, and nodes with one or two children, or a known first child,
+no longer build a transient child list. Output is identical to the previous
+parser on the upstream corpus, fixtures, 2,000 generated cases and about 4,000
+local Roc sources.
+
+On this repository's `RocSyntax.roc` source (162 KB), a full parse fell from
+190 to 37 million retired instructions and from 65,143 to 5,650 allocations;
+tokenizing alone is 14 million. The reference comparison passed the 1.5 ratio
+on 29 of 33 inputs, against one before. That run shared a heavily loaded host,
+so individual ratios are noisy; the adjacent-statement families remain around two
+to three times the reference. `scripts/roc_syntax/repros/var-join.roc` retains a
+standalone reproduction of the `var` join: 2,050 allocations for 4,096 steps with
+a function-level `var`, versus 14 when it is declared in the branch or replaced by
+an immutable binding, on both the 15 and 17 October nightlies.
+
 == Local file sizing survey, 16 October 2026
 
 The temporary survey examined only sibling Git repositories on this machine.

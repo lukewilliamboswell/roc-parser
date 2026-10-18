@@ -217,3 +217,22 @@ upstream fix. The separate repeated-entrypoint correctness report is retained
 in `repeated-header.adoc` and tracked as
 https://github.com/roc-lang/roc/issues/12328[Roc #12328]; a shared cause has not
 been established.
+
+== Function-level `var` carried across a join
+
+`var-join.roc` builds the same list three ways. Mode 0 reassigns a
+function-level `var` from a destructured call result inside the branch that
+produces the function's value; modes 1 and 2 declare the `var` in that branch
+or use an immutable binding. Final LIR carries the mode 0 variable into the join
+after the branch, so the list is shared at the following append.
+
+[source,shell]
+----
+"$ROC" build --no-cache --opt=speed --fuzz scripts/roc_syntax/repros/var-join.roc \
+  --output=.roc-parser-tmp/var-join
+printf '\x00' > .roc-parser-tmp/var-join-0 && .roc-parser-tmp/var-join replay .roc-parser-tmp/var-join-0
+----
+
+The worker exits with its diagnostic by design. With 4,096 steps, modes 0, 1 and
+2 report 2,050, 14 and 14 allocations, with identical output, on both
+`nightly-2026-10-15-38e6c42` and `nightly-2026-10-17-5f126ac`.
