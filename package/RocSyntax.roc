@@ -324,7 +324,7 @@ lex = |source| {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, start + 1)
 			}
 			while $i < source.len() and is_space(byte(source, $i)) {
-				if byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
+				if byte(source, $i) != ' ' and byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
 					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $i, $i + 1)
 				}
 				$i = $i + 1
@@ -347,9 +347,14 @@ lex = |source| {
 					$i = $i + 1
 				}
 			}
-			previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
-			field_name = previous.end == start and (spelled1(source, previous, '.') or spelled2(source, previous, '.', '?')) and is_lower(b)
-			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if $i - start == 3 and b == 'a' and byte(source, start + 1) == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and byte(source, start + 1) == 'r' Operator else if keyword(source, start, $i) Keyword else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else LowerIdent
+			before = if start > 0 byte(source, start - 1) else 0
+			field_name = if is_lower(b) and (before == '.' or before == '?') {
+				previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
+				previous.end == start and (spelled1(source, previous, '.') or spelled2(source, previous, '.', '?'))
+			} else {
+				False
+			}
+			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if $i - start == 3 and b == 'a' and byte(source, start + 1) == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and byte(source, start + 1) == 'r' Operator else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else if keyword(source, start, $i) Keyword else LowerIdent
 			if bad_dollar or bad_opaque or b >= 0x80 {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
@@ -431,7 +436,7 @@ lex = |source| {
 				_ => Invalid
 			}
 			# Longest known spelling, never an unbounded punctuation run.
-			width = operator_width(source, start)
+			width = if $kind == Operator or $kind == Punctuation operator_width(source, start) else 1
 			if width > 1 {
 				$i = start + width
 				$kind = if b == '.' and width == 3 and (byte(source, start + 2) == '<' or byte(source, start + 2) == '=') Operator else if b == '.' or b == ':' Punctuation else Operator
