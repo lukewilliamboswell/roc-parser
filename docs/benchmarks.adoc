@@ -372,10 +372,10 @@ A one-microsecond reference floor avoids division by zero and exaggerated tiny
 input ratios. The default `--max-reference-ratio 1.5` requires runtime within 1.5 times
 the optimized reference on every input. Exceeding its lower-bound ratio returns a
 nonzero exit and saves the exact request and timings under `failures/` for replay.
-After the October 2026 ownership rewrite, a run on a loaded host passed the 1.5
-ratio on 29 of 33 inputs; adjacent-statement families remain around two to three
-times the reference and are the remaining optimization work. Increasing the threshold
-does not resolve them.
+On 19 October 2026 all 33 inputs passed the 1.5 lower-bound ratio on a loaded
+host (load average about 11). Medians on that host still exceeded 1.5 for some
+adjacent-statement and unclosed inputs, so compare retired instructions when the
+host is busy: those families run 1.1 to 1.35 times the reference's instructions.
 Use `--replay failures/<hash>-<mode>.json` to time a saved input again.
 
 `--smoke` selects only two tiny inputs and one one-millisecond sample, checks the

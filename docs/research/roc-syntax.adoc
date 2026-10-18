@@ -422,6 +422,16 @@ still about 40 percent of the Roc cost on real files. Its main loop carries the
 token, diagnostic and interpolation lists, and the optimized code spills them
 around every token; a lookup table for identifier bytes saved under one percent.
 
+Wall-clock ratios trailed instruction ratios on nested and adjacent inputs. The
+LLVM backend gives every call site in a function its own stack slots
+(roc-lang/roc#12423), and Roc inlines functions with a single caller, so
+`statement` and `primary` had 13 KB and 6.5 KB frames. They now handle the
+common forms themselves and send the rest to `statement_form` and
+`primary_compound`, each called from two sites so it stays out of line. That cut
+adjacent_parenthesized to 1.34 and adjacent_upper_calls to 1.14 times the
+reference's instructions, and the full reference comparison passed on all 33
+inputs, against 29 before, on a host with load average about 11.
+
 == Local file sizing survey, 16 October 2026
 
 The temporary survey examined only sibling Git repositories on this machine.
