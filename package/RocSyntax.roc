@@ -1564,6 +1564,27 @@ collection = |ctx, initial, nodes, children, diags, closing, depth| {
 primary : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool -> R
 primary = |ctx, s, nodes, children, diags, depth, punned| {
 	t = tok(ctx, s)
+	# Hot leaves stay here; every other form goes to `primary_compound`. It is
+	# called from more than one site so it stays out of line: Roc inlines
+	# single-use functions, and the LLVM backend gives every call site in a
+	# function its own stack slots (roc-lang/roc#12423), so inlining the
+	# compound forms here made each nested operand cost a 6.5 KB frame.
+	match t.kind {
+		LowerIdent if !is_text(ctx, s, Underscore) => finish(s + 1, nodes, children, diags, Identifier, t.start, t.end, [])
+		UpperIdent if byte(ctx.source, t.start) != '@' => finish(s + 1, nodes, children, diags, Identifier, t.start, t.end, [])
+		OpenRound | NoSpaceOpenRound | OpenSquare => {
+			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
+			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_count != 1 Tuple else Parenthesized
+			finish_items(items_state, n1, c1, d1, kind, t.start, items_end, items_count, items_first, items_rest)
+		}
+		Keyword => primary_compound(ctx, s, nodes, children, diags, depth, punned)
+		_ => primary_compound(ctx, s, nodes, children, diags, depth, punned)
+	}
+}
+
+primary_compound : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool -> R
+primary_compound = |ctx, s, nodes, children, diags, depth, punned| {
+	t = tok(ctx, s)
 	match t.kind {
 		LowerIdent if is_text(ctx, s, Underscore) => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 		UpperIdent if byte(ctx.source, t.start) == '@' => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
@@ -1705,6 +1726,39 @@ parse_source = |source, mode| {
 # accidentally accepted as a binary expression operator.
 statement : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
 statement = |ctx, initial, nodes, children, diags, depth| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	following_text = ctx.texts.get(significant_position(ctx.tokens, s + 1)) ?? OtherText
+	# Expression statements and plain declarations stay here; every other form
+	# goes to `statement_form`, called from two sites so it stays out of line
+	# (see `primary`): inlined, its forms gave each statement a 13 KB frame.
+	plain = depth < 128 and match t.kind {
+		# A field name after `.` can still spell a keyword such as `var`.
+		LowerIdent => (ctx.texts.get(s) ?? OtherText) == OtherText and !(following_text == Equals or following_text == Colon or following_text == Dot)
+		UpperIdent => depth > 0 and !type_declaration_start(ctx, s) and !has_pattern_assignment(ctx, s)
+		OpenRound | OpenCurly => !has_pattern_assignment(ctx, s)
+		Keyword => False
+		_ => True
+	}
+	if plain {
+		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s, nodes, children, diags, 0, depth, True)
+		end = nend(n1, value_node)
+		finish1(value_state, n1, c1, d1, ExpressionStatement, t.start, end, value_node)
+	} else if depth < 128 and t.kind == LowerIdent and following_text == Equals {
+		{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
+		after_name = sig(ctx, name_state)
+		{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = expression(ctx, after_name + 1, n1, c1, d1, 0, depth, False)
+		end = nend(n2, value_node)
+		finish2(value_state, n2, c2, d2, Declaration, t.start, end, name_node, value_node)
+	} else if t.kind == Keyword {
+		statement_form(ctx, initial, nodes, children, diags, depth)
+	} else {
+		statement_form(ctx, initial, nodes, children, diags, depth)
+	}
+}
+
+statement_form : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+statement_form = |ctx, initial, nodes, children, diags, depth| {
 	s = sig(ctx, initial)
 	t = tok(ctx, s)
 	following_pos = significant_position(ctx.tokens, s + 1)
