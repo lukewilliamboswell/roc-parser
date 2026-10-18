@@ -20,9 +20,12 @@ practice, and rejects the rest with an error instead of guessing. If your
 files use anchors, tags or several documents in one file, read
 <<yaml-unsupported,what is rejected>> first.
 
-Every example on this page comes from
-link:{src}/docs/examples/yaml-guide.roc[`docs/examples/yaml-guide.roc`],
-which CI runs, and imports `parser.Yaml`.
+The decoding examples come from
+link:{src}/docs/examples/yaml-guide.roc[`docs/examples/yaml-guide.roc`];
+the source-highlighting example comes from
+link:{src}/docs/examples/yaml-source-guide.roc[`docs/examples/yaml-source-guide.roc`].
+CI checks, tests and runs both against the package beside this manual.
+Both import `parser.Yaml`.
 
 == Decode a document into a record
 
@@ -270,8 +273,145 @@ include::examples/yaml-guide.roc[tag=quoted-run,indent=0]
 include::examples/yaml-guide.expected[lines=8..9]
 ----
 
+[#yaml-source]
+== Highlight the original source
+
+Use `Yaml.tokenize_str(text)` when you need to display YAML as written.
+Unlike a decoded tree, its result retains whitespace, comments, quotes,
+line endings and punctuation. `Yaml.tokenize_bytes(bytes)` also accepts
+arbitrary bytes, including invalid UTF-8. Both return this shape:
+
+[source,roc]
+----
+{
+    source : List(U8),
+    tokens : List(Yaml.Token),
+    diagnostics : List(Yaml.Diagnostic),
+    status : [Complete, Recovered, Limited],
+}
+----
+
+Each token has `kind`, `start`, `end`, `role` and `scalar` fields. `start`
+and `end` are `U64` byte offsets into `source`, with `start` included and
+`end` excluded. They are byte coordinates, not character indexes: a UTF-8
+`é` occupies two bytes and CRLF occupies two bytes. Nonempty tokens cover
+the entire input in order without gaps or overlap; empty input has no
+tokens. There is no synthetic end-of-file token. Concatenating the slices
+reproduces the input byte for byte, including malformed bytes.
+
+The scanner distinguishes these token kinds:
+
+[cols="1,3"]
+|===
+|Source |Kinds
+
+|Trivia
+|`Whitespace`, `Comment`
+
+|Scalar text
+|`PlainScalar`, `SingleQuotedScalar`, `DoubleQuotedScalar`
+
+|Block scalars
+|`BlockScalarHeader`, `BlockScalarContent`
+
+|Block punctuation
+|`MappingValue`, `SequenceEntry`, `ExplicitKey`
+
+|Flow punctuation
+|`FlowSequenceStart`, `FlowSequenceEnd`, `FlowMappingStart`,
+ `FlowMappingEnd`, `FlowEntry`
+
+|Names and stream markers
+|`Anchor`, `Alias`, `Tag`, `Directive`, `DocumentStart`, `DocumentEnd`
+
+|Recovery
+|`Invalid`
+|===
+
+`role` is `Key`, `Value` or `Other`. `scalar` is `Text`, `Boolean`, `Null`
+or `Number`; it describes lexical spelling without constructing a semantic
+value or imposing the tree parser's integer range. Quoted and block scalar
+contents stay text. Plain scalars follow YAML 1.2 spelling: `on` is text,
+`false` is boolean, and `null` is null. A mapping key's role takes precedence
+for highlighting, so `on:` and `true:` both get `PropertyName`.
+
+`Yaml.highlight_category(token)` maps a token to `Trivia`, `CommentText`,
+`PropertyName`, `StringText`, `NumericLiteral`, `BooleanLiteral`,
+`NullLiteral`, `Symbol`, `Name`, `TypeName` or `InvalidText`. Use these
+categories as theme keys in either HTML or PDF output. The helper returns
+no rendered markup; your output writer copies the original slices and
+escapes or encodes them for its own output format.
+
+This example uses CRLF and non-ASCII text, a workflow key, a URL fragment,
+and a shell script in a block scalar:
+
+[source,roc]
+----
+include::examples/yaml-source-guide.roc[tag=source,indent=0]
+----
+
+Passing each piece to an output writer keeps the same category and byte
+range in both renderers. `copy_source` is a minimal sink that discards the
+theme and joins the original bytes; a production writer can stream each
+slice directly. Inspecting a few categories:
+
+[source,roc]
+----
+include::examples/yaml-source-guide.roc[tag=source-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/yaml-source-guide.expected[]
+----
+
+`#` starts a comment only in a YAML comment position. Quoted `#`, a URL's
+`#setup` fragment, and the shell comment inside `run: |-` stay scalar
+content. Literal `|`, folded `>`, and chomping or indentation indicators
+remain in their original spelling. GitHub Actions `${{ ... }}` expressions
+remain YAML scalar text; an application can add expression colouring as a
+second overlay within the returned spans.
+
+=== Recovery and semantic validation
+
+Tokenization does not require successful decoding. It recognizes anchors,
+aliases, tags and stream markers even where the semantic parser rejects
+them. `Complete` means the lexical scan completed without a diagnosed
+problem; it does not establish that the YAML is semantically valid.
+Duplicate keys and unsupported decoding features still need a semantic
+check when you intend to load configuration.
+
+Each diagnostic has a `code` and half-open `start`/`end` byte coordinates.
+Codes are `UnclosedQuote`, `InvalidEscape`, `UnclosedCollection`,
+`UnexpectedDelimiter`, `InvalidIndentation`, `InvalidBlockHeader`,
+`InvalidCharacter`, `InvalidUtf8` and `ResourceLimit`. `Recovered` reports
+lexical problems while keeping usable tokens and all original bytes.
+`Limited` reports more than 256 simultaneously open flow collections.
+The scanner emits an `Invalid` token covering the remaining input and a
+`ResourceLimit` diagnostic, so callers can display those bytes unchanged.
+This lexical limit is separate from semantic decoding's 100-level nesting
+limit. An unclosed quoted scalar retains the bytes through end of input as
+one quoted token and reports `UnclosedQuote`. Invalid escapes stay inside
+the quoted token with diagnostics. Unmatched closing flow delimiters remain
+punctuation tokens; unclosed collections report their opening spans through
+end of input. These recovery choices keep a broken example displayable;
+they do not repair it or supply a valid semantic value.
+
+[source,roc]
+----
+include::examples/yaml-source-guide.roc[tag=recovery,indent=0]
+----
+
+If a renderer cannot use a token's category, it can always copy its source
+slice with the default text style. Keep `source` as bytes when exact
+preservation matters: converting invalid UTF-8 to a string with replacement
+characters changes those bytes. A text output format may instead show a
+replacement glyph while retaining the original byte coordinates for
+reporting diagnostics.
+
 [#yaml-unsupported]
-== What is rejected
+== What semantic decoding rejects
 
 The following are outside the supported subset. Each one is an
 `InvalidYaml` error, never a silently different value:
