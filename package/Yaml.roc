@@ -1,3 +1,4 @@
+import YamlSource
 import YamlScalar
 import Parser
 import Utf8
@@ -17,6 +18,10 @@ import Utf8
 ## complex keys, multi-line flow collections, multi-line quoted or plain
 ## scalars, and multi-document streams are rejected with a parse error rather
 ## than misread.
+##
+## For source-preserving syntax highlighting, [Yaml.tokenize_str] and
+## [Yaml.tokenize_bytes] return original byte spans and diagnostics even for
+## incomplete snippets. [Yaml.highlight_category] provides theme categories.
 ##
 ## There are two ways to read a document:
 ##
@@ -46,6 +51,65 @@ Yaml := [
 	## Location and explanation of invalid YAML input. Lines and columns are
 	## one-based; a column counts bytes from the start of its line.
 	Error : { line : U64, column : U64, message : Str }
+
+	## Half-open byte interval in the original source. Offsets count UTF-8 bytes,
+	## not characters, and preserve CRLF without normalization.
+	Span : { start : U64, end : U64 }
+
+	## Stable lexical kinds; punctuation spelling is available in the source span.
+	## Quotes include their delimiters. Block scalar content includes its original
+	## indentation and line endings. Whitespace and comments are retained.
+	TokenKind : [Whitespace, Comment, PlainScalar, SingleQuotedScalar, DoubleQuotedScalar, MappingValue, SequenceEntry, ExplicitKey, FlowSequenceStart, FlowSequenceEnd, FlowMappingStart, FlowMappingEnd, FlowEntry, BlockScalarHeader, BlockScalarContent, Anchor, Alias, Tag, Directive, DocumentStart, DocumentEnd, Invalid]
+
+	## A lexical mapping-key role, a scalar value, or punctuation/trivia.
+	## Roles describe source context, not the validity or decoded type of a node.
+	TokenRole : [Key, Value, Other]
+
+	## YAML 1.2 core-schema category of a plain scalar. Quoted and block scalars
+	## are `Text`. Numeric classification does not depend on machine integer range.
+	ScalarCategory : [Text, Boolean, Null, Number]
+
+	## A nonempty original-source interval. Tokens form a contiguous partition of
+	## the entire input: no gaps, overlap, synthetic tokens, or end-of-file token.
+	Token : { kind : TokenKind, start : U64, end : U64, role : TokenRole, scalar : ScalarCategory }
+
+	## Lexical problems found while preserving displayable source.
+	DiagnosticCode : [UnclosedQuote, InvalidEscape, UnclosedCollection, UnexpectedDelimiter, InvalidIndentation, InvalidBlockHeader, InvalidCharacter, InvalidUtf8, ResourceLimit]
+
+	## A lexical issue located by its original-source byte interval.
+	Diagnostic : { code : DiagnosticCode, start : U64, end : U64 }
+
+	## `Complete` means no lexical issue was detected; it does not establish YAML
+	## semantic validity. `Recovered` preserves malformed source with diagnostics.
+	## `Limited` preserves the input after reaching 256 open flow collections;
+	## the remaining bytes become one `Invalid` token with a `ResourceLimit` issue.
+	TokenStatus : [Complete, Recovered, Limited]
+
+	## Source retained once, its lossless token partition, and located diagnostics.
+	## Tokenization is independent of the semantic parser's supported subset.
+	Tokenized : { source : List(U8), tokens : List(Token), diagnostics : List(Diagnostic), status : TokenStatus }
+
+	## Theme-independent categories, usable by HTML, PDF, or terminal renderers.
+	HighlightCategory : [Trivia, CommentText, PropertyName, StringText, NumericLiteral, BooleanLiteral, NullLiteral, Symbol, Name, TypeName, InvalidText]
+
+	## Tokenize source text for highlighting, including incomplete YAML snippets.
+	## Slicing each token interval from `source` and concatenating them reproduces
+	## the input exactly, including comments, whitespace, CRLF, and Unicode.
+	## Anchors, aliases, tags, directives and document markers are recognized
+	## lexically even when [Yaml.parse_str] rejects the document.
+	tokenize_str : Str -> Tokenized
+	tokenize_str = YamlSource.tokenize_str
+
+	## Tokenize arbitrary bytes without discarding invalid UTF-8. Diagnostics
+	## report malformed encoding; tokens still retain every original byte.
+	tokenize_bytes : List(U8) -> Tokenized
+	tokenize_bytes = YamlSource.tokenize_bytes
+
+	## Map a token to a theme category without rendering or changing its text.
+	## Mapping keys use `PropertyName`; scalar values use their core-schema
+	## category. Quoted values and block-scalar scripts remain `StringText`.
+	highlight_category : Token -> HighlightCategory
+	highlight_category = YamlSource.highlight_category
 
 	## Compare two parsed YAML values structurally.
 	is_eq : _
