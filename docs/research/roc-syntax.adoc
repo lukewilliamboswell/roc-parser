@@ -376,7 +376,51 @@ so individual ratios are noisy; the adjacent-statement families remain around tw
 to three times the reference. `scripts/roc_syntax/repros/var-join.roc` retains a
 standalone reproduction of the `var` join: 2,050 allocations for 4,096 steps with
 a function-level `var`, versus 14 when it is declared in the branch or replaced by
-an immutable binding, on both the 15 and 17 October nightlies.
+an immutable binding, on both the 15 and 17 October nightlies. It is filed
+upstream as roc-lang/roc#12419. A second filed issue, roc-lang/roc#12420, covers
+a string-pattern `match` in a loop body, which stops ARC passing dying arguments
+to owned variants (`scripts/roc_syntax/repros/str-match-variant.roc`); the
+rewritten parser no longer has that shape.
+
+== Per-construct overhead, 19 October 2026
+
+With copying gone, the remaining gap was constant work per token and per node.
+Retired-instruction counts are stable on a loaded host where wall-clock ratios
+are not, so this round compared instructions per parse against the optimized
+Zig reference on the same inputs.
+
+* Statement dispatch and the expression loop looked up the same token text up
+  to twenty times; they now read it once.
+* `List.concat` reallocates to an exact fit, so appending child ids through it
+  gave up geometric growth. Ids are appended one at a time.
+* Every non-empty collection allocated a transient id list. Expression
+  collections, blocks and records now keep their first item apart, and
+  three-child nodes append directly. With basic-cli 0.25.0 an allocation and
+  free costs about 520 instructions, partly because its host hashes every freed
+  pointer to find resource finalizers (fixed in basic-cli 0.26.0-rc2).
+* Tokenizing was half of a real file's cost. Short fixed spellings such as `.`,
+  `"""` and `_` built and validated a `Str` for each comparison and now compare
+  bytes; identifiers are scanned once; only tokens that can spell a grammar word
+  go through the spelling matcher; brackets skip the multi-character operator
+  matcher, and uppercase names skip the keyword matcher.
+
+[cols="2,1,1",options="header"]
+|===
+|Input |Before (instructions / reference) |After
+|`adjacent_parenthesized`, 2,048 statements |2.60 |1.42
+|`adjacent_upper_calls`, 2,048 statements |1.85 |1.21
+|`unclosed`, 2,048 levels |1.49 |1.24
+|`operators`, 2,048 operands |1.27 |1.09
+|`definitions`, 2,048 statements |1.03 |0.87
+|`package/Markdown.roc` |1.65 |1.22
+|`package/CSV.roc` |1.63 |1.25
+|===
+
+Output is identical to the previous parser on the same 9,141 inputs, and
+per-construct cost remains flat from 128 to 1,024 repetitions. Tokenizing is
+still about 40 percent of the Roc cost on real files. Its main loop carries the
+token, diagnostic and interpolation lists, and the optimized code spills them
+around every token; a lookup table for identifier bytes saved under one percent.
 
 == Local file sizing survey, 16 October 2026
 
