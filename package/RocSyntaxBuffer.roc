@@ -15,10 +15,10 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), t
 
 	## Preserve old snapshots and copy only the bounded radix path to a new value.
 	append : RocSyntaxBuffer(a), a -> RocSyntaxBuffer(a)
-	append = |buffer, value| {
-		index = buffer.count
-		if buffer.tail.len() < 32 {
-			RocSyntaxBuffer.{ count: index + 1, blocks: buffer.blocks, tail: buffer.tail.append(value) }
+	append = |RocSyntaxBuffer.{ count, blocks, tail }, value| {
+		index = count
+		if tail.len() < 32 {
+			RocSyntaxBuffer.{ count: index + 1, blocks, tail: tail.append(value) }
 		} else {
 			# Archive a complete leaf once per 32 appends. The active tail only
 			# copies its bounded leaf when a parser snapshot still retains it.
@@ -27,14 +27,59 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), t
 			i3 = (full_start // 32768) % 32
 			i2 = (full_start // 1024) % 32
 			i1 = (full_start // 32) % 32
-			{ list: root, prev: b3 } = extract(buffer.blocks, i4)
+			{ list: root, prev: b3 } = extract(blocks, i4)
 			{ list: rest3, prev: b2 } = extract(b3, i3)
 			{ list: rest2, prev: b1 } = extract(b2, i2)
-			next1 = put(b1, i1, buffer.tail)
+			next1 = put(b1, i1, tail)
 			next2 = put(rest2, i2, next1)
 			next3 = put(rest3, i3, next2)
-			RocSyntaxBuffer.{ count: index + 1, blocks: put(root, i4, next3), tail: [value] }
+			RocSyntaxBuffer.{ count: index + 1, blocks: put(root, i4, next3), tail: List.with_capacity(32).append(value) }
 		}
+	}
+
+	## Archive one complete 32-entry leaf held outside the buffer. Callers keep the
+	## active tail as a direct field of their own state so appends reuse it in place;
+	## an active tail nested inside this record is projected and shared before append
+	## in native builds, copying it on every append.
+	archive : RocSyntaxBuffer(a), List(a) -> RocSyntaxBuffer(a)
+	archive = |RocSyntaxBuffer.{ count, blocks, tail }, leaf| {
+		full_start = count
+		i4 = full_start // 1048576
+		i3 = (full_start // 32768) % 32
+		i2 = (full_start // 1024) % 32
+		i1 = (full_start // 32) % 32
+		{ list: root, prev: b3 } = extract(blocks, i4)
+		{ list: rest3, prev: b2 } = extract(b3, i3)
+		{ list: rest2, prev: b1 } = extract(b2, i2)
+		next1 = put(b1, i1, leaf)
+		next2 = put(rest2, i2, next1)
+		next3 = put(rest3, i3, next2)
+		RocSyntaxBuffer.{ count: count + leaf.len(), blocks: put(root, i4, next3), tail }
+	}
+
+	## Look up an index across archived leaves and an external active tail.
+	get_with : RocSyntaxBuffer(a), List(a), U64 -> Try(a, [OutOfBounds])
+	get_with = |buffer, tail, index| if index >= buffer.count tail.get(index - buffer.count) else buffer.get(index)
+
+	## Flatten archived leaves followed by an external active tail.
+	to_list_with : RocSyntaxBuffer(a), List(a) -> List(a)
+	to_list_with = |buffer, tail| {
+		var $out = List.with_capacity(buffer.count + tail.len())
+		for b3 in buffer.blocks {
+			for b2 in b3 {
+				for b1 in b2 {
+					for leaf in b1 {
+						for value in leaf {
+							$out = $out.append(value)
+						}
+					}
+				}
+			}
+		}
+		for value in tail {
+			$out = $out.append(value)
+		}
+		$out
 	}
 
 	## Append a list in order, without flattening previous contents.
@@ -59,7 +104,7 @@ RocSyntaxBuffer(a) := { count : U64, blocks : List(List(List(List(List(a))))), t
 
 	to_list : RocSyntaxBuffer(a) -> List(a)
 	to_list = |buffer| {
-		var $out = []
+		var $out = List.with_capacity(buffer.count)
 		for b3 in buffer.blocks {
 			for b2 in b3 {
 				for b1 in b2 {
@@ -159,6 +204,23 @@ expect {
 	}
 	final_values = $buffer.to_list()
 	$prefixes.all(|prefix| prefix.to_list() == final_values.take_first(prefix.len()) and prefix.get(prefix.len()) == Err(OutOfBounds)) and $buffer.get(32769) == Ok(32769)
+}
+
+expect {
+	# External active tails archive exactly at leaf boundaries.
+	var $buffer = RocSyntaxBuffer.empty({})
+	var $tail = []
+	var $i = 0.U64
+	while $i < 2085 {
+		if $tail.len() == 32 {
+			$buffer = $buffer.archive($tail)
+			$tail = []
+		}
+		$tail = $tail.append($i)
+		$i = $i + 1
+	}
+	flat = $buffer.to_list_with($tail)
+	flat.len() == 2085 and flat.first() == Ok(0) and flat.last() == Ok(2084) and $buffer.get_with($tail, 1023) == Ok(1023) and $buffer.get_with($tail, 2084) == Ok(2084) and $buffer.get_with($tail, 2085) == Err(OutOfBounds) and flat.map_with_index(|v, i| v == i).all(|ok| ok)
 }
 
 expect {
