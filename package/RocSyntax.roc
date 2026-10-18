@@ -1,5 +1,3 @@
-import RocSyntaxBuffer
-
 ## Lossless parsing of Roc source into tokens, syntax trees and diagnostics.
 ## Byte spans are half-open. Comments and whitespace are tokens.
 ##
@@ -9,9 +7,8 @@ import RocSyntaxBuffer
 ## module, app, package and platform headers retain their syntax structure.
 ## Parsing does not resolve names or establish that a program typechecks.
 ##
-## Parsing retains the source once and builds persistent radix buffers, then
-## returns nodes/children as flat lists. Retained recursive states copy bounded
-## radix paths instead of the entire accumulated tree.
+## Parsing retains the source once and appends nodes and children to flat lists
+## that each parser receives and returns directly, so they stay uniquely owned.
 ## Nesting is bounded at 128; documents over 1,048,576 tokens retain all tokens but
 ## skip syntax construction with `Limited` status. Malformed input returns a
 ## partial tree and diagnostics, including arbitrary non-UTF-8 source bytes.
@@ -108,16 +105,6 @@ RocSyntax :: [].{
 }
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
-
-Ctx : { source : List(U8), tokens : List(RocSyntax.Token) }
-
-State := { pos : U64, nodes : RocSyntaxBuffer(RocSyntax.Node), children : RocSyntaxBuffer(U64), node_tail : List(RocSyntax.Node), child_tail : List(U64), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool, limited : Bool, in_guard : Bool, last : U64 }
-
-# Parsers return the produced node in `State.last` rather than a nested
-# `{ state, node }` record. Destructuring a nested result projects and increments
-# the whole state before the result is released, so later appends copy shared
-# tails (roc-lang/roc#12327).
-Built : State
 
 byte : List(U8), U64 -> U8
 byte = |bytes, at| bytes.get(at) ?? 0
@@ -393,429 +380,7 @@ lex = |source| {
 	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: False }
 }
 
-peek : Ctx, State -> RocSyntax.Token
-peek = |ctx, s| ctx.tokens.get(s.pos) ?? { kind: EndOfFile, start: ctx.source.len(), end: ctx.source.len() }
-
-skip_trivia : Ctx, State -> State
-skip_trivia = |ctx, State.{ pos, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last }| {
-	var $pos = pos
-	var $done = False
-	while !$done {
-		kind = (ctx.tokens.get($pos) ?? { kind: EndOfFile, start: ctx.source.len(), end: ctx.source.len() }).kind
-		if kind == Whitespace or kind == Comment {
-			$pos = $pos + 1
-		} else {
-			$done = True
-		}
-	}
-	State.{ pos: $pos, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last }
-}
-
-spelling : Ctx, State, Str -> Bool
-spelling = |ctx, s, text| {
-	t = peek(ctx, s)
-	t.end - t.start == text.count_utf8_bytes() and matches(ctx.source, t.start, text)
-}
-
-issue : Ctx, State, RocSyntax.DiagnosticCode, U64, U64 -> State
-issue = |_ctx, s, code, start, end| {
-	{ ..s, diagnostics: push_diagnostic(s.diagnostics, code, start, end), unsupported: s.unsupported or code == UnsupportedSyntax, limited: s.limited or code == ResourceLimit }
-}
-
-add_node : Ctx, State, RocSyntax.NodeKind, U64, U64, List(U64) -> Built
-add_node = |_ctx, State.{ pos, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last: _ }, kind, start, end, ids| {
-	# Active tails are direct State fields: a tail nested in the buffer record
-	# is projected, incremented and then reserved, copying it on every append.
-	index = nodes.len() + node_tail.len()
-	node = { kind, start, end, children_start: children.len() + child_tail.len(), children_len: ids.len() }
-	{ buffer: next_nodes, tail: next_node_tail } = push_tail(nodes, node_tail, node)
-	var $children = children
-	var $child_tail = child_tail
-	for id in ids {
-		{ buffer: c, tail: t } = push_tail($children, $child_tail, id)
-		$children = c
-		$child_tail = t
-	}
-	State.{ pos, nodes: next_nodes, children: $children, node_tail: next_node_tail, child_tail: $child_tail, diagnostics, unsupported, limited, in_guard, last: index }
-}
-
-push_tail : RocSyntaxBuffer(a), List(a), a -> { buffer : RocSyntaxBuffer(a), tail : List(a) }
-push_tail = |buffer, tail, value| {
-	if tail.len() < 32 { buffer, tail: tail.append(value) } else { buffer: buffer.archive(tail), tail: List.with_capacity(32).append(value) }
-}
-
-with_last : Ctx, State, U64 -> State
-with_last = |_ctx, State.{ pos, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last: _ }, node| {
-	State.{ pos, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last: node }
-}
-
-node_get : Ctx, State, U64 -> Try(RocSyntax.Node, [OutOfBounds])
-node_get = |_ctx, s, id| s.nodes.get_with(s.node_tail, id)
-
-child_get : Ctx, State, U64 -> Try(U64, [OutOfBounds])
-child_get = |_ctx, s, index| s.children.get_with(s.child_tail, index)
-
-node_count : Ctx, State -> U64
-node_count = |_ctx, s| s.nodes.len() + s.node_tail.len()
-
-node_start : Ctx, State, U64 -> U64
-node_start = |ctx, s, id| (node_get(ctx, s, id) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).start
-
-node_end : Ctx, State, U64 -> U64
-node_end = |ctx, s, id| (node_get(ctx, s, id) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).end
-
-# Exact binding powers from src/parse/Parser.zig at 7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5.
-binding : Ctx, State -> { left : U64, right : U64 }
-binding = |ctx, s| {
-	t = peek(ctx, s)
-	text = if t.end - t.start <= 3 Str.from_utf8_lossy(ctx.source.sublist({ start: t.start, len: t.end - t.start })) else ""
-	match text {
-		"*" | "/" | "//" | "%" => { left: 32, right: 33 }
-		"+" => { left: 22, right: 23 }
-		"-" if binary_minus(ctx, s) => { left: 22, right: 23 }
-		"??" => { left: 20, right: 21 }
-		"?" => { left: 18, right: 19 }
-		"==" => { left: 17, right: 17 }
-		"!=" => { left: 15, right: 15 }
-		"<" => { left: 13, right: 13 }
-		">" => { left: 11, right: 11 }
-		"<=" => { left: 9, right: 9 }
-		">=" => { left: 7, right: 7 }
-		"and" => { left: 6, right: 5 }
-		"or" => { left: 4, right: 3 }
-		"..<" | "..=" => { left: 2, right: 3 }
-		_ => { left: 0, right: 0 }
-	}
-}
-
-expression : Ctx, State, U64, U64, Bool -> Built
-expression = |ctx, initial, minimum, depth, punned| {
-	s = skip_trivia(ctx, initial)
-	first = peek(ctx, s)
-	sync = declaration_sync(ctx, s)
-	if sync.sync {
-		return add_node(ctx, issue(ctx, s, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
-	}
-	if depth >= 128 {
-		limited = issue(ctx, s, ResourceLimit, first.start, first.end)
-		add_node(ctx, at_pos(ctx, limited, limited.pos + if first.kind == EndOfFile 0 else 1), ErrorNode, first.start, first.end, [])
-	} else {
-		next_pos = significant_position(ctx.tokens, s.pos + 1)
-		package_qualified = (minimum == 100 or minimum == 101) and first.kind == LowerIdent and token_spelling(ctx.source, source_token(ctx, s, next_pos), ".") and source_token(ctx, s, next_pos + 1).kind == UpperIdent
-		built_state = primary(ctx, s, depth, punned)
-		built_node = built_state.last
-		grouped_tuple = (minimum == 100 or minimum == 101) and (node_get(ctx, built_state, built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == Tuple
-		var $s = if grouped_tuple issue(ctx, built_state, UnexpectedToken, first.start, first.end) else built_state
-		var $left = built_node
-		var $qualified = first.kind == UpperIdent or package_qualified
-		var $done = False
-		var $target_done = False
-		while !$done {
-			look = skip_trivia(ctx, $s)
-			# Drop the previous loop-state owner before builders grow its buffers.
-			$s = vacant
-			t = peek(ctx, look)
-			bp = binding(ctx, look)
-			arrow_name = peek(ctx, at_pos(ctx, look, look.pos + 1))
-			arrow_field = spelling(ctx, look, ".") and t.start == node_end(ctx, look, $left) and (($qualified and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent)) or (first.kind == LowerIdent and $left == built_node and arrow_name.kind == LowerIdent))
-			pipe_boundary = (minimum == 100 or minimum == 101) and t.start > node_end(ctx, look, $left) and ((spelling(ctx, look, ".") and (peek(ctx, at_pos(ctx, look, look.pos + 1)).kind == LowerIdent or peek(ctx, at_pos(ctx, look, look.pos + 1)).kind == UpperIdent or peek(ctx, at_pos(ctx, look, look.pos + 1)).kind == Number)) or spelling(ctx, look, ".?"))
-			if pipe_boundary or ((minimum >= 100 or look.in_guard) and (spelling(ctx, look, "->") or spelling(ctx, look, "=>") or spelling(ctx, look, "|>"))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or spelling(ctx, look, "?") or ((spelling(ctx, look, ".") or spelling(ctx, look, ".?")) and !arrow_field))) {
-				$s = look
-				$done = True
-			} else if spelling(ctx, look, "->") or spelling(ctx, look, "=>") or spelling(ctx, look, "|>") {
-				pipe = spelling(ctx, look, "|>")
-				rhs = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-				rhs_token = peek(ctx, rhs)
-				literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
-				valid_start = (rhs_token.kind == LowerIdent and byte(ctx.source, rhs_token.start) != '_') or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
-				validated = if valid_start rhs else issue(ctx, rhs, UnexpectedToken, rhs_token.start, rhs_token.end)
-				target_state = expression(ctx, validated, if pipe 100 else 101, depth + 1, False)
-				target_node = target_state.last
-				method = pipe and method_target(ctx, target_state, target_node)
-				checked = if !pipe or !literal or pipe_has_method(ctx, target_state, target_node) target_state else issue(ctx, target_state, UnexpectedToken, rhs_token.start, node_end(ctx, target_state, target_node))
-				start = node_start(ctx, checked, $left)
-				end = node_end(ctx, checked, target_node)
-				arrow_state = add_node(ctx, checked, if method MethodArrowCall else ArrowCall, start, end, [$left, target_node])
-				arrow_node = arrow_state.last
-				$s = arrow_state
-				$left = arrow_node
-				$qualified = False
-			} else if spelling(ctx, look, "?") and t.start == node_end(ctx, look, $left) {
-				start = node_start(ctx, look, $left)
-				suffix_state = add_node(ctx, at_pos(ctx, look, look.pos + 1), Suffix, start, t.end, [$left])
-				suffix_node = suffix_state.last
-				$s = suffix_state
-				$left = suffix_node
-				$qualified = False
-			} else if t.kind == NoSpaceOpenRound {
-				validated = if is_optional_access(ctx, look, $left) issue(ctx, look, UnexpectedToken, t.start, t.end) else look
-				start = node_start(ctx, look, $left)
-				{ state: args_state, ids: args_ids, end: args_end, comma: _ } = collection(ctx, at_pos(ctx, validated, validated.pos + 1), CloseRound, depth + 1)
-				ids = [$left].concat(args_ids)
-				call_state = add_node(ctx, args_state, Call, start, args_end, ids)
-				call_node = call_state.last
-				$s = call_state
-				$left = call_node
-				$qualified = False
-				$target_done = minimum == 101
-				question_state = skip_trivia(ctx, call_state)
-				if minimum == 100 and !method_target(ctx, call_state, call_node) and spelling(ctx, question_state, "?") and peek(ctx, question_state).start == args_end {
-					$done = True
-				}
-			} else if spelling(ctx, look, ".") and peek(ctx, skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))).kind == OpenCurly {
-				opening_state = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-				backing_state = curly(ctx, at_pos(ctx, opening_state, opening_state.pos + 1), peek(ctx, opening_state).start, depth + 1, True, True)
-				backing_node = backing_state.last
-				start = node_start(ctx, backing_state, $left)
-				end = node_end(ctx, backing_state, backing_node)
-				nominal_state = add_node(ctx, backing_state, NominalRecord, start, end, [$left, backing_node])
-				nominal_node = nominal_state.last
-				$s = nominal_state
-				$left = nominal_node
-				$qualified = False
-			} else if spelling(ctx, look, ".") and $qualified and peek(ctx, at_pos(ctx, look, look.pos + 1)).kind == NoSpaceOpenRound {
-				opening_state = at_pos(ctx, look, look.pos + 1)
-				{ state: args_state, ids: args, end, comma: _ } = collection(ctx, at_pos(ctx, opening_state, opening_state.pos + 1), CloseRound, depth + 1)
-				start = node_start(ctx, args_state, $left)
-				nominal_state = add_node(ctx, args_state, NominalApply, start, end, [$left].concat(args))
-				nominal_node = nominal_state.last
-				$s = nominal_state
-				$left = nominal_node
-				$qualified = False
-			} else if spelling(ctx, look, ".") or spelling(ctx, look, ".?") {
-				optional = spelling(ctx, look, ".?")
-				field_state = at_pos(ctx, look, look.pos + 1)
-				field = peek(ctx, field_state)
-				valid_name = (field.kind == LowerIdent and is_lower(byte(ctx.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(ctx.source, field.start)))
-				valid_index = field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
-				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
-					start = node_start(ctx, field_state, $left)
-					leaf_state = add_node(ctx, at_pos(ctx, field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
-					leaf_node = leaf_state.last
-					access_state = add_node(ctx, leaf_state, if optional OptionalFieldAccess else FieldAccess, start, field.end, [$left, leaf_node])
-					access_node = access_state.last
-					$s = access_state
-					$left = access_node
-					$qualified = $qualified and field.kind == UpperIdent
-				} else {
-					$s = look
-					$done = True
-				}
-			} else if spelling(ctx, look, "..") or spelling(ctx, look, ".*") {
-				$s = issue(ctx, at_pos(ctx, look, look.pos + 1), UnexpectedToken, t.start, t.end)
-				$done = True
-			} else if bp.left > 0 and bp.left >= minimum {
-				start = node_start(ctx, look, $left)
-				right_state = expression(ctx, at_pos(ctx, look, look.pos + 1), bp.right, depth + 1, False)
-				right_node = right_state.last
-				end = node_end(ctx, right_state, right_node)
-				binary_state = add_node(ctx, right_state, Binary, start, end, [$left, right_node])
-				binary_node = binary_state.last
-				$s = binary_state
-				$left = binary_node
-				$qualified = False
-			} else {
-				$s = look
-				$done = True
-			}
-		}
-		with_last(ctx, $s, $left)
-	}
-}
-
-Collection : { state : State, ids : List(U64), end : U64, comma : Bool }
-
-collection : Ctx, State, RocSyntax.TokenKind, U64 -> Collection
-collection = |ctx, initial, closing, depth| {
-	var $s = initial
-	var $ids = []
-	var $end = peek(ctx, initial).start
-	var $done = False
-	var $comma = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		sync = declaration_sync(ctx, look)
-		if sync.sync {
-			$s = issue(ctx, look, UnclosedDelimiter, sync.start, sync.end)
-			$end = sync.end
-			$done = True
-		} else if t.kind == closing {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else {
-			before = look.pos
-			item_state = expression(ctx, look, 0, depth, False)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$end = node_end(ctx, item_state, item_node)
-			$s = skip_trivia(ctx, item_state)
-			if spelling(ctx, $s, ",") {
-				$comma = True
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			} else if peek(ctx, $s).kind != closing and peek(ctx, $s).kind != EndOfFile {
-				bad = peek(ctx, $s)
-				$s = issue(ctx, $s, UnexpectedToken, bad.start, bad.end)
-				if $s.pos <= before {
-					$s = at_pos(ctx, $s, $s.pos + 1)
-				}
-			}
-		}
-	}
-	{ state: $s, ids: $ids, end: $end, comma: $comma }
-}
-
-primary : Ctx, State, U64, Bool -> Built
-primary = |ctx, s, depth, punned| {
-	t = peek(ctx, s)
-	match t.kind {
-		LowerIdent if spelling(ctx, s, "_") => {
-			bad = issue(ctx, at_pos(ctx, s, s.pos + 1), UnexpectedToken, t.start, t.end)
-			add_node(ctx, bad, ErrorNode, t.start, t.end, [])
-		}
-		UpperIdent if byte(ctx.source, t.start) == '@' => {
-			bad = issue(ctx, at_pos(ctx, s, s.pos + 1), UnexpectedToken, t.start, t.end)
-			add_node(ctx, bad, ErrorNode, t.start, t.end, [])
-		}
-		LowerIdent | UpperIdent => add_node(ctx, at_pos(ctx, s, s.pos + 1), Identifier, t.start, t.end, [])
-		Number => {
-			after = at_pos(ctx, s, s.pos + 1)
-			dot = peek(ctx, after)
-			field_state = at_pos(ctx, after, after.pos + 1)
-			field = peek(ctx, field_state)
-			if integer_token(ctx.source, t) and spelling(ctx, after, ".") and dot.start == t.end and field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit) {
-				bad = issue(ctx, at_pos(ctx, field_state, field_state.pos + 1), UnexpectedToken, dot.start, field.end)
-				add_node(ctx, bad, ErrorNode, t.start, field.end, [])
-			} else {
-				literal_suffix(ctx, add_node(ctx, after, NumberLiteral, t.start, t.end, []), False)
-			}
-		}
-		SingleQuote => literal_suffix(ctx, add_node(ctx, at_pos(ctx, s, s.pos + 1), CharacterLiteral, t.start, t.end, []), False)
-		StringStart | MultilineStringStart => parse_string(ctx, s, depth + 1)
-		OpenCurly => curly(ctx, at_pos(ctx, s, s.pos + 1), t.start, depth + 1, punned, False)
-		Keyword if spelling(ctx, s, "dbg") or spelling(ctx, s, "crash") or spelling(ctx, s, "return") => {
-			kind = if spelling(ctx, s, "dbg") Debug else if spelling(ctx, s, "crash") Crash else Return
-			value_state = expression(ctx, at_pos(ctx, s, s.pos + 1), 0, depth + 1, False)
-			value_node = value_state.last
-			end = node_end(ctx, value_state, value_node)
-			add_node(ctx, value_state, kind, t.start, end, [value_node])
-		}
-		Keyword if spelling(ctx, s, "break") => add_node(ctx, at_pos(ctx, s, s.pos + 1), Break, t.start, t.end, [])
-		Punctuation if spelling(ctx, s, "...") => add_node(ctx, at_pos(ctx, s, s.pos + 1), Ellipsis, t.start, t.end, [])
-		Keyword if spelling(ctx, s, "if") => parse_if(ctx, at_pos(ctx, s, s.pos + 1), t.start, depth + 1)
-		Keyword if spelling(ctx, s, "for") or spelling(ctx, s, "for!") => parse_for(ctx, at_pos(ctx, s, s.pos + 1), t.start, spelling(ctx, s, "for!"), depth + 1)
-		Keyword if spelling(ctx, s, "match") => parse_match(ctx, at_pos(ctx, s, s.pos + 1), t.start, depth + 1)
-		Operator if spelling(ctx, s, "|") => parse_lambda(ctx, at_pos(ctx, s, s.pos + 1), t.start, depth + 1)
-		OpenRound | NoSpaceOpenRound | OpenSquare => {
-			{ state: items_state, ids: items_ids, end: items_end, comma: items_comma } = collection(ctx, at_pos(ctx, s, s.pos + 1), if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
-			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_ids.len() != 1 Tuple else Parenthesized
-			add_node(ctx, items_state, kind, t.start, items_end, items_ids)
-		}
-		Operator if spelling(ctx, s, "-") and binary_minus(ctx, s) => {
-			bad = issue(ctx, at_pos(ctx, s, s.pos + 1), UnexpectedToken, t.start, t.end)
-			add_node(ctx, bad, ErrorNode, t.start, t.end, [])
-		}
-		Operator if spelling(ctx, s, "-") or spelling(ctx, s, "!") => {
-			operand_state = expression(ctx, at_pos(ctx, s, s.pos + 1), 40, depth + 1, False)
-			operand_node = operand_state.last
-			end = node_end(ctx, operand_state, operand_node)
-			add_node(ctx, operand_state, Unary, t.start, end, [operand_node])
-		}
-		EndOfFile | InterpolationEnd | CloseRound | CloseSquare | CloseCurly => {
-			err = issue(ctx, s, UnexpectedToken, t.start, t.end)
-			add_node(ctx, err, ErrorNode, t.start, t.start, [])
-		}
-		Invalid => add_node(ctx, at_pos(ctx, s, s.pos + 1), ErrorNode, t.start, t.end, [])
-		_ => {
-			unknown = issue(ctx, at_pos(ctx, s, s.pos + 1), UnsupportedSyntax, t.start, t.end)
-			add_node(ctx, unknown, UnsupportedNode, t.start, t.end, [])
-		}
-	}
-}
-
 ParseMode : [FileMode, ExpressionMode, StatementMode, HeaderMode]
-
-parse_source : List(U8), ParseMode -> RocSyntax.Parsed
-parse_source = |source, mode| {
-	expression_only = mode == ExpressionMode
-	single = mode != FileMode
-	lexed = lex(source)
-	ctx = { source, tokens: lexed.tokens }
-	initial = State.{ pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), node_tail: List.with_capacity(32), child_tail: List.with_capacity(32), diagnostics: lexed.diagnostics, unsupported: lexed.unsupported, limited: False, in_guard: False, last: 0 }
-	var $s = initial
-	var $roots = []
-	if ctx.tokens.len() > 1048576 {
-		$s = issue(ctx, $s, ResourceLimit, 0, source.len())
-	} else {
-		var $done = False
-		while !$done {
-			look = skip_trivia(ctx, $s)
-			# Drop the previous loop-state owner before builders grow its buffers.
-			$s = vacant
-			t = peek(ctx, look)
-			if t.kind == EndOfFile {
-				$s = look
-				$done = True
-			} else {
-				before = look.pos
-				built_state = if expression_only expression(ctx, look, 0, 0, False) else statement(ctx, look, if mode == StatementMode 1 else 0)
-				built_node = built_state.last
-				$roots = $roots.append(built_node)
-				$s = built_state
-				if mode == FileMode or mode == HeaderMode {
-					if (node_get(ctx, $s, built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
-						$s = issue(ctx, $s, UnexpectedToken, t.start, node_end(ctx, $s, built_node))
-					}
-				}
-				if $s.pos <= before {
-					$s = issue(ctx, $s, UnexpectedToken, t.start, t.end)
-					$s = at_pos(ctx, $s, before + 1)
-				}
-				if mode == HeaderMode and (node_get(ctx, $s, built_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind != Header {
-					$s = issue(ctx, $s, UnexpectedToken, t.start, node_end(ctx, $s, built_node))
-				}
-				if single {
-					$s = skip_trivia(ctx, $s)
-					if peek(ctx, $s).kind != EndOfFile {
-						extra = peek(ctx, $s)
-						$s = issue(ctx, $s, UnexpectedToken, extra.start, extra.end)
-					}
-					$done = True
-				}
-			}
-		}
-	}
-	if mode == HeaderMode and $roots.is_empty() {
-		header_state = add_node(ctx, $s, Header, 0, 0, [])
-		header_node = header_state.last
-		$s = header_state
-		$roots = [header_node]
-	} else if single and $roots.is_empty() {
-		$s = issue(ctx, $s, UnexpectedToken, source.len(), source.len())
-	}
-	root_state = add_node(ctx, $s, File, 0, source.len(), $roots)
-	root_node = root_state.last
-	nodes = root_state.nodes.to_list_with(root_state.node_tail)
-	first_start = (source_token(ctx, root_state, significant_position(ctx.tokens, 0))).start
-	var $header_count = 0.U64
-	var $bad_header = False
-	for n in nodes {
-		if n.kind == Header {
-			$header_count = $header_count + 1
-			$bad_header = $bad_header or n.start != first_start
-		}
-	}
-	finished = if $header_count > 1 or $bad_header issue(ctx, root_state, UnexpectedToken, first_start, source.len()) else root_state
-	has_error = finished.diagnostics.any(|d| d.code != UnsupportedSyntax)
-	status = if finished.limited Limited else if finished.unsupported Unsupported else if has_error Recovered else Complete
-	{ source: ctx.source, tokens: ctx.tokens, nodes, children: finished.children.to_list_with(finished.child_tail), diagnostics: finished.diagnostics, status, root: root_node, consumed: peek(ctx, skip_trivia(ctx, finished)).kind == EndOfFile }
-}
 
 expect {
 	p = RocSyntax.parse_str("answer = 1 + 2 * 3\n")
@@ -957,1306 +522,9 @@ line_break = |source, start, end| {
 	$found
 }
 
-# Statements are parsed independently of expressions, so '=' cannot be
-# accidentally accepted as a binary expression operator.
-statement : Ctx, State, U64 -> Built
-statement = |ctx, initial, depth| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	following_pos = significant_position(ctx.tokens, s.pos + 1)
-	following = ctx.tokens.get(following_pos) ?? t
-	if depth >= 128 {
-		bad = issue(ctx, s, ResourceLimit, t.start, t.end)
-		add_node(ctx, at_pos(ctx, bad, bad.pos + if t.kind == EndOfFile 0 else 1), ErrorNode, t.start, t.end, [])
-	} else if (t.kind == UpperIdent and (type_declaration_start(ctx, s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or token_spelling(ctx.source, following, ".")) and has_pattern_assignment(ctx, s))))) or (t.kind == LowerIdent and token_spelling(ctx.source, following, ".") and peek(ctx, at_pos(ctx, s, following_pos + 1)).kind == UpperIdent) {
-		parse_type_declaration(ctx, s, depth + 1)
-	} else if t.kind == LowerIdent and token_spelling(ctx.source, following, "=") {
-		name_state = parse_pattern(ctx, s, False, depth + 1)
-		name_node = name_state.last
-		after_name = skip_trivia(ctx, name_state)
-		value_state = expression(ctx, at_pos(ctx, after_name, after_name.pos + 1), 0, depth, False)
-		value_node = value_state.last
-		end = node_end(ctx, value_state, value_node)
-		add_node(ctx, value_state, Declaration, t.start, end, [name_node, value_node])
-	} else if t.kind == LowerIdent and token_spelling(ctx.source, following, ":") {
-		validated = if spelling(ctx, s, "_") issue(ctx, s, UnexpectedToken, t.start, t.end) else s
-		name_state = add_node(ctx, at_pos(ctx, validated, following_pos), Identifier, t.start, t.end, [])
-		name_node = name_state.last
-		parse_annotation_after_name(ctx, at_pos(ctx, name_state, name_state.pos + 1), name_node, t.start, depth)
-	} else if spelling(ctx, s, "var") {
-		name_state = skip_trivia(ctx, at_pos(ctx, s, s.pos + 1))
-		name = peek(ctx, name_state)
-		validated = if depth == 0 or name.kind != LowerIdent or !(is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') issue(ctx, name_state, UnexpectedToken, name.start, name.end) else name_state
-		named_state = add_node(ctx, at_pos(ctx, validated, validated.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
-		named_node = named_state.last
-		look = skip_trivia(ctx, named_state)
-		if spelling(ctx, look, "=") {
-			value_state = expression(ctx, at_pos(ctx, look, look.pos + 1), 0, depth + 1, False)
-			value_node = value_state.last
-			end = node_end(ctx, value_state, value_node)
-			add_node(ctx, value_state, VariableDeclaration, t.start, end, [named_node, value_node])
-		} else if spelling(ctx, look, ":") {
-			parse_annotation_after_name(ctx, at_pos(ctx, look, look.pos + 1), named_node, t.start, depth + 1)
-		} else {
-			add_node(ctx, look, VariableDeclaration, t.start, name.end, [named_node])
-		}
-	} else if spelling(ctx, s, "expect") {
-		value_state = expression(ctx, at_pos(ctx, s, s.pos + 1), 0, depth + 1, False)
-		value_node = value_state.last
-		end = node_end(ctx, value_state, value_node)
-		add_node(ctx, value_state, Expect, t.start, end, [value_node])
-	} else if spelling(ctx, s, "while") {
-		condition_state = expression(ctx, at_pos(ctx, s, s.pos + 1), 0, depth + 1, False)
-		condition_node = condition_state.last
-		body_state = expression(ctx, condition_state, 0, depth + 1, False)
-		body_node = body_state.last
-		end = node_end(ctx, body_state, body_node)
-		add_node(ctx, body_state, While, t.start, end, [condition_node, body_node])
-	} else if spelling(ctx, s, "for") or spelling(ctx, s, "for!") or spelling(ctx, s, "dbg") or spelling(ctx, s, "crash") or spelling(ctx, s, "return") or spelling(ctx, s, "break") {
-		primary(ctx, s, depth + 1, False)
-	} else if (t.kind == OpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(ctx, s) {
-		pattern_state = parse_pattern(ctx, s, False, depth + 1)
-		pattern_node = pattern_state.last
-		look = skip_trivia(ctx, pattern_state)
-		validated = if spelling(ctx, look, "=") look else issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end)
-		value_state = expression(ctx, at_pos(ctx, validated, validated.pos + if spelling(ctx, validated, "=") 1 else 0), 0, depth + 1, False)
-		value_node = value_state.last
-		end = node_end(ctx, value_state, value_node)
-		add_node(ctx, value_state, Declaration, t.start, end, [pattern_node, value_node])
-	} else if spelling(ctx, s, "platform") {
-		validated = if depth == 0 s else issue(ctx, s, UnexpectedToken, t.start, t.end)
-		parse_platform_header(ctx, validated, depth + 1)
-	} else if spelling(ctx, s, "app") or spelling(ctx, s, "package") {
-		{ state: exposed_state, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, at_pos(ctx, s, s.pos + 1))
-		look = skip_trivia(ctx, exposed_state)
-		if peek(ctx, look).kind == OpenCurly {
-			deps_state = dependency_record(ctx, look, spelling(ctx, s, "app"), depth + 1)
-			deps_node = deps_state.last
-			end = node_end(ctx, deps_state, deps_node)
-			validated = if depth == 0 deps_state else issue(ctx, deps_state, UnexpectedToken, t.start, end)
-			add_node(ctx, validated, Header, t.start, end, exposed_ids.append(deps_node))
-		} else {
-			validated = if depth == 0 and spelling(ctx, s, "package") look else issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end)
-			add_node(ctx, validated, Header, t.start, exposed_end, exposed_ids)
-		}
-	} else if spelling(ctx, s, "module") or spelling(ctx, s, "hosted") {
-		{ state: items_state, ids: items_ids, end: items_end, comma: _ } = exposed_collection(ctx, at_pos(ctx, s, s.pos + 1))
-		validated = if depth == 0 items_state else issue(ctx, items_state, UnexpectedToken, t.start, items_end)
-		add_node(ctx, validated, Header, t.start, items_end, items_ids)
-	} else if spelling(ctx, s, "import") {
-		validated = if depth == 0 s else issue(ctx, s, UnexpectedToken, t.start, t.end)
-		parse_import(ctx, validated, depth + 1)
-	} else {
-		value_state = expression(ctx, s, 0, depth, True)
-		value_node = value_state.last
-		end = node_end(ctx, value_state, value_node)
-		add_node(ctx, value_state, ExpressionStatement, t.start, end, [value_node])
-	}
-}
-
-exposed_collection : Ctx, State -> Collection
-exposed_collection = |ctx, initial| {
-	look = skip_trivia(ctx, initial)
-	opening = peek(ctx, look)
-	var $s = if opening.kind == OpenSquare at_pos(ctx, look, look.pos + 1) else issue(ctx, look, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $end = opening.end
-	var $done = opening.kind != OpenSquare
-	while !$done {
-		item_state = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, item_state)
-		if t.kind == CloseSquare {
-			$s = at_pos(ctx, item_state, item_state.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
-			$s = issue(ctx, item_state, UnclosedDelimiter, t.start, t.end)
-			$done = True
-		} else {
-			valid_start = (t.kind == UpperIdent and byte(ctx.source, t.start) != '@') or (t.kind == LowerIdent and (is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$'))
-			validated = if valid_start item_state else issue(ctx, item_state, UnexpectedToken, t.start, t.end)
-			name_state = add_node(ctx, at_pos(ctx, validated, validated.pos + 1), Identifier, t.start, t.end, [])
-			name_node = name_state.last
-			var $name = name_node
-			$s = skip_trivia(ctx, name_state)
-			var $upper = t.kind == UpperIdent
-			var $qualified = t.kind == UpperIdent
-			var $chain_done = False
-			while !$chain_done {
-				if $qualified and spelling(ctx, $s, ".") and peek(ctx, $s).start == node_end(ctx, $s, $name) and (is_upper(byte(ctx.source, peek(ctx, at_pos(ctx, $s, $s.pos + 1)).start)) or is_lower(byte(ctx.source, peek(ctx, at_pos(ctx, $s, $s.pos + 1)).start))) {
-					field_state = at_pos(ctx, $s, $s.pos + 1)
-					field = peek(ctx, field_state)
-					named_state = add_node(ctx, at_pos(ctx, field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
-					named_node = named_state.last
-					access_state = add_node(ctx, named_state, FieldAccess, t.start, field.end, [$name, named_node])
-					access_node = access_state.last
-					$s = skip_trivia(ctx, access_state)
-					$name = access_node
-					$upper = True
-					$qualified = True
-				} else {
-					$chain_done = True
-				}
-			}
-			var $children = [$name]
-			var $wildcard = False
-			$end = node_end(ctx, $s, $name)
-			if spelling(ctx, $s, "as") {
-				alias_state = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				alias = peek(ctx, alias_state)
-				valid_alias = if $upper alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@' else alias.kind == LowerIdent and byte(ctx.source, alias.start) != '_'
-				checked = if valid_alias alias_state else issue(ctx, alias_state, UnexpectedToken, alias.start, alias.end)
-				alias_built = add_node(ctx, at_pos(ctx, checked, checked.pos + if alias.kind == EndOfFile 0 else 1), Identifier, alias.start, alias.end, [])
-				alias_node = alias_built.last
-				$s = alias_built
-				$children = $children.append(alias_node)
-				$end = alias.end
-			} else if $upper and spelling(ctx, $s, ".*") {
-				$end = peek(ctx, $s).end
-				$s = at_pos(ctx, $s, $s.pos + 1)
-				$wildcard = True
-			}
-			exposed_state = add_node(ctx, $s, if $wildcard ExposedWildcard else ExposedItem, t.start, $end, $children)
-			exposed_node = exposed_state.last
-			$ids = $ids.append(exposed_node)
-			$s = skip_trivia(ctx, exposed_state)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			} else if peek(ctx, $s).kind != CloseSquare {
-				$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-			}
-		}
-	}
-	{ state: $s, ids: $ids, end: $end, comma: False }
-}
-
-parse_import : Ctx, State, U64 -> Built
-parse_import = |ctx, initial, depth| {
-	start = peek(ctx, initial).start
-	look = skip_trivia(ctx, at_pos(ctx, initial, initial.pos + 1))
-	if peek(ctx, look).kind == StringStart {
-		path_state = parse_string(ctx, look, depth + 1)
-		path_node = path_state.last
-		after_path = skip_trivia(ctx, path_state)
-		validated = if spelling(ctx, after_path, "as") at_pos(ctx, after_path, after_path.pos + 1) else issue(ctx, after_path, UnexpectedToken, peek(ctx, after_path).start, peek(ctx, after_path).end)
-		name_state = skip_trivia(ctx, validated)
-		name = peek(ctx, name_state)
-		checked = if name.kind == LowerIdent and !spelling(ctx, name_state, "_") name_state else issue(ctx, name_state, UnexpectedToken, name.start, name.end)
-		named_state = add_node(ctx, at_pos(ctx, checked, checked.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
-		named_node = named_state.last
-		colon = skip_trivia(ctx, named_state)
-		ty_start = if spelling(ctx, colon, ":") at_pos(ctx, colon, colon.pos + 1) else issue(ctx, colon, UnexpectedToken, peek(ctx, colon).start, peek(ctx, colon).end)
-		ty_state = file_import_type(ctx, ty_start)
-		ty_node = ty_state.last
-		end = node_end(ctx, ty_state, ty_node)
-		path_info = node_get(ctx, ty_state, path_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-		path_child = child_get(ctx, ty_state, path_info.children_start) ?? node_count(ctx, ty_state)
-		part_info = node_get(ctx, ty_state, path_child) ?? path_info
-		plain_path = path_info.kind == StringLiteral and path_info.children_len == 1 and part_info.kind == StringSegment
-		checked_type = if plain_path ty_state else issue(ctx, ty_state, UnexpectedToken, start, end)
-		add_node(ctx, checked_type, FileImport, start, end, [path_node, named_node, ty_node])
-	} else {
-		var $s = look
-		path_start = peek(ctx, look).start
-		var $end = path_start
-		var $local = True
-		if spelling(ctx, $s, "/") {
-			$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		} else if spelling(ctx, $s, ".") and token_spelling(ctx.source, source_token(ctx, $s, significant_position(ctx.tokens, $s.pos + 1)), "/") {
-			$s = skip_trivia(ctx, at_pos(ctx, $s, significant_position(ctx.tokens, $s.pos + 1) + 1))
-		} else if spelling(ctx, $s, "..") {
-			while spelling(ctx, $s, "..") {
-				parent = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				if spelling(ctx, parent, "/") {
-					$s = skip_trivia(ctx, at_pos(ctx, parent, parent.pos + 1))
-				} else {
-					$s = issue(ctx, parent, UnexpectedToken, peek(ctx, parent).start, peek(ctx, parent).end)
-				}
-			}
-		} else if peek(ctx, $s).kind == LowerIdent {
-			next = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-			$local = spelling(ctx, next, "/")
-		}
-		first = peek(ctx, $s)
-		$end = U64.max($end, first.start)
-		var $upper = first.kind == UpperIdent
-		if first.kind != UpperIdent and first.kind != LowerIdent {
-			$s = issue(ctx, $s, UnexpectedToken, first.start, first.end)
-		} else {
-			$end = first.end
-			$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		}
-		if $local {
-			while spelling(ctx, $s, "/") {
-				$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				part = peek(ctx, $s)
-				if part.kind == LowerIdent or part.kind == UpperIdent {
-					$upper = part.kind == UpperIdent
-					$end = part.end
-					$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				} else {
-					$s = issue(ctx, $s, UnexpectedToken, part.start, part.end)
-				}
-			}
-			if !$upper {
-				$s = issue(ctx, $s, UnexpectedToken, first.start, $end)
-			}
-		}
-		var $nested = 0.U64
-		while spelling(ctx, $s, ".") and peek(ctx, at_pos(ctx, $s, $s.pos + 1)).kind == UpperIdent {
-			field_state = at_pos(ctx, $s, $s.pos + 1)
-			$end = peek(ctx, field_state).end
-			$s = skip_trivia(ctx, at_pos(ctx, field_state, field_state.pos + 1))
-			$nested = $nested + 1
-		}
-		if !$local and $nested == 0 {
-			$s = issue(ctx, $s, UnexpectedToken, first.start, $end)
-		}
-		path_state = add_node(ctx, $s, ImportPath, path_start, $end, [])
-		path_node = path_state.last
-		$s = path_state
-		var $ids = [path_node]
-		if spelling(ctx, $s, "as") {
-			alias_state = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-			alias = peek(ctx, alias_state)
-			checked = if alias.kind == UpperIdent alias_state else issue(ctx, alias_state, UnexpectedToken, alias.start, alias.end)
-			named_state = add_node(ctx, at_pos(ctx, checked, checked.pos + if alias.kind == EndOfFile 0 else 1), Identifier, alias.start, alias.end, [])
-			named_node = named_state.last
-			alias_built = add_node(ctx, named_state, ImportAlias, alias.start, alias.end, [named_node])
-			alias_node = alias_built.last
-			$s = skip_trivia(ctx, alias_built)
-			$ids = $ids.append(alias_node)
-			$end = alias.end
-		}
-		if spelling(ctx, $s, "exposing") {
-			{ state: exposed_state, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, at_pos(ctx, $s, $s.pos + 1))
-			$s = exposed_state
-			$ids = $ids.concat(exposed_ids)
-			$end = exposed_end
-		}
-		add_node(ctx, $s, Import, start, $end, $ids)
-	}
-}
-
 # Dedicated type syntax never delegates to value-expression parsing, except
 # record-field defaults, which the language explicitly defines as expressions.
 TypeMode : [FullType, TypeItem, TypeArgument]
-
-type_expression : Ctx, State, TypeMode, U64 -> Built
-type_expression = |ctx, initial, mode, depth| {
-	atom_state = type_atom(ctx, initial, depth + 1)
-	atom_node = atom_state.last
-	look = skip_trivia(ctx, atom_state)
-	if mode != TypeArgument and (spelling(ctx, look, "->") or spelling(ctx, look, "=>") or (mode == FullType and type_comma_begins_arguments(ctx, look))) {
-		var $s = look
-		var $args = [atom_node]
-		var $done = False
-		while !$done and spelling(ctx, $s, ",") {
-			arg_state = type_expression(ctx, at_pos(ctx, $s, $s.pos + 1), TypeArgument, depth + 1)
-			arg_node = arg_state.last
-			$args = $args.append(arg_node)
-			$s = skip_trivia(ctx, arg_state)
-			$done = peek(ctx, $s).kind == EndOfFile
-		}
-		if spelling(ctx, $s, "->") or spelling(ctx, $s, "=>") {
-			ret_state = type_expression(ctx, at_pos(ctx, $s, $s.pos + 1), TypeArgument, depth + 1)
-			ret_node = ret_state.last
-			end = node_end(ctx, ret_state, ret_node)
-			add_node(ctx, ret_state, TypeFunction, node_start(ctx, ret_state, atom_node), end, $args.append(ret_node))
-		} else {
-			bad = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-			add_node(ctx, bad, ErrorNode, node_start(ctx, bad, atom_node), U64.max(peek(ctx, bad).start, node_end(ctx, bad, $args.last() ?? atom_node)), $args)
-		}
-	} else {
-		with_last(ctx, atom_state, atom_node)
-	}
-}
-
-# A comma in a record/where constraint may begin its next field, rather than
-# the argument list of a function. Only bounded significant lookahead is used.
-type_comma_begins_arguments : Ctx, State -> Bool
-type_comma_begins_arguments = |ctx, s| {
-	if !spelling(ctx, s, ",") {
-		return False
-	}
-	a = skip_trivia(ctx, at_pos(ctx, s, s.pos + 1))
-	if peek(ctx, a).kind == CloseCurly or peek(ctx, a).kind == CloseSquare or spelling(ctx, a, "..") {
-		return False
-	}
-	b = skip_trivia(ctx, at_pos(ctx, a, a.pos + 1))
-	if peek(ctx, a).kind == LowerIdent and (spelling(ctx, b, ":") or spelling(ctx, b, "?")) {
-		return False
-	}
-	if peek(ctx, a).kind == LowerIdent and spelling(ctx, b, ".") {
-		c = skip_trivia(ctx, at_pos(ctx, b, b.pos + 1))
-		d = skip_trivia(ctx, at_pos(ctx, c, c.pos + 1))
-		if spelling(ctx, d, ":") {
-			return False
-		}
-	}
-	True
-}
-
-type_atom : Ctx, State, U64 -> Built
-type_atom = |ctx, initial, depth| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	sync = declaration_sync(ctx, s)
-	if sync.sync {
-		return add_node(ctx, issue(ctx, s, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
-	}
-	if depth >= 128 {
-		bad = issue(ctx, s, ResourceLimit, t.start, t.end)
-		return add_node(ctx, bad, ErrorNode, t.start, t.start, [])
-	}
-	if (t.kind == LowerIdent or t.kind == UpperIdent) and byte(ctx.source, t.start) != '@' {
-		var $s = at_pos(ctx, s, s.pos + 1)
-		var $end = t.end
-		var $qualified = False
-		var $done = False
-		while !$done {
-			look = skip_trivia(ctx, $s)
-			if byte(ctx.source, t.start) != '_' and spelling(ctx, look, ".") and peek(ctx, look).start == $end {
-				name_state = at_pos(ctx, look, look.pos + 1)
-				name = peek(ctx, name_state)
-				if (name.kind == LowerIdent or name.kind == UpperIdent) and name.start == peek(ctx, look).end and byte(ctx.source, name.start) != '_' and byte(ctx.source, name.start) != '@' {
-					$s = at_pos(ctx, name_state, name_state.pos + 1)
-					$end = name.end
-					$qualified = True
-				} else {
-					$done = True
-				}
-			} else {
-				$done = True
-			}
-		}
-		kind = if $qualified or t.kind == UpperIdent TypeName else if token_spelling(ctx.source, t, "_") TypeWildcard else TypeVariable
-		base_state = add_node(ctx, $s, kind, t.start, $end, [])
-		base_node = base_state.last
-		look = skip_trivia(ctx, base_state)
-		if kind == TypeName and peek(ctx, look).kind == NoSpaceOpenRound {
-			items = type_collection(ctx, at_pos(ctx, look, look.pos + 1), CloseRound, TypeItem, depth + 1)
-			add_node(ctx, items.state, TypeApply, t.start, items.end, [base_node].concat(items.ids))
-		} else {
-			with_last(ctx, base_state, base_node)
-		}
-	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound {
-		type_parenthesized(ctx, s, depth + 1)
-	} else if t.kind == OpenSquare {
-		type_fields(ctx, s, False, depth + 1)
-	} else if t.kind == OpenCurly {
-		type_fields(ctx, s, True, depth + 1)
-	} else {
-		bad = issue(ctx, s, UnexpectedToken, t.start, t.end)
-		advance = t.kind != EndOfFile and t.kind != CloseRound and t.kind != CloseSquare and t.kind != CloseCurly and !spelling(ctx, s, ",")
-		add_node(ctx, at_pos(ctx, bad, bad.pos + if advance 1 else 0), ErrorNode, t.start, t.end, [])
-	}
-}
-
-type_collection : Ctx, State, RocSyntax.TokenKind, TypeMode, U64 -> Collection
-type_collection = |ctx, initial, closing, mode, depth| {
-	var $s = initial
-	var $ids = []
-	var $end = peek(ctx, initial).start
-	var $comma = False
-	var $done = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == closing {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else {
-			before = look.pos
-			item_state = type_expression(ctx, look, mode, depth + 1)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$s = skip_trivia(ctx, item_state)
-			$end = node_end(ctx, $s, item_node)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-				$comma = True
-			} else if peek(ctx, $s).kind != closing {
-				$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-				$done = True
-			}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	{ state: $s, ids: $ids, end: $end, comma: $comma }
-}
-
-type_parenthesized : Ctx, State, U64 -> Built
-type_parenthesized = |ctx, initial, depth| {
-	opening = peek(ctx, initial)
-	var $s = skip_trivia(ctx, at_pos(ctx, initial, initial.pos + 1))
-	var $ids = []
-	var $comma = False
-	var $done = False
-	while !$done {
-		if spelling(ctx, $s, "->") or spelling(ctx, $s, "=>") {
-			ret_state = type_expression(ctx, at_pos(ctx, $s, $s.pos + 1), TypeArgument, depth + 1)
-			ret_node = ret_state.last
-			fn_state = add_node(ctx, ret_state, TypeFunction, opening.start, node_end(ctx, ret_state, ret_node), $ids.append(ret_node))
-			fn_node = fn_state.last
-			$s = skip_trivia(ctx, fn_state)
-			$ids = [fn_node]
-			$comma = False
-			$done = True
-		} else if peek(ctx, $s).kind == CloseRound or peek(ctx, $s).kind == EndOfFile {
-			$done = True
-		} else {
-			before = $s.pos
-			item_state = type_expression(ctx, $s, TypeArgument, depth + 1)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$s = skip_trivia(ctx, item_state)
-			if spelling(ctx, $s, ",") {
-				$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				$comma = True
-			} else if !spelling(ctx, $s, "->") and !spelling(ctx, $s, "=>") {
-				$done = True
-			}
-			if $s.pos <= before {
-				$done = True
-			}
-		}
-	}
-	closing = peek(ctx, $s)
-	if closing.kind == CloseRound {
-		$s = at_pos(ctx, $s, $s.pos + 1)
-	} else {
-		$s = issue(ctx, $s, UnclosedDelimiter, closing.start, closing.end)
-	}
-	end = U64.max(if closing.kind == CloseRound closing.end else closing.start, node_end(ctx, $s, $ids.last() ?? node_count(ctx, $s)))
-	if $ids.is_empty() and (spelling(ctx, skip_trivia(ctx, $s), "->") or spelling(ctx, skip_trivia(ctx, $s), "=>")) {
-		arrow = skip_trivia(ctx, $s)
-		ret_state = type_expression(ctx, at_pos(ctx, arrow, arrow.pos + 1), TypeArgument, depth + 1)
-		ret_node = ret_state.last
-		add_node(ctx, ret_state, TypeFunction, opening.start, node_end(ctx, ret_state, ret_node), [ret_node])
-	} else {
-		add_node(ctx, $s, if $ids.len() == 1 and !$comma TypeParenthesized else TypeTuple, opening.start, end, $ids)
-	}
-}
-
-type_fields : Ctx, State, Bool, U64 -> Built
-type_fields = |ctx, initial, record, depth| {
-	opening = peek(ctx, initial)
-	closing = if record CloseCurly else CloseSquare
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = opening.end
-	var $done = False
-	var $extension = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == closing {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else if $extension {
-			$s = issue(ctx, look, UnexpectedToken, t.start, t.end)
-			$done = True
-		} else if spelling(ctx, look, "..") {
-			after = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-			if peek(ctx, after).kind == LowerIdent and !spelling(ctx, after, "_") {
-				ext_state = type_expression(ctx, after, TypeArgument, depth + 1)
-				ext_node = ext_state.last
-				built_state = add_node(ctx, ext_state, TypeExtension, t.start, node_end(ctx, ext_state, ext_node), [ext_node])
-				built_node = built_state.last
-				$s = skip_trivia(ctx, built_state)
-				$ids = $ids.append(built_node)
-			} else {
-				ext_state = add_node(ctx, after, TypeExtension, t.start, t.end, [])
-				ext_node = ext_state.last
-				$s = skip_trivia(ctx, ext_state)
-				$ids = $ids.append(ext_node)
-			}
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-			$end = node_end(ctx, $s, $ids.last() ?? 0)
-			$extension = True
-		} else {
-			before = look.pos
-			if record {
-				validated = if t.kind == LowerIdent look else issue(ctx, look, UnexpectedToken, t.start, t.end)
-				name_state = add_node(ctx, at_pos(ctx, validated, validated.pos + 1), Identifier, t.start, t.end, [])
-				name_node = name_state.last
-				var $field = skip_trivia(ctx, name_state)
-				if spelling(ctx, $field, "?") {
-					if byte(ctx.source, t.start) == '_' {
-						$field = issue(ctx, $field, UnexpectedToken, t.start, t.end)
-					}
-					$field = skip_trivia(ctx, at_pos(ctx, $field, $field.pos + 1))
-				}
-				if spelling(ctx, $field, ":") {
-					$field = at_pos(ctx, $field, $field.pos + 1)
-				}
-					else {
-						$field = issue(ctx, $field, UnexpectedToken, peek(ctx, $field).start, peek(ctx, $field).end)
-					}
-				ty_state = type_expression(ctx, $field, FullType, depth + 1)
-				ty_node = ty_state.last
-				var $field_ids = [name_node, ty_node]
-				$field = skip_trivia(ctx, ty_state)
-				var $field_end = node_end(ctx, ty_state, ty_node)
-				if spelling(ctx, $field, "??") {
-					default_state = expression(ctx, at_pos(ctx, $field, $field.pos + 1), 0, depth + 1, False)
-					default_node = default_state.last
-					$field_ids = $field_ids.append(default_node)
-					$field_end = node_end(ctx, default_state, default_node)
-					$field = default_state
-				}
-				field_state = add_node(ctx, $field, TypeField, t.start, $field_end, $field_ids)
-				field_node = field_state.last
-				$s = skip_trivia(ctx, field_state)
-				$ids = $ids.append(field_node)
-			} else {
-				item_state = type_expression(ctx, look, TypeItem, depth + 1)
-				item_node = item_state.last
-				$s = skip_trivia(ctx, item_state)
-				$ids = $ids.append(item_node)
-			}
-			$end = node_end(ctx, $s, $ids.last() ?? 0)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, if record TypeRecord else TypeTagUnion, opening.start, $end, $ids)
-}
-
-parse_annotation_after_name : Ctx, State, U64, U64, U64 -> Built
-parse_annotation_after_name = |ctx, initial, name, start, depth| {
-	ty_state = type_expression(ctx, initial, FullType, depth + 1)
-	ty_node = ty_state.last
-	look = skip_trivia(ctx, ty_state)
-	if spelling(ctx, look, "where") {
-		where_state = parse_where_clause(ctx, look, depth + 1)
-		where_node = where_state.last
-		add_node(ctx, where_state, TypeAnnotation, start, node_end(ctx, where_state, where_node), [name, ty_node, where_node])
-	} else {
-		add_node(ctx, ty_state, TypeAnnotation, start, node_end(ctx, ty_state, ty_node), [name, ty_node])
-	}
-}
-
-parse_where_clause : Ctx, State, U64 -> Built
-parse_where_clause = |ctx, initial, depth| {
-	start = peek(ctx, initial).start
-	look = skip_trivia(ctx, at_pos(ctx, initial, initial.pos + 1))
-	opening = peek(ctx, look)
-	var $s = if opening.kind == OpenSquare at_pos(ctx, look, look.pos + 1) else issue(ctx, look, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $done = opening.kind != OpenSquare or depth >= 128
-	var $end = opening.end
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, start, opening.end)
-	}
-	while !$done {
-		receiver_state = skip_trivia(ctx, $s)
-		$s = vacant
-		receiver = peek(ctx, receiver_state)
-		if receiver.kind == CloseSquare {
-			$s = at_pos(ctx, receiver_state, receiver_state.pos + 1)
-			$end = receiver.end
-			$done = True
-		} else if receiver.kind == EndOfFile or receiver.kind == CloseCurly or receiver.kind == CloseRound {
-			$s = issue(ctx, receiver_state, UnclosedDelimiter, receiver.start, receiver.end)
-			$end = receiver.start
-			$done = True
-		} else {
-			before = receiver_state.pos
-			valid_receiver = receiver.kind == LowerIdent and byte(ctx.source, receiver.start) != '_'
-			validated = if valid_receiver receiver_state else issue(ctx, receiver_state, UnexpectedToken, receiver.start, receiver.end)
-			var_state = add_node(ctx, at_pos(ctx, validated, validated.pos + 1), TypeVariable, receiver.start, receiver.end, [])
-			var_node = var_state.last
-			dot = skip_trivia(ctx, var_state)
-			name_state = if spelling(ctx, dot, ".") at_pos(ctx, dot, dot.pos + 1) else issue(ctx, dot, UnexpectedToken, peek(ctx, dot).start, peek(ctx, dot).end)
-			name = peek(ctx, name_state)
-			if name.kind == LowerIdent and name.start == peek(ctx, dot).end and byte(ctx.source, name.start) != '_' {
-				method_state = add_node(ctx, at_pos(ctx, name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
-				method_node = method_state.last
-				colon = skip_trivia(ctx, method_state)
-				after_colon = if spelling(ctx, colon, ":") at_pos(ctx, colon, colon.pos + 1) else issue(ctx, colon, UnexpectedToken, peek(ctx, colon).start, peek(ctx, colon).end)
-				ty_state = type_expression(ctx, after_colon, FullType, depth + 1)
-				ty_node = ty_state.last
-				clause_state = add_node(ctx, ty_state, WhereMethod, receiver.start, node_end(ctx, ty_state, ty_node), [var_node, method_node, ty_node])
-				clause_node = clause_state.last
-				$s = skip_trivia(ctx, clause_state)
-				$ids = $ids.append(clause_node)
-			} else if name.kind == UpperIdent and name.start == peek(ctx, dot).end and byte(ctx.source, name.start) != '@' {
-				alias_state = type_where_alias_name(ctx, name_state, depth + 1)
-				alias_node = alias_state.last
-				clause_state = add_node(ctx, alias_state, WhereAlias, receiver.start, node_end(ctx, alias_state, alias_node), [var_node, alias_node])
-				clause_node = clause_state.last
-				$s = skip_trivia(ctx, clause_state)
-				$ids = $ids.append(clause_node)
-			} else {
-				$s = issue(ctx, name_state, UnexpectedToken, name.start, name.end)
-				$done = True
-			}
-			if !$ids.is_empty() {
-				$end = node_end(ctx, $s, $ids.last() ?? 0)
-			}
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-				else if peek(ctx, $s).kind != CloseSquare {
-					$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					$done = True
-				}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	if $ids.is_empty() {
-		$s = issue(ctx, $s, UnexpectedToken, start, $end)
-	}
-	add_node(ctx, $s, WhereClause, start, $end, $ids)
-}
-
-parse_type_declaration : Ctx, State, U64 -> Built
-parse_type_declaration = |ctx, initial, depth| {
-	s = skip_trivia(ctx, initial)
-	first = peek(ctx, s)
-	where_alias = first.kind == LowerIdent
-	var $s = s
-	var $receiver = []
-	if where_alias {
-		if byte(ctx.source, first.start) == '_' {
-			$s = issue(ctx, $s, UnexpectedToken, first.start, first.end)
-		}
-		receiver_state = add_node(ctx, at_pos(ctx, $s, $s.pos + 1), TypeVariable, first.start, first.end, [])
-		receiver_node = receiver_state.last
-		$receiver = [receiver_node]
-		dot = skip_trivia(ctx, receiver_state)
-		$s = if spelling(ctx, dot, ".") at_pos(ctx, dot, dot.pos + 1) else issue(ctx, dot, UnexpectedToken, peek(ctx, dot).start, peek(ctx, dot).end)
-	}
-	name = peek(ctx, $s)
-	validated = if name.kind == UpperIdent and byte(ctx.source, name.start) != '@' $s else issue(ctx, $s, UnexpectedToken, name.start, name.end)
-	named_state = add_node(ctx, at_pos(ctx, validated, validated.pos + if name.kind == EndOfFile 0 else 1), TypeName, name.start, name.end, [])
-	name_node = named_state.last
-	$s = skip_trivia(ctx, named_state)
-	var $params = [name_node]
-	var $header_end = name.end
-	if peek(ctx, $s).kind == OpenRound or peek(ctx, $s).kind == NoSpaceOpenRound {
-		$s = at_pos(ctx, $s, $s.pos + 1)
-		var $done = False
-		while !$done {
-			look = skip_trivia(ctx, $s)
-			$s = vacant
-			p = peek(ctx, look)
-			if p.kind == CloseRound {
-				$s = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-				$header_end = p.end
-				$done = True
-			} else if p.kind == EndOfFile or p.kind == CloseCurly or p.kind == CloseSquare {
-				$s = issue(ctx, look, UnclosedDelimiter, p.start, p.end)
-				$done = True
-			} else {
-				validated_arg = if p.kind == LowerIdent look else issue(ctx, look, UnexpectedToken, p.start, p.end)
-				param_state = add_node(ctx, at_pos(ctx, validated_arg, validated_arg.pos + 1), if token_spelling(ctx.source, p, "_") TypeWildcard else TypeVariable, p.start, p.end, [])
-				param_node = param_state.last
-				$params = $params.append(param_node)
-				$header_end = p.end
-				$s = skip_trivia(ctx, param_state)
-				if spelling(ctx, $s, ",") {
-					$s = at_pos(ctx, $s, $s.pos + 1)
-				}
-					else if peek(ctx, $s).kind != CloseRound {
-						$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-						$done = True
-					}
-			}
-		}
-	}
-	header_state = add_node(ctx, $s, TypeHeader, name.start, $header_end, $params)
-	header_node = header_state.last
-	operator_state = skip_trivia(ctx, header_state)
-	nominal = spelling(ctx, operator_state, ":=") or spelling(ctx, operator_state, "::")
-	valid_operator = spelling(ctx, operator_state, ":") or (!where_alias and nominal)
-	checked = if valid_operator operator_state else issue(ctx, operator_state, UnexpectedToken, peek(ctx, operator_state).start, peek(ctx, operator_state).end)
-	after_operator = skip_trivia(ctx, at_pos(ctx, checked, checked.pos + if valid_operator 1 else 0))
-	var $ids = [header_node].concat($receiver)
-	if where_alias {
-		if spelling(ctx, after_operator, "where") {
-			where_state = parse_where_clause(ctx, after_operator, depth + 1)
-			where_node = where_state.last
-			$s = where_state
-			$ids = $ids.append(where_node)
-		} else {
-			$s = issue(ctx, after_operator, UnexpectedToken, peek(ctx, after_operator).start, peek(ctx, after_operator).end)
-		}
-	} else {
-		ty_state = type_expression(ctx, after_operator, FullType, depth + 1)
-		ty_node = ty_state.last
-		$s = skip_trivia(ctx, ty_state)
-		$ids = $ids.append(ty_node)
-		if spelling(ctx, $s, "where") {
-			where_state = parse_where_clause(ctx, $s, depth + 1)
-			where_node = where_state.last
-			$s = skip_trivia(ctx, where_state)
-			$ids = $ids.append(where_node)
-		}
-	}
-	look = skip_trivia(ctx, $s)
-	if spelling(ctx, look, ".") and peek(ctx, skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))).kind == OpenCurly {
-		associated_state = if nominal and !where_alias look else issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end)
-		associated_end = parse_associated_block(ctx, skip_trivia(ctx, at_pos(ctx, associated_state, associated_state.pos + 1)), depth + 1)
-		associated_node = associated_end.last
-		$s = associated_end
-		$ids = $ids.append(associated_node)
-	}
-	end = $ids.fold(first.end, |furthest, id| U64.max(furthest, node_end(ctx, $s, id)))
-	add_node(ctx, $s, TypeDeclaration, first.start, end, $ids)
-}
-
-parse_associated_block : Ctx, State, U64 -> Built
-parse_associated_block = |ctx, initial, depth| {
-	opening = peek(ctx, initial)
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = opening.end
-	var $done = depth >= 128
-	if $done {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else {
-			before = look.pos
-			item_state = statement(ctx, if spelling(ctx, look, "var") issue(ctx, look, UnexpectedToken, t.start, t.end) else look, depth + 1)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$s = item_state
-			if (t.kind == UpperIdent or peek(ctx, skip_trivia(ctx, item_state)).kind == CloseCurly) and (node_get(ctx, item_state, item_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).kind == ExpressionStatement {
-				$s = issue(ctx, $s, UnexpectedToken, t.start, node_end(ctx, $s, item_node))
-			}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, AssociatedBlock, opening.start, $end, $ids)
-}
-
-# Patterns have their own grammar: expression operators and value-only postfixes
-# must never make an invalid binding pattern appear complete.
-parse_pattern : Ctx, State, Bool, U64 -> Built
-parse_pattern = |ctx, initial, alternatives, depth| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	if depth >= 128 {
-		bad = issue(ctx, s, ResourceLimit, t.start, t.end)
-		add_node(ctx, bad, ErrorNode, t.start, t.start, [])
-	} else {
-		first_state = pattern_primary(ctx, s, alternatives, depth + 1)
-		first_node = first_state.last
-		var $s = skip_trivia(ctx, first_state)
-		var $node = first_node
-		if alternatives and spelling(ctx, $s, "|") {
-			var $ids = [first_node]
-			while spelling(ctx, $s, "|") {
-				next_state = pattern_primary(ctx, skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1)), alternatives, depth + 1)
-				next_node = next_state.last
-				$ids = $ids.append(next_node)
-				$s = skip_trivia(ctx, next_state)
-			}
-			end = node_end(ctx, $s, $ids.last() ?? first_node)
-			alt_state = add_node(ctx, $s, AlternativePattern, t.start, end, $ids)
-			alt_node = alt_state.last
-			$s = alt_state
-			$node = alt_node
-		} else if spelling(ctx, $s, "as") {
-			name_state = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-			name = peek(ctx, name_state)
-			if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
-				named_state = add_node(ctx, at_pos(ctx, name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
-				named_node = named_state.last
-				alias_state = add_node(ctx, named_state, AliasPattern, t.start, name.end, [first_node, named_node])
-				alias_node = alias_state.last
-				$s = alias_state
-				$node = alias_node
-			} else {
-				$s = issue(ctx, name_state, UnexpectedToken, name.start, name.end)
-			}
-		}
-		with_last(ctx, $s, $node)
-	}
-}
-
-pattern_primary : Ctx, State, Bool, U64 -> Built
-pattern_primary = |ctx, s, alternatives, depth| {
-	t = peek(ctx, s)
-	if t.kind == LowerIdent {
-		add_node(ctx, at_pos(ctx, s, s.pos + 1), if spelling(ctx, s, "_") WildcardPattern else IdentifierPattern, t.start, t.end, [])
-	} else if spelling(ctx, s, "var") {
-		look = skip_trivia(ctx, at_pos(ctx, s, s.pos + 1))
-		name = peek(ctx, look)
-		if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
-			name_state = add_node(ctx, at_pos(ctx, look, look.pos + 1), Identifier, name.start, name.end, [])
-			name_node = name_state.last
-			add_node(ctx, name_state, MutablePattern, t.start, name.end, [name_node])
-		} else {
-			bad = issue(ctx, look, UnexpectedToken, name.start, name.end)
-			add_node(ctx, bad, ErrorNode, t.start, name.start, [])
-		}
-	} else if spelling(ctx, s, "..") {
-		look = skip_trivia(ctx, at_pos(ctx, s, s.pos + 1))
-		if spelling(ctx, look, "as") {
-			name_state = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-			name = peek(ctx, name_state)
-			if name.kind == LowerIdent and !spelling(ctx, name_state, "_") {
-				named_state = add_node(ctx, at_pos(ctx, name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
-				named_node = named_state.last
-				add_node(ctx, named_state, RestPattern, t.start, name.end, [named_node])
-			} else {
-				bad = issue(ctx, name_state, UnexpectedToken, name.start, name.end)
-				add_node(ctx, bad, RestPattern, t.start, t.end, [])
-			}
-		} else {
-			validated = if peek(ctx, look).kind == LowerIdent and !spelling(ctx, look, "_") issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end) else look
-			add_node(ctx, validated, RestPattern, t.start, t.end, [])
-		}
-	} else if t.kind == UpperIdent and byte(ctx.source, t.start) == '@' {
-		bad = issue(ctx, at_pos(ctx, s, s.pos + 1), UnexpectedToken, t.start, t.end)
-		add_node(ctx, bad, ErrorNode, t.start, t.end, [])
-	} else if t.kind == UpperIdent {
-		name_state = add_node(ctx, at_pos(ctx, s, s.pos + 1), Identifier, t.start, t.end, [])
-		name_node = name_state.last
-		var $s = name_state
-		var $name = name_node
-		var $done = False
-		while !$done {
-			look = skip_trivia(ctx, $s)
-			if spelling(ctx, look, ".") and peek(ctx, look).start == node_end(ctx, look, $name) and peek(ctx, at_pos(ctx, look, look.pos + 1)).kind == UpperIdent {
-				field_state = at_pos(ctx, look, look.pos + 1)
-				field = peek(ctx, field_state)
-				field_built = add_node(ctx, at_pos(ctx, field_state, field_state.pos + 1), Identifier, field.start, field.end, [])
-				field_node = field_built.last
-				access_state = add_node(ctx, field_built, FieldAccess, t.start, field.end, [$name, field_node])
-				access_node = access_state.last
-				$s = access_state
-				$name = access_node
-			} else {
-				$s = look
-				$done = True
-			}
-		}
-		var $nominal = False
-		if spelling(ctx, $s, ".") {
-			$nominal = True
-			$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		}
-		if peek(ctx, $s).kind == NoSpaceOpenRound {
-			{ state: args_state, ids: args, end, comma: _ } = pattern_collection(ctx, at_pos(ctx, $s, $s.pos + 1), CloseRound, True, depth)
-			add_node(ctx, args_state, if $nominal NominalPattern else TagPattern, t.start, end, [$name].concat(args))
-		} else if $nominal and peek(ctx, $s).kind == OpenCurly {
-			record_state = pattern_record(ctx, $s, alternatives, depth)
-			record_node = record_state.last
-			end = node_end(ctx, record_state, record_node)
-			add_node(ctx, record_state, NominalPattern, t.start, end, [$name, record_node])
-		} else {
-			validated = if $nominal issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end) else $s
-			add_node(ctx, validated, TagPattern, t.start, node_end(ctx, validated, $name), [$name])
-		}
-	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare {
-		closing = if t.kind == OpenSquare CloseSquare else CloseRound
-		{ state: items_state, ids, end, comma: _ } = pattern_collection(ctx, at_pos(ctx, s, s.pos + 1), closing, True, depth)
-		add_node(ctx, items_state, if t.kind == OpenSquare ListPattern else TuplePattern, t.start, end, ids)
-	} else if t.kind == OpenCurly {
-		pattern_record(ctx, s, alternatives, depth)
-	} else if t.kind == StringStart {
-		pattern_string(ctx, s)
-	} else if t.kind == Number or t.kind == SingleQuote {
-		primary(ctx, s, depth, False)
-	} else {
-		bad = issue(ctx, s, UnexpectedToken, t.start, t.end)
-		add_node(ctx, at_pos(ctx, bad, bad.pos + if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly 0 else 1), ErrorNode, t.start, t.end, [])
-	}
-}
-
-pattern_collection : Ctx, State, RocSyntax.TokenKind, Bool, U64 -> Collection
-pattern_collection = |ctx, initial, closing, alternatives, depth| {
-	var $s = initial
-	var $ids = []
-	var $end = peek(ctx, initial).start
-	var $done = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == closing {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else {
-			item_state = parse_pattern(ctx, look, alternatives, depth + 1)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$end = node_end(ctx, item_state, item_node)
-			$s = skip_trivia(ctx, item_state)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			} else if peek(ctx, $s).kind != closing and peek(ctx, $s).kind != EndOfFile {
-				$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-			}
-			if $s.pos <= look.pos {
-				$s = at_pos(ctx, $s, look.pos + 1)
-			}
-		}
-	}
-	{ state: $s, ids: $ids, end: $end, comma: False }
-}
-
-pattern_record : Ctx, State, Bool, U64 -> Built
-pattern_record = |ctx, initial, alternatives, depth| {
-	start = peek(ctx, initial).start
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = peek(ctx, initial).end
-	var $done = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = if t.start > $end t.start else $end
-			$done = True
-		} else {
-			field_state = if spelling(ctx, look, "..") {
-				name_state = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-				name = peek(ctx, name_state)
-				if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
-					named_state = add_node(ctx, at_pos(ctx, name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
-					named_node = named_state.last
-					add_node(ctx, named_state, RestPattern, t.start, name.end, [named_node])
-				} else {
-					add_node(ctx, name_state, RestPattern, t.start, t.end, [])
-				}
-			} else if t.kind == LowerIdent and (is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$') {
-				name_state = add_node(ctx, at_pos(ctx, look, look.pos + 1), Identifier, t.start, t.end, [])
-				name_node = name_state.last
-				after = skip_trivia(ctx, name_state)
-				if spelling(ctx, after, ":") {
-					value_state = parse_pattern(ctx, at_pos(ctx, after, after.pos + 1), alternatives, depth + 1)
-					value_node = value_state.last
-					end = node_end(ctx, value_state, value_node)
-					add_node(ctx, value_state, PatternField, t.start, end, [name_node, value_node])
-				} else {
-					validated = if spelling(ctx, after, ",") or peek(ctx, after).kind == CloseCurly after else issue(ctx, after, UnexpectedToken, peek(ctx, after).start, peek(ctx, after).end)
-					add_node(ctx, validated, PatternField, t.start, t.end, [name_node])
-				}
-			} else {
-				bad = issue(ctx, at_pos(ctx, look, look.pos + 1), UnexpectedToken, t.start, t.end)
-				add_node(ctx, bad, ErrorNode, t.start, t.end, [])
-			}
-			field_node = field_state.last
-			$ids = $ids.append(field_node)
-			$end = node_end(ctx, field_state, field_node)
-			$s = skip_trivia(ctx, field_state)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-			if $s.pos <= look.pos {
-				$s = at_pos(ctx, $s, look.pos + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, RecordPattern, start, $end, $ids)
-}
-
-parse_lambda : Ctx, State, U64, U64 -> Built
-parse_lambda = |ctx, initial, start, depth| {
-	var $s = initial
-	var $ids = []
-	var $done = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if spelling(ctx, look, "|") {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$done = True
-		} else if t.kind == EndOfFile {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$done = True
-		} else {
-			before = look.pos
-			param_state = parse_pattern(ctx, look, False, depth + 1)
-			param_node = param_state.last
-			$ids = $ids.append(param_node)
-			$s = skip_trivia(ctx, param_state)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-			if $s.pos <= before {
-				$s = issue(ctx, at_pos(ctx, $s, before + 1), UnexpectedToken, t.start, t.end)
-			}
-		}
-	}
-	body_state = expression(ctx, $s, 0, depth, False)
-	body_node = body_state.last
-	end = node_end(ctx, body_state, body_node)
-	add_node(ctx, body_state, Lambda, start, end, $ids.append(body_node))
-}
-
-parse_if : Ctx, State, U64, U64 -> Built
-parse_if = |ctx, initial, start, depth| {
-	condition_state = expression(ctx, initial, 0, depth, False)
-	condition_node = condition_state.last
-	look = skip_trivia(ctx, condition_state)
-	then_branch_state = expression(ctx, look, 0, depth, False)
-	then_branch_node = then_branch_state.last
-	after = skip_trivia(ctx, then_branch_state)
-	if spelling(ctx, after, "else") {
-		other_state = expression(ctx, at_pos(ctx, after, after.pos + 1), 0, depth, False)
-		other_node = other_state.last
-		end = node_end(ctx, other_state, other_node)
-		add_node(ctx, other_state, If, start, end, [condition_node, then_branch_node, other_node])
-	} else {
-		end = node_end(ctx, after, then_branch_node)
-		add_node(ctx, after, If, start, end, [condition_node, then_branch_node])
-	}
-}
-
-curly : Ctx, State, U64, U64, Bool, Bool -> Built
-curly = |ctx, initial, start, depth, punned, forced| {
-	look = skip_trivia(ctx, initial)
-	first = peek(ctx, look)
-	after = skip_trivia(ctx, at_pos(ctx, look, look.pos + 1))
-	record = forced or first.kind == CloseCurly or spelling(ctx, look, "..") or (first.kind == LowerIdent and (spelling(ctx, after, ":") or spelling(ctx, after, ",") or (punned and peek(ctx, after).kind == CloseCurly)) and !(spelling(ctx, after, ":") and record_starts_block(ctx, look)))
-	var $s = initial
-	var $ids = []
-	var $end = first.start
-	var $done = False
-	var $extension = False
-	if spelling(ctx, look, "..") {
-		base_state = expression(ctx, at_pos(ctx, look, look.pos + 1), 0, depth + 1, False)
-		base_node = base_state.last
-		comma = skip_trivia(ctx, base_state)
-		$s = if spelling(ctx, comma, ",") at_pos(ctx, comma, comma.pos + 1) else issue(ctx, comma, UnexpectedToken, peek(ctx, comma).start, peek(ctx, comma).end)
-		$ids = [base_node]
-		$end = node_end(ctx, $s, base_node)
-		$extension = True
-	}
-	while !$done {
-		$s = skip_trivia(ctx, $s)
-		t = peek(ctx, $s)
-		sync = declaration_sync(ctx, $s)
-		if record and sync.sync {
-			$s = issue(ctx, $s, UnclosedDelimiter, sync.start, sync.end)
-			$end = sync.end
-			$done = True
-		} else if t.kind == CloseCurly {
-			$end = t.end
-			$s = at_pos(ctx, $s, $s.pos + 1)
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
-			$end = if t.start > $end t.start else $end
-			$s = issue(ctx, $s, UnclosedDelimiter, t.start, t.end)
-			$done = True
-		} else {
-			before = $s.pos
-			if record {
-				name_state = add_node(ctx, at_pos(ctx, $s, $s.pos + 1), Identifier, t.start, t.end, [])
-				name_node = name_state.last
-				var $field_state = name_state
-				var $field_node = name_node
-				field_look = skip_trivia(ctx, name_state)
-				if t.kind != LowerIdent or !(is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$') {
-					bad = issue(ctx, field_look, UnsupportedSyntax, t.start, t.end)
-					next_field_state = add_node(ctx, bad, UnsupportedNode, t.start, t.end, [])
-					next_field_node = next_field_state.last
-					$field_state = next_field_state
-					$field_node = next_field_node
-				} else if spelling(ctx, field_look, ":") and token_spelling(ctx.source, source_token(ctx, field_look, significant_position(ctx.tokens, field_look.pos + 1)), "_") and (token_spelling(ctx.source, source_token(ctx, field_look, significant_position(ctx.tokens, significant_position(ctx.tokens, field_look.pos + 1) + 1)), ",") or source_token(ctx, field_look, significant_position(ctx.tokens, significant_position(ctx.tokens, field_look.pos + 1) + 1)).kind == CloseCurly) {
-					value_pos = significant_position(ctx.tokens, field_look.pos + 1)
-					unset_end = source_token(ctx, field_look, value_pos).end
-					unset_state = add_node(ctx, at_pos(ctx, field_look, value_pos + 1), UnsetField, t.start, unset_end, [name_node])
-					unset_node = unset_state.last
-					$field_state = unset_state
-					$field_node = unset_node
-				} else if spelling(ctx, field_look, ":") {
-					value_state = expression(ctx, at_pos(ctx, field_look, field_look.pos + 1), 0, depth, True)
-					value_node = value_state.last
-					end = node_end(ctx, value_state, value_node)
-					next_field_state = add_node(ctx, value_state, RecordField, t.start, end, [name_node, value_node])
-					next_field_node = next_field_state.last
-					$field_state = next_field_state
-					$field_node = next_field_node
-				} else {
-					next_field_state = add_node(ctx, field_look, RecordField, t.start, t.end, [name_node])
-					next_field_node = next_field_state.last
-					$field_state = next_field_state
-					$field_node = next_field_node
-				}
-				$ids = $ids.append($field_node)
-				$end = node_end(ctx, $field_state, $field_node)
-				$s = skip_trivia(ctx, $field_state)
-				if spelling(ctx, $s, ",") {
-					$s = at_pos(ctx, $s, $s.pos + 1)
-				}
-					else if peek(ctx, $s).kind != CloseCurly and peek(ctx, $s).kind != EndOfFile and (peek(ctx, $s).kind != LowerIdent or (node_get(ctx, $s, $field_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }).children_len != 2) {
-						$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					}
-			} else {
-				item_state = statement(ctx, $s, depth)
-				item_node = item_state.last
-				$ids = $ids.append(item_node)
-				$end = node_end(ctx, item_state, item_node)
-				$s = item_state
-			}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	if record and !$extension and !forced {
-		look_suffix = skip_trivia(ctx, $s)
-		dot = peek(ctx, look_suffix)
-		name_state = at_pos(ctx, look_suffix, look_suffix.pos + 1)
-		if spelling(ctx, look_suffix, ".") and dot.start == $end and peek(ctx, name_state).kind == UpperIdent {
-			var $mapper_ids = []
-			var $mapper_state = name_state
-			var $mapper_end = peek(ctx, name_state).end
-			var $mapper_done = False
-			while !$mapper_done {
-				t = peek(ctx, $mapper_state)
-				named_state = add_node(ctx, at_pos(ctx, $mapper_state, $mapper_state.pos + 1), Identifier, t.start, t.end, [])
-				named_node = named_state.last
-				$mapper_state = named_state
-				$mapper_ids = $mapper_ids.append(named_node)
-				$mapper_end = t.end
-				if spelling(ctx, $mapper_state, ".") and peek(ctx, $mapper_state).start == $mapper_end and peek(ctx, at_pos(ctx, $mapper_state, $mapper_state.pos + 1)).kind == UpperIdent {
-					$mapper_state = at_pos(ctx, $mapper_state, $mapper_state.pos + 1)
-				} else {
-					$mapper_done = True
-				}
-			}
-			# Keep the mapper as a normal qualified identifier tree.
-			var $mapper = $mapper_ids.first() ?? 0
-			var $index = 1.U64
-			while $index < $mapper_ids.len() {
-				field = $mapper_ids.get($index) ?? $mapper
-				access_state = add_node(ctx, $mapper_state, FieldAccess, node_start(ctx, $mapper_state, $mapper), node_end(ctx, $mapper_state, field), [$mapper, field])
-				access_node = access_state.last
-				$mapper_state = access_state
-				$mapper = access_node
-				$index = $index + 1
-			}
-			return add_node(ctx, $mapper_state, RecordBuilder, start, $mapper_end, [$mapper].concat($ids))
-		}
-	}
-	add_node(ctx, $s, if $extension RecordUpdate else if record Record else Block, start, $end, $ids)
-}
-
-parse_match : Ctx, State, U64, U64 -> Built
-parse_match = |ctx, initial, start, depth| {
-	value_state = expression(ctx, initial, 0, depth, False)
-	value_node = value_state.last
-	look = skip_trivia(ctx, value_state)
-	if peek(ctx, look).kind != OpenCurly {
-		bad = issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end)
-		add_node(ctx, bad, Match, start, node_end(ctx, bad, value_node), [value_node])
-	} else {
-		var $s = at_pos(ctx, look, look.pos + 1)
-		var $ids = [value_node]
-		var $end = peek(ctx, look).end
-		var $done = False
-		while !$done {
-			$s = skip_trivia(ctx, $s)
-			t = peek(ctx, $s)
-			if t.kind == CloseCurly {
-				$end = t.end
-				$s = at_pos(ctx, $s, $s.pos + 1)
-				$done = True
-			} else if t.kind == EndOfFile {
-				$s = issue(ctx, $s, UnclosedDelimiter, t.start, t.end)
-				$end = if t.start > $end t.start else $end
-				$done = True
-			} else {
-				before = $s.pos
-				pattern_state = parse_pattern(ctx, $s, True, depth + 1)
-				pattern_node = pattern_state.last
-				var $arrow = skip_trivia(ctx, pattern_state)
-				var $branch_ids = [pattern_node]
-				if spelling(ctx, $arrow, "if") {
-					outer_guard = $arrow.in_guard
-					guard_start = at_pos(ctx, { ..$arrow, in_guard: True }, $arrow.pos + 1)
-					guard_state = expression(ctx, guard_start, 0, depth + 1, False)
-					guard_node = guard_state.last
-					$arrow = skip_trivia(ctx, { ..guard_state, in_guard: outer_guard })
-					$branch_ids = $branch_ids.append(guard_node)
-				}
-				arrow = $arrow
-				if spelling(ctx, arrow, "=>") {
-					branch_value_state = expression(ctx, at_pos(ctx, arrow, arrow.pos + 1), 0, depth, False)
-					branch_value_node = branch_value_state.last
-					branch_end = node_end(ctx, branch_value_state, branch_value_node)
-					branch_state = add_node(ctx, branch_value_state, MatchBranch, t.start, branch_end, $branch_ids.append(branch_value_node))
-					branch_node = branch_state.last
-					$ids = $ids.append(branch_node)
-					$s = skip_trivia(ctx, branch_state)
-					$end = branch_end
-					if spelling(ctx, $s, ",") {
-						$s = at_pos(ctx, $s, $s.pos + 1)
-					}
-				} else {
-					$s = issue(ctx, arrow, UnsupportedSyntax, t.start, peek(ctx, arrow).end)
-					$ids = $ids.append(pattern_node)
-				}
-				if $s.pos <= before {
-					$s = at_pos(ctx, $s, before + 1)
-				}
-			}
-		}
-		if $ids.len() == 1 {
-			$s = issue(ctx, $s, UnexpectedToken, start, $end)
-		}
-		add_node(ctx, $s, Match, start, $end, $ids)
-	}
-}
 
 expect {
 	p = RocSyntax.parse_str("module [inc]\ninc : U64 -> U64\ninc = |x| x + 1\n")
@@ -2316,17 +584,6 @@ can_end_expression = |kind| {
 
 can_end_token : List(U8), RocSyntax.Token -> Bool
 can_end_token = |source, token| can_end_expression(token.kind) or token_spelling(source, token, "...")
-
-binary_minus : Ctx, State -> Bool
-binary_minus = |ctx, s| {
-	t = peek(ctx, s)
-	next = byte(ctx.source, t.end)
-	previous = ctx.tokens.get(if s.pos > 0 s.pos - 1 else 0) ?? t
-	if matches(ctx.source, t.end, "...") {
-		return previous.end == t.start and can_end_token(ctx.source, previous)
-	}
-	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_token(ctx.source, previous)) or (!is_digit(next) and !is_lower(next) and !is_upper(next) and next != '_' and next != '(' and next < 0x80)
-}
 
 expect {
 	p = RocSyntax.parse_expr_str("-1")
@@ -2398,21 +655,8 @@ expect {
 	["x : 1 -> U64", "x : \"hi\" -> U64", "x : [1] -> U64", "x : U64 -> 1 -> U64"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_str("x : U64 -> U64").status == Complete
 }
 
-# Empty lists own no buffers. Loop parsers move their old state into a local,
-# then clear the loop variable before invoking a growing builder. Keeping both
-# records alive would force copy-on-write at every append in native Roc builds.
-vacant : State
-vacant = State.{ pos: 0, nodes: RocSyntaxBuffer.empty({}), children: RocSyntaxBuffer.empty({}), node_tail: [], child_tail: [], diagnostics: [], unsupported: False, limited: False, in_guard: False, last: 0 }
-
 expect {
 	["-!h", "-'i'", "match 42 {}", "person.@"].all(|source| RocSyntax.parse_expr_str(source).status != Complete) and ["F\n", "modu\n", "S\n0\n", "x = _\n\ny = { a: _ + 1 }"].all(|source| RocSyntax.parse_str(source).status != Complete)
-}
-
-# Consume a state when advancing. Avoid a record spread retaining an alias to
-# its growing buffers across a recursive parse call.
-at_pos : Ctx, State, U64 -> State
-at_pos = |_ctx, State.{ pos: _, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last }, position| {
-	State.{ pos: position, nodes, children, node_tail, child_tail, diagnostics, unsupported, limited, in_guard, last }
 }
 
 significant_position : List(RocSyntax.Token), U64 -> U64
@@ -2434,51 +678,6 @@ significant_position = |tokens, position| {
 
 token_spelling : List(U8), RocSyntax.Token, Str -> Bool
 token_spelling = |source, token, text| token.end - token.start == text.count_utf8_bytes() and matches(source, token.start, text)
-
-source_token : Ctx, State, U64 -> RocSyntax.Token
-source_token = |ctx, _s, pos| ctx.tokens.get(pos) ?? { kind: EndOfFile, start: ctx.source.len(), end: ctx.source.len() }
-
-valid_import : Ctx, State, U64 -> Bool
-valid_import = |ctx, s, id| {
-	match node_get(ctx, s, id) {
-		Ok(n) if n.kind == Identifier => is_upper(byte(ctx.source, n.start))
-		Ok(n) if n.kind == FieldAccess => {
-			last = child_get(ctx, s, n.children_start + 1) ?? node_count(ctx, s)
-			match node_get(ctx, s, last) {
-				Ok(field) => is_upper(byte(ctx.source, field.start))
-				Err(_) => False
-			}
-		}
-		_ => False
-	}
-}
-
-valid_pattern : Ctx, State, U64 -> Bool
-valid_pattern = |ctx, s, root| {
-	var $work = [root]
-	var $depth = 1
-	var $valid = True
-	while $depth > 0 and $valid {
-		$depth = $depth - 1
-		id = $work.get($depth) ?? node_count(ctx, s)
-		match node_get(ctx, s, id) {
-			Err(_) => {
-				$valid = False
-			}
-			Ok(n) => {
-				$valid = n.kind == Identifier or n.kind == NumberLiteral or n.kind == StringLiteral or n.kind == CharacterLiteral or n.kind == Call or n.kind == Tuple or n.kind == ListLiteral or n.kind == Parenthesized
-				var $i = 0
-				while $valid and $i < n.children_len {
-					child = child_get(ctx, s, n.children_start + $i) ?? node_count(ctx, s)
-					$work = if $depth < $work.len() $work.set($depth, child) ?? $work else $work.append(child)
-					$depth = $depth + 1
-					$i = $i + 1
-				}
-			}
-		}
-	}
-	$valid
-}
 
 expect {
 	["module [1 + 2]", "import 123", "import lower", "import f(1)", "module []\nmodule []"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("match x { 1 + 2 => 3 }").status != Complete
@@ -2504,88 +703,12 @@ expect {
 	["dbg", "crash", "return", "value.?0", "value.?Upper", "value.? field", "value.?field(1)"].all(|source| RocSyntax.parse_expr_str(source).status == Recovered)
 }
 
-# A direct optional-field call is forbidden. A following required field with
-# arguments is a method call and starts a separate postfix operation.
-is_optional_access : Ctx, State, U64 -> Bool
-is_optional_access = |ctx, s, root| {
-	match node_get(ctx, s, root) {
-		Ok(n) => n.kind == OptionalFieldAccess
-		_ => False
-	}
-}
-
 expect {
 	["|_| 1", "|Some(x), (a, b), {name}, [first, .. as rest]| x", "|var count| count", "|| {}", "match x { _ => 0 }", "match x { Some(a) | Other(a) => a, None => 0 }", "match x { {a: Some(v), ..rest} => v }", "match x { [first, .. as rest] if first > 0 => rest, _ => [] }", "|Thing.(value)| value", "|Thing.{field}| field", "|(a, _) as pair| pair"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
 }
 
 expect {
 	["|1 + 2| 0", "match x { 1 + 2 => 0 }", "match x { [a b] => 0 }", "|var _| 0", "match x { [.. old] => 0 }", "match x { _ as Upper => 0 }"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
-}
-
-# Only inspect potential destructuring starts; ordinary definitions take the
-# constant-lookahead path above. Delimiters shield nested assignments.
-has_pattern_assignment : Ctx, State -> Bool
-has_pattern_assignment = |ctx, initial| {
-	var $s = initial
-	first = peek(ctx, $s)
-	if first.kind == UpperIdent {
-		if byte(ctx.source, first.start) == '@' {
-			return False
-		}
-		$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		var $name_end = first.end
-		var $done = False
-		while !$done and spelling(ctx, $s, ".") {
-			field_state = at_pos(ctx, $s, $s.pos + 1)
-			field = peek(ctx, field_state)
-			if peek(ctx, $s).start == $name_end and field.kind == UpperIdent {
-				$name_end = field.end
-				$s = skip_trivia(ctx, at_pos(ctx, field_state, field_state.pos + 1))
-			} else {
-				$done = True
-			}
-		}
-		if spelling(ctx, $s, ".") {
-			$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		}
-		if peek(ctx, $s).kind != NoSpaceOpenRound and peek(ctx, $s).kind != OpenCurly {
-			return False
-		}
-	}
-	opening = peek(ctx, $s)
-	if opening.kind != OpenRound and opening.kind != NoSpaceOpenRound and opening.kind != OpenCurly {
-		return False
-	}
-	var $pos = $s.pos + 1
-	var $nesting = 1.U64
-	while $nesting > 0 {
-		t = source_token(ctx, $s, $pos)
-		if t.kind == EndOfFile {
-			return False
-		}
-		if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
-			$nesting = $nesting + 1
-		}
-		if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			$nesting = $nesting - 1
-		}
-		$pos = $pos + 1
-	}
-	token_spelling(ctx.source, source_token(ctx, $s, significant_position(ctx.tokens, $pos)), "=")
-}
-
-parse_for : Ctx, State, U64, Bool, U64 -> Built
-parse_for = |ctx, initial, start, stream, depth| {
-	pattern_state = parse_pattern(ctx, initial, False, depth + 1)
-	pattern_node = pattern_state.last
-	look = skip_trivia(ctx, pattern_state)
-	validated = if spelling(ctx, look, "in") at_pos(ctx, look, look.pos + 1) else issue(ctx, look, UnexpectedToken, peek(ctx, look).start, peek(ctx, look).end)
-	list_state = expression(ctx, validated, 0, depth + 1, False)
-	list_node = list_state.last
-	body_state = expression(ctx, list_state, 0, depth + 1, False)
-	body_node = body_state.last
-	end = U64.max(node_end(ctx, body_state, body_node), U64.max(node_end(ctx, body_state, pattern_node), node_end(ctx, body_state, list_node)))
-	add_node(ctx, body_state, if stream ForStream else For, start, end, [pattern_node, list_node, body_node])
 }
 
 expect {
@@ -2628,117 +751,12 @@ expect {
 	RocSyntax.tokenize_str("0_.1e3").status == Complete and RocSyntax.tokenize_str("a=(0\r.e)\n").status == Recovered and RocSyntax.tokenize_str("a=0\r\n").status == Complete
 }
 
-parse_string : Ctx, State, U64 -> Built
-parse_string = |ctx, initial, depth| {
-	first = peek(ctx, initial)
-	multiline = first.kind == MultilineStringStart
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = first.end
-	var $done = False
-	while !$done {
-		look = if multiline skip_trivia(ctx, $s) else $s
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == StringPart {
-			part_state = add_node(ctx, at_pos(ctx, look, look.pos + 1), StringSegment, t.start, t.end, [])
-			part_node = part_state.last
-			$s = part_state
-			$ids = $ids.append(part_node)
-			$end = t.end
-		} else if t.kind == InterpolationStart {
-			value_state = expression(ctx, at_pos(ctx, look, look.pos + 1), 0, depth + 1, False)
-			value_node = value_state.last
-			after = skip_trivia(ctx, value_state)
-			close = peek(ctx, after)
-			closed = close.kind == InterpolationEnd
-			validated = if closed at_pos(ctx, after, after.pos + 1) else issue(ctx, after, UnclosedDelimiter, close.start, close.end)
-			end = if closed close.end else node_end(ctx, validated, value_node)
-			interpolation_state = add_node(ctx, validated, Interpolation, t.start, end, [value_node])
-			interpolation_node = interpolation_state.last
-			$s = interpolation_state
-			$ids = $ids.append(interpolation_node)
-			$end = end
-			if !closed {
-				$done = True
-			}
-		} else if multiline and t.kind == MultilineStringStart {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-		} else if !multiline and t.kind == StringEnd {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else {
-			$s = if multiline look else issue(ctx, look, UnclosedString, first.start, $end)
-			$done = True
-		}
-	}
-	literal_suffix(ctx, add_node(ctx, $s, if multiline MultilineStringLiteral else StringLiteral, first.start, $end, $ids), multiline)
-}
-
-# A literal's adjacent .Upper chain names its type, rather than a value field.
-literal_suffix : Ctx, Built, Bool -> Built
-literal_suffix = |ctx, built_state, allow_trivia| {
-	built_node = built_state.last
-	var $s = built_state
-	var $type_ids = []
-	var $end = node_end(ctx, $s, built_node)
-	var $done = False
-	while !$done {
-		look = if allow_trivia and $type_ids.is_empty() skip_trivia(ctx, $s) else $s
-		t = peek(ctx, look)
-		name_state = at_pos(ctx, look, look.pos + 1)
-		name = peek(ctx, name_state)
-		if spelling(ctx, look, ".") and (allow_trivia and $type_ids.is_empty() or t.start == $end) and name.kind == UpperIdent and is_upper(byte(ctx.source, name.start)) {
-			named_state = add_node(ctx, at_pos(ctx, name_state, name_state.pos + 1), Identifier, name.start, name.end, [])
-			named_node = named_state.last
-			$s = named_state
-			$type_ids = $type_ids.append(named_node)
-			$end = name.end
-		} else {
-			$done = True
-		}
-	}
-	if $type_ids.is_empty() with_last(ctx, $s, built_node) else {
-		start = node_start(ctx, $s, built_node)
-		add_node(ctx, $s, TypedLiteral, start, $end, [built_node].concat($type_ids))
-	}
-}
-
 expect {
 	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "42.U8", "1.0.F64", "'a'.U32", "\"hello\".MyText", "0xFF.Gui.Color"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
 }
 
 expect {
 	["\"\${}\"", "\"\${x\"", "\"\${x}", "1 .U8"].all(|source| RocSyntax.parse_expr_str(source).status != Complete)
-}
-
-file_import_type : Ctx, State -> Built
-file_import_type = |ctx, initial| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	valid_name = spelling(ctx, s, "Str") or spelling(ctx, s, "List")
-	checked = if valid_name s else issue(ctx, s, UnexpectedToken, t.start, t.end)
-	name_state = add_node(ctx, at_pos(ctx, checked, checked.pos + if t.kind == EndOfFile 0 else 1), Identifier, t.start, t.end, [])
-	name_node = name_state.last
-	if spelling(ctx, s, "List") {
-		look = skip_trivia(ctx, name_state)
-		opening = peek(ctx, look)
-		after = if opening.kind == OpenRound or opening.kind == NoSpaceOpenRound at_pos(ctx, look, look.pos + 1) else issue(ctx, look, UnexpectedToken, opening.start, opening.end)
-		arg_state = skip_trivia(ctx, after)
-		arg = peek(ctx, arg_state)
-		validated = if spelling(ctx, arg_state, "U8") arg_state else issue(ctx, arg_state, UnexpectedToken, arg.start, arg.end)
-		arg_built = add_node(ctx, at_pos(ctx, validated, validated.pos + if arg.kind == EndOfFile 0 else 1), Identifier, arg.start, arg.end, [])
-		arg_node = arg_built.last
-		close_state = skip_trivia(ctx, arg_built)
-		close = peek(ctx, close_state)
-		closed = close.kind == CloseRound
-		finished = if closed at_pos(ctx, close_state, close_state.pos + 1) else issue(ctx, close_state, UnclosedDelimiter, close.start, close.end)
-		add_node(ctx, finished, TypeExpression, t.start, if closed close.end else arg.end, [name_node, arg_node])
-	} else {
-		with_last(ctx, name_state, name_node)
-	}
 }
 
 expect {
@@ -2759,98 +777,6 @@ expect {
 
 expect {
 	RocSyntax.parse_statement_str("var count = 0").status == Complete and RocSyntax.parse_statement_str("1 + 2").status == Complete and RocSyntax.parse_statement_str("x = 1\ny = 2").status == Recovered and RocSyntax.parse_header_str("module [run]").status == Complete and RocSyntax.parse_header_str("x = 1").status == Recovered and RocSyntax.parse_header_str("module []\nx = 1").status == Recovered
-}
-
-dependency_record : Ctx, State, Bool, U64 -> Built
-dependency_record = |ctx, initial, strict, depth| {
-	start = peek(ctx, initial).start
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = peek(ctx, initial).end
-	var $platform = False
-	var $version = False
-	var $seen = Set.empty()
-	var $done = False
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$end = t.end
-			$s = at_pos(ctx, look, look.pos + 1)
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$done = True
-		} else {
-			before = look.pos
-			valid_name = t.kind == LowerIdent and !spelling(ctx, look, "_") and byte(ctx.source, t.start) != '_'
-			checked = if valid_name look else issue(ctx, look, UnexpectedToken, t.start, t.end)
-			name_state = add_node(ctx, at_pos(ctx, checked, checked.pos + 1), Identifier, t.start, t.end, [])
-			name_node = name_state.last
-			var $field_ids = [name_node]
-			$s = skip_trivia(ctx, name_state)
-			$end = t.end
-			is_version = token_spelling(ctx.source, t, "roc")
-			if !is_version {
-				dependency_name = Str.from_utf8_lossy(ctx.source.sublist({ start: t.start, len: t.end - t.start }))
-				if $seen.contains(dependency_name) {
-					$s = issue(ctx, $s, UnexpectedToken, t.start, t.end)
-				}
-				$seen = $seen.insert(dependency_name)
-			}
-			if spelling(ctx, $s, ":") {
-				value_start = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				is_platform = spelling(ctx, value_start, "platform")
-				value_state = if is_platform skip_trivia(ctx, at_pos(ctx, value_start, value_start.pos + 1)) else value_start
-				value_token = peek(ctx, value_state)
-				valid_start = if is_platform value_token.kind == StringStart or spelling(ctx, value_state, "glue") else !strict or value_token.kind == StringStart
-				validated = if valid_start and (!is_platform or !$platform) value_state else issue(ctx, value_state, UnexpectedToken, value_token.start, value_token.end)
-				parsed_state = expression(ctx, validated, 0, depth + 1, False)
-				parsed_node = parsed_state.last
-				var $value_state = parsed_state
-				var $value_node = parsed_node
-				$end = node_end(ctx, parsed_state, parsed_node)
-				if is_platform {
-					platform_state = add_node(ctx, parsed_state, PlatformReference, peek(ctx, value_start).start, $end, [parsed_node])
-					platform_node = platform_state.last
-					$value_state = platform_state
-					$value_node = platform_node
-					$platform = True
-				}
-				$s = $value_state
-				$field_ids = $field_ids.append($value_node)
-				if !is_version and !(is_platform and token_spelling(ctx.source, value_token, "glue")) and !plain_dependency_path(ctx, $s, parsed_node) {
-					$s = issue(ctx, $s, UnexpectedToken, t.start, $end)
-				}
-				if is_version {
-					n = node_get(ctx, $s, parsed_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-					part_id = child_get(ctx, $s, n.children_start) ?? node_count(ctx, $s)
-					part = node_get(ctx, $s, part_id) ?? n
-					version_text = Str.from_utf8_lossy(ctx.source.sublist({ start: part.start, len: part.end - part.start }))
-					if $version or is_platform or n.kind != StringLiteral or n.children_len != 1 or part.kind != StringSegment or !valid_roc_version(version_text) {
-						$s = issue(ctx, $s, UnexpectedToken, t.start, $end)
-					}
-				}
-			} else {
-				$s = issue(ctx, $s, UnexpectedToken, t.start, $end)
-			}
-			$version = $version or is_version
-			field_state = add_node(ctx, $s, DependencyField, t.start, $end, $field_ids)
-			field_node = field_state.last
-			$ids = $ids.append(field_node)
-			$s = skip_trivia(ctx, field_state)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			} else if peek(ctx, $s).kind != CloseCurly {
-				$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-			}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, Dependencies, start, $end, $ids)
 }
 
 version_digits : Str, U64, U64, U64 -> Bool
@@ -2899,158 +825,8 @@ expect {
 	["app []", "app [] { pkg }", "app [] { pkg: 42 }", "app [] { a: platform glue, b: platform glue }", "app [] { roc: platform glue }", "package [] { roc: \"bad\" }", "package [] { roc: \"1.0.0\", roc: \"1.0.1\" }"].all(|source| RocSyntax.parse_header_str(source).status == Recovered)
 }
 
-pattern_string : Ctx, State -> Built
-pattern_string = |ctx, initial| {
-	first = peek(ctx, initial)
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = first.end
-	var $captures = False
-	var $done = False
-	while !$done {
-		t = peek(ctx, $s)
-		if t.kind == StringPart {
-			part_state = add_node(ctx, at_pos(ctx, $s, $s.pos + 1), StringSegment, t.start, t.end, [])
-			part_node = part_state.last
-			$s = part_state
-			$ids = $ids.append(part_node)
-			$end = t.end
-		} else if t.kind == InterpolationStart {
-			name_state = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-			name = peek(ctx, name_state)
-			checked = if name.kind == LowerIdent name_state else issue(ctx, name_state, UnexpectedToken, name.start, name.end)
-			named_state = add_node(ctx, at_pos(ctx, checked, checked.pos + if name.kind == EndOfFile or name.kind == InterpolationEnd 0 else 1), if spelling(ctx, checked, "_") WildcardPattern else IdentifierPattern, name.start, name.end, [])
-			named_node = named_state.last
-			close_state = skip_trivia(ctx, named_state)
-			close = peek(ctx, close_state)
-			closed = close.kind == InterpolationEnd
-			finished = if closed at_pos(ctx, close_state, close_state.pos + 1) else issue(ctx, close_state, UnclosedDelimiter, close.start, close.end)
-			$end = if closed close.end else name.end
-			capture_state = add_node(ctx, finished, CapturePattern, t.start, $end, [named_node])
-			capture_node = capture_state.last
-			$s = capture_state
-			$ids = $ids.append(capture_node)
-			$captures = True
-			if !closed {
-				$done = True
-			}
-		} else if t.kind == StringEnd {
-			$s = at_pos(ctx, $s, $s.pos + 1)
-			$end = t.end
-			$done = True
-		} else {
-			$s = issue(ctx, $s, UnclosedString, first.start, $end)
-			$done = True
-		}
-	}
-	add_node(ctx, $s, if $captures PatternStringLiteral else StringLiteral, first.start, $end, $ids)
-}
-
 expect {
 	RocSyntax.parse_header_str("").status == Complete and RocSyntax.parse_expr_str("match text { \"hello \${name}\" => name, \"\${_}\" => \"\" }").status == Complete and RocSyntax.parse_expr_str("match text { \"\${a + b}\" => 0 }").status != Complete and RocSyntax.parse_expr_str("match text { \"x\".Str => 0 }").status != Complete
-}
-
-# Only receiver/callee ancestors count: methods buried in arguments cannot
-# make a literal a valid pipe target.
-pipe_has_method : Ctx, State, U64 -> Bool
-pipe_has_method = |ctx, s, root| {
-	var $id = root
-	var $found = False
-	var $done = False
-	while !$done {
-		if method_target(ctx, s, $id) {
-			$found = True
-			$done = True
-		} else {
-			match node_get(ctx, s, $id) {
-				Ok(n) if n.kind == Call or n.kind == FieldAccess or n.kind == OptionalFieldAccess or n.kind == Suffix or n.kind == NominalRecord or n.kind == NominalApply => {
-					$id = child_get(ctx, s, n.children_start) ?? node_count(ctx, s)
-				}
-				_ => {
-					$done = True
-				}
-			}
-		}
-	}
-	$found
-}
-
-# An assignment head after a line break cannot continue an expression. Keep
-# its tokens for the enclosing statement loop and blame the damaged line.
-declaration_sync : Ctx, State -> { sync : Bool, start : U64, end : U64 }
-declaration_sync = |ctx, initial| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	next = skip_trivia(ctx, at_pos(ctx, s, s.pos + 1))
-	if t.kind != LowerIdent or !spelling(ctx, next, "=") {
-		return { sync: False, start: t.start, end: t.start }
-	}
-	var $pos = s.pos
-	var $newline = False
-	var $done = False
-	var $start = t.start
-	var $end = t.start
-	while $pos > 0 and !$done {
-		$pos = $pos - 1
-		previous = source_token(ctx, s, $pos)
-		if previous.kind == Whitespace or previous.kind == Comment {
-			$newline = $newline or line_break(ctx.source, previous.start, previous.end)
-		} else {
-			$start = previous.start
-			$end = previous.end
-			$done = True
-		}
-	}
-	{ sync: $newline, start: $start, end: $end }
-}
-
-method_target : Ctx, State, U64 -> Bool
-method_target = |ctx, s, root| {
-	match node_get(ctx, s, root) {
-		Ok(call) if call.kind == Call => {
-			callee_id = child_get(ctx, s, call.children_start) ?? node_count(ctx, s)
-			match node_get(ctx, s, callee_id) {
-				Ok(callee) if callee.kind == FieldAccess => {
-					receiver = child_get(ctx, s, callee.children_start) ?? node_count(ctx, s)
-					field_id = child_get(ctx, s, callee.children_start + 1) ?? node_count(ctx, s)
-					field = node_get(ctx, s, field_id) ?? callee
-					is_lower(byte(ctx.source, field.start)) and !namespace_receiver(ctx, s, receiver)
-				}
-				_ => False
-			}
-		}
-		_ => False
-	}
-}
-
-namespace_receiver : Ctx, State, U64 -> Bool
-namespace_receiver = |ctx, s, root| {
-	var $id = root
-	var $upper_segment = False
-	var $done = False
-	var $qualified = False
-	while !$done {
-		match node_get(ctx, s, $id) {
-			Ok(n) if n.kind == Identifier => {
-				$qualified = is_upper(byte(ctx.source, n.start)) or $upper_segment
-				$done = True
-			}
-			Ok(n) if n.kind == FieldAccess => {
-				field_id = child_get(ctx, s, n.children_start + 1) ?? node_count(ctx, s)
-				field = node_get(ctx, s, field_id) ?? n
-				if is_upper(byte(ctx.source, field.start)) {
-					$upper_segment = True
-					$id = child_get(ctx, s, n.children_start) ?? node_count(ctx, s)
-				} else {
-					$done = True
-				}
-			}
-			_ => {
-				$done = True
-			}
-		}
-	}
-	$qualified
 }
 
 expect {
@@ -3063,66 +839,6 @@ expect {
 
 expect {
 	RocSyntax.parse_expr_str("tuple.0.1").status == Complete and RocSyntax.parse_expr_str("tuple.01.002").status == Complete
-}
-
-# Distinguish local type declarations from uppercase tag/call expressions.
-type_declaration_start : Ctx, State -> Bool
-type_declaration_start = |ctx, initial| {
-	var $s = skip_trivia(ctx, at_pos(ctx, initial, initial.pos + 1))
-	if peek(ctx, $s).kind == OpenRound or peek(ctx, $s).kind == NoSpaceOpenRound {
-		$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-		var $done = False
-		while !$done {
-			if peek(ctx, $s).kind == CloseRound {
-				$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				$done = True
-			} else if peek(ctx, $s).kind == LowerIdent {
-				$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				if spelling(ctx, $s, ",") {
-					$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				}
-					else if peek(ctx, $s).kind != CloseRound {
-						return False
-					}
-			} else {
-				return False
-			}
-		}
-	}
-	spelling(ctx, $s, ":") or spelling(ctx, $s, ":=") or spelling(ctx, $s, "::")
-}
-
-# Where aliases deliberately accept spaced qualification segments.
-type_where_alias_name : Ctx, State, U64 -> Built
-type_where_alias_name = |ctx, initial, depth| {
-	first = peek(ctx, initial)
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $end = first.end
-	var $done = False
-	while !$done {
-		dot = skip_trivia(ctx, $s)
-		if spelling(ctx, dot, ".") {
-			name_state = at_pos(ctx, dot, dot.pos + 1)
-			name = peek(ctx, name_state)
-			if name.kind == UpperIdent and name.start == peek(ctx, dot).end and byte(ctx.source, name.start) != '@' {
-				$s = at_pos(ctx, name_state, name_state.pos + 1)
-				$end = name.end
-			} else {
-				$done = True
-			}
-		} else {
-			$done = True
-		}
-	}
-	named_state = add_node(ctx, $s, TypeName, first.start, $end, [])
-	named_node = named_state.last
-	look = skip_trivia(ctx, named_state)
-	if peek(ctx, look).kind == NoSpaceOpenRound {
-		items = type_collection(ctx, at_pos(ctx, look, look.pos + 1), CloseRound, TypeItem, depth + 1)
-		add_node(ctx, items.state, TypeApply, first.start, items.end, [named_node].concat(items.ids))
-	} else {
-		with_last(ctx, named_state, named_node)
-	}
 }
 
 expect {
@@ -3162,33 +878,6 @@ expect {
 	["f : {a: U8 b: Str}", "f : [A B]", "f : [A(a) B(b)]", "f : {a ?: U8 b ?: Str}", "f : {a: U8 ?? 1 b: Str}"].all(|source| RocSyntax.parse_str(source).status == Complete)
 }
 
-record_starts_block : Ctx, State -> Bool
-record_starts_block = |ctx, s| {
-	var $pos = s.pos + 2
-	var $nesting = 0.U64
-	var $found = False
-	var $done = False
-	while !$done {
-		t = source_token(ctx, s, $pos)
-		if t.kind == EndOfFile {
-			$done = True
-		} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
-			$nesting = $nesting + 1
-		} else if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
-			if $nesting == 0 {
-				$done = True
-			} else {
-				$nesting = $nesting - 1
-			}
-		} else if $nesting == 0 and t.kind == LowerIdent and token_spelling(ctx.source, source_token(ctx, s, significant_position(ctx.tokens, $pos + 1)), "=") {
-			$found = True
-			$done = True
-		}
-		$pos = $pos + 1
-	}
-	$found
-}
-
 expect {
 	["{ ..person, age: 31 }", "{ ..person, }", "{ field: _ }", "{ x: 1 }.Foo", "{ x: 1 }.Mod.Foo", "Foo.{ x: 1 }", "mapper.{ ..base, x: 1 }", "Foo.(1)", "Mod.Foo.(1, 2)", "{ x : U64\n x = 1\n x }"].all(|source| RocSyntax.parse_expr_str(source).status == Complete)
 }
@@ -3226,473 +915,6 @@ expect {
 	["module[Foo.bar as lower]", "module[Foo._]", "module[Foo._a]", "module[Foo.$bar]"].all(|source| RocSyntax.parse_str(source).status != Complete) and RocSyntax.parse_expr_str("x.$field").status != Complete
 }
 
-# Platform headers use dedicated collections: target configuration is data,
-# and its atoms deliberately do not inherit value expression operators.
-parse_platform_header : Ctx, State, U64 -> Built
-parse_platform_header = |ctx, initial, depth| {
-	start = peek(ctx, initial).start
-	name_state = platform_header_string(ctx, skip_trivia(ctx, at_pos(ctx, initial, initial.pos + 1)), True)
-	name_node = name_state.last
-	requires_state = platform_requires(ctx, platform_header_keyword(ctx, name_state, "requires"), depth + 1)
-	requires_node = requires_state.last
-	exposed_start = platform_header_keyword(ctx, requires_state, "exposes")
-	exposed = exposed_collection(ctx, exposed_start)
-	packages_start = platform_header_keyword(ctx, exposed.state, "packages")
-	checked_packages = if peek(ctx, packages_start).kind == OpenCurly packages_start else issue(ctx, packages_start, UnexpectedToken, peek(ctx, packages_start).start, peek(ctx, packages_start).end)
-	packages_state = dependency_record(ctx, checked_packages, False, depth + 1)
-	packages_node = packages_state.last
-	package_info = node_get(ctx, packages_state, packages_node) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-	var $s = packages_state
-	var $index = 0.U64
-	while $index < package_info.children_len {
-		field_id = child_get(ctx, $s, package_info.children_start + $index) ?? packages_node
-		field = node_get(ctx, $s, field_id) ?? package_info
-		if field.children_len > 1 {
-			value_id = child_get(ctx, $s, field.children_start + 1) ?? field_id
-			value = node_get(ctx, $s, value_id) ?? field
-			if value.kind == PlatformReference {
-				$s = issue(ctx, $s, UnexpectedToken, value.start, value.end)
-			}
-		}
-		$index = $index + 1
-	}
-	provides_state = platform_symbol_map(ctx, platform_header_keyword(ctx, $s, "provides"), PlatformProvides, depth + 1)
-	provides_node = provides_state.last
-	$s = skip_trivia(ctx, provides_state)
-	var $ids = [name_node, requires_node].concat(exposed.ids).append(packages_node).append(provides_node)
-	if spelling(ctx, $s, "hosted") {
-		hosted_state = platform_symbol_map(ctx, skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1)), PlatformHosted, depth + 1)
-		hosted_node = hosted_state.last
-		$s = skip_trivia(ctx, hosted_state)
-		$ids = $ids.append(hosted_node)
-	}
-	if spelling(ctx, $s, "targets") {
-		targets_state = platform_targets(ctx, platform_header_keyword(ctx, at_pos(ctx, $s, $s.pos + 1), ":"), depth + 1)
-		targets_node = targets_state.last
-		$s = targets_state
-		$ids = $ids.append(targets_node)
-	}
-	end = $ids.fold(start, |furthest, id| U64.max(furthest, node_end(ctx, $s, id)))
-	add_node(ctx, $s, Header, start, end, $ids)
-}
-
-platform_header_keyword : Ctx, State, Str -> State
-platform_header_keyword = |ctx, initial, text| {
-	s = skip_trivia(ctx, initial)
-	if spelling(ctx, s, text) skip_trivia(ctx, at_pos(ctx, s, s.pos + 1)) else issue(ctx, s, UnexpectedToken, peek(ctx, s).start, peek(ctx, s).end)
-}
-
-# Platform names and symbol keys must be plain strings (empty is valid).
-# Target strings intentionally consume uninterpreted tokens like the compiler.
-platform_header_string : Ctx, State, Bool -> Built
-platform_header_string = |ctx, initial, plain| {
-	s = skip_trivia(ctx, initial)
-	opening = peek(ctx, s)
-	if opening.kind != StringStart {
-		bad = issue(ctx, s, UnexpectedToken, opening.start, opening.end)
-		return add_node(ctx, at_pos(ctx, bad, bad.pos + if opening.kind == EndOfFile 0 else 1), ErrorNode, opening.start, opening.end, [])
-	}
-	var $s = at_pos(ctx, s, s.pos + 1)
-	var $end = opening.end
-	var $parts = 0.U64
-	var $plain = True
-	while peek(ctx, $s).kind != StringEnd and peek(ctx, $s).kind != EndOfFile {
-		t = peek(ctx, $s)
-		$plain = $plain and t.kind == StringPart
-		$parts = $parts + 1
-		$end = t.end
-		$s = at_pos(ctx, $s, $s.pos + 1)
-	}
-	var $ids = []
-	if $end > opening.end {
-		part_state = add_node(ctx, $s, StringSegment, opening.end, $end, [])
-		part_node = part_state.last
-		$s = part_state
-		$ids = [part_node]
-	}
-	closing = peek(ctx, $s)
-	if closing.kind == StringEnd {
-		$end = closing.end
-		$s = at_pos(ctx, $s, $s.pos + 1)
-	} else {
-		$s = issue(ctx, $s, UnclosedString, opening.start, $end)
-	}
-	if plain and (!$plain or $parts > 1) {
-		$s = issue(ctx, $s, UnexpectedToken, opening.start, $end)
-	}
-	add_node(ctx, $s, StringLiteral, opening.start, $end, $ids)
-}
-
-platform_requires : Ctx, State, U64 -> Built
-platform_requires = |ctx, initial, depth| {
-	opening = peek(ctx, initial)
-	var $s = if opening.kind == OpenCurly at_pos(ctx, initial, initial.pos + 1) else issue(ctx, initial, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $end = opening.end
-	var $done = opening.kind != OpenCurly or depth >= 128
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	initial_look = skip_trivia(ctx, $s)
-	if peek(ctx, initial_look).kind == CloseCurly {
-		$end = peek(ctx, initial_look).end
-		$s = skip_trivia(ctx, at_pos(ctx, initial_look, initial_look.pos + 1))
-		if peek(ctx, $s).kind == OpenCurly {
-			$s = at_pos(ctx, $s, $s.pos + 1)
-		}
-			else {
-				$done = True
-			}
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$end = t.end
-			$s = at_pos(ctx, look, look.pos + 1)
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseSquare or t.kind == CloseRound {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
-			$done = True
-		} else {
-			before = look.pos
-			var $entry_ids = []
-			$s = look
-			if t.kind == OpenSquare {
-				$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-				var $aliases_done = False
-				while !$aliases_done {
-					alias = peek(ctx, $s)
-					if alias.kind == CloseSquare {
-						$s = at_pos(ctx, $s, $s.pos + 1)
-						$aliases_done = True
-					} else if alias.kind == EndOfFile or alias.kind == CloseCurly or alias.kind == CloseRound {
-						$s = issue(ctx, $s, UnclosedDelimiter, alias.start, alias.end)
-						$aliases_done = True
-					} else {
-						checked = if alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@' $s else issue(ctx, $s, UnexpectedToken, alias.start, alias.end)
-						alias_state = add_node(ctx, at_pos(ctx, checked, checked.pos + 1), TypeName, alias.start, alias.end, [])
-						alias_node = alias_state.last
-						rigid_state = platform_header_keyword(ctx, alias_state, ":")
-						rigid = peek(ctx, rigid_state)
-						checked_rigid = if rigid.kind == LowerIdent and byte(ctx.source, rigid.start) != '_' rigid_state else issue(ctx, rigid_state, UnexpectedToken, rigid.start, rigid.end)
-						rigid_built = add_node(ctx, at_pos(ctx, checked_rigid, checked_rigid.pos + if rigid.kind == EndOfFile 0 else 1), TypeVariable, rigid.start, rigid.end, [])
-						rigid_node = rigid_built.last
-						built_state = add_node(ctx, rigid_built, RequiredType, alias.start, rigid.end, [alias_node, rigid_node])
-						built_node = built_state.last
-						$s = skip_trivia(ctx, built_state)
-						$entry_ids = $entry_ids.append(built_node)
-						if spelling(ctx, $s, ",") {
-							$s = skip_trivia(ctx, at_pos(ctx, $s, $s.pos + 1))
-						}
-							else if peek(ctx, $s).kind != CloseSquare {
-								$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-								$aliases_done = True
-							}
-					}
-				}
-				$s = platform_header_keyword(ctx, $s, "for")
-			}
-			name = peek(ctx, skip_trivia(ctx, $s))
-			checked = if name.kind == LowerIdent and byte(ctx.source, name.start) != '_' skip_trivia(ctx, $s) else issue(ctx, skip_trivia(ctx, $s), UnexpectedToken, name.start, name.end)
-			named_state = add_node(ctx, at_pos(ctx, checked, checked.pos + if name.kind == EndOfFile 0 else 1), Identifier, name.start, name.end, [])
-			named_node = named_state.last
-			type_state = type_expression(ctx, platform_header_keyword(ctx, named_state, ":"), FullType, depth + 1)
-			type_node = type_state.last
-			$entry_ids = $entry_ids.append(named_node).append(type_node)
-			entry_end = $entry_ids.fold(t.end, |furthest, id| U64.max(furthest, node_end(ctx, type_state, id)))
-			entry_state = add_node(ctx, type_state, RequiredValue, t.start, entry_end, $entry_ids)
-			entry_node = entry_state.last
-			$s = skip_trivia(ctx, entry_state)
-			$ids = $ids.append(entry_node)
-			$end = entry_end
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-				else if peek(ctx, $s).kind != CloseCurly {
-					$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					$done = True
-				}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, PlatformRequires, opening.start, $end, $ids)
-}
-
-platform_symbol_map : Ctx, State, RocSyntax.NodeKind, U64 -> Built
-platform_symbol_map = |ctx, initial, kind, depth| {
-	opening = peek(ctx, initial)
-	var $s = if opening.kind == OpenCurly at_pos(ctx, initial, initial.pos + 1) else issue(ctx, initial, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $end = opening.end
-	var $done = opening.kind != OpenCurly or depth >= 128
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
-			$done = True
-		} else {
-			before = look.pos
-			symbol_state = platform_header_string(ctx, look, True)
-			symbol_node = symbol_state.last
-			target_state = platform_header_keyword(ctx, symbol_state, ":")
-			target = peek(ctx, target_state)
-			var $target_state = target_state
-			var $target_end = target.end
-			if target.kind == UpperIdent and byte(ctx.source, target.start) != '@' {
-				$target_state = at_pos(ctx, target_state, target_state.pos + 1)
-				var $path_done = False
-				var $lower = False
-				while !$path_done {
-					dot = peek(ctx, $target_state)
-					name_state = at_pos(ctx, $target_state, $target_state.pos + 1)
-					name = peek(ctx, name_state)
-					if token_spelling(ctx.source, dot, ".") and dot.start == $target_end and name.start == dot.end and (name.kind == UpperIdent or name.kind == LowerIdent) and (is_lower(byte(ctx.source, name.start)) or is_upper(byte(ctx.source, name.start))) {
-						$target_end = name.end
-						$target_state = at_pos(ctx, name_state, name_state.pos + 1)
-						if name.kind == LowerIdent {
-							$lower = True
-							$path_done = True
-						}
-					} else {
-						$path_done = True
-					}
-				}
-				if !$lower {
-					$target_state = issue(ctx, $target_state, UnexpectedToken, target.start, $target_end)
-				}
-			} else if target.kind == LowerIdent and byte(ctx.source, target.start) != '_' {
-				$target_state = at_pos(ctx, target_state, target_state.pos + 1)
-			} else {
-				$target_state = issue(ctx, at_pos(ctx, target_state, target_state.pos + if target.kind == EndOfFile 0 else 1), UnexpectedToken, target.start, target.end)
-			}
-			named_state = add_node(ctx, $target_state, Identifier, target.start, $target_end, [])
-			named_node = named_state.last
-			entry_end = U64.max(node_end(ctx, named_state, symbol_node), $target_end)
-			entry_state = add_node(ctx, named_state, SymbolMapping, t.start, entry_end, [symbol_node, named_node])
-			entry_node = entry_state.last
-			$s = skip_trivia(ctx, entry_state)
-			$ids = $ids.append(entry_node)
-			$end = entry_end
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-				else if peek(ctx, $s).kind != CloseCurly {
-					$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					$done = True
-				}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, kind, opening.start, $end, $ids)
-}
-
-platform_targets : Ctx, State, U64 -> Built
-platform_targets = |ctx, initial, depth| {
-	opening = peek(ctx, initial)
-	var $s = if opening.kind == OpenCurly at_pos(ctx, initial, initial.pos + 1) else issue(ctx, initial, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $end = opening.end
-	var $done = opening.kind != OpenCurly or depth >= 128
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
-			$done = True
-		} else {
-			before = look.pos
-			valid_name = t.kind == LowerIdent and byte(ctx.source, t.start) != '_'
-			checked = if valid_name look else issue(ctx, look, UnexpectedToken, t.start, t.end)
-			named_state = add_node(ctx, at_pos(ctx, checked, checked.pos + 1), Identifier, t.start, t.end, [])
-			named_node = named_state.last
-			value_state = platform_header_keyword(ctx, named_state, ":")
-			if spelling(ctx, look, "inputs_dir") and peek(ctx, value_state).kind == StringStart {
-				path_state = platform_header_string(ctx, value_state, False)
-				path_node = path_state.last
-				entry_state = add_node(ctx, path_state, TargetInputsDirectory, t.start, node_end(ctx, path_state, path_node), [path_node])
-				entry_node = entry_state.last
-				$s = skip_trivia(ctx, entry_state)
-				$ids = $ids.append(entry_node)
-				$end = node_end(ctx, $s, entry_node)
-			} else if peek(ctx, value_state).kind == OpenCurly {
-				config_state = platform_target_config(ctx, value_state, depth + 1)
-				config_node = config_state.last
-				entry_state = add_node(ctx, config_state, TargetEntry, t.start, node_end(ctx, config_state, config_node), [named_node, config_node])
-				entry_node = entry_state.last
-				$s = skip_trivia(ctx, entry_state)
-				$ids = $ids.append(entry_node)
-				$end = node_end(ctx, $s, entry_node)
-			} else {
-				$s = issue(ctx, value_state, UnexpectedToken, peek(ctx, value_state).start, peek(ctx, value_state).end)
-				$done = True
-			}
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, PlatformTargets, opening.start, $end, $ids)
-}
-
-platform_target_config : Ctx, State, U64 -> Built
-platform_target_config = |ctx, initial, depth| {
-	opening = peek(ctx, initial)
-	var $s = at_pos(ctx, initial, initial.pos + 1)
-	var $ids = []
-	var $end = opening.end
-	var $done = depth >= 128
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseCurly {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
-			$done = True
-		} else {
-			before = look.pos
-			checked = if t.kind == LowerIdent and byte(ctx.source, t.start) != '_' look else issue(ctx, look, UnexpectedToken, t.start, t.end)
-			name_state = add_node(ctx, at_pos(ctx, checked, checked.pos + 1), Identifier, t.start, t.end, [])
-			name_node = name_state.last
-			after = skip_trivia(ctx, name_state)
-			var $field_ids = [name_node]
-			$s = after
-			$end = t.end
-			if peek(ctx, after).kind != CloseCurly and !spelling(ctx, after, ",") {
-				value_state = platform_header_keyword(ctx, after, ":")
-				files = spelling(ctx, look, "inputs")
-				built_state = if files platform_target_list(ctx, value_state, True, depth + 1) else platform_target_value(ctx, value_state, False, depth + 1)
-				built_node = built_state.last
-				$s = built_state
-				$field_ids = $field_ids.append(built_node)
-				$end = node_end(ctx, built_state, built_node)
-			}
-			field_state = add_node(ctx, $s, TargetField, t.start, $end, $field_ids)
-			field_node = field_state.last
-			$s = skip_trivia(ctx, field_state)
-			$ids = $ids.append(field_node)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-				else if peek(ctx, $s).kind != CloseCurly {
-					$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					$done = True
-				}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, TargetConfig, opening.start, $end, $ids)
-}
-
-platform_target_list : Ctx, State, Bool, U64 -> Built
-platform_target_list = |ctx, initial, files, depth| {
-	opening = peek(ctx, initial)
-	var $s = if opening.kind == OpenSquare at_pos(ctx, initial, initial.pos + 1) else issue(ctx, initial, UnexpectedToken, opening.start, opening.end)
-	var $ids = []
-	var $end = opening.end
-	var $done = opening.kind != OpenSquare or depth >= 128
-	if depth >= 128 {
-		$s = issue(ctx, $s, ResourceLimit, opening.start, opening.end)
-	}
-	while !$done {
-		look = skip_trivia(ctx, $s)
-		$s = vacant
-		t = peek(ctx, look)
-		if t.kind == CloseSquare {
-			$s = at_pos(ctx, look, look.pos + 1)
-			$end = t.end
-			$done = True
-		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
-			$s = issue(ctx, look, UnclosedDelimiter, t.start, t.end)
-			$end = t.start
-			$done = True
-		} else {
-			before = look.pos
-			item_state = platform_target_value(ctx, look, files, depth + 1)
-			item_node = item_state.last
-			$ids = $ids.append(item_node)
-			$s = skip_trivia(ctx, item_state)
-			$end = node_end(ctx, item_state, item_node)
-			if spelling(ctx, $s, ",") {
-				$s = at_pos(ctx, $s, $s.pos + 1)
-			}
-				else if peek(ctx, $s).kind != CloseSquare {
-					$s = issue(ctx, $s, UnexpectedToken, peek(ctx, $s).start, peek(ctx, $s).end)
-					$done = True
-				}
-			if $s.pos <= before {
-				$s = at_pos(ctx, $s, before + 1)
-			}
-		}
-	}
-	add_node(ctx, $s, TargetList, opening.start, $end, $ids)
-}
-
-platform_target_value : Ctx, State, Bool, U64 -> Built
-platform_target_value = |ctx, initial, file, depth| {
-	s = skip_trivia(ctx, initial)
-	t = peek(ctx, s)
-	if depth >= 128 {
-		return add_node(ctx, issue(ctx, s, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.start, [])
-	}
-	if t.kind == StringStart {
-		string_state = platform_header_string(ctx, s, False)
-		string_node = string_state.last
-		if file add_node(ctx, string_state, TargetFile, t.start, node_end(ctx, string_state, string_node), [string_node]) else with_last(ctx, string_state, string_node)
-	} else if !file and t.kind == OpenSquare {
-		platform_target_list(ctx, s, False, depth + 1)
-	} else if (t.kind == LowerIdent and byte(ctx.source, t.start) != '_') or (file and spelling(ctx, s, "app")) or (!file and t.kind == UpperIdent and byte(ctx.source, t.start) != '@') {
-		name_state = add_node(ctx, at_pos(ctx, s, s.pos + 1), Identifier, t.start, t.end, [])
-		name_node = name_state.last
-		if file add_node(ctx, name_state, TargetFile, t.start, t.end, [name_node]) else with_last(ctx, name_state, name_node)
-	} else if !file and t.kind == Number {
-		raw = ctx.source.sublist({ start: t.start, len: t.end - t.start })
-		is_int = raw.any(|b| b == 'x' or b == 'o' or b == 'b') or !raw.any(|b| b == '.' or b == 'e' or b == 'E')
-		checked = if is_int s else issue(ctx, s, UnexpectedToken, t.start, t.end)
-		add_node(ctx, at_pos(ctx, checked, checked.pos + 1), NumberLiteral, t.start, t.end, [])
-	} else {
-		add_node(ctx, at_pos(ctx, issue(ctx, s, UnexpectedToken, t.start, t.end), s.pos + if t.kind == EndOfFile 0 else 1), ErrorNode, t.start, t.end, [])
-	}
-}
-
 expect {
 	# Empty names, requires type aliases, symbol paths, and target configuration.
 	["platform \"p\" requires {} exposes [] packages {} provides {}", "platform \"\" requires {} exposes [] packages {} provides {}", "platform \"name\\ntext\" requires {} exposes [] packages {} provides {}", "platform \"p\" requires {}{} exposes [] packages {} provides {}", "platform \"p\" requires {main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {}{main : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[Model:model] for main : model -> U64} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a, B:b,] for run : a,b => Str, other : U8,} exposes [] packages {} provides {}", "platform \"p\" requires {[] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[$A:$a] for $run : $a -> U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [run, Foo.*, Foo.bar as Bar] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: \"url\", roc: \"1.0.0\"} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"main\": Main.run!, \"more\": Main.Nested.call}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Host.Idx.get!}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"targets/\", linux:{inputs:[app,\"start.o\",custom], output:Exe, shared:True, level:3, flags:[\"-lc\",Symbol,thing,[1,2]]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output, inputs, custom}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{n:-1,n2:0xFE,n3:0_xFE}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{} windows:{}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[\"\",app,win_gui]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:[]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:\"a\",inputs_dir:\"b\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:\"\${x}\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {} targets: {}"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
@@ -3701,30 +923,6 @@ expect {
 expect {
 	# Platform sections are ordered and their data atoms have restricted grammars.
 	["platform \"\${x}\" requires {} exposes [] packages {} provides {}", "platform \"\"\"name requires {} exposes [] packages {} provides {}", "platform p requires {} exposes [] packages {} provides {}", "platform \"p\" requires {[A:_a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:U8] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[a:a] for run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {[A:a] run : U8} exposes [] packages {} provides {}", "platform \"p\" requires {run U8} exposes [] packages {} provides {}", "platform \"p\" requires {run : 1} exposes [] packages {} provides {}", "platform \"p\" requires {run : U8 other : U8} exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [1] packages {} provides {}", "platform \"p\" requires {} exposes {} packages {} provides {}", "platform \"p\" requires {} exposing [] packages {} provides {}", "platform \"p\" requires {} exposes [] packages {dep: platform \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"bad\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc: \"1.0.0\",roc:\"1.0.1\"} provides {}", "platform \"p\" requires {} exposes [] packages {roc} provides {}", "platform \"p\" requires {} exposes [] packages {_dep: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {x: \"url\" y: \"url\"} provides {}", "platform \"p\" requires {} exposes [] packages {dep: _} provides {}", "platform \"p\" requires {} exposes [] packages {} provides {\"symbol\": $Module.$method}", "platform \"p\" requires {} exposes [] packages {} provides {\"\${x}\": run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module .run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module. run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": _run}", "platform \"p\" requires {} exposes [] packages {} provides {x: run}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run(1)}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": Module.lower.more}", "platform \"p\" requires {} exposes [] packages {} provides {\"x\": run \"y\": other}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted []", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": Upper}", "platform \"p\" requires {} exposes [] packages {} provides {} hosted {\"host\": call} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{output:Exe inputs:[app]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {other:\"dir/\"}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {inputs_dir:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:[]}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[1]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:[Upper]}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{inputs:\"file\"}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:1.5}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:app}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:Module.name}}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {linux:{value:{}}}", "platform \"p\" missing_requires {} exposes [] packages {} provides {}", "platform \"p\" requires {} missing_exposes [] packages {} provides {}", "platform \"p\" requires {} exposes [] missing_packages {} provides {}", "platform \"p\" requires {} exposes [] packages {} missing_provides {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {} hosted {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets {}", "platform \"p\" requires {} exposes [] packages {} provides {} targets: {", "platform \"p\" requires {} exposes [] packages {} provides {} provides {}"].all(|source| RocSyntax.parse_header_str(source).status != Complete)
-}
-
-plain_dependency_path : Ctx, State, U64 -> Bool
-plain_dependency_path = |ctx, s, id| {
-	match node_get(ctx, s, id) {
-		Ok(n) if n.kind == StringLiteral => {
-			var $valid = True
-			var $i = 0.U64
-			while $i < n.children_len and $valid {
-				child_id = child_get(ctx, s, n.children_start + $i) ?? node_count(ctx, s)
-				match node_get(ctx, s, child_id) {
-					Ok(child) if child.kind == StringSegment => {
-						$valid = !ctx.source.sublist({ start: child.start, len: child.end - child.start }).contains('\\')
-					}
-					_ => {
-						$valid = False
-					}
-				}
-				$i = $i + 1
-			}
-			$valid
-		}
-		_ => False
-	}
 }
 
 expect {
@@ -3795,4 +993,2936 @@ expect {
 expect {
 	p = RocSyntax.parse_str("\u(FEFF)x = 1")
 	p.status != Complete and p.diagnostics.any(|d| d.code == Utf8ByteOrderMark and d.start == 0 and d.end == 3) and RocSyntax.parse_expr_str("\"\u(FEFF)\"").status == Complete
+}
+
+# ---- Parser core -------------------------------------------------------------
+# Growing buffers are never stored in a record that is passed into a function.
+# Each parser takes `pos`, `nodes`, `children` and `diags` as separate
+# parameters and returns them in a flat result record that its caller
+# destructures immediately. Optimized Roc builds then keep the buffers uniquely
+# owned and append in place. Bundling them in a threaded state record made the
+# compiler infer that record as borrowed, so callers kept a reference across
+# each call and every append copied (see roc-lang/roc#12327).
+
+Ctx : { source : List(U8), tokens : List(RocSyntax.Token), texts : List(TokenText), in_guard : Bool }
+
+## Result of a node-producing parser.
+R : { pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diags : List(RocSyntax.Diagnostic), node : U64 }
+
+## Result of a delimited item collection.
+C : { pos : U64, nodes : List(RocSyntax.Node), children : List(U64), diags : List(RocSyntax.Diagnostic), ids : List(U64), end : U64, comma : Bool }
+
+## Result of an emitted node.
+E : { nodes : List(RocSyntax.Node), children : List(U64), node : U64 }
+
+## Token at a position, or end of file.
+tok : Ctx, U64 -> RocSyntax.Token
+tok = |ctx, pos| ctx.tokens.get(pos) ?? { kind: EndOfFile, start: ctx.source.len(), end: ctx.source.len() }
+
+## First non-trivia position at or after `pos`.
+sig : Ctx, U64 -> U64
+sig = |ctx, pos| significant_position(ctx.tokens, pos)
+
+## Whether the token at `pos` is spelled exactly `text`.
+spell : Ctx, U64, Str -> Bool
+spell = |ctx, pos, text| token_spelling(ctx.source, tok(ctx, pos), text)
+
+## Record a diagnostic. Output is capped at 256 when parsing finishes; one
+## beyond-cap entry per status-affecting code is retained so status stays exact.
+diag : List(RocSyntax.Diagnostic), RocSyntax.DiagnosticCode, U64, U64 -> List(RocSyntax.Diagnostic)
+diag = |diags, code, start, end| {
+	if diags.len() < 256 {
+		diags.append({ code, start, end })
+	} else if (code == UnsupportedSyntax or code == ResourceLimit) and !diags.drop_first(256).any(|d| d.code == code) {
+		diags.append({ code, start, end })
+	} else {
+		diags
+	}
+}
+
+## Append a node whose children are `ids`, returning its index.
+emit : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, List(U64) -> E
+emit = |nodes, children, kind, start, end, ids| {
+	index = nodes.len()
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: children.concat(ids), node: index }
+}
+
+## Append a node and return it as a parser result at `pos`.
+finish : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, List(U64) -> R
+finish = |pos, nodes, children, diags, kind, start, end, ids| {
+	index = nodes.len()
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: ids.len() }), children: children.concat(ids), diags, node: index }
+}
+
+missing_node : RocSyntax.Node
+missing_node = { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
+
+nget : List(RocSyntax.Node), U64 -> RocSyntax.Node
+nget = |nodes, id| nodes.get(id) ?? missing_node
+
+nstart : List(RocSyntax.Node), U64 -> U64
+nstart = |nodes, id| (nodes.get(id) ?? missing_node).start
+
+nend : List(RocSyntax.Node), U64 -> U64
+nend = |nodes, id| (nodes.get(id) ?? missing_node).end
+
+## Spellings the grammar compares, classified once per token after lexing so
+## parsing compares tags rather than validating and comparing source text.
+TokenText : [OtherText, Dot, Comma, Colon, Underscore, DotDot, FatArrow, Arrow, As, Equals, DotQuestion, Question, Bar, Slash, Where, Var, ForBang, Dbg, Crash, App, Pipe, Return, Platform, Package, If, Hosted, For, Break, DotStar, Ellipsis, ColonEquals, DoubleColon, Minus, While, Module, Match, In, Import, Exposing, Expect, Else, DoubleQuestion, Bang, Exposes, Packages, Provides, Requires, Targets, Star, DoubleSlash, Percent, Plus, EqEq, NotEq, Less, Greater, LessEq, GreaterEq, And, Or, RangeExclusive, RangeInclusive]
+
+token_text : List(U8), RocSyntax.Token -> TokenText
+token_text = |source, t| {
+	len = t.end - t.start
+	if len == 0 or len > 8 {
+		OtherText
+	} else {
+		match Str.from_utf8_lossy(source.sublist({ start: t.start, len })) {
+		"." => Dot
+			"," => Comma
+			":" => Colon
+			"_" => Underscore
+			".." => DotDot
+			"=>" => FatArrow
+			"->" => Arrow
+			"as" => As
+			"=" => Equals
+			".?" => DotQuestion
+			"?" => Question
+			"|" => Bar
+			"/" => Slash
+			"where" => Where
+			"var" => Var
+			"for!" => ForBang
+			"dbg" => Dbg
+			"crash" => Crash
+			"app" => App
+			"|>" => Pipe
+			"return" => Return
+			"platform" => Platform
+			"package" => Package
+			"if" => If
+			"hosted" => Hosted
+			"for" => For
+			"break" => Break
+			".*" => DotStar
+			"..." => Ellipsis
+			":=" => ColonEquals
+			"::" => DoubleColon
+			"-" => Minus
+			"while" => While
+			"module" => Module
+			"match" => Match
+			"in" => In
+			"import" => Import
+			"exposing" => Exposing
+			"expect" => Expect
+			"else" => Else
+			"??" => DoubleQuestion
+			"!" => Bang
+			"exposes" => Exposes
+			"packages" => Packages
+			"provides" => Provides
+			"requires" => Requires
+			"targets" => Targets
+			"*" => Star
+			"//" => DoubleSlash
+			"%" => Percent
+			"+" => Plus
+			"==" => EqEq
+			"!=" => NotEq
+			"<" => Less
+			">" => Greater
+			"<=" => LessEq
+			">=" => GreaterEq
+			"and" => And
+			"or" => Or
+			"..<" => RangeExclusive
+			"..=" => RangeInclusive
+			_ => OtherText
+		}
+	}
+}
+
+is_text : Ctx, U64, TokenText -> Bool
+is_text = |ctx, pos, text| (ctx.texts.get(pos) ?? OtherText) == text
+
+## Append a node with one child, without a transient child list.
+emit1 : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64 -> E
+emit1 = |nodes, children, kind, start, end, a| {
+	index = nodes.len()
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: 1 }), children: children.append(a), node: index }
+}
+
+## Append a node with two children, without a transient child list.
+emit2 : List(RocSyntax.Node), List(U64), RocSyntax.NodeKind, U64, U64, U64, U64 -> E
+emit2 = |nodes, children, kind, start, end, a, b| {
+	index = nodes.len()
+	{ nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: 2 }), children: children.append(a).append(b), node: index }
+}
+
+finish1 : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, U64 -> R
+finish1 = |pos, nodes, children, diags, kind, start, end, a| {
+	index = nodes.len()
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: 1 }), children: children.append(a), diags, node: index }
+}
+
+finish2 : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64, U64, U64, U64 -> R
+finish2 = |pos, nodes, children, diags, kind, start, end, a, b| {
+	index = nodes.len()
+	{ pos, nodes: nodes.append({ kind, start, end, children_start: children.len(), children_len: 2 }), children: children.append(a).append(b), diags, node: index }
+}
+
+# ---- Entry, statements and expressions ---------------------------------------
+
+source_token : Ctx, U64 -> RocSyntax.Token
+source_token = |ctx, pos| tok(ctx, pos)
+
+# Exact binding powers from src/parse/Parser.zig at 7f11a825fb2df7fd48edb11e8c593ffdad4fcdb5.
+binding : Ctx, U64 -> { left : U64, right : U64 }
+binding = |ctx, pos| {
+	match ctx.texts.get(pos) ?? OtherText {
+		Star | Slash | DoubleSlash | Percent => { left: 32, right: 33 }
+		Plus => { left: 22, right: 23 }
+		Minus if binary_minus(ctx, pos) => { left: 22, right: 23 }
+		DoubleQuestion => { left: 20, right: 21 }
+		Question => { left: 18, right: 19 }
+		EqEq => { left: 17, right: 17 }
+		NotEq => { left: 15, right: 15 }
+		Less => { left: 13, right: 13 }
+		Greater => { left: 11, right: 11 }
+		LessEq => { left: 9, right: 9 }
+		GreaterEq => { left: 7, right: 7 }
+		And => { left: 6, right: 5 }
+		Or => { left: 4, right: 3 }
+		RangeExclusive | RangeInclusive => { left: 2, right: 3 }
+		_ => { left: 0, right: 0 }
+	}
+}
+
+expression : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64, Bool -> R
+expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
+	s = sig(ctx, initial)
+	first = tok(ctx, s)
+	sync = declaration_sync(ctx, s)
+	if sync.sync {
+		return finish(s, nodes, children, diag(diags, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
+	}
+	if depth >= 128 {
+		return finish(s + if first.kind == EndOfFile 0 else 1, nodes, children, diag(diags, ResourceLimit, first.start, first.end), ErrorNode, first.start, first.end, [])
+	}
+	next_pos = significant_position(ctx.tokens, s + 1)
+	package_qualified = (minimum == 100 or minimum == 101) and first.kind == LowerIdent and is_text(ctx, next_pos, Dot) and source_token(ctx, next_pos + 1).kind == UpperIdent
+	{ pos: built_state, nodes: n1, children: c1, diags: d1, node: built_node } = primary(ctx, s, nodes, children, diags, depth, punned)
+	grouped_tuple = (minimum == 100 or minimum == 101) and nget(n1, built_node).kind == Tuple
+	var $s = built_state
+	var $left = built_node
+	var $qualified = first.kind == UpperIdent or package_qualified
+	var $done = False
+	var $target_done = False
+	var $n = n1
+	var $c = c1
+	var $d = if grouped_tuple diag(d1, UnexpectedToken, first.start, first.end) else d1
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		bp = binding(ctx, look)
+		arrow_name = tok(ctx, look + 1)
+		left_end = nend($n, $left)
+		arrow_field = is_text(ctx, look, Dot) and t.start == left_end and (($qualified and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent)) or (first.kind == LowerIdent and $left == built_node and arrow_name.kind == LowerIdent))
+		pipe_boundary = (minimum == 100 or minimum == 101) and t.start > left_end and ((is_text(ctx, look, Dot) and (arrow_name.kind == LowerIdent or arrow_name.kind == UpperIdent or arrow_name.kind == Number)) or is_text(ctx, look, DotQuestion))
+		if pipe_boundary or ((minimum >= 100 or ctx.in_guard) and (is_text(ctx, look, Arrow) or is_text(ctx, look, FatArrow) or is_text(ctx, look, Pipe))) or (minimum == 101 and (($target_done and t.kind != NoSpaceOpenRound) or is_text(ctx, look, Question) or ((is_text(ctx, look, Dot) or is_text(ctx, look, DotQuestion)) and !arrow_field))) {
+			$s = look
+			$done = True
+		} else if is_text(ctx, look, Arrow) or is_text(ctx, look, FatArrow) or is_text(ctx, look, Pipe) {
+			pipe = is_text(ctx, look, Pipe)
+			rhs = sig(ctx, look + 1)
+			rhs_token = tok(ctx, rhs)
+			literal = rhs_token.kind == Number or rhs_token.kind == StringStart or rhs_token.kind == MultilineStringStart or rhs_token.kind == SingleQuote or rhs_token.kind == OpenSquare or rhs_token.kind == OpenCurly
+			valid_start = (rhs_token.kind == LowerIdent and byte(ctx.source, rhs_token.start) != '_') or rhs_token.kind == UpperIdent or rhs_token.kind == OpenRound or rhs_token.kind == NoSpaceOpenRound or (pipe and literal)
+			if !valid_start {
+				$d = diag($d, UnexpectedToken, rhs_token.start, rhs_token.end)
+			}
+			{ pos: target_state, nodes: $n, children: $c, diags: $d, node: target_node } = expression(ctx, rhs, $n, $c, $d, if pipe 100 else 101, depth + 1, False)
+			method = pipe and method_target(ctx, $n, $c, target_node)
+			if pipe and literal and !pipe_has_method(ctx, $n, $c, target_node) {
+				target_end = nend($n, target_node)
+				$d = diag($d, UnexpectedToken, rhs_token.start, target_end)
+			}
+			start = nstart($n, $left)
+			end = nend($n, target_node)
+			{ nodes: $n, children: $c, node: arrow_node } = emit2($n, $c, if method MethodArrowCall else ArrowCall, start, end, $left, target_node)
+			$s = target_state
+			$left = arrow_node
+			$qualified = False
+		} else if is_text(ctx, look, Question) and t.start == left_end {
+			start = nstart($n, $left)
+			{ nodes: $n, children: $c, node: suffix_node } = emit1($n, $c, Suffix, start, t.end, $left)
+			$s = look + 1
+			$left = suffix_node
+			$qualified = False
+		} else if t.kind == NoSpaceOpenRound {
+			if is_optional_access(ctx, $n, $c, $left) {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			start = nstart($n, $left)
+			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args_ids, end: args_end, comma: _ } = collection(ctx, look + 1, $n, $c, $d, CloseRound, depth + 1)
+			{ nodes: $n, children: $c, node: call_node } = emit($n, $c, Call, start, args_end, [$left].concat(args_ids))
+			$s = args_state
+			$left = call_node
+			$qualified = False
+			$target_done = minimum == 101
+			question_state = sig(ctx, args_state)
+			if minimum == 100 and !method_target(ctx, $n, $c, call_node) and is_text(ctx, question_state, Question) and tok(ctx, question_state).start == args_end {
+				$done = True
+			}
+		} else if is_text(ctx, look, Dot) and tok(ctx, sig(ctx, look + 1)).kind == OpenCurly {
+			opening_state = sig(ctx, look + 1)
+			{ pos: backing_state, nodes: $n, children: $c, diags: $d, node: backing_node } = curly(ctx, opening_state + 1, $n, $c, $d, tok(ctx, opening_state).start, depth + 1, True, True)
+			start = nstart($n, $left)
+			end = nend($n, backing_node)
+			{ nodes: $n, children: $c, node: nominal_node } = emit2($n, $c, NominalRecord, start, end, $left, backing_node)
+			$s = backing_state
+			$left = nominal_node
+			$qualified = False
+		} else if is_text(ctx, look, Dot) and $qualified and tok(ctx, look + 1).kind == NoSpaceOpenRound {
+			opening_state = look + 1
+			{ pos: args_state, nodes: $n, children: $c, diags: $d, ids: args, end, comma: _ } = collection(ctx, opening_state + 1, $n, $c, $d, CloseRound, depth + 1)
+			start = nstart($n, $left)
+			{ nodes: $n, children: $c, node: nominal_node } = emit($n, $c, NominalApply, start, end, [$left].concat(args))
+			$s = args_state
+			$left = nominal_node
+			$qualified = False
+		} else if is_text(ctx, look, Dot) or is_text(ctx, look, DotQuestion) {
+			optional = is_text(ctx, look, DotQuestion)
+			field_state = look + 1
+			field = tok(ctx, field_state)
+			valid_name = (field.kind == LowerIdent and is_lower(byte(ctx.source, field.start))) or ($qualified and field.kind == UpperIdent and is_upper(byte(ctx.source, field.start)))
+			valid_index = field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit)
+			if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
+				start = nstart($n, $left)
+				{ nodes: $n, children: $c, node: leaf_node } = emit($n, $c, Identifier, field.start, field.end, [])
+				{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, if optional OptionalFieldAccess else FieldAccess, start, field.end, $left, leaf_node)
+				$s = field_state + 1
+				$left = access_node
+				$qualified = $qualified and field.kind == UpperIdent
+			} else {
+				$s = look
+				$done = True
+			}
+		} else if is_text(ctx, look, DotDot) or is_text(ctx, look, DotStar) {
+			$d = diag($d, UnexpectedToken, t.start, t.end)
+			$s = look + 1
+			$done = True
+		} else if bp.left > 0 and bp.left >= minimum {
+			start = nstart($n, $left)
+			{ pos: right_state, nodes: $n, children: $c, diags: $d, node: right_node } = expression(ctx, look + 1, $n, $c, $d, bp.right, depth + 1, False)
+			end = nend($n, right_node)
+			{ nodes: $n, children: $c, node: binary_node } = emit2($n, $c, Binary, start, end, $left, right_node)
+			$s = right_state
+			$left = binary_node
+			$qualified = False
+		} else {
+			$s = look
+			$done = True
+		}
+	}
+	{ pos: $s, nodes: $n, children: $c, diags: $d, node: $left }
+}
+
+collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.TokenKind, U64 -> C
+collection = |ctx, initial, nodes, children, diags, closing, depth| {
+	var $s = initial
+	var $ids = []
+	var $end = tok(ctx, initial).start
+	var $done = False
+	var $comma = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		sync = declaration_sync(ctx, look)
+		if sync.sync {
+			$d = diag($d, UnclosedDelimiter, sync.start, sync.end)
+			$s = look
+			$end = sync.end
+			$done = True
+		} else if t.kind == closing {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else {
+			before = look
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = expression(ctx, look, $n, $c, $d, 0, depth, False)
+			$ids = $ids.append(item_node)
+			$end = nend($n, item_node)
+			$s = sig(ctx, item_state)
+			if is_text(ctx, $s, Comma) {
+				$comma = True
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != closing and tok(ctx, $s).kind != EndOfFile {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				if $s <= before {
+					$s = $s + 1
+				}
+			}
+		}
+	}
+	{ pos: $s, nodes: $n, children: $c, diags: $d, ids: $ids, end: $end, comma: $comma }
+}
+
+primary : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool -> R
+primary = |ctx, s, nodes, children, diags, depth, punned| {
+	t = tok(ctx, s)
+	match t.kind {
+		LowerIdent if is_text(ctx, s, Underscore) => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		UpperIdent if byte(ctx.source, t.start) == '@' => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		LowerIdent | UpperIdent => finish(s + 1, nodes, children, diags, Identifier, t.start, t.end, [])
+		Number => {
+			after = s + 1
+			dot = tok(ctx, after)
+			field_state = after + 1
+			field = tok(ctx, field_state)
+			if integer_token(ctx.source, t) and is_text(ctx, after, Dot) and dot.start == t.end and field.kind == Number and ctx.source.sublist({ start: field.start, len: field.end - field.start }).all(is_digit) {
+				finish(field_state + 1, nodes, children, diag(diags, UnexpectedToken, dot.start, field.end), ErrorNode, t.start, field.end, [])
+			} else {
+				{ nodes: n1, children: c1, node: literal_node } = emit(nodes, children, NumberLiteral, t.start, t.end, [])
+				literal_suffix(ctx, after, n1, c1, diags, literal_node, False)
+			}
+		}
+		SingleQuote => {
+			{ nodes: n1, children: c1, node: literal_node } = emit(nodes, children, CharacterLiteral, t.start, t.end, [])
+			literal_suffix(ctx, s + 1, n1, c1, diags, literal_node, False)
+		}
+		StringStart | MultilineStringStart => parse_string(ctx, s, nodes, children, diags, depth + 1)
+		OpenCurly => curly(ctx, s + 1, nodes, children, diags, t.start, depth + 1, punned, False)
+		Keyword if is_text(ctx, s, Dbg) or is_text(ctx, s, Crash) or is_text(ctx, s, Return) => {
+			kind = if is_text(ctx, s, Dbg) Debug else if is_text(ctx, s, Crash) Crash else Return
+			{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
+			end = nend(n1, value_node)
+			finish1(value_state, n1, c1, d1, kind, t.start, end, value_node)
+		}
+		Keyword if is_text(ctx, s, Break) => finish(s + 1, nodes, children, diags, Break, t.start, t.end, [])
+		Punctuation if is_text(ctx, s, Ellipsis) => finish(s + 1, nodes, children, diags, Ellipsis, t.start, t.end, [])
+		Keyword if is_text(ctx, s, If) => parse_if(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
+		Keyword if is_text(ctx, s, For) or is_text(ctx, s, ForBang) => parse_for(ctx, s + 1, nodes, children, diags, t.start, is_text(ctx, s, ForBang), depth + 1)
+		Keyword if is_text(ctx, s, Match) => parse_match(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
+		Operator if is_text(ctx, s, Bar) => parse_lambda(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
+		OpenRound | NoSpaceOpenRound | OpenSquare => {
+			{ pos: items_state, nodes: n1, children: c1, diags: d1, ids: items_ids, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
+			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_ids.len() != 1 Tuple else Parenthesized
+			finish(items_state, n1, c1, d1, kind, t.start, items_end, items_ids)
+		}
+		Operator if is_text(ctx, s, Minus) and binary_minus(ctx, s) => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		Operator if is_text(ctx, s, Minus) or is_text(ctx, s, Bang) => {
+			{ pos: operand_state, nodes: n1, children: c1, diags: d1, node: operand_node } = expression(ctx, s + 1, nodes, children, diags, 40, depth + 1, False)
+			end = nend(n1, operand_node)
+			finish1(operand_state, n1, c1, d1, Unary, t.start, end, operand_node)
+		}
+		EndOfFile | InterpolationEnd | CloseRound | CloseSquare | CloseCurly => finish(s, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.start, [])
+		Invalid => finish(s + 1, nodes, children, diags, ErrorNode, t.start, t.end, [])
+		_ => finish(s + 1, nodes, children, diag(diags, UnsupportedSyntax, t.start, t.end), UnsupportedNode, t.start, t.end, [])
+	}
+}
+
+parse_source : List(U8), ParseMode -> RocSyntax.Parsed
+parse_source = |source, mode| {
+	expression_only = mode == ExpressionMode
+	single = mode != FileMode
+	lexed = lex(source)
+	texts = if lexed.tokens.len() > 1048576 [] else lexed.tokens.map(|t| token_text(source, t))
+	ctx = { source, tokens: lexed.tokens, texts, in_guard: False }
+	# Roughly one node and child per two tokens; lists still grow when needed.
+	reserve = if lexed.tokens.len() > 1048576 0 else lexed.tokens.len() // 2 + 8
+	too_many = ctx.tokens.len() > 1048576
+	var $s = 0
+	var $roots = []
+	var $done = too_many
+	var $n = List.with_capacity(reserve)
+	var $c = List.with_capacity(reserve)
+	var $d = if too_many diag(lexed.diagnostics, ResourceLimit, 0, source.len()) else lexed.diagnostics
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == EndOfFile {
+			$s = look
+			$done = True
+		} else {
+			before = look
+			{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if expression_only expression(ctx, look, $n, $c, $d, 0, 0, False) else statement(ctx, look, $n, $c, $d, if mode == StatementMode 1 else 0)
+			$roots = $roots.append(built_node)
+			$s = built_state
+			if mode == FileMode or mode == HeaderMode {
+				if nget($n, built_node).kind == ExpressionStatement {
+					built_end = nend($n, built_node)
+					$d = diag($d, UnexpectedToken, t.start, built_end)
+				}
+			}
+			if $s <= before {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+				$s = before + 1
+			}
+			if mode == HeaderMode and nget($n, built_node).kind != Header {
+				built_end = nend($n, built_node)
+				$d = diag($d, UnexpectedToken, t.start, built_end)
+			}
+			if single {
+				$s = sig(ctx, $s)
+				if tok(ctx, $s).kind != EndOfFile {
+					extra = tok(ctx, $s)
+					$d = diag($d, UnexpectedToken, extra.start, extra.end)
+				}
+				$done = True
+			}
+		}
+	}
+	end_state = $s
+	roots = $roots
+	n1 = $n
+	c1 = $c
+	d1 = $d
+	header_missing = mode == HeaderMode and roots.is_empty()
+	d2 = if !header_missing and single and roots.is_empty() diag(d1, UnexpectedToken, source.len(), source.len()) else d1
+	{ nodes: n2, children: c2, roots: file_roots } = if header_missing {
+		{ nodes: hn, children: hc, node: header_node } = emit(n1, c1, Header, 0, 0, [])
+		{ nodes: hn, children: hc, roots: [header_node] }
+	} else {
+		{ nodes: n1, children: c1, roots }
+	}
+	{ nodes: n3, children: c3, node: root_node } = emit(n2, c2, File, 0, source.len(), file_roots)
+	first_start = (source_token(ctx, significant_position(ctx.tokens, 0))).start
+	var $header_count = 0.U64
+	var $bad_header = False
+	var $index = 0.U64
+	while $index < n3.len() {
+		n = nget(n3, $index)
+		if n.kind == Header {
+			$header_count = $header_count + 1
+			$bad_header = $bad_header or n.start != first_start
+		}
+		$index = $index + 1
+	}
+	d3 = if $header_count > 1 or $bad_header diag(d2, UnexpectedToken, first_start, source.len()) else d2
+	unsupported = lexed.unsupported or d3.any(|d| d.code == UnsupportedSyntax)
+	limited = d3.any(|d| d.code == ResourceLimit)
+	diagnostics = if d3.len() > 256 d3.take_first(256) else d3
+	has_error = diagnostics.any(|d| d.code != UnsupportedSyntax)
+	status = if limited Limited else if unsupported Unsupported else if has_error Recovered else Complete
+	{ source, tokens: ctx.tokens, nodes: n3, children: c3, diagnostics, status, root: root_node, consumed: tok(ctx, sig(ctx, end_state)).kind == EndOfFile }
+}
+
+# Statements are parsed independently of expressions, so '=' cannot be
+# accidentally accepted as a binary expression operator.
+statement : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+statement = |ctx, initial, nodes, children, diags, depth| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	following_pos = significant_position(ctx.tokens, s + 1)
+	following = ctx.tokens.get(following_pos) ?? t
+	if depth >= 128 {
+		finish(s + if t.kind == EndOfFile 0 else 1, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.end, [])
+	} else if (t.kind == UpperIdent and (type_declaration_start(ctx, s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or is_text(ctx, following_pos, Dot)) and has_pattern_assignment(ctx, s))))) or (t.kind == LowerIdent and is_text(ctx, following_pos, Dot) and tok(ctx, following_pos + 1).kind == UpperIdent) {
+		parse_type_declaration(ctx, s, nodes, children, diags, depth + 1)
+	} else if t.kind == LowerIdent and is_text(ctx, following_pos, Equals) {
+		{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
+		after_name = sig(ctx, name_state)
+		{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = expression(ctx, after_name + 1, n1, c1, d1, 0, depth, False)
+		end = nend(n2, value_node)
+		finish2(value_state, n2, c2, d2, Declaration, t.start, end, name_node, value_node)
+	} else if t.kind == LowerIdent and is_text(ctx, following_pos, Colon) {
+		d1 = if is_text(ctx, s, Underscore) diag(diags, UnexpectedToken, t.start, t.end) else diags
+		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
+		parse_annotation_after_name(ctx, following_pos + 1, n1, c1, d1, name_node, t.start, depth)
+	} else if is_text(ctx, s, Var) {
+		name_state = sig(ctx, s + 1)
+		name = tok(ctx, name_state)
+		d1 = if depth == 0 or name.kind != LowerIdent or !(is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') diag(diags, UnexpectedToken, name.start, name.end) else diags
+		{ nodes: n1, children: c1, node: named_node } = emit(nodes, children, Identifier, name.start, name.end, [])
+		look = sig(ctx, name_state + if name.kind == EndOfFile 0 else 1)
+		if is_text(ctx, look, Equals) {
+			{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = expression(ctx, look + 1, n1, c1, d1, 0, depth + 1, False)
+			end = nend(n2, value_node)
+			finish2(value_state, n2, c2, d2, VariableDeclaration, t.start, end, named_node, value_node)
+		} else if is_text(ctx, look, Colon) {
+			parse_annotation_after_name(ctx, look + 1, n1, c1, d1, named_node, t.start, depth + 1)
+		} else {
+			finish1(look, n1, c1, d1, VariableDeclaration, t.start, name.end, named_node)
+		}
+	} else if is_text(ctx, s, Expect) {
+		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
+		end = nend(n1, value_node)
+		finish1(value_state, n1, c1, d1, Expect, t.start, end, value_node)
+	} else if is_text(ctx, s, While) {
+		{ pos: condition_state, nodes: n1, children: c1, diags: d1, node: condition_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
+		{ pos: body_state, nodes: n2, children: c2, diags: d2, node: body_node } = expression(ctx, condition_state, n1, c1, d1, 0, depth + 1, False)
+		end = nend(n2, body_node)
+		finish2(body_state, n2, c2, d2, While, t.start, end, condition_node, body_node)
+	} else if is_text(ctx, s, For) or is_text(ctx, s, ForBang) or is_text(ctx, s, Dbg) or is_text(ctx, s, Crash) or is_text(ctx, s, Return) or is_text(ctx, s, Break) {
+		primary(ctx, s, nodes, children, diags, depth + 1, False)
+	} else if (t.kind == OpenRound or t.kind == OpenCurly or t.kind == UpperIdent) and has_pattern_assignment(ctx, s) {
+		{ pos: pattern_state, nodes: n1, children: c1, diags: d1, node: pattern_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
+		look = sig(ctx, pattern_state)
+		assigned = is_text(ctx, look, Equals)
+		d2 = if assigned d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
+		{ pos: value_state, nodes: n2, children: c2, diags: d3, node: value_node } = expression(ctx, look + if assigned 1 else 0, n1, c1, d2, 0, depth + 1, False)
+		end = nend(n2, value_node)
+		finish2(value_state, n2, c2, d3, Declaration, t.start, end, pattern_node, value_node)
+	} else if is_text(ctx, s, Platform) {
+		parse_platform_header(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
+	} else if is_text(ctx, s, App) or is_text(ctx, s, Package) {
+		{ pos: exposed_state, nodes: n1, children: c1, diags: d1, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
+		look = sig(ctx, exposed_state)
+		if tok(ctx, look).kind == OpenCurly {
+			{ pos: deps_state, nodes: n2, children: c2, diags: d2, node: deps_node } = dependency_record(ctx, look, n1, c1, d1, is_text(ctx, s, App), depth + 1)
+			end = nend(n2, deps_node)
+			d3 = if depth != 0 diag(d2, UnexpectedToken, t.start, end) else d2
+			finish(deps_state, n2, c2, d3, Header, t.start, end, exposed_ids.append(deps_node))
+		} else {
+			d2 = if !(depth == 0 and is_text(ctx, s, Package)) diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d1
+			finish(look, n1, c1, d2, Header, t.start, exposed_end, exposed_ids)
+		}
+	} else if is_text(ctx, s, Module) or is_text(ctx, s, Hosted) {
+		{ pos: items_state, nodes: n1, children: c1, diags: d1, ids: items_ids, end: items_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
+		d2 = if depth != 0 diag(d1, UnexpectedToken, t.start, items_end) else d1
+		finish(items_state, n1, c1, d2, Header, t.start, items_end, items_ids)
+	} else if is_text(ctx, s, Import) {
+		parse_import(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
+	} else {
+		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s, nodes, children, diags, 0, depth, True)
+		end = nend(n1, value_node)
+		finish1(value_state, n1, c1, d1, ExpressionStatement, t.start, end, value_node)
+	}
+}
+
+has_pattern_assignment : Ctx, U64 -> Bool
+has_pattern_assignment = |ctx, initial| {
+	var $s = initial
+	first = tok(ctx, $s)
+	if first.kind == UpperIdent {
+		if byte(ctx.source, first.start) == '@' {
+			return False
+		}
+		$s = sig(ctx, $s + 1)
+		var $name_end = first.end
+		var $done = False
+		while !$done and is_text(ctx, $s, Dot) {
+			field_state = $s + 1
+			field = tok(ctx, field_state)
+			if tok(ctx, $s).start == $name_end and field.kind == UpperIdent {
+				$name_end = field.end
+				$s = sig(ctx, field_state + 1)
+			} else {
+				$done = True
+			}
+		}
+		if is_text(ctx, $s, Dot) {
+			$s = sig(ctx, $s + 1)
+		}
+		if tok(ctx, $s).kind != NoSpaceOpenRound and tok(ctx, $s).kind != OpenCurly {
+			return False
+		}
+	}
+	opening = tok(ctx, $s)
+	if opening.kind != OpenRound and opening.kind != NoSpaceOpenRound and opening.kind != OpenCurly {
+		return False
+	}
+	var $pos = $s + 1
+	var $nesting = 1.U64
+	while $nesting > 0 {
+		t = source_token(ctx, $pos)
+		if t.kind == EndOfFile {
+			return False
+		}
+		if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
+			$nesting = $nesting + 1
+		}
+		if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$nesting = $nesting - 1
+		}
+		$pos = $pos + 1
+	}
+	is_text(ctx, significant_position(ctx.tokens, $pos), Equals)
+}
+
+declaration_sync : Ctx, U64 -> { sync : Bool, start : U64, end : U64 }
+declaration_sync = |ctx, initial| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	next = sig(ctx, s + 1)
+	if t.kind != LowerIdent or !is_text(ctx, next, Equals) {
+		return { sync: False, start: t.start, end: t.start }
+	}
+	var $pos = s
+	var $newline = False
+	var $done = False
+	var $start = t.start
+	var $end = t.start
+	while $pos > 0 and !$done {
+		$pos = $pos - 1
+		previous = source_token(ctx, $pos)
+		if previous.kind == Whitespace or previous.kind == Comment {
+			$newline = $newline or line_break(ctx.source, previous.start, previous.end)
+		} else {
+			$start = previous.start
+			$end = previous.end
+			$done = True
+		}
+	}
+	{ sync: $newline, start: $start, end: $end }
+}
+
+binary_minus : Ctx, U64 -> Bool
+binary_minus = |ctx, s| {
+	t = tok(ctx, s)
+	next = byte(ctx.source, t.end)
+	previous = ctx.tokens.get(if s > 0 s - 1 else 0) ?? t
+	if matches(ctx.source, t.end, "...") {
+		return previous.end == t.start and can_end_token(ctx.source, previous)
+	}
+	is_space(next) or next == '#' or (is_digit(next) and previous.end == t.start and can_end_token(ctx.source, previous)) or (!is_digit(next) and !is_lower(next) and !is_upper(next) and next != '_' and next != '(' and next < 0x80)
+}
+
+is_optional_access : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+is_optional_access = |_ctx, nodes, _children, root| {
+	match nodes.get(root) {
+		Ok(n) => n.kind == OptionalFieldAccess
+		_ => False
+	}
+}
+
+# A literal's adjacent .Upper chain names its type, rather than a value field.
+literal_suffix : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool -> R
+literal_suffix = |ctx, built_state, nodes, children, diags, built_node, allow_trivia| {
+	var $s = built_state
+	var $type_ids = []
+	var $end = nend(nodes, built_node)
+	var $done = False
+	var $n = nodes
+	var $c = children
+	while !$done {
+		look = if allow_trivia and $type_ids.is_empty() sig(ctx, $s) else $s
+		t = tok(ctx, look)
+		name_state = look + 1
+		name = tok(ctx, name_state)
+		if is_text(ctx, look, Dot) and (allow_trivia and $type_ids.is_empty() or t.start == $end) and name.kind == UpperIdent and is_upper(byte(ctx.source, name.start)) {
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, name.start, name.end, [])
+			$s = name_state + 1
+			$type_ids = $type_ids.append(named_node)
+			$end = name.end
+		} else {
+			$done = True
+		}
+	}
+	if $type_ids.is_empty() { pos: $s, nodes: $n, children: $c, diags, node: built_node } else {
+		start = nstart($n, built_node)
+		finish($s, $n, $c, diags, TypedLiteral, start, $end, [built_node].concat($type_ids))
+	}
+}
+
+pipe_has_method : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+pipe_has_method = |ctx, nodes, children, root| {
+	var $id = root
+	var $found = False
+	var $done = False
+	while !$done {
+		if method_target(ctx, nodes, children, $id) {
+			$found = True
+			$done = True
+		} else {
+			match nodes.get($id) {
+				Ok(n) if n.kind == Call or n.kind == FieldAccess or n.kind == OptionalFieldAccess or n.kind == Suffix or n.kind == NominalRecord or n.kind == NominalApply => {
+					$id = children.get(n.children_start) ?? nodes.len()
+				}
+				_ => {
+					$done = True
+				}
+			}
+		}
+	}
+	$found
+}
+
+method_target : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+method_target = |ctx, nodes, children, root| {
+	match nodes.get(root) {
+		Ok(call) if call.kind == Call => {
+			callee_id = children.get(call.children_start) ?? nodes.len()
+			match nodes.get(callee_id) {
+				Ok(callee) if callee.kind == FieldAccess => {
+					receiver = children.get(callee.children_start) ?? nodes.len()
+					field_id = children.get(callee.children_start + 1) ?? nodes.len()
+					field = nodes.get(field_id) ?? callee
+					is_lower(byte(ctx.source, field.start)) and !namespace_receiver(ctx, nodes, children, receiver)
+				}
+				_ => False
+			}
+		}
+		_ => False
+	}
+}
+
+namespace_receiver : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+namespace_receiver = |ctx, nodes, children, root| {
+	var $id = root
+	var $upper_segment = False
+	var $done = False
+	var $qualified = False
+	while !$done {
+		match nodes.get($id) {
+			Ok(n) if n.kind == Identifier => {
+				$qualified = is_upper(byte(ctx.source, n.start)) or $upper_segment
+				$done = True
+			}
+			Ok(n) if n.kind == FieldAccess => {
+				field_id = children.get(n.children_start + 1) ?? nodes.len()
+				field = nodes.get(field_id) ?? n
+				if is_upper(byte(ctx.source, field.start)) {
+					$upper_segment = True
+					$id = children.get(n.children_start) ?? nodes.len()
+				} else {
+					$done = True
+				}
+			}
+			_ => {
+				$done = True
+			}
+		}
+	}
+	$qualified
+}
+
+# ---- Headers, imports and dependencies ---------------------------------------
+
+exposed_collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic) -> C
+exposed_collection = |ctx, initial, nodes, children, diags| {
+	look = sig(ctx, initial)
+	opening = tok(ctx, look)
+	opened = opening.kind == OpenSquare
+	var $n = nodes
+	var $c = children
+	var $d = if opened diags else diag(diags, UnexpectedToken, opening.start, opening.end)
+	var $s = if opened look + 1 else look
+	var $ids = []
+	var $end = opening.end
+	var $done = !opened
+	while !$done {
+		item_state = sig(ctx, $s)
+		t = tok(ctx, item_state)
+		if t.kind == CloseSquare {
+			$s = item_state + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = item_state
+			$done = True
+		} else {
+			valid_start = (t.kind == UpperIdent and byte(ctx.source, t.start) != '@') or (t.kind == LowerIdent and (is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$'))
+			if !valid_start {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			validated = item_state
+			{ nodes: $n, children: $c, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+			name_state = validated + 1
+			var $name = name_node
+			$s = sig(ctx, name_state)
+			var $upper = t.kind == UpperIdent
+			var $qualified = t.kind == UpperIdent
+			var $chain_done = False
+			while !$chain_done {
+				name_end = nend($n, $name)
+				if $qualified and is_text(ctx, $s, Dot) and tok(ctx, $s).start == name_end and (is_upper(byte(ctx.source, tok(ctx, $s + 1).start)) or is_lower(byte(ctx.source, tok(ctx, $s + 1).start))) {
+					field_state = $s + 1
+					field = tok(ctx, field_state)
+					{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, field.start, field.end, [])
+					{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, FieldAccess, t.start, field.end, $name, named_node)
+					$s = sig(ctx, field_state + 1)
+					$name = access_node
+					$upper = True
+					$qualified = True
+				} else {
+					$chain_done = True
+				}
+			}
+			var $children = [$name]
+			var $wildcard = False
+			$end = nend($n, $name)
+			if is_text(ctx, $s, As) {
+				alias_state = sig(ctx, $s + 1)
+				alias = tok(ctx, alias_state)
+				valid_alias = if $upper alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@' else alias.kind == LowerIdent and byte(ctx.source, alias.start) != '_'
+				if !valid_alias {
+					$d = diag($d, UnexpectedToken, alias.start, alias.end)
+				}
+				checked = alias_state
+				{ nodes: $n, children: $c, node: alias_node } = emit($n, $c, Identifier, alias.start, alias.end, [])
+				$s = checked + if alias.kind == EndOfFile 0 else 1
+				$children = $children.append(alias_node)
+				$end = alias.end
+			} else if $upper and is_text(ctx, $s, DotStar) {
+				$end = tok(ctx, $s).end
+				$s = $s + 1
+				$wildcard = True
+			}
+			{ nodes: $n, children: $c, node: exposed_node } = emit($n, $c, if $wildcard ExposedWildcard else ExposedItem, t.start, $end, $children)
+			$ids = $ids.append(exposed_node)
+			$s = sig(ctx, $s)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseSquare {
+				$d = diag($d, UnexpectedToken, tok(ctx, $s).start, tok(ctx, $s).end)
+			}
+		}
+	}
+	{ pos: $s, nodes: $n, children: $c, diags: $d, ids: $ids, end: $end, comma: False }
+}
+
+parse_import : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_import = |ctx, initial, nodes, children, diags, depth| {
+	start = tok(ctx, initial).start
+	look = sig(ctx, initial + 1)
+	if tok(ctx, look).kind == StringStart {
+		{ pos: path_state, nodes: n1, children: c1, diags: d1, node: path_node } = parse_string(ctx, look, nodes, children, diags, depth + 1)
+		after_path = sig(ctx, path_state)
+		has_as = is_text(ctx, after_path, As)
+		d2 = if has_as d1 else diag(d1, UnexpectedToken, tok(ctx, after_path).start, tok(ctx, after_path).end)
+		validated = if has_as after_path + 1 else after_path
+		name_state = sig(ctx, validated)
+		name = tok(ctx, name_state)
+		d3 = if !(name.kind == LowerIdent and !is_text(ctx, name_state, Underscore)) diag(d2, UnexpectedToken, name.start, name.end) else d2
+		checked = name_state
+		{ nodes: n2, children: c2, node: named_node } = emit(n1, c1, Identifier, name.start, name.end, [])
+		named_state = checked + if name.kind == EndOfFile 0 else 1
+		colon = sig(ctx, named_state)
+		has_colon = is_text(ctx, colon, Colon)
+		d4 = if has_colon d3 else diag(d3, UnexpectedToken, tok(ctx, colon).start, tok(ctx, colon).end)
+		ty_start = if has_colon colon + 1 else colon
+		{ pos: ty_state, nodes: n3, children: c3, diags: d5, node: ty_node } = file_import_type(ctx, ty_start, n2, c2, d4)
+		end = nend(n3, ty_node)
+		path_info = nget(n3, path_node)
+		path_child = c3.get(path_info.children_start) ?? n3.len()
+		part_info = n3.get(path_child) ?? path_info
+		plain_path = path_info.kind == StringLiteral and path_info.children_len == 1 and part_info.kind == StringSegment
+		finish(ty_state, n3, c3, if plain_path d5 else diag(d5, UnexpectedToken, start, end), FileImport, start, end, [path_node, named_node, ty_node])
+	} else {
+		path_start = tok(ctx, look).start
+		{ pos: prefix_state, diags: d1, local } = if is_text(ctx, look, Slash) {
+			{ pos: sig(ctx, look + 1), diags, local: True }
+		} else if is_text(ctx, look, Dot) and is_text(ctx, significant_position(ctx.tokens, look + 1), Slash) {
+			{ pos: sig(ctx, significant_position(ctx.tokens, look + 1) + 1), diags, local: True }
+		} else if is_text(ctx, look, DotDot) {
+			var $s = look
+			var $d = diags
+			while is_text(ctx, $s, DotDot) {
+				parent = sig(ctx, $s + 1)
+				if is_text(ctx, parent, Slash) {
+					$s = sig(ctx, parent + 1)
+				} else {
+					$d = diag($d, UnexpectedToken, tok(ctx, parent).start, tok(ctx, parent).end)
+					$s = parent
+				}
+			}
+			{ pos: $s, diags: $d, local: True }
+		} else if tok(ctx, look).kind == LowerIdent {
+			{ pos: look, diags, local: is_text(ctx, sig(ctx, look + 1), Slash) }
+		} else {
+			{ pos: look, diags, local: True }
+		}
+		first = tok(ctx, prefix_state)
+		first_valid = first.kind == UpperIdent or first.kind == LowerIdent
+		d2 = if first_valid d1 else diag(d1, UnexpectedToken, first.start, first.end)
+		first_end = if first_valid first.end else U64.max(path_start, first.start)
+		first_state = if first_valid sig(ctx, prefix_state + 1) else prefix_state
+		{ pos: local_state, diags: d3, end: local_end } = if local {
+			var $s = first_state
+			var $d = d2
+			var $end = first_end
+			var $upper = first.kind == UpperIdent
+			while is_text(ctx, $s, Slash) {
+				$s = sig(ctx, $s + 1)
+				part = tok(ctx, $s)
+				if part.kind == LowerIdent or part.kind == UpperIdent {
+					$upper = part.kind == UpperIdent
+					$end = part.end
+					$s = sig(ctx, $s + 1)
+				} else {
+					$d = diag($d, UnexpectedToken, part.start, part.end)
+				}
+			}
+			{ pos: $s, diags: if $upper $d else diag($d, UnexpectedToken, first.start, $end), end: $end }
+		} else {
+			{ pos: first_state, diags: d2, end: first_end }
+		}
+		var $s = local_state
+		var $end = local_end
+		var $nested = 0.U64
+		while is_text(ctx, $s, Dot) and tok(ctx, $s + 1).kind == UpperIdent {
+			field_state = $s + 1
+			$end = tok(ctx, field_state).end
+			$s = sig(ctx, field_state + 1)
+			$nested = $nested + 1
+		}
+		path_end = $end
+		path_state = $s
+		d4 = if !local and $nested == 0 diag(d3, UnexpectedToken, first.start, path_end) else d3
+		{ nodes: n1, children: c1, node: path_node } = emit(nodes, children, ImportPath, path_start, path_end, [])
+		{ pos: alias_state, nodes: n2, children: c2, diags: d5, ids: alias_ids, end: alias_end } = if is_text(ctx, path_state, As) {
+			alias_pos = sig(ctx, path_state + 1)
+			alias = tok(ctx, alias_pos)
+			da = if alias.kind != UpperIdent diag(d4, UnexpectedToken, alias.start, alias.end) else d4
+			checked = alias_pos
+			{ nodes: na, children: ca, node: named_node } = emit(n1, c1, Identifier, alias.start, alias.end, [])
+			named_state = checked + if alias.kind == EndOfFile 0 else 1
+			{ nodes: nb, children: cb, node: alias_node } = emit1(na, ca, ImportAlias, alias.start, alias.end, named_node)
+			{ pos: sig(ctx, named_state), nodes: nb, children: cb, diags: da, ids: [path_node, alias_node], end: alias.end }
+		} else {
+			{ pos: path_state, nodes: n1, children: c1, diags: d4, ids: [path_node], end: path_end }
+		}
+		if is_text(ctx, alias_state, Exposing) {
+			{ pos: exposed_state, nodes: n3, children: c3, diags: d6, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, alias_state + 1, n2, c2, d5)
+			finish(exposed_state, n3, c3, d6, Import, start, exposed_end, alias_ids.concat(exposed_ids))
+		} else {
+			finish(alias_state, n2, c2, d5, Import, start, alias_end, alias_ids)
+		}
+	}
+}
+
+file_import_type : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic) -> R
+file_import_type = |ctx, initial, nodes, children, diags| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	valid_name = spell(ctx, s, "Str") or spell(ctx, s, "List")
+	d1 = if valid_name diags else diag(diags, UnexpectedToken, t.start, t.end)
+	checked = s
+	{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
+	name_state = checked + if t.kind == EndOfFile 0 else 1
+	if spell(ctx, s, "List") {
+		look = sig(ctx, name_state)
+		opening = tok(ctx, look)
+		opened = opening.kind == OpenRound or opening.kind == NoSpaceOpenRound
+		d2 = if opened d1 else diag(d1, UnexpectedToken, opening.start, opening.end)
+		after = if opened look + 1 else look
+		arg_state = sig(ctx, after)
+		arg = tok(ctx, arg_state)
+		d3 = if spell(ctx, arg_state, "U8") d2 else diag(d2, UnexpectedToken, arg.start, arg.end)
+		validated = arg_state
+		{ nodes: n2, children: c2, node: arg_node } = emit(n1, c1, Identifier, arg.start, arg.end, [])
+		arg_built = validated + if arg.kind == EndOfFile 0 else 1
+		close_state = sig(ctx, arg_built)
+		close = tok(ctx, close_state)
+		closed = close.kind == CloseRound
+		d4 = if closed d3 else diag(d3, UnclosedDelimiter, close.start, close.end)
+		finished = if closed close_state + 1 else close_state
+		finish2(finished, n2, c2, d4, TypeExpression, t.start, if closed close.end else arg.end, name_node, arg_node)
+	} else {
+		{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node }
+	}
+}
+
+dependency_record : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+dependency_record = |ctx, initial, nodes, children, diags, strict, depth| {
+	start = tok(ctx, initial).start
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	var $s = initial + 1
+	var $ids = []
+	var $end = tok(ctx, initial).end
+	var $platform = False
+	var $version = False
+	var $seen = Set.empty()
+	var $done = False
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$end = t.end
+			$s = look + 1
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$done = True
+		} else {
+			before = look
+			valid_name = t.kind == LowerIdent and !is_text(ctx, look, Underscore) and byte(ctx.source, t.start) != '_'
+			if !valid_name {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			checked = look
+			{ nodes: $n, children: $c, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+			name_state = checked + 1
+			var $field_ids = [name_node]
+			$s = sig(ctx, name_state)
+			$end = t.end
+			is_version = token_spelling(ctx.source, t, "roc")
+			if !is_version {
+				dependency_name = Str.from_utf8_lossy(ctx.source.sublist({ start: t.start, len: t.end - t.start }))
+				if $seen.contains(dependency_name) {
+					$d = diag($d, UnexpectedToken, t.start, t.end)
+				}
+				$seen = $seen.insert(dependency_name)
+			}
+			if is_text(ctx, $s, Colon) {
+				value_start = sig(ctx, $s + 1)
+				is_platform = is_text(ctx, value_start, Platform)
+				value_state = if is_platform sig(ctx, value_start + 1) else value_start
+				value_token = tok(ctx, value_state)
+				valid_start = if is_platform value_token.kind == StringStart or spell(ctx, value_state, "glue") else !strict or value_token.kind == StringStart
+				if !(valid_start and (!is_platform or !$platform)) {
+					$d = diag($d, UnexpectedToken, value_token.start, value_token.end)
+				}
+				validated = value_state
+				{ pos: parsed_state, nodes: $n, children: $c, diags: $d, node: parsed_node } = expression(ctx, validated, $n, $c, $d, 0, depth + 1, False)
+				var $value_node = parsed_node
+				$end = nend($n, parsed_node)
+				if is_platform {
+					platform_start = tok(ctx, value_start).start
+					{ nodes: $n, children: $c, node: platform_node } = emit1($n, $c, PlatformReference, platform_start, $end, parsed_node)
+					$value_node = platform_node
+					$platform = True
+				}
+				$s = parsed_state
+				$field_ids = $field_ids.append($value_node)
+				if !is_version and !(is_platform and token_spelling(ctx.source, value_token, "glue")) and !plain_dependency_path(ctx, $n, $c, parsed_node) {
+					$d = diag($d, UnexpectedToken, t.start, $end)
+				}
+				if is_version {
+					n = nget($n, parsed_node)
+					part_id = $c.get(n.children_start) ?? $n.len()
+					part = $n.get(part_id) ?? n
+					version_text = Str.from_utf8_lossy(ctx.source.sublist({ start: part.start, len: part.end - part.start }))
+					if $version or is_platform or n.kind != StringLiteral or n.children_len != 1 or part.kind != StringSegment or !valid_roc_version(version_text) {
+						$d = diag($d, UnexpectedToken, t.start, $end)
+					}
+				}
+			} else {
+				$d = diag($d, UnexpectedToken, t.start, $end)
+			}
+			$version = $version or is_version
+			{ nodes: $n, children: $c, node: field_node } = emit($n, $c, DependencyField, t.start, $end, $field_ids)
+			$ids = $ids.append(field_node)
+			$s = sig(ctx, $s)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseCurly {
+				$d = diag($d, UnexpectedToken, tok(ctx, $s).start, tok(ctx, $s).end)
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	finish($s, $n, $c, $d, Dependencies, start, $end, $ids)
+}
+
+valid_import : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+valid_import = |ctx, nodes, children, id| {
+	match nodes.get(id) {
+		Ok(n) if n.kind == Identifier => is_upper(byte(ctx.source, n.start))
+		Ok(n) if n.kind == FieldAccess => {
+			last = children.get(n.children_start + 1) ?? nodes.len()
+			match nodes.get(last) {
+				Ok(field) => is_upper(byte(ctx.source, field.start))
+				Err(_) => False
+			}
+		}
+		_ => False
+	}
+}
+
+plain_dependency_path : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+plain_dependency_path = |ctx, nodes, children, id| {
+	match nodes.get(id) {
+		Ok(n) if n.kind == StringLiteral => {
+			var $valid = True
+			var $i = 0.U64
+			while $i < n.children_len and $valid {
+				child_id = children.get(n.children_start + $i) ?? nodes.len()
+				match nodes.get(child_id) {
+					Ok(child) if child.kind == StringSegment => {
+						$valid = !ctx.source.sublist({ start: child.start, len: child.end - child.start }).contains('\\')
+					}
+					_ => {
+						$valid = False
+					}
+				}
+				$i = $i + 1
+			}
+			$valid
+		}
+		_ => False
+	}
+}
+
+# ---- Type syntax -------------------------------------------------------------
+
+type_expression : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), TypeMode, U64 -> R
+type_expression = |ctx, initial, nodes, children, diags, mode, depth| {
+	{ pos: atom_state, nodes: n1, children: c1, diags: d1, node: atom_node } = type_atom(ctx, initial, nodes, children, diags, depth + 1)
+	look = sig(ctx, atom_state)
+	if mode != TypeArgument and (is_text(ctx, look, Arrow) or is_text(ctx, look, FatArrow) or (mode == FullType and type_comma_begins_arguments(ctx, look))) {
+		var $s = look
+		var $args = [atom_node]
+		var $done = False
+		var $n = n1
+		var $c = c1
+		var $d = d1
+		while !$done and is_text(ctx, $s, Comma) {
+			{ pos: arg_state, nodes: $n, children: $c, diags: $d, node: arg_node } = type_expression(ctx, $s + 1, $n, $c, $d, TypeArgument, depth + 1)
+			$args = $args.append(arg_node)
+			$s = sig(ctx, arg_state)
+			$done = tok(ctx, $s).kind == EndOfFile
+		}
+		s2 = $s
+		args = $args
+		n2 = $n
+		c2 = $c
+		d2 = $d
+		if is_text(ctx, s2, Arrow) or is_text(ctx, s2, FatArrow) {
+			{ pos: ret_state, nodes: n3, children: c3, diags: d3, node: ret_node } = type_expression(ctx, s2 + 1, n2, c2, d2, TypeArgument, depth + 1)
+			end = nend(n3, ret_node)
+			start = nstart(n3, atom_node)
+			finish(ret_state, n3, c3, d3, TypeFunction, start, end, args.append(ret_node))
+		} else {
+			bad = tok(ctx, s2)
+			start = nstart(n2, atom_node)
+			end = U64.max(bad.start, nend(n2, args.last() ?? atom_node))
+			finish(s2, n2, c2, diag(d2, UnexpectedToken, bad.start, bad.end), ErrorNode, start, end, args)
+		}
+	} else {
+		{ pos: atom_state, nodes: n1, children: c1, diags: d1, node: atom_node }
+	}
+}
+
+# A comma in a record/where constraint may begin its next field, rather than
+# the argument list of a function. Only bounded significant lookahead is used.
+type_comma_begins_arguments : Ctx, U64 -> Bool
+type_comma_begins_arguments = |ctx, s| {
+	if !is_text(ctx, s, Comma) {
+		return False
+	}
+	a = sig(ctx, s + 1)
+	if tok(ctx, a).kind == CloseCurly or tok(ctx, a).kind == CloseSquare or is_text(ctx, a, DotDot) {
+		return False
+	}
+	b = sig(ctx, a + 1)
+	if tok(ctx, a).kind == LowerIdent and (is_text(ctx, b, Colon) or is_text(ctx, b, Question)) {
+		return False
+	}
+	if tok(ctx, a).kind == LowerIdent and is_text(ctx, b, Dot) {
+		c = sig(ctx, b + 1)
+		d = sig(ctx, c + 1)
+		if is_text(ctx, d, Colon) {
+			return False
+		}
+	}
+	True
+}
+
+type_atom : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+type_atom = |ctx, initial, nodes, children, diags, depth| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	sync = declaration_sync(ctx, s)
+	if sync.sync {
+		finish(s, nodes, children, diag(diags, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
+	} else if depth >= 128 {
+		finish(s, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.start, [])
+	} else if (t.kind == LowerIdent or t.kind == UpperIdent) and byte(ctx.source, t.start) != '@' {
+		var $s = s + 1
+		var $end = t.end
+		var $qualified = False
+		var $done = False
+		while !$done {
+			look = sig(ctx, $s)
+			if byte(ctx.source, t.start) != '_' and is_text(ctx, look, Dot) and tok(ctx, look).start == $end {
+				name_state = look + 1
+				name = tok(ctx, name_state)
+				if (name.kind == LowerIdent or name.kind == UpperIdent) and name.start == tok(ctx, look).end and byte(ctx.source, name.start) != '_' and byte(ctx.source, name.start) != '@' {
+					$s = name_state + 1
+					$end = name.end
+					$qualified = True
+				} else {
+					$done = True
+				}
+			} else {
+				$done = True
+			}
+		}
+		kind = if $qualified or t.kind == UpperIdent TypeName else if token_spelling(ctx.source, t, "_") TypeWildcard else TypeVariable
+		after = $s
+		{ nodes: n1, children: c1, node: base_node } = emit(nodes, children, kind, t.start, $end, [])
+		look = sig(ctx, after)
+		if kind == TypeName and tok(ctx, look).kind == NoSpaceOpenRound {
+			{ pos: items_state, nodes: n2, children: c2, diags: d1, ids: items_ids, end: items_end, comma: _ } = type_collection(ctx, look + 1, n1, c1, diags, CloseRound, TypeItem, depth + 1)
+			finish(items_state, n2, c2, d1, TypeApply, t.start, items_end, [base_node].concat(items_ids))
+		} else {
+			{ pos: after, nodes: n1, children: c1, diags, node: base_node }
+		}
+	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound {
+		type_parenthesized(ctx, s, nodes, children, diags, depth + 1)
+	} else if t.kind == OpenSquare {
+		type_fields(ctx, s, nodes, children, diags, False, depth + 1)
+	} else if t.kind == OpenCurly {
+		type_fields(ctx, s, nodes, children, diags, True, depth + 1)
+	} else {
+		advance = t.kind != EndOfFile and t.kind != CloseRound and t.kind != CloseSquare and t.kind != CloseCurly and !is_text(ctx, s, Comma)
+		finish(s + if advance 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+	}
+}
+
+type_collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.TokenKind, TypeMode, U64 -> C
+type_collection = |ctx, initial, nodes, children, diags, closing, mode, depth| {
+	var $s = initial
+	var $ids = []
+	var $end = tok(ctx, initial).start
+	var $comma = False
+	var $done = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == closing {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else {
+			before = look
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = type_expression(ctx, look, $n, $c, $d, mode, depth + 1)
+			$ids = $ids.append(item_node)
+			$s = sig(ctx, item_state)
+			$end = nend($n, item_node)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+				$comma = True
+			} else if tok(ctx, $s).kind != closing {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ pos: $s, nodes: $n, children: $c, diags: $d, ids: $ids, end: $end, comma: $comma }
+}
+
+type_parenthesized : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
+	opening = tok(ctx, initial)
+	var $s = sig(ctx, initial + 1)
+	var $ids = []
+	var $comma = False
+	var $done = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		if is_text(ctx, $s, Arrow) or is_text(ctx, $s, FatArrow) {
+			{ pos: ret_state, nodes: $n, children: $c, diags: $d, node: ret_node } = type_expression(ctx, $s + 1, $n, $c, $d, TypeArgument, depth + 1)
+			ret_end = nend($n, ret_node)
+			{ nodes: $n, children: $c, node: fn_node } = emit($n, $c, TypeFunction, opening.start, ret_end, $ids.append(ret_node))
+			$s = sig(ctx, ret_state)
+			$ids = [fn_node]
+			$comma = False
+			$done = True
+		} else if tok(ctx, $s).kind == CloseRound or tok(ctx, $s).kind == EndOfFile {
+			$done = True
+		} else {
+			before = $s
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = type_expression(ctx, $s, $n, $c, $d, TypeArgument, depth + 1)
+			$ids = $ids.append(item_node)
+			$s = sig(ctx, item_state)
+			if is_text(ctx, $s, Comma) {
+				$s = sig(ctx, $s + 1)
+				$comma = True
+			} else if !is_text(ctx, $s, Arrow) and !is_text(ctx, $s, FatArrow) {
+				$done = True
+			}
+			if $s <= before {
+				$done = True
+			}
+		}
+	}
+	ids = $ids
+	comma = $comma
+	n1 = $n
+	c1 = $c
+	closing = tok(ctx, $s)
+	closed = closing.kind == CloseRound
+	s1 = if closed $s + 1 else $s
+	d1 = if closed $d else diag($d, UnclosedDelimiter, closing.start, closing.end)
+	end = U64.max(if closed closing.end else closing.start, nend(n1, ids.last() ?? n1.len()))
+	arrow = sig(ctx, s1)
+	if ids.is_empty() and (is_text(ctx, arrow, Arrow) or is_text(ctx, arrow, FatArrow)) {
+		{ pos: ret_state, nodes: n2, children: c2, diags: d2, node: ret_node } = type_expression(ctx, arrow + 1, n1, c1, d1, TypeArgument, depth + 1)
+		ret_end = nend(n2, ret_node)
+		finish1(ret_state, n2, c2, d2, TypeFunction, opening.start, ret_end, ret_node)
+	} else {
+		finish(s1, n1, c1, d1, if ids.len() == 1 and !comma TypeParenthesized else TypeTuple, opening.start, end, ids)
+	}
+}
+
+type_fields : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+type_fields = |ctx, initial, nodes, children, diags, record, depth| {
+	opening = tok(ctx, initial)
+	closing = if record CloseCurly else CloseSquare
+	var $s = initial + 1
+	var $ids = []
+	var $end = opening.end
+	var $done = False
+	var $extension = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == closing {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else if $extension {
+			$d = diag($d, UnexpectedToken, t.start, t.end)
+			$s = look
+			$done = True
+		} else if is_text(ctx, look, DotDot) {
+			after = sig(ctx, look + 1)
+			if tok(ctx, after).kind == LowerIdent and !is_text(ctx, after, Underscore) {
+				{ pos: ext_state, nodes: $n, children: $c, diags: $d, node: ext_node } = type_expression(ctx, after, $n, $c, $d, TypeArgument, depth + 1)
+				ext_end = nend($n, ext_node)
+				{ nodes: $n, children: $c, node: built_node } = emit1($n, $c, TypeExtension, t.start, ext_end, ext_node)
+				$s = sig(ctx, ext_state)
+				$ids = $ids.append(built_node)
+			} else {
+				{ nodes: $n, children: $c, node: ext_node } = emit($n, $c, TypeExtension, t.start, t.end, [])
+				$s = sig(ctx, after)
+				$ids = $ids.append(ext_node)
+			}
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			}
+			$end = nend($n, $ids.last() ?? 0)
+			$extension = True
+		} else {
+			before = look
+			if record {
+				if t.kind != LowerIdent {
+					$d = diag($d, UnexpectedToken, t.start, t.end)
+				}
+				validated = look
+				{ nodes: $n, children: $c, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+				var $field = sig(ctx, validated + 1)
+				if is_text(ctx, $field, Question) {
+					if byte(ctx.source, t.start) == '_' {
+						$d = diag($d, UnexpectedToken, t.start, t.end)
+					}
+					$field = sig(ctx, $field + 1)
+				}
+				if is_text(ctx, $field, Colon) {
+					$field = $field + 1
+				} else {
+					bad = tok(ctx, $field)
+					$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				}
+				{ pos: ty_state, nodes: $n, children: $c, diags: $d, node: ty_node } = type_expression(ctx, $field, $n, $c, $d, FullType, depth + 1)
+				var $field_ids = [name_node, ty_node]
+				$field = sig(ctx, ty_state)
+				var $field_end = nend($n, ty_node)
+				if is_text(ctx, $field, DoubleQuestion) {
+					{ pos: default_state, nodes: $n, children: $c, diags: $d, node: default_node } = expression(ctx, $field + 1, $n, $c, $d, 0, depth + 1, False)
+					$field_ids = $field_ids.append(default_node)
+					$field_end = nend($n, default_node)
+					$field = default_state
+				}
+				{ nodes: $n, children: $c, node: field_node } = emit($n, $c, TypeField, t.start, $field_end, $field_ids)
+				$s = sig(ctx, $field)
+				$ids = $ids.append(field_node)
+			} else {
+				{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = type_expression(ctx, look, $n, $c, $d, TypeItem, depth + 1)
+				$s = sig(ctx, item_state)
+				$ids = $ids.append(item_node)
+			}
+			$end = nend($n, $ids.last() ?? 0)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			}
+
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	finish($s, $n, $c, $d, if record TypeRecord else TypeTagUnion, opening.start, $end, $ids)
+}
+
+parse_annotation_after_name : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64, U64 -> R
+parse_annotation_after_name = |ctx, initial, nodes, children, diags, name, start, depth| {
+	{ pos: ty_state, nodes: n1, children: c1, diags: d1, node: ty_node } = type_expression(ctx, initial, nodes, children, diags, FullType, depth + 1)
+	look = sig(ctx, ty_state)
+	if is_text(ctx, look, Where) {
+		{ pos: where_state, nodes: n2, children: c2, diags: d2, node: where_node } = parse_where_clause(ctx, look, n1, c1, d1, depth + 1)
+		end = nend(n2, where_node)
+		finish(where_state, n2, c2, d2, TypeAnnotation, start, end, [name, ty_node, where_node])
+	} else {
+		end = nend(n1, ty_node)
+		finish2(ty_state, n1, c1, d1, TypeAnnotation, start, end, name, ty_node)
+	}
+}
+
+parse_where_clause : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
+	start = tok(ctx, initial).start
+	look = sig(ctx, initial + 1)
+	opening = tok(ctx, look)
+	d1 = if opening.kind != OpenSquare diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	d2 = if depth >= 128 diag(d1, ResourceLimit, start, opening.end) else d1
+	var $s = if opening.kind == OpenSquare look + 1 else look
+	var $ids = []
+	var $done = opening.kind != OpenSquare or depth >= 128
+	var $end = opening.end
+	var $n = nodes
+	var $c = children
+	var $d = d2
+	while !$done {
+		receiver_state = sig(ctx, $s)
+		receiver = tok(ctx, receiver_state)
+		if receiver.kind == CloseSquare {
+			$s = receiver_state + 1
+			$end = receiver.end
+			$done = True
+		} else if receiver.kind == EndOfFile or receiver.kind == CloseCurly or receiver.kind == CloseRound {
+			$d = diag($d, UnclosedDelimiter, receiver.start, receiver.end)
+			$s = receiver_state
+			$end = receiver.start
+			$done = True
+		} else {
+			before = receiver_state
+			valid_receiver = receiver.kind == LowerIdent and byte(ctx.source, receiver.start) != '_'
+			if !valid_receiver {
+				$d = diag($d, UnexpectedToken, receiver.start, receiver.end)
+			}
+			validated = receiver_state
+			{ nodes: $n, children: $c, node: var_node } = emit($n, $c, TypeVariable, receiver.start, receiver.end, [])
+			dot = sig(ctx, validated + 1)
+			dotted = is_text(ctx, dot, Dot)
+			if !dotted {
+				$d = diag($d, UnexpectedToken, tok(ctx, dot).start, tok(ctx, dot).end)
+			}
+			name_state = if dotted dot + 1 else dot
+			name = tok(ctx, name_state)
+			if name.kind == LowerIdent and name.start == tok(ctx, dot).end and byte(ctx.source, name.start) != '_' {
+				{ nodes: $n, children: $c, node: method_node } = emit($n, $c, Identifier, name.start, name.end, [])
+				colon = sig(ctx, name_state + 1)
+				colon_found = is_text(ctx, colon, Colon)
+				if !colon_found {
+					$d = diag($d, UnexpectedToken, tok(ctx, colon).start, tok(ctx, colon).end)
+				}
+				after_colon = if colon_found colon + 1 else colon
+				{ pos: ty_state, nodes: $n, children: $c, diags: $d, node: ty_node } = type_expression(ctx, after_colon, $n, $c, $d, FullType, depth + 1)
+				ty_end = nend($n, ty_node)
+				{ nodes: $n, children: $c, node: clause_node } = emit($n, $c, WhereMethod, receiver.start, ty_end, [var_node, method_node, ty_node])
+				$s = sig(ctx, ty_state)
+				$ids = $ids.append(clause_node)
+			} else if name.kind == UpperIdent and name.start == tok(ctx, dot).end and byte(ctx.source, name.start) != '@' {
+				{ pos: alias_state, nodes: $n, children: $c, diags: $d, node: alias_node } = type_where_alias_name(ctx, name_state, $n, $c, $d, depth + 1)
+				alias_end = nend($n, alias_node)
+				{ nodes: $n, children: $c, node: clause_node } = emit2($n, $c, WhereAlias, receiver.start, alias_end, var_node, alias_node)
+				$s = sig(ctx, alias_state)
+				$ids = $ids.append(clause_node)
+			} else {
+				$d = diag($d, UnexpectedToken, name.start, name.end)
+				$s = name_state
+				$done = True
+			}
+			if !$ids.is_empty() {
+				$end = nend($n, $ids.last() ?? 0)
+			}
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseSquare {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	finish($s, $n, $c, if $ids.is_empty() diag($d, UnexpectedToken, start, $end) else $d, WhereClause, start, $end, $ids)
+}
+
+parse_type_declaration : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
+	s = sig(ctx, initial)
+	first = tok(ctx, s)
+	where_alias = first.kind == LowerIdent
+	{ pos: s1, nodes: n1, children: c1, diags: d1, receiver } = if where_alias {
+		da = if byte(ctx.source, first.start) == '_' diag(diags, UnexpectedToken, first.start, first.end) else diags
+		{ nodes: na, children: ca, node: receiver_node } = emit(nodes, children, TypeVariable, first.start, first.end, [])
+		dot = sig(ctx, s + 1)
+		if is_text(ctx, dot, Dot) {
+			{ pos: dot + 1, nodes: na, children: ca, diags: da, receiver: [receiver_node] }
+		} else {
+			{ pos: dot, nodes: na, children: ca, diags: diag(da, UnexpectedToken, tok(ctx, dot).start, tok(ctx, dot).end), receiver: [receiver_node] }
+		}
+	} else {
+		{ pos: s, nodes, children, diags, receiver: [] }
+	}
+	name = tok(ctx, s1)
+	d2 = if !(name.kind == UpperIdent and byte(ctx.source, name.start) != '@') diag(d1, UnexpectedToken, name.start, name.end) else d1
+	validated = s1
+	{ nodes: n2, children: c2, node: name_node } = emit(n1, c1, TypeName, name.start, name.end, [])
+	s2 = sig(ctx, validated + if name.kind == EndOfFile 0 else 1)
+	has_params = tok(ctx, s2).kind == OpenRound or tok(ctx, s2).kind == NoSpaceOpenRound
+	var $s = if has_params s2 + 1 else s2
+	var $params = [name_node]
+	var $header_end = name.end
+	var $done = !has_params
+	var $n = n2
+	var $c = c2
+	var $d = d2
+	while !$done {
+		look = sig(ctx, $s)
+		p = tok(ctx, look)
+		if p.kind == CloseRound {
+			$s = sig(ctx, look + 1)
+			$header_end = p.end
+			$done = True
+		} else if p.kind == EndOfFile or p.kind == CloseCurly or p.kind == CloseSquare {
+			$d = diag($d, UnclosedDelimiter, p.start, p.end)
+			$s = look
+			$done = True
+		} else {
+			if p.kind != LowerIdent {
+				$d = diag($d, UnexpectedToken, p.start, p.end)
+			}
+			validated_arg = look
+			{ nodes: $n, children: $c, node: param_node } = emit($n, $c, if token_spelling(ctx.source, p, "_") TypeWildcard else TypeVariable, p.start, p.end, [])
+			$params = $params.append(param_node)
+			$header_end = p.end
+			$s = sig(ctx, validated_arg + 1)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseRound {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+		}
+	}
+	s3 = $s
+	d3 = $d
+	{ nodes: n4, children: c4, node: header_node } = emit($n, $c, TypeHeader, name.start, $header_end, $params)
+	operator_state = sig(ctx, s3)
+	nominal = is_text(ctx, operator_state, ColonEquals) or is_text(ctx, operator_state, DoubleColon)
+	valid_operator = is_text(ctx, operator_state, Colon) or (!where_alias and nominal)
+	d4 = if !valid_operator diag(d3, UnexpectedToken, tok(ctx, operator_state).start, tok(ctx, operator_state).end) else d3
+	after_operator = sig(ctx, operator_state + if valid_operator 1 else 0)
+	ids0 = [header_node].concat(receiver)
+	{ pos: s5, nodes: n5, children: c5, diags: d5, ids: ids1 } = if where_alias {
+		if is_text(ctx, after_operator, Where) {
+			{ pos: where_state, nodes: na, children: ca, diags: da, node: where_node } = parse_where_clause(ctx, after_operator, n4, c4, d4, depth + 1)
+			{ pos: where_state, nodes: na, children: ca, diags: da, ids: ids0.append(where_node) }
+		} else {
+			{ pos: after_operator, nodes: n4, children: c4, diags: diag(d4, UnexpectedToken, tok(ctx, after_operator).start, tok(ctx, after_operator).end), ids: ids0 }
+		}
+	} else {
+		{ pos: ty_state, nodes: na, children: ca, diags: da, node: ty_node } = type_expression(ctx, after_operator, n4, c4, d4, FullType, depth + 1)
+		after_ty = sig(ctx, ty_state)
+		ty_ids = ids0.append(ty_node)
+		if is_text(ctx, after_ty, Where) {
+			{ pos: where_state, nodes: nb, children: cb, diags: db, node: where_node } = parse_where_clause(ctx, after_ty, na, ca, da, depth + 1)
+			{ pos: sig(ctx, where_state), nodes: nb, children: cb, diags: db, ids: ty_ids.append(where_node) }
+		} else {
+			{ pos: after_ty, nodes: na, children: ca, diags: da, ids: ty_ids }
+		}
+	}
+	# Nodes are append-only, so ends of the existing ids are final here.
+	var $end = first.end
+	for id in ids1 {
+		$end = U64.max($end, nend(n5, id))
+	}
+	ids_end = $end
+	look = sig(ctx, s5)
+	if is_text(ctx, look, Dot) and tok(ctx, sig(ctx, look + 1)).kind == OpenCurly {
+		d6 = if !(nominal and !where_alias) diag(d5, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d5
+		associated_state = look
+		{ pos: associated_end, nodes: n7, children: c7, diags: d7, node: associated_node } = parse_associated_block(ctx, sig(ctx, associated_state + 1), n5, c5, d6, depth + 1)
+		ids = ids1.append(associated_node)
+		end = U64.max(ids_end, nend(n7, associated_node))
+		finish(associated_end, n7, c7, d7, TypeDeclaration, first.start, end, ids)
+	} else {
+		finish(s5, n5, c5, d5, TypeDeclaration, first.start, ids_end, ids1)
+	}
+}
+
+parse_associated_block : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_associated_block = |ctx, initial, nodes, children, diags, depth| {
+	opening = tok(ctx, initial)
+	var $s = initial + 1
+	var $ids = []
+	var $end = opening.end
+	var $done = depth >= 128
+	var $n = nodes
+	var $c = children
+	var $d = if depth >= 128 diag(diags, ResourceLimit, opening.start, opening.end) else diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else {
+			before = look
+			if is_text(ctx, look, Var) {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = statement(ctx, look, $n, $c, $d, depth + 1)
+			$ids = $ids.append(item_node)
+			$s = item_state
+			if (t.kind == UpperIdent or tok(ctx, sig(ctx, item_state)).kind == CloseCurly) and nget($n, item_node).kind == ExpressionStatement {
+				item_end = nend($n, item_node)
+				$d = diag($d, UnexpectedToken, t.start, item_end)
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node: block_node } = emit($n, $c, AssociatedBlock, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node: block_node }
+}
+
+# Distinguish local type declarations from uppercase tag/call expressions.
+type_declaration_start : Ctx, U64 -> Bool
+type_declaration_start = |ctx, initial| {
+	var $s = sig(ctx, initial + 1)
+	if tok(ctx, $s).kind == OpenRound or tok(ctx, $s).kind == NoSpaceOpenRound {
+		$s = sig(ctx, $s + 1)
+		var $done = False
+		while !$done {
+			if tok(ctx, $s).kind == CloseRound {
+				$s = sig(ctx, $s + 1)
+				$done = True
+			} else if tok(ctx, $s).kind == LowerIdent {
+				$s = sig(ctx, $s + 1)
+				if is_text(ctx, $s, Comma) {
+					$s = sig(ctx, $s + 1)
+				} else if tok(ctx, $s).kind != CloseRound {
+					return False
+				}
+			} else {
+				return False
+			}
+		}
+	}
+	is_text(ctx, $s, Colon) or is_text(ctx, $s, ColonEquals) or is_text(ctx, $s, DoubleColon)
+}
+
+# Where aliases deliberately accept spaced qualification segments.
+type_where_alias_name : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+type_where_alias_name = |ctx, initial, nodes, children, diags, depth| {
+	first = tok(ctx, initial)
+	var $s = initial + 1
+	var $end = first.end
+	var $done = False
+	while !$done {
+		dot = sig(ctx, $s)
+		if is_text(ctx, dot, Dot) {
+			name_state = dot + 1
+			name = tok(ctx, name_state)
+			if name.kind == UpperIdent and name.start == tok(ctx, dot).end and byte(ctx.source, name.start) != '@' {
+				$s = name_state + 1
+				$end = name.end
+			} else {
+				$done = True
+			}
+		} else {
+			$done = True
+		}
+	}
+	after = $s
+	{ nodes: n1, children: c1, node: named_node } = emit(nodes, children, TypeName, first.start, $end, [])
+	look = sig(ctx, after)
+	if tok(ctx, look).kind == NoSpaceOpenRound {
+		{ pos: items_state, nodes: n2, children: c2, diags: d1, ids: items_ids, end: items_end, comma: _ } = type_collection(ctx, look + 1, n1, c1, diags, CloseRound, TypeItem, depth + 1)
+		finish(items_state, n2, c2, d1, TypeApply, first.start, items_end, [named_node].concat(items_ids))
+	} else {
+		{ pos: after, nodes: n1, children: c1, diags, node: named_node }
+	}
+}
+
+# ---- Patterns ----------------------------------------------------------------
+
+# Patterns have their own grammar: expression operators and value-only postfixes
+# must never make an invalid binding pattern appear complete.
+parse_pattern : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+parse_pattern = |ctx, initial, nodes, children, diags, alternatives, depth| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	if depth >= 128 {
+		finish(s, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.start, [])
+	} else {
+		{ pos: first_state, nodes: n1, children: c1, diags: d1, node: first_node } = pattern_primary(ctx, s, nodes, children, diags, alternatives, depth + 1)
+		look = sig(ctx, first_state)
+		if alternatives and is_text(ctx, look, Bar) {
+			var $n = n1
+			var $c = c1
+			var $d = d1
+			var $s = look
+			var $ids = [first_node]
+			while is_text(ctx, $s, Bar) {
+				{ pos: next_state, nodes: $n, children: $c, diags: $d, node: next_node } = pattern_primary(ctx, sig(ctx, $s + 1), $n, $c, $d, alternatives, depth + 1)
+				$ids = $ids.append(next_node)
+				$s = sig(ctx, next_state)
+			}
+			end = nend($n, $ids.last() ?? first_node)
+			{ nodes: n2, children: c2, node: alt_node } = emit($n, $c, AlternativePattern, t.start, end, $ids)
+			{ pos: $s, nodes: n2, children: c2, diags: $d, node: alt_node }
+		} else if is_text(ctx, look, As) {
+			name_state = sig(ctx, look + 1)
+			name = tok(ctx, name_state)
+			if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
+				{ nodes: n2, children: c2, node: named_node } = emit(n1, c1, Identifier, name.start, name.end, [])
+				finish2(name_state + 1, n2, c2, d1, AliasPattern, t.start, name.end, first_node, named_node)
+			} else {
+				{ pos: name_state, nodes: n1, children: c1, diags: diag(d1, UnexpectedToken, name.start, name.end), node: first_node }
+			}
+		} else {
+			{ pos: look, nodes: n1, children: c1, diags: d1, node: first_node }
+		}
+	}
+}
+
+pattern_primary : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
+	t = tok(ctx, s)
+	if t.kind == LowerIdent {
+		finish(s + 1, nodes, children, diags, if is_text(ctx, s, Underscore) WildcardPattern else IdentifierPattern, t.start, t.end, [])
+	} else if is_text(ctx, s, Var) {
+		look = sig(ctx, s + 1)
+		name = tok(ctx, look)
+		if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
+			{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, name.start, name.end, [])
+			finish1(look + 1, n1, c1, diags, MutablePattern, t.start, name.end, name_node)
+		} else {
+			finish(look, nodes, children, diag(diags, UnexpectedToken, name.start, name.end), ErrorNode, t.start, name.start, [])
+		}
+	} else if is_text(ctx, s, DotDot) {
+		look = sig(ctx, s + 1)
+		if is_text(ctx, look, As) {
+			name_state = sig(ctx, look + 1)
+			name = tok(ctx, name_state)
+			if name.kind == LowerIdent and !is_text(ctx, name_state, Underscore) {
+				{ nodes: n1, children: c1, node: named_node } = emit(nodes, children, Identifier, name.start, name.end, [])
+				finish1(name_state + 1, n1, c1, diags, RestPattern, t.start, name.end, named_node)
+			} else {
+				finish(name_state, nodes, children, diag(diags, UnexpectedToken, name.start, name.end), RestPattern, t.start, t.end, [])
+			}
+		} else {
+			next = tok(ctx, look)
+			d1 = if next.kind == LowerIdent and !is_text(ctx, look, Underscore) diag(diags, UnexpectedToken, next.start, next.end) else diags
+			finish(look, nodes, children, d1, RestPattern, t.start, t.end, [])
+		}
+	} else if t.kind == UpperIdent and byte(ctx.source, t.start) == '@' {
+		finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+	} else if t.kind == UpperIdent {
+		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
+		var $n = n1
+		var $c = c1
+		var $s = s + 1
+		var $name = name_node
+		var $done = False
+		while !$done {
+			look = sig(ctx, $s)
+			if is_text(ctx, look, Dot) and tok(ctx, look).start == nend($n, $name) and tok(ctx, look + 1).kind == UpperIdent {
+				field_state = look + 1
+				field = tok(ctx, field_state)
+				{ nodes: $n, children: $c, node: field_node } = emit($n, $c, Identifier, field.start, field.end, [])
+				{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, FieldAccess, t.start, field.end, $name, field_node)
+				$s = field_state + 1
+				$name = access_node
+			} else {
+				$s = look
+				$done = True
+			}
+		}
+		n2 = $n
+		c2 = $c
+		qualified = $name
+		after_name = $s
+		nominal = is_text(ctx, after_name, Dot)
+		after = if nominal sig(ctx, after_name + 1) else after_name
+		if tok(ctx, after).kind == NoSpaceOpenRound {
+			{ pos: args_state, nodes: n3, children: c3, diags: d1, ids: args, end, comma: _ } = pattern_collection(ctx, after + 1, n2, c2, diags, CloseRound, True, depth)
+			finish(args_state, n3, c3, d1, if nominal NominalPattern else TagPattern, t.start, end, [qualified].concat(args))
+		} else if nominal and tok(ctx, after).kind == OpenCurly {
+			{ pos: record_state, nodes: n3, children: c3, diags: d1, node: record_node } = pattern_record(ctx, after, n2, c2, diags, alternatives, depth)
+			end = nend(n3, record_node)
+			finish2(record_state, n3, c3, d1, NominalPattern, t.start, end, qualified, record_node)
+		} else {
+			d1 = if nominal diag(diags, UnexpectedToken, tok(ctx, after).start, tok(ctx, after).end) else diags
+			end = nend(n2, qualified)
+			finish1(after, n2, c2, d1, TagPattern, t.start, end, qualified)
+		}
+	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare {
+		closing = if t.kind == OpenSquare CloseSquare else CloseRound
+		{ pos: items_state, nodes: n1, children: c1, diags: d1, ids, end, comma: _ } = pattern_collection(ctx, s + 1, nodes, children, diags, closing, True, depth)
+		finish(items_state, n1, c1, d1, if t.kind == OpenSquare ListPattern else TuplePattern, t.start, end, ids)
+	} else if t.kind == OpenCurly {
+		pattern_record(ctx, s, nodes, children, diags, alternatives, depth)
+	} else if t.kind == StringStart {
+		pattern_string(ctx, s, nodes, children, diags)
+	} else if t.kind == Number or t.kind == SingleQuote {
+		primary(ctx, s, nodes, children, diags, depth, False)
+	} else {
+		finish(s + if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+	}
+}
+
+pattern_collection : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.TokenKind, Bool, U64 -> C
+pattern_collection = |ctx, initial, nodes, children, diags, closing, alternatives, depth| {
+	var $s = initial
+	var $ids = []
+	var $end = tok(ctx, initial).start
+	var $done = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == closing {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else {
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = parse_pattern(ctx, look, $n, $c, $d, alternatives, depth + 1)
+			$ids = $ids.append(item_node)
+			$end = nend($n, item_node)
+			$s = sig(ctx, item_state)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != closing and tok(ctx, $s).kind != EndOfFile {
+				$d = diag($d, UnexpectedToken, tok(ctx, $s).start, tok(ctx, $s).end)
+			}
+			if $s <= look {
+				$s = look + 1
+			}
+		}
+	}
+	{ pos: $s, nodes: $n, children: $c, diags: $d, ids: $ids, end: $end, comma: False }
+}
+
+pattern_record : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+pattern_record = |ctx, initial, nodes, children, diags, alternatives, depth| {
+	start = tok(ctx, initial).start
+	var $s = initial + 1
+	var $ids = []
+	var $end = tok(ctx, initial).end
+	var $done = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = if t.start > $end t.start else $end
+			$done = True
+		} else {
+			# Branches thread immutable names; only the destructure below writes the loop vars.
+			{ pos: field_state, nodes: $n, children: $c, diags: $d, node: field_node } = if is_text(ctx, look, DotDot) {
+				name_state = sig(ctx, look + 1)
+				name = tok(ctx, name_state)
+				if name.kind == LowerIdent and (is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') {
+					{ nodes: n1, children: c1, node: named_node } = emit($n, $c, Identifier, name.start, name.end, [])
+					finish1(name_state + 1, n1, c1, $d, RestPattern, t.start, name.end, named_node)
+				} else {
+					finish(name_state, $n, $c, $d, RestPattern, t.start, t.end, [])
+				}
+			} else if t.kind == LowerIdent and (is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$') {
+				{ nodes: n1, children: c1, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+				after = sig(ctx, look + 1)
+				if is_text(ctx, after, Colon) {
+					{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = parse_pattern(ctx, after + 1, n1, c1, $d, alternatives, depth + 1)
+					end = nend(n2, value_node)
+					finish2(value_state, n2, c2, d2, PatternField, t.start, end, name_node, value_node)
+				} else {
+					next = tok(ctx, after)
+					d2 = if !(is_text(ctx, after, Comma) or next.kind == CloseCurly) diag($d, UnexpectedToken, next.start, next.end) else $d
+					finish1(after, n1, c1, d2, PatternField, t.start, t.end, name_node)
+				}
+			} else {
+				finish(look + 1, $n, $c, diag($d, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+			}
+			$ids = $ids.append(field_node)
+			$end = nend($n, field_node)
+			$s = sig(ctx, field_state)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			}
+			if $s <= look {
+				$s = look + 1
+			}
+		}
+	}
+	finish($s, $n, $c, $d, RecordPattern, start, $end, $ids)
+}
+
+pattern_string : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic) -> R
+pattern_string = |ctx, initial, nodes, children, diags| {
+	first = tok(ctx, initial)
+	var $s = initial + 1
+	var $ids = []
+	var $end = first.end
+	var $captures = False
+	var $done = False
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	while !$done {
+		t = tok(ctx, $s)
+		if t.kind == StringPart {
+			{ nodes: $n, children: $c, node: part_node } = emit($n, $c, StringSegment, t.start, t.end, [])
+			$s = $s + 1
+			$ids = $ids.append(part_node)
+			$end = t.end
+		} else if t.kind == InterpolationStart {
+			name_state = sig(ctx, $s + 1)
+			name = tok(ctx, name_state)
+			if name.kind != LowerIdent {
+				$d = diag($d, UnexpectedToken, name.start, name.end)
+			}
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, if is_text(ctx, name_state, Underscore) WildcardPattern else IdentifierPattern, name.start, name.end, [])
+			close_state = sig(ctx, name_state + if name.kind == EndOfFile or name.kind == InterpolationEnd 0 else 1)
+			close = tok(ctx, close_state)
+			closed = close.kind == InterpolationEnd
+			if !closed {
+				$d = diag($d, UnclosedDelimiter, close.start, close.end)
+			}
+			$end = if closed close.end else name.end
+			{ nodes: $n, children: $c, node: capture_node } = emit1($n, $c, CapturePattern, t.start, $end, named_node)
+			$s = if closed close_state + 1 else close_state
+			$ids = $ids.append(capture_node)
+			$captures = True
+			if !closed {
+				$done = True
+			}
+		} else if t.kind == StringEnd {
+			$s = $s + 1
+			$end = t.end
+			$done = True
+		} else {
+			$d = diag($d, UnclosedString, first.start, $end)
+			$done = True
+		}
+	}
+	finish($s, $n, $c, $d, if $captures PatternStringLiteral else StringLiteral, first.start, $end, $ids)
+}
+
+valid_pattern : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
+valid_pattern = |_ctx, nodes, children, root| {
+	var $work = [root]
+	var $depth = 1
+	var $valid = True
+	while $depth > 0 and $valid {
+		$depth = $depth - 1
+		id = $work.get($depth) ?? nodes.len()
+		match nodes.get(id) {
+			Err(_) => {
+				$valid = False
+			}
+			Ok(n) => {
+				$valid = n.kind == Identifier or n.kind == NumberLiteral or n.kind == StringLiteral or n.kind == CharacterLiteral or n.kind == Call or n.kind == Tuple or n.kind == ListLiteral or n.kind == Parenthesized
+				var $i = 0
+				while $valid and $i < n.children_len {
+					child = children.get(n.children_start + $i) ?? nodes.len()
+					$work = if $depth < $work.len() $work.set($depth, child) ?? $work else $work.append(child)
+					$depth = $depth + 1
+					$i = $i + 1
+				}
+			}
+		}
+	}
+	$valid
+}
+
+# ---- Blocks, records, control flow and strings --------------------------------
+
+parse_lambda : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64 -> R
+parse_lambda = |ctx, initial, nodes, children, diags, start, depth| {
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	var $s = initial
+	var $ids = []
+	var $done = False
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if is_text(ctx, look, Bar) {
+			$s = look + 1
+			$done = True
+		} else if t.kind == EndOfFile {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$done = True
+		} else {
+			before = look
+			{ pos: param_state, nodes: $n, children: $c, diags: $d, node: param_node } = parse_pattern(ctx, look, $n, $c, $d, False, depth + 1)
+			$ids = $ids.append(param_node)
+			$s = sig(ctx, param_state)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			}
+			if $s <= before {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+				$s = before + 1
+			}
+		}
+	}
+	n1 = $n
+	c1 = $c
+	d1 = $d
+	{ pos: body_state, nodes: n2, children: c2, diags: d2, node: body_node } = expression(ctx, $s, n1, c1, d1, 0, depth, False)
+	end = nend(n2, body_node)
+	finish(body_state, n2, c2, d2, Lambda, start, end, $ids.append(body_node))
+}
+
+parse_if : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64 -> R
+parse_if = |ctx, initial, nodes, children, diags, start, depth| {
+	{ pos: condition_state, nodes: n1, children: c1, diags: d1, node: condition_node } = expression(ctx, initial, nodes, children, diags, 0, depth, False)
+	look = sig(ctx, condition_state)
+	{ pos: then_branch_state, nodes: n2, children: c2, diags: d2, node: then_branch_node } = expression(ctx, look, n1, c1, d1, 0, depth, False)
+	after = sig(ctx, then_branch_state)
+	if is_text(ctx, after, Else) {
+		{ pos: other_state, nodes: n3, children: c3, diags: d3, node: other_node } = expression(ctx, after + 1, n2, c2, d2, 0, depth, False)
+		end = nend(n3, other_node)
+		finish(other_state, n3, c3, d3, If, start, end, [condition_node, then_branch_node, other_node])
+	} else {
+		end = nend(n2, then_branch_node)
+		finish2(after, n2, c2, d2, If, start, end, condition_node, then_branch_node)
+	}
+}
+
+curly : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64, Bool, Bool -> R
+curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
+	look = sig(ctx, initial)
+	first = tok(ctx, look)
+	after = sig(ctx, look + 1)
+	record = forced or first.kind == CloseCurly or is_text(ctx, look, DotDot) or (first.kind == LowerIdent and (is_text(ctx, after, Colon) or is_text(ctx, after, Comma) or (punned and tok(ctx, after).kind == CloseCurly)) and !(is_text(ctx, after, Colon) and record_starts_block(ctx, look)))
+	extension = is_text(ctx, look, DotDot)
+	{ pos: s1, nodes: n1, children: c1, diags: d1, ids: ids1, end: end1 } = if extension {
+		{ pos: base_state, nodes: na, children: ca, diags: da, node: base_node } = expression(ctx, look + 1, nodes, children, diags, 0, depth + 1, False)
+		comma = sig(ctx, base_state)
+		has_comma = is_text(ctx, comma, Comma)
+		base_end = nend(na, base_node)
+		{ pos: if has_comma comma + 1 else comma, nodes: na, children: ca, diags: if has_comma da else diag(da, UnexpectedToken, tok(ctx, comma).start, tok(ctx, comma).end), ids: [base_node], end: base_end }
+	} else {
+		{ pos: initial, nodes, children, diags, ids: [], end: first.start }
+	}
+	var $n = n1
+	var $c = c1
+	var $d = d1
+	var $s = s1
+	var $ids = ids1
+	var $end = end1
+	var $done = False
+	while !$done {
+		$s = sig(ctx, $s)
+		t = tok(ctx, $s)
+		sync = declaration_sync(ctx, $s)
+		if record and sync.sync {
+			$d = diag($d, UnclosedDelimiter, sync.start, sync.end)
+			$end = sync.end
+			$done = True
+		} else if t.kind == CloseCurly {
+			$end = t.end
+			$s = $s + 1
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
+			$end = if t.start > $end t.start else $end
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$done = True
+		} else {
+			before = $s
+			if record {
+				name_state = $s + 1
+				{ nodes: $n, children: $c, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+				var $field_state = name_state
+				var $field_node = name_node
+				field_look = sig(ctx, name_state)
+				if t.kind != LowerIdent or !(is_lower(byte(ctx.source, t.start)) or byte(ctx.source, t.start) == '$') {
+					$d = diag($d, UnsupportedSyntax, t.start, t.end)
+					{ nodes: $n, children: $c, node: next_field_node } = emit($n, $c, UnsupportedNode, t.start, t.end, [])
+					$field_state = field_look
+					$field_node = next_field_node
+				} else if is_text(ctx, field_look, Colon) and is_text(ctx, significant_position(ctx.tokens, field_look + 1), Underscore) and (is_text(ctx, significant_position(ctx.tokens, significant_position(ctx.tokens, field_look + 1) + 1), Comma) or source_token(ctx, significant_position(ctx.tokens, significant_position(ctx.tokens, field_look + 1) + 1)).kind == CloseCurly) {
+					value_pos = significant_position(ctx.tokens, field_look + 1)
+					unset_end = source_token(ctx, value_pos).end
+					{ nodes: $n, children: $c, node: unset_node } = emit1($n, $c, UnsetField, t.start, unset_end, name_node)
+					$field_state = value_pos + 1
+					$field_node = unset_node
+				} else if is_text(ctx, field_look, Colon) {
+					{ pos: value_state, nodes: $n, children: $c, diags: $d, node: value_node } = expression(ctx, field_look + 1, $n, $c, $d, 0, depth, True)
+					end = nend($n, value_node)
+					{ nodes: $n, children: $c, node: next_field_node } = emit2($n, $c, RecordField, t.start, end, name_node, value_node)
+					$field_state = value_state
+					$field_node = next_field_node
+				} else {
+					{ nodes: $n, children: $c, node: next_field_node } = emit1($n, $c, RecordField, t.start, t.end, name_node)
+					$field_state = field_look
+					$field_node = next_field_node
+				}
+				$ids = $ids.append($field_node)
+				$end = nend($n, $field_node)
+				$s = sig(ctx, $field_state)
+				if is_text(ctx, $s, Comma) {
+					$s = $s + 1
+				} else if tok(ctx, $s).kind != CloseCurly and tok(ctx, $s).kind != EndOfFile and (tok(ctx, $s).kind != LowerIdent or nget($n, $field_node).children_len != 2) {
+					$d = diag($d, UnexpectedToken, tok(ctx, $s).start, tok(ctx, $s).end)
+				}
+			} else {
+				{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = statement(ctx, $s, $n, $c, $d, depth)
+				$ids = $ids.append(item_node)
+				$end = nend($n, item_node)
+				$s = item_state
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	n2 = $n
+	c2 = $c
+	d2 = $d
+	s2 = $s
+	ids2 = $ids
+	end2 = $end
+	look_suffix = sig(ctx, s2)
+	dot = tok(ctx, look_suffix)
+	name_state = look_suffix + 1
+	builder = record and !extension and !forced and is_text(ctx, look_suffix, Dot) and dot.start == end2 and tok(ctx, name_state).kind == UpperIdent
+	if builder {
+		var $bn = n2
+		var $bc = c2
+		var $mapper_ids = []
+		var $mapper_state = name_state
+		var $mapper_end = tok(ctx, name_state).end
+		var $mapper_done = False
+		while !$mapper_done {
+			t = tok(ctx, $mapper_state)
+			{ nodes: $bn, children: $bc, node: named_node } = emit($bn, $bc, Identifier, t.start, t.end, [])
+			$mapper_state = $mapper_state + 1
+			$mapper_ids = $mapper_ids.append(named_node)
+			$mapper_end = t.end
+			if is_text(ctx, $mapper_state, Dot) and tok(ctx, $mapper_state).start == $mapper_end and tok(ctx, $mapper_state + 1).kind == UpperIdent {
+				$mapper_state = $mapper_state + 1
+			} else {
+				$mapper_done = True
+			}
+		}
+		# Keep the mapper as a normal qualified identifier tree.
+		var $mapper = $mapper_ids.first() ?? 0
+		var $index = 1.U64
+		while $index < $mapper_ids.len() {
+			field = $mapper_ids.get($index) ?? $mapper
+			access_start = nstart($bn, $mapper)
+			access_end = nend($bn, field)
+			{ nodes: $bn, children: $bc, node: access_node } = emit2($bn, $bc, FieldAccess, access_start, access_end, $mapper, field)
+			$mapper = access_node
+			$index = $index + 1
+		}
+		finish($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, [$mapper].concat(ids2))
+	} else {
+		finish(s2, n2, c2, d2, if extension RecordUpdate else if record Record else Block, start, end2, ids2)
+	}
+}
+
+parse_match : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64 -> R
+parse_match = |ctx, initial, nodes, children, diags, start, depth| {
+	{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, initial, nodes, children, diags, 0, depth, False)
+	look = sig(ctx, value_state)
+	if tok(ctx, look).kind != OpenCurly {
+		end = nend(n1, value_node)
+		finish1(look, n1, c1, diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end), Match, start, end, value_node)
+	} else {
+		var $n = n1
+		var $c = c1
+		var $d = d1
+		var $s = look + 1
+		var $ids = [value_node]
+		var $end = tok(ctx, look).end
+		var $done = False
+		while !$done {
+			$s = sig(ctx, $s)
+			t = tok(ctx, $s)
+			if t.kind == CloseCurly {
+				$end = t.end
+				$s = $s + 1
+				$done = True
+			} else if t.kind == EndOfFile {
+				$d = diag($d, UnclosedDelimiter, t.start, t.end)
+				$end = if t.start > $end t.start else $end
+				$done = True
+			} else {
+				before = $s
+				{ pos: pattern_state, nodes: $n, children: $c, diags: $d, node: pattern_node } = parse_pattern(ctx, $s, $n, $c, $d, True, depth + 1)
+				var $arrow = sig(ctx, pattern_state)
+				var $branch_ids = [pattern_node]
+				if is_text(ctx, $arrow, If) {
+					# Only the guard expression sees `in_guard`; the arrow and the
+					# branch value continue with the outer flag.
+					{ pos: guard_state, nodes: $n, children: $c, diags: $d, node: guard_node } = expression({ ..ctx, in_guard: True }, $arrow + 1, $n, $c, $d, 0, depth + 1, False)
+					$arrow = sig(ctx, guard_state)
+					$branch_ids = $branch_ids.append(guard_node)
+				}
+				arrow = $arrow
+				if is_text(ctx, arrow, FatArrow) {
+					{ pos: branch_value_state, nodes: $n, children: $c, diags: $d, node: branch_value_node } = expression(ctx, arrow + 1, $n, $c, $d, 0, depth, False)
+					branch_end = nend($n, branch_value_node)
+					{ nodes: $n, children: $c, node: branch_node } = emit($n, $c, MatchBranch, t.start, branch_end, $branch_ids.append(branch_value_node))
+					$ids = $ids.append(branch_node)
+					$s = sig(ctx, branch_value_state)
+					$end = branch_end
+					if is_text(ctx, $s, Comma) {
+						$s = $s + 1
+					}
+				} else {
+					$d = diag($d, UnsupportedSyntax, t.start, tok(ctx, arrow).end)
+					$s = arrow
+					$ids = $ids.append(pattern_node)
+				}
+				if $s <= before {
+					$s = before + 1
+				}
+			}
+		}
+		n2 = $n
+		c2 = $c
+		d2 = $d
+		ids2 = $ids
+		end2 = $end
+		if ids2.len() == 1 {
+			finish($s, n2, c2, diag(d2, UnexpectedToken, start, end2), Match, start, end2, ids2)
+		} else {
+			finish($s, n2, c2, d2, Match, start, end2, ids2)
+		}
+	}
+}
+
+parse_for : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, Bool, U64 -> R
+parse_for = |ctx, initial, nodes, children, diags, start, stream, depth| {
+	{ pos: pattern_state, nodes: n1, children: c1, diags: d1, node: pattern_node } = parse_pattern(ctx, initial, nodes, children, diags, False, depth + 1)
+	look = sig(ctx, pattern_state)
+	in_found = is_text(ctx, look, In)
+	d2 = if in_found d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
+	validated = if in_found look + 1 else look
+	{ pos: list_state, nodes: n2, children: c2, diags: d3, node: list_node } = expression(ctx, validated, n1, c1, d2, 0, depth + 1, False)
+	{ pos: body_state, nodes: n3, children: c3, diags: d4, node: body_node } = expression(ctx, list_state, n2, c2, d3, 0, depth + 1, False)
+	end = U64.max(nend(n3, body_node), U64.max(nend(n3, pattern_node), nend(n3, list_node)))
+	finish(body_state, n3, c3, d4, if stream ForStream else For, start, end, [pattern_node, list_node, body_node])
+}
+
+parse_string : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_string = |ctx, initial, nodes, children, diags, depth| {
+	first = tok(ctx, initial)
+	multiline = first.kind == MultilineStringStart
+	var $n = nodes
+	var $c = children
+	var $d = diags
+	var $s = initial + 1
+	var $ids = []
+	var $end = first.end
+	var $done = False
+	while !$done {
+		look = if multiline sig(ctx, $s) else $s
+		t = tok(ctx, look)
+		if t.kind == StringPart {
+			{ nodes: $n, children: $c, node: part_node } = emit($n, $c, StringSegment, t.start, t.end, [])
+			$s = look + 1
+			$ids = $ids.append(part_node)
+			$end = t.end
+		} else if t.kind == InterpolationStart {
+			{ pos: value_state, nodes: $n, children: $c, diags: $d, node: value_node } = expression(ctx, look + 1, $n, $c, $d, 0, depth + 1, False)
+			after = sig(ctx, value_state)
+			close = tok(ctx, after)
+			closed = close.kind == InterpolationEnd
+			if !closed {
+				$d = diag($d, UnclosedDelimiter, close.start, close.end)
+			}
+			validated = if closed after + 1 else after
+			end = if closed close.end else nend($n, value_node)
+			{ nodes: $n, children: $c, node: interpolation_node } = emit1($n, $c, Interpolation, t.start, end, value_node)
+			$s = validated
+			$ids = $ids.append(interpolation_node)
+			$end = end
+			if !closed {
+				$done = True
+			}
+		} else if multiline and t.kind == MultilineStringStart {
+			$s = look + 1
+			$end = t.end
+		} else if !multiline and t.kind == StringEnd {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else {
+			if !multiline {
+				$d = diag($d, UnclosedString, first.start, $end)
+			}
+			$s = look
+			$done = True
+		}
+	}
+	n1 = $n
+	c1 = $c
+	d1 = $d
+	{ nodes: n2, children: c2, node: literal_node } = emit(n1, c1, if multiline MultilineStringLiteral else StringLiteral, first.start, $end, $ids)
+	literal_suffix(ctx, $s, n2, c2, d1, literal_node, multiline)
+}
+
+record_starts_block : Ctx, U64 -> Bool
+record_starts_block = |ctx, s| {
+	var $pos = s + 2
+	var $nesting = 0.U64
+	var $found = False
+	var $done = False
+	while !$done {
+		t = source_token(ctx, $pos)
+		if t.kind == EndOfFile {
+			$done = True
+		} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare or t.kind == OpenCurly {
+			$nesting = $nesting + 1
+		} else if t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
+			if $nesting == 0 {
+				$done = True
+			} else {
+				$nesting = $nesting - 1
+			}
+		} else if $nesting == 0 and t.kind == LowerIdent and is_text(ctx, significant_position(ctx.tokens, $pos + 1), Equals) {
+			$found = True
+			$done = True
+		}
+		$pos = $pos + 1
+	}
+	$found
+}
+
+# ---- Platform headers ---------------------------------------------------------
+
+parse_platform_header : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+parse_platform_header = |ctx, initial, nodes, children, diags, depth| {
+	start = tok(ctx, initial).start
+	{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node } = platform_header_string(ctx, sig(ctx, initial + 1), nodes, children, diags, True)
+	{ pos: requires_start, diags: d2 } = platform_header_keyword(ctx, name_state, d1, "requires")
+	{ pos: requires_state, nodes: n2, children: c2, diags: d3, node: requires_node } = platform_requires(ctx, requires_start, n1, c1, d2, depth + 1)
+	{ pos: exposed_start, diags: d4 } = platform_header_keyword(ctx, requires_state, d3, "exposes")
+	{ pos: exposed_state, nodes: n3, children: c3, diags: d5, ids: exposed_ids, end: _, comma: _ } = exposed_collection(ctx, exposed_start, n2, c2, d4)
+	{ pos: packages_start, diags: d6 } = platform_header_keyword(ctx, exposed_state, d5, "packages")
+	packages_opening = tok(ctx, packages_start)
+	d7 = if packages_opening.kind != OpenCurly diag(d6, UnexpectedToken, packages_opening.start, packages_opening.end) else d6
+	{ pos: packages_state, nodes: n4, children: c4, diags: d8, node: packages_node } = dependency_record(ctx, packages_start, n3, c3, d7, False, depth + 1)
+	package_info = nget(n4, packages_node)
+	var $d = d8
+	var $index = 0.U64
+	while $index < package_info.children_len {
+		field_id = c4.get(package_info.children_start + $index) ?? packages_node
+		field = n4.get(field_id) ?? package_info
+		if field.children_len > 1 {
+			value_id = c4.get(field.children_start + 1) ?? field_id
+			value = n4.get(value_id) ?? field
+			if value.kind == PlatformReference {
+				$d = diag($d, UnexpectedToken, value.start, value.end)
+			}
+		}
+		$index = $index + 1
+	}
+	d9 = $d
+	{ pos: provides_start, diags: d10 } = platform_header_keyword(ctx, packages_state, d9, "provides")
+	{ pos: provides_state, nodes: n5, children: c5, diags: d11, node: provides_node } = platform_symbol_map(ctx, provides_start, n4, c4, d10, PlatformProvides, depth + 1)
+	s1 = sig(ctx, provides_state)
+	ids1 = [name_node, requires_node].concat(exposed_ids).append(packages_node).append(provides_node)
+	{ pos: s2, nodes: n6, children: c6, diags: d12, ids: ids2 } = if is_text(ctx, s1, Hosted) {
+		{ pos: hosted_state, nodes: na, children: ca, diags: da, node: hosted_node } = platform_symbol_map(ctx, sig(ctx, s1 + 1), n5, c5, d11, PlatformHosted, depth + 1)
+		{ pos: sig(ctx, hosted_state), nodes: na, children: ca, diags: da, ids: ids1.append(hosted_node) }
+	} else {
+		{ pos: s1, nodes: n5, children: c5, diags: d11, ids: ids1 }
+	}
+	{ pos: s3, nodes: n7, children: c7, diags: d13, ids: ids3 } = if is_text(ctx, s2, Targets) {
+		{ pos: targets_start, diags: da } = platform_header_keyword(ctx, s2 + 1, d12, ":")
+		{ pos: targets_state, nodes: nb, children: cb, diags: db, node: targets_node } = platform_targets(ctx, targets_start, n6, c6, da, depth + 1)
+		{ pos: targets_state, nodes: nb, children: cb, diags: db, ids: ids2.append(targets_node) }
+	} else {
+		{ pos: s2, nodes: n6, children: c6, diags: d12, ids: ids2 }
+	}
+	end = ids3.fold(start, |furthest, id| U64.max(furthest, nend(n7, id)))
+	finish(s3, n7, c7, d13, Header, start, end, ids3)
+}
+
+platform_header_keyword : Ctx, U64, List(RocSyntax.Diagnostic), Str -> { pos : U64, diags : List(RocSyntax.Diagnostic) }
+platform_header_keyword = |ctx, initial, diags, text| {
+	s = sig(ctx, initial)
+	if spell(ctx, s, text) {
+		{ pos: sig(ctx, s + 1), diags }
+	} else {
+		t = tok(ctx, s)
+		{ pos: s, diags: diag(diags, UnexpectedToken, t.start, t.end) }
+	}
+}
+
+platform_header_string : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool -> R
+platform_header_string = |ctx, initial, nodes, children, diags, plain| {
+	s = sig(ctx, initial)
+	opening = tok(ctx, s)
+	if opening.kind != StringStart {
+		finish(s + if opening.kind == EndOfFile 0 else 1, nodes, children, diag(diags, UnexpectedToken, opening.start, opening.end), ErrorNode, opening.start, opening.end, [])
+	} else {
+		var $s = s + 1
+		var $end = opening.end
+		var $parts = 0.U64
+		var $plain = True
+		while tok(ctx, $s).kind != StringEnd and tok(ctx, $s).kind != EndOfFile {
+			t = tok(ctx, $s)
+			$plain = $plain and t.kind == StringPart
+			$parts = $parts + 1
+			$end = t.end
+			$s = $s + 1
+		}
+		parts_end = $end
+		parts_pos = $s
+		single_part = $plain and $parts <= 1
+		{ nodes: n1, children: c1, ids } = if parts_end > opening.end {
+			{ nodes: na, children: ca, node: part_node } = emit(nodes, children, StringSegment, opening.end, parts_end, [])
+			{ nodes: na, children: ca, ids: [part_node] }
+		} else {
+			{ nodes, children, ids: [] }
+		}
+		closing = tok(ctx, parts_pos)
+		closed = closing.kind == StringEnd
+		end = if closed closing.end else parts_end
+		pos = if closed parts_pos + 1 else parts_pos
+		d1 = if closed diags else diag(diags, UnclosedString, opening.start, parts_end)
+		d2 = if plain and !single_part diag(d1, UnexpectedToken, opening.start, end) else d1
+		finish(pos, n1, c1, d2, StringLiteral, opening.start, end, ids)
+	}
+}
+
+platform_requires : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+platform_requires = |ctx, initial, nodes, children, diags, depth| {
+	opening = tok(ctx, initial)
+	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	d2 = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	s0 = if opening.kind == OpenCurly initial + 1 else initial
+	initial_look = sig(ctx, s0)
+	empty = tok(ctx, initial_look).kind == CloseCurly
+	after_empty = sig(ctx, initial_look + 1)
+	reopened = tok(ctx, after_empty).kind == OpenCurly
+	var $s = if !empty s0 else if reopened after_empty + 1 else after_empty
+	var $ids = []
+	var $end = if empty tok(ctx, initial_look).end else opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128 or (empty and !reopened)
+	var $n = nodes
+	var $c = children
+	var $d = d2
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$end = t.end
+			$s = look + 1
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseSquare or t.kind == CloseRound {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = t.start
+			$done = True
+		} else {
+			before = look
+			var $entry_ids = []
+			$s = look
+			if t.kind == OpenSquare {
+				$s = sig(ctx, $s + 1)
+				var $aliases_done = False
+				while !$aliases_done {
+					alias = tok(ctx, $s)
+					if alias.kind == CloseSquare {
+						$s = $s + 1
+						$aliases_done = True
+					} else if alias.kind == EndOfFile or alias.kind == CloseCurly or alias.kind == CloseRound {
+						$d = diag($d, UnclosedDelimiter, alias.start, alias.end)
+						$aliases_done = True
+					} else {
+						if !(alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@') {
+							$d = diag($d, UnexpectedToken, alias.start, alias.end)
+						}
+						alias_state = $s + 1
+						{ nodes: $n, children: $c, node: alias_node } = emit($n, $c, TypeName, alias.start, alias.end, [])
+						{ pos: rigid_state, diags: $d } = platform_header_keyword(ctx, alias_state, $d, ":")
+						rigid = tok(ctx, rigid_state)
+						if !(rigid.kind == LowerIdent and byte(ctx.source, rigid.start) != '_') {
+							$d = diag($d, UnexpectedToken, rigid.start, rigid.end)
+						}
+						rigid_built = rigid_state + if rigid.kind == EndOfFile 0 else 1
+						{ nodes: $n, children: $c, node: rigid_node } = emit($n, $c, TypeVariable, rigid.start, rigid.end, [])
+						{ nodes: $n, children: $c, node: built_node } = emit2($n, $c, RequiredType, alias.start, rigid.end, alias_node, rigid_node)
+						$s = sig(ctx, rigid_built)
+						$entry_ids = $entry_ids.append(built_node)
+						if is_text(ctx, $s, Comma) {
+							$s = sig(ctx, $s + 1)
+						} else if tok(ctx, $s).kind != CloseSquare {
+							bad = tok(ctx, $s)
+							$d = diag($d, UnexpectedToken, bad.start, bad.end)
+							$aliases_done = True
+						}
+					}
+				}
+				{ pos: for_state, diags: $d } = platform_header_keyword(ctx, $s, $d, "for")
+				$s = for_state
+			}
+			name_look = sig(ctx, $s)
+			name = tok(ctx, name_look)
+			if !(name.kind == LowerIdent and byte(ctx.source, name.start) != '_') {
+				$d = diag($d, UnexpectedToken, name.start, name.end)
+			}
+			named_state = name_look + if name.kind == EndOfFile 0 else 1
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, name.start, name.end, [])
+			{ pos: type_start, diags: $d } = platform_header_keyword(ctx, named_state, $d, ":")
+			{ pos: type_state, nodes: $n, children: $c, diags: $d, node: type_node } = type_expression(ctx, type_start, $n, $c, $d, FullType, depth + 1)
+			$entry_ids = $entry_ids.append(named_node).append(type_node)
+			entry_end = $entry_ids.fold(t.end, |furthest, id| U64.max(furthest, nend($n, id)))
+			{ nodes: $n, children: $c, node: entry_node } = emit($n, $c, RequiredValue, t.start, entry_end, $entry_ids)
+			$s = sig(ctx, type_state)
+			$ids = $ids.append(entry_node)
+			$end = entry_end
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseCurly {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node } = emit($n, $c, PlatformRequires, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node }
+}
+
+platform_symbol_map : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64 -> R
+platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
+	opening = tok(ctx, initial)
+	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if opening.kind == OpenCurly initial + 1 else initial
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128
+	var $n = nodes
+	var $c = children
+	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = t.start
+			$done = True
+		} else {
+			before = look
+			{ pos: symbol_state, nodes: $n, children: $c, diags: $d, node: symbol_node } = platform_header_string(ctx, look, $n, $c, $d, True)
+			{ pos: target_state, diags: $d } = platform_header_keyword(ctx, symbol_state, $d, ":")
+			target = tok(ctx, target_state)
+			var $target_state = target_state
+			var $target_end = target.end
+			if target.kind == UpperIdent and byte(ctx.source, target.start) != '@' {
+				$target_state = target_state + 1
+				var $path_done = False
+				var $lower = False
+				while !$path_done {
+					dot = tok(ctx, $target_state)
+					name_state = $target_state + 1
+					name = tok(ctx, name_state)
+					if token_spelling(ctx.source, dot, ".") and dot.start == $target_end and name.start == dot.end and (name.kind == UpperIdent or name.kind == LowerIdent) and (is_lower(byte(ctx.source, name.start)) or is_upper(byte(ctx.source, name.start))) {
+						$target_end = name.end
+						$target_state = name_state + 1
+						if name.kind == LowerIdent {
+							$lower = True
+							$path_done = True
+						}
+					} else {
+						$path_done = True
+					}
+				}
+				if !$lower {
+					$d = diag($d, UnexpectedToken, target.start, $target_end)
+				}
+			} else if target.kind == LowerIdent and byte(ctx.source, target.start) != '_' {
+				$target_state = target_state + 1
+			} else {
+				$d = diag($d, UnexpectedToken, target.start, target.end)
+				$target_state = target_state + if target.kind == EndOfFile 0 else 1
+			}
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, target.start, $target_end, [])
+			entry_end = U64.max(nend($n, symbol_node), $target_end)
+			{ nodes: $n, children: $c, node: entry_node } = emit2($n, $c, SymbolMapping, t.start, entry_end, symbol_node, named_node)
+			$s = sig(ctx, $target_state)
+			$ids = $ids.append(entry_node)
+			$end = entry_end
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseCurly {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node } = emit($n, $c, kind, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node }
+}
+
+platform_targets : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+platform_targets = |ctx, initial, nodes, children, diags, depth| {
+	opening = tok(ctx, initial)
+	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if opening.kind == OpenCurly initial + 1 else initial
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenCurly or depth >= 128
+	var $n = nodes
+	var $c = children
+	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = t.start
+			$done = True
+		} else {
+			before = look
+			valid_name = t.kind == LowerIdent and byte(ctx.source, t.start) != '_'
+			if !valid_name {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, t.start, t.end, [])
+			{ pos: value_state, diags: $d } = platform_header_keyword(ctx, look + 1, $d, ":")
+			if spell(ctx, look, "inputs_dir") and tok(ctx, value_state).kind == StringStart {
+				{ pos: path_state, nodes: $n, children: $c, diags: $d, node: path_node } = platform_header_string(ctx, value_state, $n, $c, $d, False)
+				path_end = nend($n, path_node)
+				{ nodes: $n, children: $c, node: entry_node } = emit1($n, $c, TargetInputsDirectory, t.start, path_end, path_node)
+				$s = sig(ctx, path_state)
+				$ids = $ids.append(entry_node)
+				$end = nend($n, entry_node)
+			} else if tok(ctx, value_state).kind == OpenCurly {
+				{ pos: config_state, nodes: $n, children: $c, diags: $d, node: config_node } = platform_target_config(ctx, value_state, $n, $c, $d, depth + 1)
+				config_end = nend($n, config_node)
+				{ nodes: $n, children: $c, node: entry_node } = emit2($n, $c, TargetEntry, t.start, config_end, named_node, config_node)
+				$s = sig(ctx, config_state)
+				$ids = $ids.append(entry_node)
+				$end = nend($n, entry_node)
+			} else {
+				bad = tok(ctx, value_state)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$s = value_state
+				$done = True
+			}
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node } = emit($n, $c, PlatformTargets, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node }
+}
+
+platform_target_config : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
+platform_target_config = |ctx, initial, nodes, children, diags, depth| {
+	opening = tok(ctx, initial)
+	var $s = initial + 1
+	var $ids = []
+	var $end = opening.end
+	var $done = depth >= 128
+	var $n = nodes
+	var $c = children
+	var $d = if depth >= 128 diag(diags, ResourceLimit, opening.start, opening.end) else diags
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseCurly {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = t.start
+			$done = True
+		} else {
+			before = look
+			if !(t.kind == LowerIdent and byte(ctx.source, t.start) != '_') {
+				$d = diag($d, UnexpectedToken, t.start, t.end)
+			}
+			{ nodes: $n, children: $c, node: name_node } = emit($n, $c, Identifier, t.start, t.end, [])
+			after = sig(ctx, look + 1)
+			var $field_ids = [name_node]
+			$s = after
+			$end = t.end
+			if tok(ctx, after).kind != CloseCurly and !is_text(ctx, after, Comma) {
+				{ pos: value_state, diags: $d } = platform_header_keyword(ctx, after, $d, ":")
+				files = spell(ctx, look, "inputs")
+				{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if files platform_target_list(ctx, value_state, $n, $c, $d, True, depth + 1) else platform_target_value(ctx, value_state, $n, $c, $d, False, depth + 1)
+				$s = built_state
+				$field_ids = $field_ids.append(built_node)
+				$end = nend($n, built_node)
+			}
+			{ nodes: $n, children: $c, node: field_node } = emit($n, $c, TargetField, t.start, $end, $field_ids)
+			$s = sig(ctx, $s)
+			$ids = $ids.append(field_node)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseCurly {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node } = emit($n, $c, TargetConfig, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node }
+}
+
+platform_target_list : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+platform_target_list = |ctx, initial, nodes, children, diags, files, depth| {
+	opening = tok(ctx, initial)
+	d1 = if opening.kind != OpenSquare diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if opening.kind == OpenSquare initial + 1 else initial
+	var $ids = []
+	var $end = opening.end
+	var $done = opening.kind != OpenSquare or depth >= 128
+	var $n = nodes
+	var $c = children
+	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	while !$done {
+		look = sig(ctx, $s)
+		t = tok(ctx, look)
+		if t.kind == CloseSquare {
+			$s = look + 1
+			$end = t.end
+			$done = True
+		} else if t.kind == EndOfFile or t.kind == CloseCurly or t.kind == CloseRound {
+			$d = diag($d, UnclosedDelimiter, t.start, t.end)
+			$s = look
+			$end = t.start
+			$done = True
+		} else {
+			before = look
+			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = platform_target_value(ctx, look, $n, $c, $d, files, depth + 1)
+			$ids = $ids.append(item_node)
+			$s = sig(ctx, item_state)
+			$end = nend($n, item_node)
+			if is_text(ctx, $s, Comma) {
+				$s = $s + 1
+			} else if tok(ctx, $s).kind != CloseSquare {
+				bad = tok(ctx, $s)
+				$d = diag($d, UnexpectedToken, bad.start, bad.end)
+				$done = True
+			}
+			if $s <= before {
+				$s = before + 1
+			}
+		}
+	}
+	{ nodes: n1, children: c1, node } = emit($n, $c, TargetList, opening.start, $end, $ids)
+	{ pos: $s, nodes: n1, children: c1, diags: $d, node }
+}
+
+platform_target_value : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
+platform_target_value = |ctx, initial, nodes, children, diags, file, depth| {
+	s = sig(ctx, initial)
+	t = tok(ctx, s)
+	if depth >= 128 {
+		finish(s, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.start, [])
+	} else if t.kind == StringStart {
+		{ pos: string_state, nodes: n1, children: c1, diags: d1, node: string_node } = platform_header_string(ctx, s, nodes, children, diags, False)
+		if file {
+			string_end = nend(n1, string_node)
+			finish1(string_state, n1, c1, d1, TargetFile, t.start, string_end, string_node)
+		} else {
+			{ pos: string_state, nodes: n1, children: c1, diags: d1, node: string_node }
+		}
+	} else if !file and t.kind == OpenSquare {
+		platform_target_list(ctx, s, nodes, children, diags, False, depth + 1)
+	} else if (t.kind == LowerIdent and byte(ctx.source, t.start) != '_') or (file and is_text(ctx, s, App)) or (!file and t.kind == UpperIdent and byte(ctx.source, t.start) != '@') {
+		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
+		if file finish1(s + 1, n1, c1, diags, TargetFile, t.start, t.end, name_node) else { pos: s + 1, nodes: n1, children: c1, diags, node: name_node }
+	} else if !file and t.kind == Number {
+		raw = ctx.source.sublist({ start: t.start, len: t.end - t.start })
+		is_int = raw.any(|b| b == 'x' or b == 'o' or b == 'b') or !raw.any(|b| b == '.' or b == 'e' or b == 'E')
+		finish(s + 1, nodes, children, if is_int diags else diag(diags, UnexpectedToken, t.start, t.end), NumberLiteral, t.start, t.end, [])
+	} else {
+		finish(s + if t.kind == EndOfFile 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+	}
 }
