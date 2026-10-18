@@ -1,3 +1,4 @@
+import YamlScalar
 import Parser
 import Utf8
 
@@ -752,54 +753,24 @@ scalar_mismatch = |scalar, expected| {
 }
 
 is_null_text : Str -> Bool
-is_null_text = |text| {
-	match text {
-		"" | "null" | "Null" | "NULL" | "~" => True
-		_ => False
-	}
-}
+is_null_text = YamlScalar.is_null_text
 
 # Literal matches instead of `[...].contains(text)`, which builds the list of
 # strings on every call.
 is_true_text : Str -> Bool
-is_true_text = |text| {
-	match text {
-		"true" | "True" | "TRUE" => True
-		_ => False
-	}
-}
+is_true_text = YamlScalar.is_true_text
 
 is_false_text : Str -> Bool
-is_false_text = |text| {
-	match text {
-		"false" | "False" | "FALSE" => True
-		_ => False
-	}
-}
+is_false_text = YamlScalar.is_false_text
 
 is_infinity_text : Str -> Bool
-is_infinity_text = |text| {
-	match text {
-		".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => True
-		_ => False
-	}
-}
+is_infinity_text = YamlScalar.is_infinity_text
 
 is_negative_infinity_text : Str -> Bool
-is_negative_infinity_text = |text| {
-	match text {
-		"-.inf" | "-.Inf" | "-.INF" => True
-		_ => False
-	}
-}
+is_negative_infinity_text = YamlScalar.is_negative_infinity_text
 
 is_nan_text : Str -> Bool
-is_nan_text = |text| {
-	match text {
-		".nan" | ".NaN" | ".NAN" => True
-		_ => False
-	}
-}
+is_nan_text = YamlScalar.is_nan_text
 
 ## Read an integer scalar (or integer mapping key) with the core schema's
 ## decimal, `0o` octal and `0x` hexadecimal forms.
@@ -1692,12 +1663,7 @@ resolve_plain = |text, line, column| {
 ## Whether a plain scalar starting with this byte may be a null, boolean,
 ## integer or float rather than a string.
 may_be_typed : U8 -> Bool
-may_be_typed = |byte| {
-	match byte {
-		'0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '+' | '-' | '.' | '~' | 'n' | 'N' | 't' | 'T' | 'f' | 'F' => True
-		_ => False
-	}
-}
+may_be_typed = YamlScalar.may_be_typed
 
 special_float : Str -> Try(F64, [NotSpecial])
 special_float = |text| {
@@ -1745,57 +1711,7 @@ radix_integer = |digits, radix, text, line, column| {
 ## Match the core schema float form [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
 ## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
 core_float_text : Utf8.Bytes -> Try(Str, [NotFloat])
-core_float_text = |bytes| {
-	# Most plain scalars are words; reject them before slicing anything.
-	if !bytes.all(is_float_byte) {
-		return Err(NotFloat)
-	}
-	{ sign, unsigned } =
-		match bytes {
-			['-', .. as rest] => { sign: "-", unsigned: rest }
-			['+', .. as rest] => { sign: "", unsigned: rest }
-			_ => { sign: "", unsigned: bytes }
-		}
-	mantissa = unsigned.take_first(count_while(unsigned, |b| b != 'e' and b != 'E'))
-	exponent = unsigned.drop_first(mantissa.len())
-	whole = mantissa.take_first(count_while(mantissa, is_digit))
-	after_whole = mantissa.drop_first(whole.len())
-	{ has_point, fraction } =
-		match after_whole {
-			['.', .. as rest] => { has_point: True, fraction: rest }
-			_ => { has_point: False, fraction: after_whole }
-		}
-	exponent_digits =
-		match exponent {
-			['e', '+', .. as rest] | ['e', '-', .. as rest] | ['E', '+', .. as rest] | ['E', '-', .. as rest] | ['e', .. as rest] | ['E', .. as rest] => rest
-			_ => []
-		}
-	mantissa_ok = fraction.all(is_digit) and (!whole.is_empty() or (has_point and !fraction.is_empty()))
-	exponent_ok = exponent.is_empty() or (!exponent_digits.is_empty() and exponent_digits.all(is_digit))
-	# A plain integer is not a float; "1." and "1e3" are.
-	is_float = has_point or !exponent.is_empty()
-
-	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if whole.is_empty() "0" else bytes_to_str(whole)
-		fraction_text = if fraction.is_empty() "0" else bytes_to_str(fraction)
-		exponent_text = if exponent.is_empty() "" else bytes_to_str(exponent)
-		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
-	} else {
-		Err(NotFloat)
-	}
-}
-
-is_float_byte : U8 -> Bool
-is_float_byte = |b| (b >= '0' and b <= '9') or b == '.' or b == 'e' or b == 'E' or b == '+' or b == '-'
-
-count_while : Utf8.Bytes, (U8 -> Bool) -> U64
-count_while = |bytes, keep| {
-	var $count = 0
-	while $count < bytes.len() and keep(bytes.get($count) ?? 0) {
-		$count = $count + 1
-	}
-	$count
-}
+core_float_text = YamlScalar.core_float_text
 
 parse_flow_sequence : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_sequence = |bytes, line, column, depth| {
@@ -2407,22 +2323,7 @@ sequence_payload = |bytes| {
 }
 
 is_decimal_integer : Utf8.Bytes -> Bool
-is_decimal_integer = |bytes| {
-	match bytes {
-		['+', .. as rest] | ['-', .. as rest] => !rest.is_empty() and all_digits(rest)
-		_ => !bytes.is_empty() and all_digits(bytes)
-	}
-}
-
-all_digits : Utf8.Bytes -> Bool
-all_digits = |bytes| {
-	var $index = 0
-	len = bytes.len()
-	while $index < len and is_digit(bytes.get($index) ?? 0) {
-		$index = $index + 1
-	}
-	$index == len
-}
+is_decimal_integer = YamlScalar.is_decimal_integer
 
 is_digit : U8 -> Bool
 is_digit = |byte| byte >= '0' and byte <= '9'
