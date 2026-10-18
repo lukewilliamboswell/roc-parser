@@ -23,6 +23,9 @@ Earlier releases are described on the
 
 == Release candidates
 
+* {repo}/releases/tag/2.1.0-rc.3[2.1.0-rc.3]: source-preserving YAML tokens, highlighting categories and diagnostics,
+  with malformed-snippet recovery and source fuzzing. Includes the rc.2 previews.
+
 * {repo}/releases/tag/2.1.0-rc.2[2.1.0-rc.2]: AsciiDoc parsing, preprocessing and HTML rendering,
   with cached oracle baselines and local performance and scaling checks.
 
@@ -48,3 +51,8 @@ rendering. A pinned Asciidoctor oracle checks authored fixtures, independent
 generated models and reproducible mutations. Native fuzz targets and a local
 1.0-times-oracle performance gate exercise correctness and scaling. CI runs a
 minimal performance harness smoke check. See <<asciidoc>> for scope and commands.
+
+`Yaml.tokenize_str` and `Yaml.tokenize_bytes` preserve original source spans
+for highlighting, including comments, whitespace and malformed snippets.
+`Yaml.highlight_category` supplies theme categories shared by HTML and PDF
+renderers. Semantic decoding support is unchanged. See <<yaml-source>>.
