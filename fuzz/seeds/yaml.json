@@ -11,5 +11,12 @@
   "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - x",
   "v: \"\\uD800 \\U00110000 \\x41\"\n",
   "--- |1-\n x\n",
-  "steps:\n- run: a\n- - b\n"
+  "steps:\n- run: a\n- - b\n",
+  "# CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ${{ matrix.os }}\n    continue-on-error: false\n    run: |-\n      # shell text\n      echo \"${{ matrix.os }}\"\n",
+  "- - |2\n    text\n  - next\n",
+  "name: 'Check café'\r\nurl: https://example.com/manual#setup\r\n",
+  "{\"on\":true,\"count\":10,\"nested\":[null,false,{\"key\":\"# text\"}]}\n",
+  "%YAML 1.2\n---\nfirst: &shared !example value\nsecond: *shared\n...\n",
+  "--- |\n%!PS-Adobe-2.0 # content\n---\non: off\n",
+  "quoted: \"first\n  second # text\"\nplain: first\n  next\n\n  last\n"
 ]

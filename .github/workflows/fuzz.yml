@@ -39,6 +39,7 @@ jobs:
           - markdown-inline-pathological
           - yaml
           - yaml-raw
+          - yaml-source
           - yaml-roundtrip
           - yaml-block
           - xml
