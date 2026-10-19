@@ -714,6 +714,12 @@ lex = |source| {
 			}
 			$tokens = $tokens.append({ kind: $kind, start, end: $i })
 		}
+		# A lone space after a token is a whitespace token of its own; take it
+		# here rather than on another trip through the dispatch above.
+		if byte(source, $i) == ' ' and !is_space(byte(source, $i + 1)) {
+			$tokens = $tokens.append({ kind: Whitespace, start: $i, end: $i + 1 })
+			$i = $i + 1
+		}
 	}
 	if !$contexts.is_empty() {
 		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, len, len)
