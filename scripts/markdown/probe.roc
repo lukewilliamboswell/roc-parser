@@ -128,9 +128,9 @@ escape_json = |bytes, acc| {
 		} else if byte == '\\' {
 			$out = $out.concat(['\\', '\\'])
 		} else if byte < 32 {
-			hi = if byte < 16 '0' else '1'
-			lo = if byte < 16 byte else byte - 16
-			digit = if lo < 10 lo + '0' else lo - 10 + 'a'
+			hi = if (byte < 16) '0' else '1'
+			lo = if (byte < 16) byte else byte - 16
+			digit = if (lo < 10) lo + '0' else lo - 10 + 'a'
 			$out = $out.concat(['\\', 'u', '0', '0', hi, digit])
 		} else {
 			$out = $out.append(byte)

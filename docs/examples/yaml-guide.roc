@@ -153,7 +153,6 @@ main! = |_args| {
 		\\
 		\\indented: |2
 		\\    starts with two spaces
-		,
 	)
 	# end::block-run[]
 
@@ -164,7 +163,6 @@ main! = |_args| {
 		\\  name: compile
 		\\- - nested
 		\\  - compact
-		,
 	)
 	# end::sequences-run[]
 
@@ -172,7 +170,6 @@ main! = |_args| {
 	show!(
 		\\single: 'it''s # not a comment'
 		\\plain: text # this is a comment
-		,
 	)
 	show!(
 		"double: \"tab\\there, \\u00e9, \\x41\"",

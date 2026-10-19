@@ -29,7 +29,8 @@ def extract_bundle_path(output: str) -> Path:
     match = BUNDLE_PATH_RE.search(output)
     if match is None:
         raise ValueError("could not extract bundle path from roc bundle output")
-    return Path(match.group(1))
+    # `roc bundle` runs in package/ and newer compilers print a path relative to it.
+    return ROOT / "package" / match.group(1)
 
 
 def main() -> int:

@@ -34,7 +34,7 @@ process in {src}/SECURITY.md[the security policy] instead.
 Install:
 
 * the Roc nightly named in {src}/.roc-version[`.roc-version`], for example
-  `nightly-2026-10-15-38e6c42`;
+  `nightly-2026-10-18-1df370f`;
 * Python 3, for the test, review and release scripts;
 * Docker, to build this manual locally (see <<contributing-docs>>).
 
@@ -51,7 +51,7 @@ Output:
 
 [source,text]
 ----
-Roc compiler version nightly-2026-10-15-38e6c42
+Roc compiler version nightly-2026-10-18-1df370f
 ----
 
 With Nix, `blueprint shell` provides this exact nightly together with Go, Rust

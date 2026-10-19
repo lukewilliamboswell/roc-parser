@@ -529,7 +529,7 @@ framing = |fields, version| {
 		# RFC 9112 6.1 allows a recipient to process Transfer-Encoding over
 		# Content-Length, but a message with both "ought to be handled as an
 		# error"; llhttp rejects it by default, as does this parser.
-			fail(if te.offset > cl.offset te.offset else cl.offset, "both Transfer-Encoding and Content-Length")
+			fail(if (te.offset > cl.offset) te.offset else cl.offset, "both Transfer-Encoding and Content-Length")
 		(Ok(te), Err(_)) => {
 			codings =
 				transfer_encodings
@@ -629,7 +629,7 @@ parse_chunk_header = |line| {
 check_chunk_extensions : Bytes, U64 -> Try({}, Failure)
 check_chunk_extensions = |bytes, line_len| {
 	match trim_start_ows(bytes) {
-		[] => if bytes.is_empty() Ok({}) else fail(line_len - bytes.len(), "whitespace after chunk size")
+		[] => if (bytes.is_empty()) Ok({}) else fail(line_len - bytes.len(), "whitespace after chunk size")
 		[';', .. as after_semicolon] => {
 			name_onwards = trim_start_ows(after_semicolon)
 			name_len = Utf8.skip_class(name_onwards, 0, tchar_class)
@@ -658,7 +658,7 @@ chunk_ext_value_len = |bytes| {
 		['"', ..] => quoted_string_len(bytes)
 		_ => {
 			token_len = Utf8.skip_class(bytes, 0, tchar_class)
-			if token_len == 0 fail(0, "chunk extension needs a value after =") else Ok(token_len)
+			if (token_len == 0) fail(0, "chunk extension needs a value after =") else Ok(token_len)
 		}
 	}
 }
@@ -731,7 +731,7 @@ hex_value = |byte| {
 }
 
 to_lower : U8 -> U8
-to_lower = |byte| if byte >= 'A' and byte <= 'Z' byte + 32 else byte
+to_lower = |byte| if (byte >= 'A' and byte <= 'Z') byte + 32 else byte
 
 # VCHAR = %x21-7E
 is_vchar : U8 -> Bool
@@ -753,8 +753,8 @@ is_tchar : U8 -> Bool
 is_tchar = |byte| {
 	(byte >= 'a' and byte <= 'z')
 		or (byte >= 'A' and byte <= 'Z')
-			or is_digit(byte)
-				or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
+		or is_digit(byte)
+		or ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'].contains(byte)
 }
 
 parse : Parser(Utf8.Bytes, a), Str -> Try(a, [ParseError({ message : Str, offset : U64 })])

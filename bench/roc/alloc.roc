@@ -42,7 +42,7 @@ parse = |format, input| {
 			}
 		_ => False
 	}
-	if accepted "ok" else "error"
+	if (accepted) "ok" else "error"
 }
 
 target = Fuzz.target_with!({

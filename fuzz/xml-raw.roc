@@ -54,7 +54,7 @@ line_lengths = |bytes| {
 		if byte == '\n' or byte == '\r' {
 			$lengths = $lengths.append($current)
 			$current = 0
-			$index = if byte == '\r' and bytes.get($index + 1) == Ok('\n') $index + 2 else $index + 1
+			$index = if (byte == '\r' and bytes.get($index + 1) == Ok('\n')) $index + 2 else $index + 1
 		} else {
 			$current = $current + 1
 			$index = $index + 1

@@ -50,10 +50,10 @@ source_lines = |source| {
 	for raw in source.split_on("\n") {
 		$number = $number + 1
 		bom = $number == 1 and raw.starts_with("﻿")
-		$lines = $lines.append({ text: remove_cr(if bom drop(raw, 3) else raw), line: $number, offset: $offset + (if bom 3 else 0) })
+		$lines = $lines.append({ text: remove_cr(if (bom) drop(raw, 3) else raw), line: $number, offset: $offset + (if (bom) 3 else 0) })
 		$offset = $offset + raw.to_utf8().len() + 1
 	}
-	if source.ends_with("\n") $lines.drop_last(1) else $lines
+	if (source.ends_with("\n")) $lines.drop_last(1) else $lines
 }
 
 process_lines : List(SourceLine), Str, List(AsciiDocPreprocess.Attribute), AsciiDocPreprocess.Options, List(Str), U64, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
@@ -84,14 +84,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			}
 		} else if (text.starts_with("ifdef::") or text.starts_with("ifndef::")) and complete_directive(text) {
 			negative = text.starts_with("ifndef::")
-			body = drop(text, if negative 8 else 7)
+			body = drop(text, if (negative) 8 else 7)
 			parts = directive(body)
 			if !$index_ready {
 				$attribute_index = index_attributes($attributes)
 				$index_ready = True
 			}
 			defined = condition(parts.target, $attribute_index)
-			enabled = if negative !defined else defined
+			enabled = if (negative) !defined else defined
 			if parts.target != "" and parts.body == "" {
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
 			} else if parts.target != "" and active and enabled {
@@ -152,7 +152,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				parsed = directive(expand_lookup(drop(text, 9), $attributes, Indexed($attribute_index), 0))
 				target = expand_lookup(parsed.target, $attributes, Indexed($attribute_index), 0)
 				resolved = resolve(path, target)
-				found = if options.expand_includes options.includes.find_first(|entry| entry.path == resolved) else Err(NotFound)
+				found = if (options.expand_includes) options.includes.find_first(|entry| entry.path == resolved) else Err(NotFound)
 				match found {
 					Ok(entry) => {
 						if depth >= options.max_depth or stack.contains(resolved) {
@@ -167,10 +167,10 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						include_offset = option(parsed.body, "leveloffset")
 						base_offset = I64.from_str((previous_offset.map_ok(|a| a.value) ?? "0").replace_each("+", "")) ?? 0
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
-						effective_offset = if include_offset.starts_with("+") or include_offset.starts_with("-") base_offset + delta else delta
-						nested_attrs = if include_offset == "" $attributes else $attributes.keep_if(|a| a.name != "leveloffset").append({ name: "leveloffset", value: effective_offset.to_str() })
+						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
+						nested_attrs = if (include_offset == "") $attributes else $attributes.keep_if(|a| a.name != "leveloffset").append({ name: "leveloffset", value: effective_offset.to_str() })
 						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header })?
-						$attributes = if include_offset == "" nested.attributes else match previous_offset {
+						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
 							Ok(previous) => nested.attributes.keep_if(|a| a.name != "leveloffset").append(previous)
 							Err(_) => nested.attributes.keep_if(|a| a.name != "leveloffset")
 						}
@@ -193,14 +193,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 					}
 				}
 			} else {
-				emitted = if (text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1)) drop(text, 1) else text
+				emitted = if ((text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
 				$lines = $lines.append({ text: emitted, attributes: $attributes, path, line: number, offset })
 				if $opaque == text {
 					$opaque = ""
 				}
-					else if $opaque == "" and (text == "----" or text == "...." or text == "++++" or text == "////" or table_delimiter(text)) {
-						$opaque = text
-					}
+				else if $opaque == "" and (text == "----" or text == "...." or text == "++++" or text == "////" or table_delimiter(text)) {
+					$opaque = text
+				}
 				if text == "" {
 					$header = False
 				}
@@ -215,13 +215,13 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			}
 			parts = split_first(drop($definition_text, 1), ":")
 			unset = parts.before.starts_with("!") or parts.before.ends_with("!")
-			name = normalize_attribute_name(strip_suffix(if parts.before.starts_with("!") drop(parts.before, 1) else parts.before, "!"))
+			name = normalize_attribute_name(strip_suffix(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before, "!"))
 			revision_name = Str.concat("__revision:", name)
 			# Keep the mutable growing containers in this loop. Returning the
 			# Dict and attribute list through a helper forces backing-buffer
 			# copies on the pinned compiler, despite consuming the old values.
 			if !$attribute_index.contains(name) and !$attribute_index.contains(revision_name) {
-				value = if unset "" else definition_value(trim(parts.after), $attributes, $attribute_index)
+				value = if (unset) "" else definition_value(trim(parts.after), $attributes, $attribute_index)
 				if !unset {
 					$attribute_index = $attribute_index.insert(name, $attributes.len())
 					$attributes = $attributes.append({ name, value })
@@ -259,7 +259,7 @@ is_definition = |source| {
 	}
 	tail = drop(source, 1)
 	parts = split_first(tail, ":")
-	tail.contains(":") and starts_word(if parts.before.starts_with("!") drop(parts.before, 1) else parts.before) and (parts.after == "" or parts.after.starts_with(" ") or parts.after.starts_with("\t"))
+	tail.contains(":") and starts_word(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before) and (parts.after == "" or parts.after.starts_with(" ") or parts.after.starts_with("\t"))
 }
 
 Definition : { attributes : List(AsciiDocPreprocess.Attribute), index : Dict(Str, U64) }
@@ -281,12 +281,12 @@ index_attributes = |attributes| {
 # Replacement/unset keeps the existing canonical remove-then-append ordering.
 define_indexed : Str, List(AsciiDocPreprocess.Attribute), Dict(Str, U64), Bool -> Definition
 define_indexed = |source, attributes, index, ready| {
-	current = if ready index else index_attributes(attributes)
+	current = if (ready) index else index_attributes(attributes)
 	parts = split_first(drop(source, 1), ":")
 	unset = parts.before.starts_with("!") or parts.before.ends_with("!")
-	name = normalize_attribute_name(strip_suffix(if parts.before.starts_with("!") drop(parts.before, 1) else parts.before, "!"))
+	name = normalize_attribute_name(strip_suffix(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before, "!"))
 	revision_name = Str.concat("__revision:", name)
-	value = if unset "" else definition_value(trim(parts.after), attributes, current)
+	value = if (unset) "" else definition_value(trim(parts.after), attributes, current)
 	if !current.contains(name) and !current.contains(revision_name) {
 		var $updated = attributes
 		var $index = current
@@ -303,7 +303,7 @@ define_indexed = |source, attributes, index, ready| {
 			Err(_) => 0
 		}
 		remaining = attributes.keep_if(|attribute| attribute.name != name and attribute.name != revision_name)
-		defined = if unset remaining else remaining.append({ name, value })
+		defined = if (unset) remaining else remaining.append({ name, value })
 		updated = defined.append({ name: revision_name, value: (revision + 1).to_str() })
 		{ attributes: updated, index: index_attributes(updated) }
 	}
@@ -396,7 +396,7 @@ evaluate_lookup = |source, attributes, lookup| {
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
 		next = bytes.get($index + 1) ?? 0
-		length = if (byte == '=' or byte == '!' or byte == '<' or byte == '>') and next == '=' 2 else if byte == '<' or byte == '>' 1 else 0
+		length = if ((byte == '=' or byte == '!' or byte == '<' or byte == '>') and next == '=') 2 else if (byte == '<' or byte == '>') 1 else 0
 		if length > 0 and $index + length < bytes.len() {
 			operator = slice(text, $index, length)
 			left = expression_value(trim(slice(text, 0, $index)), attributes, lookup)
@@ -404,10 +404,10 @@ evaluate_lookup = |source, attributes, lookup| {
 			return match (left, right) {
 				(Text(a), Text(b)) => compare_strings(a, b, operator)
 				(Integer(a), Integer(b)) => numeric_relation(integer_order(a, b), operator)
-				(Floating(a), Floating(b)) => numeric_relation(if a < b -1 else if a > b 1 else 0, operator)
+				(Floating(a), Floating(b)) => numeric_relation(if (a < b) -1 else if (a > b) 1 else 0, operator)
 				(Integer(a), Floating(b)) => numeric_relation(integer_float_order(a, b), operator)
 				(Floating(a), Integer(b)) => numeric_relation(0 - integer_float_order(b, a), operator)
-				_ => if operator == "==" left == right else if operator == "!=" left != right else False
+				_ => if (operator == "==") left == right else if (operator == "!=") left != right else False
 			}
 		}
 		$index = $index + 1
@@ -468,7 +468,7 @@ expression_value = |source, attributes, lookup| {
 	number = trim($value)
 	bytes_number = number.to_utf8()
 	negative = bytes_number.first() == Ok('-')
-	start = if negative or bytes_number.first() == Ok('+') 1 else 0
+	start = if (negative or bytes_number.first() == Ok('+')) 1 else 0
 	whole = numeric_digits(bytes_number, start)
 	if !$value.contains(".") {
 		return Integer(canonical_integer(negative, whole.digits))
@@ -479,7 +479,7 @@ expression_value = |source, attributes, lookup| {
 	if bytes_number.get($end) == Ok('.') {
 		fraction = numeric_digits(bytes_number, $end + 1)
 		if fraction.digits != "" {
-			$prefix = Str.concat(if $prefix == "" "0" else $prefix, Str.concat(".", fraction.digits))
+			$prefix = Str.concat(if ($prefix == "") "0" else $prefix, Str.concat(".", fraction.digits))
 			$end = fraction.end
 			$has_fraction = True
 		}
@@ -489,18 +489,18 @@ expression_value = |source, attributes, lookup| {
 	if ($has_fraction or bytes_number.get($end) != Ok('.')) and $prefix != "" and (bytes_number.get($end) == Ok('e') or bytes_number.get($end) == Ok('E')) {
 		exponent_start = $end + 1
 		exponent_sign = bytes_number.get(exponent_start) ?? 0
-		exponent = numeric_digits(bytes_number, if exponent_sign == '+' or exponent_sign == '-' exponent_start + 1 else exponent_start)
+		exponent = numeric_digits(bytes_number, if (exponent_sign == '+' or exponent_sign == '-') exponent_start + 1 else exponent_start)
 		if exponent.digits != "" {
-			$prefix = Str.concat($prefix, Str.concat(if exponent_sign == '-' "e-" else "e", exponent.digits))
+			$prefix = Str.concat($prefix, Str.concat(if (exponent_sign == '-') "e-" else "e", exponent.digits))
 		}
 	}
 	if $prefix == "" {
 		return Floating(0.0)
 	}
-	prefix = if negative Str.concat("-", $prefix) else $prefix
+	prefix = if (negative) Str.concat("-", $prefix) else $prefix
 
 	## A syntactically valid numeric prefix can fail F64 parsing only on overflow.
-	Floating(F64.from_str(prefix) ?? if negative 0.0 - F64.infinity else F64.infinity)
+	Floating(F64.from_str(prefix) ?? if (negative) 0.0 - F64.infinity else F64.infinity)
 }
 
 numeric_digits : List(U8), U64 -> { digits : Str, end : U64 }
@@ -531,16 +531,16 @@ canonical_integer = |negative, digits| {
 	if $start == bytes.len() {
 		{ negative: False, digits: "0" }
 	}
-		else { negative, digits: drop(digits, $start) }
+	else { negative, digits: drop(digits, $start) }
 }
 
 integer_order : IntegerValue, IntegerValue -> I64
 integer_order = |a, b| {
 	if a.negative != b.negative {
-		return if a.negative -1 else 1
+		return if (a.negative) -1 else 1
 	}
-	order = if a.digits.to_utf8().len() < b.digits.to_utf8().len() -1 else if a.digits.to_utf8().len() > b.digits.to_utf8().len() 1 else lexical_order(a.digits, b.digits)
-	if a.negative 0 - order else order
+	order = if (a.digits.to_utf8().len() < b.digits.to_utf8().len()) -1 else if (a.digits.to_utf8().len() > b.digits.to_utf8().len()) 1 else lexical_order(a.digits, b.digits)
+	if (a.negative) 0 - order else order
 }
 
 lexical_order : Str, Str -> I64
@@ -552,11 +552,11 @@ lexical_order = |a, b| {
 		x = left.get($index) ?? 0
 		y = right.get($index) ?? 0
 		if x != y {
-			return if x < y -1 else 1
+			return if (x < y) -1 else 1
 		}
 		$index = $index + 1
 	}
-	if left.len() < right.len() -1 else if left.len() > right.len() 1 else 0
+	if (left.len() < right.len()) -1 else if (left.len() > right.len()) 1 else 0
 }
 
 numeric_relation : I64, Str -> Bool
@@ -574,33 +574,33 @@ numeric_relation = |order, operator| match operator {
 integer_float_order : IntegerValue, F64 -> I64
 integer_float_order = |integer, float| {
 	if float.is_infinite() {
-		return if float < 0.0 1 else -1
+		return if (float < 0.0) 1 else -1
 	}
 	negative = float < 0.0
 	if integer.negative != negative {
-		return if integer.negative -1 else 1
+		return if (integer.negative) -1 else 1
 	}
 	bits = float.to_bits()
 	exponent = bits.shr_wrap(52).bitwise_and(2047)
-	mantissa = bits.bitwise_and(4503599627370495) + if exponent == 0 0 else 4503599627370496
+	mantissa = bits.bitwise_and(4503599627370495) + if (exponent == 0) 0 else 4503599627370496
 	var $digits = "0"
 	var $fraction = False
 	if exponent >= 1075 {
 		$digits = binary_integer_digits(mantissa, exponent - 1075)
 	} else {
-		shift = if exponent == 0 1074 else 1075 - exponent
+		shift = if (exponent == 0) 1074 else 1075 - exponent
 		if shift >= 64 {
 			$fraction = mantissa != 0
 		}
-			else {
-				$digits = mantissa.shr_wrap(shift.to_u8_wrap()).to_str()
-				$fraction = mantissa.bitwise_and(U64.shl_wrap(1, shift.to_u8_wrap()) - 1) != 0
-			}
+		else {
+			$digits = mantissa.shr_wrap(shift.to_u8_wrap()).to_str()
+			$fraction = mantissa.bitwise_and(U64.shl_wrap(1, shift.to_u8_wrap()) - 1) != 0
+		}
 	}
 	floor = { negative, digits: $digits }
 	order = integer_order(integer, floor)
 	if order == 0 and $fraction {
-		if negative 1 else -1
+		if (negative) 1 else -1
 	} else order
 }
 
@@ -617,7 +617,7 @@ binary_integer_digits = |mantissa, shift| {
 	}
 	var $remaining = shift
 	while $remaining > 0 {
-		step = if $remaining > 32 32 else $remaining
+		step = if ($remaining > 32) 32 else $remaining
 		factor = U64.shl_wrap(1, step.to_u8_wrap())
 		var $next = []
 		var $carry = 0.U64
@@ -779,7 +779,7 @@ drop : Str, U64 -> Str
 drop = |source, count| Str.from_utf8_lossy(source.to_utf8().drop_first(count))
 
 strip_suffix : Str, Str -> Str
-strip_suffix = |source, suffix| if source.ends_with(suffix) slice(source, 0, source.to_utf8().len() - suffix.to_utf8().len()) else source
+strip_suffix = |source, suffix| if (source.ends_with(suffix)) slice(source, 0, source.to_utf8().len() - suffix.to_utf8().len()) else source
 
 remove_cr : Str -> Str
 remove_cr = |source| strip_suffix(source, "\r")
@@ -802,7 +802,7 @@ lower : Str -> Str
 lower = |source| {
 	bytes = source.to_utf8()
 	if bytes.all(|byte| byte < 128) {
-		return Str.from_utf8_lossy(bytes.map(|byte| if byte >= 'A' and byte <= 'Z' byte + 32 else byte))
+		return Str.from_utf8_lossy(bytes.map(|byte| if (byte >= 'A' and byte <= 'Z') byte + 32 else byte))
 	}
 	match Case.to_lower(source, Case.unicode_default, Case.unlimited_limits) {
 		Ok(result) => Case.result_text(result)
@@ -811,25 +811,25 @@ lower = |source| {
 }
 
 unquote : Str -> Str
-unquote = |source| if (source.starts_with("\"") and source.ends_with("\"")) or (source.starts_with("'") and source.ends_with("'")) (if source.to_utf8().len() < 2 "" else slice(source, 1, source.to_utf8().len() - 2)) else source
+unquote = |source| if ((source.starts_with("\"") and source.ends_with("\"")) or (source.starts_with("'") and source.ends_with("'"))) (if (source.to_utf8().len() < 2) "" else slice(source, 1, source.to_utf8().len() - 2)) else source
 
 resolve : Str, Str -> Str
 resolve = |path, target| {
 	parts = path.split_on("/").drop_last(1)
-	combined = if target.starts_with("/") target else join(parts.append(target), "/")
+	combined = if (target.starts_with("/")) target else join(parts.append(target), "/")
 	var $resolved = []
 	for part in combined.split_on("/") {
 		if part == ".." {
 			if $resolved.is_empty() or $resolved.last() == Ok("..") {
 				$resolved = $resolved.append("..")
 			}
-				else {
-					$resolved = $resolved.drop_last(1)
-				}
-		}
-			else if part != "." and part != "" {
-				$resolved = $resolved.append(part)
+			else {
+				$resolved = $resolved.drop_last(1)
 			}
+		}
+		else if part != "." and part != "" {
+			$resolved = $resolved.append(part)
+		}
 	}
 	join($resolved, "/")
 }
@@ -869,9 +869,9 @@ select_lines : Str, Str -> List(SourceLine)
 select_lines = |source, options| {
 	selector = option(options, "lines")
 	tag = option(options, "tag")
-	tags = if tag == "" option(options, "tags") else tag
+	tags = if (tag == "") option(options, "tags") else tag
 	if tags == "" or selector != "" {
-		return if selector == "" source_lines(source) else select_line_numbers(source_lines(source), selector)
+		return if (selector == "") source_lines(source) else select_line_numbers(source_lines(source), selector)
 	}
 	var $output = []
 	var $active_tags = []
@@ -913,7 +913,7 @@ select_line_numbers = |lines, selector| {
 				return []
 			}
 			start = bounded_selector_number(first, cap)
-			end = if range.contains("..") and !open bounded_selector_number(last, cap) else start
+			end = if (range.contains("..") and !open) bounded_selector_number(last, cap) else start
 			$ranges = $ranges.append({ start, end })
 			if end > $largest {
 				$largest = end
@@ -933,14 +933,14 @@ selector_integer : Str -> IntegerValue
 selector_integer = |source| {
 	bytes = trim(source).to_utf8()
 	negative = bytes.first() == Ok('-')
-	start = if negative or bytes.first() == Ok('+') 1 else 0
+	start = if (negative or bytes.first() == Ok('+')) 1 else 0
 	canonical_integer(negative, numeric_digits(bytes, start).digits)
 }
 
 bounded_selector_number : IntegerValue, U64 -> U64
 bounded_selector_number = |integer, cap| {
 	number = U64.from_str(integer.digits) ?? cap
-	if number > cap cap else number
+	if (number > cap) cap else number
 }
 
 adjust_lines : List(AsciiDocPreprocess.Line), Str -> List(AsciiDocPreprocess.Line)
@@ -963,7 +963,7 @@ adjust_lines = |lines, options| {
 			var $text = line.text
 			if indent_text != "" and $minimum != 18446744073709551615 {
 				count = leading_spaces($text)
-				remove = if count < $minimum count else $minimum
+				remove = if (count < $minimum) count else $minimum
 				$text = Str.concat(repeat(" ", indent), drop($text, remove))
 			}
 			{ text: $text, attributes: line.attributes, path: line.path, line: line.line, offset: line.offset }
@@ -988,7 +988,7 @@ heading_prefix = |source| {
 	while bytes.get($count) == Ok('=') {
 		$count = $count + 1
 	}
-	if bytes.get($count) == Ok(' ') $count else 0
+	if (bytes.get($count) == Ok(' ')) $count else 0
 }
 
 repeat : Str, U64 -> Str
@@ -1088,8 +1088,8 @@ select_tag = |selector, active_tags| {
 	}
 	entries = selectors(selector)
 	positives = entries.keep_if(|name| !name.starts_with("!"))
-	included = positives.is_empty() or positives.any(|name| if name == "**" True else if name == "*" !active_tags.is_empty() else active_tags.contains(name))
-	excluded = entries.any(|name| if !name.starts_with("!") False else if name == "!**" True else if name == "!*" !active_tags.is_empty() else active_tags.contains(drop(name, 1)))
+	included = positives.is_empty() or positives.any(|name| if (name == "**") True else if (name == "*") !active_tags.is_empty() else active_tags.contains(name))
+	excluded = entries.any(|name| if (!name.starts_with("!")) False else if (name == "!**") True else if (name == "!*") !active_tags.is_empty() else active_tags.contains(drop(name, 1)))
 	included and !excluded
 }
 
@@ -1108,11 +1108,11 @@ compare_strings = |left, right, operator| {
 	while $index < a.len() and $index < b.len() and $order == 0 {
 		x = a.get($index) ?? 0
 		y = b.get($index) ?? 0
-		$order = if x < y -1 else if x > y 1 else 0
+		$order = if (x < y) -1 else if (x > y) 1 else 0
 		$index = $index + 1
 	}
 	if $order == 0 {
-		$order = if a.len() < b.len() -1 else if a.len() > b.len() 1 else 0
+		$order = if (a.len() < b.len()) -1 else if (a.len() > b.len()) 1 else 0
 	}
 	compare($order, 0, operator)
 }
@@ -1281,13 +1281,13 @@ split_options = |source| {
 		if $quote == 0 and (byte == '\'' or byte == '"') {
 			$quote = byte
 		}
-			else if $quote == byte {
-				$quote = 0
-			}
-				else if $quote == 0 and byte == ',' {
-					$parts = $parts.append(slice(source, $start, $position - $start))
-					$start = $position + 1
-				}
+		else if $quote == byte {
+			$quote = 0
+		}
+		else if $quote == 0 and byte == ',' {
+			$parts = $parts.append(slice(source, $start, $position - $start))
+			$start = $position + 1
+		}
 		$position = $position + 1
 	}
 	$parts.append(drop(source, $start))
@@ -1295,7 +1295,7 @@ split_options = |source| {
 
 selectors : Str -> List(Str)
 selectors = |source| {
-	var $parts = source.split_on(if source.contains(",") "," else ";")
+	var $parts = source.split_on(if (source.contains(",")) "," else ";")
 	while !$parts.is_empty() and $parts.last() == Ok("") {
 		$parts = $parts.drop_last(1)
 	}
@@ -1333,7 +1333,7 @@ normalize_attribute_name : Str -> Str
 normalize_attribute_name = |source| {
 	bytes = source.to_utf8()
 	if bytes.all(|byte| byte < 128) {
-		return Str.from_utf8_lossy(bytes.keep_if(|byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '_' or byte == '-').map(|byte| if byte >= 'A' and byte <= 'Z' byte + 32 else byte))
+		return Str.from_utf8_lossy(bytes.keep_if(|byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '_' or byte == '-').map(|byte| if (byte >= 'A' and byte <= 'Z') byte + 32 else byte))
 	}
 	var $bytes = []
 	for located in Scalar.iter(source) {

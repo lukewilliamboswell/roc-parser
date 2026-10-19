@@ -82,7 +82,7 @@ generate = |bytes| {
 		} else {
 			"${a.prefix}${Str.repeat(a.repeat, count)}${a.middle}${Str.repeat(a.after, count)}${a.suffix}"
 		}
-	{ text, name: if interleave "${a.name} + ${b.name}" else a.name, count }
+	{ text, name: if (interleave) "${a.name} + ${b.name}" else a.name, count }
 }
 
 test : Input -> Fuzz.Outcome

@@ -28,10 +28,13 @@ HttpGen :: {}.{
 		version : HTTP.Version,
 		fields : List(Field),
 		framing : Framing,
+
 		## Bytes after the empty line that belong to this message.
 		payload : List(U8),
+
 		## The decoded body the parser must return.
 		body : List(U8),
+
 		## For chunked messages: the payload split into chunk records, so
 		## mutations can edit sizes and extensions.
 		chunks : List({ size_line : List(U8), data : List(U8) }),
@@ -54,11 +57,14 @@ HttpGen :: {}.{
 	## Rebuild the chunked payload after a mutation edited `chunks`/`trailer`.
 	encode_chunks : List({ size_line : List(U8), data : List(U8) }), List(U8) -> List(U8)
 	encode_chunks = |chunks, trailer| {
-		chunks.fold([], |acc, chunk| {
-			with_line = acc.concat(chunk.size_line).concat(['\r', '\n'])
-			if chunk.data.is_empty() with_line else with_line.concat(chunk.data).concat(['\r', '\n'])
-		})
-		.concat(trailer)
+		chunks.fold(
+			[],
+			|acc, chunk| {
+				with_line = acc.concat(chunk.size_line).concat(['\r', '\n'])
+				if (chunk.data.is_empty()) with_line else with_line.concat(chunk.data).concat(['\r', '\n'])
+			},
+		)
+			.concat(trailer)
 	}
 
 	expected_request : Msg -> Try(HTTP.Request, [NotARequest])
@@ -125,7 +131,7 @@ HttpGen :: {}.{
 		many = pick($cur, 16)
 		$cur = many.cur
 		# Occasionally emit hundreds of fields to expose super-linear parsing.
-		field_count = if many.n == 15 count.n * 200 + 50 else count.n
+		field_count = if (many.n == 15) count.n * 200 + 50 else count.n
 		var $fields = []
 		var $index = 0
 		while $index < field_count {
@@ -154,7 +160,7 @@ HttpGen :: {}.{
 			match frame_choice.n {
 				0 => NoFraming
 				1 => Length
-				_ => if at_least_1_1(version) Chunked else Length
+				_ => if (at_least_1_1(version)) Chunked else Length
 			}
 		no_body =
 			match start_line.kind {
@@ -167,7 +173,7 @@ HttpGen :: {}.{
 			} else {
 				body_choice.body
 			}
-		var $payload = if no_body [] else body
+		var $payload = if (no_body) [] else body
 		var $chunks = []
 		var $trailer = []
 		match framing {
@@ -175,7 +181,7 @@ HttpGen :: {}.{
 			Length => {
 				# A no-body status may still declare a length (e.g. 304 says what
 				# a GET would have returned); the parser must ignore it.
-				declared = if no_body body_choice.body.len() else body.len()
+				declared = if (no_body) body_choice.body.len() else body.len()
 				cl = gen_content_length($cur, declared)
 				$cur = cl.cur
 				var $i = 0
@@ -224,7 +230,7 @@ HttpGen :: {}.{
 
 	insert_bytes : List(U8), U64, List(U8) -> List(U8)
 	insert_bytes = |bytes, at, extra| {
-		index = if at < bytes.len() at else bytes.len()
+		index = if (at < bytes.len()) at else bytes.len()
 		bytes.sublist({ start: 0, len: index }).concat(extra).concat(bytes.drop_first(index))
 	}
 
@@ -244,15 +250,15 @@ HttpGen :: {}.{
 	show_bytes : List(U8) -> Str
 	show_bytes = |bytes| {
 		Str.from_utf8_lossy(bytes)
-		|> Str.replace_each("\\", "\\\\")
-		|> Str.replace_each("\t", "\\t")
-		|> Str.replace_each("\r", "\\r")
-		|> Str.replace_each("\n", "\\n\n")
+			|> Str.replace_each("\\", "\\\\")
+			|> Str.replace_each("\t", "\\t")
+			|> Str.replace_each("\r", "\\r")
+			|> Str.replace_each("\n", "\\n\n")
 	}
 }
 
 hex_digit : U8 -> U8
-hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
+hex_digit = |n| if (n < 10) n + '0' else n - 10 + 'a'
 
 methods : List({ name : Str, tag : HTTP.Method })
 methods = [
@@ -297,7 +303,7 @@ gen_target = |cur| {
 			1 => "/${tail.text}"
 			2 => "http://example.com/${tail.text}"
 			3 => "example.com:443"
-			_ => if tail.text.is_empty() "/" else tail.text
+			_ => if (tail.text.is_empty()) "/" else tail.text
 		}
 	{ text, cur: tail.cur }
 }
@@ -333,7 +339,7 @@ gen_status = |version, cur| {
 	code = code_n.to_u16_wrap()
 	reason = gen_from(raw_code.cur, reason_alphabet, 10)
 	space = HttpGen.pick(reason.cur, 2)
-	sep = if reason.text.is_empty() and space.n == 0 "" else " "
+	sep = if (reason.text.is_empty() and space.n == 0) "" else " "
 	line = "${version_text(version)} ${code_n.to_str()}${sep}${reason.text}".to_utf8()
 	{ kind: Res({ code, reason: reason.text }), line, cur: space.cur }
 }
@@ -354,7 +360,7 @@ reserved : List(List(U8))
 reserved = ["host", "content-length", "transfer-encoding"].map(|s| s.to_utf8())
 
 lower : List(U8) -> List(U8)
-lower = |bytes| bytes.map(|b| if b >= 'A' and b <= 'Z' b + 32 else b)
+lower = |bytes| bytes.map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b)
 
 is_ows : U8 -> Bool
 is_ows = |b| b == ' ' or b == '\t'
@@ -379,8 +385,8 @@ ows_options = ["", "", " ", "  ", "\t", " \t "]
 gen_field : HttpGen.Cur -> { field : HttpGen.Field, cur : HttpGen.Cur }
 gen_field = |cur| {
 	name_part = gen_from(cur, name_alphabet, 8)
-	name0 = if name_part.text.is_empty() "X" else name_part.text
-	name = if reserved.contains(lower(name0.to_utf8())) "X-${name0}" else name0
+	name0 = if (name_part.text.is_empty()) "X" else name_part.text
+	name = if (reserved.contains(lower(name0.to_utf8()))) "X-${name0}" else name0
 	value = gen_from(name_part.cur, value_alphabet, 12)
 	field = make_field(value.cur, name, value.text)
 	{ field: field.field, cur: field.cur }
@@ -411,8 +417,8 @@ random_case = |cur, text| {
 	cased =
 		match style.n {
 			0 => lower(bytes)
-			1 => bytes.map(|b| if b >= 'a' and b <= 'z' b - 32 else b)
-			2 => bytes.map_with_index(|b, i| if i % 2 == 0 and b >= 'a' and b <= 'z' b - 32 else if b >= 'A' and b <= 'Z' b + 32 else b)
+			1 => bytes.map(|b| if (b >= 'a' and b <= 'z') b - 32 else b)
+			2 => bytes.map_with_index(|b, i| if (i % 2 == 0 and b >= 'a' and b <= 'z') b - 32 else if (b >= 'A' and b <= 'Z') b + 32 else b)
 			_ => bytes
 		}
 	{ text: Str.from_utf8(cased) ?? text, cur: style.cur }
@@ -473,7 +479,7 @@ gen_body = |cur| {
 		$index = $index + 1
 	}
 	big = HttpGen.pick($cur, 32)
-	body = if big.n == 31 and !$body.is_empty() List.repeat($body, 4000 // $body.len() + 1).fold([], |acc, part| acc.concat(part)) else $body
+	body = if (big.n == 31 and !$body.is_empty()) List.repeat($body, 4000 // $body.len() + 1).fold([], |acc, part| acc.concat(part)) else $body
 	{ body, cur: big.cur }
 }
 
@@ -485,14 +491,14 @@ hex_lower = "0123456789abcdef".to_utf8()
 
 to_hex : U64, Bool -> List(U8)
 to_hex = |n, upper| {
-	digits = if upper hex_upper else hex_lower
+	digits = if (upper) hex_upper else hex_lower
 	var $out = []
 	var $rest = n
 	while $rest > 0 {
 		$out = [digits.get($rest % 16) ?? '0'].concat($out)
 		$rest = $rest // 16
 	}
-	if $out.is_empty() ['0'] else $out
+	if ($out.is_empty()) ['0'] else $out
 }
 
 ## chunk-ext with optional BWS, token or quoted-string values (RFC 9112 7.1.1).
@@ -503,7 +509,7 @@ gen_extensions = |cur| {
 	var $text = []
 	var $index = 0
 	# Most chunk lines get no extension.
-	limit = if count.n == 3 2 else 0
+	limit = if (count.n == 3) 2 else 0
 	while $index < limit {
 		e = HttpGen.pick($cur, ext_forms.len())
 		$text = $text.concat((ext_forms.get(e.n) ?? ";a").to_utf8())
@@ -526,8 +532,8 @@ gen_chunks = |cur, body| {
 		s = HttpGen.pick($cur, 8)
 		remaining = body.len() - $offset
 		# Size 7 means "the rest"; big bodies use 1 KiB chunks.
-		wanted = if s.n == 7 remaining else if body.len() > 100 1024 else s.n + 1
-		size = if wanted < remaining wanted else remaining
+		wanted = if (s.n == 7) remaining else if (body.len() > 100) 1024 else s.n + 1
+		size = if (wanted < remaining) wanted else remaining
 		line = gen_size_line(s.cur, size)
 		$chunks = $chunks.append({ size_line: line.text, data: body.sublist({ start: $offset, len: size }) })
 		$cur = line.cur
@@ -551,7 +557,7 @@ gen_chunks = |cur, body| {
 gen_size_line : HttpGen.Cur, U64 -> { text : List(U8), cur : HttpGen.Cur }
 gen_size_line = |cur, size| {
 	style = HttpGen.pick(cur, 8)
-	zeros = List.repeat('0', if style.n >= 6 style.n - 5 else 0)
+	zeros = List.repeat('0', if (style.n >= 6) style.n - 5 else 0)
 	ext = gen_extensions(style.cur)
 	{ text: zeros.concat(to_hex(size, style.n % 2 == 0)).concat(ext.text), cur: ext.cur }
 }

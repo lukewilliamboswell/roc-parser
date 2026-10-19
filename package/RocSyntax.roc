@@ -52,7 +52,7 @@ RocSyntax :: [].{
 	tokenize_bytes : List(U8) -> Tokenized
 	tokenize_bytes = |source| {
 		lexed = lex(source)
-		status = if lexed.unsupported Unsupported else if lexed.diagnostics.is_empty() Complete else Recovered
+		status = if (lexed.unsupported) Unsupported else if (lexed.diagnostics.is_empty()) Complete else Recovered
 		{ source, tokens: lexed.tokens, diagnostics: lexed.diagnostics, status }
 	}
 
@@ -142,29 +142,29 @@ keyword_bytes = |source, start, end| {
 		b0 = byte(source, start)
 		if len == 2 {
 			b1 = byte(source, start + 1)
-			if b0 == 'a' and b1 == 's' True else if b0 == 'i' and b1 == 'f' True else if b0 == 'i' and b1 == 'n' True else False
+			if (b0 == 'a' and b1 == 's') True else if (b0 == 'i' and b1 == 'f') True else if (b0 == 'i' and b1 == 'n') True else False
 		} else if len == 3 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
-			if b0 == 'a' and b1 == 'p' and b2 == 'p' True else if b0 == 'd' and b1 == 'b' and b2 == 'g' True else if b0 == 'f' and b1 == 'o' and b2 == 'r' True else if b0 == 'h' and b1 == 'a' and b2 == 's' True else if b0 == 'v' and b1 == 'a' and b2 == 'r' True else False
+			if (b0 == 'a' and b1 == 'p' and b2 == 'p') True else if (b0 == 'd' and b1 == 'b' and b2 == 'g') True else if (b0 == 'f' and b1 == 'o' and b2 == 'r') True else if (b0 == 'h' and b1 == 'a' and b2 == 's') True else if (b0 == 'v' and b1 == 'a' and b2 == 'r') True else False
 		} else if len == 4 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
-			if b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e' True else if b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!' True else if b0 == 'w' and b1 == 'i' and b2 == 't' and b3 == 'h' True else False
+			if (b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e') True else if (b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!') True else if (b0 == 'w' and b1 == 'i' and b2 == 't' and b3 == 'h') True else False
 		} else if len == 5 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
 			b4 = byte(source, start + 4)
-			if b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h' True else if b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h' True else if b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e' True else if b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e' True else if b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k' True else False
+			if (b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h') True else if (b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h') True else if (b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e') True else if (b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e') True else if (b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k') True else False
 		} else if len == 6 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
 			b4 = byte(source, start + 4)
 			b5 = byte(source, start + 5)
-			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't' True else if b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd' True else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' True else if b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e' True else if b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n' True else False
+			if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't') True else if (b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd') True else if (b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't') True else if (b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e') True else if (b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n') True else False
 		} else if len == 7 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -172,7 +172,7 @@ keyword_bytes = |source, start, end| {
 			b4 = byte(source, start + 4)
 			b5 = byte(source, start + 5)
 			b6 = byte(source, start + 6)
-			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's' True else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' and b6 == 's' True else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' True else if b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's' True else False
+			if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's') True else if (b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' and b6 == 's') True else if (b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e') True else if (b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's') True else False
 		} else if len == 8 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -181,7 +181,7 @@ keyword_bytes = |source, start, end| {
 			b5 = byte(source, start + 5)
 			b6 = byte(source, start + 6)
 			b7 = byte(source, start + 7)
-			if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g' True else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's' True else if b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm' True else if b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's' True else if b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's' True else False
+			if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g') True else if (b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's') True else if (b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm') True else if (b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's') True else if (b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's') True else False
 		} else if len == 9 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -191,7 +191,7 @@ keyword_bytes = |source, start, end| {
 			b6 = byte(source, start + 6)
 			b7 = byte(source, start + 7)
 			b8 = byte(source, start + 8)
-			if b0 == 'g' and b1 == 'e' and b2 == 'n' and b3 == 'e' and b4 == 'r' and b5 == 'a' and b6 == 't' and b7 == 'e' and b8 == 's' True else if b0 == 'i' and b1 == 'n' and b2 == 't' and b3 == 'e' and b4 == 'r' and b5 == 'f' and b6 == 'a' and b7 == 'c' and b8 == 'e' True else False
+			if (b0 == 'g' and b1 == 'e' and b2 == 'n' and b3 == 'e' and b4 == 'r' and b5 == 'a' and b6 == 't' and b7 == 'e' and b8 == 's') True else if (b0 == 'i' and b1 == 'n' and b2 == 't' and b3 == 'e' and b4 == 'r' and b5 == 'f' and b6 == 'a' and b7 == 'c' and b8 == 'e') True else False
 		} else if len == 10 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -202,7 +202,7 @@ keyword_bytes = |source, start, end| {
 			b7 = byte(source, start + 7)
 			b8 = byte(source, start + 8)
 			b9 = byte(source, start + 9)
-			if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'l' and b4 == 'e' and b5 == 'm' and b6 == 'e' and b7 == 'n' and b8 == 't' and b9 == 's' True else False
+			if (b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'l' and b4 == 'e' and b5 == 'm' and b6 == 'e' and b7 == 'n' and b8 == 't' and b9 == 's') True else False
 		} else {
 			False
 		}
@@ -212,7 +212,7 @@ keyword_bytes = |source, start, end| {
 push_diagnostic : List(RocSyntax.Diagnostic), RocSyntax.DiagnosticCode, U64, U64 -> List(RocSyntax.Diagnostic)
 push_diagnostic = |diagnostics, code, start, end| {
 	# Bounded diagnostic output; parsing still records error status once full.
-	if diagnostics.len() < 256 diagnostics.append({ code, start, end }) else diagnostics
+	if (diagnostics.len() < 256) diagnostics.append({ code, start, end }) else diagnostics
 }
 
 Starts : { starts : List(U64), count : U64 }
@@ -425,12 +425,12 @@ utf8_diagnostics_inline = |source| {
 		if high == 0 {
 			$i = $i + 16
 		} else {
-			at = if high == 0x10000 $i else $i + U8.to_u64(U64.count_trailing_zero_bits(high))
+			at = if (high == 0x10000) $i else $i + U8.to_u64(U64.count_trailing_zero_bits(high))
 			b = byte(source, at)
 			if b < 0x80 {
 				$i = at + 1
 			} else {
-				width = if b >= 0xC2 and b <= 0xDF 2 else if b >= 0xE0 and b <= 0xEF 3 else if b >= 0xF0 and b <= 0xF4 4 else 0
+				width = if (b >= 0xC2 and b <= 0xDF) 2 else if (b >= 0xE0 and b <= 0xEF) 3 else if (b >= 0xF0 and b <= 0xF4) 4 else 0
 				var $valid = width > 0 and at + width <= len
 				var $j = 1
 				while $valid and $j < width {
@@ -488,7 +488,7 @@ lex = |source| {
 	starts = index.starts
 	var $tokens = List.with_capacity(index.count + 2)
 	var $diagnostics = utf8_diagnostics_inline(source)
-	var $i = if bom 3 else 0
+	var $i = if (bom) 3 else 0
 	var $contexts = []
 	if bom {
 		$tokens = $tokens.append({ kind: Invalid, start: 0, end: 3 })
@@ -527,21 +527,21 @@ lex = |source| {
 						$j = $j + 1
 					}
 				}
-				before = if start > 0 byte(source, start - 1) else 0
+				before = if (start > 0) byte(source, start - 1) else 0
 				field_name = if is_lower(b) and (before == '.' or before == '?') {
 					previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
 					previous.end == start and (spelled1(source, previous, '.') or spelled2(source, previous, '.', '?'))
 				} else {
 					False
 				}
-				kind = if field_name LowerIdent else if b == '_' LowerIdent else if $i - start == 3 and b == 'a' and next == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and next == 'r' Operator else if is_upper(b) UpperIdent else if keyword_swar(source, start, $i) Keyword else LowerIdent
+				kind = if (field_name) LowerIdent else if (b == '_') LowerIdent else if ($i - start == 3 and b == 'a' and next == 'n' and byte(source, start + 2) == 'd') Operator else if ($i - start == 2 and b == 'o' and next == 'r') Operator else if (is_upper(b)) UpperIdent else if (keyword_swar(source, start, $i)) Keyword else LowerIdent
 				$tokens = $tokens.append({ kind, start, end: $i })
 			}
 		} else if b == '#' {
 			$i = comment_end(source, start + 1)
 			$tokens = $tokens.append({ kind: Comment, start, end: $i })
 		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_token(source, $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }))) {
-			number = scan_number(source, start + if b == '-' 1 else 0)
+			number = scan_number(source, start + if (b == '-') 1 else 0)
 			$i = number.end
 			if start > 0 and byte(source, start - 1) == '.' and is_digit(b) {
 				var $digits_end = start
@@ -561,15 +561,15 @@ lex = |source| {
 			# String start, or the string continuation after an interpolation's closing brace.
 			resumed = b == '}'
 			context = $contexts.last() ?? { multiline: False, depth: 0 }
-			multiline = if resumed context.multiline else b == '\\' or bytes3(source, start, '"', '"', '"')
-			diag_start = if resumed start + 1 else start
+			multiline = if (resumed) context.multiline else b == '\\' or bytes3(source, start, '"', '"', '"')
+			diag_start = if (resumed) start + 1 else start
 			if resumed {
 				$contexts = $contexts.drop_last(1)
 				$tokens = $tokens.append({ kind: InterpolationEnd, start, end: start + 1 })
 				$i = start + 1
 			} else {
-				width = if b == '\\' 2 else if multiline 3 else 1
-				$tokens = $tokens.append({ kind: if multiline MultilineStringStart else StringStart, start, end: start + width })
+				width = if (b == '\\') 2 else if (multiline) 3 else 1
+				$tokens = $tokens.append({ kind: if (multiline) MultilineStringStart else StringStart, start, end: start + width })
 				$i = start + width
 			}
 			part = $i
@@ -605,13 +605,13 @@ lex = |source| {
 				$diagnostics = push_diagnostic($diagnostics, UnclosedString, diag_start, $i)
 			}
 		} else if b == '{' or b == '}' {
-			kind = if b == '{' OpenCurly else CloseCurly
+			kind = if (b == '{') OpenCurly else CloseCurly
 			$i = start + 1
 			$tokens = $tokens.append({ kind, start, end: $i })
 			if !$contexts.is_empty() {
 				top = $contexts.len() - 1
 				context = $contexts.last() ?? { multiline: False, depth: 0 }
-				next_depth = if b == '{' context.depth + 1 else if context.depth > 0 context.depth - 1 else 0
+				next_depth = if (b == '{') context.depth + 1 else if (context.depth > 0) context.depth - 1 else 0
 				$contexts = $contexts.set(top, { multiline: context.multiline, depth: next_depth }) ?? $contexts
 			}
 		} else if b == '\'' {
@@ -669,11 +669,11 @@ lex = |source| {
 					$i = $i + 1
 				}
 			}
-			kind = if b == '@' UpperIdent else if bad_dollar Invalid else if b == '$' and is_upper(next) UpperIdent else if keyword(source, start, $i) Keyword else LowerIdent
+			kind = if (b == '@') UpperIdent else if (bad_dollar) Invalid else if (b == '$' and is_upper(next)) UpperIdent else if (keyword(source, start, $i)) Keyword else LowerIdent
 			if bad_dollar or bad_opaque or b >= 0x80 {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
-			var $j = if $unusual start + 1 else $i
+			var $j = if ($unusual) start + 1 else $i
 			while $j < $i {
 				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 {
 					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1)
@@ -696,7 +696,7 @@ lex = |source| {
 		} else {
 			$i = start + 1
 			var $kind = match b {
-				'(' => if start > 0 and !is_space(byte(source, start - 1)) NoSpaceOpenRound else OpenRound
+				'(' => if (start > 0 and !is_space(byte(source, start - 1))) NoSpaceOpenRound else OpenRound
 				')' => CloseRound
 				'[' => OpenSquare
 				']' => CloseSquare
@@ -704,10 +704,10 @@ lex = |source| {
 				'+' | '-' | '*' | '/' | '%' | '^' | '=' | '!' | '?' | '<' | '>' | '|' | '&' | '\\' => Operator
 				_ => Invalid
 			}
-			width = if $kind == Operator or $kind == Punctuation operator_width(source, start) else 1
+			width = if ($kind == Operator or $kind == Punctuation) operator_width(source, start) else 1
 			if width > 1 {
 				$i = start + width
-				$kind = if b == '.' and width == 3 and (byte(source, start + 2) == '<' or byte(source, start + 2) == '=') Operator else if b == '.' or b == ':' Punctuation else Operator
+				$kind = if (b == '.' and width == 3 and (byte(source, start + 2) == '<' or byte(source, start + 2) == '=')) Operator else if (b == '.' or b == ':') Punctuation else Operator
 			}
 			if $kind == Invalid {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
@@ -736,15 +736,15 @@ keyword_swar = |source, start, end| {
 	} else {
 		match U64.from_le_bytes(source, start) {
 			Ok(w) => {
-				lo = if len >= 8 w else w.bitwise_and((1.U64).shl_wrap(U64.to_u8_wrap(len.shl_wrap(3))) - 1)
-				if len == 2 lo == 0x0000000000007361 or lo == 0x0000000000006669 or lo == 0x0000000000006e69
-				else if len == 3 lo == 0x0000000000707061 or lo == 0x0000000000676264 or lo == 0x0000000000726f66 or lo == 0x0000000000736168 or lo == 0x0000000000726176
-				else if len == 4 lo == 0x0000000065736c65 or lo == 0x0000000021726f66 or lo == 0x0000000068746977
-				else if len == 5 lo == 0x0000006873617263 or lo == 0x000000686374616d or lo == 0x0000006572656877 or lo == 0x000000656c696877 or lo == 0x0000006b61657262
-				else if len == 6 lo == 0x0000746365707865 or lo == 0x0000646574736f68 or lo == 0x000074726f706d69 or lo == 0x0000656c75646f6d or lo == 0x00006e7275746572
-				else if len == 7 lo == 0x007365736f707865 or lo == 0x007374726f706d69 or lo == 0x006567616b636170 or lo == 0x0073746567726174
-				else if len == 8 lo == 0x676e69736f707865 or lo == 0x736567616b636170 or lo == 0x6d726f6674616c70 or lo == 0x73656469766f7270 or lo == 0x7365726975716572
-				else if len == 9 (lo == 0x65746172656e6567 and byte(source, start + 8) == 's') or (lo == 0x6361667265746e69 and byte(source, start + 8) == 'e')
+				lo = if (len >= 8) w else w.bitwise_and((1.U64).shl_wrap(U64.to_u8_wrap(len.shl_wrap(3))) - 1)
+				if (len == 2) lo == 0x0000000000007361 or lo == 0x0000000000006669 or lo == 0x0000000000006e69
+				else if (len == 3) lo == 0x0000000000707061 or lo == 0x0000000000676264 or lo == 0x0000000000726f66 or lo == 0x0000000000736168 or lo == 0x0000000000726176
+				else if (len == 4) lo == 0x0000000065736c65 or lo == 0x0000000021726f66 or lo == 0x0000000068746977
+				else if (len == 5) lo == 0x0000006873617263 or lo == 0x000000686374616d or lo == 0x0000006572656877 or lo == 0x000000656c696877 or lo == 0x0000006b61657262
+				else if (len == 6) lo == 0x0000746365707865 or lo == 0x0000646574736f68 or lo == 0x000074726f706d69 or lo == 0x0000656c75646f6d or lo == 0x00006e7275746572
+				else if (len == 7) lo == 0x007365736f707865 or lo == 0x007374726f706d69 or lo == 0x006567616b636170 or lo == 0x0073746567726174
+				else if (len == 8) lo == 0x676e69736f707865 or lo == 0x736567616b636170 or lo == 0x6d726f6674616c70 or lo == 0x73656469766f7270 or lo == 0x7365726975716572
+				else if (len == 9) (lo == 0x65746172656e6567 and byte(source, start + 8) == 's') or (lo == 0x6361667265746e69 and byte(source, start + 8) == 'e')
 				else lo == 0x6e656d656c706d69 and byte(source, start + 8) == 't' and byte(source, start + 9) == 's'
 			}
 			Err(_) => keyword_bytes(source, start, end)
@@ -766,7 +766,7 @@ expect {
 
 expect {
 	p = RocSyntax.parse_str("# hello\nx = \"é\"\n")
-	p.tokens.fold(0, |at, token| if token.start == at token.end else 999999) == p.source.len() and p.tokens.any(|t| t.kind == Comment) and p.status == Complete
+	p.tokens.fold(0, |at, token| if (token.start == at) token.end else 999999) == p.source.len() and p.tokens.any(|t| t.kind == Comment) and p.status == Complete
 }
 
 expect {
@@ -798,7 +798,7 @@ scan_number = |source, start| {
 		}
 		prefix = byte(source, $prefix_at)
 		if prefix == 'x' or prefix == 'o' or prefix == 'b' {
-			$base = if prefix == 'x' 16 else if prefix == 'o' 8 else 2
+			$base = if (prefix == 'x') 16 else if (prefix == 'o') 8 else 2
 			$i = $prefix_at + 1
 		} else if is_digit(prefix) {
 			$valid = False
@@ -808,17 +808,17 @@ scan_number = |source, start| {
 	var $done = False
 	while $i < source.len() and !$done {
 		b = byte(source, $i)
-		digit = if is_digit(b) U8.to_u64(b - '0') else if b >= 'a' and b <= 'f' U8.to_u64(b - 'a') + 10 else if b >= 'A' and b <= 'F' U8.to_u64(b - 'A') + 10 else 99
+		digit = if (is_digit(b)) U8.to_u64(b - '0') else if (b >= 'a' and b <= 'f') U8.to_u64(b - 'a') + 10 else if (b >= 'A' and b <= 'F') U8.to_u64(b - 'A') + 10 else 99
 		if b == '_' {
 			$i = $i + 1
 		}
-			else if digit < $base {
-				$digits = $digits + 1
-				$i = $i + 1
-			}
-				else {
-					$done = True
-				}
+		else if digit < $base {
+			$digits = $digits + 1
+			$i = $i + 1
+		}
+		else {
+			$done = True
+		}
 	}
 	$valid = $valid and $digits > 0
 	if $base == 10 {
@@ -866,7 +866,7 @@ scan_escape = |source, start| {
 		var $valid = True
 		while $i < source.len() and byte(source, $i) != ')' and byte(source, $i) != '\n' and byte(source, $i) != '"' and byte(source, $i) != '\'' {
 			c = byte(source, $i)
-			digit = if is_digit(c) U8.to_u64(c - '0') else if c >= 'a' and c <= 'f' U8.to_u64(c - 'a') + 10 else if c >= 'A' and c <= 'F' U8.to_u64(c - 'A') + 10 else 99
+			digit = if (is_digit(c)) U8.to_u64(c - '0') else if (c >= 'a' and c <= 'f') U8.to_u64(c - 'a') + 10 else if (c >= 'A' and c <= 'F') U8.to_u64(c - 'A') + 10 else 99
 			$valid = $valid and digit < 16
 			if $value <= 0x10FFFF and digit < 16 {
 				$value = $value * 16 + digit
@@ -877,9 +877,9 @@ scan_escape = |source, start| {
 			$i = $i + 1
 		}
 		closed = byte(source, $i) == ')'
-		{ end: $i + if closed 1 else 0, valid: $valid and closed and $digits > 0 and $value <= 0x10FFFF and !($value >= 0xD800 and $value <= 0xDFFF) }
+		{ end: $i + if (closed) 1 else 0, valid: $valid and closed and $digits > 0 and $value <= 0x10FFFF and !($value >= 0xD800 and $value <= 0xDFFF) }
 	} else {
-		{ end: if start + 1 < source.len() and b != '\n' start + 2 else start + 1, valid: b == 'n' or b == 'r' or b == 't' or b == '\\' or b == '"' or b == '\'' or b == '$' }
+		{ end: if (start + 1 < source.len() and b != '\n') start + 2 else start + 1, valid: b == 'n' or b == 'r' or b == 't' or b == '\\' or b == '"' or b == '\'' or b == '$' }
 	}
 }
 
@@ -997,8 +997,8 @@ operator_width = |source, at| {
 	a = byte(source, at)
 	b = byte(source, at + 1)
 	c = byte(source, at + 2)
-	if a == '.' and b == '.' and (c == '.' or c == '<' or c == '=') 3
-	else if (a == '-' and b == '>') or (a == '=' and (b == '>' or b == '=')) or (a == '<' and (b == '-' or b == '=')) or (a == '>' and b == '=') or (a == '|' and b == '>') or (a == '!' and b == '=') or (a == '?' and b == '?') or (a == '/' and b == '/') or (a == ':' and (b == '=' or b == ':')) or (a == '.' and (b == '.' or b == '*' or b == '?')) 2
+	if (a == '.' and b == '.' and (c == '.' or c == '<' or c == '=')) 3
+	else if ((a == '-' and b == '>') or (a == '=' and (b == '>' or b == '=')) or (a == '<' and (b == '-' or b == '=')) or (a == '>' and b == '=') or (a == '|' and b == '>') or (a == '!' and b == '=') or (a == '?' and b == '?') or (a == '/' and b == '/') or (a == ':' and (b == '=' or b == ':')) or (a == '.' and (b == '.' or b == '*' or b == '?'))) 2
 	else 1
 }
 
@@ -1109,7 +1109,7 @@ expect {
 	["\"hello \${name}!\"", "\"\${{ a: 1 }}\"", "\"\${\"inner \${x}\"}\"", "\\\\hello\n\\\\world", "\"\"\"hello\n\"\"\"world", "\"\"\"hello\"\"\"", "0_xFF", "0__b10", "\"\\u(0000000000000000000000000041)\"", "'\\u(00000041)'", "$Type", "_a", "@Foo"].all(
 		|source| {
 			lexed = RocSyntax.tokenize_str(source)
-			lexed.status == Complete and lexed.tokens.drop_last(1).all(|t| t.start < t.end) and lexed.tokens.fold(0.U64, |end, t| if t.start == end t.end else 18446744073709551615) == source.count_utf8_bytes()
+			lexed.status == Complete and lexed.tokens.drop_last(1).all(|t| t.start < t.end) and lexed.tokens.fold(0.U64, |end, t| if (t.start == end) t.end else 18446744073709551615) == source.count_utf8_bytes()
 		},
 	)
 }
@@ -1195,7 +1195,7 @@ valid_roc_version = |text| {
 	} else {
 		numbers = Str.split_on(first, ".")
 		valid_numbers = numbers.len() == 3 and numbers.all(|part| version_digits(part, 1, 10, 4294967295))
-		if parts.len() == 1 valid_numbers else {
+		if (parts.len() == 1) valid_numbers else {
 			suffix = text.to_utf8().drop_first(first.count_utf8_bytes() + 1)
 			valid_numbers and !suffix.is_empty() and suffix.all(|b| is_digit(b) or is_lower(b) or is_upper(b) or b == '.' or b == '-')
 		}
@@ -1324,7 +1324,7 @@ expect {
 
 integer_token : List(U8), RocSyntax.Token -> Bool
 integer_token = |source, t| {
-	start = t.start + if byte(source, t.start) == '-' 1 else 0
+	start = t.start + if (byte(source, t.start) == '-') 1 else 0
 	if byte(source, start) == '0' {
 		var $base = start + 1
 		while byte(source, $base) == '_' {
@@ -1339,7 +1339,7 @@ integer_token = |source, t| {
 }
 
 expect {
-	["0xff.0", "0b10.00", "x -> _name", "x |> _", "match value { @Foo => 1 }", "|@A| 0", "match value { A .B => 0 }", "module [A .b]", "module [A .B]", "module [x as _name]", "module [x as _]", "module [A as @A]"].all(|source| (if source.starts_with("module") RocSyntax.parse_str(source) else RocSyntax.parse_expr_str(source)).status != Complete)
+	["0xff.0", "0b10.00", "x -> _name", "x |> _", "match value { @Foo => 1 }", "|@A| 0", "match value { A .B => 0 }", "module [A .b]", "module [A .B]", "module [x as _name]", "module [x as _]", "module [A as @A]"].all(|source| (if (source.starts_with("module")) RocSyntax.parse_str(source) else RocSyntax.parse_expr_str(source)).status != Complete)
 }
 
 expect {
@@ -1490,32 +1490,32 @@ token_text_bytes = |source, start, end| {
 	} else {
 		b0 = byte(source, start)
 		if len == 1 {
-			if b0 == '.' Dot else if b0 == ',' Comma else if b0 == ':' Colon else if b0 == '_' Underscore else if b0 == '=' Equals else if b0 == '?' Question else if b0 == '|' Bar else if b0 == '/' Slash else if b0 == '-' Minus else if b0 == '!' Bang else if b0 == '*' Star else if b0 == '%' Percent else if b0 == '+' Plus else if b0 == '<' Less else if b0 == '>' Greater else OtherText
+			if (b0 == '.') Dot else if (b0 == ',') Comma else if (b0 == ':') Colon else if (b0 == '_') Underscore else if (b0 == '=') Equals else if (b0 == '?') Question else if (b0 == '|') Bar else if (b0 == '/') Slash else if (b0 == '-') Minus else if (b0 == '!') Bang else if (b0 == '*') Star else if (b0 == '%') Percent else if (b0 == '+') Plus else if (b0 == '<') Less else if (b0 == '>') Greater else OtherText
 		} else if len == 2 {
 			b1 = byte(source, start + 1)
-			if b0 == '.' and b1 == '.' DotDot else if b0 == '=' and b1 == '>' FatArrow else if b0 == '-' and b1 == '>' Arrow else if b0 == 'a' and b1 == 's' As else if b0 == '.' and b1 == '?' DotQuestion else if b0 == '|' and b1 == '>' Pipe else if b0 == 'i' and b1 == 'f' If else if b0 == '.' and b1 == '*' DotStar else if b0 == ':' and b1 == '=' ColonEquals else if b0 == ':' and b1 == ':' DoubleColon else if b0 == 'i' and b1 == 'n' In else if b0 == '?' and b1 == '?' DoubleQuestion else if b0 == '/' and b1 == '/' DoubleSlash else if b0 == '=' and b1 == '=' EqEq else if b0 == '!' and b1 == '=' NotEq else if b0 == '<' and b1 == '=' LessEq else if b0 == '>' and b1 == '=' GreaterEq else if b0 == 'o' and b1 == 'r' Or else OtherText
+			if (b0 == '.' and b1 == '.') DotDot else if (b0 == '=' and b1 == '>') FatArrow else if (b0 == '-' and b1 == '>') Arrow else if (b0 == 'a' and b1 == 's') As else if (b0 == '.' and b1 == '?') DotQuestion else if (b0 == '|' and b1 == '>') Pipe else if (b0 == 'i' and b1 == 'f') If else if (b0 == '.' and b1 == '*') DotStar else if (b0 == ':' and b1 == '=') ColonEquals else if (b0 == ':' and b1 == ':') DoubleColon else if (b0 == 'i' and b1 == 'n') In else if (b0 == '?' and b1 == '?') DoubleQuestion else if (b0 == '/' and b1 == '/') DoubleSlash else if (b0 == '=' and b1 == '=') EqEq else if (b0 == '!' and b1 == '=') NotEq else if (b0 == '<' and b1 == '=') LessEq else if (b0 == '>' and b1 == '=') GreaterEq else if (b0 == 'o' and b1 == 'r') Or else OtherText
 		} else if len == 3 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
-			if b0 == 'v' and b1 == 'a' and b2 == 'r' Var else if b0 == 'd' and b1 == 'b' and b2 == 'g' Dbg else if b0 == 'a' and b1 == 'p' and b2 == 'p' App else if b0 == 'f' and b1 == 'o' and b2 == 'r' For else if b0 == '.' and b1 == '.' and b2 == '.' Ellipsis else if b0 == 'a' and b1 == 'n' and b2 == 'd' And else if b0 == '.' and b1 == '.' and b2 == '<' RangeExclusive else if b0 == '.' and b1 == '.' and b2 == '=' RangeInclusive else OtherText
+			if (b0 == 'v' and b1 == 'a' and b2 == 'r') Var else if (b0 == 'd' and b1 == 'b' and b2 == 'g') Dbg else if (b0 == 'a' and b1 == 'p' and b2 == 'p') App else if (b0 == 'f' and b1 == 'o' and b2 == 'r') For else if (b0 == '.' and b1 == '.' and b2 == '.') Ellipsis else if (b0 == 'a' and b1 == 'n' and b2 == 'd') And else if (b0 == '.' and b1 == '.' and b2 == '<') RangeExclusive else if (b0 == '.' and b1 == '.' and b2 == '=') RangeInclusive else OtherText
 		} else if len == 4 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
-			if b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!' ForBang else if b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e' Else else OtherText
+			if (b0 == 'f' and b1 == 'o' and b2 == 'r' and b3 == '!') ForBang else if (b0 == 'e' and b1 == 'l' and b2 == 's' and b3 == 'e') Else else OtherText
 		} else if len == 5 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
 			b4 = byte(source, start + 4)
-			if b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e' Where else if b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h' Crash else if b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k' Break else if b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e' While else if b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h' Match else OtherText
+			if (b0 == 'w' and b1 == 'h' and b2 == 'e' and b3 == 'r' and b4 == 'e') Where else if (b0 == 'c' and b1 == 'r' and b2 == 'a' and b3 == 's' and b4 == 'h') Crash else if (b0 == 'b' and b1 == 'r' and b2 == 'e' and b3 == 'a' and b4 == 'k') Break else if (b0 == 'w' and b1 == 'h' and b2 == 'i' and b3 == 'l' and b4 == 'e') While else if (b0 == 'm' and b1 == 'a' and b2 == 't' and b3 == 'c' and b4 == 'h') Match else OtherText
 		} else if len == 6 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
 			b3 = byte(source, start + 3)
 			b4 = byte(source, start + 4)
 			b5 = byte(source, start + 5)
-			if b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n' Return else if b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd' Hosted else if b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e' Module else if b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't' Import else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't' Expect else OtherText
+			if (b0 == 'r' and b1 == 'e' and b2 == 't' and b3 == 'u' and b4 == 'r' and b5 == 'n') Return else if (b0 == 'h' and b1 == 'o' and b2 == 's' and b3 == 't' and b4 == 'e' and b5 == 'd') Hosted else if (b0 == 'm' and b1 == 'o' and b2 == 'd' and b3 == 'u' and b4 == 'l' and b5 == 'e') Module else if (b0 == 'i' and b1 == 'm' and b2 == 'p' and b3 == 'o' and b4 == 'r' and b5 == 't') Import else if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'e' and b4 == 'c' and b5 == 't') Expect else OtherText
 		} else if len == 7 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -1523,7 +1523,7 @@ token_text_bytes = |source, start, end| {
 			b4 = byte(source, start + 4)
 			b5 = byte(source, start + 5)
 			b6 = byte(source, start + 6)
-			if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' Package else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's' Exposes else if b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's' Targets else OtherText
+			if (b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e') Package else if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'e' and b6 == 's') Exposes else if (b0 == 't' and b1 == 'a' and b2 == 'r' and b3 == 'g' and b4 == 'e' and b5 == 't' and b6 == 's') Targets else OtherText
 		} else if len == 8 {
 			b1 = byte(source, start + 1)
 			b2 = byte(source, start + 2)
@@ -1532,7 +1532,7 @@ token_text_bytes = |source, start, end| {
 			b5 = byte(source, start + 5)
 			b6 = byte(source, start + 6)
 			b7 = byte(source, start + 7)
-			if b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm' Platform else if b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g' Exposing else if b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's' Packages else if b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's' Provides else if b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's' Requires else OtherText
+			if (b0 == 'p' and b1 == 'l' and b2 == 'a' and b3 == 't' and b4 == 'f' and b5 == 'o' and b6 == 'r' and b7 == 'm') Platform else if (b0 == 'e' and b1 == 'x' and b2 == 'p' and b3 == 'o' and b4 == 's' and b5 == 'i' and b6 == 'n' and b7 == 'g') Exposing else if (b0 == 'p' and b1 == 'a' and b2 == 'c' and b3 == 'k' and b4 == 'a' and b5 == 'g' and b6 == 'e' and b7 == 's') Packages else if (b0 == 'p' and b1 == 'r' and b2 == 'o' and b3 == 'v' and b4 == 'i' and b5 == 'd' and b6 == 'e' and b7 == 's') Provides else if (b0 == 'r' and b1 == 'e' and b2 == 'q' and b3 == 'u' and b4 == 'i' and b5 == 'r' and b6 == 'e' and b7 == 's') Requires else OtherText
 		} else {
 			OtherText
 		}
@@ -1555,7 +1555,7 @@ emit_items = |nodes, children, kind, start, end, lead, count, first, rest| {
 	index = nodes.len()
 	children_start = children.len()
 	c1 = children.append(lead)
-	c2 = if count > 0 append_ids(c1.append(first), rest) else c1
+	c2 = if (count > 0) append_ids(c1.append(first), rest) else c1
 	{ nodes: nodes.append({ kind, start, end, children_start, children_len: count + 1 }), children: c2, node: index }
 }
 
@@ -1565,7 +1565,7 @@ finish_lead_items = |pos, nodes, children, diags, kind, start, end, lead, count,
 	index = nodes.len()
 	children_start = children.len()
 	c1 = children.append(lead)
-	c2 = if count > 0 append_ids(c1.append(first), rest) else c1
+	c2 = if (count > 0) append_ids(c1.append(first), rest) else c1
 	{ pos, nodes: nodes.append({ kind, start, end, children_start, children_len: count + 1 }), children: c2, diags, node: index }
 }
 
@@ -1574,7 +1574,7 @@ finish_items : U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic),
 finish_items = |pos, nodes, children, diags, kind, start, end, count, first, rest| {
 	index = nodes.len()
 	children_start = children.len()
-	c1 = if count > 0 append_ids(children.append(first), rest) else children
+	c1 = if (count > 0) append_ids(children.append(first), rest) else children
 	{ pos, nodes: nodes.append({ kind, start, end, children_start, children_len: count }), children: c1, diags, node: index }
 }
 
@@ -1667,7 +1667,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 		return finish(s, nodes, children, diag(diags, UnexpectedToken, sync.start, sync.end), ErrorNode, sync.end, sync.end, [])
 	}
 	if depth >= 128 {
-		return finish(s + if first.kind == EndOfFile 0 else 1, nodes, children, diag(diags, ResourceLimit, first.start, first.end), ErrorNode, first.start, first.end, [])
+		return finish(s + if (first.kind == EndOfFile) 0 else 1, nodes, children, diag(diags, ResourceLimit, first.start, first.end), ErrorNode, first.start, first.end, [])
 	}
 	next_pos = significant_position(ctx.tokens, s + 1)
 	package_qualified = (minimum == 100 or minimum == 101) and first.kind == LowerIdent and is_text(ctx, next_pos, Dot) and source_token(ctx, next_pos + 1).kind == UpperIdent
@@ -1680,7 +1680,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 	var $target_done = False
 	var $n = n1
 	var $c = c1
-	var $d = if grouped_tuple diag(d1, UnexpectedToken, first.start, first.end) else d1
+	var $d = if (grouped_tuple) diag(d1, UnexpectedToken, first.start, first.end) else d1
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -1707,7 +1707,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 				if !valid_start {
 					$d = diag($d, UnexpectedToken, rhs_token.start, rhs_token.end)
 				}
-				{ pos: target_state, nodes: $n, children: $c, diags: $d, node: target_node } = expression(ctx, rhs, $n, $c, $d, if pipe 100 else 101, depth + 1, False)
+				{ pos: target_state, nodes: $n, children: $c, diags: $d, node: target_node } = expression(ctx, rhs, $n, $c, $d, if (pipe) 100 else 101, depth + 1, False)
 				method = pipe and method_target(ctx, $n, $c, target_node)
 				if pipe and literal and !pipe_has_method(ctx, $n, $c, target_node) {
 					target_end = nend($n, target_node)
@@ -1715,7 +1715,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 				}
 				start = nstart($n, $left)
 				end = nend($n, target_node)
-				{ nodes: $n, children: $c, node: arrow_node } = emit2($n, $c, if method MethodArrowCall else ArrowCall, start, end, $left, target_node)
+				{ nodes: $n, children: $c, node: arrow_node } = emit2($n, $c, if (method) MethodArrowCall else ArrowCall, start, end, $left, target_node)
 				$s = target_state
 				$left = arrow_node
 				$qualified = False
@@ -1766,7 +1766,7 @@ expression = |ctx, initial, nodes, children, diags, minimum, depth, punned| {
 				if (valid_name and (!optional or field.kind == LowerIdent)) or (valid_index and !optional) {
 					start = nstart($n, $left)
 					{ nodes: $n, children: $c, node: leaf_node } = emit($n, $c, Identifier, field.start, field.end, [])
-					{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, if optional OptionalFieldAccess else FieldAccess, start, field.end, $left, leaf_node)
+					{ nodes: $n, children: $c, node: access_node } = emit2($n, $c, if (optional) OptionalFieldAccess else FieldAccess, start, field.end, $left, leaf_node)
 					$s = field_state + 1
 					$left = access_node
 					$qualified = $qualified and field.kind == UpperIdent
@@ -1823,7 +1823,7 @@ collection = |ctx, initial, nodes, children, diags, closing, depth| {
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else {
 			before = look
@@ -1863,8 +1863,8 @@ primary = |ctx, s, nodes, children, diags, depth, punned| {
 		LowerIdent if !is_text(ctx, s, Underscore) => finish(s + 1, nodes, children, diags, Identifier, t.start, t.end, [])
 		UpperIdent if byte(ctx.source, t.start) != '@' => finish(s + 1, nodes, children, diags, Identifier, t.start, t.end, [])
 		OpenRound | NoSpaceOpenRound | OpenSquare => {
-			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
-			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_count != 1 Tuple else Parenthesized
+			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if (t.kind == OpenSquare) CloseSquare else CloseRound, depth + 1)
+			kind = if (t.kind == OpenSquare) ListLiteral else if (items_comma or items_count != 1) Tuple else Parenthesized
 			finish_items(items_state, n1, c1, d1, kind, t.start, items_end, items_count, items_first, items_rest)
 		}
 		Keyword => primary_compound(ctx, s, nodes, children, diags, depth, punned)
@@ -1898,7 +1898,7 @@ primary_compound = |ctx, s, nodes, children, diags, depth, punned| {
 		StringStart | MultilineStringStart => parse_string(ctx, s, nodes, children, diags, depth + 1)
 		OpenCurly => curly(ctx, s + 1, nodes, children, diags, t.start, depth + 1, punned, False)
 		Keyword if is_text(ctx, s, Dbg) or is_text(ctx, s, Crash) or is_text(ctx, s, Return) => {
-			kind = if is_text(ctx, s, Dbg) Debug else if is_text(ctx, s, Crash) Crash else Return
+			kind = if (is_text(ctx, s, Dbg)) Debug else if (is_text(ctx, s, Crash)) Crash else Return
 			{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s + 1, nodes, children, diags, 0, depth + 1, False)
 			end = nend(n1, value_node)
 			finish1(value_state, n1, c1, d1, kind, t.start, end, value_node)
@@ -1910,8 +1910,8 @@ primary_compound = |ctx, s, nodes, children, diags, depth, punned| {
 		Keyword if is_text(ctx, s, Match) => parse_match(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
 		Operator if is_text(ctx, s, Bar) => parse_lambda(ctx, s + 1, nodes, children, diags, t.start, depth + 1)
 		OpenRound | NoSpaceOpenRound | OpenSquare => {
-			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if t.kind == OpenSquare CloseSquare else CloseRound, depth + 1)
-			kind = if t.kind == OpenSquare ListLiteral else if items_comma or items_count != 1 Tuple else Parenthesized
+			{ pos: items_state, nodes: n1, children: c1, diags: d1, count: items_count, first: items_first, rest: items_rest, end: items_end, comma: items_comma } = collection(ctx, s + 1, nodes, children, diags, if (t.kind == OpenSquare) CloseSquare else CloseRound, depth + 1)
+			kind = if (t.kind == OpenSquare) ListLiteral else if (items_comma or items_count != 1) Tuple else Parenthesized
 			finish_items(items_state, n1, c1, d1, kind, t.start, items_end, items_count, items_first, items_rest)
 		}
 		Operator if is_text(ctx, s, Minus) and binary_minus(ctx, s) => finish(s + 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
@@ -1931,17 +1931,17 @@ parse_source = |source, mode| {
 	expression_only = mode == ExpressionMode
 	single = mode != FileMode
 	lexed = lex(source)
-	texts = if lexed.tokens.len() > 1048576 [] else lexed.tokens.map(|t| token_text(source, t))
+	texts = if (lexed.tokens.len() > 1048576) [] else lexed.tokens.map(|t| token_text(source, t))
 	ctx = { source, tokens: lexed.tokens, texts, in_guard: False }
 	# Roughly one node and child per two tokens; lists still grow when needed.
-	reserve = if lexed.tokens.len() > 1048576 0 else lexed.tokens.len() // 2 + 8
+	reserve = if (lexed.tokens.len() > 1048576) 0 else lexed.tokens.len() // 2 + 8
 	too_many = ctx.tokens.len() > 1048576
 	var $s = 0
 	var $roots = []
 	var $done = too_many
 	var $n = List.with_capacity(reserve)
 	var $c = List.with_capacity(reserve)
-	var $d = if too_many diag(lexed.diagnostics, ResourceLimit, 0, source.len()) else lexed.diagnostics
+	var $d = if (too_many) diag(lexed.diagnostics, ResourceLimit, 0, source.len()) else lexed.diagnostics
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -1950,7 +1950,7 @@ parse_source = |source, mode| {
 			$done = True
 		} else {
 			before = look
-			{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if expression_only expression(ctx, look, $n, $c, $d, 0, 0, False) else statement(ctx, look, $n, $c, $d, if mode == StatementMode 1 else 0)
+			{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if (expression_only) expression(ctx, look, $n, $c, $d, 0, 0, False) else statement(ctx, look, $n, $c, $d, if (mode == StatementMode) 1 else 0)
 			$roots = $roots.append(built_node)
 			$s = built_state
 			if mode == FileMode or mode == HeaderMode {
@@ -1983,7 +1983,7 @@ parse_source = |source, mode| {
 	c1 = $c
 	d1 = $d
 	header_missing = mode == HeaderMode and roots.is_empty()
-	d2 = if !header_missing and single and roots.is_empty() diag(d1, UnexpectedToken, source.len(), source.len()) else d1
+	d2 = if (!header_missing and single and roots.is_empty()) diag(d1, UnexpectedToken, source.len(), source.len()) else d1
 	{ nodes: n2, children: c2, roots: file_roots } = if header_missing {
 		{ nodes: hn, children: hc, node: header_node } = emit(n1, c1, Header, 0, 0, [])
 		{ nodes: hn, children: hc, roots: [header_node] }
@@ -2003,12 +2003,12 @@ parse_source = |source, mode| {
 		}
 		$index = $index + 1
 	}
-	d3 = if $header_count > 1 or $bad_header diag(d2, UnexpectedToken, first_start, source.len()) else d2
+	d3 = if ($header_count > 1 or $bad_header) diag(d2, UnexpectedToken, first_start, source.len()) else d2
 	unsupported = lexed.unsupported or d3.any(|d| d.code == UnsupportedSyntax)
 	limited = d3.any(|d| d.code == ResourceLimit)
-	diagnostics = if d3.len() > 256 d3.take_first(256) else d3
+	diagnostics = if (d3.len() > 256) d3.take_first(256) else d3
 	has_error = diagnostics.any(|d| d.code != UnsupportedSyntax)
-	status = if limited Limited else if unsupported Unsupported else if has_error Recovered else Complete
+	status = if (limited) Limited else if (unsupported) Unsupported else if (has_error) Recovered else Complete
 	{ source, tokens: ctx.tokens, nodes: n3, children: c3, diagnostics, status, root: root_node, consumed: tok(ctx, sig(ctx, end_state)).kind == EndOfFile }
 }
 
@@ -2056,7 +2056,7 @@ statement_form = |ctx, initial, nodes, children, diags, depth| {
 	text = ctx.texts.get(s) ?? OtherText
 	following_text = ctx.texts.get(following_pos) ?? OtherText
 	if depth >= 128 {
-		finish(s + if t.kind == EndOfFile 0 else 1, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (t.kind == EndOfFile) 0 else 1, nodes, children, diag(diags, ResourceLimit, t.start, t.end), ErrorNode, t.start, t.end, [])
 	} else if (t.kind == UpperIdent and (type_declaration_start(ctx, s) or (depth == 0 and !((following.kind == NoSpaceOpenRound or following_text == Dot) and has_pattern_assignment(ctx, s))))) or (t.kind == LowerIdent and following_text == Dot and tok(ctx, following_pos + 1).kind == UpperIdent) {
 		parse_type_declaration(ctx, s, nodes, children, diags, depth + 1)
 	} else if t.kind == LowerIdent and following_text == Equals {
@@ -2066,15 +2066,15 @@ statement_form = |ctx, initial, nodes, children, diags, depth| {
 		end = nend(n2, value_node)
 		finish2(value_state, n2, c2, d2, Declaration, t.start, end, name_node, value_node)
 	} else if t.kind == LowerIdent and following_text == Colon {
-		d1 = if text == Underscore diag(diags, UnexpectedToken, t.start, t.end) else diags
+		d1 = if (text == Underscore) diag(diags, UnexpectedToken, t.start, t.end) else diags
 		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
 		parse_annotation_after_name(ctx, following_pos + 1, n1, c1, d1, name_node, t.start, depth)
 	} else if text == Var {
 		name_state = sig(ctx, s + 1)
 		name = tok(ctx, name_state)
-		d1 = if depth == 0 or name.kind != LowerIdent or !(is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$') diag(diags, UnexpectedToken, name.start, name.end) else diags
+		d1 = if (depth == 0 or name.kind != LowerIdent or !(is_lower(byte(ctx.source, name.start)) or byte(ctx.source, name.start) == '$')) diag(diags, UnexpectedToken, name.start, name.end) else diags
 		{ nodes: n1, children: c1, node: named_node } = emit(nodes, children, Identifier, name.start, name.end, [])
-		look = sig(ctx, name_state + if name.kind == EndOfFile 0 else 1)
+		look = sig(ctx, name_state + if (name.kind == EndOfFile) 0 else 1)
 		if is_text(ctx, look, Equals) {
 			{ pos: value_state, nodes: n2, children: c2, diags: d2, node: value_node } = expression(ctx, look + 1, n1, c1, d1, 0, depth + 1, False)
 			end = nend(n2, value_node)
@@ -2099,30 +2099,30 @@ statement_form = |ctx, initial, nodes, children, diags, depth| {
 		{ pos: pattern_state, nodes: n1, children: c1, diags: d1, node: pattern_node } = parse_pattern(ctx, s, nodes, children, diags, False, depth + 1)
 		look = sig(ctx, pattern_state)
 		assigned = is_text(ctx, look, Equals)
-		d2 = if assigned d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
-		{ pos: value_state, nodes: n2, children: c2, diags: d3, node: value_node } = expression(ctx, look + if assigned 1 else 0, n1, c1, d2, 0, depth + 1, False)
+		d2 = if (assigned) d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
+		{ pos: value_state, nodes: n2, children: c2, diags: d3, node: value_node } = expression(ctx, look + if (assigned) 1 else 0, n1, c1, d2, 0, depth + 1, False)
 		end = nend(n2, value_node)
 		finish2(value_state, n2, c2, d3, Declaration, t.start, end, pattern_node, value_node)
 	} else if text == Platform {
-		parse_platform_header(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
+		parse_platform_header(ctx, s, nodes, children, if (depth != 0) diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
 	} else if text == App or text == Package {
 		{ pos: exposed_state, nodes: n1, children: c1, diags: d1, ids: exposed_ids, end: exposed_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
 		look = sig(ctx, exposed_state)
 		if tok(ctx, look).kind == OpenCurly {
 			{ pos: deps_state, nodes: n2, children: c2, diags: d2, node: deps_node } = dependency_record(ctx, look, n1, c1, d1, text == App, depth + 1)
 			end = nend(n2, deps_node)
-			d3 = if depth != 0 diag(d2, UnexpectedToken, t.start, end) else d2
+			d3 = if (depth != 0) diag(d2, UnexpectedToken, t.start, end) else d2
 			finish(deps_state, n2, c2, d3, Header, t.start, end, exposed_ids.append(deps_node))
 		} else {
-			d2 = if !(depth == 0 and text == Package) diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d1
+			d2 = if (!(depth == 0 and text == Package)) diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d1
 			finish(look, n1, c1, d2, Header, t.start, exposed_end, exposed_ids)
 		}
 	} else if text == Module or text == Hosted {
 		{ pos: items_state, nodes: n1, children: c1, diags: d1, ids: items_ids, end: items_end, comma: _ } = exposed_collection(ctx, s + 1, nodes, children, diags)
-		d2 = if depth != 0 diag(d1, UnexpectedToken, t.start, items_end) else d1
+		d2 = if (depth != 0) diag(d1, UnexpectedToken, t.start, items_end) else d1
 		finish(items_state, n1, c1, d2, Header, t.start, items_end, items_ids)
 	} else if text == Import {
-		parse_import(ctx, s, nodes, children, if depth != 0 diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
+		parse_import(ctx, s, nodes, children, if (depth != 0) diag(diags, UnexpectedToken, t.start, t.end) else diags, depth + 1)
 	} else {
 		{ pos: value_state, nodes: n1, children: c1, diags: d1, node: value_node } = expression(ctx, s, nodes, children, diags, 0, depth, True)
 		end = nend(n1, value_node)
@@ -2211,7 +2211,7 @@ binary_minus : Ctx, U64 -> Bool
 binary_minus = |ctx, s| {
 	t = tok(ctx, s)
 	next = byte(ctx.source, t.end)
-	previous = ctx.tokens.get(if s > 0 s - 1 else 0) ?? t
+	previous = ctx.tokens.get(if (s > 0) s - 1 else 0) ?? t
 	if bytes3(ctx.source, t.end, '.', '.', '.') {
 		return previous.end == t.start and can_end_token(ctx.source, previous)
 	}
@@ -2236,7 +2236,7 @@ literal_suffix = |ctx, built_state, nodes, children, diags, built_node, allow_tr
 	var $n = nodes
 	var $c = children
 	while !$done {
-		look = if allow_trivia and $type_ids.is_empty() sig(ctx, $s) else $s
+		look = if (allow_trivia and $type_ids.is_empty()) sig(ctx, $s) else $s
 		t = tok(ctx, look)
 		name_state = look + 1
 		name = tok(ctx, name_state)
@@ -2249,7 +2249,7 @@ literal_suffix = |ctx, built_state, nodes, children, diags, built_node, allow_tr
 			$done = True
 		}
 	}
-	if $type_ids.is_empty() { pos: $s, nodes: $n, children: $c, diags, node: built_node } else {
+	if ($type_ids.is_empty()) { pos: $s, nodes: $n, children: $c, diags, node: built_node } else {
 		start = nstart($n, built_node)
 		finish_after($s, $n, $c, diags, TypedLiteral, start, $end, built_node, $type_ids)
 	}
@@ -2336,8 +2336,8 @@ exposed_collection = |ctx, initial, nodes, children, diags| {
 	opened = opening.kind == OpenSquare
 	var $n = nodes
 	var $c = children
-	var $d = if opened diags else diag(diags, UnexpectedToken, opening.start, opening.end)
-	var $s = if opened look + 1 else look
+	var $d = if (opened) diags else diag(diags, UnexpectedToken, opening.start, opening.end)
+	var $s = if (opened) look + 1 else look
 	var $ids = []
 	var $end = opening.end
 	var $done = !opened
@@ -2386,13 +2386,13 @@ exposed_collection = |ctx, initial, nodes, children, diags| {
 			if is_text(ctx, $s, As) {
 				alias_state = sig(ctx, $s + 1)
 				alias = tok(ctx, alias_state)
-				valid_alias = if $upper alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@' else alias.kind == LowerIdent and byte(ctx.source, alias.start) != '_'
+				valid_alias = if ($upper) alias.kind == UpperIdent and byte(ctx.source, alias.start) != '@' else alias.kind == LowerIdent and byte(ctx.source, alias.start) != '_'
 				if !valid_alias {
 					$d = diag($d, UnexpectedToken, alias.start, alias.end)
 				}
 				checked = alias_state
 				{ nodes: $n, children: $c, node: alias_node } = emit($n, $c, Identifier, alias.start, alias.end, [])
-				$s = checked + if alias.kind == EndOfFile 0 else 1
+				$s = checked + if (alias.kind == EndOfFile) 0 else 1
 				$children = $children.append(alias_node)
 				$end = alias.end
 			} else if $upper and is_text(ctx, $s, DotStar) {
@@ -2400,7 +2400,7 @@ exposed_collection = |ctx, initial, nodes, children, diags| {
 				$s = $s + 1
 				$wildcard = True
 			}
-			{ nodes: $n, children: $c, node: exposed_node } = emit($n, $c, if $wildcard ExposedWildcard else ExposedItem, t.start, $end, $children)
+			{ nodes: $n, children: $c, node: exposed_node } = emit($n, $c, if ($wildcard) ExposedWildcard else ExposedItem, t.start, $end, $children)
 			$ids = $ids.append(exposed_node)
 			$s = sig(ctx, $s)
 			if is_text(ctx, $s, Comma) {
@@ -2421,25 +2421,25 @@ parse_import = |ctx, initial, nodes, children, diags, depth| {
 		{ pos: path_state, nodes: n1, children: c1, diags: d1, node: path_node } = parse_string(ctx, look, nodes, children, diags, depth + 1)
 		after_path = sig(ctx, path_state)
 		has_as = is_text(ctx, after_path, As)
-		d2 = if has_as d1 else diag(d1, UnexpectedToken, tok(ctx, after_path).start, tok(ctx, after_path).end)
-		validated = if has_as after_path + 1 else after_path
+		d2 = if (has_as) d1 else diag(d1, UnexpectedToken, tok(ctx, after_path).start, tok(ctx, after_path).end)
+		validated = if (has_as) after_path + 1 else after_path
 		name_state = sig(ctx, validated)
 		name = tok(ctx, name_state)
-		d3 = if !(name.kind == LowerIdent and !is_text(ctx, name_state, Underscore)) diag(d2, UnexpectedToken, name.start, name.end) else d2
+		d3 = if (!(name.kind == LowerIdent and !is_text(ctx, name_state, Underscore))) diag(d2, UnexpectedToken, name.start, name.end) else d2
 		checked = name_state
 		{ nodes: n2, children: c2, node: named_node } = emit(n1, c1, Identifier, name.start, name.end, [])
-		named_state = checked + if name.kind == EndOfFile 0 else 1
+		named_state = checked + if (name.kind == EndOfFile) 0 else 1
 		colon = sig(ctx, named_state)
 		has_colon = is_text(ctx, colon, Colon)
-		d4 = if has_colon d3 else diag(d3, UnexpectedToken, tok(ctx, colon).start, tok(ctx, colon).end)
-		ty_start = if has_colon colon + 1 else colon
+		d4 = if (has_colon) d3 else diag(d3, UnexpectedToken, tok(ctx, colon).start, tok(ctx, colon).end)
+		ty_start = if (has_colon) colon + 1 else colon
 		{ pos: ty_state, nodes: n3, children: c3, diags: d5, node: ty_node } = file_import_type(ctx, ty_start, n2, c2, d4)
 		end = nend(n3, ty_node)
 		path_info = nget(n3, path_node)
 		path_child = c3.get(path_info.children_start) ?? n3.len()
 		part_info = n3.get(path_child) ?? path_info
 		plain_path = path_info.kind == StringLiteral and path_info.children_len == 1 and part_info.kind == StringSegment
-		finish3(ty_state, n3, c3, if plain_path d5 else diag(d5, UnexpectedToken, start, end), FileImport, start, end, path_node, named_node, ty_node)
+		finish3(ty_state, n3, c3, if (plain_path) d5 else diag(d5, UnexpectedToken, start, end), FileImport, start, end, path_node, named_node, ty_node)
 	} else {
 		path_start = tok(ctx, look).start
 		{ pos: prefix_state, diags: d1, local } = if is_text(ctx, look, Slash) {
@@ -2466,9 +2466,9 @@ parse_import = |ctx, initial, nodes, children, diags, depth| {
 		}
 		first = tok(ctx, prefix_state)
 		first_valid = first.kind == UpperIdent or first.kind == LowerIdent
-		d2 = if first_valid d1 else diag(d1, UnexpectedToken, first.start, first.end)
-		first_end = if first_valid first.end else U64.max(path_start, first.start)
-		first_state = if first_valid sig(ctx, prefix_state + 1) else prefix_state
+		d2 = if (first_valid) d1 else diag(d1, UnexpectedToken, first.start, first.end)
+		first_end = if (first_valid) first.end else U64.max(path_start, first.start)
+		first_state = if (first_valid) sig(ctx, prefix_state + 1) else prefix_state
 		{ pos: local_state, diags: d3, end: local_end } = if local {
 			var $s = first_state
 			var $d = d2
@@ -2485,7 +2485,7 @@ parse_import = |ctx, initial, nodes, children, diags, depth| {
 					$d = diag($d, UnexpectedToken, part.start, part.end)
 				}
 			}
-			{ pos: $s, diags: if $upper $d else diag($d, UnexpectedToken, first.start, $end), end: $end }
+			{ pos: $s, diags: if ($upper) $d else diag($d, UnexpectedToken, first.start, $end), end: $end }
 		} else {
 			{ pos: first_state, diags: d2, end: first_end }
 		}
@@ -2500,15 +2500,15 @@ parse_import = |ctx, initial, nodes, children, diags, depth| {
 		}
 		path_end = $end
 		path_state = $s
-		d4 = if !local and $nested == 0 diag(d3, UnexpectedToken, first.start, path_end) else d3
+		d4 = if (!local and $nested == 0) diag(d3, UnexpectedToken, first.start, path_end) else d3
 		{ nodes: n1, children: c1, node: path_node } = emit(nodes, children, ImportPath, path_start, path_end, [])
 		{ pos: alias_state, nodes: n2, children: c2, diags: d5, ids: alias_ids, end: alias_end } = if is_text(ctx, path_state, As) {
 			alias_pos = sig(ctx, path_state + 1)
 			alias = tok(ctx, alias_pos)
-			da = if alias.kind != UpperIdent diag(d4, UnexpectedToken, alias.start, alias.end) else d4
+			da = if (alias.kind != UpperIdent) diag(d4, UnexpectedToken, alias.start, alias.end) else d4
 			checked = alias_pos
 			{ nodes: na, children: ca, node: named_node } = emit(n1, c1, Identifier, alias.start, alias.end, [])
-			named_state = checked + if alias.kind == EndOfFile 0 else 1
+			named_state = checked + if (alias.kind == EndOfFile) 0 else 1
 			{ nodes: nb, children: cb, node: alias_node } = emit1(na, ca, ImportAlias, alias.start, alias.end, named_node)
 			{ pos: sig(ctx, named_state), nodes: nb, children: cb, diags: da, ids: [path_node, alias_node], end: alias.end }
 		} else {
@@ -2528,28 +2528,28 @@ file_import_type = |ctx, initial, nodes, children, diags| {
 	s = sig(ctx, initial)
 	t = tok(ctx, s)
 	valid_name = spell(ctx, s, "Str") or spell(ctx, s, "List")
-	d1 = if valid_name diags else diag(diags, UnexpectedToken, t.start, t.end)
+	d1 = if (valid_name) diags else diag(diags, UnexpectedToken, t.start, t.end)
 	checked = s
 	{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
-	name_state = checked + if t.kind == EndOfFile 0 else 1
+	name_state = checked + if (t.kind == EndOfFile) 0 else 1
 	if spell(ctx, s, "List") {
 		look = sig(ctx, name_state)
 		opening = tok(ctx, look)
 		opened = opening.kind == OpenRound or opening.kind == NoSpaceOpenRound
-		d2 = if opened d1 else diag(d1, UnexpectedToken, opening.start, opening.end)
-		after = if opened look + 1 else look
+		d2 = if (opened) d1 else diag(d1, UnexpectedToken, opening.start, opening.end)
+		after = if (opened) look + 1 else look
 		arg_state = sig(ctx, after)
 		arg = tok(ctx, arg_state)
-		d3 = if spell(ctx, arg_state, "U8") d2 else diag(d2, UnexpectedToken, arg.start, arg.end)
+		d3 = if (spell(ctx, arg_state, "U8")) d2 else diag(d2, UnexpectedToken, arg.start, arg.end)
 		validated = arg_state
 		{ nodes: n2, children: c2, node: arg_node } = emit(n1, c1, Identifier, arg.start, arg.end, [])
-		arg_built = validated + if arg.kind == EndOfFile 0 else 1
+		arg_built = validated + if (arg.kind == EndOfFile) 0 else 1
 		close_state = sig(ctx, arg_built)
 		close = tok(ctx, close_state)
 		closed = close.kind == CloseRound
-		d4 = if closed d3 else diag(d3, UnclosedDelimiter, close.start, close.end)
-		finished = if closed close_state + 1 else close_state
-		finish2(finished, n2, c2, d4, TypeExpression, t.start, if closed close.end else arg.end, name_node, arg_node)
+		d4 = if (closed) d3 else diag(d3, UnclosedDelimiter, close.start, close.end)
+		finished = if (closed) close_state + 1 else close_state
+		finish2(finished, n2, c2, d4, TypeExpression, t.start, if (closed) close.end else arg.end, name_node, arg_node)
 	} else {
 		{ pos: name_state, nodes: n1, children: c1, diags: d1, node: name_node }
 	}
@@ -2602,9 +2602,9 @@ dependency_record = |ctx, initial, nodes, children, diags, strict, depth| {
 			if is_text(ctx, $s, Colon) {
 				value_start = sig(ctx, $s + 1)
 				is_platform = is_text(ctx, value_start, Platform)
-				value_state = if is_platform sig(ctx, value_start + 1) else value_start
+				value_state = if (is_platform) sig(ctx, value_start + 1) else value_start
 				value_token = tok(ctx, value_state)
-				valid_start = if is_platform value_token.kind == StringStart or spell(ctx, value_state, "glue") else !strict or value_token.kind == StringStart
+				valid_start = if (is_platform) value_token.kind == StringStart or spell(ctx, value_state, "glue") else !strict or value_token.kind == StringStart
 				if !(valid_start and (!is_platform or !$platform)) {
 					$d = diag($d, UnexpectedToken, value_token.start, value_token.end)
 				}
@@ -2786,7 +2786,7 @@ type_atom = |ctx, initial, nodes, children, diags, depth| {
 				$done = True
 			}
 		}
-		kind = if $qualified or t.kind == UpperIdent TypeName else if spelled1(ctx.source, t, '_') TypeWildcard else TypeVariable
+		kind = if ($qualified or t.kind == UpperIdent) TypeName else if (spelled1(ctx.source, t, '_')) TypeWildcard else TypeVariable
 		after = $s
 		{ nodes: n1, children: c1, node: base_node } = emit(nodes, children, kind, t.start, $end, [])
 		look = sig(ctx, after)
@@ -2804,7 +2804,7 @@ type_atom = |ctx, initial, nodes, children, diags, depth| {
 		type_fields(ctx, s, nodes, children, diags, True, depth + 1)
 	} else {
 		advance = t.kind != EndOfFile and t.kind != CloseRound and t.kind != CloseSquare and t.kind != CloseCurly and !is_text(ctx, s, Comma)
-		finish(s + if advance 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (advance) 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 	}
 }
 
@@ -2828,7 +2828,7 @@ type_collection = |ctx, initial, nodes, children, diags, closing, mode, depth| {
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else {
 			before = look
@@ -2895,23 +2895,23 @@ type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 	c1 = $c
 	closing = tok(ctx, $s)
 	closed = closing.kind == CloseRound
-	s1 = if closed $s + 1 else $s
-	d1 = if closed $d else diag($d, UnclosedDelimiter, closing.start, closing.end)
-	end = U64.max(if closed closing.end else closing.start, nend(n1, ids.last() ?? n1.len()))
+	s1 = if (closed) $s + 1 else $s
+	d1 = if (closed) $d else diag($d, UnclosedDelimiter, closing.start, closing.end)
+	end = U64.max(if (closed) closing.end else closing.start, nend(n1, ids.last() ?? n1.len()))
 	arrow = sig(ctx, s1)
 	if ids.is_empty() and (is_text(ctx, arrow, Arrow) or is_text(ctx, arrow, FatArrow)) {
 		{ pos: ret_state, nodes: n2, children: c2, diags: d2, node: ret_node } = type_expression(ctx, arrow + 1, n1, c1, d1, TypeArgument, depth + 1)
 		ret_end = nend(n2, ret_node)
 		finish1(ret_state, n2, c2, d2, TypeFunction, opening.start, ret_end, ret_node)
 	} else {
-		finish(s1, n1, c1, d1, if ids.len() == 1 and !comma TypeParenthesized else TypeTuple, opening.start, end, ids)
+		finish(s1, n1, c1, d1, if (ids.len() == 1 and !comma) TypeParenthesized else TypeTuple, opening.start, end, ids)
 	}
 }
 
 type_fields : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
 type_fields = |ctx, initial, nodes, children, diags, record, depth| {
 	opening = tok(ctx, initial)
-	closing = if record CloseCurly else CloseSquare
+	closing = if (record) CloseCurly else CloseSquare
 	var $s = initial + 1
 	var $ids = []
 	var $end = opening.end
@@ -2930,7 +2930,7 @@ type_fields = |ctx, initial, nodes, children, diags, record, depth| {
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else if $extension {
 			$d = diag($d, UnexpectedToken, t.start, t.end)
@@ -3003,7 +3003,7 @@ type_fields = |ctx, initial, nodes, children, diags, record, depth| {
 			}
 		}
 	}
-	finish($s, $n, $c, $d, if record TypeRecord else TypeTagUnion, opening.start, $end, $ids)
+	finish($s, $n, $c, $d, if (record) TypeRecord else TypeTagUnion, opening.start, $end, $ids)
 }
 
 parse_annotation_after_name : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64, U64, U64 -> R
@@ -3025,9 +3025,9 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 	start = tok(ctx, initial).start
 	look = sig(ctx, initial + 1)
 	opening = tok(ctx, look)
-	d1 = if opening.kind != OpenSquare diag(diags, UnexpectedToken, opening.start, opening.end) else diags
-	d2 = if depth >= 128 diag(d1, ResourceLimit, start, opening.end) else d1
-	var $s = if opening.kind == OpenSquare look + 1 else look
+	d1 = if (opening.kind != OpenSquare) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	d2 = if (depth >= 128) diag(d1, ResourceLimit, start, opening.end) else d1
+	var $s = if (opening.kind == OpenSquare) look + 1 else look
 	var $ids = []
 	var $done = opening.kind != OpenSquare or depth >= 128
 	var $end = opening.end
@@ -3059,7 +3059,7 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 			if !dotted {
 				$d = diag($d, UnexpectedToken, tok(ctx, dot).start, tok(ctx, dot).end)
 			}
-			name_state = if dotted dot + 1 else dot
+			name_state = if (dotted) dot + 1 else dot
 			name = tok(ctx, name_state)
 			if name.kind == LowerIdent and name.start == tok(ctx, dot).end and byte(ctx.source, name.start) != '_' {
 				{ nodes: $n, children: $c, node: method_node } = emit($n, $c, Identifier, name.start, name.end, [])
@@ -3068,7 +3068,7 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 				if !colon_found {
 					$d = diag($d, UnexpectedToken, tok(ctx, colon).start, tok(ctx, colon).end)
 				}
-				after_colon = if colon_found colon + 1 else colon
+				after_colon = if (colon_found) colon + 1 else colon
 				{ pos: ty_state, nodes: $n, children: $c, diags: $d, node: ty_node } = type_expression(ctx, after_colon, $n, $c, $d, FullType, depth + 1)
 				ty_end = nend($n, ty_node)
 				{ nodes: $n, children: $c, node: clause_node } = emit3($n, $c, WhereMethod, receiver.start, ty_end, var_node, method_node, ty_node)
@@ -3100,7 +3100,7 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 			}
 		}
 	}
-	finish($s, $n, $c, if $ids.is_empty() diag($d, UnexpectedToken, start, $end) else $d, WhereClause, start, $end, $ids)
+	finish($s, $n, $c, if ($ids.is_empty()) diag($d, UnexpectedToken, start, $end) else $d, WhereClause, start, $end, $ids)
 }
 
 parse_type_declaration : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
@@ -3109,7 +3109,7 @@ parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
 	first = tok(ctx, s)
 	where_alias = first.kind == LowerIdent
 	{ pos: s1, nodes: n1, children: c1, diags: d1, receiver } = if where_alias {
-		da = if byte(ctx.source, first.start) == '_' diag(diags, UnexpectedToken, first.start, first.end) else diags
+		da = if (byte(ctx.source, first.start) == '_') diag(diags, UnexpectedToken, first.start, first.end) else diags
 		{ nodes: na, children: ca, node: receiver_node } = emit(nodes, children, TypeVariable, first.start, first.end, [])
 		dot = sig(ctx, s + 1)
 		if is_text(ctx, dot, Dot) {
@@ -3121,12 +3121,12 @@ parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
 		{ pos: s, nodes, children, diags, receiver: [] }
 	}
 	name = tok(ctx, s1)
-	d2 = if !(name.kind == UpperIdent and byte(ctx.source, name.start) != '@') diag(d1, UnexpectedToken, name.start, name.end) else d1
+	d2 = if (!(name.kind == UpperIdent and byte(ctx.source, name.start) != '@')) diag(d1, UnexpectedToken, name.start, name.end) else d1
 	validated = s1
 	{ nodes: n2, children: c2, node: name_node } = emit(n1, c1, TypeName, name.start, name.end, [])
-	s2 = sig(ctx, validated + if name.kind == EndOfFile 0 else 1)
+	s2 = sig(ctx, validated + if (name.kind == EndOfFile) 0 else 1)
 	has_params = tok(ctx, s2).kind == OpenRound or tok(ctx, s2).kind == NoSpaceOpenRound
-	var $s = if has_params s2 + 1 else s2
+	var $s = if (has_params) s2 + 1 else s2
 	var $params = [name_node]
 	var $header_end = name.end
 	var $done = !has_params
@@ -3149,7 +3149,7 @@ parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
 				$d = diag($d, UnexpectedToken, p.start, p.end)
 			}
 			validated_arg = look
-			{ nodes: $n, children: $c, node: param_node } = emit($n, $c, if spelled1(ctx.source, p, '_') TypeWildcard else TypeVariable, p.start, p.end, [])
+			{ nodes: $n, children: $c, node: param_node } = emit($n, $c, if (spelled1(ctx.source, p, '_')) TypeWildcard else TypeVariable, p.start, p.end, [])
 			$params = $params.append(param_node)
 			$header_end = p.end
 			$s = sig(ctx, validated_arg + 1)
@@ -3168,8 +3168,8 @@ parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
 	operator_state = sig(ctx, s3)
 	nominal = is_text(ctx, operator_state, ColonEquals) or is_text(ctx, operator_state, DoubleColon)
 	valid_operator = is_text(ctx, operator_state, Colon) or (!where_alias and nominal)
-	d4 = if !valid_operator diag(d3, UnexpectedToken, tok(ctx, operator_state).start, tok(ctx, operator_state).end) else d3
-	after_operator = sig(ctx, operator_state + if valid_operator 1 else 0)
+	d4 = if (!valid_operator) diag(d3, UnexpectedToken, tok(ctx, operator_state).start, tok(ctx, operator_state).end) else d3
+	after_operator = sig(ctx, operator_state + if (valid_operator) 1 else 0)
 	ids0 = [header_node].concat(receiver)
 	{ pos: s5, nodes: n5, children: c5, diags: d5, ids: ids1 } = if where_alias {
 		if is_text(ctx, after_operator, Where) {
@@ -3197,7 +3197,7 @@ parse_type_declaration = |ctx, initial, nodes, children, diags, depth| {
 	ids_end = $end
 	look = sig(ctx, s5)
 	if is_text(ctx, look, Dot) and tok(ctx, sig(ctx, look + 1)).kind == OpenCurly {
-		d6 = if !(nominal and !where_alias) diag(d5, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d5
+		d6 = if (!(nominal and !where_alias)) diag(d5, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end) else d5
 		associated_state = look
 		{ pos: associated_end, nodes: n7, children: c7, diags: d7, node: associated_node } = parse_associated_block(ctx, sig(ctx, associated_state + 1), n5, c5, d6, depth + 1)
 		ids = ids1.append(associated_node)
@@ -3217,7 +3217,7 @@ parse_associated_block = |ctx, initial, nodes, children, diags, depth| {
 	var $done = depth >= 128
 	var $n = nodes
 	var $c = children
-	var $d = if depth >= 128 diag(diags, ResourceLimit, opening.start, opening.end) else diags
+	var $d = if (depth >= 128) diag(diags, ResourceLimit, opening.start, opening.end) else diags
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -3228,7 +3228,7 @@ parse_associated_block = |ctx, initial, nodes, children, diags, depth| {
 		} else if t.kind == EndOfFile {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else {
 			before = look
@@ -3356,7 +3356,7 @@ pattern_primary : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diag
 pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 	t = tok(ctx, s)
 	if t.kind == LowerIdent {
-		finish(s + 1, nodes, children, diags, if is_text(ctx, s, Underscore) WildcardPattern else IdentifierPattern, t.start, t.end, [])
+		finish(s + 1, nodes, children, diags, if (is_text(ctx, s, Underscore)) WildcardPattern else IdentifierPattern, t.start, t.end, [])
 	} else if is_text(ctx, s, Var) {
 		look = sig(ctx, s + 1)
 		name = tok(ctx, look)
@@ -3379,7 +3379,7 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 			}
 		} else {
 			next = tok(ctx, look)
-			d1 = if next.kind == LowerIdent and !is_text(ctx, look, Underscore) diag(diags, UnexpectedToken, next.start, next.end) else diags
+			d1 = if (next.kind == LowerIdent and !is_text(ctx, look, Underscore)) diag(diags, UnexpectedToken, next.start, next.end) else diags
 			finish(look, nodes, children, d1, RestPattern, t.start, t.end, [])
 		}
 	} else if t.kind == UpperIdent and byte(ctx.source, t.start) == '@' {
@@ -3410,23 +3410,23 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 		qualified = $name
 		after_name = $s
 		nominal = is_text(ctx, after_name, Dot)
-		after = if nominal sig(ctx, after_name + 1) else after_name
+		after = if (nominal) sig(ctx, after_name + 1) else after_name
 		if tok(ctx, after).kind == NoSpaceOpenRound {
 			{ pos: args_state, nodes: n3, children: c3, diags: d1, ids: args, end, comma: _ } = pattern_collection(ctx, after + 1, n2, c2, diags, CloseRound, True, depth)
-			finish_after(args_state, n3, c3, d1, if nominal NominalPattern else TagPattern, t.start, end, qualified, args)
+			finish_after(args_state, n3, c3, d1, if (nominal) NominalPattern else TagPattern, t.start, end, qualified, args)
 		} else if nominal and tok(ctx, after).kind == OpenCurly {
 			{ pos: record_state, nodes: n3, children: c3, diags: d1, node: record_node } = pattern_record(ctx, after, n2, c2, diags, alternatives, depth)
 			end = nend(n3, record_node)
 			finish2(record_state, n3, c3, d1, NominalPattern, t.start, end, qualified, record_node)
 		} else {
-			d1 = if nominal diag(diags, UnexpectedToken, tok(ctx, after).start, tok(ctx, after).end) else diags
+			d1 = if (nominal) diag(diags, UnexpectedToken, tok(ctx, after).start, tok(ctx, after).end) else diags
 			end = nend(n2, qualified)
 			finish1(after, n2, c2, d1, TagPattern, t.start, end, qualified)
 		}
 	} else if t.kind == OpenRound or t.kind == NoSpaceOpenRound or t.kind == OpenSquare {
-		closing = if t.kind == OpenSquare CloseSquare else CloseRound
+		closing = if (t.kind == OpenSquare) CloseSquare else CloseRound
 		{ pos: items_state, nodes: n1, children: c1, diags: d1, ids, end, comma: _ } = pattern_collection(ctx, s + 1, nodes, children, diags, closing, True, depth)
-		finish(items_state, n1, c1, d1, if t.kind == OpenSquare ListPattern else TuplePattern, t.start, end, ids)
+		finish(items_state, n1, c1, d1, if (t.kind == OpenSquare) ListPattern else TuplePattern, t.start, end, ids)
 	} else if t.kind == OpenCurly {
 		pattern_record(ctx, s, nodes, children, diags, alternatives, depth)
 	} else if t.kind == StringStart {
@@ -3434,7 +3434,7 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 	} else if t.kind == Number or t.kind == SingleQuote {
 		primary(ctx, s, nodes, children, diags, depth, False)
 	} else {
-		finish(s + if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 	}
 }
 
@@ -3457,7 +3457,7 @@ pattern_collection = |ctx, initial, nodes, children, diags, closing, alternative
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else {
 			{ pos: item_state, nodes: $n, children: $c, diags: $d, node: item_node } = parse_pattern(ctx, look, $n, $c, $d, alternatives, depth + 1)
@@ -3497,7 +3497,7 @@ pattern_record = |ctx, initial, nodes, children, diags, alternatives, depth| {
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$s = look
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$done = True
 		} else {
 			# Branches thread immutable names; only the destructure below writes the loop vars.
@@ -3519,7 +3519,7 @@ pattern_record = |ctx, initial, nodes, children, diags, alternatives, depth| {
 					finish2(value_state, n2, c2, d2, PatternField, t.start, end, name_node, value_node)
 				} else {
 					next = tok(ctx, after)
-					d2 = if !(is_text(ctx, after, Comma) or next.kind == CloseCurly) diag($d, UnexpectedToken, next.start, next.end) else $d
+					d2 = if (!(is_text(ctx, after, Comma) or next.kind == CloseCurly)) diag($d, UnexpectedToken, next.start, next.end) else $d
 					finish1(after, n1, c1, d2, PatternField, t.start, t.end, name_node)
 				}
 			} else {
@@ -3563,16 +3563,16 @@ pattern_string = |ctx, initial, nodes, children, diags| {
 			if name.kind != LowerIdent {
 				$d = diag($d, UnexpectedToken, name.start, name.end)
 			}
-			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, if is_text(ctx, name_state, Underscore) WildcardPattern else IdentifierPattern, name.start, name.end, [])
-			close_state = sig(ctx, name_state + if name.kind == EndOfFile or name.kind == InterpolationEnd 0 else 1)
+			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, if (is_text(ctx, name_state, Underscore)) WildcardPattern else IdentifierPattern, name.start, name.end, [])
+			close_state = sig(ctx, name_state + if (name.kind == EndOfFile or name.kind == InterpolationEnd) 0 else 1)
 			close = tok(ctx, close_state)
 			closed = close.kind == InterpolationEnd
 			if !closed {
 				$d = diag($d, UnclosedDelimiter, close.start, close.end)
 			}
-			$end = if closed close.end else name.end
+			$end = if (closed) close.end else name.end
 			{ nodes: $n, children: $c, node: capture_node } = emit1($n, $c, CapturePattern, t.start, $end, named_node)
-			$s = if closed close_state + 1 else close_state
+			$s = if (closed) close_state + 1 else close_state
 			$ids = $ids.append(capture_node)
 			$captures = True
 			if !closed {
@@ -3587,7 +3587,7 @@ pattern_string = |ctx, initial, nodes, children, diags| {
 			$done = True
 		}
 	}
-	finish($s, $n, $c, $d, if $captures PatternStringLiteral else StringLiteral, first.start, $end, $ids)
+	finish($s, $n, $c, $d, if ($captures) PatternStringLiteral else StringLiteral, first.start, $end, $ids)
 }
 
 valid_pattern : Ctx, List(RocSyntax.Node), List(U64), U64 -> Bool
@@ -3607,7 +3607,7 @@ valid_pattern = |_ctx, nodes, children, root| {
 				var $i = 0
 				while $valid and $i < n.children_len {
 					child = children.get(n.children_start + $i) ?? nodes.len()
-					$work = if $depth < $work.len() $work.set($depth, child) ?? $work else $work.append(child)
+					$work = if ($depth < $work.len()) $work.set($depth, child) ?? $work else $work.append(child)
 					$depth = $depth + 1
 					$i = $i + 1
 				}
@@ -3687,7 +3687,7 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 		comma = sig(ctx, base_state)
 		has_comma = is_text(ctx, comma, Comma)
 		base_end = nend(na, base_node)
-		{ pos: if has_comma comma + 1 else comma, nodes: na, children: ca, diags: if has_comma da else diag(da, UnexpectedToken, tok(ctx, comma).start, tok(ctx, comma).end), count: 1, first: base_node, rest: [], end: base_end }
+		{ pos: if (has_comma) comma + 1 else comma, nodes: na, children: ca, diags: if (has_comma) da else diag(da, UnexpectedToken, tok(ctx, comma).start, tok(ctx, comma).end), count: 1, first: base_node, rest: [], end: base_end }
 	} else {
 		{ pos: initial, nodes, children, diags, count: 0, first: 0, rest: [], end: first.start }
 	}
@@ -3713,7 +3713,7 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 			$s = $s + 1
 			$done = True
 		} else if t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare {
-			$end = if t.start > $end t.start else $end
+			$end = if (t.start > $end) t.start else $end
 			$d = diag($d, UnclosedDelimiter, t.start, t.end)
 			$done = True
 		} else {
@@ -3819,7 +3819,7 @@ curly = |ctx, initial, nodes, children, diags, start, depth, punned, forced| {
 		}
 		finish_lead_items($mapper_state, $bn, $bc, d2, RecordBuilder, start, $mapper_end, $mapper, count2, first2, rest2)
 	} else {
-		finish_items(s2, n2, c2, d2, if extension RecordUpdate else if record Record else Block, start, end2, count2, first2, rest2)
+		finish_items(s2, n2, c2, d2, if (extension) RecordUpdate else if (record) Record else Block, start, end2, count2, first2, rest2)
 	}
 }
 
@@ -3847,7 +3847,7 @@ parse_match = |ctx, initial, nodes, children, diags, start, depth| {
 				$done = True
 			} else if t.kind == EndOfFile {
 				$d = diag($d, UnclosedDelimiter, t.start, t.end)
-				$end = if t.start > $end t.start else $end
+				$end = if (t.start > $end) t.start else $end
 				$done = True
 			} else {
 				before = $s
@@ -3900,12 +3900,12 @@ parse_for = |ctx, initial, nodes, children, diags, start, stream, depth| {
 	{ pos: pattern_state, nodes: n1, children: c1, diags: d1, node: pattern_node } = parse_pattern(ctx, initial, nodes, children, diags, False, depth + 1)
 	look = sig(ctx, pattern_state)
 	in_found = is_text(ctx, look, In)
-	d2 = if in_found d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
-	validated = if in_found look + 1 else look
+	d2 = if (in_found) d1 else diag(d1, UnexpectedToken, tok(ctx, look).start, tok(ctx, look).end)
+	validated = if (in_found) look + 1 else look
 	{ pos: list_state, nodes: n2, children: c2, diags: d3, node: list_node } = expression(ctx, validated, n1, c1, d2, 0, depth + 1, False)
 	{ pos: body_state, nodes: n3, children: c3, diags: d4, node: body_node } = expression(ctx, list_state, n2, c2, d3, 0, depth + 1, False)
 	end = U64.max(nend(n3, body_node), U64.max(nend(n3, pattern_node), nend(n3, list_node)))
-	finish3(body_state, n3, c3, d4, if stream ForStream else For, start, end, pattern_node, list_node, body_node)
+	finish3(body_state, n3, c3, d4, if (stream) ForStream else For, start, end, pattern_node, list_node, body_node)
 }
 
 parse_string : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
@@ -3920,7 +3920,7 @@ parse_string = |ctx, initial, nodes, children, diags, depth| {
 	var $end = first.end
 	var $done = False
 	while !$done {
-		look = if multiline sig(ctx, $s) else $s
+		look = if (multiline) sig(ctx, $s) else $s
 		t = tok(ctx, look)
 		if t.kind == StringPart {
 			{ nodes: $n, children: $c, node: part_node } = emit($n, $c, StringSegment, t.start, t.end, [])
@@ -3935,8 +3935,8 @@ parse_string = |ctx, initial, nodes, children, diags, depth| {
 			if !closed {
 				$d = diag($d, UnclosedDelimiter, close.start, close.end)
 			}
-			validated = if closed after + 1 else after
-			end = if closed close.end else nend($n, value_node)
+			validated = if (closed) after + 1 else after
+			end = if (closed) close.end else nend($n, value_node)
 			{ nodes: $n, children: $c, node: interpolation_node } = emit1($n, $c, Interpolation, t.start, end, value_node)
 			$s = validated
 			$ids = $ids.append(interpolation_node)
@@ -3962,7 +3962,7 @@ parse_string = |ctx, initial, nodes, children, diags, depth| {
 	n1 = $n
 	c1 = $c
 	d1 = $d
-	{ nodes: n2, children: c2, node: literal_node } = emit(n1, c1, if multiline MultilineStringLiteral else StringLiteral, first.start, $end, $ids)
+	{ nodes: n2, children: c2, node: literal_node } = emit(n1, c1, if (multiline) MultilineStringLiteral else StringLiteral, first.start, $end, $ids)
 	literal_suffix(ctx, $s, n2, c2, d1, literal_node, multiline)
 }
 
@@ -4005,7 +4005,7 @@ parse_platform_header = |ctx, initial, nodes, children, diags, depth| {
 	{ pos: exposed_state, nodes: n3, children: c3, diags: d5, ids: exposed_ids, end: _, comma: _ } = exposed_collection(ctx, exposed_start, n2, c2, d4)
 	{ pos: packages_start, diags: d6 } = platform_header_keyword(ctx, exposed_state, d5, "packages")
 	packages_opening = tok(ctx, packages_start)
-	d7 = if packages_opening.kind != OpenCurly diag(d6, UnexpectedToken, packages_opening.start, packages_opening.end) else d6
+	d7 = if (packages_opening.kind != OpenCurly) diag(d6, UnexpectedToken, packages_opening.start, packages_opening.end) else d6
 	{ pos: packages_state, nodes: n4, children: c4, diags: d8, node: packages_node } = dependency_record(ctx, packages_start, n3, c3, d7, False, depth + 1)
 	package_info = nget(n4, packages_node)
 	var $d = d8
@@ -4060,7 +4060,7 @@ platform_header_string = |ctx, initial, nodes, children, diags, plain| {
 	s = sig(ctx, initial)
 	opening = tok(ctx, s)
 	if opening.kind != StringStart {
-		finish(s + if opening.kind == EndOfFile 0 else 1, nodes, children, diag(diags, UnexpectedToken, opening.start, opening.end), ErrorNode, opening.start, opening.end, [])
+		finish(s + if (opening.kind == EndOfFile) 0 else 1, nodes, children, diag(diags, UnexpectedToken, opening.start, opening.end), ErrorNode, opening.start, opening.end, [])
 	} else {
 		var $s = s + 1
 		var $end = opening.end
@@ -4084,10 +4084,10 @@ platform_header_string = |ctx, initial, nodes, children, diags, plain| {
 		}
 		closing = tok(ctx, parts_pos)
 		closed = closing.kind == StringEnd
-		end = if closed closing.end else parts_end
-		pos = if closed parts_pos + 1 else parts_pos
-		d1 = if closed diags else diag(diags, UnclosedString, opening.start, parts_end)
-		d2 = if plain and !single_part diag(d1, UnexpectedToken, opening.start, end) else d1
+		end = if (closed) closing.end else parts_end
+		pos = if (closed) parts_pos + 1 else parts_pos
+		d1 = if (closed) diags else diag(diags, UnclosedString, opening.start, parts_end)
+		d2 = if (plain and !single_part) diag(d1, UnexpectedToken, opening.start, end) else d1
 		finish(pos, n1, c1, d2, StringLiteral, opening.start, end, ids)
 	}
 }
@@ -4095,16 +4095,16 @@ platform_header_string = |ctx, initial, nodes, children, diags, plain| {
 platform_requires : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
 platform_requires = |ctx, initial, nodes, children, diags, depth| {
 	opening = tok(ctx, initial)
-	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
-	d2 = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
-	s0 = if opening.kind == OpenCurly initial + 1 else initial
+	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	d2 = if (depth >= 128) diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	s0 = if (opening.kind == OpenCurly) initial + 1 else initial
 	initial_look = sig(ctx, s0)
 	empty = tok(ctx, initial_look).kind == CloseCurly
 	after_empty = sig(ctx, initial_look + 1)
 	reopened = tok(ctx, after_empty).kind == OpenCurly
-	var $s = if !empty s0 else if reopened after_empty + 1 else after_empty
+	var $s = if (!empty) s0 else if (reopened) after_empty + 1 else after_empty
 	var $ids = []
-	var $end = if empty tok(ctx, initial_look).end else opening.end
+	var $end = if (empty) tok(ctx, initial_look).end else opening.end
 	var $done = opening.kind != OpenCurly or depth >= 128 or (empty and !reopened)
 	var $n = nodes
 	var $c = children
@@ -4147,7 +4147,7 @@ platform_requires = |ctx, initial, nodes, children, diags, depth| {
 						if !(rigid.kind == LowerIdent and byte(ctx.source, rigid.start) != '_') {
 							$d = diag($d, UnexpectedToken, rigid.start, rigid.end)
 						}
-						rigid_built = rigid_state + if rigid.kind == EndOfFile 0 else 1
+						rigid_built = rigid_state + if (rigid.kind == EndOfFile) 0 else 1
 						{ nodes: $n, children: $c, node: rigid_node } = emit($n, $c, TypeVariable, rigid.start, rigid.end, [])
 						{ nodes: $n, children: $c, node: built_node } = emit2($n, $c, RequiredType, alias.start, rigid.end, alias_node, rigid_node)
 						$s = sig(ctx, rigid_built)
@@ -4169,7 +4169,7 @@ platform_requires = |ctx, initial, nodes, children, diags, depth| {
 			if !(name.kind == LowerIdent and byte(ctx.source, name.start) != '_') {
 				$d = diag($d, UnexpectedToken, name.start, name.end)
 			}
-			named_state = name_look + if name.kind == EndOfFile 0 else 1
+			named_state = name_look + if (name.kind == EndOfFile) 0 else 1
 			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, name.start, name.end, [])
 			{ pos: type_start, diags: $d } = platform_header_keyword(ctx, named_state, $d, ":")
 			{ pos: type_state, nodes: $n, children: $c, diags: $d, node: type_node } = type_expression(ctx, type_start, $n, $c, $d, FullType, depth + 1)
@@ -4198,14 +4198,14 @@ platform_requires = |ctx, initial, nodes, children, diags, depth| {
 platform_symbol_map : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), RocSyntax.NodeKind, U64 -> R
 platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
 	opening = tok(ctx, initial)
-	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
-	var $s = if opening.kind == OpenCurly initial + 1 else initial
+	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
 	var $end = opening.end
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
-	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	var $d = if (depth >= 128) diag(d1, ResourceLimit, opening.start, opening.end) else d1
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -4251,7 +4251,7 @@ platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
 				$target_state = target_state + 1
 			} else {
 				$d = diag($d, UnexpectedToken, target.start, target.end)
-				$target_state = target_state + if target.kind == EndOfFile 0 else 1
+				$target_state = target_state + if (target.kind == EndOfFile) 0 else 1
 			}
 			{ nodes: $n, children: $c, node: named_node } = emit($n, $c, Identifier, target.start, $target_end, [])
 			entry_end = U64.max(nend($n, symbol_node), $target_end)
@@ -4278,14 +4278,14 @@ platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
 platform_targets : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), U64 -> R
 platform_targets = |ctx, initial, nodes, children, diags, depth| {
 	opening = tok(ctx, initial)
-	d1 = if opening.kind != OpenCurly diag(diags, UnexpectedToken, opening.start, opening.end) else diags
-	var $s = if opening.kind == OpenCurly initial + 1 else initial
+	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
 	var $end = opening.end
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
-	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	var $d = if (depth >= 128) diag(d1, ResourceLimit, opening.start, opening.end) else d1
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -4347,7 +4347,7 @@ platform_target_config = |ctx, initial, nodes, children, diags, depth| {
 	var $done = depth >= 128
 	var $n = nodes
 	var $c = children
-	var $d = if depth >= 128 diag(diags, ResourceLimit, opening.start, opening.end) else diags
+	var $d = if (depth >= 128) diag(diags, ResourceLimit, opening.start, opening.end) else diags
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -4373,7 +4373,7 @@ platform_target_config = |ctx, initial, nodes, children, diags, depth| {
 			if tok(ctx, after).kind != CloseCurly and !is_text(ctx, after, Comma) {
 				{ pos: value_state, diags: $d } = platform_header_keyword(ctx, after, $d, ":")
 				files = spell(ctx, look, "inputs")
-				{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if files platform_target_list(ctx, value_state, $n, $c, $d, True, depth + 1) else platform_target_value(ctx, value_state, $n, $c, $d, False, depth + 1)
+				{ pos: built_state, nodes: $n, children: $c, diags: $d, node: built_node } = if (files) platform_target_list(ctx, value_state, $n, $c, $d, True, depth + 1) else platform_target_value(ctx, value_state, $n, $c, $d, False, depth + 1)
 				$s = built_state
 				$field_ids = $field_ids.append(built_node)
 				$end = nend($n, built_node)
@@ -4400,14 +4400,14 @@ platform_target_config = |ctx, initial, nodes, children, diags, depth| {
 platform_target_list : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.Diagnostic), Bool, U64 -> R
 platform_target_list = |ctx, initial, nodes, children, diags, files, depth| {
 	opening = tok(ctx, initial)
-	d1 = if opening.kind != OpenSquare diag(diags, UnexpectedToken, opening.start, opening.end) else diags
-	var $s = if opening.kind == OpenSquare initial + 1 else initial
+	d1 = if (opening.kind != OpenSquare) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
+	var $s = if (opening.kind == OpenSquare) initial + 1 else initial
 	var $ids = []
 	var $end = opening.end
 	var $done = opening.kind != OpenSquare or depth >= 128
 	var $n = nodes
 	var $c = children
-	var $d = if depth >= 128 diag(d1, ResourceLimit, opening.start, opening.end) else d1
+	var $d = if (depth >= 128) diag(d1, ResourceLimit, opening.start, opening.end) else d1
 	while !$done {
 		look = sig(ctx, $s)
 		t = tok(ctx, look)
@@ -4460,12 +4460,12 @@ platform_target_value = |ctx, initial, nodes, children, diags, file, depth| {
 		platform_target_list(ctx, s, nodes, children, diags, False, depth + 1)
 	} else if (t.kind == LowerIdent and byte(ctx.source, t.start) != '_') or (file and is_text(ctx, s, App)) or (!file and t.kind == UpperIdent and byte(ctx.source, t.start) != '@') {
 		{ nodes: n1, children: c1, node: name_node } = emit(nodes, children, Identifier, t.start, t.end, [])
-		if file finish1(s + 1, n1, c1, diags, TargetFile, t.start, t.end, name_node) else { pos: s + 1, nodes: n1, children: c1, diags, node: name_node }
+		if (file) finish1(s + 1, n1, c1, diags, TargetFile, t.start, t.end, name_node) else { pos: s + 1, nodes: n1, children: c1, diags, node: name_node }
 	} else if !file and t.kind == Number {
 		raw = ctx.source.sublist({ start: t.start, len: t.end - t.start })
 		is_int = raw.any(|b| b == 'x' or b == 'o' or b == 'b') or !raw.any(|b| b == '.' or b == 'e' or b == 'E')
-		finish(s + 1, nodes, children, if is_int diags else diag(diags, UnexpectedToken, t.start, t.end), NumberLiteral, t.start, t.end, [])
+		finish(s + 1, nodes, children, if (is_int) diags else diag(diags, UnexpectedToken, t.start, t.end), NumberLiteral, t.start, t.end, [])
 	} else {
-		finish(s + if t.kind == EndOfFile 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (t.kind == EndOfFile) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
 	}
 }

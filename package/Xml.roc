@@ -301,7 +301,7 @@ locate = |bytes, offset, message| {
 # leaves are then cut from it instead of being validated one by one.
 parse_document : Str, List(U8) -> Parsed(Xml)
 parse_document = |src, bytes| {
-	var $pos = if starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF]) 3 else 0
+	var $pos = if (starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF])) 3 else 0
 	var $declaration = Err(Missing)
 	if starts_with_at(bytes, $pos, "<?xml".to_utf8()) and is_space_at(bytes, $pos + 5) {
 		parsed = parse_xml_declaration(bytes, $pos)?
@@ -514,7 +514,7 @@ parse_cdata = |bytes, start, text| {
 			return Ok({ val: $text, pos: $pos + 3 })
 		} else if byte == '\r' {
 			$text = $text.append('\n')
-			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
 		} else {
 			next = check_char(bytes, $pos)?
 			$text = $text.concat(bytes.sublist({ start: $pos, len: next - $pos }))
@@ -634,7 +634,7 @@ parse_element = |src, bytes, start| {
 			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
 			$run_start = 0
 			$run_end = 0
-			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
 		} else {
 			# A run of bytes kept as they are: plain ASCII found 16 bytes at a
 			# time, or one checked non-ASCII character.
@@ -657,7 +657,6 @@ parse_element = |src, bytes, start| {
 			$pos = end
 		}
 	}
-	crash "unreachable: the element loop only exits by returning"
 }
 
 # The pending text: the input slice when nothing was rewritten, else `text`.
@@ -781,7 +780,6 @@ parse_start_tag = |src, bytes, start| {
 		}
 		$pos = value.pos
 	}
-	crash "unreachable: the start tag loop only exits by returning"
 }
 
 # Up to this many attributes, duplicates are found by scanning the list.
@@ -797,7 +795,7 @@ parse_attribute_value = |src, bytes, start| {
 	}
 	# Most values are plain ASCII up to the closing quote: find it 16 bytes
 	# at a time and return a slice of the input.
-	plain_end = Utf8.skip_class(bytes, start + 1, if quote == '"' double_quoted_class else single_quoted_class)
+	plain_end = Utf8.skip_class(bytes, start + 1, if (quote == '"') double_quoted_class else single_quoted_class)
 	if bytes.get(plain_end) == Ok(quote) {
 		return Ok({ val: slice_str(src, bytes, start + 1, plain_end), pos: plain_end + 1 })
 	}
@@ -815,7 +813,7 @@ parse_attribute_value = |src, bytes, start| {
 			$pos = reference.pos
 		} else if byte == '\r' {
 			$value = $value.append(' ')
-			$pos = if bytes.get($pos + 1) == Ok('\n') $pos + 2 else $pos + 1
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
 		} else if byte == '\n' or byte == '\t' {
 			$value = $value.append(' ')
 			$pos = $pos + 1
@@ -874,14 +872,14 @@ parse_char_reference = |bytes, start, digits_start, base| {
 		digit = digit_value(bytes.get($pos) ?? 0)
 		if digit < base {
 			next_code = $code * base + digit
-			$code = if next_code > 0x110000 0x110000 else next_code
+			$code = if (next_code > 0x110000) 0x110000 else next_code
 			$pos = $pos + 1
 		} else {
 			$done = True
 		}
 	}
 	if $pos == digits_start {
-		return fail(digits_start, if base == 16 "expected hexadecimal digits in the character reference" else "expected decimal digits in the character reference")
+		return fail(digits_start, if (base == 16) "expected hexadecimal digits in the character reference" else "expected decimal digits in the character reference")
 	}
 	if bytes.get($pos) != Ok(';') {
 		return fail($pos, "expected ';' to end the character reference")
@@ -930,31 +928,31 @@ is_name_start_char : U32 -> Bool
 is_name_start_char = |c| {
 	(c >= 'a' and c <= 'z')
 		or (c >= 'A' and c <= 'Z')
-			or c == ':'
-				or c == '_'
-					or (c >= 0xC0 and c <= 0xD6)
-						or (c >= 0xD8 and c <= 0xF6)
-							or (c >= 0xF8 and c <= 0x2FF)
-								or (c >= 0x370 and c <= 0x37D)
-									or (c >= 0x37F and c <= 0x1FFF)
-										or (c >= 0x200C and c <= 0x200D)
-											or (c >= 0x2070 and c <= 0x218F)
-												or (c >= 0x2C00 and c <= 0x2FEF)
-													or (c >= 0x3001 and c <= 0xD7FF)
-														or (c >= 0xF900 and c <= 0xFDCF)
-															or (c >= 0xFDF0 and c <= 0xFFFD)
-																or (c >= 0x10000 and c <= 0xEFFFF)
+		or c == ':'
+		or c == '_'
+		or (c >= 0xC0 and c <= 0xD6)
+		or (c >= 0xD8 and c <= 0xF6)
+		or (c >= 0xF8 and c <= 0x2FF)
+		or (c >= 0x370 and c <= 0x37D)
+		or (c >= 0x37F and c <= 0x1FFF)
+		or (c >= 0x200C and c <= 0x200D)
+		or (c >= 0x2070 and c <= 0x218F)
+		or (c >= 0x2C00 and c <= 0x2FEF)
+		or (c >= 0x3001 and c <= 0xD7FF)
+		or (c >= 0xF900 and c <= 0xFDCF)
+		or (c >= 0xFDF0 and c <= 0xFFFD)
+		or (c >= 0x10000 and c <= 0xEFFFF)
 }
 
 is_name_char : U32 -> Bool
 is_name_char = |c| {
 	is_name_start_char(c)
 		or c == '-'
-			or c == '.'
-				or (c >= '0' and c <= '9')
-					or c == 0xB7
-						or (c >= 0x300 and c <= 0x36F)
-							or (c >= 0x203F and c <= 0x2040)
+		or c == '.'
+		or (c >= '0' and c <= '9')
+		or c == 0xB7
+		or (c >= 0x300 and c <= 0x36F)
+		or (c >= 0x203F and c <= 0x2040)
 }
 
 # See https://www.w3.org/TR/xml/#NT-Char
@@ -962,10 +960,10 @@ is_xml_char : U32 -> Bool
 is_xml_char = |c| {
 	c == 0x9
 		or c == 0xA
-			or c == 0xD
-				or (c >= 0x20 and c <= 0xD7FF)
-					or (c >= 0xE000 and c <= 0xFFFD)
-						or (c >= 0x10000 and c <= 0x10FFFF)
+		or c == 0xD
+		or (c >= 0x20 and c <= 0xD7FF)
+		or (c >= 0xE000 and c <= 0xFFFD)
+		or (c >= 0x10000 and c <= 0x10FFFF)
 }
 
 ## Check that a legal XML character starts at `pos` and return the position after it.
@@ -1000,7 +998,7 @@ decode_scalar = |bytes, pos| {
 	b0 = U8.to_u32(bytes.get(pos) ?? return Err(InvalidUtf8))
 	cont = |offset| {
 		byte = bytes.get(pos + offset) ?? 0
-		if byte >= 0x80 and byte < 0xC0 Ok(U8.to_u32(byte - 0x80)) else Err(InvalidUtf8)
+		if (byte >= 0x80 and byte < 0xC0) Ok(U8.to_u32(byte - 0x80)) else Err(InvalidUtf8)
 	}
 	if b0 < 0x80 {
 		Ok({ code: b0, len: 1 })
@@ -1008,10 +1006,10 @@ decode_scalar = |bytes, pos| {
 		Ok({ code: (b0 - 0xC0) * 64 + cont(1)?, len: 2 })
 	} else if b0 >= 0xE0 and b0 <= 0xEF {
 		code = (b0 - 0xE0) * 4096 + cont(1)? * 64 + cont(2)?
-		if code < 0x800 or (code >= 0xD800 and code <= 0xDFFF) Err(InvalidUtf8) else Ok({ code, len: 3 })
+		if (code < 0x800 or (code >= 0xD800 and code <= 0xDFFF)) Err(InvalidUtf8) else Ok({ code, len: 3 })
 	} else if b0 >= 0xF0 and b0 <= 0xF4 {
 		code = (b0 - 0xF0) * 262144 + cont(1)? * 4096 + cont(2)? * 64 + cont(3)?
-		if code < 0x10000 or code > 0x10FFFF Err(InvalidUtf8) else Ok({ code, len: 4 })
+		if (code < 0x10000 or code > 0x10FFFF) Err(InvalidUtf8) else Ok({ code, len: 4 })
 	} else {
 		Err(InvalidUtf8)
 	}
@@ -1039,7 +1037,7 @@ append_utf8 = |out, code| {
 ## slice itself is kept, so text with no references or line breaks to rewrite
 ## becomes a `Str` that shares the input's bytes instead of a copy.
 append_run : List(U8), List(U8) -> List(U8)
-append_run = |out, run| if out.is_empty() run else out.concat(run)
+append_run = |out, run| if (out.is_empty()) run else out.concat(run)
 
 plain_run_end : List(U8), U64 -> U64
 plain_run_end = |bytes, start| Utf8.skip_class(bytes, start, plain_class)
@@ -1106,7 +1104,7 @@ is_encoding_char : U8 -> Bool
 is_encoding_char = |c| is_alphabetical(c) or (c >= '0' and c <= '9') or c == '.' or c == '_' or c == '-'
 
 ascii_lowercase : List(U8) -> List(U8)
-ascii_lowercase = |bytes| bytes.map(|c| if c >= 'A' and c <= 'Z' c + 32 else c)
+ascii_lowercase = |bytes| bytes.map(|c| if (c >= 'A' and c <= 'Z') c + 32 else c)
 
 v1_0 : Xml.Version
 v1_0 = { major: 1, minor: 0 }
@@ -1216,7 +1214,6 @@ expect {
 		\\    <link rel="self" type="application/atom+xml" href="http://example.org" />
 		\\    <updated>2024-02-23T20:38:24Z</updated>
 		\\</feed>
-		,
 	)
 
 	result
@@ -1374,14 +1371,14 @@ expect {
 			leaf = Text("t")
 			root.name() == Ok("p")
 				and root.attribute("id") == Ok("x")
-					and root.attribute("class") == Err(Missing)
-						and root.children_named("b").len() == 2
-							and root.children_named("i") == []
-								and root.text() == "Hi there!"
-									and leaf.name() == Err(NotAnElement)
-										and leaf.attribute("id") == Err(Missing)
-											and leaf.children_named("b") == []
-												and leaf.text() == "t"
+				and root.attribute("class") == Err(Missing)
+				and root.children_named("b").len() == 2
+				and root.children_named("i") == []
+				and root.text() == "Hi there!"
+				and leaf.name() == Err(NotAnElement)
+				and leaf.attribute("id") == Err(Missing)
+				and leaf.children_named("b") == []
+				and leaf.text() == "t"
 		}
 
 		Err(_) => False

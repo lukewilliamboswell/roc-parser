@@ -76,7 +76,7 @@ parse = |source, bytes, mode| match mode {
 	"repl" => {
 		file = RocSyntax.parse_bytes(bytes)
 		root = file.nodes.get(file.root) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-		if file.status == Complete and root.children_len == 1 file else RocSyntax.parse_statement_str(source)
+		if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_statement_str(source)
 	}
 	_ => RocSyntax.parse_bytes(bytes)
 }

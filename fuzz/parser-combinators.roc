@@ -80,7 +80,7 @@ decode : List(U8), U64, U64 -> (Expr, U64)
 decode = |bytes, pos, depth| {
 	tag = byte(bytes, pos)
 	next = pos + 1
-	kind = if depth == 0 U8.to_u64(tag) % 13 else U8.to_u64(tag) % 30
+	kind = if (depth == 0) U8.to_u64(tag) % 13 else U8.to_u64(tag) % 30
 	match kind {
 		0 => {
 			(lit, p) = short_bytes(bytes, next)
@@ -175,14 +175,14 @@ generate = |bytes| {
 	(expr, pos) = decode(bytes, 1, depth)
 	raw = bytes.drop_first(pos)
 	# Half the time map input bytes through the alphabet so literals match.
-	input = if byte(bytes, 0) >= 128 raw.map(pick) else raw
+	input = if (byte(bytes, 0) >= 128) raw.map(pick) else raw
 	{ expr, input, text: Str.from_utf8_lossy(input) }
 }
 
 # ------------------------------------------------------------------ library
 
 even_only : List(U8) -> Try(List(U8), Str)
-even_only = |v| if v.len() % 2 == 0 Ok(v) else Err("odd length")
+even_only = |v| if (v.len() % 2 == 0) Ok(v) else Err("odd length")
 
 items : List(List(U8)), U8 -> List(U8)
 items = |vals, marker| vals.fold([], |acc, v| acc.concat(v).append(marker))
@@ -285,7 +285,7 @@ first_success = |es, input| {
 model : Expr, List(U8) -> Outcome
 model = |expr, input| {
 	match expr {
-		Lit(lit) => if input.starts_with(lit) ok(lit, input.drop_first(lit.len())) else Err(Fail)
+		Lit(lit) => if (input.starts_with(lit)) ok(lit, input.drop_first(lit.len())) else Err(Fail)
 		Text(text) => model(Lit(text.to_utf8()), input)
 		Cu(c) =>
 			match input {
@@ -314,11 +314,11 @@ model = |expr, input| {
 				_ => Err(Fail)
 			}
 		Digits => {
-			count = input.fold_until(0, |n, b| if b >= '0' and b <= '9' Continue(n + 1) else Break(n))
+			count = input.fold_until(0, |n, b| if (b >= '0' and b <= '9') Continue(n + 1) else Break(n))
 			if count == 0 {
 				Err(Fail)
 			} else {
-				value = input.sublist({ start: 0, len: count }).fold(0.U128, |acc, b| if acc > 18446744073709551615 acc else acc * 10 + U8.to_u128(b - '0'))
+				value = input.sublist({ start: 0, len: count }).fold(0.U128, |acc, b| if (acc > 18446744073709551615) acc else acc * 10 + U8.to_u128(b - '0'))
 				if value > 18446744073709551615 {
 					Err(Fail)
 				} else {
@@ -329,7 +329,7 @@ model = |expr, input| {
 		Const(lit) => ok(lit, input)
 		Fail => Err(Fail)
 		ChompWhile(t) => {
-			count = input.fold_until(0, |n, b| if b < t Continue(n + 1) else Break(n))
+			count = input.fold_until(0, |n, b| if (b < t) Continue(n + 1) else Break(n))
 			ok(input.sublist({ start: 0, len: count }), input.drop_first(count))
 		}
 		ChompUntil(c) =>
@@ -349,19 +349,25 @@ model = |expr, input| {
 			r = repeat(|i| model(a, i), input)
 			ok(items(r.vals, ';'), r.rest)
 		}
-		OneOrMore(a) => then(model(a, input), |x, r1| {
-			r = repeat(|i| model(a, i), r1)
-			ok(items(r.vals.prepend(x), ';'), r.rest)
-		})
+		OneOrMore(a) => then(
+			model(a, input),
+			|x, r1| {
+				r = repeat(|i| model(a, i), r1)
+				ok(items(r.vals.prepend(x), ';'), r.rest)
+			},
+		)
 		SepBy(a, s) =>
 			match model(SepBy1(a, s), input) {
 				Ok(r) => Ok(r)
 				Err(_) => ok([], input)
 			}
-		SepBy1(a, s) => then(model(a, input), |x, r1| {
-			r = repeat(|i| then(model(s, i), |_, ri| model(a, ri)), r1)
-			ok(items(r.vals.prepend(x), ','), r.rest)
-		})
+		SepBy1(a, s) => then(
+			model(a, input),
+			|x, r1| {
+				r = repeat(|i| then(model(s, i), |_, ri| model(a, ri)), r1)
+				ok(items(r.vals.prepend(x), ','), r.rest)
+			},
+		)
 		Between(a, o, c) => then(model(o, input), |_, r1| then(model(a, r1), |x, r2| then(model(c, r2), |_, r3| ok(x, r3))))
 		Maybe(a) =>
 			match model(a, input) {
@@ -369,7 +375,7 @@ model = |expr, input| {
 				Err(_) => ok(['N'], input)
 			}
 		Rev(a) => then(model(a, input), |x, r1| ok(x.drop_first(1), r1))
-		EvenOnly(a) => then(model(a, input), |x, r1| if x.len() % 2 == 0 ok(x, r1) else Err(Fail))
+		EvenOnly(a) => then(model(a, input), |x, r1| if (x.len() % 2 == 0) ok(x, r1) else Err(Fail))
 		Lazy(a) => model(a, input)
 		Ignore(a) => then(model(a, input), |_, r1| ok([], r1))
 	}
@@ -396,7 +402,7 @@ test = |case| {
 			Err(ParseError({ message, offset })) => {
 				# Messages must be renderable without crashing.
 				_ = message.count_utf8_bytes()
-				if offset > case.input.len() crash "failure offset ${offset.to_str()} is beyond the input"
+				if (offset > case.input.len()) crash "failure offset ${offset.to_str()} is beyond the input"
 				Err(Fail)
 			}
 		}
@@ -406,10 +412,10 @@ test = |case| {
 	# Full-input runs agree with the partial run. Leftover input fails at or
 	# beyond the point where the partial run stopped (the furthest failure).
 	match (Utf8.parse_bytes(parser, case.input), expected) {
-		(Ok(v), Ok(r)) => if !r.rest.is_empty() or v != r.val crash "parse_bytes Ok differs from model"
+		(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_bytes Ok differs from model"
 		(Err(ParseError({ offset, message: _ })), Ok(r)) =>
-			if r.rest.is_empty() or offset < case.input.len() - r.rest.len() or offset > case.input.len() crash "parse_bytes leftover offset ${offset.to_str()} differs from model"
-		(Err(ParseError({ offset, message: _ })), Err(_)) => if offset > case.input.len() crash "parse_bytes offset is beyond the input"
+			if (r.rest.is_empty() or offset < case.input.len() - r.rest.len() or offset > case.input.len()) crash "parse_bytes leftover offset ${offset.to_str()} differs from model"
+		(Err(ParseError({ offset, message: _ })), Err(_)) => if (offset > case.input.len()) crash "parse_bytes offset is beyond the input"
 		_ => crash "parse_bytes outcome differs from model"
 	}
 	# Str front ends only when the input is valid UTF-8.
@@ -426,8 +432,8 @@ test = |case| {
 			}
 			full = Utf8.parse_str(parser, text)
 			match (full, expected) {
-				(Ok(v), Ok(r)) => if !r.rest.is_empty() or v != r.val crash "parse_str Ok differs from model"
-				(Err(ParseError({ offset, message: _ })), Ok(r)) => if r.rest.is_empty() or offset < case.input.len() - r.rest.len() crash "parse_str leftover differs from model"
+				(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_str Ok differs from model"
+				(Err(ParseError({ offset, message: _ })), Ok(r)) => if (r.rest.is_empty() or offset < case.input.len() - r.rest.len()) crash "parse_str leftover differs from model"
 				(Err(ParseError(_)), Err(_)) => {}
 				_ => crash "parse_str outcome differs from model"
 			}

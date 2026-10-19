@@ -108,7 +108,7 @@ well_formed = |nodes, in_link| {
 
 				Image({ alt, .. }) => well_formed(alt, in_link)
 				HardBreak => Ok({})
-				HtmlInline(html) => if html.is_empty() Err("empty raw HTML") else Ok({})
+				HtmlInline(html) => if (html.is_empty()) Err("empty raw HTML") else Ok({})
 			}
 		$previous_text =
 			match node {
@@ -229,7 +229,7 @@ is_trailing_space : U8 -> Bool
 is_trailing_space = |byte| byte == ' ' or byte == '\t'
 
 text_tree : List(U8) -> Tree
-text_tree = |bytes| if bytes.is_empty() [] else [Text(Str.from_utf8_lossy(bytes))]
+text_tree = |bytes| if (bytes.is_empty()) [] else [Text(Str.from_utf8_lossy(bytes))]
 
 check_escaped : Str -> {}
 check_escaped = |input| {
@@ -260,7 +260,7 @@ check_escaped = |input| {
 	fence = List.repeat('`', longest_backtick_run(flat) + 1)
 	code_input = fence.append(' ').concat(flat).append(' ').concat(fence)
 	all_spaces = flat.all(|b| b == ' ')
-	expected_code = [InlineCode(if all_spaces " ${text} " else text)]
+	expected_code = [InlineCode(if (all_spaces) " ${text} " else text)]
 	code = parse(code_input)
 	if code != expected_code {
 		mismatch("raw text inside a code span", code_input, expected_code, code)

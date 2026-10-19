@@ -70,7 +70,7 @@ main! = |_| {
 
 operation : Str, { includes : List({ path : Str, source : Str }), attributes : List(AsciiDoc.Attribute), max_depth : U64, expand_includes : Bool }, Str -> U64
 operation = |source, options, mode| match AsciiDoc.parse_with(source, options) {
-	Ok(document) => if mode == "render" AsciiDoc.render(document).count_utf8_bytes() + 1 else document.blocks.len() + document.title.count_utf8_bytes() + 1
+	Ok(document) => if (mode == "render") AsciiDoc.render(document).count_utf8_bytes() + 1 else document.blocks.len() + document.title.count_utf8_bytes() + 1
 	Err(_) => 0
 }
 
@@ -96,9 +96,9 @@ encode_block = |block| {
 		ThematicBreak => encode_leaf("thematic_break", "")
 		Rich(node) => {
 			context = node.context
-			level = if context == "section" node.level else 0
-			source = if ["list_item", "image", "video", "audio", "table", "table"].contains(context) "" else node.source
-			title = if context == "list_item" "" else AsciiDoc.render_inline(node.title, node.attrs)
+			level = if (context == "section") node.level else 0
+			source = if (["list_item", "image", "video", "audio", "table", "table"].contains(context)) "" else node.source
+			title = if (context == "list_item") "" else AsciiDoc.render_inline(node.title, node.attrs)
 			var $blocks = []
 			for item in node.blocks {
 				if context == "dlist" and has_definition(item) {
@@ -125,9 +125,9 @@ escape_json = |bytes, out| {
 		['"', .. as rest] => escape_json(rest, out.concat(['\\', '"']))
 		['\\', .. as rest] => escape_json(rest, out.concat(['\\', '\\']))
 		[byte, .. as rest] if byte < 32 => {
-			hi = if byte < 16 '0' else '1'
-			lo = if byte < 16 byte else byte - 16
-			digit = if lo < 10 lo + '0' else lo - 10 + 'a'
+			hi = if (byte < 16) '0' else '1'
+			lo = if (byte < 16) byte else byte - 16
+			digit = if (lo < 10) lo + '0' else lo - 10 + 'a'
 			escape_json(rest, out.concat(['\\', 'u', '0', '0', hi, digit]))
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))

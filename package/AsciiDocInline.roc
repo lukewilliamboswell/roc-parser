@@ -25,7 +25,7 @@ AsciiDocInline :: [].{
 				Ok(open) => {
 					subs = slice(source, 5, open - 5)
 					body = slice(source, open + 1, source.to_utf8().len() - open - 2)
-					if subs == "" body else render_with(body, attrs, { subs: subs })
+					if (subs == "") body else render_with(body, attrs, { subs: subs })
 				}
 				Err(_) => render_with(escape(source), attrs, { subs: "attributes" })
 			}
@@ -46,7 +46,7 @@ AsciiDocInline :: [].{
 	## Replace the reference registry and build its lookup index once.
 	with_refs : State, List({ id : Str, text : Str }) -> State
 	with_refs = |state, refs| {
-		index = refs.fold(Dict.empty(), |found, ref| if found.contains(ref.id) found else found.insert(ref.id, ref.text))
+		index = refs.fold(Dict.empty(), |found, ref| if (found.contains(ref.id)) found else found.insert(ref.id, ref.text))
 		{ ..state, refs, ref_index: index, indexed_ref_count: refs.len() }
 	}
 
@@ -99,7 +99,7 @@ render_state_fixed = |input, attrs, options, state, prepared| {
 
 render_plain_normal : Str, List({ name : Str, value : Str }), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
 render_plain_normal = |input, attrs, state| {
-	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
+	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
 	{ html: input, state: refresh_state(attrs, indexed) }
 }
 
@@ -109,21 +109,21 @@ render_normal_owned : Str, List({ name : Str, value : Str }), AsciiDocInline.Sta
 render_normal_owned = |input, attrs, state| {
 	{ attributes: incoming_attributes, removed: incoming_removed, tag_prefix: incoming_prefix, footnotes: incoming_notes, note_index: incoming_names, indexed_note_count: incoming_note_count, emitted_footnotes, refs, ref_index: incoming_refs, indexed_ref_count, snapshot: incoming_snapshot, snapshot_index: incoming_snapshot_index } = state
 	{ attributes, removed, snapshot, snapshot_index } = refresh_owned_attributes(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_snapshot_index)
-	ref_index = if indexed_ref_count == refs.len() incoming_refs else refs.fold(Dict.empty(), |found, ref| if found.contains(ref.id) found else found.insert(ref.id, ref.text))
+	ref_index = if (indexed_ref_count == refs.len()) incoming_refs else refs.fold(Dict.empty(), |found, ref| if (found.contains(ref.id)) found else found.insert(ref.id, ref.text))
 	context = { emitted_footnotes, refs, ref_index, indexed_ref_count: refs.len(), snapshot, snapshot_index }
 	g = { ..normal, ref_index }
 	prior_notes = incoming_notes.len()
 	# pass_needed was checked before entering this path. Ordinary formatting
 	# reads the cached delimiter alone; it never borrows a registry container.
-	before = if quote_needed(input, g) quote_prefixed(input, attrs, g, incoming_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
+	before = if (quote_needed(input, g)) quote_prefixed(input, attrs, g, incoming_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
 	{ source: mutated_source, context: mutated_context, attributes: mutated_attributes, removed: mutated_removed, tag_prefix, footnotes: mutated_notes, note_index: mutated_names, indexed_note_count: mutated_note_count, tags: mutated_tags, prefix: mutated_prefix } = mutate_owned_attributes(before.source, attrs, g, attributes, removed, incoming_prefix, incoming_notes, incoming_names, incoming_note_count, context, before.prefix, before.tags)
 	if mutated_tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutated_source, { ..g, quotes: False, attributes: False }) {
 		return { html: mutated_source, state: assemble_state(mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count) }
 	}
 	quotes = { source: mutated_source, prefix: mutated_prefix, tags: mutated_tags, deferred: before.deferred }
-	quoted = if quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
+	quoted = if (quotes.prefix == "" and quotes.source.contains("footnote:")) { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
 	scan_groups = { ..g, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = (if macro_candidate(quoted.source) merged_attributes(attrs, mutated_attributes, mutated_removed) else attrs).concat(if quoted.source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	reference_attrs = (if (macro_candidate(quoted.source)) merged_attributes(attrs, mutated_attributes, mutated_removed) else attrs).concat(if (quoted.source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
 	if !quoted.source.contains("footnote:") {
 		return finish_owned_normal(scan(quoted.source, reference_attrs, scan_groups, 0), attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count, quoted, prior_notes)
 	}
@@ -143,12 +143,12 @@ refresh_owned_attributes = |attrs, attributes, removed, snapshot, snapshot_index
 		return { attributes, removed, snapshot, snapshot_index }
 	}
 	next = source_attribute_index(attrs)
-	previous = if snapshot_index.is_empty() source_attribute_index(snapshot) else snapshot_index
+	previous = if (snapshot_index.is_empty()) source_attribute_index(snapshot) else snapshot_index
 	var $attributes = attributes
 	var $removed = removed
 	for source in [snapshot, attrs] {
 		for attr in source {
-			name = if attr.name.starts_with("__revision:") drop(attr.name, 11) else attr.name
+			name = if (attr.name.starts_with("__revision:")) drop(attr.name, 11) else attr.name
 			if next.get(name) != previous.get(name) or next.get("__revision:${name}") != previous.get("__revision:${name}") {
 				$attributes = $attributes.remove(name)
 				$removed = $removed.remove(name)
@@ -161,7 +161,7 @@ refresh_owned_attributes = |attrs, attributes, removed, snapshot, snapshot_index
 render_owned_notes : Str, List({ name : Str, value : Str }), Groups, QuoteResult, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> { html : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str) }
 render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_note_count| {
 	var $notes = notes
-	var $names = if indexed_note_count == notes.len() names else {
+	var $names = if (indexed_note_count == notes.len()) names else {
 		var $index = Dict.empty()
 		var $number = 0.U64
 		for note in notes {
@@ -192,7 +192,7 @@ render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_
 						text = slice(source, $open + 1, end - $open - 1)
 						existing = $names.get(name) ?? 0
 						reference = text == "" or existing > 0
-						number = if reference existing else $notes.len() + 1
+						number = if (reference) existing else $notes.len() + 1
 						if number > 0 {
 							if !reference {
 								$notes = $notes.append({ name, text: scan(text, reference_attrs, g, 0) })
@@ -201,8 +201,8 @@ render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_
 								}
 							}
 							n = number.to_str()
-							id = if name == "" "" else " id=\"_footnote_${escape(name)}\""
-							html = if reference "<sup class=\"footnoteref\">[<a class=\"footnote\" href=\"#_footnotedef_${n}\" title=\"View footnote.\">${n}</a>]</sup>" else "<sup class=\"footnote\"${id}>[<a id=\"_footnoteref_${n}\" class=\"footnote\" href=\"#_footnotedef_${n}\" title=\"View footnote.\">${n}</a>]</sup>"
+							id = if (name == "") "" else " id=\"_footnote_${escape(name)}\""
+							html = if (reference) "<sup class=\"footnoteref\">[<a class=\"footnote\" href=\"#_footnotedef_${n}\" title=\"View footnote.\">${n}</a>]</sup>" else "<sup class=\"footnote\"${id}>[<a id=\"_footnoteref_${n}\" class=\"footnote\" href=\"#_footnotedef_${n}\" title=\"View footnote.\">${n}</a>]</sup>"
 							$prepared = $prepared.concat(token(quoted.prefix, $render_tags.len()))
 							$render_tags = $render_tags.append(html)
 						} else {
@@ -252,26 +252,26 @@ finish_owned_normal = |html, attrs, context, attributes, removed, tag_prefix, no
 render_state_conservative : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
 render_state_conservative = |input, attrs, options, state, prepared| {
 	prior_notes = state.footnotes.len()
-	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
-	original = { ..(if options.subs == "normal" or options.subs == "n" normal else groups(options.subs)), ref_index: indexed.ref_index }
+	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
+	original = { ..(if (options.subs == "normal" or options.subs == "n") normal else groups(options.subs)), ref_index: indexed.ref_index }
 	refreshed = refresh_state(attrs, indexed)
 	if !needs_substitutions(input, original) {
 		return { html: input, state: refreshed }
 	}
-	quote_groups = if prepared { ..original, macros: False } else original
-	before = if (original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
-	mutation = if original.attributes mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
+	quote_groups = if (prepared) { ..original, macros: False } else original
+	before = if ((original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups)) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
+	mutation = if (original.attributes) mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
 	# Plain attribute/counter results need no second attribute merge or scan.
 	# Preserve protected quote/passthrough slots and deferred stateful macros.
 	if !original.attr_quotes and mutation.tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutation.source, { ..original, quotes: False, attributes: False }) {
 		return { html: mutation.source, state: mutation.state }
 	}
-	quotes = if original.quotes and original.attr_quotes quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
+	quotes = if (original.quotes and original.attr_quotes) quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
 	# Footnotes also use protected slots, including notes inserted by attributes.
-	quoted = if original.macros and quotes.prefix == "" and quotes.source.contains("footnote:") { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
+	quoted = if (original.macros and quotes.prefix == "" and quotes.source.contains("footnote:")) { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
 	source = quoted.source
 	g = { ..original, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = (if g.macros and macro_candidate(source) effective_attributes(attrs, mutation.state) else attrs).concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	reference_attrs = (if (g.macros and macro_candidate(source)) effective_attributes(attrs, mutation.state) else attrs).concat(if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
 	if !g.macros {
 		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
 	}
@@ -313,11 +313,11 @@ empty = { special: False, quotes: False, attributes: False, replacements: False,
 
 groups : Str -> Groups
 groups = |spec| {
-	var $g = if spec.starts_with("+") or spec.starts_with("-") normal else empty
+	var $g = if (spec.starts_with("+") or spec.starts_with("-")) normal else empty
 	for raw in spec.split_on(",") {
 		name = raw.trim()
 		enabled = !name.starts_with("-")
-		key = if name.starts_with("+") or name.starts_with("-") drop(name, 1) else name
+		key = if (name.starts_with("+") or name.starts_with("-")) drop(name, 1) else name
 		$g = match key {
 			"normal" => normal
 			"n" => normal
@@ -418,9 +418,9 @@ scan = |input, incoming_attrs, options, depth| {
 	if depth > 24 {
 		return escape(input)
 	}
-	quoted = if options.quotes quote_all(input, incoming_attrs, options, depth) else { source: input, prefix: "", tags: [], deferred: [] }
+	quoted = if (options.quotes) quote_all(input, incoming_attrs, options, depth) else { source: input, prefix: "", tags: [], deferred: [] }
 	source = quoted.source
-	attrs = incoming_attrs.concat(if source.contains("mailto:") tag_attributes(quoted.prefix, quoted.tags) else [])
+	attrs = incoming_attrs.concat(if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
 	g = { ..options, quotes: False, passes_done: options.passes_done or options.quotes }
 	bytes = source.to_utf8()
 	has_email = bytes.contains('@')
@@ -444,7 +444,7 @@ scan = |input, incoming_attrs, options, depth| {
 				rest = drop(source, $i)
 				c = bytes.get($i) ?? 0
 				next = bytes.get($i + 1) ?? 0
-				prev = if $i == 0 0 else bytes.get($i - 1) ?? 0
+				prev = if ($i == 0) 0 else bytes.get($i - 1) ?? 0
 				if c == '\\' and $i + 1 < bytes.len() and (g.quotes or g.macros or g.attributes) {
 					escaped_macro = parse_macro(drop(rest, 1), attrs, g, depth)
 					if escaped_macro.used > 0 {
@@ -469,7 +469,7 @@ scan = |input, incoming_attrs, options, depth| {
 							key = slice(source, $i + 1, end - $i - 1).with_ascii_lowercased()
 							match lookup(attrs, key) {
 								Ok(value) => {
-									$out = $out.concat(if lookup([], key).is_ok() value else scan(value, attrs, { special: False, quotes: g.attr_quotes, attributes: False, replacements: g.replacements, macros: g.macros, post: g.post, passes_done: g.passes_done, attr_quotes: g.attr_quotes, ref_index: g.ref_index }, depth + 1))
+									$out = $out.concat(if (lookup([], key).is_ok()) value else scan(value, attrs, { special: False, quotes: g.attr_quotes, attributes: False, replacements: g.replacements, macros: g.macros, post: g.post, passes_done: g.passes_done, attr_quotes: g.attr_quotes, ref_index: g.ref_index }, depth + 1))
 									$i = end + 1
 									break
 								}
@@ -488,7 +488,7 @@ scan = |input, incoming_attrs, options, depth| {
 					}
 				}
 				if !g.passes_done and g.macros and (rest.starts_with("+++") or rest.starts_with("++") or rest.starts_with("pass:")) {
-					marker = if rest.starts_with("+++") "+++" else if rest.starts_with("++") "++" else "pass:"
+					marker = if (rest.starts_with("+++")) "+++" else if (rest.starts_with("++")) "++" else "pass:"
 					if marker == "pass:" {
 						match find(source, "[", $i + 5) {
 							Ok(open) => match bracket_end(source, open) {
@@ -507,7 +507,7 @@ scan = |input, incoming_attrs, options, depth| {
 						match find(source, marker, $i + n) {
 							Ok(end) => {
 								content = slice(source, $i + n, end - $i - n)
-								$out = $out.concat(if n == 3 content else escape(content))
+								$out = $out.concat(if (n == 3) content else escape(content))
 								$i = end + n
 								break
 							}
@@ -526,7 +526,7 @@ scan = |input, incoming_attrs, options, depth| {
 					}
 				}
 				if g.macros {
-					macro = if prev == '<' and (rest.starts_with("https://") or rest.starts_with("http://")) { used: 0, html: "" } else parse_macro(rest, attrs, g, depth)
+					macro = if (prev == '<' and (rest.starts_with("https://") or rest.starts_with("http://"))) { used: 0, html: "" } else parse_macro(rest, attrs, g, depth)
 					if macro.used > 0 {
 						$out = $out.concat(macro.html)
 						$i = $i + macro.used
@@ -613,7 +613,7 @@ scan = |input, incoming_attrs, options, depth| {
 						break
 					}
 				}
-				n = if c < 128 1 else if c < 224 2 else if c < 240 3 else 4
+				n = if (c < 128) 1 else if (c < 224) 2 else if (c < 240) 3 else 4
 				var $end = $i + n
 				while $end < bytes.len() {
 					b = bytes.get($end) ?? 0
@@ -637,10 +637,10 @@ parse_macro : Str, List({ name : Str, value : Str }), Groups, U64 -> Macro
 parse_macro = |source, attrs, g, depth| {
 	none = { used: 0, html: "" }
 	if source.starts_with("(((") or source.starts_with("((") {
-		n = if source.starts_with("(((") 3 else 2
-		match find(source, if n == 3 ")))" else "))", n) {
+		n = if (source.starts_with("(((")) 3 else 2
+		match find(source, if (n == 3) ")))" else "))", n) {
 			Ok(end) => {
-				return { used: end + n, html: if n == 3 "" else scan(slice(source, n, end - n), attrs, g, depth + 1) }
+				return { used: end + n, html: if (n == 3) "" else scan(slice(source, n, end - n), attrs, g, depth + 1) }
 			}
 			Err(_) => {}
 		}
@@ -652,7 +652,7 @@ parse_macro = |source, attrs, g, depth| {
 				return {
 					used: end + 3,
 					html: if (lookup(attrs, "style") ?? "") == "bibliography" or lookup(attrs, "bibliography").is_ok() {
-						label = if slice(source, 3, end - 3).contains(",") Str.join_with(slice(source, 3, end - 3).split_on(",").drop_first(1), ",").trim() else id
+						label = if (slice(source, 3, end - 3).contains(",")) Str.join_with(slice(source, 3, end - 3).split_on(",").drop_first(1), ",").trim() else id
 						"<a id=\"${escape(id)}\"></a>[${label}]"
 					} else "[<a id=\"${escape(id)}\"></a>]",
 				}
@@ -660,14 +660,14 @@ parse_macro = |source, attrs, g, depth| {
 			_ => {}
 		}
 	}
-	xref_open = if source.starts_with("&lt;&lt;") 8 else if g.special and source.starts_with("<<") 2 else 0
+	xref_open = if (source.starts_with("&lt;&lt;")) 8 else if (g.special and source.starts_with("<<")) 2 else 0
 	if xref_open > 0 {
-		match find(source, if xref_open == 8 "&gt;&gt;" else ">>", xref_open) {
+		match find(source, if (xref_open == 8) "&gt;&gt;" else ">>", xref_open) {
 			Ok(end) => {
 				parts = slice(source, xref_open, end - xref_open).split_on(",")
 				target = parts.first() ?? ""
-				text = if parts.len() > 1 Str.join_with(parts.drop_first(1), ",").trim() else reference_label(attrs, g, target) ?? "[${target}]"
-				return { used: end + xref_open, html: "<a href=\"#${if g.special escape_entities(target) else target}\">${scan(text, attrs, if parts.len() > 1 g else { ..normal, ref_index: g.ref_index }, depth + 1)}</a>" }
+				text = if (parts.len() > 1) Str.join_with(parts.drop_first(1), ",").trim() else reference_label(attrs, g, target) ?? "[${target}]"
+				return { used: end + xref_open, html: "<a href=\"#${if (g.special) escape_entities(target) else target}\">${scan(text, attrs, if (parts.len() > 1) g else { ..normal, ref_index: g.ref_index }, depth + 1)}</a>" }
 			}
 			_ => {}
 		}
@@ -702,32 +702,32 @@ parse_macro = |source, attrs, g, depth| {
 		Ok(open) if !take(source, open).to_utf8().any(space) => {
 			match first_bracket_end(source, open) {
 				Ok(end) => {
-					target = if is_url take(source, open) else slice(source, $prefix.to_utf8().len(), open - $prefix.to_utf8().len())
+					target = if (is_url) take(source, open) else slice(source, $prefix.to_utf8().len(), open - $prefix.to_utf8().len())
 					if is_url and target == $prefix {
 						return none
 					}
 					label = repl(slice(source, open + 1, end - open - 1), "\\]", "]")
-					parts = if (($prefix == "link:" or is_url or $prefix == "xref:") and !label.contains("=")) or ($prefix == "mailto:" and !label.contains(",")) [label] else macro_parts(label)
+					parts = if ((($prefix == "link:" or is_url or $prefix == "xref:") and !label.contains("=")) or ($prefix == "mailto:" and !label.contains(","))) [label] else macro_parts(label)
 					positional = parts
 					first_raw = (positional.first() ?? "").trim()
-					first = if named_item(first_raw) and ($prefix != "mailto:" or label.contains(",")) "" else if $prefix == "image:" or label.contains("=") or ($prefix == "mailto:" and label.contains(",")) unquote_attribute(first_raw) else first_raw
-					text = if first == "" escape_entities(target) else scan(first, if is_url attrs.append({ name: "__suppress-url-label", value: "" }) else attrs, g, depth + 1)
+					first = if (named_item(first_raw) and ($prefix != "mailto:" or label.contains(","))) "" else if ($prefix == "image:" or label.contains("=") or ($prefix == "mailto:" and label.contains(","))) unquote_attribute(first_raw) else first_raw
+					text = if (first == "") escape_entities(target) else scan(first, if (is_url) attrs.append({ name: "__suppress-url-label", value: "" }) else attrs, g, depth + 1)
 					html = match $prefix {
 						"indexterm:" => ""
 						"indexterm2:" => scan(label, attrs, g, depth + 1)
 						"image:" => {
 							default_alt = repl(repl((target.split_on("/").last() ?? target), "_", " "), "-", " ").split_on(".").first() ?? ""
-							alt = named(parts, "alt") ?? if first == "" or first.contains("=") default_alt else first
-							width_value = named(parts, "width") ?? if positional.len() > 1 and !named_item(positional.get(1) ?? "") unquote_attribute((positional.get(1) ?? "").trim()) else ""
-							height_value = named(parts, "height") ?? if positional.len() > 2 and !named_item(positional.get(2) ?? "") unquote_attribute((positional.get(2) ?? "").trim()) else ""
-							width = if width_value == "" "" else " width=\"${escape_entities(width_value)}\""
-							height = if height_value == "" "" else " height=\"${escape_entities(height_value)}\""
+							alt = named(parts, "alt") ?? if (first == "" or first.contains("=")) default_alt else first
+							width_value = named(parts, "width") ?? if (positional.len() > 1 and !named_item(positional.get(1) ?? "")) unquote_attribute((positional.get(1) ?? "").trim()) else ""
+							height_value = named(parts, "height") ?? if (positional.len() > 2 and !named_item(positional.get(2) ?? "")) unquote_attribute((positional.get(2) ?? "").trim()) else ""
+							width = if (width_value == "") "" else " width=\"${escape_entities(width_value)}\""
+							height = if (height_value == "") "" else " height=\"${escape_entities(height_value)}\""
 							title = match named(parts, "title") {
 								Ok(value) => " title=\"${html_attribute(value)}\""
 								Err(_) => ""
 							}
 							image_dir = lookup(attrs, "imagesdir") ?? ""
-							src = if image_dir == "" or target.contains("://") or target.starts_with("/") target else "${image_dir}/${target}"
+							src = if (image_dir == "" or target.contains("://") or target.starts_with("/")) target else "${image_dir}/${target}"
 							image = "<img src=\"${html_attribute(src)}\" alt=\"${html_attribute(alt)}\"${width}${height}${title}>"
 							content = match named(parts, "link") {
 								Ok(link) => "<a class=\"image\" href=\"${html_attribute(link)}\">${image}</a>"
@@ -741,7 +741,7 @@ parse_macro = |source, attrs, g, depth| {
 							}\">${content}</span>"
 						}
 						"xref:" => {
-							href = if target.contains(".adoc") repl(target, ".adoc", ".html") else if target.contains("#") or path_has_extension(target) target else "#${target}"
+							href = if (target.contains(".adoc")) repl(target, ".adoc", ".html") else if (target.contains("#") or path_has_extension(target)) target else "#${target}"
 							display = if first == "" {
 								if href.starts_with("#") {
 									id = drop(href, 1)
@@ -750,7 +750,7 @@ parse_macro = |source, attrs, g, depth| {
 										Err(_) => "[${id}]"
 									}
 								} else href.split_on("#").first() ?? href
-							} else if label.contains(",%") scan(label, attrs, g, depth + 1) else text
+							} else if (label.contains(",%")) scan(label, attrs, g, depth + 1) else text
 							"<a href=\"${escape(href)}\"${
 								match named(parts, "role") {
 									Ok(role) => " class=\"${html_attribute(role)}\""
@@ -777,14 +777,14 @@ parse_macro = |source, attrs, g, depth| {
 								}"
 								Err(_) => ""
 							}
-							"<a href=\"mailto:${escape_entities(target)}${query}\"${link_attributes(if label.contains(",") parts else [], False, label.ends_with("^"))}>${text}</a>"
+							"<a href=\"mailto:${escape_entities(target)}${query}\"${link_attributes(if (label.contains(",")) parts else [], False, label.ends_with("^"))}>${text}</a>"
 						}
 						"kbd:" => {
 							if lookup(attrs, "experimental").is_err() {
 								return none
 							}
-							keys = if label.ends_with("++") repl(take(label, label.to_utf8().len() - 2), "+", ",").split_on(",").append("+") else repl(label, "+", ",").split_on(",")
-							if keys.len() == 1 "<kbd>${escape(label)}</kbd>" else "<span class=\"keyseq\">${Str.join_with(keys.map(|key| "<kbd>${escape(key.trim())}</kbd>"), "+")}</span>"
+							keys = if (label.ends_with("++")) repl(take(label, label.to_utf8().len() - 2), "+", ",").split_on(",").append("+") else repl(label, "+", ",").split_on(",")
+							if (keys.len() == 1) "<kbd>${escape(label)}</kbd>" else "<span class=\"keyseq\">${Str.join_with(keys.map(|key| "<kbd>${escape(key.trim())}</kbd>"), "+")}</span>"
 						}
 						"btn:" => {
 							if lookup(attrs, "experimental").is_err() {
@@ -798,8 +798,8 @@ parse_macro = |source, attrs, g, depth| {
 							}
 							items = label.split_on(">").map(|item| item.trim())
 							arrow = "&#160;<b class=\"caret\">&#8250;</b> "
-							if label == "" "<b class=\"menuref\">${escape_entities(target)}</b>" else {
-								middle = if items.len() > 1 Str.join_with(items.take_first(items.len() - 1).map(|item| "<b class=\"submenu\">${escape(item)}</b>"), arrow).concat(arrow) else ""
+							if (label == "") "<b class=\"menuref\">${escape_entities(target)}</b>" else {
+								middle = if (items.len() > 1) Str.join_with(items.take_first(items.len() - 1).map(|item| "<b class=\"submenu\">${escape(item)}</b>"), arrow).concat(arrow) else ""
 								"<span class=\"menuseq\"><b class=\"menu\">${escape_entities(target)}</b>${arrow}${middle}<b class=\"menuitem\">${escape(items.last() ?? "")}</b></span>"
 							}
 						}
@@ -807,7 +807,7 @@ parse_macro = |source, attrs, g, depth| {
 							if label == "" {
 								"<sup class=\"footnoteref\">[<a class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>"
 							} else {
-								id = if target == "" "" else " id=\"_footnote_${escape_entities(target)}\""
+								id = if (target == "") "" else " id=\"_footnote_${escape_entities(target)}\""
 								"<sup class=\"footnote\"${id}>[<a id=\"_footnoteref_1\" class=\"footnote\" href=\"#_footnotedef_1\" title=\"View footnote.\">1</a>]</sup>"
 							}
 						}
@@ -816,7 +816,7 @@ parse_macro = |source, attrs, g, depth| {
 						_ => {
 							href = repl(escape_entities(target), " ", "%20")
 							attr_text = link_attributes(parts, first == "", label.ends_with("^"))
-							display = if label.ends_with("^") take(text, text.to_utf8().len() - 1) else if label.contains(",%") scan(label, attrs, g, depth + 1) else text
+							display = if (label.ends_with("^")) take(text, text.to_utf8().len() - 1) else if (label.contains(",%")) scan(label, attrs, g, depth + 1) else text
 							"<a href=\"${href}\"${attr_text}>${display}</a>"
 						}
 					}
@@ -842,7 +842,7 @@ parse_macro = |source, attrs, g, depth| {
 		if target == $prefix {
 			return none
 		}
-		rendered_target = if g.special escape_entities(target) else target
+		rendered_target = if (g.special) escape_entities(target) else target
 		return { used: $end, html: "<a href=\"${rendered_target}\" class=\"bare\">${rendered_target}</a>" }
 	}
 	none
@@ -1223,7 +1223,7 @@ macro_parts = |incoming_source| {
 	var $closed = False
 	while $pos < bytes.len() {
 		b = bytes.get($pos) ?? 0
-		previous = if $pos == 0 0 else bytes.get($pos - 1) ?? 0
+		previous = if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0
 		if $closed and (b == ',' or space(b)) {
 			$start = $pos + 1
 			if b == ',' {
@@ -1596,12 +1596,12 @@ escape_entities = |source| {
 		} else if b == '<' {
 			$out = $out.concat("&lt;".to_utf8())
 		}
-			else if b == '>' {
-				$out = $out.concat("&gt;".to_utf8())
-			}
-				else {
-					$out = $out.append(b)
-				}
+		else if b == '>' {
+			$out = $out.concat("&gt;".to_utf8())
+		}
+		else {
+			$out = $out.append(b)
+		}
 		$pos = $pos + 1
 	}
 	Str.from_utf8_lossy($out)
@@ -1692,14 +1692,14 @@ quote_prefixed = |input, attrs, g, prefix| {
 			bytes = pass_source.to_utf8()
 			while $pos < bytes.len() {
 				rest = drop(pass_source, $pos)
-				pass = if g.macros pass_match(rest, if $pos == 0 0 else bytes.get($pos - 1) ?? 0, attrs, single, word_before(bytes, $pos)) else { used: 0, body: "", role: "", escaped: False, escaped_role: False }
+				pass = if (g.macros) pass_match(rest, if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0, attrs, single, word_before(bytes, $pos)) else { used: 0, body: "", role: "", escaped: False, escaped_role: False }
 				if pass.used > 0 {
 					if pass.escaped {
 						$text = $text.concat(pass.body)
 					} else {
 						body = pass.body
-						html = if pass.role == "" or pass.escaped_role body else "<span${quote_attributes(pass.role)}>${body}</span>"
-						$text = $text.concat(if pass.escaped_role "[${pass.role}]${token($prefix, $tags.len())}" else token($prefix, $tags.len()))
+						html = if (pass.role == "" or pass.escaped_role) body else "<span${quote_attributes(pass.role)}>${body}</span>"
+						$text = $text.concat(if (pass.escaped_role) "[${pass.role}]${token($prefix, $tags.len())}" else token($prefix, $tags.len()))
 						match deferred_pass(rest) {
 							Ok(deferred) if !single => {
 								$deferred = $deferred.append({ slot: $tags.len(), source: deferred.source, subs: deferred.subs })
@@ -1711,7 +1711,7 @@ quote_prefixed = |input, attrs, g, prefix| {
 					$pos = $pos + pass.used
 				} else {
 					c = bytes.get($pos) ?? 0
-					n = if c < 128 1 else if c < 224 2 else if c < 240 3 else 4
+					n = if (c < 128) 1 else if (c < 224) 2 else if (c < 240) 3 else 4
 					var $end = $pos + n
 					while $end < bytes.len() and !possible_pass(bytes, $end, single) {
 						$end = $end + 1
@@ -1749,24 +1749,24 @@ quote_prefixed = |input, attrs, g, prefix| {
 				var $i = 0
 				var $boundary = bs.len() + 1
 				while $i < bs.len() {
-					matched = if !stage.unconstrained and $i == $boundary { used: 0, body: "", role: "", escaped: False, escaped_role: False } else quote_match(source, bs, $i, stage, marker_open, marker_close, closers, g.special)
+					matched = if (!stage.unconstrained and $i == $boundary) { used: 0, body: "", role: "", escaped: False, escaped_role: False } else quote_match(source, bs, $i, stage, marker_open, marker_close, closers, g.special)
 					if matched.used > 0 {
 						if matched.escaped {
 							$next = $next.concat(matched.body)
 						} else {
-							tag = if stage.tag == "mark" and matched.role != "" "span" else stage.tag
-							opening = if tag == "double" "&#8220;" else if tag == "single" "&#8216;" else "<${tag}${quote_attributes(if matched.escaped_role "" else matched.role)}>"
-							closing = if tag == "double" "&#8221;" else if tag == "single" "&#8217;" else "</${tag}>"
+							tag = if (stage.tag == "mark" and matched.role != "") "span" else stage.tag
+							opening = if (tag == "double") "&#8220;" else if (tag == "single") "&#8216;" else "<${tag}${quote_attributes(if (matched.escaped_role) "" else matched.role)}>"
+							closing = if (tag == "double") "&#8221;" else if (tag == "single") "&#8217;" else "</${tag}>"
 							before = token($prefix, $tags.len())
 							after = token($prefix, $tags.len() + 1)
 							$tags = $tags.append(opening).append(closing)
-							$next = $next.concat("${if matched.escaped_role "[${matched.role}]" else ""}${before}${matched.body}${after}")
+							$next = $next.concat("${if (matched.escaped_role) "[${matched.role}]" else ""}${before}${matched.body}${after}")
 						}
 						$i = $i + matched.used
 						$boundary = $i
 					} else {
 						c = bs.get($i) ?? 0
-						n = if c < 128 1 else if c < 224 2 else if c < 240 3 else 4
+						n = if (c < 128) 1 else if (c < 224) 2 else if (c < 240) 3 else 4
 						var $end = $i + n
 						while $end < bs.len() and (bs.get($end) ?? 0) != first_marker and (bs.get($end) ?? 0) != '[' and (bs.get($end) ?? 0) != '\\' {
 							$end = $end + 1
@@ -1790,7 +1790,7 @@ quote_match = |source, bs, position, stage, opening, closing, closers, special| 
 		return none
 	}
 	escaped = first == '\\'
-	var $offset = if escaped 1 else 0
+	var $offset = if (escaped) 1 else 0
 	var $role = ""
 	if (bs.get(position + $offset) ?? 0) == '[' {
 		match find_bytes(bs, [93], position + $offset + 1) {
@@ -1804,7 +1804,7 @@ quote_match = |source, bs, position, stage, opening, closing, closers, special| 
 	if !bs.drop_first(position + $offset).starts_with(opening) {
 		return none
 	}
-	previous = if position == 0 or escaped 0 else bs.get(position - 1) ?? 0
+	previous = if (position == 0 or escaped) 0 else bs.get(position - 1) ?? 0
 	if !stage.unconstrained {
 		if (!escaped and word_before(bs, position)) or (special and (previous == '<' or previous == '>' or previous == '&')) or previous == ';' or previous == ':' or previous == '}' or (stage.tag == "mark" and previous == '&') or (stage.tag == "code" and (previous == '\'' or previous == '"' or previous == '`')) {
 			return none
@@ -1835,7 +1835,7 @@ quote_match = |source, bs, position, stage, opening, closing, closers, special| 
 			used = end + closing.len() - position
 			escaped_role = escaped and $role != "" and !stage.unconstrained
 			content = slice(source, start, end - start)
-			{ used, body: if escaped and !escaped_role slice(source, position + 1, used - 1) else content, role: $role, escaped: escaped and !escaped_role, escaped_role }
+			{ used, body: if (escaped and !escaped_role) slice(source, position + 1, used - 1) else content, role: $role, escaped: escaped and !escaped_role, escaped_role }
 		}
 	}
 }
@@ -1845,16 +1845,16 @@ quote_attributes = |role| {
 	if role == "" {
 		return ""
 	}
-	id = if role.starts_with("#") drop(role, 1).split_on(".").first() ?? "" else ""
-	classes = if role.starts_with("#") Str.join_with(role.split_on(".").drop_first(1), " ") else if role.starts_with(".") Str.join_with(drop(role, 1).split_on("."), " ") else role
-	"${if id == "" "" else " id=\"${id}\""}${if classes == "" "" else " class=\"${classes}\""}"
+	id = if (role.starts_with("#")) drop(role, 1).split_on(".").first() ?? "" else ""
+	classes = if (role.starts_with("#")) Str.join_with(role.split_on(".").drop_first(1), " ") else if (role.starts_with(".")) Str.join_with(drop(role, 1).split_on("."), " ") else role
+	"${if (id == "") "" else " id=\"${id}\""}${if (classes == "") "" else " class=\"${classes}\""}"
 }
 
 pass_match : Str, U8, List({ name : Str, value : Str }), Bool, Bool -> QuoteMatch
 pass_match = |source, prev, attrs, single, prev_word| {
 	none = { used: 0, body: "", role: "", escaped: False, escaped_role: False }
 	escaped = source.starts_with("\\")
-	var $offset = if escaped 1 else 0
+	var $offset = if (escaped) 1 else 0
 	var $role = ""
 	if drop(source, $offset).starts_with("[") {
 		match find(source, "]", $offset + 1) {
@@ -1884,11 +1884,11 @@ pass_match = |source, prev, attrs, single, prev_word| {
 					}
 					subs = slice(rest, $math_prefix.to_utf8().len(), open - $math_prefix.to_utf8().len())
 					raw = repl(slice(rest, open + 1, end - open - 1), "\\]", "]")
-					dialect = if $math_prefix == "stem:" lookup(attrs, "stem") ?? "" else $math_prefix
+					dialect = if ($math_prefix == "stem:") lookup(attrs, "stem") ?? "" else $math_prefix
 					latex = dialect == "latexmath:" or dialect == "latexmath" or dialect == "latex" or dialect == "tex"
-					content = if latex and raw.starts_with("$") and raw.ends_with("$") slice(raw, 1, raw.to_utf8().len() - 2) else raw
-					html = AsciiDocInline.render_with(content, attrs, { subs: if subs == "" "specialcharacters" else subs })
-					body = if latex "\\(${html}\\)" else "\\$${html}\\$"
+					content = if (latex and raw.starts_with("$") and raw.ends_with("$")) slice(raw, 1, raw.to_utf8().len() - 2) else raw
+					html = AsciiDocInline.render_with(content, attrs, { subs: if (subs == "") "specialcharacters" else subs })
+					body = if (latex) "\\(${html}\\)" else "\\$${html}\\$"
 					return { used, body, role: "", escaped: False, escaped_role: False }
 				}
 				Err(_) => return none
@@ -1914,8 +1914,8 @@ pass_match = |source, prev, attrs, single, prev_word| {
 		}
 	}
 	choices = if single {
-		if rest.starts_with("+") [1] else []
-	} else if rest.starts_with("+++") [3, 2] else if rest.starts_with("++") or rest.starts_with("$$") [2] else []
+		if (rest.starts_with("+")) [1] else []
+	} else if (rest.starts_with("+++")) [3, 2] else if (rest.starts_with("++") or rest.starts_with("$$")) [2] else []
 	for n in choices {
 		if !(n == 1 and (prev_word or prev == ';' or prev == ':' or prev == '\\')) {
 			marker = take(rest, n)
@@ -1927,7 +1927,7 @@ pass_match = |source, prev, attrs, single, prev_word| {
 						content = slice(rest, n, end - n)
 						if n > 1 or (end > n and !space(content.to_utf8().first() ?? 0) and !space(content.to_utf8().last() ?? 0) and !word_at(rest.to_utf8(), end + n)) {
 							used = $offset + end + n
-							body = if escaped and $role == "" drop(take(source, used), 1) else if n == 3 content else escape(content)
+							body = if (escaped and $role == "") drop(take(source, used), 1) else if (n == 3) content else escape(content)
 							return { used, body, role: $role, escaped: escaped and $role == "", escaped_role: escaped and $role != "" }
 						}
 						$search = end + n
@@ -2096,7 +2096,7 @@ dynamic_value : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Boo
 dynamic_value = |attrs, attributes, removed, name| {
 	match attributes.get(name) {
 		Ok(value) => Ok(value)
-		Err(_) => if removed.contains(name) Err(Missing) else direct(attrs, name)
+		Err(_) => if (removed.contains(name)) Err(Missing) else direct(attrs, name)
 	}
 }
 
@@ -2186,7 +2186,7 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 								current = dynamic_value(attrs, $attributes, $removed, name)
 								value = match current {
 									Ok(text) if text != "" => successor(text)
-									_ => if parts.len() > 2 Str.join_with(parts.drop_first(2), ":") else "1"
+									_ => if (parts.len() > 2) Str.join_with(parts.drop_first(2), ":") else "1"
 								}
 								$tag_prefix = safe_prefix(value, $tag_prefix)
 								$attributes = $attributes.insert(name, value)
@@ -2221,10 +2221,10 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 										if g.attr_quotes or !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
 											$out = $out.concat(value)
 										} else {
-											subs = Str.join_with((if g.replacements ["replacements"] else []).concat(if g.macros ["macros"] else []).concat(if g.post ["post_replacements"] else []), ",")
+											subs = Str.join_with((if (g.replacements) ["replacements"] else []).concat(if (g.macros) ["macros"] else []).concat(if (g.post) ["post_replacements"] else []), ",")
 											var $rendered_html = ""
 											if !value.contains("footnote:") {
-												effective = if g.macros and macro_candidate(value) merged_attributes(attrs, $attributes, $removed) else attrs
+												effective = if (g.macros and macro_candidate(value)) merged_attributes(attrs, $attributes, $removed) else attrs
 												$rendered_html = scan(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0)
 											} else {
 												shared = assemble_state($context, $attributes, $removed, $tag_prefix, $footnotes, $note_index, $indexed_note_count)
@@ -2286,7 +2286,7 @@ normalize_number : Str -> Try(Str, [Missing])
 normalize_number = |source| {
 	text = source.trim()
 	negative = text.starts_with("-")
-	digits = if negative or text.starts_with("+") drop(text, 1) else text
+	digits = if (negative or text.starts_with("+")) drop(text, 1) else text
 	if digits == "" or !digits.to_utf8().all(|b| b >= '0' and b <= '9') {
 		return Err(Missing)
 	}
@@ -2295,7 +2295,7 @@ normalize_number = |source| {
 		$start = $start + 1
 	}
 	number = drop(digits, $start)
-	Ok(if negative and number != "0" "-${number}" else number)
+	Ok(if (negative and number != "0") "-${number}" else number)
 }
 
 successor : Str -> Str
@@ -2303,24 +2303,24 @@ successor = |source| {
 	match normalize_number(source) {
 		Ok(number) if number == source => {
 			negative = number.starts_with("-")
-			var $digits = (if negative drop(number, 1) else number).to_utf8()
+			var $digits = (if (negative) drop(number, 1) else number).to_utf8()
 			var $pos = $digits.len()
 			var $carry = True
 			while $pos > 0 and $carry {
 				$pos = $pos - 1
 				b = $digits.get($pos) ?? '0'
 				value = if negative {
-					if b == '0' '9' else b - 1
-				} else if b == '9' '0' else b + 1
-				$carry = if negative b == '0' else b == '9'
+					if (b == '0') '9' else b - 1
+				} else if (b == '9') '0' else b + 1
+				$carry = if (negative) b == '0' else b == '9'
 				$digits = $digits.set($pos, value) ?? $digits
 			}
 			if negative {
 				normalize_number("-${Str.from_utf8_lossy($digits)}") ?? "0"
 			}
-				else {
-					if $carry "1${Str.from_utf8_lossy($digits)}" else Str.from_utf8_lossy($digits)
-				}
+			else {
+				if ($carry) "1${Str.from_utf8_lossy($digits)}" else Str.from_utf8_lossy($digits)
+			}
 		}
 		_ => string_successor(source)
 	}
@@ -2341,16 +2341,16 @@ string_successor = |source| {
 		b = $bytes.get($pos) ?? 0
 		if (b >= '0' and b <= '9') or (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') {
 			$first = $pos
-			$prefix = if b >= 'a' and b <= 'z' 'a' else if b >= 'A' and b <= 'Z' 'A' else '1'
+			$prefix = if (b >= 'a' and b <= 'z') 'a' else if (b >= 'A' and b <= 'Z') 'A' else '1'
 			wrap = b == '9' or b == 'z' or b == 'Z'
-			replacement = if b == '9' '0' else if b == 'z' 'a' else if b == 'Z' 'A' else b + 1
+			replacement = if (b == '9') '0' else if (b == 'z') 'a' else if (b == 'Z') 'A' else b + 1
 			$bytes = $bytes.set($pos, replacement) ?? $bytes
 			$carry = wrap
 		}
 	}
 	if $first == $bytes.len() {
 		last = ($bytes.last() ?? 0)
-		$bytes = $bytes.set($bytes.len() - 1, if last == 255 0 else last + 1) ?? $bytes
+		$bytes = $bytes.set($bytes.len() - 1, if (last == 255) 0 else last + 1) ?? $bytes
 	} else if $carry {
 		$bytes = $bytes.take_first($first).append($prefix).concat($bytes.drop_first($first))
 	}
@@ -2487,7 +2487,7 @@ syntax_candidate : List(U8), U64, Groups, Bool, Bool -> Bool
 syntax_candidate = |bytes, pos, g, has_email, has_colon| {
 	b = bytes.get(pos) ?? 0
 	next = bytes.get(pos + 1) ?? 0
-	prev = if pos == 0 0 else bytes.get(pos - 1) ?? 0
+	prev = if (pos == 0) 0 else bytes.get(pos - 1) ?? 0
 	if b == '\\' and (g.macros or g.attributes or g.quotes or (g.replacements and (next == '-' or next == '.'))) {
 		return True
 	}
@@ -2712,7 +2712,7 @@ has_dash_replacement = |bytes| {
 	var $pos = 0
 	while $pos + 1 < bytes.len() {
 		if (bytes.get($pos) ?? 0) == '-' and (bytes.get($pos + 1) ?? 0) == '-' {
-			before = if $pos == 0 0 else bytes.get($pos - 1) ?? 0
+			before = if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0
 			after = bytes.get($pos + 2) ?? 0
 			if (word(before) and word(after)) or (($pos == 0 or space(before)) and ($pos + 2 == bytes.len() or space(after))) {
 				return True
@@ -2729,7 +2729,7 @@ fixed_replacement = |bytes, pos, g| {
 	b = bytes.get(pos) ?? 0
 	next = bytes.get(pos + 1) ?? 0
 	third = bytes.get(pos + 2) ?? 0
-	prev = if pos == 0 0 else bytes.get(pos - 1) ?? 0
+	prev = if (pos == 0) 0 else bytes.get(pos - 1) ?? 0
 	if g.post and b == ' ' and next == '+' {
 		if third == '\n' {
 			return { used: 3, html: "<br>\n" }
@@ -2781,13 +2781,13 @@ fixed_replacement = |bytes, pos, g| {
 			return { used: 2, html: "&#8212;&#8203;" }
 		}
 		if pos == 0 and (space(third) or pos + 2 == bytes.len()) {
-			return { used: if pos + 2 == bytes.len() 2 else 3, html: "&#8201;&#8212;&#8201;" }
+			return { used: if (pos + 2 == bytes.len()) 2 else 3, html: "&#8201;&#8212;&#8201;" }
 		}
 	}
 	if (b == ' ' or b == '\n') and next == '-' and third == '-' {
 		after = bytes.get(pos + 3) ?? 0
 		if space(after) or pos + 3 == bytes.len() {
-			return { used: if pos + 3 == bytes.len() 3 else 4, html: "&#8201;&#8212;&#8201;" }
+			return { used: if (pos + 3 == bytes.len()) 3 else 4, html: "&#8201;&#8212;&#8201;" }
 		}
 	}
 	none
@@ -2818,7 +2818,7 @@ quote_closers = |bytes, stage, closing| {
 	while $pos + closing.len() <= bytes.len() {
 		if (bytes.get($pos) ?? 0) == first and bytes.drop_first($pos).starts_with(closing) {
 			after = bytes.get($pos + closing.len()) ?? 0
-			before = if $pos == 0 0 else bytes.get($pos - 1) ?? 0
+			before = if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0
 			if stage.unconstrained or (!space(before) and !word_at(bytes, $pos + closing.len()) and !(stage.tag == "code" and (after == '"' or after == '\'' or after == '`'))) {
 				$positions = $positions.append($pos)
 			}
@@ -2839,8 +2839,8 @@ word_at = |bytes, pos| {
 	if first < 128 {
 		return word(first)
 	}
-	width = if first < 224 2 else if first < 240 3 else 4
-	var $scalar = if width == 2 first.to_u32() - 192 else if width == 3 first.to_u32() - 224 else first.to_u32() - 240
+	width = if (first < 224) 2 else if (first < 240) 3 else 4
+	var $scalar = if (width == 2) first.to_u32() - 192 else if (width == 3) first.to_u32() - 224 else first.to_u32() - 240
 	var $offset = 1
 	while $offset < width {
 		$scalar = $scalar * 64 + ((bytes.get(pos + $offset) ?? 0).to_u32() % 64)
@@ -2888,9 +2888,9 @@ substitution_stages = |spec| {
 		append = name.starts_with("+")
 		remove = name.starts_with("-")
 		prepend = !append and !remove and name.ends_with("+")
-		key = if append or remove drop(name, 1) else if prepend take(name, name.to_utf8().len() - 1) else name
+		key = if (append or remove) drop(name, 1) else if (prepend) take(name, name.to_utf8().len() - 1) else name
 		if !$started {
-			$stages = if append or remove or prepend normal_stages else []
+			$stages = if (append or remove or prepend) normal_stages else []
 			$started = True
 		}
 		resolved = match key {
@@ -2904,7 +2904,7 @@ substitution_stages = |spec| {
 			"post_replacements" | "p" => ["post_replacements"]
 			_ => []
 		}
-		$stages = if remove $stages.keep_if(|stage| !resolved.contains(stage)) else if prepend resolved.concat($stages) else $stages.concat(resolved)
+		$stages = if (remove) $stages.keep_if(|stage| !resolved.contains(stage)) else if (prepend) resolved.concat($stages) else $stages.concat(resolved)
 	}
 	var $unique = []
 	for stage in $stages {
@@ -2918,9 +2918,9 @@ substitution_stages = |spec| {
 render_ordered : Str, List({ name : Str, value : Str }), List(Str), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
 render_ordered = |input, attrs, stages, state| {
 	prior_notes = state.footnotes.len()
-	indexed = if state.indexed_ref_count == state.refs.len() state else AsciiDocInline.with_refs(state, state.refs)
+	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
 	refreshed = refresh_state(attrs, indexed)
-	extracted = if stages.contains("macros") and quote_needed(input, { ..empty, macros: True }) quote_state(input, attrs, { ..empty, macros: True, ref_index: refreshed.ref_index }, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
+	extracted = if (stages.contains("macros") and quote_needed(input, { ..empty, macros: True })) quote_state(input, attrs, { ..empty, macros: True, ref_index: refreshed.ref_index }, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
 	var $text = extracted.source
 	var $state = refreshed
 	for stage in stages {
@@ -2967,9 +2967,9 @@ link_attributes = |parts, bare, new_window| {
 	id = named(parts, "id") ?? ""
 	role = named(parts, "role") ?? ""
 	title = named(parts, "title") ?? ""
-	classes = if bare and role != "" "bare ${role}" else if bare "bare" else role
-	window = named(parts, "window") ?? if new_window "_blank" else ""
-	"${if id == "" "" else " id=\"${html_attribute(id)}\""}${if classes == "" "" else " class=\"${html_attribute(classes)}\""}${if title == "" "" else " title=\"${html_attribute(title)}\""}${if window == "" "" else " target=\"${html_attribute(window)}\"${if window == "_blank" " rel=\"noopener\"" else ""}"}"
+	classes = if (bare and role != "") "bare ${role}" else if (bare) "bare" else role
+	window = named(parts, "window") ?? if (new_window) "_blank" else ""
+	"${if (id == "") "" else " id=\"${html_attribute(id)}\""}${if (classes == "") "" else " class=\"${html_attribute(classes)}\""}${if (title == "") "" else " title=\"${html_attribute(title)}\""}${if (window == "") "" else " target=\"${html_attribute(window)}\"${if (window == "_blank") " rel=\"noopener\"" else ""}"}"
 }
 
 uri_component : Str -> Str
@@ -3140,28 +3140,28 @@ footnote_end_at = |source, bytes, open, attrs, g| {
 		if b == '\\' and (bytes.get($pos + 1) ?? 0) == ']' {
 			$pos = $pos + 2
 		}
-			else if b == ']' {
-				return Ok($pos)
-			}
-				else {
-					nested = if macro_name_at(bytes, $pos) and !bytes.drop_first($pos).starts_with(note) and !bytes.drop_first($pos).starts_with(note_ref) {
-						var $end = $pos
-						while $end < bytes.len() {
-							c = bytes.get($end) ?? 0
-							if c == '\\' and (bytes.get($end + 1) ?? 0) == ']' {
-								$end = $end + 2
-							}
-								else if c == ']' {
-									break
-								}
-									else {
-										$end = $end + 1
-									}
-						}
-						parse_macro(slice(source, $pos, $end - $pos + if $end < bytes.len() 1 else 0), attrs, g, 0).used
-					} else 0
-					$pos = $pos + if nested > 0 nested else 1
+		else if b == ']' {
+			return Ok($pos)
+		}
+		else {
+			nested = if macro_name_at(bytes, $pos) and !bytes.drop_first($pos).starts_with(note) and !bytes.drop_first($pos).starts_with(note_ref) {
+				var $end = $pos
+				while $end < bytes.len() {
+					c = bytes.get($end) ?? 0
+					if c == '\\' and (bytes.get($end + 1) ?? 0) == ']' {
+						$end = $end + 2
+					}
+					else if c == ']' {
+						break
+					}
+					else {
+						$end = $end + 1
+					}
 				}
+				parse_macro(slice(source, $pos, $end - $pos + if ($end < bytes.len()) 1 else 0), attrs, g, 0).used
+			} else 0
+			$pos = $pos + if (nested > 0) nested else 1
+		}
 	}
 	Err(Missing)
 }
@@ -3212,7 +3212,7 @@ expect [2, 3, 4, 5].all(
 	|n| {
 		run = Str.join_with(List.repeat("-", n), "")
 		escaped = "\\${run}"
-		expected = if n == 2 run else escaped
+		expected = if (n == 2) run else escaped
 		AsciiDocInline.render(escaped, []) == expected and AsciiDocInline.render("A${escaped}B", []) == "A${expected}B" and AsciiDocInline.render("--${escaped}", []) == "--${expected}"
 	},
 )

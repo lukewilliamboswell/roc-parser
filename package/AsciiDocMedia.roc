@@ -5,9 +5,9 @@ AsciiDocMedia :: [].{
 	render : { context : Str, target : Str, title : Str, id : Str, attrs : List({ name : Str, value : Str }) } -> Str
 	render = |node| {
 		attrs = node.attrs
-		id = if node.id == "" "" else " id=\"${encode(node.id)}\""
+		id = if (node.id == "") "" else " id=\"${encode(node.id)}\""
 		role = get(attrs, "role") ?? ""
-		role_class = if role == "" "" else " ${role}"
+		role_class = if (role == "") "" else " ${role}"
 		float = match get(attrs, "float") {
 			Ok(value) => " ${value}"
 			Err(_) => ""
@@ -16,14 +16,14 @@ AsciiDocMedia :: [].{
 			Ok(value) => " text-${value}"
 			Err(_) => ""
 		}
-		classes = "${node.context}block${if node.context == "audio" "" else "${float}${align}"}${role_class}"
+		classes = "${node.context}block${if (node.context == "audio") "" else "${float}${align}"}${role_class}"
 		width = dimension(attrs, "width", "2")
 		height = dimension(attrs, "height", "3")
-		title = if node.title == "" "" else "\n<div class=\"title\">${node.title}</div>"
+		title = if (node.title == "") "" else "\n<div class=\"title\">${node.title}</div>"
 		body = match node.context {
 			"image" => {
 				positional_alt = get(attrs, "1") ?? ""
-				alt = get(attrs, "alt") ?? (if positional_alt == "" default_alt(node.target) else positional_alt)
+				alt = get(attrs, "alt") ?? (if (positional_alt == "") default_alt(node.target) else positional_alt)
 				src = uri(node.target, attrs)
 				img = "<img src=\"${encode(src)}\" alt=\"${encode(alt)}\"${width}${height}>"
 				content = match get(attrs, "link") {
@@ -34,46 +34,46 @@ AsciiDocMedia :: [].{
 			}
 			"audio" => {
 				autoplay = flag(attrs, "autoplay")
-				controls = if option(attrs, "nocontrols") "" else " controls"
+				controls = if (option(attrs, "nocontrols")) "" else " controls"
 				loop = flag(attrs, "loop")
-				title_above = if node.title == "" "" else "<div class=\"title\">${node.title}</div>\n"
+				title_above = if (node.title == "") "" else "<div class=\"title\">${node.title}</div>\n"
 				"<div${id} class=\"${classes}\">\n${title_above}<div class=\"content\">\n<audio src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${autoplay}${controls}${loop}>\nYour browser does not support the audio tag.\n</audio>\n</div>\n</div>"
 			}
 			"video" => {
 				poster = get(attrs, "poster") ?? (get(attrs, "1") ?? "")
-				fullscreen = if option(attrs, "nofullscreen") "" else " allowfullscreen"
+				fullscreen = if (option(attrs, "nofullscreen")) "" else " allowfullscreen"
 				scheme = get(attrs, "asset-uri-scheme") ?? "https"
-				scheme_prefix = if scheme == "" "" else "${scheme}:"
+				scheme_prefix = if (scheme == "") "" else "${scheme}:"
 				content = if poster == "youtube" {
 					segments = node.target.split_on("/")
 					first = segments.first() ?? ""
 					ids = first.split_on(",")
 					target = ids.first() ?? ""
-					list = if segments.len() > 1 Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "list")
-					playlist = if ids.len() > 1 Ok(Str.join_with(ids.drop_first(1), ",")) else get(attrs, "playlist")
+					list = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "list")
+					playlist = if (ids.len() > 1) Ok(Str.join_with(ids.drop_first(1), ",")) else get(attrs, "playlist")
 					list_param = match list {
 						Ok(value) => "&amp;list=${value}"
 						Err(_) => match playlist {
 							Ok(value) => "&amp;playlist=${target},${value}"
-							Err(_) => if option(attrs, "loop") "&amp;playlist=${target}" else ""
+							Err(_) => if (option(attrs, "loop")) "&amp;playlist=${target}" else ""
 						}
 					}
-					related = if option(attrs, "related") "1" else "0"
+					related = if (option(attrs, "related")) "1" else "0"
 					start = query(attrs, "start", "start")
 					end = query(attrs, "end", "end")
-					autoplay = if option(attrs, "autoplay") "&amp;autoplay=1" else ""
-					loop = if option(attrs, "loop") "&amp;loop=1" else ""
-					muted = if option(attrs, "muted") "&amp;mute=1" else ""
-					controls = if option(attrs, "nocontrols") "&amp;controls=0" else ""
-					fs = if option(attrs, "nofullscreen") "&amp;fs=0" else ""
-					modest = if option(attrs, "modest") "&amp;modestbranding=1" else ""
+					autoplay = if (option(attrs, "autoplay")) "&amp;autoplay=1" else ""
+					loop = if (option(attrs, "loop")) "&amp;loop=1" else ""
+					muted = if (option(attrs, "muted")) "&amp;mute=1" else ""
+					controls = if (option(attrs, "nocontrols")) "&amp;controls=0" else ""
+					fs = if (option(attrs, "nofullscreen")) "&amp;fs=0" else ""
+					modest = if (option(attrs, "modest")) "&amp;modestbranding=1" else ""
 					theme = query(attrs, "theme", "theme")
 					lang = query(attrs, "lang", "hl")
 					"<iframe${width}${height} src=\"${scheme_prefix}//www.youtube.com/embed/${target}?rel=${related}${start}${end}${autoplay}${loop}${muted}${controls}${list_param}${fs}${modest}${theme}${lang}\" frameborder=\"0\"${fullscreen}></iframe>"
 				} else if poster == "vimeo" {
 					segments = node.target.split_on("/")
 					target = segments.first() ?? ""
-					hash = if segments.len() > 1 Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "hash")
+					hash = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "hash")
 					var $params = []
 					match hash {
 						Ok(value) => {
@@ -86,21 +86,21 @@ AsciiDocMedia :: [].{
 							$params = $params.append("${opt}=1")
 						}
 					}
-					query_string = if $params.is_empty() "" else "?${Str.join_with($params, "&amp;")}"
+					query_string = if ($params.is_empty()) "" else "?${Str.join_with($params, "&amp;")}"
 					start = match get(attrs, "start") {
 						Ok(value) => "#at=${value}"
 						Err(_) => ""
 					}
 					"<iframe${width}${height} src=\"${scheme_prefix}//player.vimeo.com/video/${target}${query_string}${start}\" frameborder=\"0\"${fullscreen}></iframe>"
 				} else {
-					poster_attribute = if poster == "" "" else " poster=\"${encode(uri(poster, attrs))}\""
+					poster_attribute = if (poster == "") "" else " poster=\"${encode(uri(poster, attrs))}\""
 					preload = match get(attrs, "preload") {
 						Ok(value) if value != "" => " preload=\"${encode(value)}\""
 						_ => ""
 					}
 					autoplay = flag(attrs, "autoplay")
 					muted = flag(attrs, "muted")
-					controls = if option(attrs, "nocontrols") "" else " controls"
+					controls = if (option(attrs, "nocontrols")) "" else " controls"
 					loop = flag(attrs, "loop")
 					"<video src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${width}${height}${poster_attribute}${autoplay}${muted}${controls}${loop}${preload}>\nYour browser does not support the video tag.\n</video>"
 				}
@@ -138,7 +138,7 @@ option = |attrs, name| {
 }
 
 flag : List({ name : Str, value : Str }), Str -> Str
-flag = |attrs, name| if option(attrs, name) " ${name}" else ""
+flag = |attrs, name| if (option(attrs, name)) " ${name}" else ""
 
 dimension : List({ name : Str, value : Str }), Str, Str -> Str
 dimension = |attrs, name, positional| match (
@@ -161,7 +161,7 @@ time_fragment : List({ name : Str, value : Str }) -> Str
 time_fragment = |attrs| {
 	start = get(attrs, "start")
 	end = get(attrs, "end")
-	if start.is_err() and end.is_err() "" else "#t=${start ?? ""}${
+	if (start.is_err() and end.is_err()) "" else "#t=${start ?? ""}${
 		match end {
 			Ok(value) => ",${value}"
 			Err(_) => ""
@@ -175,26 +175,26 @@ link_constraints = |attrs| {
 	match get(attrs, "window") {
 		Ok(window) => {
 			rel = if window == "_blank" or option(attrs, "noopener") {
-				if nofollow " rel=\"nofollow noopener\"" else " rel=\"noopener\""
+				if (nofollow) " rel=\"nofollow noopener\"" else " rel=\"noopener\""
 			} else ""
 			" target=\"${encode(window)}\"${rel}"
 		}
-		Err(_) => if nofollow " rel=\"nofollow\"" else ""
+		Err(_) => if (nofollow) " rel=\"nofollow\"" else ""
 	}
 }
 
 uri : Str, List({ name : Str, value : Str }) -> Str
 uri = |target, attrs| {
 	directory = get(attrs, "imagesdir") ?? ""
-	path = if directory == "" or target.contains(":") or target.starts_with("/") target else "${directory}/${target}"
-	Str.join_with((if directory != "" and !target.contains(":") and !target.starts_with("/") normalize_path(path) else path).split_on(" "), "%20")
+	path = if (directory == "" or target.contains(":") or target.starts_with("/")) target else "${directory}/${target}"
+	Str.join_with((if (directory != "" and !target.contains(":") and !target.starts_with("/")) normalize_path(path) else path).split_on(" "), "%20")
 }
 
 default_alt : Str -> Str
 default_alt = |target| {
 	filename = (target.split_on("/").last() ?? target)
 	parts = filename.split_on(".")
-	stem = if parts.len() > 1 Str.join_with(parts.take_first(parts.len() - 1), ".") else filename
+	stem = if (parts.len() > 1) Str.join_with(parts.take_first(parts.len() - 1), ".") else filename
 	Str.join_with(Str.join_with(stem.split_on("_"), " ").split_on("-"), " ")
 }
 
@@ -218,15 +218,15 @@ encode = |source| {
 		} else if b == '<' {
 			$out = $out.concat("&lt;".to_utf8())
 		}
-			else if b == '>' {
-				$out = $out.concat("&gt;".to_utf8())
-			}
-				else if b == '"' {
-					$out = $out.concat("&quot;".to_utf8())
-				}
-					else {
-						$out = $out.append(b)
-					}
+		else if b == '>' {
+			$out = $out.concat("&gt;".to_utf8())
+		}
+		else if b == '"' {
+			$out = $out.concat("&quot;".to_utf8())
+		}
+		else {
+			$out = $out.append(b)
+		}
 		$pos = $pos + 1
 	}
 	Str.from_utf8_lossy($out)
@@ -239,8 +239,8 @@ expect AsciiDocMedia.render({ context: "video", target: "abc", title: "", id: ""
 normalize_path : Str -> Str
 normalize_path = |path| {
 	scheme_parts = path.split_on("://")
-	prefix = if scheme_parts.len() > 1 "${scheme_parts.first() ?? ""}://" else if path.starts_with("/") "/" else ""
-	body = if scheme_parts.len() > 1 Str.join_with(scheme_parts.drop_first(1), "://") else path
+	prefix = if (scheme_parts.len() > 1) "${scheme_parts.first() ?? ""}://" else if (path.starts_with("/")) "/" else ""
+	body = if (scheme_parts.len() > 1) Str.join_with(scheme_parts.drop_first(1), "://") else path
 	var $parts = []
 	for part in body.split_on("/") {
 		if part == ".." and !$parts.is_empty() and ($parts.last() ?? "") != ".." {

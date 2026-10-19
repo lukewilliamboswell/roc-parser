@@ -135,20 +135,20 @@ plain_safe = |text, flow| {
 	flow_bad = flow and (bytes.contains(',') or bytes.contains('[') or bytes.contains(']') or bytes.contains('{') or bytes.contains('}'))
 
 	!bytes.is_empty()
-	and !indicator.contains(first)
-	and last != ' '
-	and last != '\t'
-	and last != ':'
-	and !bytes.contains('\n')
-	and !bytes.contains('\t')
-	and !contains(text, ": ")
-	and !contains(text, ":\t")
-	and !contains(text, " #")
-	and !contains(text, "\t#")
-	and !flow_bad
-	and !resolves_non_string(text)
-	# At the start of a line these are document markers.
-	and !(Str.starts_with(text, "---") or Str.starts_with(text, "..."))
+		and !indicator.contains(first)
+		and last != ' '
+		and last != '\t'
+		and last != ':'
+		and !bytes.contains('\n')
+		and !bytes.contains('\t')
+		and !contains(text, ": ")
+		and !contains(text, ":\t")
+		and !contains(text, " #")
+		and !contains(text, "\t#")
+		and !flow_bad
+		and !resolves_non_string(text)
+		# At the start of a line these are document markers.
+		and !(Str.starts_with(text, "---") or Str.starts_with(text, "..."))
 }
 
 escape_utf8 : Str -> Str
@@ -184,7 +184,7 @@ needs_escapes = |text| ["\u(0)", "\u(1b)", "\u(85)", "\u(2028)"].any(|special| S
 
 single_quote : Str -> Str
 single_quote = |text| {
-	doubled = text.to_utf8().fold([], |acc, b| if b == '\'' acc.concat(['\'', '\'']) else acc.append(b))
+	doubled = text.to_utf8().fold([], |acc, b| if (b == '\'') acc.concat(['\'', '\'']) else acc.append(b))
 	"'${Str.from_utf8(doubled) ?? ""}'"
 }
 
@@ -311,7 +311,7 @@ emit_literal = |start, text, base_indent, explicit_ok| {
 		chomp_choice = pick(header_choice.cur, 3)
 		extra_choice = pick(chomp_choice.cur, 3)
 		explicit = needs_explicit or (explicit_ok and header_choice.n % 2 == 0)
-		indicator = if explicit offset.to_str() else ""
+		indicator = if (explicit) offset.to_str() else ""
 		{ chomp, extra_blank } =
 			if trailing == 0 {
 				{ chomp: "-", extra_blank: extra_choice.n }
@@ -324,9 +324,9 @@ emit_literal = |start, text, base_indent, explicit_ok| {
 				{ chomp: "+", extra_blank: trailing - 1 }
 			}
 		# Indicator order is free: |2- and |-2 are both valid.
-		header = if header_choice.n >= 2 "|${chomp}${indicator}" else "|${indicator}${chomp}"
+		header = if (header_choice.n >= 2) "|${chomp}${indicator}" else "|${indicator}${chomp}"
 		pad = spaces(base_indent + offset)
-		lines = body.map(|line| if line.is_empty() "" else Str.concat(pad, line))
+		lines = body.map(|line| if (line.is_empty()) "" else Str.concat(pad, line))
 		blanks = List.repeat("", extra_blank)
 		Ok({ text: Str.join_with([header].concat(lines).concat(blanks), "\n"), cur: extra_choice.cur })
 	}
@@ -369,7 +369,7 @@ gen_flow = |start, depth| {
 			$index = $index + 1
 		}
 		sep = pick($cur, 2)
-		joiner = if sep.n == 0 ", " else ","
+		joiner = if (sep.n == 0) ", " else ","
 		{ value: Sequence($values), text: "[${Str.join_with($texts, joiner)}]", cur: sep.cur, block_scalar: False }
 	} else {
 		count = pick(kind.cur, 4)
@@ -443,7 +443,7 @@ gen_block_value = |start, indent, depth, in_sequence| {
 			form = pick(kind.cur, 3)
 			# Mapping values may hold an "indentless" sequence at the key's column.
 			indentless = !in_sequence and form.n == 1
-			column = if indentless indent else child
+			column = if (indentless) indent else child
 			sequence = gen_block_sequence(form.cur, column, depth - 1)
 			if sequence.items_text.is_empty() {
 				{ value: Sequence([]), text: " []", cur: sequence.cur, block_scalar: False }
@@ -473,8 +473,8 @@ gen_block_value = |start, indent, depth, in_sequence| {
 		_ => {
 			scalar = gen_scalar(kind.cur, False, True)
 			note = pick(scalar.cur, 4)
-			trailer = if note.n == 0 and !scalar.text.is_empty() " # note" else ""
-			text = if scalar.text.is_empty() trailer else " ${scalar.text}${trailer}"
+			trailer = if (note.n == 0 and !scalar.text.is_empty()) " # note" else ""
+			text = if (scalar.text.is_empty()) trailer else " ${scalar.text}${trailer}"
 			{ value: scalar.value, text, cur: note.cur, block_scalar: False }
 		}
 	}
@@ -497,7 +497,7 @@ gen_block_mapping = |start, indent, depth| {
 		if !$entries.any(|e| e.key == key.key) {
 			$entries = $entries.append({ key: key.key, value: value.value })
 			# Blank lines after a block scalar would belong to it, so only comments.
-			spacer = if value.block_scalar and gap.text == "\n" "" else gap.text
+			spacer = if (value.block_scalar and gap.text == "\n") "" else gap.text
 			$texts = $texts.append("${key.text}:${value.text}${spacer}")
 			$last_block = value.block_scalar
 		}
@@ -519,7 +519,7 @@ gen_block_sequence = |start, indent, depth| {
 		gap = comment_line(value.cur, indent)
 		$cur = gap.cur
 		$values = $values.append(value.value)
-		spacer = if value.block_scalar and gap.text == "\n" "" else gap.text
+		spacer = if (value.block_scalar and gap.text == "\n") "" else gap.text
 		$texts = $texts.append("-${value.text}${spacer}")
 		$last_block = value.block_scalar
 		$index = $index + 1
@@ -562,8 +562,8 @@ generate = |bytes| {
 				{ value: scalar.value, text: scalar.text, block_scalar: False }
 			}
 		}
-	prefix = if marker.n % 2 == 1 "---\n" else ""
-	suffix = if marker.n >= 2 "\n...\n" else "\n"
+	prefix = if (marker.n % 2 == 1) "---\n" else ""
+	suffix = if (marker.n >= 2) "\n...\n" else "\n"
 	typed = gen_record({ bytes, pos: 0 })
 	{ yaml: "${prefix}${body.text}${suffix}", expected: body.value, record_yaml: typed.text, record: typed.value }
 }
@@ -654,7 +654,7 @@ gen_record = |start| {
 		ratio: ratio_entry.value,
 		flag: flag_entry.value,
 		tags: $tags,
-		inner: { level: U64.to_u8_wrap(level.n), note: if has_note.n == 0 Err(Missing) else Ok(note.s) },
+		inner: { level: U64.to_u8_wrap(level.n), note: if (has_note.n == 0) Err(Missing) else Ok(note.s) },
 		gone: Err(Missing),
 	}
 

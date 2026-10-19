@@ -747,7 +747,7 @@ mismatch = |event, expected| {
 
 scalar_mismatch : Scalar, Str -> Try(_, [InvalidYaml(Yaml.Error)])
 scalar_mismatch = |scalar, expected| {
-	kind = if scalar.plain Plain(scalar.text) else Quoted(scalar.text)
+	kind = if (scalar.plain) Plain(scalar.text) else Quoted(scalar.text)
 	mismatch({ line: scalar.line, column: scalar.column, kind }, expected)
 }
 
@@ -958,7 +958,7 @@ offset_of = |bytes, line, column| {
 	}
 
 	offset = $index + column - 1
-	if offset > bytes.len() bytes.len() else offset
+	if (offset > bytes.len()) bytes.len() else offset
 }
 
 drop_byte_order_mark : Utf8.Bytes -> Utf8.Bytes
@@ -1102,7 +1102,7 @@ parse_node = |input, indent, depth, raw_lines| {
 				Err(_) => {
 					if starts_block_scalar(first.content) {
 						# At the document root (indentation -1) content may start in column 0.
-						min_indent = if depth == 0 and first.indent == 0 0 else first.indent + 1
+						min_indent = if (depth == 0 and first.indent == 0) 0 else first.indent + 1
 						parse_block_scalar(advance(input), raw_lines, first.content, first.number, first.indent + 1, min_indent)
 					} else {
 						node = parse_inline_value(first.content, first.number, first.indent + 1, depth + 1)?
@@ -1392,7 +1392,7 @@ collect_block_lines = |raw_lines, start, min_indent, block_indent, header_line| 
 	var $content_indent =
 		match block_indent {
 			# Like libyaml and ruamel, a root indicator counts from column 0.
-			ExplicitIndent(offset) => FixedIndent((if min_indent == 0 1 else min_indent) + offset - 1)
+			ExplicitIndent(offset) => FixedIndent((if (min_indent == 0) 1 else min_indent) + offset - 1)
 			AutoIndent => PendingIndent
 		}
 	var $lines = []
@@ -1517,8 +1517,8 @@ render_block_scalar = |lines, terminated, style, chomp| {
 
 		match chomp {
 			StripChomp => body
-			ClipChomp => if final_break body.append('\n') else body
-			KeepChomp => append_bytes(if final_break body.append('\n') else body, List.repeat('\n', trailing))
+			ClipChomp => if (final_break) body.append('\n') else body
+			KeepChomp => append_bytes(if (final_break) body.append('\n') else body, List.repeat('\n', trailing))
 		}
 	}
 }
@@ -1570,7 +1570,7 @@ fold_block_lines = |lines| {
 				match $previous {
 					Err(_) => List.repeat('\n', $empties)
 					Ok(before) if !starts_with_space(before) and !starts_with_space(line) =>
-						if $empties == 0 [' '] else List.repeat('\n', $empties)
+						if ($empties == 0) [' '] else List.repeat('\n', $empties)
 
 					Ok(_) => List.repeat('\n', $empties + 1)
 				}
@@ -1681,7 +1681,7 @@ resolve_plain = |text, line, column| {
 					Ok(value) => Ok(Float(value))
 					Err(_) =>
 						match core_float_text(bytes) {
-							Ok(canonical) => Ok(Float(F64.from_str(canonical) ?? (if bytes.first() == Ok('-') -F64.infinity else F64.infinity)))
+							Ok(canonical) => Ok(Float(F64.from_str(canonical) ?? (if (bytes.first() == Ok('-')) -F64.infinity else F64.infinity)))
 							Err(_) => Ok(Text(text))
 						}
 				}
@@ -1776,9 +1776,9 @@ core_float_text = |bytes| {
 	is_float = has_point or !exponent.is_empty()
 
 	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if whole.is_empty() "0" else bytes_to_str(whole)
-		fraction_text = if fraction.is_empty() "0" else bytes_to_str(fraction)
-		exponent_text = if exponent.is_empty() "" else bytes_to_str(exponent)
+		whole_text = if (whole.is_empty()) "0" else bytes_to_str(whole)
+		fraction_text = if (fraction.is_empty()) "0" else bytes_to_str(fraction)
+		exponent_text = if (exponent.is_empty()) "" else bytes_to_str(exponent)
 		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
 	} else {
 		Err(NotFloat)
@@ -1800,7 +1800,7 @@ count_while = |bytes, keep| {
 parse_flow_sequence : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_sequence = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '[', ']', line, column)?
-	parts = if trim_spaces(inner).is_empty() [] else split_flow_items(inner, line, column)?
+	parts = if (trim_spaces(inner).is_empty()) [] else split_flow_items(inner, line, column)?
 	var $items = List.with_capacity(parts.len())
 
 	for part in parts {
@@ -1813,7 +1813,7 @@ parse_flow_sequence = |bytes, line, column, depth| {
 parse_flow_mapping : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_mapping = |bytes, line, column, depth| {
 	inner = unwrap_flow(bytes, '{', '}', line, column)?
-	parts = if trim_spaces(inner).is_empty() [] else split_flow_items(inner, line, column)?
+	parts = if (trim_spaces(inner).is_empty()) [] else split_flow_items(inner, line, column)?
 	var $entries = List.with_capacity(parts.len())
 	var $seen = Set.empty()
 
@@ -1908,7 +1908,7 @@ quoted_inner = |bytes, quote, line, column| {
 		}
 	}
 
-	kind = if quote == '"' "double" else "single"
+	kind = if (quote == '"') "double" else "single"
 
 	match $close {
 		Err(_) => fail(line, column, "unterminated ${kind}-quoted string")
@@ -2142,7 +2142,7 @@ split_lines = |input, first_number| {
 		if byte == '\n' or byte == '\r' {
 			$lines = $lines.append({ content: input.sublist({ start: $start, len: $index - $start }), indent: 0, number: $number, terminated: True, tab: False })
 			$number = $number + 1
-			$index = if byte == '\r' and input.get($index + 1) == Ok('\n') $index + 2 else $index + 1
+			$index = if (byte == '\r' and input.get($index + 1) == Ok('\n')) $index + 2 else $index + 1
 			$start = $index
 		} else {
 			$index = Utf8.find_line_end(input, $index + 1)
@@ -2445,7 +2445,7 @@ trim_start_spaces = |bytes| {
 	while $start < len and is_space_or_tab(bytes.get($start) ?? 0) {
 		$start = $start + 1
 	}
-	if $start == 0 bytes else bytes.sublist({ start: $start, len: len - $start })
+	if ($start == 0) bytes else bytes.sublist({ start: $start, len: len - $start })
 }
 
 is_space_or_tab : U8 -> Bool
@@ -2478,7 +2478,7 @@ inspect_yaml : Yaml -> Str
 inspect_yaml = |value| {
 	match value {
 		Null => "Null"
-		Bool(boolean) => if boolean "Bool(True)" else "Bool(False)"
+		Bool(boolean) => if (boolean) "Bool(True)" else "Bool(False)"
 		Int(integer) => "Int(${integer.to_str()})"
 		Float(float) => "Float(${float.to_str()})"
 		Text(text) => "Text(${inspect_text(text)})"
@@ -2527,7 +2527,7 @@ inspect_text = |text| {
 
 code_point_escape : U32 -> Utf8.Bytes
 code_point_escape = |code| {
-	hex = |digit| if digit < 10 U32.to_u8_wrap(digit) + '0' else U32.to_u8_wrap(digit) - 10 + 'a'
+	hex = |digit| if (digit < 10) U32.to_u8_wrap(digit) + '0' else U32.to_u8_wrap(digit) - 10 + 'a'
 	['\\', 'u', '(', hex(code // 16), hex(code % 16), ')']
 }
 
@@ -2543,7 +2543,6 @@ expect {
 			\\count: 3
 			\\rating: 4.5
 			\\description: null
-			,
 		)?
 
 	actual
@@ -2565,7 +2564,6 @@ expect {
 			\\  tags:
 			\\    - parser
 			\\    - yaml
-			,
 		)?
 
 	actual
@@ -2588,7 +2586,6 @@ expect {
 			\\  - name: Ada
 			\\    active: true
 			\\  - name: Grace
-			,
 		)?
 
 	actual
@@ -2797,7 +2794,6 @@ expect {
 			\\summary: >
 			\\  one
 			\\  two
-			,
 		)?
 
 	actual

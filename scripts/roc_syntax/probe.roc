@@ -47,7 +47,7 @@ respond = |request| {
 		"repl" => {
 			file = RocSyntax.parse_str(request.source)
 			root = file.nodes.get(file.root) ?? { kind: ErrorNode, start: 0, end: 0, children_start: 0, children_len: 0 }
-			if file.status == Complete and root.children_len == 1 file else RocSyntax.parse_statement_str(request.source)
+			if (file.status == Complete and root.children_len == 1) file else RocSyntax.parse_statement_str(request.source)
 		}
 		_ => RocSyntax.parse_str(request.source)
 	}

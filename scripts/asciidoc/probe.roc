@@ -15,7 +15,7 @@ main! = |args| {
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"invalid_utf8\"}")?
 		Ok(source) => {
-			request = if args.any(|arg| OsStr.display(arg) == "--request") decode_request(source.to_utf8()) else { source, includes: [], expand: False }
+			request = if (args.any(|arg| OsStr.display(arg) == "--request")) decode_request(source.to_utf8()) else { source, includes: [], expand: False }
 			match AsciiDoc.parse_with(request.source, { includes: request.includes, attributes: [], max_depth: 16, expand_includes: request.expand }) {
 				Ok(document) => Stdout.line!("{\"status\":\"ok\",\"projection\":{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}},\"html\":${json_string(AsciiDoc.render(document))}}")?
 				Err(Unsupported(error)) => Stdout.line!(encode_error("unsupported", error))?
@@ -51,9 +51,9 @@ encode_block = |block| {
 		ThematicBreak => encode_leaf("thematic_break", "")
 		Rich(node) => {
 			context = node.context
-			level = if context == "section" node.level else 0
-			source = if ["list_item", "image", "video", "audio", "table"].contains(context) "" else node.source
-			title = if context == "list_item" "" else AsciiDoc.render_inline(node.title, node.attrs)
+			level = if (context == "section") node.level else 0
+			source = if (["list_item", "image", "video", "audio", "table"].contains(context)) "" else node.source
+			title = if (context == "list_item") "" else AsciiDoc.render_inline(node.title, node.attrs)
 			var $blocks = []
 			for item in node.blocks {
 				if context == "dlist" and has_definition(item) {
@@ -80,9 +80,9 @@ escape_json = |bytes, out| {
 		['"', .. as rest] => escape_json(rest, out.concat(['\\', '"']))
 		['\\', .. as rest] => escape_json(rest, out.concat(['\\', '\\']))
 		[byte, .. as rest] if byte < 32 => {
-			hi = if byte < 16 '0' else '1'
-			lo = if byte < 16 byte else byte - 16
-			digit = if lo < 10 lo + '0' else lo - 10 + 'a'
+			hi = if (byte < 16) '0' else '1'
+			lo = if (byte < 16) byte else byte - 16
+			digit = if (lo < 10) lo + '0' else lo - 10 + 'a'
 			escape_json(rest, out.concat(['\\', 'u', '0', '0', hi, digit]))
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))

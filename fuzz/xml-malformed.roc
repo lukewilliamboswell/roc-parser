@@ -17,6 +17,7 @@ import XmlGen
 Mutation : {
 	name : Str,
 	xml : Str,
+
 	## Byte offsets where the error may be reported (inclusive).
 	low : U64,
 	high : U64,
@@ -128,8 +129,8 @@ insert = |pieces, located, insertion, which| {
 		Ok(entry) => {
 			xml = XmlGen.render((pieces.set(entry.index, Lit(insertion.text)) ?? pieces))
 			# "]]>" may complete brackets written just before it.
-			low = if insertion.low == 0 and insertion.high > 0 entry.offset - (if entry.offset < insertion.high entry.offset else insertion.high) else entry.offset + insertion.low
-			high = if insertion.low == 0 and insertion.high > 0 entry.offset else entry.offset + insertion.high
+			low = if (insertion.low == 0 and insertion.high > 0) entry.offset - (if (entry.offset < insertion.high) entry.offset else insertion.high) else entry.offset + insertion.low
+			high = if (insertion.low == 0 and insertion.high > 0) entry.offset else entry.offset + insertion.high
 			{ name: insertion.name, xml, low, high }
 		}
 	}
@@ -210,4 +211,4 @@ target = Fuzz.target_with({
 })
 
 at_least_one : U64 -> U64
-at_least_one = |count| if count == 0 1 else count
+at_least_one = |count| if (count == 0) 1 else count

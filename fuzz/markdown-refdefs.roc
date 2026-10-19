@@ -103,13 +103,13 @@ gen_def = |start| {
 	before_dest = separators.get(sep1.n) ?? " "
 	before_title = separators.get(sep2.n) ?? " "
 	# (No trailing spaces after a junk title: they would make a hard break.)
-	trailing = if title.text == "'it''s'" "" else if trail.n == 1 "  " else if trail.n == 2 "\t" else ""
+	trailing = if (title.text == "'it''s'") "" else if (trail.n == 1) "  " else if (trail.n == 2) "\t" else ""
 	# 'it''s' is not a title (it ends at the second quote and junk follows), so
 	# if it starts on the destination's line the definition is invalid; on the
 	# next line the definition stands without a title and the junk is text.
 	junk_title = title.text == "'it''s'"
-	title_part = if title.text.is_empty() "" else "${before_title}${title.text}"
-	title_value = if junk_title Err(Missing) else title.value
+	title_part = if (title.text.is_empty()) "" else "${before_title}${title.text}"
+	title_value = if (junk_title) Err(Missing) else title.value
 	valid_shape = !(junk_title and !Str.contains(before_title, "\n"))
 	text_ok = "[${written_label}]:${before_dest}${dest.text}${title_part}${trailing}"
 	target = { href: dest.href, title: title_value }
@@ -124,7 +124,7 @@ gen_def = |start| {
 			_ => { text: text_ok, valid: valid_shape }
 		}
 	junk = valid and junk_title and broken.n > 5
-	{ def: { text, label, target: if valid Valid(target) else Invalid, junk }, cur: broken.cur }
+	{ def: { text, label, target: if (valid) Valid(target) else Invalid, junk }, cur: broken.cur }
 }
 
 Input : { markdown : Str, expected : List(Markdown) }
@@ -150,18 +150,18 @@ gen_block = |start| {
 	# junk title line ends the run, are definitions; the rest is text.
 	valid_prefix = take_valid($defs)
 	all_valid = valid_prefix.len() == $defs.len()
-	tail_text = if text_choice.n == 0 "tail words" else ""
+	tail_text = if (text_choice.n == 0) "tail words" else ""
 	junk = match valid_prefix.last() {
 		Ok(def) if all_valid and def.junk => "'it''s'"
 		_ => ""
 	}
-	lines = Str.join_with($defs.map(|def| def.text).concat(if tail_text.is_empty() [] else [tail_text]), "\n").split_on("\n")
+	lines = Str.join_with($defs.map(|def| def.text).concat(if (tail_text.is_empty()) [] else [tail_text]), "\n").split_on("\n")
 	# Only an all-valid run followed by plain text gives a predictable node;
 	# otherwise the paragraph's content is checked loosely (see `test`).
 	node =
 		if all_valid {
 			rest = [junk, tail_text].keep_if(|part| !part.is_empty())
-			if rest.is_empty() Err(Missing) else Ok(Paragraph([Text(Str.join_with(rest, "\n"))]))
+			if (rest.is_empty()) Err(Missing) else Ok(Paragraph([Text(Str.join_with(rest, "\n"))]))
 		} else {
 			Ok(Paragraph([Text("?")]))
 		}
@@ -194,7 +194,7 @@ contain = |lines, container, index| {
 	bullet = ["-", "*", "+"].get(index % 3) ?? "-"
 	match container {
 		1 => lines.map(|line| "> ${line}")
-		2 => lines.map_with_index(|line, i| if i == 0 "${bullet} ${line}" else "  ${line}")
+		2 => lines.map_with_index(|line, i| if (i == 0) "${bullet} ${line}" else "  ${line}")
 		_ => lines
 	}
 }
@@ -242,8 +242,8 @@ generate = |bytes| {
 	# is text.
 	interrupt = pick($cur, 4)
 	$cur = interrupt.cur
-	late = if interrupt.n == 0 "para\n[late]: /late\n\n" else ""
-	late_node = if interrupt.n == 0 [Paragraph([Text("para\n[late]: /late")])] else []
+	late = if (interrupt.n == 0) "para\n[late]: /late\n\n" else ""
+	late_node = if (interrupt.n == 0) [Paragraph([Text("para\n[late]: /late")])] else []
 	uses = labels.map_with_index(|label, index| "[t${index.to_str()}][${label}]")
 	use_line = Str.join_with(uses, " ")
 	use_inlines = labels.map_with_index(
@@ -378,7 +378,7 @@ encode_block = |block| {
 					Ordered({ start }) => start.to_str()
 				}
 			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
-			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
+			"[\"list\",${kind_json},${if (loose) "false" else "true"},[${items_json}]]"
 		}
 		other => "[\"other\",${json_string(Str.inspect(other))}]"
 	}
@@ -408,7 +408,7 @@ json_string = |text| {
 			if byte == '"' or byte == '\\' {
 				out.concat(['\\', byte])
 			} else if byte < 0x20 {
-				hex = |n| if n < 10 '0' + n else 'a' + n - 10
+				hex = |n| if (n < 10) '0' + n else 'a' + n - 10
 				out.concat(['\\', 'u', '0', '0', hex(byte // 16), hex(byte % 16)])
 			} else {
 				out.append(byte)

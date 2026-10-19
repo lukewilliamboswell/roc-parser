@@ -48,12 +48,12 @@ AsciiDoc :: [].{
 			if first == "" or (first.starts_with("//") and delimiter(first) != "comment") {
 				$lines = $lines.drop_first(1)
 			}
-				else if delimiter(first) == "comment" {
-					$lines = take_delimited($lines.drop_first(1), first).rest
-				}
-					else {
-						$header_ready = True
-					}
+			else if delimiter(first) == "comment" {
+				$lines = take_delimited($lines.drop_first(1), first).rest
+			}
+			else {
+				$header_ready = True
+			}
 		}
 		var $candidate = $lines
 		var $discrete = False
@@ -95,22 +95,22 @@ AsciiDoc :: [].{
 					if candidate.starts_with("//") {
 						$body = $body.drop_first(1)
 					}
-						else if $metadata_lines == 1 and candidate.trim().starts_with(":") {
-							break
-						}
-							else {
-								$body = $body.drop_first(1)
-								$metadata_lines = $metadata_lines + 1
-							}
+					else if $metadata_lines == 1 and candidate.trim().starts_with(":") {
+						break
+					}
+					else {
+						$body = $body.drop_first(1)
+						$metadata_lines = $metadata_lines + 1
+					}
 				}
 				raw_title = drop_text(first.text, 2).trim()
-				header_attrs = if $body.is_empty() processed.attributes else ($body.first() ?? empty_line).attrs
-				parsed = document_reference(parse_blocks($body, 98).blocks, $document_id, if $document_reftext == "" raw_title else $document_reftext)
+				header_attrs = if ($body.is_empty()) processed.attributes else ($body.first() ?? empty_line).attrs
+				parsed = document_reference(parse_blocks($body, 98).blocks, $document_id, if ($document_reftext == "") raw_title else $document_reftext)
 				if raw_title.contains("{") or raw_title.contains("footnote:") or raw_title.contains("<<") or raw_title.contains("xref:") or has_attr(header_attrs, "doctitle") {
 					stored = store_header(parsed, raw_title, first.attrs, header_attrs)
 					identified = identify_blocks(stored, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
 					header = prepare_header((render_node(stored.first() ?? AsciiDoc.empty_item)).attrs, identified.state.refs)
-					Ok({ title: header.html, blocks: if parsed.is_empty() and header.state.footnotes.is_empty() [] else stored })
+					Ok({ title: header.html, blocks: if (parsed.is_empty() and header.state.footnotes.is_empty()) [] else stored })
 				} else {
 					Ok({ title: AsciiDocInline.render(raw_title, header_attrs), blocks: parsed })
 				}
@@ -161,7 +161,7 @@ trim_end = |text| {
 
 make_lines : Str -> List(Line)
 make_lines = |source| {
-	s = if source.starts_with("﻿") drop_text(source, 3) else source
+	s = if (source.starts_with("﻿")) drop_text(source, 3) else source
 	s.split_on("\n").map(|text| { text: trim_end(text), attrs: [] })
 }
 
@@ -234,7 +234,7 @@ list_marker = |text| {
 		$n = $n + 1
 	}
 	if $n > 0 and (bytes.get($n) == Ok(' ') or bytes.get($n) == Ok(9)) {
-		return { kind: if first == '*' "ulist" else "olist", level: $n, text: drop_text(text, $n + 1).trim(), term: "" }
+		return { kind: if (first == '*') "ulist" else "olist", level: $n, text: drop_text(text, $n + 1).trim(), term: "" }
 	}
 	if bytes.len() > 3 and ((first >= 65 and first <= 90) or (first >= 97 and first <= 122)) and bytes.get(1) == Ok(46) and bytes.get(2) == Ok(32) {
 		return { kind: "olist", level: 1, text: drop_text(text, 3).trim(), term: "" }
@@ -265,7 +265,7 @@ list_marker = |text| {
 			while $colon + $count < bytes.len() and bytes.get($colon + $count) == Ok(first_colon) {
 				$count = $count + 1
 			}
-			if $count >= 2 and $count <= (if first_colon == 59 2 else 4) and ($colon + $count == bytes.len() or bytes.get($colon + $count) == Ok(32) or bytes.get($colon + $count) == Ok(9)) {
+			if $count >= 2 and $count <= (if (first_colon == 59) 2 else 4) and ($colon + $count == bytes.len() or bytes.get($colon + $count) == Ok(32) or bytes.get($colon + $count) == Ok(9)) {
 				return { kind: "dlist", level: $count - 1, text: drop_text(text, $colon + $count).trim(), term: Str.from_utf8_lossy(bytes.take_first($colon)) }
 			}
 		}
@@ -348,164 +348,164 @@ parse_blocks = |lines, parent| {
 		if parent < 98 and h.title != "" and h.level <= parent {
 			$done = True
 		}
-			else if text == "" or (text.starts_with("//") and delimiter(text) != "comment") {
+		else if text == "" or (text.starts_with("//") and delimiter(text) != "comment") {
+			$rest = tail
+		}
+		else if parent < 98 and (text.starts_with("[") or text.starts_with(".")) and following_heading($rest).title != "" and following_heading($rest).level <= parent {
+			$done = True
+		}
+		else if text.starts_with("[[") and text.ends_with("]]") {
+			target = Str.from_utf8_lossy(text.to_utf8().drop_first(2).drop_last(2))
+			parts = split_attributes(target)
+			$id = (parts.first() ?? "").trim()
+			if parts.len() > 1 {
+				$attrs = $attrs.append({ name: "reftext", value: unquote(Str.join_with(parts.drop_first(1), ",")) })
+			}
+			$rest = tail
+		}
+		else if is_block_metadata(text) {
+			$attrs = $attrs.concat(parse_metadata(text))
+			$rest = tail
+		}
+		else if is_block_title(text) and delimiter(text) == "" and list_marker(text).kind == "" {
+			$title = drop_text(text, 1)
+			$rest = tail
+		}
+		else if text.starts_with("> ") or text == ">" {
+			var $quote = []
+			while !$rest.is_empty() and (($rest.first() ?? empty_line).text.starts_with("> ") or ($rest.first() ?? empty_line).text == ">") {
+				$quote = $quote.append({ text: drop_text(($rest.first() ?? empty_line).text, 2), attrs: line.attrs })
+				$rest = $rest.drop_first(1)
+			}
+			$blocks = $blocks.append(rich("quote", "", $title, "quote", $id, $attrs.concat(line.attrs), parse_blocks($quote, parent).blocks, 0))
+			$attrs = []
+			$title = ""
+			$id = ""
+		}
+		else {
+			$attrs = $attrs.concat(line.attrs)
+			style = attribute($attrs, "1")
+			id = if ($id != "") $id else if (attribute($attrs, "id") != "") attribute($attrs, "id") else if (h.title != "") heading_id(text) else ""
+			kind = delimiter(text)
+			if h.title != "" and parent < 99 {
+				if style == "discrete" {
+					$blocks = $blocks.append(rich("floating_title", "", h.title, style, id, $attrs, [], h.level))
+					$rest = tail
+				}
+				else {
+					child_lines = if ($title == "") tail else [{ text: ".${$title}", attrs: line.attrs }].concat(tail)
+					child = parse_blocks(child_lines, h.level)
+					child_blocks = if (h.level == 0 and attribute($attrs, "doctype") == "book") wrap_part_intro(child.blocks, $attrs) else child.blocks
+					$blocks = $blocks.append(if (plain_attrs($attrs) and id == "") Section({ level: h.level, title: h.title, blocks: child_blocks }) else rich("section", "", h.title, style, id, $attrs, child_blocks, h.level))
+					$rest = child.rest
+				}
+			} else if kind != "" {
+				body = take_delimited(tail, text)
+				if kind == "table" {
+					mark = text.to_utf8().first() ?? 124
+					if attribute($attrs, "format") == "" and mark == 44 {
+						$attrs = $attrs.append({ name: "format", value: "csv" })
+					}
+					else if attribute($attrs, "format") == "" and mark == 58 {
+						$attrs = $attrs.append({ name: "format", value: "dsv" })
+					}
+					if attribute($attrs, "separator") == "" and has_attr(line.attrs, "__table-cell-context") {
+						$attrs = $attrs.append({ name: "separator", value: "!" })
+					}
+					$attrs = $attrs.concat(line.attrs.map(|a| { name: "__document:${a.name}", value: a.value }))
+				}
+				$rest = body.rest
+				if kind != "comment" {
+					context = if (kind == "table") "table" else if (["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"].contains(style)) "admonition" else if (["stem", "asciimath", "latexmath"].contains(style)) "stem" else if ["listing", "literal", "open"].contains(kind) and ["source", "listing", "literal"].contains(style) {
+						if (style == "source") "listing" else style
+					} else if (style == "verse") "verse" else if kind == "open" and ["source", "listing", "literal", "pass", "quote", "sidebar", "example"].contains(style) {
+						if (style == "source") "listing" else style
+					} else kind
+					compound = ["example", "sidebar", "quote", "open", "admonition"].contains(context)
+					children = if (compound) parse_blocks(body.lines, 99).blocks else []
+					if kind == "listing" and plain_attrs($attrs) and $title == "" and id == "" {
+						$blocks = $blocks.append(Listing(normalize_indent(body.source, $attrs)))
+					}
+					else if kind == "literal" and plain_attrs($attrs) and $title == "" and id == "" {
+						$blocks = $blocks.append(Literal(normalize_indent(body.source, $attrs)))
+					}
+					else {
+						$blocks = $blocks.append(rich(context, if (compound) "" else normalize_indent(body.source, $attrs), $title, style, id, $attrs, children, 0))
+					}
+				}
+			} else if (text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 39)) or text == "---" or text == "***" {
+				$blocks = $blocks.append(ThematicBreak)
 				$rest = tail
 			}
-				else if parent < 98 and (text.starts_with("[") or text.starts_with(".")) and following_heading($rest).title != "" and following_heading($rest).level <= parent {
-					$done = True
-				}
-					else if text.starts_with("[[") and text.ends_with("]]") {
-						target = Str.from_utf8_lossy(text.to_utf8().drop_first(2).drop_last(2))
-						parts = split_attributes(target)
-						$id = (parts.first() ?? "").trim()
-						if parts.len() > 1 {
-							$attrs = $attrs.append({ name: "reftext", value: unquote(Str.join_with(parts.drop_first(1), ",")) })
-						}
-						$rest = tail
+			else if text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 60) {
+				$blocks = $blocks.append(rich("page_break", "", $title, style, id, $attrs, [], 0))
+				$rest = tail
+			}
+			else if text.starts_with("toc::[") {
+				$blocks = $blocks.append(rich("toc", "", $title, style, id, $attrs, [], 0))
+				$rest = tail
+			}
+			else if list_marker(text).kind != "" {
+				marker = list_marker(text)
+				list = parse_list($rest, marker.kind, marker.level, [])
+				inferred = implicit_list_style(text)
+				list_blocks = if (style == "bibliography") list.blocks.map(bibliography_item) else list.blocks
+				$blocks = $blocks.append(rich(marker.kind, "", $title, if (style == "") inferred else style, id, if (style == "" and inferred != "") $attrs.append({ name: "__implicit-list-style", value: "" }) else $attrs, list_blocks, marker.level))
+				$rest = list.rest
+			} else if valid_media(text) {
+				context = if (text.starts_with("image::")) "image" else if (text.starts_with("video::")) "video" else "audio"
+				value = drop_text(text, context.to_utf8().len() + 2)
+				bits = value.split_on("[")
+				target = bits.first() ?? value
+				inline_attrs = if (bits.len() > 1) parse_media_metadata("[${Str.join_with(bits.drop_first(1), "[")}") else []
+				$blocks = $blocks.append(rich(context, target, $title, style, id, $attrs.concat(inline_attrs), [], 0))
+				$rest = tail
+			} else {
+				var $body = [text]
+				opaque_paragraph = ["literal", "source", "listing", "pass", "verse"].contains(style)
+				$rest = tail
+				while !$rest.is_empty() and ($rest.first() ?? empty_line).text != "" and (opaque_paragraph or delimiter(($rest.first() ?? empty_line).text) == "") and (opaque_paragraph or !(is_block_metadata(($rest.first() ?? empty_line).text))) and (opaque_paragraph or ($rest.first() ?? empty_line).text != "+") {
+					if opaque_paragraph or !(($rest.first() ?? empty_line).text.starts_with("//")) {
+						$body = $body.append(($rest.first() ?? empty_line).text)
 					}
-						else if is_block_metadata(text) {
-							$attrs = $attrs.concat(parse_metadata(text))
-							$rest = tail
-						}
-							else if is_block_title(text) and delimiter(text) == "" and list_marker(text).kind == "" {
-								$title = drop_text(text, 1)
-								$rest = tail
-							}
-								else if (text.starts_with("> ") or text == ">") {
-									var $quote = []
-									while !$rest.is_empty() and (($rest.first() ?? empty_line).text.starts_with("> ") or ($rest.first() ?? empty_line).text == ">") {
-										$quote = $quote.append({ text: drop_text(($rest.first() ?? empty_line).text, 2), attrs: line.attrs })
-										$rest = $rest.drop_first(1)
-									}
-									$blocks = $blocks.append(rich("quote", "", $title, "quote", $id, $attrs.concat(line.attrs), parse_blocks($quote, parent).blocks, 0))
-									$attrs = []
-									$title = ""
-									$id = ""
-								}
-									else {
-										$attrs = $attrs.concat(line.attrs)
-										style = attribute($attrs, "1")
-										id = if $id != "" $id else if attribute($attrs, "id") != "" attribute($attrs, "id") else if h.title != "" heading_id(text) else ""
-										kind = delimiter(text)
-										if h.title != "" and parent < 99 {
-											if style == "discrete" {
-												$blocks = $blocks.append(rich("floating_title", "", h.title, style, id, $attrs, [], h.level))
-												$rest = tail
-											}
-												else {
-													child_lines = if $title == "" tail else [{ text: ".${$title}", attrs: line.attrs }].concat(tail)
-													child = parse_blocks(child_lines, h.level)
-													child_blocks = if h.level == 0 and attribute($attrs, "doctype") == "book" wrap_part_intro(child.blocks, $attrs) else child.blocks
-													$blocks = $blocks.append(if plain_attrs($attrs) and id == "" Section({ level: h.level, title: h.title, blocks: child_blocks }) else rich("section", "", h.title, style, id, $attrs, child_blocks, h.level))
-													$rest = child.rest
-												}
-										} else if kind != "" {
-											body = take_delimited(tail, text)
-											if kind == "table" {
-												mark = text.to_utf8().first() ?? 124
-												if attribute($attrs, "format") == "" and mark == 44 {
-													$attrs = $attrs.append({ name: "format", value: "csv" })
-												}
-													else if attribute($attrs, "format") == "" and mark == 58 {
-														$attrs = $attrs.append({ name: "format", value: "dsv" })
-													}
-												if attribute($attrs, "separator") == "" and has_attr(line.attrs, "__table-cell-context") {
-													$attrs = $attrs.append({ name: "separator", value: "!" })
-												}
-												$attrs = $attrs.concat(line.attrs.map(|a| { name: "__document:${a.name}", value: a.value }))
-											}
-											$rest = body.rest
-											if kind != "comment" {
-												context = if kind == "table" "table" else if ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"].contains(style) "admonition" else if ["stem", "asciimath", "latexmath"].contains(style) "stem" else if ["listing", "literal", "open"].contains(kind) and ["source", "listing", "literal"].contains(style) {
-													if style == "source" "listing" else style
-												} else if style == "verse" "verse" else if kind == "open" and ["source", "listing", "literal", "pass", "quote", "sidebar", "example"].contains(style) {
-													if style == "source" "listing" else style
-												} else kind
-												compound = ["example", "sidebar", "quote", "open", "admonition"].contains(context)
-												children = if compound parse_blocks(body.lines, 99).blocks else []
-												if kind == "listing" and plain_attrs($attrs) and $title == "" and id == "" {
-													$blocks = $blocks.append(Listing(normalize_indent(body.source, $attrs)))
-												}
-													else if kind == "literal" and plain_attrs($attrs) and $title == "" and id == "" {
-														$blocks = $blocks.append(Literal(normalize_indent(body.source, $attrs)))
-													}
-														else {
-															$blocks = $blocks.append(rich(context, if compound "" else normalize_indent(body.source, $attrs), $title, style, id, $attrs, children, 0))
-														}
-											}
-										} else if (text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 39)) or text == "---" or text == "***" {
-											$blocks = $blocks.append(ThematicBreak)
-											$rest = tail
-										}
-											else if text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 60) {
-												$blocks = $blocks.append(rich("page_break", "", $title, style, id, $attrs, [], 0))
-												$rest = tail
-											}
-												else if text.starts_with("toc::[") {
-													$blocks = $blocks.append(rich("toc", "", $title, style, id, $attrs, [], 0))
-													$rest = tail
-												}
-													else if list_marker(text).kind != "" {
-														marker = list_marker(text)
-														list = parse_list($rest, marker.kind, marker.level, [])
-														inferred = implicit_list_style(text)
-														list_blocks = if style == "bibliography" list.blocks.map(bibliography_item) else list.blocks
-														$blocks = $blocks.append(rich(marker.kind, "", $title, if style == "" inferred else style, id, if style == "" and inferred != "" $attrs.append({ name: "__implicit-list-style", value: "" }) else $attrs, list_blocks, marker.level))
-														$rest = list.rest
-													} else if valid_media(text) {
-														context = if text.starts_with("image::") "image" else if text.starts_with("video::") "video" else "audio"
-														value = drop_text(text, context.to_utf8().len() + 2)
-														bits = value.split_on("[")
-														target = bits.first() ?? value
-														inline_attrs = if bits.len() > 1 parse_media_metadata("[${Str.join_with(bits.drop_first(1), "[")}") else []
-														$blocks = $blocks.append(rich(context, target, $title, style, id, $attrs.concat(inline_attrs), [], 0))
-														$rest = tail
-													} else {
-														var $body = [text]
-														opaque_paragraph = ["literal", "source", "listing", "pass", "verse"].contains(style)
-														$rest = tail
-														while !$rest.is_empty() and ($rest.first() ?? empty_line).text != "" and (opaque_paragraph or delimiter(($rest.first() ?? empty_line).text) == "") and (opaque_paragraph or !(is_block_metadata(($rest.first() ?? empty_line).text))) and (opaque_paragraph or ($rest.first() ?? empty_line).text != "+") {
-															if opaque_paragraph or !(($rest.first() ?? empty_line).text.starts_with("//")) {
-																$body = $body.append(($rest.first() ?? empty_line).text)
-															}
-															$rest = $rest.drop_first(1)
-														}
-														source = Str.join_with($body, "\n")
-														var $admonition = ""
-														for name in ["NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"] {
-															if source.starts_with("${name}: ") {
-																$admonition = name
-															}
-														}
-														if $admonition == "" and ["NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"].contains(style) {
-															$admonition = style
-														}
-														if $admonition != "" {
-															$blocks = $blocks.append(rich("admonition", if source.starts_with("${$admonition}: ") drop_text(source, $admonition.to_utf8().len() + 2).trim() else source, $title, $admonition, id, $attrs, [], 0))
-														}
-															else if text.starts_with(" ") or text.starts_with("\t") {
-																$blocks = $blocks.append(Literal(dedent(source)))
-															}
-																else if ["quote", "verse", "sidebar", "example", "pass"].contains(style) {
-																	$blocks = $blocks.append(rich(style, source, $title, style, id, $attrs, [], 0))
-																}
-																	else if style == "literal" {
-																		$blocks = $blocks.append(rich("literal", source, $title, style, id, $attrs, [], 0))
-																	}
-																		else if style == "source" or style == "listing" {
-																			$blocks = $blocks.append(rich("listing", source, $title, style, id, $attrs, [], 0))
-																		}
-																			else if plain_attrs($attrs) and $title == "" and id == "" and !source.contains("{") {
-																				$blocks = $blocks.append(Paragraph(source))
-																			}
-																				else {
-																					$blocks = $blocks.append(rich("paragraph", source, $title, style, id, $attrs, [], 0))
-																				}
-													}
-										$attrs = []
-										$title = ""
-										$id = ""
-									}
+					$rest = $rest.drop_first(1)
+				}
+				source = Str.join_with($body, "\n")
+				var $admonition = ""
+				for name in ["NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"] {
+					if source.starts_with("${name}: ") {
+						$admonition = name
+					}
+				}
+				if $admonition == "" and ["NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"].contains(style) {
+					$admonition = style
+				}
+				if $admonition != "" {
+					$blocks = $blocks.append(rich("admonition", if (source.starts_with("${$admonition}: ")) drop_text(source, $admonition.to_utf8().len() + 2).trim() else source, $title, $admonition, id, $attrs, [], 0))
+				}
+				else if text.starts_with(" ") or text.starts_with("\t") {
+					$blocks = $blocks.append(Literal(dedent(source)))
+				}
+				else if ["quote", "verse", "sidebar", "example", "pass"].contains(style) {
+					$blocks = $blocks.append(rich(style, source, $title, style, id, $attrs, [], 0))
+				}
+				else if style == "literal" {
+					$blocks = $blocks.append(rich("literal", source, $title, style, id, $attrs, [], 0))
+				}
+				else if style == "source" or style == "listing" {
+					$blocks = $blocks.append(rich("listing", source, $title, style, id, $attrs, [], 0))
+				}
+				else if plain_attrs($attrs) and $title == "" and id == "" and !source.contains("{") {
+					$blocks = $blocks.append(Paragraph(source))
+				}
+				else {
+					$blocks = $blocks.append(rich("paragraph", source, $title, style, id, $attrs, [], 0))
+				}
+			}
+			$attrs = []
+			$title = ""
+			$id = ""
+		}
 	}
 	{ blocks: $blocks, rest: $rest }
 }
@@ -570,10 +570,10 @@ parse_list = |lines, kind, level, ancestors| {
 				} else if m.kind != "" or heading(next).level > 0 or delimiter(next) != "" {
 					$item_done = True
 				}
-					else {
-						$body = if $body == "" next.trim() else "${$body}\n${next.trim()}"
-						$rest = $rest.drop_first(1)
-					}
+				else {
+					$body = if ($body == "") next.trim() else "${$body}\n${next.trim()}"
+					$rest = $rest.drop_first(1)
+				}
 			}
 			$items = $items.append(rich("list_item", $body, marker.term, "", "", line.attrs, $children, 0))
 		} else {
@@ -606,39 +606,39 @@ render_block = |block| {
 		Section({ level, title, blocks }) => render_section(level, title, "", blocks)
 		Rich(node) => {
 			wrapper = ["paragraph", "listing", "literal", "open", "sidebar", "example", "quote", "verse", "stem", "admonition"].contains(node.context)
-			title = if node.title == "" or !wrapper "" else "<div class=\"title\">${rendered_title(node.title, node.attrs)}</div>\n"
-			body = if ["open", "sidebar", "example", "quote", "admonition", "ulist", "olist", "colist", "list_item"].contains(node.context) render_blocks(node.blocks) else ""
-			source = if ["paragraph", "list_item", "verse", "admonition", "quote", "example", "sidebar", "open"].contains(node.context) AsciiDocBlockHtml.paragraph(node.source, node.attrs) else ""
+			title = if (node.title == "" or !wrapper) "" else "<div class=\"title\">${rendered_title(node.title, node.attrs)}</div>\n"
+			body = if (["open", "sidebar", "example", "quote", "admonition", "ulist", "olist", "colist", "list_item"].contains(node.context)) render_blocks(node.blocks) else ""
+			source = if (["paragraph", "list_item", "verse", "admonition", "quote", "example", "sidebar", "open"].contains(node.context)) AsciiDocBlockHtml.paragraph(node.source, node.attrs) else ""
 			checklist = node.context == "ulist" and node.blocks.any(
 				|b| match b {
 					Rich(n) => n.source.starts_with("[x] ") or n.source.starts_with("[ ] ") or n.source.starts_with("[*] ")
 					_ => False
 				},
 			)
-			id = if node.id == "" or !wrapper "" else " id=\"${escape(node.id)}\""
+			id = if (node.id == "" or !wrapper) "" else " id=\"${escape(node.id)}\""
 			match node.context {
 				"section" => render_section_with(node.level, node.title, node.id, node.blocks, node.attrs)
-				"floating_title" => "<h${(node.level + 1).to_str()}${if node.id == "" "" else " id=\"${escape(node.id)}\""} class=\"discrete\">${rendered_title(node.title, node.attrs)}</h${(node.level + 1).to_str()}>"
+				"floating_title" => "<h${(node.level + 1).to_str()}${if (node.id == "") "" else " id=\"${escape(node.id)}\""} class=\"discrete\">${rendered_title(node.title, node.attrs)}</h${(node.level + 1).to_str()}>"
 				"paragraph" => "<div${id} class=\"paragraph${role_suffix(node.attrs)}\">\n${title}<p>${source}</p>\n</div>"
 				"listing" | "literal" => {
 					context = node.context
 					language = attribute(node.attrs, "2")
-					pre = if node.style == "source" "<pre class=\"highlight${if attribute(node.attrs, "options").split_on(",").contains("nowrap") " nowrap" else ""}\"><code${if language == "" "" else " class=\"language-${language}\" data-lang=\"${language}\""}>${listing_content(node.source, node.attrs)}</code></pre>" else "<pre${if attribute(node.attrs, "options").split_on(",").contains("nowrap") " class=\"nowrap\"" else ""}>${listing_content(node.source, node.attrs)}</pre>"
+					pre = if (node.style == "source") "<pre class=\"highlight${if (attribute(node.attrs, "options").split_on(",").contains("nowrap")) " nowrap" else ""}\"><code${if (language == "") "" else " class=\"language-${language}\" data-lang=\"${language}\""}>${listing_content(node.source, node.attrs)}</code></pre>" else "<pre${if (attribute(node.attrs, "options").split_on(",").contains("nowrap")) " class=\"nowrap\"" else ""}>${listing_content(node.source, node.attrs)}</pre>"
 					"<div${id} class=\"${context}block\">\n${title}<div class=\"content\">\n${pre}\n</div>\n</div>"
 				}
-				"open" => "<div${id} class=\"openblock${if node.style == "partintro" " partintro" else ""}${role_suffix(node.attrs)}\">\n${title}<div class=\"content\">\n${if node.blocks.is_empty() source else body}\n</div>\n</div>"
-				"sidebar" => "<div${id} class=\"sidebarblock\">\n<div class=\"content\">\n${title}${if node.blocks.is_empty() source else body}\n</div>\n</div>"
-				"example" => "<div${id} class=\"exampleblock\">\n${title}<div class=\"content\">\n${if node.blocks.is_empty() source else body}\n</div>\n</div>"
-				"quote" => "<div${id} class=\"quoteblock${role_suffix(node.attrs)}\">\n${title}<blockquote>\n${if node.blocks.is_empty() source else body}\n</blockquote>${attribution(node.attrs)}\n</div>"
+				"open" => "<div${id} class=\"openblock${if (node.style == "partintro") " partintro" else ""}${role_suffix(node.attrs)}\">\n${title}<div class=\"content\">\n${if (node.blocks.is_empty()) source else body}\n</div>\n</div>"
+				"sidebar" => "<div${id} class=\"sidebarblock\">\n<div class=\"content\">\n${title}${if (node.blocks.is_empty()) source else body}\n</div>\n</div>"
+				"example" => "<div${id} class=\"exampleblock\">\n${title}<div class=\"content\">\n${if (node.blocks.is_empty()) source else body}\n</div>\n</div>"
+				"quote" => "<div${id} class=\"quoteblock${role_suffix(node.attrs)}\">\n${title}<blockquote>\n${if (node.blocks.is_empty()) source else body}\n</blockquote>${attribution(node.attrs)}\n</div>"
 				"verse" => "<div${id} class=\"verseblock${role_suffix(node.attrs)}\">\n${title}<pre class=\"content\">${source}</pre>${attribution(node.attrs)}\n</div>"
 				"toc" => attribute(node.attrs, "__toc-html")
-				"stem" => "<div${id} class=\"stemblock${role_suffix(node.attrs)}\">\n${title}<div class=\"content\">\n${if node.style == "latexmath" or attribute(node.attrs, "stem") == "latexmath" "\\[${escape(node.source)}\\]" else "\\$${escape(node.source)}\\$"}\n</div>\n</div>"
+				"stem" => "<div${id} class=\"stemblock${role_suffix(node.attrs)}\">\n${title}<div class=\"content\">\n${if (node.style == "latexmath" or attribute(node.attrs, "stem") == "latexmath") "\\[${escape(node.source)}\\]" else "\\$${escape(node.source)}\\$"}\n</div>\n</div>"
 				"pass" => node.source
 				"thematic_break" => "<hr>"
 				"page_break" => "<div style=\"page-break-after: always;\"></div>"
-				"admonition" => "<div${id} class=\"admonitionblock ${lower(node.style)}${role_suffix(node.attrs)}\">\n<table>\n<tr>\n<td class=\"icon\">\n<div class=\"title\">${capitalize(node.style)}</div>\n</td>\n<td class=\"content\">\n${title}${if node.blocks.is_empty() source else body}\n</td>\n</tr>\n</table>\n</div>"
+				"admonition" => "<div${id} class=\"admonitionblock ${lower(node.style)}${role_suffix(node.attrs)}\">\n<table>\n<tr>\n<td class=\"icon\">\n<div class=\"title\">${capitalize(node.style)}</div>\n</td>\n<td class=\"content\">\n${title}${if (node.blocks.is_empty()) source else body}\n</td>\n</tr>\n</table>\n</div>"
 				"ulist" | "olist" | "colist" => AsciiDocBlockHtml.list_wrapper(node.context, node.style, node.level, node.id, rendered_title(node.title, node.attrs), node.attrs, body, checklist)
-				"list_item" => "<li>\n<p>${if node.source.starts_with("[x] ") or node.source.starts_with("[*] ") "&#10003; ${if has_attr(node.attrs, "__rendered-source") source else inline(drop_text(node.source, 4))}" else if node.source.starts_with("[ ] ") "&#10063; ${if has_attr(node.attrs, "__rendered-source") source else inline(drop_text(node.source, 4))}" else source}</p>${if body == "" "" else "\n${body}"}\n</li>"
+				"list_item" => "<li>\n<p>${if (node.source.starts_with("[x] ") or node.source.starts_with("[*] ")) "&#10003; ${if (has_attr(node.attrs, "__rendered-source")) source else inline(drop_text(node.source, 4))}" else if (node.source.starts_with("[ ] ")) "&#10063; ${if (has_attr(node.attrs, "__rendered-source")) source else inline(drop_text(node.source, 4))}" else source}</p>${if (body == "") "" else "\n${body}"}\n</li>"
 				"dlist" => AsciiDocBlockHtml.description(
 					node.style,
 					node.id,
@@ -652,7 +652,7 @@ render_block = |block| {
 					),
 				)
 				"image" | "video" | "audio" => AsciiDocMedia.render({ context: node.context, target: node.source, title: rendered_title(node.title, node.attrs), id: node.id, attrs: node.attrs })
-				"table" => if has_attr(node.attrs, "__rendered-table") attribute(node.attrs, "__rendered-table") else AsciiDocTable.render_with(node.source, put_attr(node.attrs, "title", node.title), |text| render_blocks(parse_blocks(make_lines(text), 0).blocks))
+				"table" => if (has_attr(node.attrs, "__rendered-table")) attribute(node.attrs, "__rendered-table") else AsciiDocTable.render_with(node.source, put_attr(node.attrs, "title", node.title), |text| render_blocks(parse_blocks(make_lines(text), 0).blocks))
 				_ => source
 			}
 		}
@@ -661,7 +661,7 @@ render_block = |block| {
 
 render_ditem : AsciiDoc.Block -> Str
 render_ditem = |item| match item {
-	Rich(n) => "<dt class=\"hdlist1\">${rendered_title(n.title, n.attrs)}</dt>\n<dd>\n<p>${rendered_source(n.source, n.attrs)}</p>\n${if n.blocks.is_empty() "" else "${render_blocks(n.blocks)}\n"}</dd>"
+	Rich(n) => "<dt class=\"hdlist1\">${rendered_title(n.title, n.attrs)}</dt>\n<dd>\n<p>${rendered_source(n.source, n.attrs)}</p>\n${if (n.blocks.is_empty()) "" else "${render_blocks(n.blocks)}\n"}</dd>"
 	_ => ""
 }
 
@@ -669,7 +669,7 @@ capitalize : Str -> Str
 capitalize = |s| {
 	bytes = lower(s).to_utf8()
 	match bytes {
-		[b, .. as rest] => Str.from_utf8_lossy([if b >= 'a' and b <= 'z' b - 32 else b].concat(rest))
+		[b, .. as rest] => Str.from_utf8_lossy([if (b >= 'a' and b <= 'z') b - 32 else b].concat(rest))
 		[] => ""
 	}
 }
@@ -682,15 +682,15 @@ section_id = |s| {
 		if $emoji > 0 {
 			$emoji = $emoji - 1
 		}
-			else if byte >= 240 {
-				$emoji = 3
-			}
-				else if byte == ' ' {
-					$bytes = $bytes.append(95)
-				}
-					else if (byte >= 'a' and byte <= 'z') or (byte >= '0' and byte <= '9') or byte == '_' or byte >= 128 {
-						$bytes = $bytes.append(byte)
-					}
+		else if byte >= 240 {
+			$emoji = 3
+		}
+		else if byte == ' ' {
+			$bytes = $bytes.append(95)
+		}
+		else if (byte >= 'a' and byte <= 'z') or (byte >= '0' and byte <= '9') or byte == '_' or byte >= 128 {
+			$bytes = $bytes.append(byte)
+		}
 	}
 	var $result = Str.from_utf8_lossy($bytes)
 	while $result.ends_with("_") and $result != "_" {
@@ -701,25 +701,25 @@ section_id = |s| {
 
 render_section : U64, Str, Str, List(AsciiDoc.Block) -> Str
 render_section = |level, title, id, blocks| {
-	render_section_with(level, title, if id == "" section_id(title) else id, blocks, [])
+	render_section_with(level, title, if (id == "") section_id(title) else id, blocks, [])
 }
 
 render_section_with : U64, Str, Str, List(AsciiDoc.Block), List(AsciiDoc.Attribute) -> Str
 render_section_with = |level, title, sid, blocks, attrs| {
 	body = render_blocks(blocks)
 	heading_title = "${attribute(attrs, "__heading-number")}${rendered_title(title, attrs)}"
-	heading_link = if sid != "" and has_attr(attrs, "sectlinks") "<a class=\"link\" href=\"#${escape(sid)}\">${heading_title}</a>" else heading_title
-	anchor = if sid != "" and has_attr(attrs, "sectanchors") "<a class=\"anchor\" href=\"#${escape(sid)}\"></a>" else ""
-	heading_html = "<h${(level + 1).to_str()}${if sid == "" and !has_attr(attrs, "__generated-id") "" else " id=\"${escape(sid)}\""}${if level == 0 " class=\"sect0\"" else ""}>${anchor}${heading_link}</h${(level + 1).to_str()}>"
+	heading_link = if (sid != "" and has_attr(attrs, "sectlinks")) "<a class=\"link\" href=\"#${escape(sid)}\">${heading_title}</a>" else heading_title
+	anchor = if (sid != "" and has_attr(attrs, "sectanchors")) "<a class=\"anchor\" href=\"#${escape(sid)}\"></a>" else ""
+	heading_html = "<h${(level + 1).to_str()}${if (sid == "" and !has_attr(attrs, "__generated-id")) "" else " id=\"${escape(sid)}\""}${if (level == 0) " class=\"sect0\"" else ""}>${anchor}${heading_link}</h${(level + 1).to_str()}>"
 	if level == 0 {
 		"${heading_html}\n${body}"
 	}
-		else if level == 1 {
-			"<div class=\"sect1\">\n${heading_html}\n<div class=\"sectionbody\">\n${body}\n</div>\n</div>"
-		}
-			else {
-				"<div class=\"sect${level.to_str()}\">\n${heading_html}\n${body}\n</div>"
-			}
+	else if level == 1 {
+		"<div class=\"sect1\">\n${heading_html}\n<div class=\"sectionbody\">\n${body}\n</div>\n</div>"
+	}
+	else {
+		"<div class=\"sect${level.to_str()}\">\n${heading_html}\n${body}\n</div>"
+	}
 }
 
 expect AsciiDoc.parse_str("") == Ok({ title: "", blocks: [] })
@@ -730,7 +730,7 @@ replace : Str, Str, Str -> Str
 replace = |s, from, to| Str.join_with(s.split_on(from), to)
 
 lower : Str -> Str
-lower = |s| Str.from_utf8_lossy(s.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b))
+lower = |s| Str.from_utf8_lossy(s.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
 
 following_heading : List(Line) -> { level : U64, title : Str }
 following_heading = |lines| {
@@ -770,7 +770,7 @@ split_attributes = |text| {
 	var $index = 0.U64
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
-		prefix = if byte == 34 or byte == 39 Str.from_utf8_lossy($part).trim() else ""
+		prefix = if (byte == 34 or byte == 39) Str.from_utf8_lossy($part).trim() else ""
 		if (byte == 34 or byte == 39) and (prefix == "" or prefix.ends_with("=")) {
 			var $closing = $index + 1
 			while $closing < bytes.len() and !(bytes.get($closing) == Ok(byte) and bytes.get($closing - 1) != Ok(92)) {
@@ -840,18 +840,18 @@ take_attached = |lines| {
 }
 
 role_suffix : List(AsciiDoc.Attribute) -> Str
-role_suffix = |attrs| if attribute(attrs, "role") == "" "" else " ${attribute(attrs, "role")}"
+role_suffix = |attrs| if (attribute(attrs, "role") == "") "" else " ${attribute(attrs, "role")}"
 
 attribution : List(AsciiDoc.Attribute) -> Str
 attribution = |attrs| {
 	author = attribute(attrs, "2")
 	cite = attribute(attrs, "3")
-	if author == "" and cite == "" "" else "\n<div class=\"attribution\">\n${if author == "" "" else "&#8212; ${inline(author)}"}${if cite == "" "" else "${if author == "" "" else "<br>\n"}<cite>${inline(cite)}</cite>"}\n</div>"
+	if (author == "" and cite == "") "" else "\n<div class=\"attribution\">\n${if (author == "") "" else "&#8212; ${inline(author)}"}${if (cite == "") "" else "${if (author == "") "" else "<br>\n"}<cite>${inline(cite)}</cite>"}\n</div>"
 }
 
 list_style : Str, U64 -> Str
 list_style = |style, level| {
-	if style != "" style else match level {
+	if (style != "") style else match level {
 		2 => "loweralpha"
 		3 => "lowerroman"
 		4 => "upperalpha"
@@ -881,7 +881,7 @@ dedent = |source| {
 			}
 		}
 	}
-	Str.join_with(lines.map(|line| drop_text(line, if $n == 999999 0 else $n)), "\n")
+	Str.join_with(lines.map(|line| drop_text(line, if ($n == 999999) 0 else $n)), "\n")
 }
 
 normalize_indent : Str, List(AsciiDoc.Attribute) -> Str
@@ -911,15 +911,15 @@ render_horizontal = |block| match block {
 
 size_attrs : List(AsciiDoc.Attribute) -> Str
 size_attrs = |attrs| {
-	w = if attribute(attrs, "width") == "" attribute(attrs, "2") else attribute(attrs, "width")
-	h = if attribute(attrs, "height") == "" attribute(attrs, "3") else attribute(attrs, "height")
-	"${if w == "" "" else " width=\"${escape(w)}\""}${if h == "" "" else " height=\"${escape(h)}\""}"
+	w = if (attribute(attrs, "width") == "") attribute(attrs, "2") else attribute(attrs, "width")
+	h = if (attribute(attrs, "height") == "") attribute(attrs, "3") else attribute(attrs, "height")
+	"${if (w == "") "" else " width=\"${escape(w)}\""}${if (h == "") "" else " height=\"${escape(h)}\""}"
 }
 
 media_attrs : List(AsciiDoc.Attribute) -> Str
 media_attrs = |attrs| {
 	options = attribute(attrs, "options").split_on(",")
-	"${size_attrs(attrs)}${if attribute(attrs, "poster") == "" "" else " poster=\"${escape(attribute(attrs, "poster"))}\""}${if options.contains("autoplay") " autoplay" else ""}${if options.contains("loop") " loop" else ""}${if options.contains("muted") " muted" else ""}"
+	"${size_attrs(attrs)}${if (attribute(attrs, "poster") == "") "" else " poster=\"${escape(attribute(attrs, "poster"))}\""}${if (options.contains("autoplay")) " autoplay" else ""}${if (options.contains("loop")) " loop" else ""}${if (options.contains("muted")) " muted" else ""}"
 }
 
 plain_attrs : List(AsciiDoc.Attribute) -> Bool
@@ -993,7 +993,7 @@ identify_blocks = |blocks, state| {
 		if node.context == "section" or node.context == "floating_title" {
 			if $id == "" and has_attr(node.attrs, "sectids") {
 				base = generated_id(node.title, node.attrs)
-				separator = if has_attr(node.attrs, "idseparator") attribute(node.attrs, "idseparator") else "_"
+				separator = if (has_attr(node.attrs, "idseparator")) attribute(node.attrs, "idseparator") else "_"
 				$id = base
 				var $suffix = 2.U64
 				while $state.ids.contains($id) {
@@ -1023,7 +1023,7 @@ identify_blocks = |blocks, state| {
 			}
 		}
 		if $id != "" {
-			reftext = if has_attr(node.attrs, "reftext") attribute(node.attrs, "reftext") else node.title
+			reftext = if (has_attr(node.attrs, "reftext")) attribute(node.attrs, "reftext") else node.title
 			$state = { ..$state, ids: $state.ids.insert($id, True), refs: $state.refs.append({ id: $id, text: reftext }) }
 		}
 		if node.title != "" {
@@ -1066,14 +1066,14 @@ prepare_blocks = |blocks, state| {
 			$title_html = title.html
 			$state = title.state
 		}
-		caption_kind = if node.context == "example" "example" else if node.context == "image" "figure" else if node.context == "table" "table" else ""
-		caption = if caption_kind == "" "" else if has_attr(node.attrs, "caption") attribute(node.attrs, "caption") else if caption_kind != "" and has_attr(node.attrs, "${caption_kind}-caption") "${attribute(node.attrs, "${caption_kind}-caption")} ${attribute(node.attrs, "__caption-number")}. " else ""
+		caption_kind = if (node.context == "example") "example" else if (node.context == "image") "figure" else if (node.context == "table") "table" else ""
+		caption = if (caption_kind == "") "" else if (has_attr(node.attrs, "caption")) attribute(node.attrs, "caption") else if (caption_kind != "" and has_attr(node.attrs, "${caption_kind}-caption")) "${attribute(node.attrs, "${caption_kind}-caption")} ${attribute(node.attrs, "__caption-number")}. " else ""
 		if node.title != "" and (caption != "" or $title_html != node.title or !plain_title(node.title)) {
 			$attrs = put_attr($attrs, "__rendered-title", "${caption}${$title_html}")
 		}
 		if node.source != "" and ["paragraph", "list_item", "verse", "admonition", "quote", "example", "sidebar", "open"].contains(node.context) {
-			subs = if has_attr(node.attrs, "subs") attribute(node.attrs, "subs") else "normal"
-			render_source = if node.context == "list_item" and (node.source.starts_with("[x] ") or node.source.starts_with("[*] ") or node.source.starts_with("[ ] ")) drop_text(node.source, 4) else node.source
+			subs = if (has_attr(node.attrs, "subs")) attribute(node.attrs, "subs") else "normal"
+			render_source = if (node.context == "list_item" and (node.source.starts_with("[x] ") or node.source.starts_with("[*] ") or node.source.starts_with("[ ] "))) drop_text(node.source, 4) else node.source
 			rendered = AsciiDocInline.render_state(render_source, node.attrs, { subs: subs }, $state)
 			$state = rendered.state
 			if rendered.html != render_source or render_source.contains("{") {
@@ -1094,8 +1094,8 @@ prepare_blocks = |blocks, state| {
 					child_state = { emitted_footnotes: [], footnotes, note_index, indexed_note_count, refs, ref_index, indexed_ref_count, attributes, removed, snapshot, snapshot_index, tag_prefix }
 					lines = text.split_on("\n").map(|line| { text: line, attrs: table_cell_attributes(node.attrs) })
 					identified = identify_blocks(parse_blocks(lines, 98).blocks, { ids: refs.fold(Dict.empty(), |index, ref| index.insert(ref.id, True)), refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
-					content = prepare_blocks(identified.blocks, if refs.len() == identified.state.refs.len() child_state else AsciiDocInline.with_refs(child_state, identified.state.refs))
-					prepared_blocks = if identified.state.toc attach_toc(content.blocks, content.blocks) else content.blocks
+					content = prepare_blocks(identified.blocks, if (refs.len() == identified.state.refs.len()) child_state else AsciiDocInline.with_refs(child_state, identified.state.refs))
+					prepared_blocks = if (identified.state.toc) attach_toc(content.blocks, content.blocks) else content.blocks
 					# Nested cells emit their own definitions before this cell's
 					# footer. Keep that suppression state until the footer is built.
 					footer = footnote_footer(content.state, node.attrs, start)
@@ -1126,18 +1126,18 @@ render_document : AsciiDoc.Document -> Str
 render_document = |document| {
 	first_node = render_node(document.blocks.first() ?? AsciiDoc.empty_item)
 	document_id = attribute(first_node.attrs, "__document-id")
-	document_refs = if document_id == "" [] else [{ id: document_id, text: attribute(first_node.attrs, "__document-reftext") }]
-	identified = identify_blocks(document.blocks, { ids: if document_id == "" Dict.empty() else Dict.empty().insert(document_id, True), refs: document_refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
+	document_refs = if (document_id == "") [] else [{ id: document_id, text: attribute(first_node.attrs, "__document-reftext") }]
+	identified = identify_blocks(document.blocks, { ids: if (document_id == "") Dict.empty() else Dict.empty().insert(document_id, True), refs: document_refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
 	header = prepare_header(first_node.attrs, identified.state.refs)
 	initial = prepare_blocks(without_header_snapshots(identified.blocks), header.state)
-	prepared = { blocks: if identified.state.toc attach_toc(initial.blocks, initial.blocks) else initial.blocks, state: initial.state }
+	prepared = { blocks: if (identified.state.toc) attach_toc(initial.blocks, initial.blocks) else initial.blocks, state: initial.state }
 	var $split = 0.U64
 	while $split < prepared.blocks.len() and (render_node(prepared.blocks.get($split) ?? AsciiDoc.empty_item)).context != "section" {
 		$split = $split + 1
 	}
-	body = if document.title != "" and $split > 0 and $split < prepared.blocks.len() "<div id=\"preamble\">\n<div class=\"sectionbody\">\n${render_blocks(prepared.blocks.take_first($split))}\n</div>\n</div>\n${render_blocks(prepared.blocks.drop_first($split))}" else render_blocks(prepared.blocks)
+	body = if (document.title != "" and $split > 0 and $split < prepared.blocks.len()) "<div id=\"preamble\">\n<div class=\"sectionbody\">\n${render_blocks(prepared.blocks.take_first($split))}\n</div>\n</div>\n${render_blocks(prepared.blocks.drop_first($split))}" else render_blocks(prepared.blocks)
 	attrs = (render_node(prepared.blocks.first() ?? AsciiDoc.empty_item)).attrs
-	html = if has_attr(attrs, "toc") and attribute(attrs, "toc") != "macro" and attribute(attrs, "toc-placement") != "macro" "${toc_html(prepared.blocks, attrs, False)}\n${body}" else body
+	html = if (has_attr(attrs, "toc") and attribute(attrs, "toc") != "macro" and attribute(attrs, "toc-placement") != "macro") "${toc_html(prepared.blocks, attrs, False)}\n${body}" else body
 	"${html}${footnote_footer(prepared.state, attrs, 0)}"
 }
 
@@ -1173,7 +1173,7 @@ footnote_footer = |state, attrs, start| {
 			$notes = $notes.append("<div class=\"footnote\" id=\"_footnotedef_${n}\">\n<a href=\"#_footnoteref_${n}\">${n}</a>. ${note.text}\n</div>\n")
 		}
 	}
-	if $notes.is_empty() "" else "\n<div id=\"footnotes\">\n<hr>\n${Str.join_with($notes, "")}</div>"
+	if ($notes.is_empty()) "" else "\n<div id=\"footnotes\">\n<hr>\n${Str.join_with($notes, "")}</div>"
 }
 
 # Core rendering starts with an empty emission list. Each cell appends exactly
@@ -1200,23 +1200,25 @@ attach_toc : List(AsciiDoc.Block), List(AsciiDoc.Block) -> List(AsciiDoc.Block)
 attach_toc = |blocks, document| blocks.map(
 	|block| {
 		node = render_node(block)
-		attrs = if node.context == "toc" put_attr(node.attrs, "__toc-html", if attribute(node.attrs, "toc") == "macro" or attribute(node.attrs, "toc-placement") == "macro" toc_html(document, node.attrs, True) else "<!-- toc disabled -->") else node.attrs
+		attrs = if (node.context == "toc") put_attr(node.attrs, "__toc-html", if (attribute(node.attrs, "toc") == "macro" or attribute(node.attrs, "toc-placement") == "macro") toc_html(document, node.attrs, True) else "<!-- toc disabled -->") else node.attrs
 		Rich({ ..node, attrs, blocks: attach_toc(node.blocks, document) })
 	},
 )
 
 toc_html : List(AsciiDoc.Block), List(AsciiDoc.Attribute), Bool -> Str
 toc_html = |blocks, attrs, macro| {
-	title = if has_attr(attrs, "toc-title") attribute(attrs, "toc-title") else "Table of Contents"
+	title = if (has_attr(attrs, "toc-title")) attribute(attrs, "toc-title") else "Table of Contents"
 	levels = U64.from_str(attribute(attrs, "toclevels")) ?? 2
-	"<div id=\"toc\" class=\"toc\">\n<div id=\"toctitle\"${if macro " class=\"title\"" else ""}>${AsciiDocInline.render(title, attrs)}</div>\n${
+	"<div id=\"toc\" class=\"toc\">\n<div id=\"toctitle\"${if (macro) " class=\"title\"" else ""}>${AsciiDocInline.render(title, attrs)}</div>\n${
 		toc_list(
 			blocks,
-			if blocks.any(
-				|block| {
-					n = render_node(block)
-					n.context == "section" and n.level == 0
-				},
+			if (
+				blocks.any(
+					|block| {
+						n = render_node(block)
+						n.context == "section" and n.level == 0
+					},
+				)
 			) 0 else 1,
 			levels,
 		)
@@ -1230,22 +1232,22 @@ toc_list = |blocks, level, levels| {
 		node = render_node(block)
 		if node.context == "section" and node.level <= levels {
 			children = toc_list(node.blocks, node.level + 1, levels)
-			$items = $items.append("<li><a href=\"#${escape(node.id)}\">${attribute(node.attrs, "__heading-number")}${rendered_title(node.title, node.attrs)}</a>${if children == "" "" else "\n${children}\n"}</li>")
+			$items = $items.append("<li><a href=\"#${escape(node.id)}\">${attribute(node.attrs, "__heading-number")}${rendered_title(node.title, node.attrs)}</a>${if (children == "") "" else "\n${children}\n"}</li>")
 		}
 	}
 	actual_level = blocks.map(render_node).find_first(|node| node.context == "section").map_ok(|node| node.level) ?? level
-	if $items.is_empty() "" else "<ul class=\"sectlevel${actual_level.to_str()}\">\n${Str.join_with($items, "\n")}\n</ul>"
+	if ($items.is_empty()) "" else "<ul class=\"sectlevel${actual_level.to_str()}\">\n${Str.join_with($items, "\n")}\n</ul>"
 }
 
 generated_id : Str, List(AsciiDoc.Attribute) -> Str
 generated_id = |title, attrs| {
 	html = AsciiDocInline.render(title, attrs)
 	ascii = html.to_utf8().all(|byte| byte < 128)
-	lowered = if ascii lower(html) else match Case.to_lower(html, Case.unicode_default, Case.unlimited_limits) {
+	lowered = if (ascii) lower(html) else match Case.to_lower(html, Case.unicode_default, Case.unlimited_limits) {
 		Ok(result) => Case.result_text(result)
 		Err(_) => lower(html)
 	}
-	var $text = if ascii ascii_id_text(lowered) else ""
+	var $text = if (ascii) ascii_id_text(lowered) else ""
 	var $tag = False
 	var $entity = False
 	if !ascii {
@@ -1255,28 +1257,28 @@ generated_id = |title, attrs| {
 			if n == 60 {
 				$tag = True
 			}
-				else if n == 62 and $tag {
-					$tag = False
+			else if n == 62 and $tag {
+				$tag = False
+			}
+			else if !$tag {
+				if n == 38 {
+					$entity = True
 				}
-					else if !$tag {
-						if n == 38 {
-							$entity = True
-						}
-							else if n == 59 and $entity {
-								$entity = False
-							}
-								else if !$entity {
-									category = GeneralCategory.short(GeneralCategory.of_scalar(scalar))
-									if n == 32 or n == 45 or n == 46 or n == 95 or category.starts_with("L") or category.starts_with("M") or category.starts_with("N") or category == "Pc" {
-										$text = Str.concat($text, Str.from_utf8_lossy(Scalar.to_utf8(scalar)))
-									}
-								}
+				else if n == 59 and $entity {
+					$entity = False
+				}
+				else if !$entity {
+					category = GeneralCategory.short(GeneralCategory.of_scalar(scalar))
+					if n == 32 or n == 45 or n == 46 or n == 95 or category.starts_with("L") or category.starts_with("M") or category.starts_with("N") or category == "Pc" {
+						$text = Str.concat($text, Str.from_utf8_lossy(Scalar.to_utf8(scalar)))
 					}
+				}
+			}
 		}
 	}
-	prefix = if has_attr(attrs, "idprefix") attribute(attrs, "idprefix") else "_"
+	prefix = if (has_attr(attrs, "idprefix")) attribute(attrs, "idprefix") else "_"
 	explicit_separator = has_attr(attrs, "idseparator")
-	separator = if explicit_separator Str.from_utf8_lossy(attribute(attrs, "idseparator").to_utf8().take_first(1)) else "_"
+	separator = if (explicit_separator) Str.from_utf8_lossy(attribute(attrs, "idseparator").to_utf8().take_first(1)) else "_"
 	separator_bytes = separator.to_utf8()
 	separator_byte = separator_bytes.first()
 	var $bytes = []
@@ -1289,10 +1291,10 @@ generated_id = |title, attrs| {
 			}
 			$last = True
 		}
-			else {
-				$bytes = $bytes.append(byte)
-				$last = False
-			}
+		else {
+			$bytes = $bytes.append(byte)
+			$last = False
+		}
 	}
 	var $out = Str.from_utf8_lossy($bytes)
 	if separator != "" and $out.ends_with(separator) {
@@ -1346,7 +1348,7 @@ adjusted_heading = |text, attrs| {
 		return h
 	}
 	level = (h.level.to_i64_try() ?? 0) + offset
-	{ level: if level < 0 0 else if level > 6 6 else (level.to_u64_try() ?? 1), title: h.title }
+	{ level: if (level < 0) 0 else if (level > 6) 6 else (level.to_u64_try() ?? 1), title: h.title }
 }
 
 normalize_headings : List(Line) -> List(Line)
@@ -1398,21 +1400,21 @@ normalize_headings = |lines| {
 					$boundary = True
 					$header = False
 				}
-					else if !text.starts_with("//") {
-						if !$seen and text.starts_with("= ") {
-							$header = True
-						}
-						section_boundary = $boundary and !$header and heading(text).title != ""
-						if !(is_block_metadata(text)) and !(text.starts_with(".") and text.to_utf8().len() > 1) {
-							$boundary = False
-						}
-						if special or section_boundary {
-							$boundary = True
-						}
-						if !(is_block_metadata(text)) {
-							$seen = True
-						}
+				else if !text.starts_with("//") {
+					if !$seen and text.starts_with("= ") {
+						$header = True
 					}
+					section_boundary = $boundary and !$header and heading(text).title != ""
+					if !(is_block_metadata(text)) and !(text.starts_with(".") and text.to_utf8().len() > 1) {
+						$boundary = False
+					}
+					if special or section_boundary {
+						$boundary = True
+					}
+					if !(is_block_metadata(text)) {
+						$seen = True
+					}
+				}
 			}
 		}
 	}
@@ -1420,7 +1422,7 @@ normalize_headings = |lines| {
 }
 
 scalar_count : Str -> U64
-scalar_count = |text| text.to_utf8().fold(0.U64, |n, b| if b < 128 or b >= 192 n + 1 else n)
+scalar_count = |text| text.to_utf8().fold(0.U64, |n, b| if (b < 128 or b >= 192) n + 1 else n)
 
 valid_media : Str -> Bool
 valid_media = |text| {
@@ -1441,13 +1443,13 @@ parse_compact = |value, position| {
 			text = Str.from_utf8_lossy($part)
 			if text != "" {
 				if $kind == "role" {
-					$role = if $role == "" text else "${$role} ${text}"
+					$role = if ($role == "") text else "${$role} ${text}"
 				}
-					else {
-						$attrs = $attrs.append({ name: $kind, value: text })
-					}
+				else {
+					$attrs = $attrs.append({ name: $kind, value: text })
+				}
 			}
-			$kind = if b == 35 "id" else if b == 46 "role" else "options"
+			$kind = if (b == 35) "id" else if (b == 46) "role" else "options"
 			$part = []
 		} else {
 			$part = $part.append(b)
@@ -1476,7 +1478,7 @@ take_indented = |lines| {
 unquote : Str -> Str
 unquote = |text| {
 	s = text.trim()
-	if s.to_utf8().len() >= 2 and ((s.starts_with("\"") and s.ends_with("\"")) or (s.starts_with("'") and s.ends_with("'"))) Str.from_utf8_lossy(s.to_utf8().drop_first(1).drop_last(1)).replace_each(if s.starts_with("\"") "\\\"" else "\\'", if s.starts_with("\"") "\"" else "'") else s
+	if (s.to_utf8().len() >= 2 and ((s.starts_with("\"") and s.ends_with("\"")) or (s.starts_with("'") and s.ends_with("'")))) Str.from_utf8_lossy(s.to_utf8().drop_first(1).drop_last(1)).replace_each(if (s.starts_with("\"")) "\\\"" else "\\'", if (s.starts_with("\"")) "\"" else "'") else s
 }
 
 parse_media_metadata : Str -> List(AsciiDoc.Attribute)
@@ -1517,12 +1519,12 @@ validate_nesting = |lines| {
 		if top != "" and text == top {
 			$stack = $stack.drop_last(1)
 		}
-			else if kind != "" and !["listing", "literal", "pass", "comment", "table"].contains(delimiter(top)) {
-				if $stack.len() >= 64 {
-					return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, message: "AsciiDoc block nesting exceeds 64-level limit" }))
-				}
-				$stack = $stack.append(text)
+		else if kind != "" and !["listing", "literal", "pass", "comment", "table"].contains(delimiter(top)) {
+			if $stack.len() >= 64 {
+				return Err(InvalidAsciiDoc({ offset: line.offset, line: line.line, message: "AsciiDoc block nesting exceeds 64-level limit" }))
 			}
+			$stack = $stack.append(text)
+		}
 	}
 	Ok({})
 }
@@ -1609,7 +1611,7 @@ implicit_list_style = |text| {
 	bytes = text.trim().to_utf8()
 	b = bytes.first() ?? 0
 	if bytes.get(1) == Ok(46) and bytes.get(2) == Ok(32) {
-		if b >= 65 and b <= 90 "upperalpha" else if b >= 97 and b <= 122 "loweralpha" else ""
+		if (b >= 65 and b <= 90) "upperalpha" else if (b >= 97 and b <= 122) "loweralpha" else ""
 	} else ""
 }
 
@@ -1705,7 +1707,7 @@ bibliography_item = |block| match block {
 table_cell_attributes : List(AsciiDoc.Attribute) -> List(AsciiDoc.Attribute)
 table_cell_attributes = |attrs| {
 	snapshot = attrs.keep_if(|a| a.name.starts_with("__document:"))
-	inherited = if snapshot.is_empty() attrs.keep_if(|a| !["cols", "format", "separator", "1", "2", "3", "style", "options", "role", "id", "title", "caption"].contains(a.name) and !a.name.starts_with("__")) else snapshot.map(|a| { name: drop_text(a.name, 11), value: a.value })
+	inherited = if (snapshot.is_empty()) attrs.keep_if(|a| !["cols", "format", "separator", "1", "2", "3", "style", "options", "role", "id", "title", "caption"].contains(a.name) and !a.name.starts_with("__")) else snapshot.map(|a| { name: drop_text(a.name, 11), value: a.value })
 	inherited.append({ name: "__table-cell-context", value: "" })
 }
 
@@ -1725,7 +1727,7 @@ is_block_title = |text| {
 	if bytes.first() != Ok(46) {
 		return False
 	}
-	index = if bytes.get(1) == Ok(46) 2 else 1
+	index = if (bytes.get(1) == Ok(46)) 2 else 1
 	next = bytes.get(index) ?? 46
 	![46, 32, 9].contains(next)
 }
@@ -1745,7 +1747,7 @@ has_alphanumeric = |text| {
 numeric_prefix : Str -> I64
 numeric_prefix = |text| {
 	bytes = text.trim().to_utf8()
-	var $length = if [43, 45].contains(bytes.first() ?? 0) 1.U64 else 0.U64
+	var $length = if ([43, 45].contains(bytes.first() ?? 0)) 1.U64 else 0.U64
 	while $length < bytes.len() and (bytes.get($length) ?? 0) >= 48 and (bytes.get($length) ?? 255) <= 57 {
 		$length = $length + 1
 	}
@@ -1795,8 +1797,8 @@ prepare_header = |attrs, refs| {
 	initial = attrs.keep_if(|a| a.name.starts_with("__header-initial:")).map(|a| { name: drop_text(a.name, 17), value: a.value })
 	final = attrs.keep_if(|a| a.name.starts_with("__header-final:")).map(|a| { name: drop_text(a.name, 15), value: a.value })
 	source = attribute(attrs, "__header-source")
-	early = if has_attr(initial, "doctitle") { html: "", state } else AsciiDocInline.render_state(source, initial, { subs: "specialcharacters,attributes" }, state)
-	title = if has_attr(final, "doctitle") attribute(final, "doctitle") else source
+	early = if (has_attr(initial, "doctitle")) { html: "", state } else AsciiDocInline.render_state(source, initial, { subs: "specialcharacters,attributes" }, state)
+	title = if (has_attr(final, "doctitle")) attribute(final, "doctitle") else source
 	AsciiDocInline.render_state(title, final, { subs: "normal" }, early.state)
 }
 
@@ -1819,20 +1821,20 @@ ascii_id_text = |source| {
 		if byte == 60 {
 			$tag = True
 		}
-			else if byte == 62 and $tag {
-				$tag = False
+		else if byte == 62 and $tag {
+			$tag = False
+		}
+		else if !$tag {
+			if byte == 38 {
+				$entity = True
 			}
-				else if !$tag {
-					if byte == 38 {
-						$entity = True
-					}
-						else if byte == 59 and $entity {
-							$entity = False
-						}
-							else if !$entity and (byte == 32 or byte == 45 or byte == 46 or byte == 95 or (byte >= 97 and byte <= 122) or (byte >= 48 and byte <= 57)) {
-								$out = $out.append(byte)
-							}
-				}
+			else if byte == 59 and $entity {
+				$entity = False
+			}
+			else if !$entity and (byte == 32 or byte == 45 or byte == 46 or byte == 95 or (byte >= 97 and byte <= 122) or (byte >= 48 and byte <= 57)) {
+				$out = $out.append(byte)
+			}
+		}
 	}
 	Str.from_utf8_lossy($out)
 }

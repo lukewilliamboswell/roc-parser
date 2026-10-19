@@ -48,7 +48,7 @@ encode_block = |block| {
 					Ordered({ start }) => start.to_str()
 				}
 			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
-			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
+			"[\"list\",${kind_json},${if (loose) "false" else "true"},[${items_json}]]"
 		}
 		Code({ info, pre }) => "[\"code\",${json_string(info)},${json_string(pre)}]"
 		ThematicBreak => "[\"hr\"]"
@@ -95,9 +95,9 @@ escape_json = |bytes, out| {
 		['"', .. as rest] => escape_json(rest, out.concat(['\\', '"']))
 		['\\', .. as rest] => escape_json(rest, out.concat(['\\', '\\']))
 		[byte, .. as rest] if byte < 32 => {
-			hi = if byte < 16 '0' else '1'
-			lo = if byte < 16 byte else byte - 16
-			digit = if lo < 10 lo + '0' else lo - 10 + 'a'
+			hi = if (byte < 16) '0' else '1'
+			lo = if (byte < 16) byte else byte - 16
+			digit = if (lo < 10) lo + '0' else lo - 10 + 'a'
 			escape_json(rest, out.concat(['\\', 'u', '0', '0', hi, digit]))
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))

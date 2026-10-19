@@ -81,7 +81,7 @@ should tolerate partial results.
 
 The syntax reference is compiler commit
 `0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is pinned separately to
-`nightly-2026-10-15-38e6c42` in `.roc-version`. This identifies a changing language implementation,
+`nightly-2026-10-18-1df370f` in `.roc-version`. This identifies a changing language implementation,
 rather than a stable language specification. Updating the implementation compiler
 and updating the syntax reference are separate maintenance decisions.
 

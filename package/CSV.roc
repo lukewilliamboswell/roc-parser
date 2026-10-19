@@ -429,7 +429,7 @@ CSV :: [].{
 		parse_null : Format, State -> Try(State, [InvalidCsv(Error)])
 		parse_null = |_, state| {
 			bytes = current_cell(state)?
-			if bytes.is_empty() Ok(state) else Err(cell_error(state, "expected an empty cell"))
+			if (bytes.is_empty()) Ok(state) else Err(cell_error(state, "expected an empty cell"))
 		}
 
 		## A row is one record; a record inside a row is rejected.
@@ -465,7 +465,7 @@ CSV :: [].{
 		## The record ends after the last header column.
 		parse_record_after_field : Format, State -> Try([Continue(State), Done(State)], [InvalidCsv(Error)])
 		parse_record_after_field = |_, state| {
-			if state.column >= state.header.len() Ok(Done(state)) else Ok(Continue(state))
+			if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
 		}
 
 		## The cell to skip is chosen by the column, so nothing is consumed.
@@ -506,7 +506,7 @@ CSV :: [].{
 					tag: Str.from_utf8_lossy(bytes),
 					encoding: format,
 					state,
-					start_payloads: |s, count| if count == 0 Ok(s) else Err(cell_error(s, "a CSV cell cannot hold a tag with a payload")),
+					start_payloads: |s, count| if (count == 0) Ok(s) else Err(cell_error(s, "a CSV cell cannot hold a tag with a payload")),
 					next_payload: |s, _, _| Ok(s),
 					finish_payloads: |s, _| Ok(s),
 					missing: cell_error(state, "unknown tag `${excerpt(bytes)}`"),
@@ -559,7 +559,7 @@ decode_table = |text, parse_row, mode| {
 }
 
 smaller : U64, U64 -> U64
-smaller = |a, b| if a < b a else b
+smaller = |a, b| if (a < b) a else b
 
 width_message : U64, U64 -> Str
 width_message = |found, wanted| {
@@ -583,7 +583,7 @@ normalize_name = |bytes| {
 				$out = $out.append('_')
 				$pending = False
 			}
-			$out = $out.append(if byte >= 'A' and byte <= 'Z' byte + 32 else byte)
+			$out = $out.append(if (byte >= 'A' and byte <= 'Z') byte + 32 else byte)
 		}
 	}
 	Str.from_utf8_lossy($out)
@@ -619,7 +619,7 @@ int_from_bytes = |bytes, from_str, signed| {
 			_ => { negative: False, digits: bytes }
 		}
 	if all_digits(digits) {
-		text = Str.from_utf8_lossy(if negative ['-'].concat(digits) else digits)
+		text = Str.from_utf8_lossy(if (negative) ['-'].concat(digits) else digits)
 		match from_str(text) {
 			Ok(value) => Ok(value)
 			Err(_) => Err(NotAnInteger)
@@ -770,7 +770,7 @@ line_column = |bytes, offset| {
 after_break : List(U8), U64 -> U64
 after_break = |bytes, at| {
 	match bytes.get(at) {
-		Ok('\r') => if bytes.get(at + 1) == Ok('\n') at + 2 else at + 1
+		Ok('\r') => if (bytes.get(at + 1) == Ok('\n')) at + 2 else at + 1
 		Ok('\n') => at + 1
 		_ => at
 	}
@@ -826,7 +826,6 @@ scan_record = |bytes, start| {
 			}
 		}
 	}
-	Ok({ fields: $fields, next: $pos })
 }
 
 ## Offset of the first `,`, CR or LF at or after `start`, or the input length.
@@ -854,7 +853,7 @@ scan_quoted = |bytes, start| {
 		if bytes.get($pos) == Ok('"') {
 			chunk = bytes.sublist({ start: $chunk_start, len: $pos - $chunk_start })
 			# A field with no doubled quotes stays a slice of the input.
-			$field = if $field.is_empty() chunk else $field.concat(chunk)
+			$field = if ($field.is_empty()) chunk else $field.concat(chunk)
 			if bytes.get($pos + 1) == Ok('"') {
 				$field = $field.append('"')
 				$chunk_start = $pos + 2
@@ -877,7 +876,7 @@ all_digits : List(U8) -> Bool
 all_digits = |bytes| !bytes.is_empty() and bytes.all(|b| b >= '0' and b <= '9')
 
 lowercase_ascii : List(U8) -> List(U8)
-lowercase_ascii = |bytes| bytes.map(|b| if b >= 'A' and b <= 'Z' b + 32 else b)
+lowercase_ascii = |bytes| bytes.map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b)
 
 ## Parse a float using the grammar documented on `CSV.f64`.
 decimal_f64 : List(U8) -> Try(F64, [NotAFloat])
@@ -888,7 +887,7 @@ decimal_f64 = |bytes| {
 			['+', .. as rest] => { negative: False, unsigned: rest }
 			_ => { negative: False, unsigned: bytes }
 		}
-	signed = |value| if negative -value else value
+	signed = |value| if (negative) -value else value
 	word = lowercase_ascii(unsigned)
 	if word == "inf".to_utf8() or word == "infinity".to_utf8() {
 		Ok(signed(F64.infinity))

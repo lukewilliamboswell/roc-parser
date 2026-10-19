@@ -41,7 +41,7 @@ test = |bytes| {
 					if !Str.from_utf8(prefix).is_ok() {
 						crash "AsciiDoc error offset splits a UTF-8 character"
 					}
-					line = 1 + prefix.fold(0.U64, |count, byte| if byte == '\n' count + 1 else count)
+					line = 1 + prefix.fold(0.U64, |count, byte| if (byte == '\n') count + 1 else count)
 					if error.line != line {
 						crash "AsciiDoc byte offset and line disagree"
 					}

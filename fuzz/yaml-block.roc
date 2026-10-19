@@ -60,7 +60,7 @@ fold = |lines| {
 					Err(_) => Str.join_with(List.repeat("\n", $empties), "")
 					Ok(before) =>
 						if !starts_white(before) and !starts_white(line) {
-							if $empties == 0 " " else Str.join_with(List.repeat("\n", $empties), "")
+							if ($empties == 0) " " else Str.join_with(List.repeat("\n", $empties), "")
 						} else {
 							Str.join_with(List.repeat("\n", $empties + 1), "")
 						}
@@ -89,10 +89,10 @@ expected_value = |style, chomp, lines, trailing, final_break| {
 				Literal => Str.join_with(lines, "\n")
 				Folded => fold(lines)
 			}
-		breaks = if final_break trailing + 1 else 0
+		breaks = if (final_break) trailing + 1 else 0
 		match chomp {
 			Strip => body
-			Clip => if final_break Str.concat(body, "\n") else body
+			Clip => if (final_break) Str.concat(body, "\n") else body
 			Keep => Str.concat(body, Str.join_with(List.repeat("\n", breaks), ""))
 		}
 	}
@@ -102,7 +102,7 @@ generate : List(U8) -> Input
 generate = |bytes| {
 	shape = byte_at(bytes, 0)
 	setup = byte_at(bytes, 1)
-	style = if shape % 2 == 0 Literal else Folded
+	style = if (shape % 2 == 0) Literal else Folded
 	chomp =
 		match (shape / 2) % 3 {
 			0 => Clip
@@ -121,8 +121,8 @@ generate = |bytes| {
 		match setup % 5 {
 			0 => Eof
 			4 => EofNoBreak
-			1 => if context == Root DocumentEnd else Sibling
-			2 => if context == Root DocumentEnd else CommentThenSibling
+			1 => if (context == Root) DocumentEnd else Sibling
+			2 => if (context == Root) DocumentEnd else CommentThenSibling
 			_ => DocumentEnd
 		}
 	# Explicit indicators are relative to the parent node's indentation, which is
@@ -140,7 +140,7 @@ generate = |bytes| {
 	leads_white = starts_white(chosen_lines.find_first(|line| !line.is_empty()) ?? "a")
 	# An empty root scalar before "..." is read differently by YAML parsers.
 	no_content = chosen_lines.all(|line| line.is_empty())
-	raw_lines = if (!explicit_allowed and leads_white) or (context == Root and no_content) List.prepend(chosen_lines, "lead") else chosen_lines
+	raw_lines = if ((!explicit_allowed and leads_white) or (context == Root and no_content)) List.prepend(chosen_lines, "lead") else chosen_lines
 	# Content is everything up to the last non-empty line; later empties trail.
 	last_content = last_non_empty(raw_lines)
 	content = raw_lines.sublist({ start: 0, len: last_content })
@@ -159,17 +159,17 @@ generate = |bytes| {
 		}
 	indent = base + offset
 	pad = spaces(indent)
-	style_char = if style == Literal "|" else ">"
+	style_char = if (style == Literal) "|" else ">"
 	chomp_char =
 		match chomp {
 			Clip => ""
 			Strip => "-"
 			Keep => "+"
 		}
-	indicator = if explicit offset.to_str() else ""
-	header = if indicator_first "${style_char}${indicator}${chomp_char}" else "${style_char}${chomp_char}${indicator}"
-	body_lines = content.map(|line| if line.is_empty() (if empty_pad pad else "") else Str.concat(pad, line))
-	blank_lines = List.repeat(if empty_pad pad else "", if ending == EofNoBreak 0 else trailing_total)
+	indicator = if (explicit) offset.to_str() else ""
+	header = if (indicator_first) "${style_char}${indicator}${chomp_char}" else "${style_char}${chomp_char}${indicator}"
+	body_lines = content.map(|line| if (line.is_empty()) (if (empty_pad) pad else "") else Str.concat(pad, line))
+	blank_lines = List.repeat(if (empty_pad) pad else "", if (ending == EofNoBreak) 0 else trailing_total)
 	block = Str.join_with([header].concat(body_lines).concat(blank_lines), "\n")
 
 	# Without a final line break the last content line has none to chomp, and
@@ -177,7 +177,7 @@ generate = |bytes| {
 	# line at the end of input (yaml-test-suite L24T, JEF9).
 	last_white = (content.last() ?? "x").to_utf8().all(|b| b == ' ' or b == '\t')
 	no_break = ending == EofNoBreak and !last_white
-	trailing_kept = if ending == EofNoBreak 0 else trailing_total
+	trailing_kept = if (ending == EofNoBreak) 0 else trailing_total
 	value = Text(expected_value(style, chomp, content, trailing_kept, !no_break))
 	sibling_indent = spaces(base)
 	tail =
@@ -189,15 +189,15 @@ generate = |bytes| {
 			CommentThenSibling => "\n# comment\n${sibling_indent}next: 1\n"
 		}
 	has_sibling = ending == Sibling or ending == CommentThenSibling
-	siblings = if has_sibling [{ key: "next", value: Int(1) }] else []
+	siblings = if (has_sibling) [{ key: "next", value: Int(1) }] else []
 	entries = [{ key: "k", value }].concat(siblings)
 	{ yaml, expected } =
 		match context {
 			Root => { yaml: "${block}${tail}", expected: value }
 			MapValue => { yaml: "k: ${block}${tail}", expected: Mapping(entries) }
 			SeqItem => {
-				yaml: "- ${block}${if has_sibling Str.replace_each(tail, "next: 1", "- 1") else tail}",
-				expected: Sequence([value].concat(if has_sibling [Int(1)] else [])),
+				yaml: "- ${block}${if (has_sibling) Str.replace_each(tail, "next: 1", "- 1") else tail}",
+				expected: Sequence([value].concat(if (has_sibling) [Int(1)] else [])),
 			}
 			CompactMap => { yaml: "- k: ${block}${tail}", expected: Sequence([Mapping(entries)]) }
 			NestedMap => { yaml: "outer:\n  k: ${block}${tail}", expected: Mapping([{ key: "outer", value: Mapping(entries) }]) }

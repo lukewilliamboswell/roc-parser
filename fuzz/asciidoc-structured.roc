@@ -25,7 +25,7 @@ project = |block| match block {
 	Literal(source) => node("literal", source, [])
 	ThematicBreak => node("thematic_break", "", [])
 	Section(s) => heading("section", s.level, s.title, s.blocks.keep_if(visible_block).map(project))
-	Rich(n) => Node({ context: n.context, title: n.title, source: n.source, level: if n.context == "section" or n.context == "floating_title" n.level else 0, blocks: n.blocks.keep_if(visible_block).map(project) })
+	Rich(n) => Node({ context: n.context, title: n.title, source: n.source, level: if (n.context == "section" or n.context == "floating_title") n.level else 0, blocks: n.blocks.keep_if(visible_block).map(project) })
 }
 
 test : List(U8) -> Fuzz.Outcome

@@ -48,7 +48,7 @@ field_named = |name, value| { line: "${name}: ${value}".to_utf8(), header: { nam
 name_is : HttpGen.Field, Str -> Bool
 name_is = |field, wanted| {
 	match field.header {
-		{ name, value: _ } => name.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b) == wanted.to_utf8()
+		{ name, value: _ } => name.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b) == wanted.to_utf8()
 	}
 }
 
@@ -136,27 +136,37 @@ mutate = |which, msg, cur| {
 		}
 		4 => {
 			# RFC 9112 5.1: no whitespace is allowed between field name and colon.
-			edit_field(msg, cur, |line| {
-				colon = index_of(line, ':')
-				HttpGen.insert_bytes(line, colon, if n % 2 == 0 [' '] else ['\t', ' '])
-			}, "whitespace before colon")
+			edit_field(
+				msg,
+				cur,
+				|line| {
+					colon = index_of(line, ':')
+					HttpGen.insert_bytes(line, colon, if (n % 2 == 0) [' '] else ['\t', ' '])
+				},
+				"whitespace before colon",
+			)
 		}
 		5 => {
 			# RFC 9112 5.2: obs-fold; this parser rejects it (a server MAY).
-			edit_field(msg, cur, |line| line.concat(['\r', '\n', if n % 2 == 0 ' ' else '\t', 'x']), "obs-fold")
+			edit_field(msg, cur, |line| line.concat(['\r', '\n', if (n % 2 == 0) ' ' else '\t', 'x']), "obs-fold")
 		}
 		6 => {
 			# RFC 9112 2.2: bare CR must be rejected; bare LF is rejected here.
-			replace_line_end(msg, next, if n % 2 == 0 ['\n'] else ['\r'])
+			replace_line_end(msg, next, if (n % 2 == 0) ['\n'] else ['\r'])
 		}
 		7 => {
 			# RFC 9110 5.5: field values exclude CTLs (only SP/HTAB allowed),
 			# and field names are tokens.
 			ctl = ctl_bytes.get(n % ctl_bytes.len()) ?? 0
-			edit_field(msg, next, |line| {
-				spot = pick(cur, line.len() + 1).n
-				HttpGen.insert_bytes(line, spot, [ctl])
-			}, "control character 0x${ctl.to_str()} in field line")
+			edit_field(
+				msg,
+				next,
+				|line| {
+					spot = pick(cur, line.len() + 1).n
+					HttpGen.insert_bytes(line, spot, [ctl])
+				},
+				"control character 0x${ctl.to_str()} in field line",
+			)
 		}
 		8 => {
 			# RFC 9112 3.2: an HTTP/1.1 request needs exactly one Host.
@@ -192,7 +202,7 @@ mutate = |which, msg, cur| {
 					match n % 12 {
 						0 => hex_of(size + 1)
 						1 => hex_of(size + 2)
-						2 => if size > 1 hex_of(size - 1) else ['G']
+						2 => if (size > 1) hex_of(size - 1) else ['G']
 						3 => ['0', 'x'].concat(hex)
 						4 => ['+'].concat(hex)
 						5 => hex.concat([' '])
@@ -220,10 +230,12 @@ mutate = |which, msg, cur| {
 			} else {
 				index = pick(next, data_chunks.len()).n
 				ending = [['\n'], ['\r'], [], ['X', 'X'], ['\r', ' ', '\n']].get(n % 5) ?? []
-				payload = data_chunks.map_with_index(|chunk, i| {
-					line = chunk.size_line.concat(['\r', '\n']).concat(chunk.data)
-					if i == index line.concat(ending) else line.concat(['\r', '\n'])
-				}).fold([], |acc, part| acc.concat(part))
+				payload = data_chunks.map_with_index(
+					|chunk, i| {
+						line = chunk.size_line.concat(['\r', '\n']).concat(chunk.data)
+						if (i == index) line.concat(ending) else line.concat(['\r', '\n'])
+					},
+				).fold([], |acc, part| acc.concat(part))
 				last = msg.chunks.last() ?? { size_line: ['0'], data: [] }
 				done({ ..msg, payload: payload.concat(last.size_line).concat(['\r', '\n']).concat(msg.trailer) }, "bad CRLF after chunk data")
 			}
@@ -234,7 +246,7 @@ mutate = |which, msg, cur| {
 				Err(NotApplicable)
 			} else {
 				payload = HttpGen.encode_chunks(msg.chunks.drop_last(1), [])
-				ending = if n % 2 == 0 payload else HttpGen.encode_chunks(msg.chunks, msg.trailer).drop_last(2)
+				ending = if (n % 2 == 0) payload else HttpGen.encode_chunks(msg.chunks, msg.trailer).drop_last(2)
 				done({ ..msg, payload: ending }, "unterminated chunked body")
 			}
 		}
@@ -254,7 +266,7 @@ mutate = |which, msg, cur| {
 			} else {
 				full = HttpGen.encode(msg)
 				cut = 1 + n % 8
-				Ok({ bytes: full.drop_last(if cut < full.len() cut else full.len()), label: "truncated by ${cut.to_str()}" })
+				Ok({ bytes: full.drop_last(if (cut < full.len()) cut else full.len()), label: "truncated by ${cut.to_str()}" })
 			}
 		}
 		_ => {
@@ -304,9 +316,9 @@ replace_line_end : HttpGen.Msg, Cur, List(U8) -> Result
 replace_line_end = |msg, cur, ending| {
 	lines = [msg.start].concat(msg.fields.map(|f| f.line)).append([])
 	index = pick(cur, lines.len()).n
-	head = lines.map_with_index(|line, i| line.concat(if i == index ending else ['\r', '\n'])).fold([], |acc, part| acc.concat(part))
+	head = lines.map_with_index(|line, i| line.concat(if (i == index) ending else ['\r', '\n'])).fold([], |acc, part| acc.concat(part))
 	# A CR directly followed by the LF of the next line would just be CRLF.
-	following = if index + 1 < lines.len() (lines.get(index + 1) ?? []).first() else msg.payload.first()
+	following = if (index + 1 < lines.len()) (lines.get(index + 1) ?? []).first() else msg.payload.first()
 	if ending == ['\r'] and (following == Ok('\n') or (index + 2 == lines.len() and msg.payload.is_empty())) {
 		Err(NotApplicable)
 	} else {
@@ -323,7 +335,7 @@ hex_of = |n| {
 		$out = [digits.get($rest % 16) ?? '0'].concat($out)
 		$rest = $rest // 16
 	}
-	if $out.is_empty() ['0'] else $out
+	if ($out.is_empty()) ['0'] else $out
 }
 
 with_version : HttpGen.Msg, Str -> List(U8)

@@ -68,7 +68,7 @@ hex = |bytes| {
 }
 
 hex_digit : U8 -> U8
-hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
+hex_digit = |n| if (n < 10) n + '0' else n - 10 + 'a'
 
 json_string : Str -> Str
 json_string = |text| "\"${Str.from_utf8_lossy(escape_json(text.to_utf8(), []))}\""
