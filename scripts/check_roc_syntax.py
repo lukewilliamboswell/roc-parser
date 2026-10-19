@@ -173,6 +173,11 @@ def main(argv: list[str] | None = None) -> int:
         step("oracle-mutations", mutations)
         benchmark = [sys.executable, "scripts/bench_roc_syntax.py", "--roc", roc,
                      "--output", str(output / "performance.json")]
+        if sys.platform.startswith("linux"):
+            # basic-cli's static musl host can unmap and remap a page on every
+            # parse at some comment sizes, swamping the parser's own scaling
+            # (roc-lang/basic-cli#530). Comment timings are still recorded.
+            benchmark += ["--scaling-exempt", "comment"]
         if args.allocations:
             alloc = output / "alloc"
             step("allocation-build", [roc, "build", "--opt=speed", "--no-cache", "--fuzz",

@@ -16,6 +16,12 @@ class ScalingTests(unittest.TestCase):
     def test_quadratic_growth_fails(self):
         self.assertEqual(len(bench.scaling_failures(self.records([10,40,160]),1.75)),2)
 
+    def test_exempt_family_skips_only_the_ratio_check(self):
+        records = self.records([10, 40, 160])
+        self.assertEqual(bench.scaling_failures(records, 1.75, {'operators'}), [])
+        records[1]['accepted'] = False
+        self.assertEqual([f['metric'] for f in bench.scaling_failures(records, 1.75, {'operators'})], ['parse_outcome'])
+
     def test_load_noise_needs_consistent_slowdown_to_fail(self):
         records = self.records([10, 45])
         records[0]['samples_ns'] = [9, 10, 11, 10, 10]

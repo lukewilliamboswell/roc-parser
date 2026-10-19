@@ -52,7 +52,7 @@ def measure(binary, data, repetitions, target_ms):
             'bytes_per_second': len(data) * 1e9 / median,
             'accepted': records[0]['successes'] == iterations, 'status': records[0]['status']}
 
-def scaling_failures(records, max_ratio):
+def scaling_failures(records, max_ratio, exempt=()):
     failures = []
     prior = {}
     for record in records:
@@ -64,7 +64,7 @@ def scaling_failures(records, max_ratio):
             failures.append({'family': family, 'size': record['size'], 'metric': 'parse_outcome',
                              'status': record.get('status'), 'accepted': record.get('accepted'),
                              'expected': 'rejected incomplete source' if family == 'unclosed' else 'Complete and accepted'})
-        if family in prior:
+        if family in prior and family not in exempt:
             previous = prior[family]
             # Normalize by actual source-byte growth, not generator parameter.
             if family == 'unclosed' and (record.get('status') == 'Limited' or previous.get('status') == 'Limited'):
@@ -167,6 +167,8 @@ def main(argv=None):
     ap.add_argument('--max-regression', type=float, default=1.5)
     ap.add_argument('--max-allocation-regression', type=float, default=1.25)
     ap.add_argument('--max-scaling-overhead', type=float, default=1.75, help='allowed time growth beyond byte growth')
+    ap.add_argument('--scaling-exempt', action='append', default=[], metavar='FAMILY',
+                    help='measure and report FAMILY but skip its scaling-ratio check')
     ap.add_argument('--sizes', type=int, nargs='+', default=[256, 512, 1024, 2048])
     ap.add_argument('--document-bytes', type=int, nargs='+', default=[4096, 65536, 262144])
     ap.add_argument('--repetitions', type=int, default=5)
@@ -199,7 +201,8 @@ def main(argv=None):
                 'candidate_source_relationship': 'workspace source; reused binary relationship unverified' if args.binary else 'built from workspace source in this run',
                 'candidate_commit': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip(),
                 'reused_binary': bool(args.binary), 'input_ownership': 'shared in-memory source across iterations; fresh parse result each iteration', 'allocation_metric': 'roc_alloc + roc_realloc calls; not byte volume or peak memory'}
-    failures = scaling_failures(records, args.max_scaling_overhead)
+    metadata['scaling_exempt'] = sorted(args.scaling_exempt)
+    failures = scaling_failures(records, args.max_scaling_overhead, set(args.scaling_exempt))
     baseline_comparison = None
     if args.baseline:
         baseline_comparison = {}

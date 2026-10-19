@@ -133,7 +133,11 @@ development machine; the ratchet reports any input that regresses past it.
 See {src}/docs/benchmarks.adoc[the measurement protocol and replay commands].
 
 CI uses only `--reference-performance smoke`: two tiny inputs with a short
-measurement window and no speed-ratio assertion. The full comparative ratchet is
+measurement window and no speed-ratio assertion. On Linux the scaling check
+records the comment family but does not assert its ratio: the basic-cli host's
+musl allocator can unmap and remap a page on every parse at some sizes, which
+hides the parser's own scaling
+(https://github.com/roc-lang/basic-cli/issues/530[basic-cli#530]). The full comparative ratchet is
 a local development tool. Deep synthetic operator chains explicitly report
 partial depth-limited structural eligibility checks; ordinary conformance gates
 continue to require complete normalized tree comparisons.
