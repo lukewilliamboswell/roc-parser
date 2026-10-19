@@ -22,8 +22,13 @@ Mutated : { bytes : List(U8), original : List(U8), kind : HttpGen.Kind, label : 
 
 Cur : HttpGen.Cur
 
+# Inlined from HttpGen.pick: delegating to it makes --opt=speed free the fuzz
+# input one time too many and corrupt the heap.
 pick : Cur, U64 -> { n : U64, cur : Cur }
-pick = |cur, count| HttpGen.pick(cur, count)
+pick = |cur, count| {
+	byte = cur.bytes.get(cur.pos) ?? 0
+	{ n: U8.to_u64(byte) % count, cur: { bytes: cur.bytes, pos: cur.pos + 1 } }
+}
 
 generate : List(U8) -> Try(Mutated, [NotApplicable])
 generate = |bytes| {
