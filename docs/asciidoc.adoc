@@ -57,9 +57,6 @@ For a manually constructed block, use `attrs: AsciiDoc.attributes(bindings)`.
 To replace bindings, materialize and edit the list, then construct a new scope
 with `AsciiDoc.attributes`; the original snapshot remains unchanged.
 
-`without_internal_caches(document)` explicitly materializes scopes throughout
-a document. Ordinary parsing and rendering keep them shared.
-
 Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
 64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
 resource-limit failures return a message, one-based line and zero-based UTF-8

@@ -136,12 +136,6 @@ AsciiDoc :: [].{
 		}
 	}
 
-	## Materialize independent ordered bindings throughout a parsed document.
-	## Use attributes(materialize_attributes(node.attrs).map(...)) to replace
-	## bindings explicitly; shared source snapshots themselves are immutable.
-	without_internal_caches : Document -> Document
-	without_internal_caches = |document| { title: document.title, blocks: clear_source_caches(document.blocks) }
-
 	## Render inline substitutions with caller-supplied attributes.
 	render_inline : Str, List(Attribute) -> Str
 	render_inline = |source, attrs| AsciiDocInline.render(source, attrs)
@@ -2206,6 +2200,10 @@ render_cached_inline = |source, attrs, view, subs, state| {
 	}
 }
 
+# Materialize independent ordered bindings throughout a parsed document.
+without_internal_caches : AsciiDoc.Document -> AsciiDoc.Document
+without_internal_caches = |document| { title: document.title, blocks: clear_source_caches(document.blocks) }
+
 clear_source_caches : List(AsciiDoc.Block) -> List(AsciiDoc.Block)
 clear_source_caches = |blocks| blocks.map(
 	|block| match block {
@@ -2223,7 +2221,7 @@ expect {
 			valid = AsciiDocAttributes.indexed_attributes(original.attrs, AsciiDocAttributes.empty)
 			# Editing source values must first drop the authenticated carrier.
 			changed = { ..original, attrs: original.attrs.map(|a| if (a.name == "value") { name: a.name, value: "Changed" } else a) }
-			invalidated = AsciiDoc.without_internal_caches({ title: doc.title, blocks: [Rich(changed)] })
+			invalidated = without_internal_caches({ title: doc.title, blocks: [Rich(changed)] })
 			cleared = render_node(invalidated.blocks.first() ?? empty_item)
 			valid.view.first.get("value") == Ok("Original") and !AsciiDocAttributes.indexed_attributes(cleared.attrs, valid.cache).view.indexed and AsciiDoc.render(invalidated).contains("<p>Changed</p>")
 		}
