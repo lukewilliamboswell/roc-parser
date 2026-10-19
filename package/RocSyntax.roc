@@ -215,129 +215,318 @@ push_diagnostic = |diagnostics, code, start, end| {
 	if diagnostics.len() < 256 diagnostics.append({ code, start, end }) else diagnostics
 }
 
-## Bitmask of the bytes in `block` that cannot continue an identifier.
-ident_block_stop : U8x16 -> U16
-ident_block_stop = |block| {
-	lower = block.minus_wrap(U8x16.splat('a')).lte_lanes(U8x16.splat(25))
-	upper = block.minus_wrap(U8x16.splat('A')).lte_lanes(U8x16.splat(25))
-	digit = block.minus_wrap(U8x16.splat('0')).lte_lanes(U8x16.splat(9))
-	marks = block.eq_lanes(U8x16.splat('_')).bitwise_or(block.eq_lanes(U8x16.splat('!'))).bitwise_or(block.eq_lanes(U8x16.splat('$')))
-	lower.bitwise_or(upper).bitwise_or(digit).bitwise_or(marks).bitwise_or(block.gte_lanes(U8x16.splat(0x80))).bitwise_not().to_bitmask()
-}
+Starts : { starts : List(U64), count : U64 }
 
-## Length of the ASCII run at `at` (which must be ASCII), up to 16 bytes.
-ascii_run : List(U8), U64 -> U64
-ascii_run = |source, at| {
-	match U8x16.load(source, at) {
-		Ok(block) => {
-			high = block.to_bitmask()
-			if high == 0 16 else high.count_trailing_zero_bits().to_u64()
-		}
-		Err(_) => 1
+## Stage 1: token-start bitmask. A byte starts a token unless it continues a run of
+## plain identifier bytes [A-Za-z0-9_!] or of space/tab/newline. Bytes past the end are starts.
+## `count` (popcount) bounds the number of tokens the simple subset can produce.
+stage1_starts : List(U8) -> Starts
+stage1_starts = |source| {
+	len = source.len()
+	nwords = (len + 63).shr_zf_wrap(6)
+	s_zero = U8x16.splat(0)
+	s_nl = U8x16.splat('\n')
+	s_sp = U8x16.splat(' ')
+	s_tab = U8x16.splat('\t')
+	s_20 = U8x16.splat(0x20)
+	s_a = U8x16.splat('a')
+	s_25 = U8x16.splat(25)
+	s_0 = U8x16.splat('0')
+	s_9 = U8x16.splat(9)
+	s_us = U8x16.splat('_')
+	s_bang = U8x16.splat('!')
+	weights = U64x2.splat(0x8040201008040201).to_u8x16_bits()
+	var $starts = List.with_capacity(nwords)
+	var $count = 0.U64
+	var $last_id = U8x16.splat(0)
+	var $last_sp = U8x16.splat(0)
+	var $off = 0.U64
+	while $off + 64 <= len {
+		off = $off
+		v0 = U8x16.load(source, off + 0) ?? s_zero
+		id0 = v0.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v0.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v0.eq_lanes(s_us)).bitwise_or(v0.eq_lanes(s_bang))
+		sp0 = v0.eq_lanes(s_sp).bitwise_or(v0.eq_lanes(s_nl)).bitwise_or(v0.eq_lanes(s_tab))
+		st0 = id0.bitwise_and(U8x16.concat_shift_bytes($last_id, id0, 15)).bitwise_or(sp0.bitwise_and(U8x16.concat_shift_bytes($last_sp, sp0, 15))).bitwise_not().bitwise_and(weights)
+		v1 = U8x16.load(source, off + 16) ?? s_zero
+		id1 = v1.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v1.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v1.eq_lanes(s_us)).bitwise_or(v1.eq_lanes(s_bang))
+		sp1 = v1.eq_lanes(s_sp).bitwise_or(v1.eq_lanes(s_nl)).bitwise_or(v1.eq_lanes(s_tab))
+		st1 = id1.bitwise_and(U8x16.concat_shift_bytes(id0, id1, 15)).bitwise_or(sp1.bitwise_and(U8x16.concat_shift_bytes(sp0, sp1, 15))).bitwise_not().bitwise_and(weights)
+		v2 = U8x16.load(source, off + 32) ?? s_zero
+		id2 = v2.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v2.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v2.eq_lanes(s_us)).bitwise_or(v2.eq_lanes(s_bang))
+		sp2 = v2.eq_lanes(s_sp).bitwise_or(v2.eq_lanes(s_nl)).bitwise_or(v2.eq_lanes(s_tab))
+		st2 = id2.bitwise_and(U8x16.concat_shift_bytes(id1, id2, 15)).bitwise_or(sp2.bitwise_and(U8x16.concat_shift_bytes(sp1, sp2, 15))).bitwise_not().bitwise_and(weights)
+		v3 = U8x16.load(source, off + 48) ?? s_zero
+		id3 = v3.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v3.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v3.eq_lanes(s_us)).bitwise_or(v3.eq_lanes(s_bang))
+		sp3 = v3.eq_lanes(s_sp).bitwise_or(v3.eq_lanes(s_nl)).bitwise_or(v3.eq_lanes(s_tab))
+		st3 = id3.bitwise_and(U8x16.concat_shift_bytes(id2, id3, 15)).bitwise_or(sp3.bitwise_and(U8x16.concat_shift_bytes(sp2, sp3, 15))).bitwise_not().bitwise_and(weights)
+		st_ab = st0.even_lanes(st1).plus_wrap(st0.odd_lanes(st1))
+		st_cd = st2.even_lanes(st3).plus_wrap(st2.odd_lanes(st3))
+		st_q = st_ab.even_lanes(st_cd).plus_wrap(st_ab.odd_lanes(st_cd))
+		st_o = st_q.even_lanes(st_q).plus_wrap(st_q.odd_lanes(st_q))
+		word = st_o.to_u64x2_bits().get_lane(0)
+		$starts = $starts.append(word)
+		$count = $count + U8.to_u64(U64.count_one_bits(word))
+		$last_id = id3
+		$last_sp = sp3
+		$off = $off + 64
 	}
+	if $off < len {
+		tail_bytes = source.sublist({ start: $off, len: len - $off }).concat(List.repeat(0, 64))
+		off = 0
+		v0 = U8x16.load(tail_bytes, off + 0) ?? s_zero
+		id0 = v0.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v0.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v0.eq_lanes(s_us)).bitwise_or(v0.eq_lanes(s_bang))
+		sp0 = v0.eq_lanes(s_sp).bitwise_or(v0.eq_lanes(s_nl)).bitwise_or(v0.eq_lanes(s_tab))
+		st0 = id0.bitwise_and(U8x16.concat_shift_bytes($last_id, id0, 15)).bitwise_or(sp0.bitwise_and(U8x16.concat_shift_bytes($last_sp, sp0, 15))).bitwise_not().bitwise_and(weights)
+		v1 = U8x16.load(tail_bytes, off + 16) ?? s_zero
+		id1 = v1.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v1.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v1.eq_lanes(s_us)).bitwise_or(v1.eq_lanes(s_bang))
+		sp1 = v1.eq_lanes(s_sp).bitwise_or(v1.eq_lanes(s_nl)).bitwise_or(v1.eq_lanes(s_tab))
+		st1 = id1.bitwise_and(U8x16.concat_shift_bytes(id0, id1, 15)).bitwise_or(sp1.bitwise_and(U8x16.concat_shift_bytes(sp0, sp1, 15))).bitwise_not().bitwise_and(weights)
+		v2 = U8x16.load(tail_bytes, off + 32) ?? s_zero
+		id2 = v2.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v2.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v2.eq_lanes(s_us)).bitwise_or(v2.eq_lanes(s_bang))
+		sp2 = v2.eq_lanes(s_sp).bitwise_or(v2.eq_lanes(s_nl)).bitwise_or(v2.eq_lanes(s_tab))
+		st2 = id2.bitwise_and(U8x16.concat_shift_bytes(id1, id2, 15)).bitwise_or(sp2.bitwise_and(U8x16.concat_shift_bytes(sp1, sp2, 15))).bitwise_not().bitwise_and(weights)
+		v3 = U8x16.load(tail_bytes, off + 48) ?? s_zero
+		id3 = v3.bitwise_or(s_20).minus_wrap(s_a).lte_lanes(s_25).bitwise_or(v3.minus_wrap(s_0).lte_lanes(s_9)).bitwise_or(v3.eq_lanes(s_us)).bitwise_or(v3.eq_lanes(s_bang))
+		sp3 = v3.eq_lanes(s_sp).bitwise_or(v3.eq_lanes(s_nl)).bitwise_or(v3.eq_lanes(s_tab))
+		st3 = id3.bitwise_and(U8x16.concat_shift_bytes(id2, id3, 15)).bitwise_or(sp3.bitwise_and(U8x16.concat_shift_bytes(sp2, sp3, 15))).bitwise_not().bitwise_and(weights)
+		st_ab = st0.even_lanes(st1).plus_wrap(st0.odd_lanes(st1))
+		st_cd = st2.even_lanes(st3).plus_wrap(st2.odd_lanes(st3))
+		st_q = st_ab.even_lanes(st_cd).plus_wrap(st_ab.odd_lanes(st_cd))
+		st_o = st_q.even_lanes(st_q).plus_wrap(st_q.odd_lanes(st_q))
+		word = st_o.to_u64x2_bits().get_lane(0)
+		$starts = $starts.append(word)
+		$count = $count + U8.to_u64(U64.count_one_bits(word))
+		$last_id = id3
+		$last_sp = sp3
+	}
+	{ starts: $starts, count: $count }
 }
 
-utf8_diagnostics : List(U8) -> List(RocSyntax.Diagnostic)
-utf8_diagnostics = |source| {
+## Next token-start position strictly after `at`.
+next_start : List(U64), U64 -> U64
+next_start = |starts, at| {
+	from = at + 1
+	var $w = from.shr_zf_wrap(6)
+	var $bits = (starts.get($w) ?? U64.highest).shr_zf_wrap(U64.to_u8_wrap(from.bitwise_and(63)))
+	var $base = from
+	while $bits == 0 {
+		$w = $w + 1
+		$base = $w.shl_wrap(6)
+		$bits = starts.get($w) ?? U64.highest
+	}
+	$base + U8.to_u64(U64.count_trailing_zero_bits($bits))
+}
+
+## Bitmask of plain identifier bytes [A-Za-z0-9_!] in a block.
+plain_ident_bits : U8x16 -> U16
+plain_ident_bits = |v| {
+	letter = v.bitwise_or(U8x16.splat(0x20)).minus_wrap(U8x16.splat('a')).lte_lanes(U8x16.splat(25))
+	digit = v.minus_wrap(U8x16.splat('0')).lte_lanes(U8x16.splat(9))
+	letter.bitwise_or(digit).bitwise_or(v.eq_lanes(U8x16.splat('_'))).bitwise_or(v.eq_lanes(U8x16.splat('!'))).to_bitmask()
+}
+
+## End of the run of plain identifier bytes starting at `at`.
+ident_end_inline : List(U8), U64 -> U64
+ident_end_inline = |source, at| {
+	var $i = at
+	var $result = at
+	var $done = False
+	while !$done {
+		match U8x16.load(source, $i) {
+			Ok(v) => {
+				clear = plain_ident_bits(v).bitwise_not()
+				if clear != 0 {
+					$result = $i + U8.to_u64(U16.count_trailing_zero_bits(clear))
+					$done = True
+				} else {
+					$i = $i + 16
+				}
+			}
+			Err(_) => {
+				while $i < source.len() and (is_lower(byte(source, $i)) or is_upper(byte(source, $i)) or is_digit(byte(source, $i)) or byte(source, $i) == '_' or byte(source, $i) == '!') {
+					$i = $i + 1
+				}
+				$result = $i
+				$done = True
+			}
+		}
+	}
+	$result
+}
+
+## End of the run of space/tab/newline bytes starting at `at`.
+space_end_inline : List(U8), U64 -> U64
+space_end_inline = |source, at| {
+	var $i = at
+	var $result = at
+	var $done = False
+	while !$done {
+		match U8x16.load(source, $i) {
+			Ok(v) => {
+				clear = v.eq_lanes(U8x16.splat(' ')).bitwise_or(v.eq_lanes(U8x16.splat('\n'))).bitwise_or(v.eq_lanes(U8x16.splat('\t'))).to_bitmask().bitwise_not()
+				if clear != 0 {
+					$result = $i + U8.to_u64(U16.count_trailing_zero_bits(clear))
+					$done = True
+				} else {
+					$i = $i + 16
+				}
+			}
+			Err(_) => {
+				while $i < source.len() and (byte(source, $i) == ' ' or byte(source, $i) == '\n' or byte(source, $i) == '\t') {
+					$i = $i + 1
+				}
+				$result = $i
+				$done = True
+			}
+		}
+	}
+	$result
+}
+
+## Inline SIMD: first newline or CR at or after `at`, else the end of the source.
+comment_end : List(U8), U64 -> U64
+comment_end = |source, at| {
+	var $i = at
+	var $result = source.len()
+	var $done = False
+	while !$done {
+		match U8x16.load(source, $i) {
+			Ok(v) => {
+				m = v.eq_lanes(U8x16.splat('\n')).bitwise_or(v.eq_lanes(U8x16.splat('\r'))).to_bitmask()
+				if m != 0 {
+					$result = $i + U8.to_u64(U16.count_trailing_zero_bits(m))
+					$done = True
+				} else {
+					$i = $i + 16
+				}
+			}
+			Err(_) => {
+				while $i < source.len() and byte(source, $i) != '\n' and byte(source, $i) != '\r' {
+					$i = $i + 1
+				}
+				$result = $i
+				$done = True
+			}
+		}
+	}
+	$result
+}
+
+utf8_diagnostics_inline : List(U8) -> List(RocSyntax.Diagnostic)
+utf8_diagnostics_inline = |source| {
 	var $out = []
 	var $i = 0
-	while $i < source.len() {
-		b = byte(source, $i)
-		# ASCII is always valid and never a bidirectional control or byte-order mark.
-		if b < 0x80 {
-			$i = $i + ascii_run(source, $i)
+	len = source.len()
+	while $i < len {
+		high = match U8x16.load(source, $i) {
+			Ok(v) => U16.to_u64(v.to_bitmask())
+			Err(_) => 0x10000
+		}
+		if high == 0 {
+			$i = $i + 16
 		} else {
-			width = if b >= 0xC2 and b <= 0xDF 2 else if b >= 0xE0 and b <= 0xEF 3 else if b >= 0xF0 and b <= 0xF4 4 else 0
-			var $valid = width > 0 and $i + width <= source.len()
-			var $j = 1
-			while $valid and $j < width {
-				c = byte(source, $i + $j)
-				$valid = c >= 0x80 and c <= 0xBF
-				$j = $j + 1
-			}
-			second = byte(source, $i + 1)
-			$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
-			if $valid {
-				third = byte(source, $i + 2)
-				bidi = (b == 0xD8 and second == 0x9C) or (b == 0xE2 and ((second == 0x80 and (third == 0x8E or third == 0x8F or (third >= 0xAA and third <= 0xAE))) or (second == 0x81 and third >= 0xA6 and third <= 0xA9)))
-				if bidi {
-					$out = push_diagnostic($out, BidiControlInSource, $i, $i + width)
-				}
-				if $i == 0 and b == 0xEF and second == 0xBB and third == 0xBF {
-					$out = push_diagnostic($out, Utf8ByteOrderMark, 0, 3)
-				}
-				$i = $i + width
+			at = if high == 0x10000 $i else $i + U8.to_u64(U64.count_trailing_zero_bits(high))
+			b = byte(source, at)
+			if b < 0x80 {
+				$i = at + 1
 			} else {
-				$out = push_diagnostic($out, InvalidUtf8, $i, $i + 1)
-				$i = $i + 1
+				width = if b >= 0xC2 and b <= 0xDF 2 else if b >= 0xE0 and b <= 0xEF 3 else if b >= 0xF0 and b <= 0xF4 4 else 0
+				var $valid = width > 0 and at + width <= len
+				var $j = 1
+				while $valid and $j < width {
+					c = byte(source, at + $j)
+					$valid = c >= 0x80 and c <= 0xBF
+					$j = $j + 1
+				}
+				second = byte(source, at + 1)
+				$valid = $valid and !(b == 0xE0 and second < 0xA0) and !(b == 0xED and second >= 0xA0) and !(b == 0xF0 and second < 0x90) and !(b == 0xF4 and second >= 0x90)
+				if $valid {
+					third = byte(source, at + 2)
+					bidi = (b == 0xD8 and second == 0x9C) or (b == 0xE2 and ((second == 0x80 and (third == 0x8E or third == 0x8F or (third >= 0xAA and third <= 0xAE))) or (second == 0x81 and third >= 0xA6 and third <= 0xA9)))
+					if bidi {
+						$out = push_diagnostic($out, BidiControlInSource, at, at + width)
+					}
+					if at == 0 and b == 0xEF and second == 0xBB and third == 0xBF {
+						$out = push_diagnostic($out, Utf8ByteOrderMark, 0, 3)
+					}
+					$i = at + width
+				} else {
+					$out = push_diagnostic($out, InvalidUtf8, at, at + 1)
+					$i = at + 1
+				}
 			}
 		}
 	}
 	$out
 }
 
-## The run of tokens from `initial` that need no diagnostics, string state or
-## interpolation bookkeeping, with the same kinds and spans `lex` gives them.
-## It stops before any other token. Keeping this loop apart from `lex`, whose
-## loop also carries diagnostics and interpolation contexts, avoids reloading
-## that state around every token. `lex` calls it from two sites so it stays out
-## of line (see `primary`).
-lex_simple : List(U8), U64, List(RocSyntax.Token), Bool -> { tokens : List(RocSyntax.Token), end : U64 }
-lex_simple = |source, initial, tokens, in_interpolation| {
-	var $tokens = tokens
-	var $i = initial
-	var $going = True
-	while $going and $i < source.len() {
+scalar_space_end : List(U8), U64 -> U64
+scalar_space_end = |source, at| {
+	var $i = at
+	while $i < source.len() and (byte(source, $i) == ' ' or byte(source, $i) == '\n' or byte(source, $i) == '\t') {
+		$i = $i + 1
+	}
+	$i
+}
+
+scalar_ident_end : List(U8), U64 -> U64
+scalar_ident_end = |source, at| {
+	var $i = at
+	while $i < source.len() and (is_lower(byte(source, $i)) or is_upper(byte(source, $i)) or is_digit(byte(source, $i)) or byte(source, $i) == '_' or byte(source, $i) == '!') {
+		$i = $i + 1
+	}
+	$i
+}
+
+## Hybrid lexer: tight loop for common tokens driven by the stage-1 start index,
+## original scalar rules for strings, characters, interpolation, CR, `$`/`@`/non-ASCII names.
+lex : List(U8) -> Lexed
+lex = |source| {
+	len = source.len()
+	bom = byte(source, 0) == 0xEF and byte(source, 1) == 0xBB and byte(source, 2) == 0xBF
+	index = stage1_starts(source)
+	starts = index.starts
+	var $tokens = List.with_capacity(index.count + 2)
+	var $diagnostics = utf8_diagnostics_inline(source)
+	var $i = if bom 3 else 0
+	var $contexts = []
+	if bom {
+		$tokens = $tokens.append({ kind: Invalid, start: 0, end: 3 })
+	}
+	while $i < len {
 		start = $i
 		b = byte(source, start)
-		next = byte(source, start + 1)
 		if b == ' ' or b == '\n' or b == '\t' {
-			var $j = start + 1
-			while $j < source.len() and (byte(source, $j) == ' ' or byte(source, $j) == '\n' or byte(source, $j) == '\t') {
-				$j = $j + 1
-			}
-			# A carriage return joins this run and may need a diagnostic.
-			if $j < source.len() and byte(source, $j) == '\r' {
-				$going = False
-			} else {
-				$tokens = $tokens.append({ kind: Whitespace, start, end: $j })
-				$i = $j
-			}
-		} else if b == '#' {
-			var $j = start + 1
-			var $vector = True
-			while $vector {
-				match U8x16.load(source, $j) {
-					Ok(block) => {
-						stop = block.eq_lanes(U8x16.splat('\n')).bitwise_or(block.eq_lanes(U8x16.splat('\r'))).to_bitmask()
-						run = if stop == 0 16 else stop.count_trailing_zero_bits()
-						$j = $j + run.to_u64()
-						$vector = run == 16
+			$i = next_start(starts, start)
+			if byte(source, $i) == '\r' {
+				while $i < len and is_space(byte(source, $i)) {
+					if byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
+						$diagnostics = push_diagnostic($diagnostics, InvalidByte, $i, $i + 1)
 					}
-					Err(_) => {
-						$vector = False
-					}
+					$i = $i + 1
 				}
 			}
-			while $j < source.len() and byte(source, $j) != '\n' and byte(source, $j) != '\r' {
-				$j = $j + 1
-			}
-			$tokens = $tokens.append({ kind: Comment, start, end: $j })
-			$i = $j
+			$tokens = $tokens.append({ kind: Whitespace, start, end: $i })
 		} else if is_lower(b) or is_upper(b) or b == '_' {
-			standalone_underscore = b == '_' and !(is_lower(next) or is_upper(next) or is_digit(next))
-			var $j = start + 1
-			var $unusual = False
-			if !standalone_underscore {
-				while $j < source.len() and is_ident(byte(source, $j)) {
-					c = byte(source, $j)
-					$unusual = $unusual or c == '$' or c >= 0x80
-					$j = $j + 1
-				}
-			}
-			if $unusual {
-				$going = False
+			next = byte(source, start + 1)
+			if b == '_' and !(is_lower(next) or is_upper(next) or is_digit(next)) {
+				$i = start + 1
+				$tokens = $tokens.append({ kind: LowerIdent, start, end: $i })
 			} else {
+				$i = next_start(starts, start)
+				c0 = byte(source, $i)
+				if c0 == '$' or c0 >= 0x80 {
+					while $i < len and is_ident(byte(source, $i)) {
+						$i = $i + 1
+					}
+					var $j = start + 1
+					while $j < $i {
+						if byte(source, $j) == '$' or byte(source, $j) >= 0x80 {
+							$diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1)
+						}
+						$j = $j + 1
+					}
+				}
 				before = if start > 0 byte(source, start - 1) else 0
 				field_name = if is_lower(b) and (before == '.' or before == '?') {
 					previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
@@ -345,76 +534,47 @@ lex_simple = |source, initial, tokens, in_interpolation| {
 				} else {
 					False
 				}
-				kind = if field_name or b == '_' LowerIdent else if $j - start == 3 and b == 'a' and next == 'n' and byte(source, start + 2) == 'd' Operator else if $j - start == 2 and b == 'o' and next == 'r' Operator else if is_upper(b) UpperIdent else if keyword(source, start, $j) Keyword else LowerIdent
-				$tokens = $tokens.append({ kind, start, end: $j })
-				$i = $j
+				kind = if field_name LowerIdent else if b == '_' LowerIdent else if $i - start == 3 and b == 'a' and next == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and next == 'r' Operator else if is_upper(b) UpperIdent else if keyword_swar(source, start, $i) Keyword else LowerIdent
+				$tokens = $tokens.append({ kind, start, end: $i })
 			}
-		} else if is_digit(b) {
-			# Digits after `.` may be a tuple index; invalid numbers need a diagnostic.
-			number = scan_number(source, start)
-			if number.valid and (start == 0 or byte(source, start - 1) != '.') {
-				$tokens = $tokens.append({ kind: Number, start, end: number.end })
-				$i = number.end
-			} else {
-				$going = False
+		} else if b == '#' {
+			$i = comment_end(source, start + 1)
+			$tokens = $tokens.append({ kind: Comment, start, end: $i })
+		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_token(source, $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }))) {
+			number = scan_number(source, start + if b == '-' 1 else 0)
+			$i = number.end
+			if start > 0 and byte(source, start - 1) == '.' and is_digit(b) {
+				var $digits_end = start
+				while is_digit(byte(source, $digits_end)) {
+					$digits_end = $digits_end + 1
+				}
+				if byte(source, $digits_end) == '.' {
+					$i = $digits_end
+				}
 			}
-		} else {
-			kind = match b {
-				'(' => if start > 0 and !is_space(byte(source, start - 1)) NoSpaceOpenRound else OpenRound
-				')' => CloseRound
-				'[' => OpenSquare
-				']' => CloseSquare
-				'{' if !in_interpolation => OpenCurly
-				'}' if !in_interpolation => CloseCurly
-				',' | '.' | ':' => Punctuation
-				'+' | '*' | '/' | '%' | '^' | '=' | '!' | '?' | '<' | '>' | '|' | '&' => Operator
-				'-' if !is_digit(next) => Operator
-				'\\' if next != '\\' => Operator
-				_ => Invalid
+			tuple_index = start > 0 and byte(source, start - 1) == '.' and source.sublist({ start, len: $i - start }).all(is_digit)
+			if !number.valid and !tuple_index {
+				$diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i)
 			}
-			if kind == Invalid {
-				$going = False
-			} else {
-				width = if kind == Operator or kind == Punctuation operator_width(source, start) else 1
-				final = if width > 1 (if b == '.' and width == 3 and (byte(source, start + 2) == '<' or byte(source, start + 2) == '=') Operator else if b == '.' or b == ':' Punctuation else Operator) else kind
-				$tokens = $tokens.append({ kind: final, start, end: start + width })
-				$i = start + width
-			}
-		}
-	}
-	{ tokens: $tokens, end: $i }
-}
-
-lex : List(U8) -> Lexed
-lex = |source| {
-	bom = byte(source, 0) == 0xEF and byte(source, 1) == 0xBB and byte(source, 2) == 0xBF
-	var $tokens = if bom [{ kind: Invalid, start: 0, end: 3 }] else []
-	var $diagnostics = utf8_diagnostics(source)
-	var $i = if bom 3 else 0
-	var $contexts = []
-	var $resume = False
-	var $resume_multiline = False
-	{ tokens: $tokens, end: $i } = lex_simple(source, $i, $tokens, False)
-	while $i < source.len() or $resume {
-		start = $i
-		b = byte(source, start)
-		var $kind = Invalid
-		var $emitted = False
-		$i = $i + 1
-		if $resume or b == '"' or (b == '\\' and byte(source, start + 1) == '\\') {
-			$emitted = True
-			multiline = if $resume $resume_multiline else b == '\\' or bytes3(source, start, '"', '"', '"')
-			if $resume {
-				$i = start
+			$tokens = $tokens.append({ kind: Number, start, end: $i })
+		} else if b == '"' or (b == '\\' and byte(source, start + 1) == '\\') or (b == '}' and !$contexts.is_empty() and ($contexts.last() ?? { multiline: False, depth: 0 }).depth == 0) {
+			# String start, or the string continuation after an interpolation's closing brace.
+			resumed = b == '}'
+			context = $contexts.last() ?? { multiline: False, depth: 0 }
+			multiline = if resumed context.multiline else b == '\\' or bytes3(source, start, '"', '"', '"')
+			diag_start = if resumed start + 1 else start
+			if resumed {
+				$contexts = $contexts.drop_last(1)
+				$tokens = $tokens.append({ kind: InterpolationEnd, start, end: start + 1 })
+				$i = start + 1
 			} else {
 				width = if b == '\\' 2 else if multiline 3 else 1
 				$tokens = $tokens.append({ kind: if multiline MultilineStringStart else StringStart, start, end: start + width })
 				$i = start + width
 			}
-			$resume = False
 			part = $i
 			var $done = False
-			while $i < source.len() and !$done {
+			while $i < len and !$done {
 				c = byte(source, $i)
 				if c == '\\' {
 					escape = scan_escape(source, $i)
@@ -438,100 +598,26 @@ lex = |source| {
 				$tokens = $tokens.append({ kind: InterpolationStart, start: $i, end: $i + 2 })
 				$contexts = $contexts.append({ multiline, depth: 0.U64 })
 				$i = $i + 2
-			} else if !multiline and $i < source.len() and byte(source, $i) == '"' {
+			} else if !multiline and $i < len and byte(source, $i) == '"' {
 				$tokens = $tokens.append({ kind: StringEnd, start: $i, end: $i + 1 })
 				$i = $i + 1
 			} else if !multiline {
-				$diagnostics = push_diagnostic($diagnostics, UnclosedString, start, $i)
+				$diagnostics = push_diagnostic($diagnostics, UnclosedString, diag_start, $i)
 			}
-		} else if b == '}' and !$contexts.is_empty() and ($contexts.last() ?? { multiline: False, depth: 0 }).depth == 0 {
-			context = $contexts.last() ?? { multiline: False, depth: 0 }
-			$contexts = $contexts.drop_last(1)
-			$kind = InterpolationEnd
-			$resume = True
-			$resume_multiline = context.multiline
-		} else if is_space(b) {
-			$kind = Whitespace
-			if b == '\r' and byte(source, start + 1) != '\n' {
-				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, start + 1)
-			}
-			while $i < source.len() and is_space(byte(source, $i)) {
-				if byte(source, $i) != ' ' and byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
-					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $i, $i + 1)
-				}
-				$i = $i + 1
-			}
-		} else if b == '#' {
-			$kind = Comment
-			var $vector = True
-			while $vector {
-				match U8x16.load(source, $i) {
-					Ok(block) => {
-						stop = block.eq_lanes(U8x16.splat('\n')).bitwise_or(block.eq_lanes(U8x16.splat('\r'))).to_bitmask()
-						run = if stop == 0 16 else stop.count_trailing_zero_bits()
-						$i = $i + run.to_u64()
-						$vector = run == 16
-					}
-					Err(_) => {
-						$vector = False
-					}
-				}
-			}
-			while $i < source.len() and byte(source, $i) != '\n' and byte(source, $i) != '\r' {
-				$i = $i + 1
-			}
-		} else if is_lower(b) or is_upper(b) or b == '_' or b == '$' or b == '@' or b >= 0x80 {
-			next = byte(source, start + 1)
-			standalone_underscore = b == '_' and !(is_lower(next) or is_upper(next) or is_digit(next))
-			bad_dollar = b == '$' and !(is_lower(next) or is_upper(next))
-			bad_opaque = b == '@' and !(is_lower(next) or is_upper(next) or is_digit(next) or next == '_' or next >= 0x80)
-			var $unusual = False
-			if !standalone_underscore and !bad_dollar and !bad_opaque {
-				while $i < source.len() and is_ident(byte(source, $i)) {
-					c = byte(source, $i)
-					$unusual = $unusual or c == '$' or c >= 0x80
-					$i = $i + 1
-				}
-			}
-			before = if start > 0 byte(source, start - 1) else 0
-			field_name = if is_lower(b) and (before == '.' or before == '?') {
-				previous = $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }
-				previous.end == start and (spelled1(source, previous, '.') or spelled2(source, previous, '.', '?'))
-			} else {
-				False
-			}
-			$kind = if field_name LowerIdent else if standalone_underscore LowerIdent else if b == '_' LowerIdent else if b == '@' UpperIdent else if bad_dollar Invalid else if $i - start == 3 and b == 'a' and byte(source, start + 1) == 'n' and byte(source, start + 2) == 'd' Operator else if $i - start == 2 and b == 'o' and byte(source, start + 1) == 'r' Operator else if is_upper(b) or (b == '$' and is_upper(next)) UpperIdent else if keyword(source, start, $i) Keyword else LowerIdent
-			if bad_dollar or bad_opaque or b >= 0x80 {
-				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
-			}
-			var $j = if $unusual start + 1 else $i
-			while $j < $i {
-				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 {
-					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1)
-				}
-				$j = $j + 1
-			}
-		} else if is_digit(b) or (b == '-' and is_digit(byte(source, start + 1)) and (start == 0 or is_space(byte(source, start - 1)) or !can_end_token(source, $tokens.last() ?? { kind: EndOfFile, start: 0, end: 0 }))) {
-			$kind = Number
-			number = scan_number(source, start + if b == '-' 1 else 0)
-			$i = number.end
-			if start > 0 and byte(source, start - 1) == '.' and is_digit(b) {
-				var $digits_end = start
-				while is_digit(byte(source, $digits_end)) {
-					$digits_end = $digits_end + 1
-				}
-				if byte(source, $digits_end) == '.' {
-					$i = $digits_end
-				}
-			}
-			tuple_index = start > 0 and byte(source, start - 1) == '.' and source.sublist({ start, len: $i - start }).all(is_digit)
-			if !number.valid and !tuple_index {
-				$diagnostics = push_diagnostic($diagnostics, InvalidNumber, start, $i)
+		} else if b == '{' or b == '}' {
+			kind = if b == '{' OpenCurly else CloseCurly
+			$i = start + 1
+			$tokens = $tokens.append({ kind, start, end: $i })
+			if !$contexts.is_empty() {
+				top = $contexts.len() - 1
+				context = $contexts.last() ?? { multiline: False, depth: 0 }
+				next_depth = if b == '{' context.depth + 1 else if context.depth > 0 context.depth - 1 else 0
+				$contexts = $contexts.set(top, { multiline: context.multiline, depth: next_depth }) ?? $contexts
 			}
 		} else if b == '\'' {
-			$kind = SingleQuote
+			$i = start + 1
 			var $closed = False
-			while $i < source.len() and !$closed and byte(source, $i) != '\n' {
+			while $i < len and !$closed and byte(source, $i) != '\n' {
 				if byte(source, $i) == '\\' {
 					escape = scan_escape(source, $i)
 					if !escape.valid {
@@ -557,31 +643,67 @@ lex = |source| {
 					if byte(source, $j) == '\\' {
 						$j = scan_escape(source, $j).end
 						$chars = $chars + 1
-					}
-						else {
-							if byte(source, $j) < 0x80 or byte(source, $j) >= 0xC0 {
-								$chars = $chars + 1
-							}
-							$j = $j + 1
+					} else {
+						if byte(source, $j) < 0x80 or byte(source, $j) >= 0xC0 {
+							$chars = $chars + 1
 						}
+						$j = $j + 1
+					}
 				}
 				if $chars != 1 {
 					$diagnostics = push_diagnostic($diagnostics, InvalidCharacter, start, $i)
 				}
 			}
+			$tokens = $tokens.append({ kind: SingleQuote, start, end: $i })
+		} else if b == '$' or b == '@' or b >= 0x80 {
+			# Rare name starts: the original identifier rules, unchanged.
+			$i = start + 1
+			next = byte(source, start + 1)
+			bad_dollar = b == '$' and !(is_lower(next) or is_upper(next))
+			bad_opaque = b == '@' and !(is_lower(next) or is_upper(next) or is_digit(next) or next == '_' or next >= 0x80)
+			var $unusual = False
+			if !bad_dollar and !bad_opaque {
+				while $i < len and is_ident(byte(source, $i)) {
+					c = byte(source, $i)
+					$unusual = $unusual or c == '$' or c >= 0x80
+					$i = $i + 1
+				}
+			}
+			kind = if b == '@' UpperIdent else if bad_dollar Invalid else if b == '$' and is_upper(next) UpperIdent else if keyword(source, start, $i) Keyword else LowerIdent
+			if bad_dollar or bad_opaque or b >= 0x80 {
+				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
+			}
+			var $j = if $unusual start + 1 else $i
+			while $j < $i {
+				if byte(source, $j) == '$' or byte(source, $j) >= 0x80 {
+					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $j, $j + 1)
+				}
+				$j = $j + 1
+			}
+			$tokens = $tokens.append({ kind, start, end: $i })
+		} else if b == '\r' {
+			$i = start + 1
+			if byte(source, start + 1) != '\n' {
+				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, start + 1)
+			}
+			while $i < len and is_space(byte(source, $i)) {
+				if byte(source, $i) == '\r' and byte(source, $i + 1) != '\n' {
+					$diagnostics = push_diagnostic($diagnostics, InvalidByte, $i, $i + 1)
+				}
+				$i = $i + 1
+			}
+			$tokens = $tokens.append({ kind: Whitespace, start, end: $i })
 		} else {
-			$kind = match b {
+			$i = start + 1
+			var $kind = match b {
 				'(' => if start > 0 and !is_space(byte(source, start - 1)) NoSpaceOpenRound else OpenRound
 				')' => CloseRound
 				'[' => OpenSquare
 				']' => CloseSquare
-				'{' => OpenCurly
-				'}' => CloseCurly
 				',' | '.' | ':' => Punctuation
 				'+' | '-' | '*' | '/' | '%' | '^' | '=' | '!' | '?' | '<' | '>' | '|' | '&' | '\\' => Operator
 				_ => Invalid
 			}
-			# Longest known spelling, never an unbounded punctuation run.
 			width = if $kind == Operator or $kind == Punctuation operator_width(source, start) else 1
 			if width > 1 {
 				$i = start + width
@@ -590,25 +712,38 @@ lex = |source| {
 			if $kind == Invalid {
 				$diagnostics = push_diagnostic($diagnostics, InvalidByte, start, $i)
 			}
-		}
-		if !$emitted {
 			$tokens = $tokens.append({ kind: $kind, start, end: $i })
-		}
-		if !$contexts.is_empty() and ($kind == OpenCurly or $kind == CloseCurly) {
-			index = $contexts.len() - 1
-			context = $contexts.last() ?? { multiline: False, depth: 0 }
-			next_depth = if $kind == OpenCurly context.depth + 1 else if context.depth > 0 context.depth - 1 else 0
-			$contexts = $contexts.set(index, { multiline: context.multiline, depth: next_depth }) ?? $contexts
-		}
-		if !$resume {
-			{ tokens: $tokens, end: $i } = lex_simple(source, $i, $tokens, !$contexts.is_empty())
 		}
 	}
 	if !$contexts.is_empty() {
-		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, source.len(), source.len())
+		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, len, len)
 	}
+	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics: $diagnostics, unsupported: False }
+}
 
-	{ tokens: $tokens.append({ kind: EndOfFile, start: source.len(), end: source.len() }), diagnostics: $diagnostics, unsupported: False }
+## SWAR keyword test: compare the identifier's first 8 bytes as one U64 (simdjson-style atom check).
+keyword_swar : List(U8), U64, U64 -> Bool
+keyword_swar = |source, start, end| {
+	len = end - start
+	if len < 2 or len > 10 {
+		False
+	} else {
+		match U64.from_le_bytes(source, start) {
+			Ok(w) => {
+				lo = if len >= 8 w else w.bitwise_and((1.U64).shl_wrap(U64.to_u8_wrap(len.shl_wrap(3))) - 1)
+				if len == 2 lo == 0x0000000000007361 or lo == 0x0000000000006669 or lo == 0x0000000000006e69
+				else if len == 3 lo == 0x0000000000707061 or lo == 0x0000000000676264 or lo == 0x0000000000726f66 or lo == 0x0000000000736168 or lo == 0x0000000000726176
+				else if len == 4 lo == 0x0000000065736c65 or lo == 0x0000000021726f66 or lo == 0x0000000068746977
+				else if len == 5 lo == 0x0000006873617263 or lo == 0x000000686374616d or lo == 0x0000006572656877 or lo == 0x000000656c696877 or lo == 0x0000006b61657262
+				else if len == 6 lo == 0x0000746365707865 or lo == 0x0000646574736f68 or lo == 0x000074726f706d69 or lo == 0x0000656c75646f6d or lo == 0x00006e7275746572
+				else if len == 7 lo == 0x007365736f707865 or lo == 0x007374726f706d69 or lo == 0x006567616b636170 or lo == 0x0073746567726174
+				else if len == 8 lo == 0x676e69736f707865 or lo == 0x736567616b636170 or lo == 0x6d726f6674616c70 or lo == 0x73656469766f7270 or lo == 0x7365726975716572
+				else if len == 9 (lo == 0x65746172656e6567 and byte(source, start + 8) == 's') or (lo == 0x6361667265746e69 and byte(source, start + 8) == 'e')
+				else lo == 0x6e656d656c706d69 and byte(source, start + 8) == 't' and byte(source, start + 9) == 's'
+			}
+			Err(_) => keyword_bytes(source, start, end)
+		}
+	}
 }
 
 ParseMode : [FileMode, ExpressionMode, StatementMode, HeaderMode]
