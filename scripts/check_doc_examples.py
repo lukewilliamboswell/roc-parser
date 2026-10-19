@@ -50,7 +50,8 @@ def check(app: Path, roc: str) -> bool:
         if run(command, cwd) is None:
             return False
     # nightly-2026-10-18 segfaults when `roc test` reuses the cache `roc check`
-    # just wrote for some apps; 10-17 does not. Drop this once that is fixed.
+    # just wrote for some apps; 10-17 does not. Drop this once roc-lang/roc#12437
+    # is fixed.
     if EXPECT_RE.search(app.read_text(encoding="utf-8")) and run([roc, "test", "--no-cache", name], cwd) is None:
         return False
     result = run([roc, name], cwd)

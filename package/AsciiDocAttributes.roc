@@ -527,7 +527,7 @@ expect {
 	expected = AsciiDocAttributes.materialize(body).append({ name: "__header-source", value: "{x}" }).concat(AsciiDocAttributes.materialize(initial).map(|a| { name: "__header-initial:${a.name}", value: a.value })).concat(AsciiDocAttributes.materialize(final).map(|a| { name: "__header-final:${a.name}", value: a.value }))
 	view = AsciiDocAttributes.indexed_attributes(attrs, AsciiDocAttributes.empty).view
 	# Look up through the view before reading its sources: the dev backend frees
-	# a field moved into `semantic` and then reads it again.
+	# a field moved into `semantic` and then reads it again (roc-lang/roc#12436).
 	lookups = AsciiDocAttributes.lookup_first(view, "__header-initial:x") == Ok("initial-first") and AsciiDocAttributes.lookup_last(view, "__header-initial:x") == Ok("initial-last") and AsciiDocAttributes.lookup_first(view, "__header-final:x") == Ok("final-first") and AsciiDocAttributes.lookup_last(view, "__header-final:x") == Ok("final-last") and AsciiDocAttributes.lookup_first(view, "__header-initial:__header-final:x") == Ok("nested")
 	lookups and AsciiDocAttributes.header_parts(attrs).is_ok() and AsciiDocAttributes.materialize(attrs) == expected and attrs.len() == expected.len() and AsciiDocSource.semantic(view.first, []) == expected and AsciiDocSource.semantic(view.last, []) == expected and AsciiDocAttributes.lookup_attributes(attrs, "__header-final:empty") == Ok("") and AsciiDocAttributes.without_header(attrs) == body and AsciiDocAttributes.source_only(attrs) == AsciiDocAttributes.source_only(body)
 }
