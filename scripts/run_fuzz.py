@@ -73,6 +73,7 @@ TARGETS = dict(
         target("markdown-inline-pathological", "markdown-inline-pathological", "raw", max_input_size=64, timeout=10),
         target("yaml", "yaml", "fuzz-str", "yaml"),
         target("yaml-raw", "yaml", "raw", "yaml"),
+        target("yaml-source", "yaml", "raw", "yaml"),
         target("yaml-roundtrip", max_input_size=512, timeout=10),
         target("yaml-block", max_input_size=64),
         target("xml", "xml", "fuzz-str", "xml"),

@@ -1,3 +1,5 @@
+import YamlSource
+import YamlScalar
 import Parser
 import Utf8
 
@@ -16,6 +18,10 @@ import Utf8
 ## complex keys, multi-line flow collections, multi-line quoted or plain
 ## scalars, and multi-document streams are rejected with a parse error rather
 ## than misread.
+##
+## For source-preserving syntax highlighting, [Yaml.tokenize_str] and
+## [Yaml.tokenize_bytes] return original byte spans and diagnostics even for
+## incomplete snippets. [Yaml.highlight_category] provides theme categories.
 ##
 ## There are two ways to read a document:
 ##
@@ -45,6 +51,65 @@ Yaml := [
 	## Location and explanation of invalid YAML input. Lines and columns are
 	## one-based; a column counts bytes from the start of its line.
 	Error : { line : U64, column : U64, message : Str }
+
+	## Half-open byte interval in the original source. Offsets count UTF-8 bytes,
+	## not characters, and preserve CRLF without normalization.
+	Span : { start : U64, end : U64 }
+
+	## Stable lexical kinds; punctuation spelling is available in the source span.
+	## Quotes include their delimiters. Block scalar content includes its original
+	## indentation and line endings. Whitespace and comments are retained.
+	TokenKind : [Whitespace, Comment, PlainScalar, SingleQuotedScalar, DoubleQuotedScalar, MappingValue, SequenceEntry, ExplicitKey, FlowSequenceStart, FlowSequenceEnd, FlowMappingStart, FlowMappingEnd, FlowEntry, BlockScalarHeader, BlockScalarContent, Anchor, Alias, Tag, Directive, DocumentStart, DocumentEnd, Invalid]
+
+	## A lexical mapping-key role, a scalar value, or punctuation/trivia.
+	## Roles describe source context, not the validity or decoded type of a node.
+	TokenRole : [Key, Value, Other]
+
+	## YAML 1.2 core-schema category of a plain scalar. Quoted and block scalars
+	## are `Text`. Numeric classification does not depend on machine integer range.
+	ScalarCategory : [Text, Boolean, Null, Number]
+
+	## A nonempty original-source interval. Tokens form a contiguous partition of
+	## the entire input: no gaps, overlap, synthetic tokens, or end-of-file token.
+	Token : { kind : TokenKind, start : U64, end : U64, role : TokenRole, scalar : ScalarCategory }
+
+	## Lexical problems found while preserving displayable source.
+	DiagnosticCode : [UnclosedQuote, InvalidEscape, UnclosedCollection, UnexpectedDelimiter, InvalidIndentation, InvalidBlockHeader, InvalidCharacter, InvalidUtf8, ResourceLimit]
+
+	## A lexical issue located by its original-source byte interval.
+	Diagnostic : { code : DiagnosticCode, start : U64, end : U64 }
+
+	## `Complete` means no lexical issue was detected; it does not establish YAML
+	## semantic validity. `Recovered` preserves malformed source with diagnostics.
+	## `Limited` preserves the input after reaching 256 open flow collections;
+	## the remaining bytes become one `Invalid` token with a `ResourceLimit` issue.
+	TokenStatus : [Complete, Recovered, Limited]
+
+	## Source retained once, its lossless token partition, and located diagnostics.
+	## Tokenization is independent of the semantic parser's supported subset.
+	Tokenized : { source : List(U8), tokens : List(Token), diagnostics : List(Diagnostic), status : TokenStatus }
+
+	## Theme-independent categories, usable by HTML, PDF, or terminal renderers.
+	HighlightCategory : [Trivia, CommentText, PropertyName, StringText, NumericLiteral, BooleanLiteral, NullLiteral, Symbol, Name, TypeName, InvalidText]
+
+	## Tokenize source text for highlighting, including incomplete YAML snippets.
+	## Slicing each token interval from `source` and concatenating them reproduces
+	## the input exactly, including comments, whitespace, CRLF, and Unicode.
+	## Anchors, aliases, tags, directives and document markers are recognized
+	## lexically even when [Yaml.parse_str] rejects the document.
+	tokenize_str : Str -> Tokenized
+	tokenize_str = YamlSource.tokenize_str
+
+	## Tokenize arbitrary bytes without discarding invalid UTF-8. Diagnostics
+	## report malformed encoding; tokens still retain every original byte.
+	tokenize_bytes : List(U8) -> Tokenized
+	tokenize_bytes = YamlSource.tokenize_bytes
+
+	## Map a token to a theme category without rendering or changing its text.
+	## Mapping keys use `PropertyName`; scalar values use their core-schema
+	## category. Quoted values and block-scalar scripts remain `StringText`.
+	highlight_category : Token -> HighlightCategory
+	highlight_category = YamlSource.highlight_category
 
 	## Compare two parsed YAML values structurally.
 	is_eq : _
@@ -752,54 +817,24 @@ scalar_mismatch = |scalar, expected| {
 }
 
 is_null_text : Str -> Bool
-is_null_text = |text| {
-	match text {
-		"" | "null" | "Null" | "NULL" | "~" => True
-		_ => False
-	}
-}
+is_null_text = YamlScalar.is_null_text
 
 # Literal matches instead of `[...].contains(text)`, which builds the list of
 # strings on every call.
 is_true_text : Str -> Bool
-is_true_text = |text| {
-	match text {
-		"true" | "True" | "TRUE" => True
-		_ => False
-	}
-}
+is_true_text = YamlScalar.is_true_text
 
 is_false_text : Str -> Bool
-is_false_text = |text| {
-	match text {
-		"false" | "False" | "FALSE" => True
-		_ => False
-	}
-}
+is_false_text = YamlScalar.is_false_text
 
 is_infinity_text : Str -> Bool
-is_infinity_text = |text| {
-	match text {
-		".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => True
-		_ => False
-	}
-}
+is_infinity_text = YamlScalar.is_infinity_text
 
 is_negative_infinity_text : Str -> Bool
-is_negative_infinity_text = |text| {
-	match text {
-		"-.inf" | "-.Inf" | "-.INF" => True
-		_ => False
-	}
-}
+is_negative_infinity_text = YamlScalar.is_negative_infinity_text
 
 is_nan_text : Str -> Bool
-is_nan_text = |text| {
-	match text {
-		".nan" | ".NaN" | ".NAN" => True
-		_ => False
-	}
-}
+is_nan_text = YamlScalar.is_nan_text
 
 ## Read an integer scalar (or integer mapping key) with the core schema's
 ## decimal, `0o` octal and `0x` hexadecimal forms.
@@ -1692,12 +1727,7 @@ resolve_plain = |text, line, column| {
 ## Whether a plain scalar starting with this byte may be a null, boolean,
 ## integer or float rather than a string.
 may_be_typed : U8 -> Bool
-may_be_typed = |byte| {
-	match byte {
-		'0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '+' | '-' | '.' | '~' | 'n' | 'N' | 't' | 'T' | 'f' | 'F' => True
-		_ => False
-	}
-}
+may_be_typed = YamlScalar.may_be_typed
 
 special_float : Str -> Try(F64, [NotSpecial])
 special_float = |text| {
@@ -1745,57 +1775,7 @@ radix_integer = |digits, radix, text, line, column| {
 ## Match the core schema float form [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
 ## and spell it as sign, digits, ".", digits, exponent for F64.from_str.
 core_float_text : Utf8.Bytes -> Try(Str, [NotFloat])
-core_float_text = |bytes| {
-	# Most plain scalars are words; reject them before slicing anything.
-	if !bytes.all(is_float_byte) {
-		return Err(NotFloat)
-	}
-	{ sign, unsigned } =
-		match bytes {
-			['-', .. as rest] => { sign: "-", unsigned: rest }
-			['+', .. as rest] => { sign: "", unsigned: rest }
-			_ => { sign: "", unsigned: bytes }
-		}
-	mantissa = unsigned.take_first(count_while(unsigned, |b| b != 'e' and b != 'E'))
-	exponent = unsigned.drop_first(mantissa.len())
-	whole = mantissa.take_first(count_while(mantissa, is_digit))
-	after_whole = mantissa.drop_first(whole.len())
-	{ has_point, fraction } =
-		match after_whole {
-			['.', .. as rest] => { has_point: True, fraction: rest }
-			_ => { has_point: False, fraction: after_whole }
-		}
-	exponent_digits =
-		match exponent {
-			['e', '+', .. as rest] | ['e', '-', .. as rest] | ['E', '+', .. as rest] | ['E', '-', .. as rest] | ['e', .. as rest] | ['E', .. as rest] => rest
-			_ => []
-		}
-	mantissa_ok = fraction.all(is_digit) and (!whole.is_empty() or (has_point and !fraction.is_empty()))
-	exponent_ok = exponent.is_empty() or (!exponent_digits.is_empty() and exponent_digits.all(is_digit))
-	# A plain integer is not a float; "1." and "1e3" are.
-	is_float = has_point or !exponent.is_empty()
-
-	if mantissa_ok and exponent_ok and is_float {
-		whole_text = if (whole.is_empty()) "0" else bytes_to_str(whole)
-		fraction_text = if (fraction.is_empty()) "0" else bytes_to_str(fraction)
-		exponent_text = if (exponent.is_empty()) "" else bytes_to_str(exponent)
-		Ok("${sign}${whole_text}.${fraction_text}${exponent_text}")
-	} else {
-		Err(NotFloat)
-	}
-}
-
-is_float_byte : U8 -> Bool
-is_float_byte = |b| (b >= '0' and b <= '9') or b == '.' or b == 'e' or b == 'E' or b == '+' or b == '-'
-
-count_while : Utf8.Bytes, (U8 -> Bool) -> U64
-count_while = |bytes, keep| {
-	var $count = 0
-	while $count < bytes.len() and keep(bytes.get($count) ?? 0) {
-		$count = $count + 1
-	}
-	$count
-}
+core_float_text = YamlScalar.core_float_text
 
 parse_flow_sequence : Utf8.Bytes, U64, U64, U64 -> Try(Node, [InvalidYaml(Yaml.Error)])
 parse_flow_sequence = |bytes, line, column, depth| {
@@ -2407,22 +2387,7 @@ sequence_payload = |bytes| {
 }
 
 is_decimal_integer : Utf8.Bytes -> Bool
-is_decimal_integer = |bytes| {
-	match bytes {
-		['+', .. as rest] | ['-', .. as rest] => !rest.is_empty() and all_digits(rest)
-		_ => !bytes.is_empty() and all_digits(bytes)
-	}
-}
-
-all_digits : Utf8.Bytes -> Bool
-all_digits = |bytes| {
-	var $index = 0
-	len = bytes.len()
-	while $index < len and is_digit(bytes.get($index) ?? 0) {
-		$index = $index + 1
-	}
-	$index == len
-}
+is_decimal_integer = YamlScalar.is_decimal_integer
 
 is_digit : U8 -> Bool
 is_digit = |byte| byte >= '0' and byte <= '9'
@@ -3150,3 +3115,455 @@ expect {
 # A key starting with % is reported as a directive, with or without a leading --- (fuzz: yaml-raw).
 expect when_error(Yaml.parse_str("%:")) == when_error(Yaml.parse_str("---\n%:"))
 expect when_error(Yaml.parse_str("%-- x\n...\nx")) == when_error(Yaml.parse_str("---\n%-- x\n...\nx"))
+
+# Source highlighting acceptance tests. The independent suites live beside
+# the API so package-wide tests execute them without a testing-only export.
+
+source_test_slice : Yaml.Tokenized, Yaml.Token -> Str
+source_test_slice = |result, token| Str.from_utf8_lossy(result.source.sublist({ start: token.start, len: token.end - token.start }))
+
+source_test_lossless : Yaml.Tokenized, List(U8) -> Bool
+source_test_lossless = |result, original| {
+	var $cursor = 0
+	var $valid = result.source == original
+	var $rebuilt = []
+	for token in result.tokens {
+		if token.start != $cursor or token.end <= token.start or token.end > original.len() {
+			$valid = False
+		} else {
+			$rebuilt = $rebuilt.concat(result.source.sublist({ start: token.start, len: token.end - token.start }))
+		}
+		$cursor = token.end
+	}
+	for diagnostic in result.diagnostics {
+		if diagnostic.start > diagnostic.end or diagnostic.end > original.len() {
+			$valid = False
+		}
+	}
+	$valid and $cursor == original.len() and $rebuilt == original
+}
+
+source_test_has_token : Yaml.Tokenized, Str, Yaml.TokenKind -> Bool
+source_test_has_token = |result, spelling, kind| result.tokens.any(|token| token.kind == kind and source_test_slice(result, token) == spelling)
+
+source_test_classified : Yaml.Tokenized, Str, [Key, Value, Other], [Text, Boolean, Null, Number] -> Bool
+source_test_classified = |result, spelling, role, scalar| result.tokens.any(|token| source_test_slice(result, token) == spelling and token.role == role and token.scalar == scalar)
+
+source_test_category : Yaml.Tokenized, Str, [Trivia, CommentText, PropertyName, StringText, NumericLiteral, BooleanLiteral, NullLiteral, Symbol, Name, TypeName, InvalidText] -> Bool
+source_test_category = |result, spelling, expected| result.tokens.any(|token| source_test_slice(result, token) == spelling and Yaml.highlight_category(token) == expected)
+
+expect {
+	result = Yaml.tokenize_str("")
+	source_test_lossless(result, []) and result.tokens.is_empty() and result.diagnostics.is_empty() and result.status == Complete
+}
+
+expect {
+	source = "# café\r\non:\r\n  push: true\r\n  名称: '日本語'\r\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty() and source_test_has_token(result, "# café", Comment) and source_test_classified(result, "名称", Key, Text) and source_test_has_token(result, "'日本語'", SingleQuotedScalar)
+}
+
+expect {
+	result = Yaml.tokenize_str("on: off\nyes: no\nOn: ON\ntrue: false\nnull: ~\n")
+	source_test_classified(result, "on", Key, Text) and source_test_classified(result, "off", Value, Text) and source_test_classified(result, "yes", Key, Text) and source_test_classified(result, "no", Value, Text) and source_test_classified(result, "On", Key, Text) and source_test_classified(result, "ON", Value, Text) and source_test_category(result, "on", PropertyName) and source_test_category(result, "false", BooleanLiteral) and source_test_category(result, "~", NullLiteral)
+}
+
+expect {
+	source = "a: \"# quoted\" # comment\nb: 'it''s # text'\nc: https://example.com/manual#setup\nd: abc#def\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.tokens.keep_if(|token| token.kind == Comment).len() == 1 and source_test_has_token(result, "# comment", Comment) and source_test_has_token(result, "\"# quoted\"", DoubleQuotedScalar) and source_test_has_token(result, "'it''s # text'", SingleQuotedScalar) and source_test_has_token(result, "https://example.com/manual#setup", PlainScalar) and source_test_has_token(result, "abc#def", PlainScalar)
+}
+
+expect {
+	source = "{\"on\":true, 'count': 42, nested: [null, false, {k: v}]}\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty() and source_test_classified(result, "\"on\"", Key, Text) and source_test_classified(result, "true", Value, Boolean) and source_test_classified(result, "42", Value, Number) and source_test_classified(result, "nested", Key, Text) and source_test_has_token(result, "{", FlowMappingStart) and source_test_has_token(result, "}", FlowMappingEnd) and source_test_has_token(result, "[", FlowSequenceStart) and source_test_has_token(result, "]", FlowSequenceEnd) and source_test_has_token(result, ",", FlowEntry) and source_test_has_token(result, ":", MappingValue)
+}
+
+expect {
+	source = "- value\n- - nested\n- key: other\nnegative: -42\ntext: -word\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.tokens.keep_if(|token| token.kind == SequenceEntry).len() == 4 and source_test_classified(result, "key", Key, Text) and source_test_classified(result, "-42", Value, Number) and source_test_has_token(result, "-word", PlainScalar)
+}
+
+expect {
+	source = "? explicit\n: value\n? [a, b]\n: complex\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and source_test_has_token(result, "?", ExplicitKey) and source_test_classified(result, "explicit", Key, Text) and source_test_has_token(result, ":", MappingValue)
+}
+
+expect {
+	source = "%YAML 1.2\n%TAG !e! tag:example.com,2026:\n---\nfirst: &shared !e!thing value\nsecond: *shared\n...\n---\n!!str plain\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and source_test_has_token(result, "%YAML 1.2", Directive) and source_test_has_token(result, "%TAG !e! tag:example.com,2026:", Directive) and source_test_has_token(result, "---", DocumentStart) and source_test_has_token(result, "...", DocumentEnd) and source_test_has_token(result, "&shared", Anchor) and source_test_has_token(result, "*shared", Alias) and source_test_has_token(result, "!e!thing", Tag) and source_test_has_token(result, "!!str", Tag) and source_test_category(result, "&shared", Name) and source_test_category(result, "!e!thing", TypeName)
+}
+
+expect {
+	source = "run: |-\n  # shell, not YAML\n  echo \"hello # world\"\nnext: >+\n  folded line\n  another line\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and source_test_has_token(result, "|-", BlockScalarHeader) and source_test_has_token(result, ">+", BlockScalarHeader) and result.tokens.keep_if(|token| token.kind == Comment).is_empty() and result.tokens.any(|token| token.kind == BlockScalarContent and source_test_slice(result, token).contains("# shell, not YAML")) and source_test_classified(result, "next", Key, Text)
+}
+
+expect {
+	source = "script: |2- # header comment\n  # scalar comment\n  echo ok\n\nnext: done\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and source_test_has_token(result, "|2-", BlockScalarHeader) and source_test_has_token(result, "# header comment", Comment) and result.tokens.keep_if(|token| token.kind == Comment).len() == 1 and source_test_classified(result, "next", Key, Text)
+}
+
+expect {
+	source = "quoted: \"first\n  second # still quoted\"\nsingle: 'one\n  two'\nplain: first\n  second\nnext: value\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.tokens.keep_if(|token| token.kind == Comment).is_empty() and source_test_has_token(result, "\"first\n  second # still quoted\"", DoubleQuotedScalar) and source_test_has_token(result, "'one\n  two'", SingleQuotedScalar) and source_test_classified(result, "next", Key, Text)
+}
+
+expect {
+	values = ["0", "-42", "+12", "0o777", "0xABC", "1234567890123456789012345678901234567890", "1.25", "1e10000", ".inf", "-.Inf", ".NaN", ".5", "1."]
+	values.all(
+		|value| {
+			source = Str.join_with(["value: ", value], "")
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and source_test_classified(result, value, Value, Number) and source_test_category(result, value, NumericLiteral)
+		},
+	)
+}
+
+expect {
+	values = ["yes", "no", "on", "off", "TRUEish", "nullish", "1_000", "0xZZ", "1e", "12:34", "0b101"]
+	values.all(
+		|value| {
+			result = Yaml.tokenize_str(Str.join_with(["value: ", value], ""))
+			source_test_classified(result, value, Value, Text) and source_test_category(result, value, StringText)
+		},
+	)
+}
+
+expect {
+	values = ["true", "True", "TRUE", "false", "False", "FALSE"]
+	values.all(|value| source_test_classified(Yaml.tokenize_str(Str.join_with(["value: ", value], "")), value, Value, Boolean))
+}
+
+expect {
+	values = ["null", "Null", "NULL", "~"]
+	values.all(|value| source_test_classified(Yaml.tokenize_str(Str.join_with(["value: ", value], "")), value, Value, Null))
+}
+
+expect {
+	result = Yaml.tokenize_str("a: 'true'\nb: \"42\"\nc: 'null'\n")
+	source_test_classified(result, "'true'", Value, Text) and source_test_classified(result, "\"42\"", Value, Text) and source_test_classified(result, "'null'", Value, Text) and source_test_category(result, "'true'", StringText)
+}
+
+expect {
+	source = "a: \"unterminated"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == UnclosedQuote)
+}
+
+expect {
+	source = "a: \"bad\\q escape\"\nnext: true\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidEscape) and source_test_classified(result, "next", Key, Text)
+}
+
+expect {
+	["[one, {two: three}", "{a: [b, c]"].all(
+		|source| {
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == UnclosedCollection)
+		},
+	)
+}
+
+expect {
+	["a: ]\nnext: true\n", "a: [one}\nnext: true\n"].all(
+		|source| {
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == UnexpectedDelimiter)
+		},
+	)
+}
+
+expect {
+	source = "a:\n\tb: value\nnext: true\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidIndentation)
+}
+
+expect {
+	["a: |0\n  text\n", "a: >22\n  text\n", "a: |+-\n  text\n"].all(
+		|source| {
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidBlockHeader)
+		},
+	)
+}
+
+expect {
+	source : List(U8)
+	source = [97, 58, 32, 0, 10, 98, 58, 32, 255, 254, 10]
+	result = Yaml.tokenize_bytes(source)
+	source_test_lossless(result, source) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidCharacter) and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidUtf8)
+}
+
+# Every single byte, including invalid UTF-8, remains an exact source partition.
+expect {
+	var $valid = True
+	var $value = 0.U16
+	while $value < 256 {
+		bytes = [$value.to_u8_wrap()]
+		if !source_test_lossless(Yaml.tokenize_bytes(bytes), bytes) {
+			$valid = False
+		}
+		$value = $value + 1
+	}
+	$valid
+}
+
+# Deterministic malformed byte cases exercise transitions around every byte.
+expect {
+	var $valid = True
+	var $seed = 0.U64
+	while $seed < 128 {
+		var $bytes = []
+		var $index = 0.U64
+		while $index < 64 {
+			$bytes = $bytes.append((($seed * 73 + $index * 151 + $index * $index) % 256).to_u8_wrap())
+			$index = $index + 1
+		}
+		if !source_test_lossless(Yaml.tokenize_bytes($bytes), $bytes) {
+			$valid = False
+		}
+		$seed = $seed + 1
+	}
+	$valid
+}
+
+# A common source prefix is useful throughout interactive editing, including
+# prefixes ending inside UTF-8, an escape, a flow collection or a block header.
+expect {
+	source = "name: \"café\\n\"\nflow: [one, {two: 2}]\nrun: |-\n  echo '# text'\n".to_utf8()
+	var $valid = True
+	var $length = 0
+	while $length <= source.len() {
+		prefix = source.sublist({ start: 0, len: $length })
+		if !source_test_lossless(Yaml.tokenize_bytes(prefix), prefix) {
+			$valid = False
+		}
+		$length = $length + 1
+	}
+	$valid
+}
+
+# The complete issue91 workflow keeps GitHub expression text inside its YAML
+# scalar. All spans, including the café UTF-8 bytes, still reference the input.
+expect {
+	source = Str.join_with(
+		[
+			"# Build and test",
+			"name: \"CI #1\"",
+			"on:",
+			"  push:",
+			"  pull_request:",
+			"jobs:",
+			"  test:",
+			"    runs-on: \${{ matrix.os }}",
+			"    timeout-minutes: 10",
+			"    continue-on-error: false",
+			"    strategy:",
+			"      matrix:",
+			"        os: [ubuntu-latest, macos-latest]",
+			"    steps:",
+			"      - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567",
+			"      - name: 'Check café'",
+			"        env:",
+			"          DOCS_URL: https://example.com/manual#setup",
+			"        run: |-",
+			"          # This is shell text inside a YAML scalar",
+			"          echo \"\${{ matrix.os }}\"",
+		],
+		"\n",
+	)
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty() and source_test_classified(result, "on", Key, Text) and source_test_category(result, "on", PropertyName) and source_test_classified(result, "10", Value, Number) and source_test_classified(result, "false", Value, Boolean) and source_test_has_token(result, "https://example.com/manual#setup", PlainScalar) and source_test_has_token(result, "'Check café'", SingleQuotedScalar) and source_test_has_token(result, "\${{ matrix.os }}", PlainScalar) and result.tokens.keep_if(|token| token.kind == Comment).len() == 1
+}
+
+# Compact sequence mappings count the mapping's indentation for explicit block
+# indentation; a sibling key is outside the scalar even when indented two spaces.
+expect {
+	source = "- run: |2\n    echo yes\n  next: true\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and source_test_classified(result, "next", Key, Text) and source_test_classified(result, "true", Value, Boolean) and result.tokens.any(|token| token.kind == BlockScalarContent and source_test_slice(result, token).contains("echo yes") and !source_test_slice(result, token).contains("next"))
+}
+
+expect {
+	source = "value: !<tag:yaml.org,2002:str> true\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and source_test_has_token(result, "!<tag:yaml.org,2002:str>", Tag) and source_test_classified(result, "true", Value, Boolean)
+}
+
+# Numeric escapes name Unicode scalar values, not UTF-16 surrogate halves or
+# codepoints above U+10FFFF, even though every hex digit is individually valid.
+expect {
+	["value: \"\\uD800\"", "value: \"\\uDFFF\"", "value: \"\\U00110000\"", "value: \"\\UFFFFFFFF\""].all(
+		|source| {
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidEscape)
+		},
+	)
+}
+
+expect {
+	source = "a: \"\\u0000\\uD7FF\\uE000\\U0010FFFF\"\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty()
+}
+
+# Raw non-printable source characters remain visible and diagnosed even inside
+# lexical constructs that otherwise consume an entire quoted string or line.
+expect {
+	["value: \"a\u(0)b\"\n", "value: 'a\u(1)b'\n", "# bad \u(7) comment\n", "run: |\n  echo \u(0)\n", "%YAML \u(0)\n", "value: \u(80)\n", "value: \u(FFFE)\n"].all(
+		|source| {
+			result = Yaml.tokenize_str(source)
+			source_test_lossless(result, source.to_utf8()) and result.status == Recovered and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidCharacter)
+		},
+	)
+}
+
+# Valid UTF-8 boundary sequences must not be mistaken for malformed bytes.
+expect {
+	["value: café\n", "value: \u(80)\n", "value: \u(800)\n", "value: \u(D7FF)\n", "value: \u(E000)\n", "value: \u(10000)\n", "value: \u(10FFFF)\n"].all(
+		|source| {
+			result = Yaml.tokenize_bytes(source.to_utf8())
+			source_test_lossless(result, source.to_utf8()) and !result.diagnostics.any(|diagnostic| diagnostic.code == InvalidUtf8)
+		},
+	)
+}
+
+expect {
+	source = "a: café\r\n次: true\r\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.tokens.any(|token| source_test_slice(result, token) == "café" and token.start == 3 and token.end == 8) and result.tokens.any(|token| source_test_slice(result, token) == "次" and token.start == 10 and token.end == 13 and token.role == Key)
+}
+
+# Exhausting the documented flow-depth budget must retain the remaining bytes
+# as a usable fallback instead of dropping or attempting to recurse over them.
+expect {
+	var $source = ""
+	var $index = 0
+	while $index < 300 {
+		$source = Str.join_with([$source, "["], "")
+		$index = $index + 1
+	}
+	result = Yaml.tokenize_str($source)
+	source_test_lossless(result, $source.to_utf8()) and result.status == Limited and result.diagnostics.any(|diagnostic| diagnostic.code == ResourceLimit) and result.tokens.any(|token| token.kind == Invalid)
+}
+
+# Modest repeated-input smoke catches accidental loss of progress on long
+# comments, plain scalars, punctuation and many short independent documents.
+expect {
+	var $source = ""
+	var $index = 0
+	while $index < 128 {
+		$source = Str.join_with([$source, "---\non: [true, false, null, 123]\nurl: https://example.com/#fragment # comment\n"], "")
+		$index = $index + 1
+	}
+	result = Yaml.tokenize_str($source)
+	source_test_lossless(result, $source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty() and result.tokens.keep_if(|token| token.kind == DocumentStart).len() == 128 and result.tokens.keep_if(|token| token.kind == Comment).len() == 128
+}
+
+source_test_slices = |text, kind| {
+	result = Yaml.tokenize_str(text)
+	result.tokens.keep_if(|token| token.kind == kind).map(|token| result.source.sublist({ start: token.start, len: token.end - token.start }))
+}
+
+# Root block scalars may have unindented content (block indentation -1).
+# YAML 1.2.2 example9.3: https://yaml.org/spec/1.2.2/#example-93-bare-documents
+expect source_test_slices("|\nhello\n", BlockScalarContent) == ["hello\n".to_utf8()]
+expect source_test_slices("|\n%!PS-Adobe-2.0 # Not the first line\n", BlockScalarContent) == ["%!PS-Adobe-2.0 # Not the first line\n".to_utf8()]
+
+# Compact mappings start after the sequence indicator; |2 is relative to that.
+expect source_test_slices("- run: |2\n    echo hi\n  name: step\n", BlockScalarContent) == ["    echo hi\n".to_utf8()]
+expect source_test_slices("- - run: |2\n      echo hi\n    name: step\n", BlockScalarContent) == ["      echo hi\n".to_utf8()]
+
+# The BOM is source trivia, not part of the next scalar or comment.
+bom = Str.from_utf8([0xEF, 0xBB, 0xBF]) ?? ""
+expect source_test_slices(bom.concat("# comment\non: true\n"), Comment) == ["# comment".to_utf8()]
+expect source_test_slices(bom.concat("on: true\n"), PlainScalar) == ["on".to_utf8(), "true".to_utf8()]
+
+# Raw controls remain invalid even inside quoted, comment or block text.
+expect !Yaml.tokenize_bytes(['"', 'a', 1, 'b', '"']).diagnostics.is_empty()
+expect !Yaml.tokenize_bytes(['#', ' ', 127]).diagnostics.is_empty()
+expect !Yaml.tokenize_bytes(['|', '\n', ' ', ' ', 1, '\n']).diagnostics.is_empty()
+
+# YAML's printable set excludes U+0080 but includes U+0085 as text.
+expect !Yaml.tokenize_bytes([0xC2, 0x80]).diagnostics.is_empty()
+expect Yaml.tokenize_bytes([0xC2, 0x85]).diagnostics.is_empty()
+
+# Hexadecimal escape digits must encode Unicode scalar values.
+expect !Yaml.tokenize_str("\"\\uD800\"").diagnostics.is_empty()
+expect !Yaml.tokenize_str("\"\\U00110000\"").diagnostics.is_empty()
+expect Yaml.tokenize_str("\"\\U0010FFFF\"").diagnostics.is_empty()
+
+# Anchor names include # and : but stop before flow punctuation.
+expect source_test_slices("[&a:b#c value, *a:b#c]", Anchor) == ["&a:b#c".to_utf8()]
+expect source_test_slices("[&a:b#c value, *a:b#c]", Alias) == ["*a:b#c".to_utf8()]
+expect source_test_slices("!<tag:example.com,2000:app/foo> value", Tag) == ["!<tag:example.com,2000:app/foo>".to_utf8()]
+
+# Invalid verbatim tags must stay displayable and report lexical recovery.
+expect !Yaml.tokenize_str("!<tag:example.com/foo bar> value").diagnostics.is_empty()
+expect !Yaml.tokenize_str("!<tag:example.com/foo").diagnostics.is_empty()
+
+expect {
+	source = "- - |2\n    text\n  - next\n"
+	result = Yaml.tokenize_str(source)
+	source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.tokens.keep_if(|token| token.kind == SequenceEntry).len() == 3 and source_test_has_token(result, "next", PlainScalar) and result.tokens.any(|token| token.kind == BlockScalarContent and source_test_slice(result, token).contains("text") and !source_test_slice(result, token).contains("next"))
+}
+
+# Structured generation exercises valid YAML paths that arbitrary byte fuzzing
+# rarely reaches: mixed collections, nested jobs, block scripts, scalar types,
+# source widths, comments and line endings. Expected categories are model data.
+expect {
+	values = [
+		{ spelling: "123456789012345678901234567890", scalar: Number },
+		{ spelling: "1e10000", scalar: Number },
+		{ spelling: "0xABC", scalar: Number },
+		{ spelling: "true", scalar: Boolean },
+		{ spelling: "NULL", scalar: Null },
+		{ spelling: "on", scalar: Text },
+		{ spelling: "'false'", scalar: Text },
+		{ spelling: "\"42\"", scalar: Text },
+		{ spelling: "https://example.com/#fragment", scalar: Text },
+	]
+	["\n", "\r\n"].all(
+		|ending| ["  ", "    "].all(
+			|unit| values.all(
+				|value| {
+					base = Str.join_with([unit, unit], "")
+					source = Str.join_with(
+						[
+							"---",
+							"on:",
+							"  push:",
+							"jobs:",
+							Str.join_with([unit, "test:"], ""),
+							Str.join_with([base, "count: ", value.spelling], ""),
+							Str.join_with([base, "nested: [{\"name\": \"quoted # text\"}, true, null]"], ""),
+							Str.join_with([base, "url: https://example.com/#fragment"], ""),
+							Str.join_with([base, "run: |2-"], ""),
+							Str.join_with([base, "  # shell text"], ""),
+							Str.join_with([base, "  echo café"], ""),
+							Str.join_with([base, "next: done # YAML comment"], ""),
+						],
+						ending,
+					)
+					result = Yaml.tokenize_str(source)
+					source_test_lossless(result, source.to_utf8()) and result.status == Complete and result.diagnostics.is_empty() and source_test_classified(result, value.spelling, Value, value.scalar) and source_test_classified(result, "on", Key, Text) and source_test_classified(result, "next", Key, Text) and source_test_has_token(result, "https://example.com/#fragment", PlainScalar) and source_test_has_token(result, "\"quoted # text\"", DoubleQuotedScalar) and result.tokens.keep_if(|token| token.kind == Comment).len() == 1 and result.tokens.any(|token| token.kind == BlockScalarContent and source_test_slice(result, token).contains("# shell text") and !source_test_slice(result, token).contains("next"))
+				},
+			),
+		),
+	)
+}
+
+expect {
+	result = Yaml.tokenize_bytes([0xFF])
+	result.status == Recovered and result.tokens.all(|token| token.scalar == Text) and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidUtf8)
+}
