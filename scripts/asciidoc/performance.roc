@@ -182,7 +182,7 @@ encode_block = |block| {
 			var $blocks = []
 			for item in node.blocks {
 				if context == "dlist" and has_definition(item) {
-					$blocks = $blocks.append(AsciiDoc.empty_item)
+					$blocks = $blocks.append(AsciiDoc.Block.Rich({ context: "list_item", source: "", title: "", style: "", id: "", attrs: AsciiDoc.attributes([]), blocks: [], level: 0 }))
 				}
 				$blocks = $blocks.append(item)
 			}

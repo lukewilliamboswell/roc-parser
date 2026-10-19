@@ -124,7 +124,7 @@ AsciiDoc :: [].{
 				parsed = document_reference(parse_blocks($body, 98).blocks, $document_id, if ($document_reftext == "") raw_title else $document_reftext)
 				if raw_title.contains("{") or raw_title.contains("footnote:") or raw_title.contains("<<") or raw_title.contains("xref:") or has_attr(header_attrs, "doctitle") {
 					stored = store_header(parsed, raw_title, first.attrs, header_attrs)
-					stored_attrs = (render_node(stored.first() ?? AsciiDoc.empty_item)).attrs
+					stored_attrs = (render_node(stored.first() ?? empty_item)).attrs
 					refs = if (header_ref_independent(stored_attrs)) [] else identify_blocks(stored, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
 					header = prepare_header(stored_attrs, refs)
 					Ok({ title: header.html, blocks: if (parsed.is_empty() and header.state.footnotes.is_empty()) [] else stored })
@@ -135,10 +135,6 @@ AsciiDoc :: [].{
 			_ => Ok({ title: "", blocks: parse_blocks(lines, 98).blocks })
 		}
 	}
-
-	## Empty list item used when constructing source projections.
-	empty_item : Block
-	empty_item = Rich({ context: "list_item", source: "", title: "", style: "", id: "", attrs: AsciiDocAttributes.flat([]), blocks: [], level: 0 })
 
 	## Materialize independent ordered bindings throughout a parsed document.
 	## Use attributes(materialize_attributes(node.attrs).map(...)) to replace
@@ -167,6 +163,10 @@ import AsciiDocAttributes
 import AsciiDocSource
 
 Line : { text : Str, attrs : AsciiDoc.Attributes }
+
+# Empty list item used when constructing source projections.
+empty_item : AsciiDoc.Block
+empty_item = Rich({ context: "list_item", source: "", title: "", style: "", id: "", attrs: AsciiDocAttributes.flat([]), blocks: [], level: 0 })
 
 empty_line : Line
 empty_line = { text: "", attrs: AsciiDocAttributes.flat([]) }
@@ -1298,7 +1298,7 @@ render_document = |document| {
 	if document.blocks.all(stateless_verbatim_block) {
 		return Str.join_with(document.blocks.map(render_stateless_verbatim_block), "\n")
 	}
-	first_node = render_node(document.blocks.first() ?? AsciiDoc.empty_item)
+	first_node = render_node(document.blocks.first() ?? empty_item)
 	document_id = attribute(first_node.attrs, "__document-id")
 	document_refs = if (document_id == "") [] else [{ id: document_id, text: attribute(first_node.attrs, "__document-reftext") }]
 	identified = identify_blocks(without_header_snapshots(document.blocks), { ids: if (document_id == "") Dict.empty() else Dict.empty().insert(document_id, True), refs: document_refs, numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False })
@@ -1903,7 +1903,7 @@ document_reference = |blocks, id, text| {
 	if id == "" or blocks.is_empty() {
 		blocks
 	} else {
-		first_node = render_node(blocks.first() ?? AsciiDoc.empty_item)
+		first_node = render_node(blocks.first() ?? empty_item)
 		[Rich({ ..first_node, attrs: put_attr(put_attr(first_node.attrs, "__document-id", id), "__document-reftext", text) })].concat(blocks.drop_first(1))
 	}
 }
@@ -2219,12 +2219,12 @@ expect {
 	source = "${dense_test_header({})}\n:value: Original\n\n{value}"
 	match AsciiDoc.parse_str(source) {
 		Ok(doc) => {
-			original = render_node(doc.blocks.first() ?? AsciiDoc.empty_item)
+			original = render_node(doc.blocks.first() ?? empty_item)
 			valid = AsciiDocAttributes.indexed_attributes(original.attrs, AsciiDocAttributes.empty)
 			# Editing source values must first drop the authenticated carrier.
 			changed = { ..original, attrs: original.attrs.map(|a| if (a.name == "value") { name: a.name, value: "Changed" } else a) }
 			invalidated = AsciiDoc.without_internal_caches({ title: doc.title, blocks: [Rich(changed)] })
-			cleared = render_node(invalidated.blocks.first() ?? AsciiDoc.empty_item)
+			cleared = render_node(invalidated.blocks.first() ?? empty_item)
 			valid.view.first.get("value") == Ok("Original") and !AsciiDocAttributes.indexed_attributes(cleared.attrs, valid.cache).view.indexed and AsciiDoc.render(invalidated).contains("<p>Changed</p>")
 		}
 		_ => False
@@ -2247,7 +2247,7 @@ expect {
 
 prepared_node = |value| match value {
 	Ok(Prepared(p)) => p.node
-	Err(_) => render_node(AsciiDoc.empty_item)
+	Err(_) => render_node(empty_item)
 }
 
 attach_prepared_toc : List(PreparedBlock), List(PreparedBlock) -> List(PreparedBlock)
@@ -2294,8 +2294,8 @@ expect {
 	source = "${dense_test_header({})}\n:imagesdir: assets\n\nimage::first.png[First,100,80,role=first]\n\nimage::second.png[Second,200,160,role=second]"
 	match AsciiDoc.parse_str(source) {
 		Ok(doc) => {
-			first = render_node(doc.blocks.first() ?? AsciiDoc.empty_item)
-			second = render_node(doc.blocks.get(1) ?? AsciiDoc.empty_item)
+			first = render_node(doc.blocks.first() ?? empty_item)
+			second = render_node(doc.blocks.get(1) ?? empty_item)
 			bindings = AsciiDoc.materialize_attributes(first.attrs)
 			html = AsciiDoc.render(doc)
 			bindings.contains({ name: "imagesdir", value: "assets" }) and !bindings.any(|a| a.name == "\u(0)roc-source-snapshot") and AsciiDoc.render_inline_attributes("{imagesdir}", first.attrs) == "assets" and attribute(first.attrs, "1") == "First" and attribute(second.attrs, "1") == "Second" and html.contains("alt=\"First\" width=\"100\" height=\"80\"") and html.contains("alt=\"Second\" width=\"200\" height=\"160\"")
@@ -2410,7 +2410,7 @@ expect {
 	for source in ["= {counter:n}\n\n{counter:n}", "= {project} Guide\n:project: Roc\n\nBody {project}", "= Header footnote:[Header note]\n\nBody footnote:[Body note]", "= <<target>> {counter:n}\n\n[#target]\n== Target\n\nBody {counter:n}", "= Title\n:doctitle: {counter:n}\n\nBody {counter:n}"] {
 		match AsciiDoc.parse_str(source) {
 			Ok(doc) => {
-				node = render_node(doc.blocks.first() ?? AsciiDoc.empty_item)
+				node = render_node(doc.blocks.first() ?? empty_item)
 				flattened = node.attrs.map(|a| a)
 				legacy = { ..doc, blocks: [Rich({ ..node, attrs: flattened })].concat(doc.blocks.drop_first(1)) }
 				refs = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
@@ -2431,7 +2431,7 @@ expect {
 expect {
 	source = AsciiDocAttributes.from_store(AsciiDocSource.new_parsed("header-identification", [{ name: "x", value: "Roc" }]))
 	stored = store_header([rich("section", "", "{__header-final:x}", "", "", source, [], 1)], "{x}", source, source)
-	node = render_node(stored.first() ?? AsciiDoc.empty_item)
+	node = render_node(stored.first() ?? empty_item)
 	flat = [Rich({ ..node, attrs: node.attrs.map(|a| a) })]
 	initial = { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }
 	typed = identify_blocks(stored, initial)
@@ -2443,7 +2443,7 @@ expect {
 # in the final scope. The common referenced title must qualify.
 expect {
 	match AsciiDoc.parse_str("= Header {project}\n:project: Roc\n\n== Body\n\nText") {
-		Ok(doc) => header_ref_independent(render_node(doc.blocks.first() ?? AsciiDoc.empty_item).attrs) and doc.title == "Header Roc"
+		Ok(doc) => header_ref_independent(render_node(doc.blocks.first() ?? empty_item).attrs) and doc.title == "Header Roc"
 		_ => False
 	}
 }
@@ -2455,7 +2455,7 @@ expect {
 	for source in ["= {project}\n:project: Roc\n\n== Body", "= {project}\n:project: pass:[<<target>>]\n\n[[target]]\n== Destination", "= {project}\n:project: &lt;&lt;target&gt;&gt;\n\n[[target]]\n== Destination", "= Title\n:doctitle: <<target>>\n\n[[target]]\n== Destination", "= {lt}{lt}target{gt}{gt}\n\n[[target]]\n== Destination", "= {two-colons}\n\nBody", "= pass:normal[<<target>>]\n\n[[target]]\n== Destination", "= footnote:[See <<target>>]\n\n[[target]]\n== Destination", "= xref:target[See <<other>>]\n\n[[target]]\n== Target\n\n[[other]]\n== Other", "= {counter:n} footnote:[Header]\n\nBody {counter:n} footnote:[Body]"] {
 		match AsciiDoc.parse_str(source) {
 			Ok(doc) => {
-				attrs = render_node(doc.blocks.first() ?? AsciiDoc.empty_item).attrs
+				attrs = render_node(doc.blocks.first() ?? empty_item).attrs
 				refs = identify_blocks(doc.blocks, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
 				full = prepare_header(attrs, refs)
 				$same = $same and doc.title == full.html
@@ -2501,7 +2501,7 @@ expect {
 		bindings = AsciiDoc.materialize_attributes(original.attrs).append({ name: "__header-source", value: source }).concat(AsciiDoc.materialize_attributes(initial).map(|a| { name: "__header-initial:${a.name}", value: a.value })).concat(AsciiDoc.materialize_attributes(final).map(|a| { name: "__header-final:${a.name}", value: a.value }))
 		legacy = [Rich({ ..original, attrs: AsciiDoc.attributes(bindings) }), Paragraph("Tail")]
 		actual = store_header([first, Paragraph("Tail")], source, initial, final)
-		node = render_node(actual.first() ?? AsciiDoc.empty_item)
+		node = render_node(actual.first() ?? empty_item)
 		new_header = prepare_header(node.attrs, [])
 		old_header = prepare_header(AsciiDoc.attributes(bindings), [])
 		$same = $same and AsciiDocAttributes.header_parts(node.attrs).is_ok() and AsciiDoc.materialize_attributes(node.attrs) == bindings and actual == legacy and new_header.html == old_header.html and new_header.state.attributes == old_header.state.attributes and new_header.state.removed == old_header.state.removed and new_header.state.footnotes == old_header.state.footnotes and AsciiDoc.render({ title: new_header.html, blocks: actual }) == AsciiDoc.render({ title: old_header.html, blocks: legacy })
@@ -2517,10 +2517,10 @@ expect {
 	body = [{ name: "x", value: "first" }, { name: "__header-final:x", value: "reserved" }, { name: "x", value: "last" }]
 	manual = rich("paragraph", "{x} {__header-final:x}", "", "", "", AsciiDoc.attributes(body), [], 0)
 	stored = store_header([manual], "{x}", initial, final)
-	actual = render_node(stored.first() ?? AsciiDoc.empty_item)
+	actual = render_node(stored.first() ?? empty_item)
 	bindings = body.append({ name: "__header-source", value: "{x}" }).concat(AsciiDoc.materialize_attributes(initial).map(|a| { name: "__header-initial:${a.name}", value: a.value })).concat(AsciiDoc.materialize_attributes(final).map(|a| { name: "__header-final:${a.name}", value: a.value }))
 	empty_stored = store_header([], "{counter:n}", initial, final)
-	empty_node = render_node(empty_stored.first() ?? AsciiDoc.empty_item)
+	empty_node = render_node(empty_stored.first() ?? empty_item)
 	empty_bindings = [{ name: "__header-source", value: "{counter:n}" }].concat(AsciiDoc.materialize_attributes(initial).map(|a| { name: "__header-initial:${a.name}", value: a.value })).concat(AsciiDoc.materialize_attributes(final).map(|a| { name: "__header-final:${a.name}", value: a.value }))
 	empty_part = match AsciiDocAttributes.header_parts(empty_node.attrs) {
 		Ok(h) => h.body.is_empty()
