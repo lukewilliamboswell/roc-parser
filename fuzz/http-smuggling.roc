@@ -23,7 +23,7 @@ Mutated : { bytes : List(U8), original : List(U8), kind : HttpGen.Kind, label : 
 Cur : HttpGen.Cur
 
 # Inlined from HttpGen.pick: delegating to it makes --opt=speed free the fuzz
-# input one time too many and corrupt the heap.
+# input one time too many and corrupt the heap (roc-lang/roc#12438).
 pick : Cur, U64 -> { n : U64, cur : Cur }
 pick = |cur, count| {
 	byte = cur.bytes.get(cur.pos) ?? 0
