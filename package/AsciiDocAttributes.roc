@@ -526,7 +526,10 @@ expect {
 	attrs = AsciiDocAttributes.header(body, "{x}", initial, final)
 	expected = AsciiDocAttributes.materialize(body).append({ name: "__header-source", value: "{x}" }).concat(AsciiDocAttributes.materialize(initial).map(|a| { name: "__header-initial:${a.name}", value: a.value })).concat(AsciiDocAttributes.materialize(final).map(|a| { name: "__header-final:${a.name}", value: a.value }))
 	view = AsciiDocAttributes.indexed_attributes(attrs, AsciiDocAttributes.empty).view
-	AsciiDocAttributes.header_parts(attrs).is_ok() and AsciiDocAttributes.materialize(attrs) == expected and attrs.len() == expected.len() and AsciiDocSource.semantic(view.first, []) == expected and AsciiDocSource.semantic(view.last, []) == expected and AsciiDocAttributes.lookup_first(view, "__header-initial:x") == Ok("initial-first") and AsciiDocAttributes.lookup_last(view, "__header-initial:x") == Ok("initial-last") and AsciiDocAttributes.lookup_first(view, "__header-final:x") == Ok("final-first") and AsciiDocAttributes.lookup_last(view, "__header-final:x") == Ok("final-last") and AsciiDocAttributes.lookup_first(view, "__header-initial:__header-final:x") == Ok("nested") and AsciiDocAttributes.lookup_attributes(attrs, "__header-final:empty") == Ok("") and AsciiDocAttributes.without_header(attrs) == body and AsciiDocAttributes.source_only(attrs) == AsciiDocAttributes.source_only(body)
+	# Look up through the view before reading its sources: the dev backend frees
+	# a field moved into `semantic` and then reads it again.
+	lookups = AsciiDocAttributes.lookup_first(view, "__header-initial:x") == Ok("initial-first") and AsciiDocAttributes.lookup_last(view, "__header-initial:x") == Ok("initial-last") and AsciiDocAttributes.lookup_first(view, "__header-final:x") == Ok("final-first") and AsciiDocAttributes.lookup_last(view, "__header-final:x") == Ok("final-last") and AsciiDocAttributes.lookup_first(view, "__header-initial:__header-final:x") == Ok("nested")
+	lookups and AsciiDocAttributes.header_parts(attrs).is_ok() and AsciiDocAttributes.materialize(attrs) == expected and attrs.len() == expected.len() and AsciiDocSource.semantic(view.first, []) == expected and AsciiDocSource.semantic(view.last, []) == expected and AsciiDocAttributes.lookup_attributes(attrs, "__header-final:empty") == Ok("") and AsciiDocAttributes.without_header(attrs) == body and AsciiDocAttributes.source_only(attrs) == AsciiDocAttributes.source_only(body)
 }
 
 expect {
@@ -568,7 +571,9 @@ expect {
 			Ok(h) => h.body.is_empty() and h.body == body
 			Err(_) => False
 		}
-		$same = $same and empty_part and AsciiDocAttributes.materialize(attrs) == bindings and attrs.len() == bindings.len() and AsciiDocSource.semantic(view.first, []) == bindings and AsciiDocSource.semantic(view.last, []) == bindings and AsciiDocAttributes.lookup_first(view, "__header-initial:x") == Ok("initial-first") and AsciiDocAttributes.lookup_last(view, "__header-initial:x") == Ok("initial-last") and AsciiDocAttributes.lookup_first(view, "__header-final:x") == Ok("final-first") and AsciiDocAttributes.lookup_last(view, "__header-final:x") == Ok("final-last") and AsciiDocAttributes.lookup_attributes(attrs, "__header-initial:__header-final:x") == Ok("nested") and AsciiDocAttributes.without_header(attrs) == body and AsciiDocAttributes.source_only(attrs) == AsciiDocAttributes.source_only(body)
+		# Lookups first; see the dev backend note in the expect above.
+		lookups = AsciiDocAttributes.lookup_first(view, "__header-initial:x") == Ok("initial-first") and AsciiDocAttributes.lookup_last(view, "__header-initial:x") == Ok("initial-last") and AsciiDocAttributes.lookup_first(view, "__header-final:x") == Ok("final-first") and AsciiDocAttributes.lookup_last(view, "__header-final:x") == Ok("final-last")
+		$same = $same and lookups and empty_part and AsciiDocAttributes.materialize(attrs) == bindings and attrs.len() == bindings.len() and AsciiDocSource.semantic(view.first, []) == bindings and AsciiDocSource.semantic(view.last, []) == bindings and AsciiDocAttributes.lookup_attributes(attrs, "__header-initial:__header-final:x") == Ok("nested") and AsciiDocAttributes.without_header(attrs) == body and AsciiDocAttributes.source_only(attrs) == AsciiDocAttributes.source_only(body)
 	}
 	# Nonempty manual scopes, including reserved duplicates, stay conservative.
 	manual = AsciiDocAttributes.flat([{ name: "__header-final:x", value: "manual-first" }, { name: "__header-final:x", value: "manual-last" }])
