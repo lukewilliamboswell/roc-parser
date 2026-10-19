@@ -40,6 +40,26 @@ references, section IDs, numbering, tables of contents, captions and footnotes.
 `Rich` blocks retain context, style, ID, attributes and nested blocks alongside
 the simpler paragraph, section, listing and literal variants.
 
+`Rich.attrs` uses an immutable `AsciiDoc.Attributes` scope. Parsed nodes share
+their document attribute snapshot and keep local metadata separately, preserving
+attribute order, duplicates and empty values without copying the document
+bindings into each node. `render_inline_attributes(text, node.attrs)` renders
+against that scope. The existing `render_inline(text, bindings)` accepts a
+plain list for independent inline input.
+
+Use `materialize_attributes(node.attrs)` when a flat list is required for
+serialization or editing; this explicitly enumerates the ordered bindings.
+Parsed source updates share balanced name indexes; materializing an updated
+scope sorts its bindings by their retained insertion positions, taking
+O(N log N) work at this explicit boundary. Unchanged seed scopes reuse their
+already ordered immutable bindings.
+For a manually constructed block, use `attrs: AsciiDoc.attributes(bindings)`.
+To replace bindings, materialize and edit the list, then construct a new scope
+with `AsciiDoc.attributes`; the original snapshot remains unchanged.
+
+`without_internal_caches(document)` explicitly materializes scopes throughout
+a document. Ordinary parsing and rendering keep them shared.
+
 Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
 64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
 resource-limit failures return a message, one-based line and zero-based UTF-8
@@ -95,7 +115,45 @@ reference fixtures without a Roc probe. The native raw target checks crashes,
 error locations and LF/CRLF agreement; the structured target builds expected
 block trees independently from its input choices.
 
-== Local performance gate
+== Local performance checks
+
+For fast local iteration, reuse the Ruby side of an existing saved run:
+
+[source,sh]
+----
+python3 scripts/check_asciidoc_performance_cached.py \
+  --baseline /path/to/saved/results.json \
+  --roc "$ROC" \
+  --replay path/to/small-cases.json --output /tmp/asciidoc-cached-dev-1
+----
+
+When no binary is supplied, the command builds optimized native code with the
+pinned `--roc` compiler. To reuse an existing build, pass `--candidate-binary`
+with its genuine matching build receipt. The saved report SHA is always
+recorded; `--baseline-sha256` optionally pins an expected value.
+The cached runner starts only that native worker. It checks fresh projection and
+DOM against the saved Ruby correctness hashes before and after timing, using the
+complete request (including ordered attributes and virtual includes) and mode.
+It defaults to quick 5 ms / three-sample native batches. `--id ID` can select a
+saved case without writing a replay file; repeat it for several IDs.
+
+Treat ratios as rough internal guidance: large gains and geometric scaling
+warnings matter more than small near-parity differences. Saved Ruby sample
+quality, original failures, machine descriptions and reference code hashes remain
+visible; noisy or short historical samples receive warnings. New requests or
+changed semantics require a refresh. Noisy native samples remain visible too.
+Native requests time out after 10 seconds by default (`--timeout` overrides
+this). The first worker error is saved and stops the run; unprocessed inputs
+remain explicit. Include several sizes of each geometric family in a replay to
+inspect scaling; isolated maximum-size cases cannot establish growth.
+
+Refresh with the existing fresh `check_asciidoc_performance.py --replay ...`
+command. Cached runs never claim fresh paired Oracle timing qualification and do
+not overwrite saved reports. This is an optional local development shortcut; it
+does not add CI jobs or change parser behavior.
+
+Fresh reference measurements are available when refreshing the cache or
+investigating a meaningful slowdown:
 
 The performance harness builds optimized native code and compares parsing and
 parsing plus HTML rendering with the same pinned Asciidoctor. Its default
@@ -107,7 +165,7 @@ IPC, JSON serialization, warmup and correctness checks outside timed batches.
 python3 scripts/check_asciidoc_performance.py --roc "$ROC" --deadline-seconds 10800
 ----
 
-The default campaign generates 2,000 seeded documents plus 500 raw mutations,
+The fresh campaign generates 2,000 seeded documents plus 500 raw mutations,
 runs the authored fixtures, and tests geometric sizes from 32 to 1,024 for
 paragraphs, sections, footnotes, cross references, lists, tables, attributes
 and delimiters. Footnotes (including table cells), named references, growing
@@ -122,7 +180,44 @@ URLs also runs through 4,096 entries to catch repeated attribute materialization
 Static header attributes mixed with URL paragraphs, URL list items, listing
 blocks, formatted section titles and AsciiDoc table cells check shared snapshot
 copies and repeated option lookups through 4,096 entries. The table-cell family
-explicitly disables headers and starts cell contents immediately after `|`. Stateful pass previews mixed with unrelated sets
+explicitly disables headers and starts cell contents immediately after `|`. Static
+attribute environments with repeated and distinct image targets also run
+through 4,096 blocks to guard media option lookup and attribute sharing.
+Repeated source definitions followed by URLs or text, varied-name unset/readd
+cycles and many tiny tables currently use the bounded audit sizes 128, 256 and
+512. Additional bounded families keep counters or set values live while
+unrelated source definitions change, including an explicit counter reset.
+A separate bounded family resets every live counter through a source definition
+and increments it again, then probes both endpoint counters. Alternating
+counter paragraphs and simple `Body.` paragraphs exercise transitions between
+Rich and ordinary parsed nodes while dynamic names grow, retaining counter,
+body and final-value predicates at the same bounded sizes. Ordered Options
+variants supply a same-value standard attribute or change and restore that
+attribute. Both retain ordered requests and the same HTML predicates to check
+initialization and baseline tracking across scope transitions.
+These families guard revision history, dynamic-state reconciliation and shared
+table scopes. The fixed `performance-guards.json` corpus appends 248 retained
+inputs after all historical inputs: standard-scope controls, small and ordered
+Options boundaries, and larger counter-reset and section-title cases. Title
+variants include ordinary and escaped quoted passes, role-prefixed passthroughs,
+explicit links, angle-wrapped HTTP/HTTPS links and literal angle prefixes,
+through 4,096 entries. These are strict performance targets,
+including retained failures; their presence does not claim passing timings.
+The extended guards exercise missing and newline-rejected literal closers,
+shared quote-role closers, Unicode role prefixes, malformed title macros and
+listing callouts through 4,096 entries. Callout cases include missing `>`,
+Unicode HTML-like text, many numbered callouts on separate lines or one line,
+and a growing placeholder-prefix collision. Two default-substitution families
+retain normal HTML-comment callouts and escaped numeric callouts through 4,096
+entries. Their fixed sources keep cached comparisons reproducible. These
+remain local scaling inputs and do not expand the two-case CI smoke.
+Larger counter-preview, colliding
+attribute-name and alternating Options inputs retain the exact requests that
+exposed repeated copying and rescanning.
+Source-scaled fixed guards above 512 load only when the largest requested size
+is at least 1,024. A bounded campaign retains the other 134 fixed guards. Use
+`--sizes 128 256 512` for a bounded local scaling campaign, or `--replay` with a
+retained exact-source case to isolate a measured failure. Stateful pass previews mixed with unrelated sets
 check work that can otherwise be discarded before shared-state evaluation.
 Positional mail subjects and bodies exercise protected-tag restoration with
 growing counter state.
@@ -131,10 +226,55 @@ Nested containers use depths from 2 to 32. Scaling checks
 flag growth above the configured exponent. Reports record source hashes,
 compiler, machine, samples and replay commands. Failing inputs and scaling
 pairs are retained under `.roc-parser-tmp/asciidoc-performance/`.
+Replay cases may supply an ordered `attributes` list of `{name, value}` string
+records to exercise `AsciiDoc.Options.attributes`. Nonempty options are included
+in request fingerprints and retained replay cases; absent and empty options use
+the original request format and fingerprints. Entries keep their order and
+last duplicate wins. The pinned Ruby worker applies these as soft initial
+attributes, permitting subsequent document definitions to override them as the
+Roc parser does. Supplied values override the worker's fixed initial attributes.
+Use ordinary lowercase attribute names for cross-engine parity; Asciidoctor's
+API also interprets special attribute-name suffixes and normalizes names.
+
+Scaling uses source UTF-8 byte length by default. Replay cases whose growing
+input is an ordered Options list or include map can set
+`"scaling_input": "request"`. This measures the canonical compact UTF-8 JSON
+of source, includes, expansion mode and nonempty ordered attributes. Case IDs,
+measurement modes, iteration counts and warmup counts do not contribute to size.
+The flag changes only the scaling metric; worker requests and their fingerprints
+stay the same. Reports record the chosen basis and both measured input sizes.
+A family cannot mix source and request metrics, and cases cannot supply an
+arbitrary numeric size. The speed ceiling and scaling exponent stay unchanged.
+
 Use `--seed` to explore another deterministic campaign, `--corpus` for local
 documents, and `--replay` to repeat a retained failure. `--smoke` runs two tiny
 correctness and protocol cases without asserting timing; CI runs this smoke
 check. The full timing gate is intended for a quiet local machine.
+For a stronger measurement of a retained input, use:
+
+[source,sh]
+----
+python3 scripts/check_asciidoc_performance.py --roc "$ROC" --replay path/to/cases.json --window-ms 50 --samples 7 --stable-all --progress
+----
+
+The standalone attribute-alias replay retains nine long stored values and late
+syntax-rejection inputs that exposed slow fallback scanning. It keeps their
+original ordered caller attributes and sources. Run it locally with a fresh
+output directory:
+
+[source,sh]
+----
+python3 scripts/check_asciidoc_performance.py --roc "$ROC" --replay scripts/asciidoc/performance-attribute-alias-controls.json --modes parse render --window-ms 150 --samples 15 --stable-all --batch-policy per-engine --max-ratio 1.0 --max-scaling-exponent 1.3 --output .roc-parser-tmp/asciidoc-alias-controls-attempt1
+----
+
+These are individual timing controls with no geometric scaling claim. They do
+not change the normal guard inventory or the two-case CI smoke check.
+
+Document models are generated in Python. Each input then runs through both
+engines for fresh correctness checks, calibration, warmup and timing samples.
+The timing window is a minimum duration; it does not cap a single operation.
+A Ruby parse that takes seconds still runs in full for warmup and each sample.
+Use `--progress` to see the active case, engine and measurement phase.
 The default per-response wall budget is 180 seconds, allowing slow oracle
 warmup, calibration and fresh projection/HTML checks outside the timed interval.
 This response budget does not change the 1.0 times speed ceiling or sampling.
@@ -142,11 +282,19 @@ The default full-campaign deadline remains 7,200 seconds; the command above
 allows 10,800 seconds for the expanded local corpus. Every request retains its
 fresh correctness checks.
 
+The Ruby worker releases request-local correctness documents, projections,
+responses and include-source maps after each reply, including error replies.
+It clears the thread-local include map at the same boundary. This cleanup runs
+outside the elapsed interval; it prevents a prior correctness graph from
+remaining live during the next timed request. It does not force garbage
+collection inside measured operations.
+
 The default `--batch-policy per-engine` calibrates an independent operation
 count for each engine. Every elapsed batch is divided by that engine's count;
 full-duration measurements retain the requested minimum window for both
-engines, the requested sample count and alternating engine order. Every
-request still computes fresh projection and HTML checks outside its timer.
+engines, the requested sample count and alternating engine order. Fresh projection and HTML checks run before and after every case/mode
+measurement. Version 1 workers also return full output for each response;
+version 2 positive replies contain verified counts, checksum and elapsed time.
 Duration or noise refinement increases only affected engine counts within the
 existing attempt and iteration limits. Reports use schema version 2 and record
 both counts for every attempt; retained replay commands preserve the policy.
@@ -161,3 +309,23 @@ Add `--progress` to flush the current case, mode, calibration engine and
 sample/attempt counts to stderr before each worker request. Completion and
 qualification messages identify long oracle responses without changing timed
 worker loops. The flag is opt-in and retained by replay commands.
+
+The performance workers use reply protocol version 2. For every case and mode,
+the driver requests fresh full projection and HTML output before and after
+measurement, compares both engines and each engine's before/after output, and
+checks the pinned oracle identity. Each zero-iteration reply also reports the
+metric from one separate fresh operation. Positive-iteration replies contain
+counts, checksum and elapsed time, avoiding an additional untimed conversion
+for each calibration or sample response. Every timed operation and warmup still
+constructs a fresh document; the driver requires its engine's exact checksum
+`(iterations + warmup) * operation_checksum`.
+
+A compact timing reply is accepted only inside the matching checked input,
+mode and worker-instance context, which expires on error or restart. Version 1
+workers remain supported with their full per-response output comparisons.
+Reports retain before/after proof digests and raw timing attempts; correctness
+failures also retain full replies under the output's `correctness/` directory.
+Input fingerprints and retained replay sources are unchanged. This protocol
+does not reduce samples, duration windows, coverage or performance thresholds.
+The two-case CI smoke exercises the same correctness boundaries and compact
+protocol without asserting speed.

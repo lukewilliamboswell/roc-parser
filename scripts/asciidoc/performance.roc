@@ -8,7 +8,80 @@ import cli.Stdout
 import cli.Monotonic
 import parser.AsciiDoc
 
-Request : { id : Str, source : Str, includes : List({ path : Str, source : Str }), expand : Bool, iterations : U64, warmup : U64, mode : Str }
+LegacyRequest : { id : Str, source : Str, includes : List({ path : Str, source : Str }), expand : Bool, iterations : U64, warmup : U64, mode : Str }
+
+Request : { id : Str, source : Str, includes : List({ path : Str, source : Str }), attributes : List(AsciiDoc.Attribute), expand : Bool, iterations : U64, warmup : U64, mode : Str }
+
+# Decode outside the timer. Missing attributes preserve the original protocol;
+# a present malformed field must not silently fall back to an empty list.
+parse_request : Str -> Try(Request, [Invalid])
+parse_request = |line| {
+	extended : Try(Request, _)
+	extended = Json.parse(line)
+	match extended {
+		Ok(item) => Ok(item)
+		Err(_) => {
+			if has_attributes_field(line) {
+				return Err(Invalid)
+			}
+			legacy : Try(LegacyRequest, _)
+			legacy = Json.parse(line)
+			legacy.map_ok(|item| { id: item.id, source: item.source, includes: item.includes, attributes: [], expand: item.expand, iterations: item.iterations, warmup: item.warmup, mode: item.mode }).map_err(|_| Invalid)
+		}
+	}
+}
+
+has_attributes_field : Str -> Bool
+has_attributes_field = |line| {
+	bytes = line.to_utf8()
+	var $depth = 0.U64
+	var $inside = False
+	var $escaped = False
+	var $key = False
+	var $expect_key = False
+	var $start = 0.U64
+	var $i = 0.U64
+	for byte in bytes {
+		if $inside {
+			if $escaped {
+				$escaped = False
+			}
+			else if byte == 92 {
+				$escaped = True
+			}
+			else if byte == 34 {
+				$inside = False
+				if $key {
+					decoded : Try(Str, _)
+					decoded = Json.parse(Str.from_utf8_lossy(bytes.sublist({ start: $start, len: $i - $start + 1 })))
+					if decoded == Ok("attributes") {
+						return True
+					}
+				}
+			}
+		} else if byte == 34 {
+			$inside = True
+			$key = $depth == 1 and $expect_key
+			$start = $i
+		} else if byte == 123 or byte == 91 {
+			$depth = $depth + 1
+			if $depth == 1 {
+				$expect_key = True
+			}
+		} else if byte == 125 or byte == 93 {
+			if $depth > 0 {
+				$depth = $depth - 1
+			}
+		} else if byte == 44 and $depth == 1 {
+			$expect_key = True
+		}
+		else if byte == 58 and $depth == 1 {
+			$expect_key = False
+		}
+		$i = $i + 1
+	}
+	False
+}
 
 # Input decoding, options, warm-up, correctness projection and JSON encoding are
 # outside the timer. Every timed iteration constructs and destroys a fresh AST.
@@ -25,14 +98,14 @@ main! = |_| {
 			}
 			Ok(line) => {
 				request : Try(Request, _)
-				request = Json.parse(line)
+				request = parse_request(line)
 				match request {
 					Err(_) => Stdout.line!("{\"error\":\"invalid_request\"}")?
 					Ok(item) => {
 						if item.iterations > 100000 or item.warmup > 10000 or item.source.count_utf8_bytes() > 1048576 or !["parse", "render"].contains(item.mode) {
 							Stdout.line!("{\"error\":\"invalid_benchmark_request\"}")?
 						} else {
-							options = { includes: item.includes, attributes: [], max_depth: 16, expand_includes: item.expand }
+							options = { includes: item.includes, attributes: item.attributes, max_depth: 16, expand_includes: item.expand }
 							var $i = 0
 							var $checksum = 0.U64
 							while $i < item.warmup {
@@ -51,12 +124,19 @@ main! = |_| {
 								$i = $i + 1
 							}
 							elapsed_ns = Monotonic.now!() - start
-							match AsciiDoc.parse_with(item.source, options) {
-								Err(_) => Stdout.line!(Json.to_str({ error: "parse_failed", id: item.id }))?
-								Ok(document) => {
-									projection = "{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}}"
-									html = AsciiDoc.render(document)
-									Stdout.line!("{\"version\":1,\"id\":${json_string(item.id)},\"iterations\":${item.iterations.to_str()},\"successes\":${$successes.to_str()},\"checksum\":${$checksum.to_str()},\"elapsed_ns\":${elapsed_ns.to_str()},\"projection\":${projection},\"html\":${json_string(html)}}")?
+							if item.iterations > 0 {
+								# Every warmup and measured operation above built its own AST.
+								# Compact timing replies do not build a redundant output AST.
+								Stdout.line!(Json.to_str({ version: 2.U64, phase: "timing", mode: item.mode, id: item.id, iterations: item.iterations, warmup: item.warmup, successes: $successes, checksum: $checksum, elapsed_ns }))?
+							} else {
+								match AsciiDoc.parse_with(item.source, options) {
+									Err(_) => Stdout.line!(Json.to_str({ error: "parse_failed", id: item.id }))?
+									Ok(document) => {
+										operation_checksum = operation(item.source, options, item.mode)
+										projection = "{\"title\":${json_string(document.title)},\"blocks\":${encode_blocks(document.blocks)}}"
+										html = AsciiDoc.render(document)
+										Stdout.line!("{\"version\":2,\"phase\":\"correctness\",\"mode\":${json_string(item.mode)},\"warmup\":${item.warmup.to_str()},\"operation_checksum\":${operation_checksum.to_str()},\"id\":${json_string(item.id)},\"iterations\":${item.iterations.to_str()},\"successes\":${$successes.to_str()},\"checksum\":${$checksum.to_str()},\"elapsed_ns\":${elapsed_ns.to_str()},\"projection\":${projection},\"html\":${json_string(html)}}")?
+									}
 								}
 							}
 						}
@@ -98,7 +178,7 @@ encode_block = |block| {
 			context = node.context
 			level = if (context == "section") node.level else 0
 			source = if (["list_item", "image", "video", "audio", "table", "table"].contains(context)) "" else node.source
-			title = if (context == "list_item") "" else AsciiDoc.render_inline(node.title, node.attrs)
+			title = if (context == "list_item") "" else AsciiDoc.render_inline_attributes(node.title, node.attrs)
 			var $blocks = []
 			for item in node.blocks {
 				if context == "dlist" and has_definition(item) {

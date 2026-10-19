@@ -23,7 +23,8 @@ class WorkerError(RuntimeError):
 
 class Worker:
     """A bounded, persistent JSONL exchange. stderr cannot fill a pipe."""
-    def __init__(self, command, timeout=5.0, max_response=16 * 1024 * 1024, env=None):
+    def __init__(self, command, timeout=5.0, max_response=16 * 1024 * 1024, env=None, protocol_versions=None):
+        self.protocol_versions = frozenset((PROTOCOL_VERSION,) if protocol_versions is None else protocol_versions)
         self.command = list(command)
         self.timeout = timeout
         self.max_response = max_response
@@ -72,7 +73,7 @@ class Worker:
             raise WorkerError(f'invalid worker JSON: {line[:200]!r}') from error
         if not isinstance(result, dict) or result.get('id') != value['id']:
             raise WorkerError('worker response ID mismatch')
-        if result.get('version') != PROTOCOL_VERSION or 'error' in result:
+        if type(result.get('version')) is not int or result['version'] not in self.protocol_versions or 'error' in result:
             raise WorkerError(f'worker protocol error: {result}')
         self.requests += 1
         return result

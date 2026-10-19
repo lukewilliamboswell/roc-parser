@@ -1,4 +1,6 @@
 import AsciiDocInline
+import AsciiDocAttributes
+import AsciiDocSource
 import unicode.Case
 import unicode.GeneralCategory
 import unicode.Scalar
@@ -19,12 +21,19 @@ AsciiDocPreprocess :: [].{
 
 	run : Str, Options -> Try(Result, [PreprocessError(Error)])
 	run = |source, options| {
-		var $attributes = standard_attributes
-		for attribute in options.attributes {
-			$attributes = $attributes.keep_if(|current| current.name != attribute.name).append(attribute)
-		}
-		result = process(source, "", $attributes, options, [], 0)?
-		Ok({ source: join(result.lines.map(|line| line.text), "\n"), attributes: result.attributes, lines: result.lines })
+		result = run_scoped(source, options)?
+		Ok({ source: result.source, attributes: AsciiDocAttributes.materialize(result.attributes), lines: result.lines.map(|line| { text: line.text, path: line.path, line: line.line, offset: line.offset, attributes: AsciiDocAttributes.materialize(line.attributes) }) })
+	}
+
+	## The document parser consumes immutable scopes directly. The legacy
+	## preprocessing inspection API materializes only at its explicit boundary.
+	ScopedLine : { text : Str, attributes : AsciiDocAttributes.Attributes, path : Str, line : U64, offset : U64 }
+	ScopedResult : { source : Str, attributes : AsciiDocAttributes.Attributes, lines : List(ScopedLine) }
+	run_scoped : Str, Options -> Try(ScopedResult, [PreprocessError(Error)])
+	run_scoped = |source, options| {
+		attributes = AsciiDocSource.new_standard_parsed_options(source_namespace(source, options), options.attributes)
+		result = process(source, "", attributes, options, [], 0)?
+		Ok({ source: join(result.lines.map(|line| line.text), "\n"), attributes: AsciiDocAttributes.from_store(result.attributes), lines: result.lines })
 	}
 
 	## Expand defined attribute references, preserving unknown references and
@@ -33,11 +42,32 @@ AsciiDocPreprocess :: [].{
 	substitute = |source, attributes| expand(source, attributes, 0)
 }
 
+source_namespace : Str, AsciiDocPreprocess.Options -> Str
+source_namespace = |source, options| {
+	var $namespace = "ADOCSource1:${frame(source)}${options.max_depth.to_str()}:${if (options.expand_includes) "1" else "0"}:${options.attributes.len().to_str()}:"
+	for attr in options.attributes {
+		$namespace = $namespace.concat("${frame(attr.name)}${frame(attr.value)}")
+	}
+	$namespace = $namespace.concat("${options.includes.len().to_str()}:")
+	for entry in options.includes {
+		$namespace = $namespace.concat("${frame(entry.path)}${frame(entry.source)}")
+	}
+	$namespace
+}
+
+frame : Str -> Str
+frame = |value| "${value.count_utf8_bytes().to_str()}:${value}"
+
+condition_source : Str, AsciiDocSource.Store -> Bool
+condition_source = |source, attributes| {
+	if (source.contains(",")) source.split_on(",").any(|name| AsciiDocSource.lookup(attributes, lower(trim(name))).is_ok()) else source.split_on("+").all(|name| AsciiDocSource.lookup(attributes, lower(trim(name))).is_ok())
+}
+
 Context : { definition_allowed : Bool, opaque : Str, header : Bool }
 
-State : { lines : List(AsciiDocPreprocess.Line), attributes : List(AsciiDocPreprocess.Attribute), context : Context }
+State : { lines : List(AsciiDocPreprocess.ScopedLine), attributes : AsciiDocSource.Store, context : Context }
 
-process : Str, Str, List(AsciiDocPreprocess.Attribute), AsciiDocPreprocess.Options, List(Str), U64 -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
+process : Str, Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64 -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
 process = |source, path, attributes, options, stack, depth| process_lines(source_lines(source), path, attributes, options, stack, depth, { definition_allowed: True, opaque: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
 
 SourceLine : { text : Str, line : U64, offset : U64 }
@@ -56,11 +86,12 @@ source_lines = |source| {
 	if (source.ends_with("\n")) $lines.drop_last(1) else $lines
 }
 
-process_lines : List(SourceLine), Str, List(AsciiDocPreprocess.Attribute), AsciiDocPreprocess.Options, List(Str), U64, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
+process_lines : List(SourceLine), Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
 process_lines = |input_lines, path, attributes, options, stack, depth, context| {
 	var $attributes = attributes
-	var $attribute_index = Dict.empty()
-	var $index_ready = False
+	var $snapshot_ready = False
+	var $snapshot_attrs = AsciiDocAttributes.flat([])
+
 	var $lines = []
 	var $conditions = []
 	var $continuation = ""
@@ -86,11 +117,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			negative = text.starts_with("ifndef::")
 			body = drop(text, if (negative) 8 else 7)
 			parts = directive(body)
-			if !$index_ready {
-				$attribute_index = index_attributes($attributes)
-				$index_ready = True
-			}
-			defined = condition(parts.target, $attribute_index)
+			defined = condition_source(parts.target, $attributes)
 			enabled = if (negative) !defined else defined
 			if parts.target != "" and parts.body == "" {
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
@@ -98,7 +125,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				if $opaque == "" and (!is_definition(parts.body) or $definition_allowed) {
 					nested = process_lines([{ text: parts.body, line: number, offset }], path, $attributes, options, stack, depth, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header })?
 					$attributes = nested.attributes
-					$index_ready = False
+					$snapshot_ready = False
 					$definition_allowed = nested.context.definition_allowed
 					$opaque = nested.context.opaque
 					$header = nested.context.header
@@ -106,7 +133,11 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						$lines = $lines.append(line)
 					}
 				} else {
-					$lines = $lines.append({ text: parts.body, attributes: $attributes, path, line: number, offset })
+					if !$snapshot_ready {
+						$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
+						$snapshot_ready = True
+					}
+					$lines = $lines.append({ text: parts.body, attributes: $snapshot_attrs, path, line: number, offset })
 				}
 			}
 		} else if text.starts_with("ifeval::") and complete_directive(text) {
@@ -116,15 +147,11 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				var $enabled = False
 				if active {
 					if expression.contains("{") {
-						if !$index_ready {
-							$attribute_index = index_attributes($attributes)
-							$index_ready = True
-						}
-						$enabled = evaluate_lookup(expression, $attributes, Indexed($attribute_index))
+						$enabled = evaluate_lookup(expression, [], Stored($attributes))
 					} else {
 						## Literal expressions never perform attribute lookups.
 						## Keep the reader index lazy for subsequent directives.
-						$enabled = evaluate_with(expression, $attributes)
+						$enabled = evaluate_with(expression, [])
 					}
 				}
 				$conditions = $conditions.append({ enabled: $enabled, target: "" })
@@ -145,12 +172,8 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 					$definition_text = text
 				}
 			} else if text.starts_with("include::") and complete_directive(text) {
-				if !$index_ready {
-					$attribute_index = index_attributes($attributes)
-					$index_ready = True
-				}
-				parsed = directive(expand_lookup(drop(text, 9), $attributes, Indexed($attribute_index), 0))
-				target = expand_lookup(parsed.target, $attributes, Indexed($attribute_index), 0)
+				parsed = directive(expand_lookup(drop(text, 9), [], Stored($attributes), 0))
+				target = expand_lookup(parsed.target, [], Stored($attributes), 0)
 				resolved = resolve(path, target)
 				found = if (options.expand_includes) options.includes.find_first(|entry| entry.path == resolved) else Err(NotFound)
 				match found {
@@ -162,19 +185,19 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
 						}
 						selected = select_lines(entry.source, parsed.body)
-						prepared = adjust_lines(selected.map(|line| { text: line.text, line: line.line, offset: line.offset, path: resolved, attributes: $attributes }), parsed.body)
-						previous_offset = $attributes.find_first(|a| a.name == "leveloffset")
+						prepared = adjust_lines(selected.map(|line| { text: line.text, line: line.line, offset: line.offset, path: resolved, attributes: AsciiDocAttributes.from_store($attributes) }), parsed.body)
+						previous_offset = AsciiDocSource.lookup($attributes, "leveloffset")
 						include_offset = option(parsed.body, "leveloffset")
-						base_offset = I64.from_str((previous_offset.map_ok(|a| a.value) ?? "0").replace_each("+", "")) ?? 0
+						base_offset = I64.from_str((previous_offset ?? "0").replace_each("+", "")) ?? 0
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
 						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
-						nested_attrs = if (include_offset == "") $attributes else $attributes.keep_if(|a| a.name != "leveloffset").append({ name: "leveloffset", value: effective_offset.to_str() })
+						nested_attrs = if (include_offset == "") $attributes else AsciiDocSource.set_parsed($attributes, "leveloffset", effective_offset.to_str())
 						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header })?
 						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
-							Ok(previous) => nested.attributes.keep_if(|a| a.name != "leveloffset").append(previous)
-							Err(_) => nested.attributes.keep_if(|a| a.name != "leveloffset")
+							Ok(previous) => AsciiDocSource.set_parsed(nested.attributes, "leveloffset", previous)
+							Err(_) => AsciiDocSource.unset_parsed(nested.attributes, "leveloffset")
 						}
-						$index_ready = False
+						$snapshot_ready = False
 						$definition_allowed = nested.context.definition_allowed
 						$opaque = nested.context.opaque
 						$header = nested.context.header
@@ -188,13 +211,21 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 							return Err(PreprocessError({ path, line: number, offset, message: Str.concat("virtual include not supplied: ", resolved) }))
 						}
 						if !options.expand_includes {
-							$lines = $lines.append({ text: Str.concat(Str.concat("link:", target), "[role=include]"), attributes: $attributes, path, line: number, offset })
+							if !$snapshot_ready {
+								$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
+								$snapshot_ready = True
+							}
+							$lines = $lines.append({ text: Str.concat(Str.concat("link:", target), "[role=include]"), attributes: $snapshot_attrs, path, line: number, offset })
 						}
 					}
 				}
 			} else {
 				emitted = if ((text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
-				$lines = $lines.append({ text: emitted, attributes: $attributes, path, line: number, offset })
+				if !$snapshot_ready {
+					$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
+					$snapshot_ready = True
+				}
+				$lines = $lines.append({ text: emitted, attributes: $snapshot_attrs, path, line: number, offset })
 				if $opaque == text {
 					$opaque = ""
 				}
@@ -210,38 +241,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			}
 		}
 		if $definition_text != "" {
-			if !$index_ready {
-				$attribute_index = index_attributes($attributes)
-			}
+			$snapshot_ready = False
 			parts = split_first(drop($definition_text, 1), ":")
 			unset = parts.before.starts_with("!") or parts.before.ends_with("!")
 			name = normalize_attribute_name(strip_suffix(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before, "!"))
-			revision_name = Str.concat("__revision:", name)
-			# Keep the mutable growing containers in this loop. Returning the
-			# Dict and attribute list through a helper forces backing-buffer
-			# copies on the pinned compiler, despite consuming the old values.
-			if !$attribute_index.contains(name) and !$attribute_index.contains(revision_name) {
-				value = if (unset) "" else definition_value(trim(parts.after), $attributes, $attribute_index)
-				if !unset {
-					$attribute_index = $attribute_index.insert(name, $attributes.len())
-					$attributes = $attributes.append({ name, value })
-				}
-				$attribute_index = $attribute_index.insert(revision_name, $attributes.len())
-				$attributes = $attributes.append({ name: revision_name, value: "1" })
-			} else if !unset and $attributes.len() >= 2 and $attribute_index.get(name) == Ok($attributes.len() - 2) and $attribute_index.get(revision_name) == Ok($attributes.len() - 1) {
-				## The most recently defined name already occupies the canonical
-				## remove-then-append position. Keep its stable index and replace
-				## only that final pair, retaining earlier per-line snapshots.
-				value = definition_value(trim(parts.after), $attributes, $attribute_index)
-				revision = U64.from_str(($attributes.last() ?? { name: "", value: "0" }).value) ?? 0
-				$attributes = $attributes.drop_last(2).append({ name, value }).append({ name: revision_name, value: (revision + 1).to_str() })
-			} else {
-				{ attributes: next_attributes, index: next_index } = define_indexed($definition_text, $attributes, $attribute_index, True)
-				$attributes = next_attributes
-				$attribute_index = next_index
-			}
-			$index_ready = True
+			value = if (unset) "" else AsciiDocInline.attribute_value_source(trim(parts.after), $attributes)
+			$attributes = AsciiDocSource.define_parsed($attributes, name, value, unset)
 		}
+
 		for line in $lines.drop_first(emitted_before) {
 			$expanded_size = $expanded_size + line.text.to_utf8().len() + 1
 		}
@@ -384,7 +391,7 @@ evaluate_with = |source, attributes| evaluate_lookup(source, attributes, FirstMa
 
 ## Reader lookups borrow the existing name index; standalone substitutions
 ## retain first-match semantics even for caller-provided duplicate names.
-AttributeLookup : [FirstMatch, Indexed(Dict(Str, U64))]
+AttributeLookup : [FirstMatch, Indexed(Dict(Str, U64)), Stored(AsciiDocSource.Store)]
 
 evaluate_lookup : Str, List(AsciiDocPreprocess.Attribute), AttributeLookup -> Bool
 evaluate_lookup = |source, attributes, lookup| {
@@ -721,6 +728,7 @@ expand_lookup = |source, attributes, lookup, depth| {
 
 lookup_attribute : List(AsciiDocPreprocess.Attribute), Str, AttributeLookup -> Try(AsciiDocPreprocess.Attribute, [NotFound])
 lookup_attribute = |attributes, name, lookup| match lookup {
+	Stored(store) => AsciiDocSource.lookup(store, name).map_ok(|value| { name, value }).map_err(|_| NotFound)
 	FirstMatch => find_attribute(attributes, name)
 	Indexed(index) => match index.get(name) {
 		Ok(position) => attributes.get(position).map_err(|_| NotFound)
@@ -795,7 +803,7 @@ trim = |source| {
 	while $end > $start and (bytes.get($end - 1) == Ok(' ') or bytes.get($end - 1) == Ok('\t')) {
 		$end = $end - 1
 	}
-	slice(source, $start, $end - $start)
+	if ($start == 0 and $end == bytes.len()) source else Str.from_utf8_lossy(bytes.sublist({ start: $start, len: $end - $start }))
 }
 
 lower : Str -> Str
@@ -943,7 +951,7 @@ bounded_selector_number = |integer, cap| {
 	if (number > cap) cap else number
 }
 
-adjust_lines : List(AsciiDocPreprocess.Line), Str -> List(AsciiDocPreprocess.Line)
+adjust_lines : List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 }), Str -> List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 })
 adjust_lines = |lines, options| {
 	indent_text = option(options, "indent")
 	indent = U64.from_str(indent_text) ?? 0
@@ -1155,62 +1163,7 @@ expect evaluate_with("\"{n}\" < \"2\"", [{ name: "n", value: "10" }])
 expect evaluate_with("{missing} == {missing2}", [])
 
 standard_attributes : List(AsciiDocPreprocess.Attribute)
-standard_attributes = [
-	{ name: "asciidoctor", value: "" },
-	{ name: "asciidoctor-version", value: "2.0.23" },
-	{ name: "backend", value: "html5" },
-	{ name: "backend-html5", value: "" },
-	{ name: "basebackend", value: "html" },
-	{ name: "basebackend-html", value: "" },
-	{ name: "backend-html5-doctype-article", value: "" },
-	{ name: "basebackend-html-doctype-article", value: "" },
-	{ name: "doctype", value: "article" },
-	{ name: "doctype-article", value: "" },
-	{ name: "filetype", value: "html" },
-	{ name: "filetype-html", value: "" },
-	{ name: "htmlsyntax", value: "html" },
-	{ name: "safe-mode-level", value: "20" },
-	{ name: "safe-mode-name", value: "secure" },
-	{ name: "safe-mode-secure", value: "" },
-	{ name: "docdate", value: "2000-01-01" },
-	{ name: "docyear", value: "2000" },
-	{ name: "doctime", value: "00:00:00 UTC" },
-	{ name: "docdatetime", value: "2000-01-01 00:00:00 UTC" },
-	{ name: "localdate", value: "2000-01-01" },
-	{ name: "localyear", value: "2000" },
-	{ name: "localtime", value: "00:00:00 UTC" },
-	{ name: "localdatetime", value: "2000-01-01 00:00:00 UTC" },
-	{ name: "docdir", value: "" },
-	{ name: "outdir", value: "." },
-	{ name: "user-home", value: "." },
-	{ name: "attribute-missing", value: "skip" },
-	{ name: "attribute-undefined", value: "drop-line" },
-	{ name: "outfilesuffix", value: ".html" },
-	{ name: "sectids", value: "" },
-	{ name: "prewrap", value: "" },
-	{ name: "embedded", value: "" },
-	{ name: "notitle", value: "" },
-	{ name: "toc-placement", value: "auto" },
-	{ name: "toc-title", value: "Table of Contents" },
-	{ name: "stylesdir", value: "." },
-	{ name: "iconsdir", value: "./images/icons" },
-	{ name: "appendix-caption", value: "Appendix" },
-	{ name: "appendix-refsig", value: "Appendix" },
-	{ name: "chapter-refsig", value: "Chapter" },
-	{ name: "part-refsig", value: "Part" },
-	{ name: "section-refsig", value: "Section" },
-	{ name: "example-caption", value: "Example" },
-	{ name: "figure-caption", value: "Figure" },
-	{ name: "table-caption", value: "Table" },
-	{ name: "note-caption", value: "Note" },
-	{ name: "tip-caption", value: "Tip" },
-	{ name: "important-caption", value: "Important" },
-	{ name: "warning-caption", value: "Warning" },
-	{ name: "caution-caption", value: "Caution" },
-	{ name: "untitled-label", value: "Untitled" },
-	{ name: "version-label", value: "Version" },
-	{ name: "last-update-label", value: "Last updated" },
-]
+standard_attributes = AsciiDocSource.standard
 
 expect match AsciiDocPreprocess.run("include::dir/a.adoc[]", { includes: [{ path: "dir/a.adoc", source: "include::../b.adoc[]" }, { path: "b.adoc", source: "nested" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "nested"
@@ -1332,7 +1285,21 @@ word_scalar = |scalar| {
 normalize_attribute_name : Str -> Str
 normalize_attribute_name = |source| {
 	bytes = source.to_utf8()
-	if bytes.all(|byte| byte < 128) {
+	var $ascii = True
+	var $canonical = True
+	for byte in bytes {
+		if byte >= 128 {
+			$ascii = False
+			break
+		}
+		if !((byte >= 'a' and byte <= 'z') or (byte >= '0' and byte <= '9') or byte == '_' or byte == '-') {
+			$canonical = False
+		}
+	}
+	if $ascii {
+		if $canonical {
+			return source
+		}
 		return Str.from_utf8_lossy(bytes.keep_if(|byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '_' or byte == '-').map(|byte| if (byte >= 'A' and byte <= 'Z') byte + 32 else byte))
 	}
 	var $bytes = []
@@ -1516,4 +1483,36 @@ expect {
 		Ok(result) => result.source == "indexed\n\nupdated"
 		_ => False
 	}
+}
+
+# A source snapshot is immutable after emission. Its exact canonical token is
+# computed lazily once, so a long header still appends definitions linearly.
+# NUL cannot occur in a legal AsciiDoc attribute name. Small snapshots retain
+# the ordinary representation and avoid indexing overhead.
+snapshot_attributes : List(AsciiDocPreprocess.Attribute) -> List(AsciiDocPreprocess.Attribute)
+snapshot_attributes = |attrs| {
+	if (attrs.len() < 64) attrs else AsciiDocAttributes.with_snapshot(attrs)
+}
+
+expect {
+	options = { ..AsciiDocPreprocess.defaults, attributes: [{ name: "seed", value: "first" }, { name: "seed", value: "last" }] }
+	source = "{seed}\n\n:value: one\n\n{value}\n\n:value!: \n\n:other: middle\n\n:value: two\n\n{value}"
+	match AsciiDocPreprocess.run_scoped(source, options) {
+		Ok(result) => {
+			lines = result.lines.keep_if(|line| line.text == "{seed}" or line.text == "{value}")
+			views = lines.map(|line| AsciiDocAttributes.indexed_attributes(line.attributes, AsciiDocAttributes.empty).view)
+			initial = views.get(0) ?? AsciiDocAttributes.indexed_attributes(AsciiDocAttributes.flat([]), AsciiDocAttributes.empty).view
+			last = views.last() ?? initial
+			values = lines.map(|line| AsciiDocAttributes.materialize(line.attributes))
+			(values.get(0) ?? []).any(|a| a.name == "seed" and a.value == "last") and !(values.get(0) ?? []).any(|a| a.name == "seed" and a.value == "first") and AsciiDocAttributes.lookup_first(last, "value") == Ok("two") and initial.key == last.key and last.generation > initial.generation and AsciiDocAttributes.materialize(result.attributes).keep_if(|a| ["other", "value", "__revision:value"].contains(a.name)) == [{ name: "other", value: "middle" }, { name: "value", value: "two" }, { name: "__revision:value", value: "3" }]
+		}
+		_ => False
+	}
+}
+
+expect {
+	source = "include::part.adoc[]"
+	base = { ..AsciiDocPreprocess.defaults, expand_includes: True, includes: [{ path: "part.adoc", source: "Body" }] }
+	changed = { ..base, includes: [{ path: "part.adoc", source: "Other" }] }
+	source_namespace(source, base) == source_namespace(source, base) and source_namespace(source, base) != source_namespace(source, changed) and source_namespace(source, base) != source_namespace("include::other.adoc[]", base) and source_namespace(source, base) != source_namespace(source, { ..base, attributes: [{ name: "a", value: "bc" }] }) and source_namespace(source, { ..base, attributes: [{ name: "a", value: "bc" }] }) != source_namespace(source, { ..base, attributes: [{ name: "ab", value: "c" }] })
 }

@@ -1,3 +1,6 @@
+import AsciiDocDict
+import AsciiDocSource
+import AsciiDocAttributes
 import unicode.GeneralCategory
 import unicode.Scalar
 
@@ -19,29 +22,25 @@ AsciiDocInline :: [].{
 	## specialcharacters and attributes; a whole-value pass macro chooses its
 	## own substitution list. Values are bounded as in the reference engine.
 	attribute_value : Str, List({ name : Str, value : Str }) -> Str
-	attribute_value = |source, attrs| {
-		value = if source.starts_with("pass:") and source.ends_with("]") {
-			match find(source, "[", 5) {
-				Ok(open) => {
-					subs = slice(source, 5, open - 5)
-					body = slice(source, open + 1, source.to_utf8().len() - open - 2)
-					if (subs == "") body else render_with(body, attrs, { subs: subs })
-				}
-				Err(_) => render_with(escape(source), attrs, { subs: "attributes" })
+	attribute_value = |source, attrs| attribute_value_using(source, attrs, Err(Missing))
+
+	## Definition-time source reads reuse the immutable persistent index.
+	attribute_value_source : Str, AsciiDocSource.Store -> Str
+	attribute_value_source = |source, store| {
+		match simple_stored_reference(source, store) {
+			Ok(value) => bounded_attribute(value)
+			Err(_) => {
+				key = AsciiDocSource.key(store)
+				attribute_value_using(source, [], Ok({ first: AsciiDocSource.index(store), token: key.namespace, generation: key.generation, prefix: AsciiDocSource.prefix(store), before: [], after: [] }))
 			}
-		} else if !source.contains("{") {
-			escape(source)
-		} else {
-			render_with(escape(source), attrs, { subs: "attributes" })
 		}
-		bounded_attribute(value)
 	}
 
-	State : { emitted_footnotes : List(U64), footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, attributes : Dict(Str, Str), removed : Dict(Str, Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str), tag_prefix : Str }
+	State : { snapshot_before : List({ name : Str, value : Str }), snapshot_after : List({ name : Str, value : Str }), trusted_snapshot_generation : U64, trusted_snapshot_token : Str, dynamic_tags_possible : Bool, emitted_footnotes : List(U64), footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, attributes : AsciiDocDict.Map(Str), removed : AsciiDocDict.Map(Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : AsciiDocSource.Index, tag_prefix : Str }
 
 	## Start a new document; reuse the returned state between its blocks.
 	initial_state : State
-	initial_state = { emitted_footnotes: [], footnotes: [], note_index: Dict.empty(), indexed_note_count: 0, refs: [], ref_index: Dict.empty(), indexed_ref_count: 0, attributes: Dict.empty(), removed: Dict.empty(), snapshot: [], snapshot_index: Dict.empty(), tag_prefix: "\u(1)" }
+	initial_state = { snapshot_before: [], snapshot_after: [], trusted_snapshot_generation: 0, trusted_snapshot_token: "", dynamic_tags_possible: True, emitted_footnotes: [], footnotes: [], note_index: Dict.empty(), indexed_note_count: 0, refs: [], ref_index: Dict.empty(), indexed_ref_count: 0, attributes: AsciiDocDict.empty(), removed: AsciiDocDict.empty(), snapshot: [], snapshot_index: AsciiDocSource.from_dict(Dict.empty()), tag_prefix: "\u(1)" }
 
 	## Replace the reference registry and build its lookup index once.
 	with_refs : State, List({ id : Str, text : Str }) -> State
@@ -52,113 +51,417 @@ AsciiDocInline :: [].{
 
 	## Carry footnote numbering and references across blocks in document order.
 	render_state : Str, List({ name : Str, value : Str }), { subs : Str }, State -> { html : Str, state : State }
-	render_state = |input, attrs, options, state| {
-		# The common pipeline retains its fused scanner. Explicit selections
-		# use the engine's ordered substitution list, including modifiers.
-		if options.subs == "normal" or options.subs == "n" {
-			return render_state_fixed(input, attrs, options, state, False)
-		}
-		# Header attributes follow special characters, so inserted attribute
-		# values must not be escaped again. This pair needs one state pass.
-		if options.subs == "specialcharacters,attributes" {
-			return render_state_fixed(escape(input), attrs, { subs: "attributes" }, state, True)
-		}
-		stages = substitution_stages(options.subs)
-		if stages == normal_stages {
-			return render_state_fixed(input, attrs, { subs: "normal" }, state, False)
-		}
-		render_ordered(input, attrs, stages, state)
+	render_state = |input, attrs, options, state| render_dispatch(input, attrs, options, state, Err(Missing))
+
+	## Internal document-renderer bridge. The caller supplies the complete
+	## first-winner semantic index and an exact, stable snapshot token.
+	render_indexed_state : Str, List({ name : Str, value : Str }), { subs : Str }, State, { first : Dict(Str, Str), token : Str, prefix : Str } -> { html : Str, state : State }
+	render_indexed_state = |input, attrs, options, state, index| {
+		{ html, state: next } = render_dispatch(input, attrs, options, state, Ok({ first: AsciiDocSource.from_dict(index.first), token: index.token, generation: 0, prefix: index.prefix, before: [], after: [] }))
+		# Shared recursive stages always receive these same semantic bindings.
+		# Legacy nested calls deliberately invalidate their own trusted token.
+		{ html, state: { ..next, trusted_snapshot_generation: 0, trusted_snapshot_token: index.token } }
 	}
+
+	## Internal layered source entry. Base and local overlays stay immutable;
+	## no combined binding list or dictionary is required for each block.
+	render_layered_state : Str, List({ name : Str, value : Str }), { subs : Str }, State, { first : Dict(Str, Str), token : Str, prefix : Str, before : List({ name : Str, value : Str }), after : List({ name : Str, value : Str }) } -> { html : Str, state : State }
+	render_layered_state = |input, attrs, options, state, index| {
+		{ html, state: next } = render_dispatch(input, attrs, options, state, Ok({ first: AsciiDocSource.from_dict(index.first), token: index.token, generation: 0, prefix: index.prefix, before: index.before, after: index.after }))
+		{ html, state: { ..next, trusted_snapshot_generation: 0, trusted_snapshot_token: index.token } }
+	}
+
+	## Parsed source readers carry the persistent index directly; source
+	## identity includes both the exact input namespace and update generation.
+	render_source_state : Str, List({ name : Str, value : Str }), { subs : Str }, State, { first : AsciiDocSource.Index, token : Str, generation : U64, prefix : Str, before : List({ name : Str, value : Str }), after : List({ name : Str, value : Str }) } -> { html : Str, state : State }
+	render_source_state = |input, attrs, options, state, index| {
+		{ html, state: next } = render_dispatch(input, attrs, options, state, Ok(index))
+		{ html, state: { ..next, trusted_snapshot_token: index.token, trusted_snapshot_generation: index.generation } }
+	}
+
+	## Stateless normal rendering for table captions and other scoped readers.
+	render_view : Str, AsciiDocAttributes.View -> Str
+	render_view = |input, view| {
+		if input == "" {
+			return ""
+		}
+		if view.indexed {
+			render_source_state(input, view.semantic, { subs: "normal" }, initial_state, { first: view.first, token: view.key, generation: view.generation, prefix: view.prefix, before: view.before, after: view.after }).html
+		} else {
+			render(input, view.semantic)
+		}
+	}
+}
+
+SourceHint : Try({ first : AsciiDocSource.Index, token : Str, generation : U64, prefix : Str, before : List({ name : Str, value : Str }), after : List({ name : Str, value : Str }) }, [Missing])
+
+# Definition-time only: an exact ordinary reference to an inert stored leaf
+# cannot escape, extract passes, mutate counters or introduce private slots.
+# Unknown/builtin fallback and every unproved spelling keep the canonical path.
+simple_stored_reference : Str, AsciiDocSource.Store -> Try(Str, [Missing])
+simple_stored_reference = |source, store| {
+	bytes = source.to_utf8()
+	if bytes.len() < 3 or bytes.get(0) != Ok('{') or bytes.last() != Ok('}') {
+		return Err(Missing)
+	}
+	name_bytes = bytes.sublist({ start: 1, len: bytes.len() - 2 })
+	first = name_bytes.first() ?? 0
+	if !((first >= 'a' and first <= 'z') or first == '_') {
+		return Err(Missing)
+	}
+	if !name_bytes.all(|b| (b >= 'a' and b <= 'z') or (b >= '0' and b <= '9') or b == '_' or b == '-' or b == '.') {
+		return Err(Missing)
+	}
+	name = Str.from_utf8_lossy(name_bytes)
+	match AsciiDocSource.lookup(store, name) {
+		Ok(value) => {
+			# Bound speculative work; longer leaves use the canonical engine.
+			if value.count_utf8_bytes() > 256 {
+				Err(Missing)
+			} else if value.to_utf8().all(inert_attribute_byte) {
+				Ok(value)
+			} else {
+				Err(Missing)
+			}
+		}
+		Err(_) => Err(Missing)
+	}
+}
+
+# Deliberately narrow. Unicode literal bytes are unchanged by attribute-only
+# substitution; ASCII controls, quotes/passes/macros/entities and escapes fall
+# back. The full result still passes through the existing UTF8-aware cap.
+inert_attribute_byte : U8 -> Bool
+inert_attribute_byte = |b| b >= 128 or (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == ' ' or b == '_' or b == '-' or b == '.' or b == '/'
+
+attribute_value_using : Str, List({ name : Str, value : Str }), SourceHint -> Str
+attribute_value_using = |source, attrs, hint| {
+	value = if source.starts_with("pass:") and source.ends_with("]") {
+		match find(source, "[", 5) {
+			Ok(open) => {
+				subs = slice(source, 5, open - 5)
+				body = slice(source, open + 1, source.to_utf8().len() - open - 2)
+				if (subs == "") body else render_dispatch(body, attrs, { subs: subs }, AsciiDocInline.initial_state, hint).html
+			}
+			Err(_) => render_dispatch(escape(source), attrs, { subs: "attributes" }, AsciiDocInline.initial_state, hint).html
+		}
+	} else if !source.contains("{") {
+		escape(source)
+	} else {
+		render_dispatch(escape(source), attrs, { subs: "attributes" }, AsciiDocInline.initial_state, hint).html
+	}
+	bounded_attribute(value)
+}
+
+hint_token : SourceHint -> Str
+hint_token = |hint| match hint {
+	Ok(index) => index.token
+	Err(_) => ""
+}
+
+hint_generation : SourceHint -> U64
+hint_generation = |hint| match hint {
+	Ok(index) => index.generation
+	Err(_) => 0
+}
+
+hint_prefix : SourceHint -> Str
+hint_prefix = |hint| match hint {
+	Ok(index) => index.prefix
+	Err(_) => ""
+}
+
+hint_before : SourceHint -> List({ name : Str, value : Str })
+hint_before = |hint| match hint {
+	Ok(index) => index.before
+	Err(_) => []
+}
+
+hint_after : SourceHint -> List({ name : Str, value : Str })
+hint_after = |hint| match hint {
+	Ok(index) => index.after
+	Err(_) => []
+}
+
+# Only immutable source metadata enters this hint, never owned registries.
+context_hint : RenderContext -> SourceHint
+context_hint = |context| {
+	if !AsciiDocSource.is_persistent(context.snapshot_index) and context.trusted_snapshot_token == "" and context.snapshot_before.is_empty() and context.snapshot_after.is_empty() {
+		Err(Missing)
+	} else {
+		Ok({ first: context.snapshot_index, token: context.trusted_snapshot_token, generation: context.trusted_snapshot_generation, prefix: context.source_prefix, before: context.snapshot_before, after: context.snapshot_after })
+	}
+}
+
+# FIRST source precedence is leading metadata, base bindings, then trailing
+# metadata. Synthetic scanner bindings follow all three source layers.
+source_value : List({ name : Str, value : Str }), AsciiDocSource.Index, List({ name : Str, value : Str }), List({ name : Str, value : Str }), Str -> Try(Str, [Missing])
+source_value = |source, index, before, after, name| {
+	match direct(before, name) {
+		Ok(value) => Ok(value)
+		Err(_) => match (if (index.is_empty()) direct(source, name) else index.get(name).map_err(|_| Missing)) {
+			Ok(value) => Ok(value)
+			Err(_) => direct(after, name)
+		}
+	}
+}
+
+render_dispatch : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, SourceHint -> { html : Str, state : AsciiDocInline.State }
+render_dispatch = |input, attrs, options, state, hint| {
+	# The common pipeline retains its fused scanner. Explicit selections
+	# use the engine's ordered substitution list, including modifiers.
+	if options.subs == "normal" or options.subs == "n" {
+		return render_state_indexed(input, attrs, options, state, False, hint)
+	}
+	# Header attributes follow special characters, so inserted attribute
+	# values must not be escaped again. This pair needs one state pass.
+	if options.subs == "specialcharacters,attributes" {
+		return render_state_indexed(escape(input), attrs, { subs: "attributes" }, state, True, hint)
+	}
+	stages = substitution_stages(options.subs)
+	if stages == normal_stages {
+		return render_state_indexed(input, attrs, { subs: "normal" }, state, False, hint)
+	}
+	# A lone stage without pass extraction has no outer quote/tag work.
+	# Dispatch here so no ordered-pipeline State frame surrounds mutation.
+	if stages.len() == 1 and !(stages.contains("macros") and quote_needed(input, { ..empty, macros: True })) {
+		return render_state_indexed(input, attrs, { subs: stages.first() ?? "none" }, state, True, hint)
+	}
+	render_ordered_indexed(input, attrs, stages, state, hint)
 }
 
 # Experimental ownership boundary: formatting/reference context cannot retain
 # the dynamic dictionaries or note collections owned by the mutation phases.
-RenderContext : { emitted_footnotes : List(U64), refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str) }
+RenderContext : { snapshot_before : List({ name : Str, value : Str }), snapshot_after : List({ name : Str, value : Str }), source_prefix : Str, trusted_snapshot_generation : U64, trusted_snapshot_token : Str, dynamic_tags_possible : Bool, emitted_footnotes : List(U64), refs : List({ id : Str, text : Str }), ref_index : Dict(Str, Str), indexed_ref_count : U64, snapshot : List({ name : Str, value : Str }), snapshot_index : AsciiDocSource.Index }
 
-assemble_state : RenderContext, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> AsciiDocInline.State
+# Macro scanners borrow bindings without enumerating the document's counters.
+# Appended synthetic bindings follow all existing effective source bindings.
+AttributeView : { source_before : List({ name : Str, value : Str }), source_after : List({ name : Str, value : Str }), source_prefix : Str, dynamic_tags_possible : Bool, source : List({ name : Str, value : Str }), source_index : AsciiDocSource.Index, appended : List({ name : Str, value : Str }), values : AsciiDocDict.Map(Str), removed : AsciiDocDict.Map(Bool), prefix : Str }
+
+static_view : List({ name : Str, value : Str }) -> AttributeView
+static_view = |attrs| { source_before: [], source_after: [], source_prefix: "", dynamic_tags_possible: False, source: attrs, source_index: AsciiDocSource.from_dict(Dict.empty()), appended: [], values: AsciiDocDict.empty(), removed: AsciiDocDict.empty(), prefix: "\u(1)" }
+
+append_view : AttributeView, List({ name : Str, value : Str }) -> AttributeView
+append_view = |view, attrs| { ..view, appended: view.appended.concat(attrs) }
+
+lookup_view : AttributeView, Str -> Try(Str, [Missing])
+lookup_view = |view, key| {
+	match view.values.get(key) {
+		Ok(value) => Ok(value)
+		Err(_) => {
+			original = if (view.removed.contains(key)) Err(Missing) else source_value(view.source, view.source_index, view.source_before, view.source_after, key)
+			match original {
+				Ok(value) => Ok(value)
+				Err(_) => match direct(view.appended, key) {
+					Ok(value) => Ok(value)
+					Err(_) => lookup([], key)
+				}
+			}
+		}
+	}
+}
+
+materialize_view : AttributeView -> List({ name : Str, value : Str })
+materialize_view = |view| merged_attributes(view.source_before.concat(AsciiDocSource.semantic(view.source_index, view.source)).concat(view.source_after), view.values, view.removed).concat(view.appended)
+
+# Immediate passthroughs have isolated writes, as render_with did previously.
+# Sharing the read-only Dict is cheap; a child mutation deliberately copies it.
+# Filter only bounded source bindings, not the growing dynamic registry.
+render_with_view : Str, AttributeView, { subs : Str } -> Str
+render_with_view = |input, view, options| {
+	stages = substitution_stages(options.subs)
+	if stages.len() == 1 {
+		stage = stages.first() ?? "none"
+		if stage == "quotes" or stage == "specialcharacters" or stage == "replacements" or stage == "post_replacements" {
+			# These stages cannot mutate attributes, notes or references. Their
+			# scanner already performs exactly one prepared substitution stage.
+			return scan_view(input, view, groups(stage), 0)
+		}
+	}
+	certificate = view_certificate(view)
+	reader = AsciiDocSource.from_view({ first: view.source_index, source: view.source, before: view.source_before, after: view.source_after, values: view.values, removed: view.removed, appended: view.appended, prefix: certificate, dynamic_tags_possible: view.dynamic_tags_possible })
+	render_dispatch(input, [], options, AsciiDocInline.initial_state, Ok({ first: reader, token: "", generation: 0, prefix: certificate, before: [], after: [] })).html
+}
+
+view_certificate : AttributeView -> Str
+view_certificate = |view| {
+	var $prefix = view.source_prefix
+	if $prefix == "" {
+		$prefix = AsciiDocSource.certificate(view.source_index)
+		if $prefix == "" {
+			$prefix = layered_delimiter("", view.source, view.source_before, view.source_after, "")
+		} else {
+			while view.source_before.any(|attr| attr.value.contains($prefix)) or view.source_after.any(|attr| attr.value.contains($prefix)) {
+				$prefix = $prefix.concat("\u(1)")
+			}
+		}
+	}
+	known_dynamic = !view.dynamic_tags_possible and view.prefix != "" and view.prefix.to_utf8().all(|byte| byte == 1)
+	if known_dynamic {
+		if view.prefix.count_utf8_bytes() > $prefix.count_utf8_bytes() {
+			$prefix = view.prefix
+		}
+	} else {
+		for (_, value) in view.values.to_list() {
+			while value.contains($prefix) {
+				$prefix = $prefix.concat("\u(1)")
+			}
+		}
+	}
+	while view.appended.any(|attr| attr.value.contains($prefix)) {
+		$prefix = $prefix.concat("\u(1)")
+	}
+	$prefix
+}
+
+assemble_state : RenderContext, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> AsciiDocInline.State
 assemble_state = |context, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count| {
-	{ emitted_footnotes: context.emitted_footnotes, refs: context.refs, ref_index: context.ref_index, indexed_ref_count: context.indexed_ref_count, snapshot: context.snapshot, snapshot_index: context.snapshot_index, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count }
+	{ snapshot_before: context.snapshot_before, snapshot_after: context.snapshot_after, trusted_snapshot_generation: context.trusted_snapshot_generation, trusted_snapshot_token: context.trusted_snapshot_token, dynamic_tags_possible: context.dynamic_tags_possible, emitted_footnotes: context.emitted_footnotes, refs: context.refs, ref_index: context.ref_index, indexed_ref_count: context.indexed_ref_count, snapshot: context.snapshot, snapshot_index: context.snapshot_index, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count }
 }
 
 render_state_fixed : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
-render_state_fixed = |input, attrs, options, state, prepared| {
-	# Explicit substitution stages and passthroughs retain their existing path.
-	# The common normal pipeline owns each growing collection independently.
-	if prepared or (options.subs != "normal" and options.subs != "n") {
-		render_state_conservative(input, attrs, options, state, prepared)
-	} else if !needs_substitutions(input, normal) {
-		# Plain input still updates source snapshots and caller-supplied refs,
-		# without paying the passthrough eligibility scans.
-		render_plain_normal(input, attrs, state)
-	} else if pass_needed(input, normal) {
-		render_state_conservative(input, attrs, options, state, prepared)
+render_state_fixed = |input, attrs, options, state, prepared| render_state_indexed(input, attrs, options, state, prepared, Err(Missing))
+
+render_state_indexed : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool, SourceHint -> { html : Str, state : AsciiDocInline.State }
+render_state_indexed = |input, attrs, options, state, prepared, hint| {
+	selected = if (options.subs == "normal" or options.subs == "n") normal else groups(options.subs)
+	if !needs_substitutions(input, selected) {
+		# Plain input still updates source snapshots and caller-supplied refs.
+		render_plain_indexed(input, attrs, state, hint)
 	} else {
-		render_normal_owned(input, attrs, state)
+		render_fixed_owned(input, attrs, selected, prepared, state, hint)
 	}
 }
 
-render_plain_normal : Str, List({ name : Str, value : Str }), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
-render_plain_normal = |input, attrs, state| {
+render_plain_indexed : Str, List({ name : Str, value : Str }), AsciiDocInline.State, SourceHint -> { html : Str, state : AsciiDocInline.State }
+render_plain_indexed = |input, attrs, state, hint| {
 	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
-	{ html: input, state: refresh_state(attrs, indexed) }
+	{ html: input, state: refresh_state_indexed(attrs, indexed, hint) }
 }
 
-# The caller has checked that substitutions are needed and source passthroughs
-# are absent. Keep registry ownership within this path through mutation.
-render_normal_owned : Str, List({ name : Str, value : Str }), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
-render_normal_owned = |input, attrs, state| {
-	{ attributes: incoming_attributes, removed: incoming_removed, tag_prefix: incoming_prefix, footnotes: incoming_notes, note_index: incoming_names, indexed_note_count: incoming_note_count, emitted_footnotes, refs, ref_index: incoming_refs, indexed_ref_count, snapshot: incoming_snapshot, snapshot_index: incoming_snapshot_index } = state
-	{ attributes, removed, snapshot, snapshot_index } = refresh_owned_attributes(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_snapshot_index)
+# All fixed substitution selections use the same independently owned phases.
+# Explicit stage order is supplied by render_ordered; prepared stages suppress
+# early macro extraction exactly as in the canonical pipeline.
+render_fixed_owned : Str, List({ name : Str, value : Str }), Groups, Bool, AsciiDocInline.State, SourceHint -> { html : Str, state : AsciiDocInline.State }
+render_fixed_owned = |input, attrs, selected, prepared, state, hint| {
+	{ snapshot_before: incoming_before, snapshot_after: incoming_after, trusted_snapshot_generation, trusted_snapshot_token, dynamic_tags_possible, attributes: incoming_attributes, removed: incoming_removed, tag_prefix: incoming_prefix, footnotes: incoming_notes, note_index: incoming_names, indexed_note_count: incoming_note_count, emitted_footnotes, refs, ref_index: incoming_refs, indexed_ref_count, snapshot: incoming_snapshot, snapshot_index: incoming_snapshot_index } = state
+	{ attributes, removed, snapshot, snapshot_index: cached_index, snapshot_before, snapshot_after } = refresh_hint(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_snapshot_index, incoming_before, incoming_after, trusted_snapshot_token, trusted_snapshot_generation, hint)
+	snapshot_index = if (cached_index.is_empty() and selected.macros and macro_candidate(input)) AsciiDocSource.from_dict(source_attribute_index(attrs)) else cached_index
 	ref_index = if (indexed_ref_count == refs.len()) incoming_refs else refs.fold(Dict.empty(), |found, ref| if (found.contains(ref.id)) found else found.insert(ref.id, ref.text))
-	context = { emitted_footnotes, refs, ref_index, indexed_ref_count: refs.len(), snapshot, snapshot_index }
-	g = { ..normal, ref_index }
+	context = { snapshot_before, snapshot_after, source_prefix: hint_prefix(hint), trusted_snapshot_generation: hint_generation(hint), trusted_snapshot_token: hint_token(hint), dynamic_tags_possible: dynamic_tags_possible and !attributes.is_empty(), emitted_footnotes, refs, ref_index, indexed_ref_count: refs.len(), snapshot, snapshot_index }
+	g = { ..selected, ref_index }
 	prior_notes = incoming_notes.len()
-	# pass_needed was checked before entering this path. Ordinary formatting
-	# reads the cached delimiter alone; it never borrows a registry container.
-	before = if (quote_needed(input, g)) quote_prefixed(input, attrs, g, incoming_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
+	quote_groups = if (prepared) { ..g, macros: False } else g
+	before = if ((g.quotes or g.macros) and !g.attr_quotes and quote_needed(input, quote_groups)) quote_owned(input, attrs, snapshot_index, hint, dynamic_tags_possible, quote_groups, attributes, removed, incoming_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
 	{ source: mutated_source, context: mutated_context, attributes: mutated_attributes, removed: mutated_removed, tag_prefix, footnotes: mutated_notes, note_index: mutated_names, indexed_note_count: mutated_note_count, tags: mutated_tags, prefix: mutated_prefix } = mutate_owned_attributes(before.source, attrs, g, attributes, removed, incoming_prefix, incoming_notes, incoming_names, incoming_note_count, context, before.prefix, before.tags)
-	if mutated_tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutated_source, { ..g, quotes: False, attributes: False }) {
+	if !g.attr_quotes and mutated_tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutated_source, { ..g, quotes: False, attributes: False }) {
 		return { html: mutated_source, state: assemble_state(mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count) }
 	}
-	quotes = { source: mutated_source, prefix: mutated_prefix, tags: mutated_tags, deferred: before.deferred }
-	quoted = if (quotes.prefix == "" and quotes.source.contains("footnote:")) { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
+	quotes = if (g.quotes and g.attr_quotes) quote_owned(mutated_source, attrs, mutated_context.snapshot_index, hint, mutated_context.dynamic_tags_possible, g, mutated_attributes, mutated_removed, tag_prefix) else { source: mutated_source, prefix: mutated_prefix, tags: mutated_tags, deferred: before.deferred }
+	quoted = if (g.macros and quotes.prefix == "" and quotes.source.contains("footnote:")) { ..quotes, prefix: layered_delimiter(quotes.source, attrs, hint_before(hint), hint_after(hint), hint_prefix(hint)) } else quotes
 	scan_groups = { ..g, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = (if (macro_candidate(quoted.source)) merged_attributes(attrs, mutated_attributes, mutated_removed) else attrs).concat(if (quoted.source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
-	if !quoted.source.contains("footnote:") {
-		return finish_owned_normal(scan(quoted.source, reference_attrs, scan_groups, 0), attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, mutated_notes, mutated_names, mutated_note_count, quoted, prior_notes)
-	}
-	notes_start = mutated_notes.len()
-	{ html, footnotes, note_index, indexed_note_count: note_count, tags } = render_owned_notes(quoted.source, reference_attrs, scan_groups, quoted, mutated_notes, mutated_names, mutated_note_count)
-	finish_owned_normal(html, attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, footnotes, note_index, note_count, { ..quoted, tags }, notes_start)
+	{ html, footnotes, note_index, indexed_note_count: note_count, tags, notes_start } = render_read_phase(quoted.source, attrs, mutated_context.snapshot_index, hint, mutated_context.dynamic_tags_possible, mutated_attributes, mutated_removed, tag_prefix, scan_groups, quoted, mutated_notes, mutated_names, mutated_note_count, prior_notes)
+	finish_owned(html, attrs, mutated_context, mutated_attributes, mutated_removed, tag_prefix, footnotes, note_index, note_count, { ..quoted, tags }, notes_start)
 }
 
-# Reconcile only the attribute dictionaries and source snapshots. No footnote
-# or reference registry is available to this helper, even as an aggregate alias.
-refresh_owned_attributes : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool), List({ name : Str, value : Str }), Dict(Str, Str) -> { attributes : Dict(Str, Str), removed : Dict(Str, Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : Dict(Str, Str) }
-refresh_owned_attributes = |attrs, attributes, removed, snapshot, snapshot_index| {
-	if attributes.is_empty() and removed.is_empty() {
-		return { attributes, removed, snapshot: attrs, snapshot_index: Dict.empty() }
+# End the borrowed attribute view before deferred substitutions can mutate
+# the document dictionaries. Note registries remain independently owned.
+render_read_phase : Str, List({ name : Str, value : Str }), AsciiDocSource.Index, SourceHint, Bool, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str, Groups, QuoteResult, List({ name : Str, text : Str }), Dict(Str, U64), U64, U64 -> { html : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str), notes_start : U64 }
+render_read_phase = |source, attrs, source_index, hint, dynamic_tags_possible, attributes, removed, tag_prefix, g, quoted, notes, names, indexed_note_count, prior_notes| {
+	reference_attrs = { source_before: hint_before(hint), source_after: hint_after(hint), source_prefix: hint_prefix(hint), dynamic_tags_possible, source: attrs, source_index, appended: if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [], values: attributes, removed, prefix: tag_prefix }
+	if !g.macros or !source.contains("footnote:") {
+		return { html: scan_view_context(source, reference_attrs, g, 0, { prefix: quoted.prefix, tags: quoted.tags }), footnotes: notes, note_index: names, indexed_note_count, tags: quoted.tags, notes_start: prior_notes }
 	}
-	if attrs == snapshot {
-		return { attributes, removed, snapshot, snapshot_index }
+	notes_start = notes.len()
+	{ html, footnotes, note_index, indexed_note_count: note_count, tags } = render_owned_notes(source, reference_attrs, g, quoted, notes, names, indexed_note_count)
+	{ html, footnotes, note_index, indexed_note_count: note_count, tags, notes_start }
+}
+
+RefreshResult : { attributes : AsciiDocDict.Map(Str), removed : AsciiDocDict.Map(Bool), snapshot : List({ name : Str, value : Str }), snapshot_index : AsciiDocSource.Index, snapshot_before : List({ name : Str, value : Str }), snapshot_after : List({ name : Str, value : Str }) }
+
+# Base token equality and exact small overlay equality certify the effective
+# snapshot without comparing or materializing its full binding list.
+refresh_hint : List({ name : Str, value : Str }), AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), List({ name : Str, value : Str }), AsciiDocSource.Index, List({ name : Str, value : Str }), List({ name : Str, value : Str }), Str, U64, SourceHint -> RefreshResult
+refresh_hint = |attrs, attributes, removed, snapshot, snapshot_index, before, after, trusted_snapshot_token, trusted_snapshot_generation, hint| {
+	match hint {
+		Err(_) => refresh_owned_attributes(attrs, attributes, removed, snapshot, snapshot_index, before, after)
+		Ok(index) => {
+			# Parsed identity is trusted only on the canonical processor lineage.
+			# Ordinary Store updates can fork at the same namespace/generation.
+			identity_safe = if (AsciiDocSource.is_persistent(index.first) or AsciiDocSource.is_persistent(snapshot_index)) AsciiDocSource.trusted_history(index.first) and AsciiDocSource.trusted_history(snapshot_index) else True
+			base_same = identity_safe and index.token != "" and index.token == trusted_snapshot_token and index.generation == trusted_snapshot_generation
+			if (base_same and index.before == before and index.after == after) or (attributes.is_empty() and removed.is_empty()) {
+				return { attributes, removed, snapshot: attrs, snapshot_index: index.first, snapshot_before: index.before, snapshot_after: index.after }
+			}
+			previous = if (snapshot_index.is_empty() and !AsciiDocSource.is_persistent(snapshot_index)) AsciiDocSource.from_dict(source_attribute_index(snapshot)) else snapshot_index
+			# Source deltas include raw names and revision aliases. Local overlays
+			# must retain both too: a reserved revision name can itself be live.
+			overlay_names = [before, after, index.before, index.after].fold([], |found, part| part.fold(found, |names, attr| if (attr.name.starts_with("__revision:")) names.append(attr.name).append(drop(attr.name, 11)) else names.append(attr.name)))
+			names = if base_same {
+				overlay_names
+			} else match AsciiDocSource.changed_names(previous, index.first) {
+				Ok(changed) => changed.concat(overlay_names)
+				Err(_) => attributes.keys().concat(removed.keys())
+			}
+			var $attributes = attributes
+			var $removed = removed
+			for name in names {
+				if $attributes.contains(name) or $removed.contains(name) {
+					old = source_value(snapshot, previous, before, after, name)
+					next = source_value(attrs, index.first, index.before, index.after, name)
+					old_revision = source_value(snapshot, previous, before, after, "__revision:${name}")
+					next_revision = source_value(attrs, index.first, index.before, index.after, "__revision:${name}")
+					if next != old or next_revision != old_revision {
+						$attributes = $attributes.remove(name)
+						$removed = $removed.remove(name)
+					}
+				}
+			}
+			{ attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: index.first, snapshot_before: index.before, snapshot_after: index.after }
+		}
 	}
-	next = source_attribute_index(attrs)
-	previous = if (snapshot_index.is_empty()) source_attribute_index(snapshot) else snapshot_index
+}
+
+# Legacy/manual calls have a full flat input list and empty new overlays.
+# Prior layered metadata still participates in exact reset semantics.
+refresh_owned_attributes : List({ name : Str, value : Str }), AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), List({ name : Str, value : Str }), AsciiDocSource.Index, List({ name : Str, value : Str }), List({ name : Str, value : Str }) -> RefreshResult
+refresh_owned_attributes = |attrs, attributes, removed, snapshot, snapshot_index, before, after| {
+	if !AsciiDocSource.is_persistent(snapshot_index) and before.is_empty() and after.is_empty() {
+		if attributes.is_empty() and removed.is_empty() {
+			return { attributes, removed, snapshot: attrs, snapshot_index: if (!snapshot_index.is_empty() and attrs == snapshot) snapshot_index else AsciiDocSource.from_dict(Dict.empty()), snapshot_before: [], snapshot_after: [] }
+		}
+		if attrs == snapshot {
+			return { attributes, removed, snapshot, snapshot_index, snapshot_before: [], snapshot_after: [] }
+		}
+	} else if attributes.is_empty() and removed.is_empty() {
+		return { attributes, removed, snapshot: attrs, snapshot_index: AsciiDocSource.from_dict(Dict.empty()), snapshot_before: [], snapshot_after: [] }
+	}
+	next = AsciiDocSource.from_dict(source_attribute_index(attrs))
+	previous = if (snapshot_index.is_empty()) AsciiDocSource.from_dict(source_attribute_index(snapshot)) else snapshot_index
 	var $attributes = attributes
 	var $removed = removed
-	for source in [snapshot, attrs] {
+	if AsciiDocSource.is_persistent(previous) {
+		for name in attributes.keys().concat(removed.keys()) {
+			if next.get(name) != source_value(snapshot, previous, before, after, name) or next.get("__revision:${name}") != source_value(snapshot, previous, before, after, "__revision:${name}") {
+				$attributes = $attributes.remove(name)
+				$removed = $removed.remove(name)
+			}
+		}
+		return { attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next, snapshot_before: [], snapshot_after: [] }
+	}
+	for source in [before, snapshot, after, attrs] {
 		for attr in source {
 			name = if (attr.name.starts_with("__revision:")) drop(attr.name, 11) else attr.name
-			if next.get(name) != previous.get(name) or next.get("__revision:${name}") != previous.get("__revision:${name}") {
+			if next.get(name).map_err(|_| Missing) != source_value(snapshot, previous, before, after, name) or next.get("__revision:${name}").map_err(|_| Missing) != source_value(snapshot, previous, before, after, "__revision:${name}") {
 				$attributes = $attributes.remove(name)
 				$removed = $removed.remove(name)
 			}
 		}
 	}
-	{ attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next }
+	{ attributes: $attributes, removed: $removed, snapshot: attrs, snapshot_index: next, snapshot_before: [], snapshot_after: [] }
 }
 
-render_owned_notes : Str, List({ name : Str, value : Str }), Groups, QuoteResult, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> { html : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str) }
+render_owned_notes : Str, AttributeView, Groups, QuoteResult, List({ name : Str, text : Str }), Dict(Str, U64), U64 -> { html : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str) }
 render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_note_count| {
 	var $notes = notes
 	var $names = if (indexed_note_count == notes.len()) names else {
@@ -186,7 +489,7 @@ render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_
 				$open = $open + 1
 			}
 			if (bytes.get($open) ?? 0) == '[' {
-				match footnote_end_at(source, bytes, $open, reference_attrs, g) {
+				match footnote_end_view(source, bytes, $open, reference_attrs, g) {
 					Ok(end) => {
 						name = slice(source, $pos + marker.len(), $open - $pos - marker.len())
 						text = slice(source, $open + 1, end - $open - 1)
@@ -195,7 +498,7 @@ render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_
 						number = if (reference) existing else $notes.len() + 1
 						if number > 0 {
 							if !reference {
-								$notes = $notes.append({ name, text: scan(text, reference_attrs, g, 0) })
+								$notes = $notes.append({ name, text: scan_view(text, reference_attrs, g, 0) })
 								if name != "" {
 									$names = $names.insert(name, number)
 								}
@@ -222,16 +525,16 @@ render_owned_notes = |source, reference_attrs, g, quoted, notes, names, indexed_
 			$pos = end
 		}
 	}
-	{ html: scan($prepared, reference_attrs, g, 0), footnotes: $notes, note_index: $names, indexed_note_count: $notes.len(), tags: $render_tags }
+	{ html: scan_view_context($prepared, reference_attrs, g, 0, { prefix: quoted.prefix, tags: $render_tags }), footnotes: $notes, note_index: $names, indexed_note_count: $notes.len(), tags: $render_tags }
 }
 
 # Deferred passthroughs use the established full-State path. The ordinary
 # path restores new note text while the note list is still independently owned,
 # then reconstructs State after every collection update has finished.
-finish_owned_normal : Str, List({ name : Str, value : Str }), RenderContext, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, QuoteResult, U64 -> { html : Str, state : AsciiDocInline.State }
-finish_owned_normal = |html, attrs, context, attributes, removed, tag_prefix, notes, names, indexed_note_count, quoted, notes_start| {
+finish_owned : Str, List({ name : Str, value : Str }), RenderContext, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, QuoteResult, U64 -> { html : Str, state : AsciiDocInline.State }
+finish_owned = |html, attrs, context, attributes, removed, tag_prefix, notes, names, indexed_note_count, quoted, notes_start| {
 	if !quoted.deferred.is_empty() {
-		return finish_render(html, attrs, assemble_state(context, attributes, removed, tag_prefix, notes, names, indexed_note_count), quoted, notes_start)
+		return finish_render(html, attrs, assemble_state(context, attributes, removed, tag_prefix, notes, names, indexed_note_count), quoted, notes_start, context_hint(context))
 	}
 	var $notes = notes
 	var $index = notes_start
@@ -247,60 +550,6 @@ finish_owned_normal = |html, attrs, context, attributes, removed, tag_prefix, no
 		$index = $index + 1
 	}
 	{ html: restore_tags(html, quoted.prefix, quoted.tags), state: assemble_state(context, attributes, removed, tag_prefix, $notes, names, indexed_note_count) }
-}
-
-render_state_conservative : Str, List({ name : Str, value : Str }), { subs : Str }, AsciiDocInline.State, Bool -> { html : Str, state : AsciiDocInline.State }
-render_state_conservative = |input, attrs, options, state, prepared| {
-	prior_notes = state.footnotes.len()
-	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
-	original = { ..(if (options.subs == "normal" or options.subs == "n") normal else groups(options.subs)), ref_index: indexed.ref_index }
-	refreshed = refresh_state(attrs, indexed)
-	if !needs_substitutions(input, original) {
-		return { html: input, state: refreshed }
-	}
-	quote_groups = if (prepared) { ..original, macros: False } else original
-	before = if ((original.quotes or original.macros) and !original.attr_quotes and quote_needed(input, quote_groups)) quote_state(input, attrs, quote_groups, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
-	mutation = if (original.attributes) mutate_attributes(before.source, attrs, original, refreshed, before.prefix, before.tags) else { source: before.source, state: refreshed, tags: before.tags, prefix: before.prefix }
-	# Plain attribute/counter results need no second attribute merge or scan.
-	# Preserve protected quote/passthrough slots and deferred stateful macros.
-	if !original.attr_quotes and mutation.tags.is_empty() and before.deferred.is_empty() and !needs_substitutions(mutation.source, { ..original, quotes: False, attributes: False }) {
-		return { html: mutation.source, state: mutation.state }
-	}
-	quotes = if (original.quotes and original.attr_quotes) quote_state(mutation.source, attrs, original, mutation.state) else { source: mutation.source, prefix: mutation.prefix, tags: mutation.tags, deferred: before.deferred }
-	# Footnotes also use protected slots, including notes inserted by attributes.
-	quoted = if (original.macros and quotes.prefix == "" and quotes.source.contains("footnote:")) { ..quotes, prefix: attribute_delimiter(quotes.source, attrs, "") } else quotes
-	source = quoted.source
-	g = { ..original, quotes: False, attributes: False, passes_done: True }
-	reference_attrs = (if (g.macros and macro_candidate(source)) effective_attributes(attrs, mutation.state) else attrs).concat(if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
-	if !g.macros {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
-	}
-	if !source.contains("footnote:") {
-		return finish_render(scan(source, reference_attrs, g, 0), attrs, mutation.state, quoted, prior_notes)
-	}
-	indexed_notes = with_note_index(mutation.state)
-	notes_start = indexed_notes.footnotes.len()
-	base_state = { ..indexed_notes, footnotes: [], note_index: Dict.empty() }
-	{ html, footnotes, note_index, indexed_note_count, tags } = render_owned_notes(source, reference_attrs, g, quoted, indexed_notes.footnotes, indexed_notes.note_index, indexed_notes.indexed_note_count)
-	finish_render(html, attrs, { ..base_state, footnotes, note_index, indexed_note_count }, { ..quoted, tags }, notes_start)
-}
-
-# Build an index for caller-supplied notes once; ordinary document renders
-# carry and update it across blocks, preserving the first definition's number.
-with_note_index : AsciiDocInline.State -> AsciiDocInline.State
-with_note_index = |state| {
-	if state.indexed_note_count == state.footnotes.len() {
-		return state
-	}
-	var $names = Dict.empty()
-	var $number = 0.U64
-	for note in state.footnotes {
-		$number = $number + 1
-		if note.name != "" and !$names.contains(note.name) {
-			$names = $names.insert(note.name, $number)
-		}
-	}
-	{ ..state, note_index: $names, indexed_note_count: state.footnotes.len() }
 }
 
 Groups : { special : Bool, quotes : Bool, attributes : Bool, replacements : Bool, macros : Bool, post : Bool, passes_done : Bool, attr_quotes : Bool, ref_index : Dict(Str, Str) }
@@ -355,7 +604,7 @@ groups = |spec| {
 }
 
 drop : Str, U64 -> Str
-drop = |s, n| Str.from_utf8_lossy(s.to_utf8().drop_first(n))
+drop = |s, n| if (n == 0) s else Str.from_utf8_lossy(s.to_utf8().drop_first(n))
 
 take : Str, U64 -> Str
 take = |s, n| Str.from_utf8_lossy(s.to_utf8().take_first(n))
@@ -414,20 +663,36 @@ repl : Str, Str, Str -> Str
 repl = |s, before, after| Str.join_with(s.split_on(before), after)
 
 scan : Str, List({ name : Str, value : Str }), Groups, U64 -> Str
-scan = |input, incoming_attrs, options, depth| {
+scan = |input, attrs, options, depth| scan_view(input, static_view(attrs), options, depth)
+
+scan_view : Str, AttributeView, Groups, U64 -> Str
+scan_view = |input, incoming_attrs, options, depth| scan_view_context(input, incoming_attrs, options, depth, { prefix: "", tags: [] })
+
+scan_view_context : Str, AttributeView, Groups, U64, { prefix : Str, tags : List(Str) } -> Str
+scan_view_context = |input, incoming_attrs, options, depth, protected| {
 	if depth > 24 {
 		return escape(input)
 	}
-	quoted = if (options.quotes) quote_all(input, incoming_attrs, options, depth) else { source: input, prefix: "", tags: [], deferred: [] }
+	quoted = if (options.quotes) quote_view(input, incoming_attrs, options) else { source: input, prefix: "", tags: [], deferred: [] }
 	source = quoted.source
-	attrs = incoming_attrs.concat(if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
+	url_slots = if (quoted.prefix != "") { prefix: quoted.prefix, tags: quoted.tags } else protected
+	attrs = append_view(incoming_attrs, if (source.contains("mailto:")) tag_attributes(quoted.prefix, quoted.tags) else [])
 	g = { ..options, quotes: False, passes_done: options.passes_done or options.quotes }
 	bytes = source.to_utf8()
 	has_email = bytes.contains('@')
 	has_colon = bytes.contains(':')
 	var $i = 0
+	var $remaining = source
+	var $angle_close = Err(Missing)
+	var $angle_close_known = False
+	var $entity_angle_close = Err(Missing)
+	var $entity_angle_close_known = False
+	var $bracket_cursor = empty_bracket_cursor
+	var $literal_cursors = empty_literal_cursors
 	var $out = ""
 	while $i < bytes.len() {
+		previous_i = $i
+		var $consumed = ""
 		simple = fixed_replacement(bytes, $i, g)
 		if simple.used > 0 {
 			$out = $out.concat(simple.html)
@@ -437,22 +702,54 @@ scan = |input, incoming_attrs, options, depth| {
 			while $end < bytes.len() and !syntax_candidate(bytes, $end, g, has_email, has_colon) {
 				$end = $end + 1
 			}
-			$out = $out.concat(slice(source, $i, $end - $i))
+			literal = slice(source, $i, $end - $i)
+			$out = $out.concat(literal)
+			$consumed = literal
 			$i = $end
 		} else {
 			for _ in [0] {
-				rest = drop(source, $i)
+				rest = $remaining
 				c = bytes.get($i) ?? 0
 				next = bytes.get($i + 1) ?? 0
 				prev = if ($i == 0) 0 else bytes.get($i - 1) ?? 0
+				if g.macros and g.special and rest.starts_with("\\&lt;") {
+					$out = $out.concat("&amp;lt;")
+					$i = $i + 5
+					break
+				}
+				if g.macros and g.special and rest.starts_with("\\<") {
+					inside = rest.drop_prefix("\\<")
+					if url_scheme(inside) or (inside.starts_with("\\") and url_scheme(inside.drop_prefix("\\"))) {
+						stale = match $angle_close {
+							Ok(position) => position <= $i
+							Err(_) => False
+						}
+						if !$angle_close_known or stale {
+							$angle_close = find(source, ">", $i + 2)
+							$angle_close_known = True
+						}
+						match $angle_close {
+							Ok(position) => {
+								$out = $out.concat(escape(slice(source, $i + 1, position - $i)))
+								$i = position + 1
+								break
+							}
+							Err(_) => {}
+						}
+					}
+				}
 				if c == '\\' and $i + 1 < bytes.len() and (g.quotes or g.macros or g.attributes) {
-					escaped_macro = parse_macro(drop(rest, 1), attrs, g, depth)
-					if escaped_macro.used > 0 {
+					escaped_rest = rest.drop_prefix("\\")
+					escaped_result = parse_macro_context(escaped_rest, attrs, g, depth, $i + 1, $bracket_cursor, $literal_cursors, if (prev == '<') UrlAny else url_context(bytes, $i, url_slots))
+					$bracket_cursor = escaped_result.cursor
+					$literal_cursors = escaped_result.literals
+					escaped_macro = escaped_result.macro
+					if escaped_macro.used > 0 and !(escaped_rest.starts_with("link:") and url_scheme(escaped_rest.drop_prefix("link:"))) {
 						$out = $out.concat(escape(slice(rest, 1, escaped_macro.used)))
 						$i = $i + escaped_macro.used + 1
 						break
 					}
-					if drop(rest, 1).starts_with("pass:") {
+					if escaped_rest.starts_with("pass:") {
 						match find(rest, "]", 1) {
 							Ok(end) => {
 								$out = $out.concat(escape(slice(rest, 1, end)))
@@ -467,9 +764,9 @@ scan = |input, incoming_attrs, options, depth| {
 					match find(source, "}", $i + 1) {
 						Ok(end) => {
 							key = slice(source, $i + 1, end - $i - 1).with_ascii_lowercased()
-							match lookup(attrs, key) {
+							match lookup_view(attrs, key) {
 								Ok(value) => {
-									$out = $out.concat(if (lookup([], key).is_ok()) value else scan(value, attrs, { special: False, quotes: g.attr_quotes, attributes: False, replacements: g.replacements, macros: g.macros, post: g.post, passes_done: g.passes_done, attr_quotes: g.attr_quotes, ref_index: g.ref_index }, depth + 1))
+									$out = $out.concat(if (lookup([], key).is_ok()) value else scan_view(value, attrs, { special: False, quotes: g.attr_quotes, attributes: False, replacements: g.replacements, macros: g.macros, post: g.post, passes_done: g.passes_done, attr_quotes: g.attr_quotes, ref_index: g.ref_index }, depth + 1))
 									$i = end + 1
 									break
 								}
@@ -494,7 +791,7 @@ scan = |input, incoming_attrs, options, depth| {
 							Ok(open) => match bracket_end(source, open) {
 								Ok(end) => {
 									sub = slice(source, $i + 5, open - $i - 5)
-									$out = $out.concat(scan(slice(source, open + 1, end - open - 1), attrs, groups(sub), depth + 1))
+									$out = $out.concat(scan_view(slice(source, open + 1, end - open - 1), attrs, groups(sub), depth + 1))
 									$i = end + 1
 									break
 								}
@@ -515,18 +812,54 @@ scan = |input, incoming_attrs, options, depth| {
 						}
 					}
 				}
-				if g.macros and c == '<' and (drop(rest, 1).starts_with("https://") or drop(rest, 1).starts_with("http://")) {
-					match find(rest, ">", 1) {
-						Ok(end) => {
-							$out = $out.concat(scan(slice(rest, 1, end - 1), attrs, g, depth + 1))
-							$i = $i + end + 1
+				if g.macros and rest.starts_with("&lt;") and url_scheme(rest.drop_prefix("&lt;")) {
+					stale = match $entity_angle_close {
+						Ok(position) => position <= $i
+						Err(_) => False
+					}
+					if !$entity_angle_close_known or stale {
+						$entity_angle_close = find(source, "&gt;", $i + 4)
+						$entity_angle_close_known = True
+					}
+					match $entity_angle_close {
+						Ok(position) => {
+							$out = $out.concat(scan_view(slice(source, $i + 4, position - $i - 4), attrs, g, depth + 1))
+							$i = position + 4
 							break
 						}
 						Err(_) => {}
 					}
 				}
+				if g.macros and c == '<' {
+					angle_rest = rest.drop_prefix("<")
+					if angle_rest.starts_with("https://") or angle_rest.starts_with("http://") {
+						# The source is immutable and the cursor advances. A known
+						# closing position is reusable until a scan skips past it;
+						# a missing closer remains missing for every later suffix.
+						stale = match $angle_close {
+							Ok(position) => position <= $i
+							Err(_) => False
+						}
+						if !$angle_close_known or stale {
+							$angle_close = find(source, ">", $i + 1)
+							$angle_close_known = True
+						}
+						match $angle_close {
+							Ok(position) => {
+								end = position - $i
+								$out = $out.concat(scan_view(slice(rest, 1, end - 1), attrs, g, depth + 1))
+								$i = $i + end + 1
+								break
+							}
+							Err(_) => {}
+						}
+					}
+				}
 				if g.macros {
-					macro = if (prev == '<' and (rest.starts_with("https://") or rest.starts_with("http://"))) { used: 0, html: "" } else parse_macro(rest, attrs, g, depth)
+					macro_result = if (prev == '<' and (rest.starts_with("https://") or rest.starts_with("http://"))) { macro: { used: 0, html: "" }, cursor: $bracket_cursor, literals: $literal_cursors } else parse_macro_context(rest, attrs, g, depth, $i, $bracket_cursor, $literal_cursors, url_context(bytes, $i, url_slots))
+					$bracket_cursor = macro_result.cursor
+					$literal_cursors = macro_result.literals
+					macro = macro_result.macro
 					if macro.used > 0 {
 						$out = $out.concat(macro.html)
 						$i = $i + macro.used
@@ -623,9 +956,17 @@ scan = |input, incoming_attrs, options, depth| {
 					}
 					$end = $end + 1
 				}
-				$out = $out.concat(slice(source, $i, $end - $i))
+				literal = slice(source, $i, $end - $i)
+				$out = $out.concat(literal)
+				$consumed = literal
 				$i = $end
 			}
+		}
+		if $i < bytes.len() {
+			# Every branch advances across an original UTF-8 span. Keep the
+			# suffix after inner-for breaks without validating future input.
+			consumed = if ($consumed != "") $consumed else slice(source, previous_i, $i - previous_i)
+			$remaining = $remaining.drop_prefix(consumed)
 		}
 	}
 	restore_tags($out, quoted.prefix, quoted.tags)
@@ -633,28 +974,185 @@ scan = |input, incoming_attrs, options, depth| {
 
 Macro : { used : U64, html : Str }
 
-parse_macro : Str, List({ name : Str, value : Str }), Groups, U64 -> Macro
-parse_macro = |source, attrs, g, depth| {
+# A macro target ends before the first label bracket or existing whitespace.
+# Other control bytes retain their prior treatment by the macro parser.
+macro_label_open : Str, U64 -> Try(U64, [Missing])
+macro_label_open = |source, start| {
+	bytes = source.to_utf8()
+	var $pos = start
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		if byte == '[' {
+			return Ok($pos)
+		}
+		if space(byte) {
+			return Err(Missing)
+		}
+		$pos = $pos + 1
+	}
+	Err(Missing)
+}
+
+parse_macro_view : Str, AttributeView, Groups, U64 -> Macro
+parse_macro_view = |source, attrs, g, depth| parse_macro_cached(source, attrs, g, depth, 0, empty_bracket_cursor).macro
+
+BracketCursor : { known : Bool, searched_after : U64, closing : Try(U64, [Missing]) }
+
+empty_bracket_cursor : BracketCursor
+empty_bracket_cursor = { known: False, searched_after: 0, closing: Err(Missing) }
+
+# Closing indexes are absolute within one scan's immutable source. Earlier
+# queries fall back to the unchanged matcher; no monotonicity assumption leaks
+# across escaped/normal macro probes or independent scan invocations.
+cached_bracket_end : Str, U64, U64, BracketCursor -> { end : Try(U64, [Missing]), cursor : BracketCursor }
+cached_bracket_end = |source, open, base, cursor| {
+	absolute_open = base + open
+	if cursor.known and absolute_open >= cursor.searched_after {
+		match cursor.closing {
+			Ok(position) if position > absolute_open => return { end: Ok(position - base), cursor }
+			Err(_) => return { end: Err(Missing), cursor }
+			_ => {}
+		}
+	}
+	end = first_bracket_end(source, open)
+	closing = match end {
+		Ok(position) => Ok(base + position)
+		Err(_) => Err(Missing)
+	}
+	{ end, cursor: { known: True, searched_after: absolute_open, closing } }
+}
+
+# Every cursor belongs to one exact needle and one immutable scanner source.
+# Cache only positions: no source buffers or mutable document registries escape.
+LiteralCursors : { index2 : BracketCursor, index3 : BracketCursor, anchor2 : BracketCursor, anchor3 : BracketCursor, xref : BracketCursor, entity_xref : BracketCursor, newline : BracketCursor }
+
+empty_literal_cursors : LiteralCursors
+empty_literal_cursors = { index2: empty_bracket_cursor, index3: empty_bracket_cursor, anchor2: empty_bracket_cursor, anchor3: empty_bracket_cursor, xref: empty_bracket_cursor, entity_xref: empty_bracket_cursor, newline: empty_bracket_cursor }
+
+cached_literal_end : Str, Str, U64, U64, BracketCursor -> { end : Try(U64, [Missing]), cursor : BracketCursor }
+cached_literal_end = |source, needle, start, base, cursor| {
+	absolute_start = base + start
+	if cursor.known and absolute_start >= cursor.searched_after {
+		match cursor.closing {
+			Ok(position) if position >= absolute_start => return { end: Ok(position - base), cursor }
+			Err(_) => return { end: Err(Missing), cursor }
+			_ => {}
+		}
+	}
+	end = find(source, needle, start)
+	closing = match end {
+		Ok(position) => Ok(base + position)
+		Err(_) => Err(Missing)
+	}
+	{ end, cursor: { known: True, searched_after: absolute_start, closing } }
+}
+
+parse_macro_cached : Str, AttributeView, Groups, U64, U64, BracketCursor -> { macro : Macro, cursor : BracketCursor }
+parse_macro_cached = |source, attrs, g, depth, base, incoming_cursor| {
+	result = parse_macro_context(source, attrs, g, depth, base, incoming_cursor, empty_literal_cursors, UrlAny)
+	{ macro: result.macro, cursor: result.cursor }
+}
+
+# The standalone macro adapter starts a fresh source. Scanner calls supply the
+# actual URL prefix context; other macro kinds retain their prior boundaries.
+UrlContext : [UrlAny, UrlFormal, UrlNone]
+
+url_scheme : Str -> Bool
+url_scheme = |source| source.starts_with("https://") or source.starts_with("http://") or source.starts_with("ftp://") or source.starts_with("irc://")
+
+url_context : List(U8), U64, { prefix : Str, tags : List(Str) } -> UrlContext
+url_context = |bytes, pos, slots| {
+	if pos == 0 {
+		return UrlAny
+	}
+	prev = bytes.get(pos - 1) ?? 0
+	if prev == '"' or prev == '\'' {
+		return UrlFormal
+	}
+	if prev == ' ' or prev == '\t' or prev == '\n' or prev == '>' or prev == '(' or prev == ')' or prev == '[' or prev == ']' or prev == ';' {
+		return UrlAny
+	}
+	if prev == 1 and slots.prefix != "" {
+		prefix = slots.prefix.to_utf8()
+		width = prefix.len()
+		if pos >= width and bytes.sublist({ start: pos - width, len: width }) == prefix {
+			end = pos - width
+			var $start = end
+			while $start > 0 and (bytes.get($start - 1) ?? 0) >= '0' and (bytes.get($start - 1) ?? 0) <= '9' {
+				$start = $start - 1
+			}
+			if $start < end and $start >= width and bytes.sublist({ start: $start - width, len: width }) == prefix {
+				var $index = 0.U64
+				var $cursor = $start
+				while $cursor < end {
+					if $index > slots.tags.len() {
+						return UrlNone
+					}
+					$index = $index * 10 + (bytes.get($cursor) ?? '0').to_u64() - 48
+					$cursor = $cursor + 1
+				}
+				match slots.tags.get($index) {
+					Ok(tag) if tag.ends_with(">") or tag.ends_with(";") => return UrlAny
+					_ => {}
+				}
+			}
+		}
+	}
+	if prev < 128 {
+		return UrlNone
+	}
+	var $start = pos - 1
+	while $start > 0 and pos - $start < 4 and (bytes.get($start) ?? 0) >= 128 and (bytes.get($start) ?? 0) < 192 {
+		$start = $start - 1
+	}
+	first = bytes.get($start) ?? 0
+	width = if (first < 224) 2 else if (first < 240) 3 else 4
+	var $scalar = if (width == 2) first.to_u32() - 192 else if (width == 3) first.to_u32() - 224 else first.to_u32() - 240
+	var $offset = 1
+	while $offset < width {
+		$scalar = $scalar * 64 + ((bytes.get($start + $offset) ?? 0).to_u32() % 64)
+		$offset = $offset + 1
+	}
+	match unicode_category($scalar) {
+		Ok(Zs) => UrlAny
+		_ => UrlNone
+	}
+}
+
+parse_macro_context : Str, AttributeView, Groups, U64, U64, BracketCursor, LiteralCursors, UrlContext -> { macro : Macro, cursor : BracketCursor, literals : LiteralCursors }
+parse_macro_context = |source, attrs, g, depth, base, incoming_cursor, incoming_literals, url_prefix| {
+	var $cursor = incoming_cursor
+	var $literals = incoming_literals
 	none = { used: 0, html: "" }
 	if source.starts_with("(((") or source.starts_with("((") {
 		n = if (source.starts_with("(((")) 3 else 2
-		match find(source, if (n == 3) ")))" else "))", n) {
+		searched = cached_literal_end(source, if (n == 3) ")))" else "))", n, base, if (n == 3) $literals.index3 else $literals.index2)
+		$literals = if (n == 3) { ..$literals, index3: searched.cursor } else { ..$literals, index2: searched.cursor }
+		match searched.end {
 			Ok(end) => {
-				return { used: end + n, html: if (n == 3) "" else scan(slice(source, n, end - n), attrs, g, depth + 1) }
+				return { macro: { used: end + n, html: if (n == 3) "" else scan_view(slice(source, n, end - n), attrs, g, depth + 1) }, cursor: $cursor, literals: $literals }
 			}
 			Err(_) => {}
 		}
 	}
 	if source.starts_with("[[[") {
-		match find(source, "]]]", 3) {
-			Ok(end) if !take(source, end).contains("\n") => {
+		searched = cached_literal_end(source, "]]]", 3, base, $literals.anchor3)
+		$literals = { ..$literals, anchor3: searched.cursor }
+		line_end = cached_literal_end(source, "\n", 0, base, $literals.newline)
+		$literals = { ..$literals, newline: line_end.cursor }
+		match searched.end {
+			Ok(end) if (line_end.end ?? source.count_utf8_bytes()) >= end => {
 				id = slice(source, 3, end - 3).split_on(",").first() ?? ""
 				return {
-					used: end + 3,
-					html: if (lookup(attrs, "style") ?? "") == "bibliography" or lookup(attrs, "bibliography").is_ok() {
-						label = if (slice(source, 3, end - 3).contains(",")) Str.join_with(slice(source, 3, end - 3).split_on(",").drop_first(1), ",").trim() else id
-						"<a id=\"${escape(id)}\"></a>[${label}]"
-					} else "[<a id=\"${escape(id)}\"></a>]",
+					macro: {
+						used: end + 3,
+						html: if (lookup_view(attrs, "style") ?? "") == "bibliography" or lookup_view(attrs, "bibliography").is_ok() {
+							label = if (slice(source, 3, end - 3).contains(",")) Str.join_with(slice(source, 3, end - 3).split_on(",").drop_first(1), ",").trim() else id
+							"<a id=\"${escape(id)}\"></a>[${label}]"
+						} else "[<a id=\"${escape(id)}\"></a>]",
+					},
+					cursor: $cursor,
+					literals: $literals,
 				}
 			}
 			_ => {}
@@ -662,21 +1160,27 @@ parse_macro = |source, attrs, g, depth| {
 	}
 	xref_open = if (source.starts_with("&lt;&lt;")) 8 else if (g.special and source.starts_with("<<")) 2 else 0
 	if xref_open > 0 {
-		match find(source, if (xref_open == 8) "&gt;&gt;" else ">>", xref_open) {
+		searched = cached_literal_end(source, if (xref_open == 8) "&gt;&gt;" else ">>", xref_open, base, if (xref_open == 8) $literals.entity_xref else $literals.xref)
+		$literals = if (xref_open == 8) { ..$literals, entity_xref: searched.cursor } else { ..$literals, xref: searched.cursor }
+		match searched.end {
 			Ok(end) => {
 				parts = slice(source, xref_open, end - xref_open).split_on(",")
 				target = parts.first() ?? ""
 				text = if (parts.len() > 1) Str.join_with(parts.drop_first(1), ",").trim() else reference_label(attrs, g, target) ?? "[${target}]"
-				return { used: end + xref_open, html: "<a href=\"#${if (g.special) escape_entities(target) else target}\">${scan(text, attrs, if (parts.len() > 1) g else { ..normal, ref_index: g.ref_index }, depth + 1)}</a>" }
+				return { macro: { used: end + xref_open, html: "<a href=\"#${if (g.special) escape_entities(target) else target}\">${scan_view(text, attrs, if (parts.len() > 1) g else { ..normal, ref_index: g.ref_index }, depth + 1)}</a>" }, cursor: $cursor, literals: $literals }
 			}
 			_ => {}
 		}
 	}
 	if source.starts_with("[[") {
-		match find(source, "]]", 2) {
-			Ok(end) if !take(source, end).contains("\n") => {
+		searched = cached_literal_end(source, "]]", 2, base, $literals.anchor2)
+		$literals = { ..$literals, anchor2: searched.cursor }
+		line_end = cached_literal_end(source, "\n", 0, base, $literals.newline)
+		$literals = { ..$literals, newline: line_end.cursor }
+		match searched.end {
+			Ok(end) if (line_end.end ?? source.count_utf8_bytes()) >= end => {
 				id = (slice(source, 2, end - 2).split_on(",").first() ?? "").trim()
-				return { used: end + 2, html: "<a id=\"${escape(id)}\"></a>" }
+				return { macro: { used: end + 2, html: "<a id=\"${escape(id)}\"></a>" }, cursor: $cursor, literals: $literals }
 			}
 			_ => {}
 		}
@@ -689,32 +1193,37 @@ parse_macro = |source, attrs, g, depth| {
 		}
 	}
 	if $prefix == "" {
-		return none
+		return { macro: none, cursor: $cursor, literals: $literals }
 	}
-	if !$prefix.ends_with("//") and drop(source, $prefix.to_utf8().len()).starts_with(":") {
-		return none
+	if !$prefix.ends_with("//") and (source.to_utf8().get($prefix.count_utf8_bytes()) ?? 0) == ':' {
+		return { macro: none, cursor: $cursor, literals: $literals }
 	}
 	is_url = $prefix.ends_with("//")
-	if is_url and lookup(attrs, "__suppress-url-label").is_ok() {
-		return none
+	if is_url and url_prefix == UrlNone {
+		return { macro: none, cursor: $cursor, literals: $literals }
 	}
-	match find(source, "[", $prefix.to_utf8().len()) {
-		Ok(open) if !take(source, open).to_utf8().any(space) => {
-			match first_bracket_end(source, open) {
+	if is_url and lookup_view(attrs, "__suppress-url-label").is_ok() {
+		return { macro: none, cursor: $cursor, literals: $literals }
+	}
+	match macro_label_open(source, $prefix.count_utf8_bytes()) {
+		Ok(open) => {
+			searched = cached_bracket_end(source, open, base, $cursor)
+			$cursor = searched.cursor
+			match searched.end {
 				Ok(end) => {
 					target = if (is_url) take(source, open) else slice(source, $prefix.to_utf8().len(), open - $prefix.to_utf8().len())
 					if is_url and target == $prefix {
-						return none
+						return { macro: none, cursor: $cursor, literals: $literals }
 					}
 					label = repl(slice(source, open + 1, end - open - 1), "\\]", "]")
 					parts = if ((($prefix == "link:" or is_url or $prefix == "xref:") and !label.contains("=")) or ($prefix == "mailto:" and !label.contains(","))) [label] else macro_parts(label)
 					positional = parts
 					first_raw = (positional.first() ?? "").trim()
 					first = if (named_item(first_raw) and ($prefix != "mailto:" or label.contains(","))) "" else if ($prefix == "image:" or label.contains("=") or ($prefix == "mailto:" and label.contains(","))) unquote_attribute(first_raw) else first_raw
-					text = if (first == "") escape_entities(target) else scan(first, if (is_url) attrs.append({ name: "__suppress-url-label", value: "" }) else attrs, g, depth + 1)
+					text = if (first == "") escape_entities(target) else scan_view(first, if (is_url) append_view(attrs, [{ name: "__suppress-url-label", value: "" }]) else attrs, g, depth + 1)
 					html = match $prefix {
 						"indexterm:" => ""
-						"indexterm2:" => scan(label, attrs, g, depth + 1)
+						"indexterm2:" => scan_view(label, attrs, g, depth + 1)
 						"image:" => {
 							default_alt = repl(repl((target.split_on("/").last() ?? target), "_", " "), "-", " ").split_on(".").first() ?? ""
 							alt = named(parts, "alt") ?? if (first == "" or first.contains("=")) default_alt else first
@@ -726,7 +1235,7 @@ parse_macro = |source, attrs, g, depth| {
 								Ok(value) => " title=\"${html_attribute(value)}\""
 								Err(_) => ""
 							}
-							image_dir = lookup(attrs, "imagesdir") ?? ""
+							image_dir = lookup_view(attrs, "imagesdir") ?? ""
 							src = if (image_dir == "" or target.contains("://") or target.starts_with("/")) target else "${image_dir}/${target}"
 							image = "<img src=\"${html_attribute(src)}\" alt=\"${html_attribute(alt)}\"${width}${height}${title}>"
 							content = match named(parts, "link") {
@@ -746,11 +1255,11 @@ parse_macro = |source, attrs, g, depth| {
 								if href.starts_with("#") {
 									id = drop(href, 1)
 									match reference_label(attrs, g, id) {
-										Ok(ref_label) => scan(ref_label, attrs, { ..normal, ref_index: g.ref_index }, depth + 1)
+										Ok(ref_label) => scan_view(ref_label, attrs, { ..normal, ref_index: g.ref_index }, depth + 1)
 										Err(_) => "[${id}]"
 									}
 								} else href.split_on("#").first() ?? href
-							} else if (label.contains(",%")) scan(label, attrs, g, depth + 1) else text
+							} else if (label.contains(",%")) scan_view(label, attrs, g, depth + 1) else text
 							"<a href=\"${escape(href)}\"${
 								match named(parts, "role") {
 									Ok(role) => " class=\"${html_attribute(role)}\""
@@ -769,9 +1278,9 @@ parse_macro = |source, attrs, g, depth| {
 								_ => Err(Missing)
 							}
 							query = match subject {
-								Ok(value) => "?subject=${uri_component(restore_tag_attributes(scan(unquote_attribute(value.trim()), attrs, { ..empty, special: g.special, replacements: g.replacements }, depth + 1), attrs))}${
+								Ok(value) => "?subject=${uri_component(restore_view_tags(scan_view(unquote_attribute(value.trim()), attrs, { ..empty, special: g.special, replacements: g.replacements }, depth + 1), attrs))}${
 									match body {
-										Ok(body_value) => "&amp;body=${uri_component(restore_tag_attributes(scan(unquote_attribute(body_value.trim()), attrs, { ..empty, special: g.special, replacements: g.replacements }, depth + 1), attrs))}"
+										Ok(body_value) => "&amp;body=${uri_component(restore_view_tags(scan_view(unquote_attribute(body_value.trim()), attrs, { ..empty, special: g.special, replacements: g.replacements }, depth + 1), attrs))}"
 										Err(_) => ""
 									}
 								}"
@@ -780,21 +1289,21 @@ parse_macro = |source, attrs, g, depth| {
 							"<a href=\"mailto:${escape_entities(target)}${query}\"${link_attributes(if (label.contains(",")) parts else [], False, label.ends_with("^"))}>${text}</a>"
 						}
 						"kbd:" => {
-							if lookup(attrs, "experimental").is_err() {
-								return none
+							if lookup_view(attrs, "experimental").is_err() {
+								return { macro: none, cursor: $cursor, literals: $literals }
 							}
 							keys = if (label.ends_with("++")) repl(take(label, label.to_utf8().len() - 2), "+", ",").split_on(",").append("+") else repl(label, "+", ",").split_on(",")
 							if (keys.len() == 1) "<kbd>${escape(label)}</kbd>" else "<span class=\"keyseq\">${Str.join_with(keys.map(|key| "<kbd>${escape(key.trim())}</kbd>"), "+")}</span>"
 						}
 						"btn:" => {
-							if lookup(attrs, "experimental").is_err() {
-								return none
+							if lookup_view(attrs, "experimental").is_err() {
+								return { macro: none, cursor: $cursor, literals: $literals }
 							}
 							"<b class=\"button\">${escape(label)}</b>"
 						}
 						"menu:" => {
-							if lookup(attrs, "experimental").is_err() {
-								return none
+							if lookup_view(attrs, "experimental").is_err() {
+								return { macro: none, cursor: $cursor, literals: $literals }
 							}
 							items = label.split_on(">").map(|item| item.trim())
 							arrow = "&#160;<b class=\"caret\">&#8250;</b> "
@@ -816,11 +1325,11 @@ parse_macro = |source, attrs, g, depth| {
 						_ => {
 							href = repl(escape_entities(target), " ", "%20")
 							attr_text = link_attributes(parts, first == "", label.ends_with("^"))
-							display = if (label.ends_with("^")) take(text, text.to_utf8().len() - 1) else if (label.contains(",%")) scan(label, attrs, g, depth + 1) else text
+							display = if (label.ends_with("^")) take(text, text.to_utf8().len() - 1) else if (label.contains(",%")) scan_view(label, attrs, g, depth + 1) else text
 							"<a href=\"${href}\"${attr_text}>${display}</a>"
 						}
 					}
-					return { used: end + 1, html }
+					return { macro: { used: end + 1, html }, cursor: $cursor, literals: $literals }
 				}
 				Err(_) => {}
 			}
@@ -828,6 +1337,9 @@ parse_macro = |source, attrs, g, depth| {
 		_ => {}
 	}
 	if is_url {
+		if url_prefix == UrlFormal {
+			return { macro: none, cursor: $cursor, literals: $literals }
+		}
 		var $end = 0
 		for b in source.to_utf8() {
 			if b < 32 or space(b) or b == '<' or b == '>' or b == '[' or b == ']' {
@@ -835,17 +1347,21 @@ parse_macro = |source, attrs, g, depth| {
 			}
 			$end = $end + 1
 		}
+		lexical_end = $end
 		while $end > 0 and ".,;:!?)".to_utf8().contains(source.to_utf8().get($end - 1) ?? 0) {
 			$end = $end - 1
 		}
 		target = take(source, $end)
 		if target == $prefix {
-			return none
+			return { macro: none, cursor: $cursor, literals: $literals }
 		}
-		rendered_target = if (g.special) escape_entities(target) else target
-		return { used: $end, html: "<a href=\"${rendered_target}\" class=\"bare\">${rendered_target}</a>" }
+		rendered_target = if g.special {
+			escaped = escape_entities(take(source, lexical_end))
+			take(escaped, escaped.count_utf8_bytes() - (lexical_end - $end))
+		} else target
+		return { macro: { used: $end, html: "<a href=\"${rendered_target}\" class=\"bare\">${rendered_target}</a>" }, cursor: $cursor, literals: $literals }
 	}
-	none
+	{ macro: none, cursor: $cursor, literals: $literals }
 }
 
 expect AsciiDocInline.render("*bold* _em_ `code` #mark# ^up^ ~down~", []) == "<strong>bold</strong> <em>em</em> <code>code</code> <mark>mark</mark> <sup>up</sup> <sub>down</sub>"
@@ -1653,13 +2169,11 @@ quote_needed = |input, g| {
 # Formatting reads attribute values only to reserve a private delimiter.
 # Carry that delimiter across dynamic writes rather than materialize every
 # stored counter. Passthrough substitution still receives the full context.
-quote_state : Str, List({ name : Str, value : Str }), Groups, AsciiDocInline.State -> QuoteResult
-quote_state = |input, attrs, g, state| {
-	if pass_needed(input, g) {
-		quote_all(input, effective_attributes(attrs, state), g, 0)
-	} else {
-		quote_prefixed(input, attrs, g, state.tag_prefix)
-	}
+quote_owned : Str, List({ name : Str, value : Str }), AsciiDocSource.Index, SourceHint, Bool, Groups, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str -> QuoteResult
+quote_owned = |input, attrs, source_index, hint, dynamic_tags_possible, g, attributes, removed, tag_prefix| {
+	# The carried prefix already excludes every dynamic value. Pass matching
+	# requests effective bindings only when an immediate pass must be rendered.
+	quote_view(input, { source_before: hint_before(hint), source_after: hint_after(hint), source_prefix: hint_prefix(hint), dynamic_tags_possible, source: attrs, source_index, appended: [], values: attributes, removed, prefix: tag_prefix }, g)
 }
 
 macro_candidate : Str -> Bool
@@ -1669,17 +2183,50 @@ quote_all : Str, List({ name : Str, value : Str }), Groups, U64 -> QuoteResult
 quote_all = |input, attrs, g, _depth| quote_prefixed(input, attrs, g, "\u(1)")
 
 quote_prefixed : Str, List({ name : Str, value : Str }), Groups, Str -> QuoteResult
-quote_prefixed = |input, attrs, g, prefix| {
+quote_prefixed = |input, attrs, g, prefix| quote_view(input, { ..static_view(attrs), prefix }, g)
+
+# Track only literal output: protected pass bodies cannot terminate an outer
+# set reference. The matcher spans emitted chunks and resets at line boundaries.
+capture_set : Str, { matched : U64, active : Bool, previous : U8 } -> { matched : U64, active : Bool, previous : U8 }
+capture_set = |text, state| {
+	var $matched = state.matched
+	var $active = state.active
+	var $previous = state.previous
+	pattern = "{set:".to_utf8()
+	for byte in text.to_utf8() {
+		if byte == '\n' or byte == '}' {
+			$active = False
+		}
+		if byte == (pattern.get($matched) ?? 0) and !($matched == 0 and $previous == '\\') {
+			$matched = $matched + 1
+			if $matched == 5 {
+				$active = True
+				$matched = 0
+			}
+		} else {
+			$matched = if (byte == '{' and $previous != '\\') 1 else 0
+		}
+		$previous = byte
+	}
+	{ matched: $matched, active: $active, previous: $previous }
+}
+
+quote_view : Str, AttributeView, Groups -> QuoteResult
+quote_view = |input, attrs, g| {
 	# Most attribute references and URLs need no private quote slots.
 	if !quote_needed(input, g) {
 		return { source: input, prefix: "", tags: [], deferred: [] }
 	}
-	var $prefix = prefix
-	while input.contains($prefix) or attrs.any(|attr| attr.value.contains($prefix)) {
+	certified = attrs.source_prefix != "" and attrs.prefix != "" and attrs.prefix.to_utf8().all(|byte| byte == 1)
+	var $prefix = if (certified and attrs.source_prefix.count_utf8_bytes() > attrs.prefix.count_utf8_bytes()) attrs.source_prefix else attrs.prefix
+	while input.contains($prefix) or (!certified and (attrs.source_before.any(|attr| attr.value.contains($prefix)) or attrs.source.any(|attr| attr.value.contains($prefix)) or attrs.source_after.any(|attr| attr.value.contains($prefix)))) or attrs.appended.any(|attr| attr.value.contains($prefix)) {
 		$prefix = $prefix.concat("\u(1)")
 	}
 	var $tags = []
 	var $deferred = []
+	# Attribute set captures restore slot bodies before deferred evaluation.
+	# Keep their preview semantics; other deferred bodies are overwritten.
+	track_capture = input.contains("{set:")
 	var $text = input
 	# Unconstrained passthroughs are extracted before single-plus spans. A
 	# single-plus span may enclose an already extracted passthrough slot.
@@ -1687,20 +2234,40 @@ quote_prefixed = |input, attrs, g, prefix| {
 		needed = g.macros and ($text.contains("+") or (!single and ($text.contains("pass:") or $text.contains("stem:") or $text.contains("latexmath:") or $text.contains("asciimath:") or $text.contains("$$"))))
 		if needed {
 			pass_source = $text
+			var $remaining = pass_source
 			$text = ""
 			var $pos = 0
 			bytes = pass_source.to_utf8()
+			var $capture = { matched: 0, active: False, previous: 0 }
+			var $pass_bracket_cursor = empty_bracket_cursor
+			var $pass_role_cursor = empty_role_cursor
 			while $pos < bytes.len() {
-				rest = drop(pass_source, $pos)
-				pass = if (g.macros) pass_match(rest, if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0, attrs, single, word_before(bytes, $pos)) else { used: 0, body: "", role: "", escaped: False, escaped_role: False }
+				rest = $remaining
+				pending_result = if (g.macros and !single) deferred_pass_cached(rest, $pos, $pass_bracket_cursor) else { result: Err(Missing), cursor: $pass_bracket_cursor }
+				$pass_bracket_cursor = pending_result.cursor
+				pending = pending_result.result
+				pass_result = match pending {
+					Ok(deferred) if !track_capture or !$capture.active => { matched: { used: deferred.used, body: "", role: "", escaped: False, escaped_role: False }, cursor: $pass_bracket_cursor, role_cursor: $pass_role_cursor }
+					_ => if (g.macros) pass_match_cached(rest, if ($pos == 0) 0 else bytes.get($pos - 1) ?? 0, { ..attrs, prefix: $prefix }, single, word_before(bytes, $pos), $pos, $pass_bracket_cursor, $pass_role_cursor) else { matched: { used: 0, body: "", role: "", escaped: False, escaped_role: False }, cursor: $pass_bracket_cursor, role_cursor: $pass_role_cursor }
+				}
+				$pass_bracket_cursor = pass_result.cursor
+				$pass_role_cursor = pass_result.role_cursor
+				pass = pass_result.matched
 				if pass.used > 0 {
 					if pass.escaped {
 						$text = $text.concat(pass.body)
+						if track_capture and !single {
+							$capture = capture_set(pass.body, $capture)
+						}
 					} else {
 						body = pass.body
 						html = if (pass.role == "" or pass.escaped_role) body else "<span${quote_attributes(pass.role)}>${body}</span>"
-						$text = $text.concat(if (pass.escaped_role) "[${pass.role}]${token($prefix, $tags.len())}" else token($prefix, $tags.len()))
-						match deferred_pass(rest) {
+						slot = if (pass.escaped_role) "[${pass.role}]${token($prefix, $tags.len())}" else token($prefix, $tags.len())
+						$text = $text.concat(slot)
+						if track_capture and !single {
+							$capture = capture_set(slot, $capture)
+						}
+						match pending {
 							Ok(deferred) if !single => {
 								$deferred = $deferred.append({ slot: $tags.len(), source: deferred.source, subs: deferred.subs })
 							}
@@ -1708,7 +2275,13 @@ quote_prefixed = |input, attrs, g, prefix| {
 						}
 						$tags = $tags.append(html)
 					}
+					previous_pos = $pos
 					$pos = $pos + pass.used
+					if $pos < bytes.len() {
+						# Match endpoints follow ASCII delimiters. Validate only
+						# the consumed prefix, retaining the untouched UTF-8 suffix.
+						$remaining = $remaining.drop_prefix(slice(pass_source, previous_pos, pass.used))
+					}
 				} else {
 					c = bytes.get($pos) ?? 0
 					n = if (c < 128) 1 else if (c < 224) 2 else if (c < 240) 3 else 4
@@ -1716,8 +2289,15 @@ quote_prefixed = |input, attrs, g, prefix| {
 					while $end < bytes.len() and !possible_pass(bytes, $end, single) {
 						$end = $end + 1
 					}
-					$text = $text.concat(slice(pass_source, $pos, $end - $pos))
+					literal = slice(pass_source, $pos, $end - $pos)
+					$text = $text.concat(literal)
+					if track_capture and !single {
+						$capture = capture_set(literal, $capture)
+					}
 					$pos = $end
+					if $pos < bytes.len() {
+						$remaining = $remaining.drop_prefix(literal)
+					}
 				}
 			}
 		}
@@ -1748,8 +2328,11 @@ quote_prefixed = |input, attrs, g, prefix| {
 				var $next = ""
 				var $i = 0
 				var $boundary = bs.len() + 1
+				var $quote_role_cursor = empty_bracket_cursor
 				while $i < bs.len() {
-					matched = if (!stage.unconstrained and $i == $boundary) { used: 0, body: "", role: "", escaped: False, escaped_role: False } else quote_match(source, bs, $i, stage, marker_open, marker_close, closers, g.special)
+					result = if (!stage.unconstrained and $i == $boundary) { matched: { used: 0, body: "", role: "", escaped: False, escaped_role: False }, cursor: $quote_role_cursor } else quote_match_cached(source, bs, $i, stage, marker_open, marker_close, closers, g.special, $quote_role_cursor)
+					$quote_role_cursor = result.cursor
+					matched = result.matched
 					if matched.used > 0 {
 						if matched.escaped {
 							$next = $next.concat(matched.body)
@@ -1783,36 +2366,59 @@ quote_prefixed = |input, attrs, g, prefix| {
 }
 
 quote_match : Str, List(U8), U64, QuoteStage, List(U8), List(U8), List(U64), Bool -> QuoteMatch
-quote_match = |source, bs, position, stage, opening, closing, closers, special| {
+quote_match = |source, bs, position, stage, opening, closing, closers, special| quote_match_cached(source, bs, position, stage, opening, closing, closers, special, empty_bracket_cursor).matched
+
+# Raw quote roles close at the first literal ], independently of escape/body
+# rules. Each quote stage owns a fresh cursor over its immutable byte source.
+cached_quote_role_end : List(U8), U64, BracketCursor -> { end : Try(U64, [Missing]), cursor : BracketCursor }
+cached_quote_role_end = |bs, open, cursor| {
+	if cursor.known and open >= cursor.searched_after {
+		match cursor.closing {
+			Ok(position) if position > open => return { end: Ok(position), cursor }
+			Err(_) => return { end: Err(Missing), cursor }
+			_ => {}
+		}
+	}
+	end = find_bytes(bs, [93], open + 1)
+	{ end, cursor: { known: True, searched_after: open, closing: end } }
+}
+
+quote_match_cached : Str, List(U8), U64, QuoteStage, List(U8), List(U8), List(U64), Bool, BracketCursor -> { matched : QuoteMatch, cursor : BracketCursor }
+quote_match_cached = |source, bs, position, stage, opening, closing, closers, special, incoming_cursor| {
+	var $cursor = incoming_cursor
 	none = { used: 0, body: "", role: "", escaped: False, escaped_role: False }
 	first = bs.get(position) ?? 0
 	if first != (opening.first() ?? 0) and first != '[' and first != '\\' {
-		return none
+		return { matched: none, cursor: $cursor }
 	}
 	escaped = first == '\\'
 	var $offset = if (escaped) 1 else 0
-	var $role = ""
+	var $role_start = 0
+	var $role_end = 0
 	if (bs.get(position + $offset) ?? 0) == '[' {
-		match find_bytes(bs, [93], position + $offset + 1) {
+		searched = cached_quote_role_end(bs, position + $offset, $cursor)
+		$cursor = searched.cursor
+		match searched.end {
 			Ok(end) => {
-				$role = slice(source, position + $offset + 1, end - position - $offset - 1)
+				$role_start = position + $offset + 1
+				$role_end = end
 				$offset = end + 1 - position
 			}
-			Err(_) => return none
+			Err(_) => return { matched: none, cursor: $cursor }
 		}
 	}
 	if !bs.drop_first(position + $offset).starts_with(opening) {
-		return none
+		return { matched: none, cursor: $cursor }
 	}
 	previous = if (position == 0 or escaped) 0 else bs.get(position - 1) ?? 0
 	if !stage.unconstrained {
 		if (!escaped and word_before(bs, position)) or (special and (previous == '<' or previous == '>' or previous == '&')) or previous == ';' or previous == ':' or previous == '}' or (stage.tag == "mark" and previous == '&') or (stage.tag == "code" and (previous == '\'' or previous == '"' or previous == '`')) {
-			return none
+			return { matched: none, cursor: $cursor }
 		}
 	}
 	start = position + $offset + opening.len()
 	if start >= bs.len() or ((!stage.unconstrained or stage.no_space) and space(bs.get(start) ?? 0)) {
-		return none
+		return { matched: none, cursor: $cursor }
 	}
 	# All invalid closing boundaries were filtered once for the whole pass.
 	# Binary search avoids rescanning a suffix for every unmatched opener.
@@ -1827,15 +2433,16 @@ quote_match = |source, bs, position, stage, opening, closing, closers, special| 
 		}
 	}
 	match closers.get($low) {
-		Err(_) => none
+		Err(_) => { matched: none, cursor: $cursor }
 		Ok(end) => {
 			if stage.no_space and bs.sublist({ start, len: end - start }).any(space) {
-				return none
+				return { matched: none, cursor: $cursor }
 			}
 			used = end + closing.len() - position
-			escaped_role = escaped and $role != "" and !stage.unconstrained
+			role = if ($role_start == 0) "" else slice(source, $role_start, $role_end - $role_start)
+			escaped_role = escaped and role != "" and !stage.unconstrained
 			content = slice(source, start, end - start)
-			{ used, body: if (escaped and !escaped_role) slice(source, position + 1, used - 1) else content, role: $role, escaped: escaped and !escaped_role, escaped_role }
+			{ matched: { used, body: if (escaped and !escaped_role) slice(source, position + 1, used - 1) else content, role, escaped: escaped and !escaped_role, escaped_role }, cursor: $cursor }
 		}
 	}
 }
@@ -1850,23 +2457,63 @@ quote_attributes = |role| {
 	"${if (id == "") "" else " id=\"${id}\""}${if (classes == "") "" else " class=\"${classes}\""}"
 }
 
-pass_match : Str, U8, List({ name : Str, value : Str }), Bool, Bool -> QuoteMatch
-pass_match = |source, prev, attrs, single, prev_word| {
+RoleCursor : { known : Bool, searched_after : U64, closing : Try(U64, [Missing]), after : Str }
+
+empty_role_cursor : RoleCursor
+empty_role_cursor = { known: False, searched_after: 0, closing: Err(Missing), after: "" }
+
+# Raw role syntax closes at the next literal ], even after a backslash. Keep
+# its bounded cursor separate from first_bracket_end's escaped-body cursor.
+cached_role_end : Str, U64, U64, RoleCursor -> { end : Try(U64, [Missing]), cursor : RoleCursor }
+cached_role_end = |source, open, base, cursor| {
+	absolute_open = base + open
+	if cursor.known and absolute_open >= cursor.searched_after {
+		match cursor.closing {
+			Ok(position) if position > absolute_open => return { end: Ok(position - base), cursor }
+			Err(_) => return { end: Err(Missing), cursor }
+			_ => {}
+		}
+	}
+	end = find(source, "]", open + 1)
+	closing = match end {
+		Ok(position) => Ok(base + position)
+		Err(_) => Err(Missing)
+	}
+	# This tail belongs to the immutable pass-source phase, not to its owned
+	# attribute state. Reuse it for later role opens sharing the same raw closer.
+	after = match end {
+		Ok(position) => source.drop_prefix(take(source, position + 1))
+		Err(_) => ""
+	}
+	{ end, cursor: { known: True, searched_after: absolute_open, closing, after } }
+}
+
+pass_match : Str, U8, AttributeView, Bool, Bool -> QuoteMatch
+pass_match = |source, prev, attrs, single, prev_word| pass_match_cached(source, prev, attrs, single, prev_word, 0, empty_bracket_cursor, empty_role_cursor).matched
+
+pass_match_cached : Str, U8, AttributeView, Bool, Bool, U64, BracketCursor, RoleCursor -> { matched : QuoteMatch, cursor : BracketCursor, role_cursor : RoleCursor }
+pass_match_cached = |source, prev, attrs, single, prev_word, base, incoming_cursor, incoming_role_cursor| {
+	var $cursor = incoming_cursor
+	var $role_cursor = incoming_role_cursor
 	none = { used: 0, body: "", role: "", escaped: False, escaped_role: False }
 	escaped = source.starts_with("\\")
 	var $offset = if (escaped) 1 else 0
-	var $role = ""
-	if drop(source, $offset).starts_with("[") {
-		match find(source, "]", $offset + 1) {
+	var $role_start = 0
+	var $role_end = 0
+	if (source.to_utf8().get($offset) ?? 0) == '[' {
+		searched_role = cached_role_end(source, $offset, base, $role_cursor)
+		$role_cursor = searched_role.cursor
+		match searched_role.end {
 			Ok(end) => {
-				$role = slice(source, $offset + 1, end - $offset - 1)
+				$role_start = $offset + 1
+				$role_end = end
 				$offset = end + 1
 			}
-			Err(_) => return none
+			Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 		}
 	}
 
-	rest = drop(source, $offset)
+	rest = if ($role_start != 0) $role_cursor.after else if (escaped) source.drop_prefix("\\") else source
 	var $math_prefix = ""
 	for prefix in ["stem:", "latexmath:", "asciimath:"] {
 		if rest.starts_with(prefix) {
@@ -1876,41 +2523,49 @@ pass_match = |source, prev, attrs, single, prev_word| {
 	}
 	if !single and $math_prefix != "" {
 		match find(rest, "[", $math_prefix.to_utf8().len()) {
-			Ok(open) => match first_bracket_end(rest, open) {
-				Ok(end) => {
-					used = $offset + end + 1
-					if escaped {
-						return { used, body: drop(take(source, used), 1), role: "", escaped: True, escaped_role: False }
+			Ok(open) => {
+				searched = cached_bracket_end(rest, open, base + $offset, $cursor)
+				$cursor = searched.cursor
+				match searched.end {
+					Ok(end) => {
+						used = $offset + end + 1
+						if escaped {
+							return { matched: { used, body: drop(take(source, used), 1), role: "", escaped: True, escaped_role: False }, cursor: $cursor, role_cursor: $role_cursor }
+						}
+						subs = slice(rest, $math_prefix.to_utf8().len(), open - $math_prefix.to_utf8().len())
+						raw = repl(slice(rest, open + 1, end - open - 1), "\\]", "]")
+						dialect = if ($math_prefix == "stem:") lookup_view(attrs, "stem") ?? "" else $math_prefix
+						latex = dialect == "latexmath:" or dialect == "latexmath" or dialect == "latex" or dialect == "tex"
+						content = if (latex and raw.starts_with("$") and raw.ends_with("$")) slice(raw, 1, raw.to_utf8().len() - 2) else raw
+						html = render_with_view(content, attrs, { subs: if (subs == "") "specialcharacters" else subs })
+						body = if (latex) "\\(${html}\\)" else "\\$${html}\\$"
+						return { matched: { used, body, role: "", escaped: False, escaped_role: False }, cursor: $cursor, role_cursor: $role_cursor }
 					}
-					subs = slice(rest, $math_prefix.to_utf8().len(), open - $math_prefix.to_utf8().len())
-					raw = repl(slice(rest, open + 1, end - open - 1), "\\]", "]")
-					dialect = if ($math_prefix == "stem:") lookup(attrs, "stem") ?? "" else $math_prefix
-					latex = dialect == "latexmath:" or dialect == "latexmath" or dialect == "latex" or dialect == "tex"
-					content = if (latex and raw.starts_with("$") and raw.ends_with("$")) slice(raw, 1, raw.to_utf8().len() - 2) else raw
-					html = AsciiDocInline.render_with(content, attrs, { subs: if (subs == "") "specialcharacters" else subs })
-					body = if (latex) "\\(${html}\\)" else "\\$${html}\\$"
-					return { used, body, role: "", escaped: False, escaped_role: False }
+					Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 				}
-				Err(_) => return none
 			}
-			Err(_) => return none
+			Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 		}
 	}
 	if !single and rest.starts_with("pass:") {
 		match find(rest, "[", 5) {
-			Ok(open) => match first_bracket_end(rest, open) {
-				Ok(end) => {
-					used = $offset + end + 1
-					if escaped {
-						return { ..none, used, body: take(source, used), escaped: True }
+			Ok(open) => {
+				searched = cached_bracket_end(rest, open, base + $offset, $cursor)
+				$cursor = searched.cursor
+				match searched.end {
+					Ok(end) => {
+						used = $offset + end + 1
+						if escaped {
+							return { matched: { ..none, used, body: take(source, used), escaped: True }, cursor: $cursor, role_cursor: $role_cursor }
+						}
+						subs = slice(rest, 5, open - 5)
+						content = repl(slice(rest, open + 1, end - open - 1), "\\]", "]")
+						return { matched: { used, body: render_with_view(content, attrs, { subs: subs }), role: "", escaped: False, escaped_role: False }, cursor: $cursor, role_cursor: $role_cursor }
 					}
-					subs = slice(rest, 5, open - 5)
-					content = repl(slice(rest, open + 1, end - open - 1), "\\]", "]")
-					return { used, body: AsciiDocInline.render_with(content, attrs, { subs: subs }), role: "", escaped: False, escaped_role: False }
+					Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 				}
-				Err(_) => return none
 			}
-			Err(_) => return none
+			Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 		}
 	}
 	choices = if single {
@@ -1927,8 +2582,9 @@ pass_match = |source, prev, attrs, single, prev_word| {
 						content = slice(rest, n, end - n)
 						if n > 1 or (end > n and !space(content.to_utf8().first() ?? 0) and !space(content.to_utf8().last() ?? 0) and !word_at(rest.to_utf8(), end + n)) {
 							used = $offset + end + n
-							body = if (escaped and $role == "") drop(take(source, used), 1) else if (n == 3) content else escape(content)
-							return { used, body, role: $role, escaped: escaped and $role == "", escaped_role: escaped and $role != "" }
+							role = if ($role_start == 0) "" else slice(source, $role_start, $role_end - $role_start)
+							body = if (escaped and role == "") drop(take(source, used), 1) else if (n == 3) content else escape(content)
+							return { matched: { used, body, role, escaped: escaped and role == "", escaped_role: escaped and role != "" }, cursor: $cursor, role_cursor: $role_cursor }
 						}
 						$search = end + n
 					}
@@ -1939,7 +2595,7 @@ pass_match = |source, prev, attrs, single, prev_word| {
 			}
 		}
 	}
-	none
+	{ matched: none, cursor: $cursor, role_cursor: $role_cursor }
 }
 
 restore_tags : Str, Str, List(Str) -> Str
@@ -2051,10 +2707,13 @@ expect AsciiDocInline.render("Hello {NAME}.", [{ name: "name", value: "Roc" }]) 
 # Snapshot revisions allow a source definition to reset a dynamic attribute,
 # including a definition whose text equals its previous definition.
 refresh_state : List({ name : Str, value : Str }), AsciiDocInline.State -> AsciiDocInline.State
-refresh_state = |attrs, state| {
-	{ attributes: incoming_attributes, removed: incoming_removed, snapshot: incoming_snapshot, snapshot_index: incoming_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count } = state
-	{ attributes, removed, snapshot, snapshot_index } = refresh_owned_attributes(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_index)
-	{ attributes, removed, snapshot, snapshot_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count }
+refresh_state = |attrs, state| refresh_state_indexed(attrs, state, Err(Missing))
+
+refresh_state_indexed : List({ name : Str, value : Str }), AsciiDocInline.State, SourceHint -> AsciiDocInline.State
+refresh_state_indexed = |attrs, state, hint| {
+	{ snapshot_before: incoming_before, snapshot_after: incoming_after, trusted_snapshot_generation, trusted_snapshot_token, dynamic_tags_possible, attributes: incoming_attributes, removed: incoming_removed, snapshot: incoming_snapshot, snapshot_index: incoming_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count } = state
+	{ attributes, removed, snapshot, snapshot_index, snapshot_before, snapshot_after } = refresh_hint(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_index, incoming_before, incoming_after, trusted_snapshot_token, trusted_snapshot_generation, hint)
+	{ snapshot_before, snapshot_after, trusted_snapshot_generation: hint_generation(hint), trusted_snapshot_token: hint_token(hint), dynamic_tags_possible: dynamic_tags_possible and !attributes.is_empty(), attributes, removed, snapshot, snapshot_index, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count }
 }
 
 # Source attributes use their first matching binding, just like direct().
@@ -2079,10 +2738,7 @@ direct = |attrs, name| {
 	Err(Missing)
 }
 
-effective_attributes : List({ name : Str, value : Str }), AsciiDocInline.State -> List({ name : Str, value : Str })
-effective_attributes = |attrs, state| merged_attributes(attrs, state.attributes, state.removed)
-
-merged_attributes : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool) -> List({ name : Str, value : Str })
+merged_attributes : List({ name : Str, value : Str }), AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool) -> List({ name : Str, value : Str })
 merged_attributes = |attrs, attributes, removed| {
 	if attributes.is_empty() and removed.is_empty() {
 		return attrs
@@ -2092,11 +2748,11 @@ merged_attributes = |attrs, attributes, removed| {
 
 # Dynamic values override the source snapshot, then removed values remain
 # hidden. Built-in attribute defaults are applied by the ordinary lookup.
-dynamic_value : List({ name : Str, value : Str }), Dict(Str, Str), Dict(Str, Bool), Str -> Try(Str, [Missing])
-dynamic_value = |attrs, attributes, removed, name| {
+dynamic_value : List({ name : Str, value : Str }), RenderContext, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str -> Try(Str, [Missing])
+dynamic_value = |attrs, context, attributes, removed, name| {
 	match attributes.get(name) {
 		Ok(value) => Ok(value)
-		Err(_) => if (removed.contains(name)) Err(Missing) else direct(attrs, name)
+		Err(_) => if (removed.contains(name)) Err(Missing) else source_value(attrs, context.snapshot_index, context.snapshot_before, context.snapshot_after, name)
 	}
 }
 
@@ -2106,6 +2762,29 @@ safe_prefix : Str, Str -> Str
 safe_prefix = |value, prefix| {
 	var $prefix = prefix
 	while value.contains($prefix) {
+		$prefix = $prefix.concat("\u(1)")
+	}
+	$prefix
+}
+
+# A trusted source certificate already excludes every static value. The
+# footnote slot delimiter still has to exclude the actual substituted source.
+layered_delimiter : Str, List({ name : Str, value : Str }), List({ name : Str, value : Str }), List({ name : Str, value : Str }), Str -> Str
+layered_delimiter = |source, attrs, before, after, certificate| {
+	var $prefix = if (certificate == "") "\u(1)" else certificate
+	while source.contains($prefix) or (certificate == "" and [before, attrs, after].any(|part| part.any(|attr| attr.value.contains($prefix)))) {
+		$prefix = $prefix.concat("\u(1)")
+	}
+	$prefix
+}
+
+certified_delimiter : Str, List({ name : Str, value : Str }), Str -> Str
+certified_delimiter = |source, attrs, certificate| {
+	if certificate == "" {
+		return attribute_delimiter(source, attrs, "")
+	}
+	var $prefix = certificate
+	while source.contains($prefix) {
 		$prefix = $prefix.concat("\u(1)")
 	}
 	$prefix
@@ -2123,17 +2802,23 @@ attribute_delimiter = |source, attrs, prefix| {
 	$delimiter
 }
 
-mutate_attributes : Str, List({ name : Str, value : Str }), Groups, AsciiDocInline.State, Str, List(Str) -> { source : Str, state : AsciiDocInline.State, tags : List(Str), prefix : Str }
-mutate_attributes = |source, attrs, g, state, prefix, tags| {
-	{ attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index, indexed_ref_count, snapshot, snapshot_index } = state
-	context = { emitted_footnotes, refs, ref_index, indexed_ref_count, snapshot, snapshot_index }
-	{ source: result, context: next_context, attributes: next_attributes, removed: next_removed, tag_prefix: next_prefix, footnotes: next_notes, note_index: next_names, indexed_note_count: next_count, tags: next_tags, prefix: delimiter } = mutate_owned_attributes(source, attrs, g, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, context, prefix, tags)
-	{ source: result, state: assemble_state(next_context, next_attributes, next_removed, next_prefix, next_notes, next_names, next_count), tags: next_tags, prefix: delimiter }
+# Only for the protected inserted-value subscan: quote/attribute/special
+# processing is disabled and pass extraction stays disabled. Keep a conservative
+# set of possible handler bytes; outer protection and restoration are unchanged.
+inserted_scan_needed : Str, Groups -> Bool
+inserted_scan_needed = |value, g| {
+	if g.replacements and (value.contains("&") or value.contains(".") or value.contains("-") or value.contains("<") or value.contains("=") or value.contains("(") or value.contains("'")) {
+		return True
+	}
+	if g.post and value.contains(" +") {
+		return True
+	}
+	g.macros and (value.contains(":") or value.contains("@") or value.contains("[") or value.contains("(") or value.contains("<") or value.contains("&") or value.contains("\\") or value.contains("$"))
 }
 
-mutate_owned_attributes : Str, List({ name : Str, value : Str }), Groups, Dict(Str, Str), Dict(Str, Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, RenderContext, Str, List(Str) -> { source : Str, context : RenderContext, attributes : Dict(Str, Str), removed : Dict(Str, Bool), tag_prefix : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str), prefix : Str }
+mutate_owned_attributes : Str, List({ name : Str, value : Str }), Groups, AsciiDocDict.Map(Str), AsciiDocDict.Map(Bool), Str, List({ name : Str, text : Str }), Dict(Str, U64), U64, RenderContext, Str, List(Str) -> { source : Str, context : RenderContext, attributes : AsciiDocDict.Map(Str), removed : AsciiDocDict.Map(Bool), tag_prefix : Str, footnotes : List({ name : Str, text : Str }), note_index : Dict(Str, U64), indexed_note_count : U64, tags : List(Str), prefix : Str }
 mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, context, prefix, tags| {
-	if !source.contains("{") {
+	if !g.attributes or !source.contains("{") {
 		return { source, context, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count, tags, prefix }
 	}
 	# Each growing collection is an owned argument. The read-only context
@@ -2161,7 +2846,7 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 			if byte == '\\' and (bytes.get($pos + 1) ?? 0) == '{' {
 				match find_bytes(bytes, "}".to_utf8(), $pos + 2) {
 					Ok(end) => {
-						$delimiter = attribute_delimiter(source, attrs, $delimiter)
+						$delimiter = if ($delimiter != "") $delimiter else layered_delimiter(source, attrs, $context.snapshot_before, $context.snapshot_after, $context.source_prefix)
 						$out = $out.concat(token($delimiter, $tags.len()))
 						$tags = $tags.append(slice(line, $pos + 1, end - $pos))
 						$pos = end + 1
@@ -2183,13 +2868,16 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 							kind = parts.first() ?? ""
 							name = (parts.get(1) ?? "").with_ascii_lowercased()
 							if (kind == "counter" or kind == "counter2") and name != "" {
-								current = dynamic_value(attrs, $attributes, $removed, name)
+								current = dynamic_value(attrs, $context, $attributes, $removed, name)
 								value = match current {
 									Ok(text) if text != "" => successor(text)
 									_ => if (parts.len() > 2) Str.join_with(parts.drop_first(2), ":") else "1"
 								}
 								$tag_prefix = safe_prefix(value, $tag_prefix)
 								$attributes = $attributes.insert(name, value)
+								if name.starts_with("__inline-tag:") {
+									$context = { ..$context, dynamic_tags_possible: True }
+								}
 								$removed = $removed.remove(name)
 								if kind == "counter" {
 									$out = $out.concat(value)
@@ -2207,12 +2895,15 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 									value = scan(restore_tags(raw, prefix, tags), [], { ..empty, special: g.special }, 0)
 									$tag_prefix = safe_prefix(value, $tag_prefix)
 									$attributes = $attributes.insert(name, value)
+									if name.starts_with("__inline-tag:") {
+										$context = { ..$context, dynamic_tags_possible: True }
+									}
 									$removed = $removed.remove(name)
 									$drop_empty = True
 								}
 							} else {
 								normalized = key.with_ascii_lowercased()
-								resolved = match dynamic_value(attrs, $attributes, $removed, normalized) {
+								resolved = match dynamic_value(attrs, $context, $attributes, $removed, normalized) {
 									Ok(value) => Ok(value)
 									Err(_) => lookup([], normalized)
 								}
@@ -2224,15 +2915,17 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 											subs = Str.join_with((if (g.replacements) ["replacements"] else []).concat(if (g.macros) ["macros"] else []).concat(if (g.post) ["post_replacements"] else []), ",")
 											var $rendered_html = ""
 											if !value.contains("footnote:") {
-												effective = if (g.macros and macro_candidate(value)) merged_attributes(attrs, $attributes, $removed) else attrs
-												$rendered_html = scan(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0)
+												effective = { source_before: $context.snapshot_before, source_after: $context.snapshot_after, source_prefix: $context.source_prefix, dynamic_tags_possible: $context.dynamic_tags_possible, source: attrs, source_index: $context.snapshot_index, appended: [], values: $attributes, removed: $removed, prefix: $tag_prefix }
+												# Without a possible handler, the protected subscan is identity.
+												$rendered_html = if (!inserted_scan_needed(value, g)) value else scan_view(value, effective, { ..g, quotes: False, attributes: False, special: False, passes_done: True }, 0)
 											} else {
+												nested_hint = context_hint($context)
 												shared = assemble_state($context, $attributes, $removed, $tag_prefix, $footnotes, $note_index, $indexed_note_count)
-												$attributes = Dict.empty()
-												$removed = Dict.empty()
+												$attributes = AsciiDocDict.empty()
+												$removed = AsciiDocDict.empty()
 												$footnotes = []
 												$note_index = Dict.empty()
-												{ html, state: { attributes: next_attributes, removed: next_removed, tag_prefix: next_prefix, footnotes: next_notes, note_index: next_names, indexed_note_count: next_count, emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index } } = AsciiDocInline.render_state(value, attrs, { subs: subs }, shared)
+												{ html, state: { snapshot_before: next_before, snapshot_after: next_after, trusted_snapshot_generation: next_generation, trusted_snapshot_token: next_snapshot_token, dynamic_tags_possible: next_dynamic_tags, attributes: next_attributes, removed: next_removed, tag_prefix: next_prefix, footnotes: next_notes, note_index: next_names, indexed_note_count: next_count, emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index } } = render_dispatch(value, attrs, { subs: subs }, shared, nested_hint)
 												$rendered_html = html
 												$attributes = next_attributes
 												$removed = next_removed
@@ -2240,15 +2933,11 @@ mutate_owned_attributes = |source, attrs, g, attributes, removed, tag_prefix, fo
 												$footnotes = next_notes
 												$note_index = next_names
 												$indexed_note_count = next_count
-												$context = { emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index }
+												$context = { snapshot_before: next_before, snapshot_after: next_after, source_prefix: $context.source_prefix, trusted_snapshot_generation: next_generation, trusted_snapshot_token: next_snapshot_token, dynamic_tags_possible: next_dynamic_tags, emitted_footnotes: next_emitted, refs: next_refs, ref_index: next_ref_index, indexed_ref_count: next_ref_count, snapshot: next_snapshot, snapshot_index: next_snapshot_index }
 											}
-											if $rendered_html == value and !value.to_utf8().any(|b| b == '<' or b == '>' or b == '&' or b == '+') {
-												$out = $out.concat(value)
-											} else {
-												$delimiter = attribute_delimiter(source, attrs, $delimiter)
-												$out = $out.concat(token($delimiter, $tags.len()))
-												$tags = $tags.append($rendered_html)
-											}
+											$delimiter = if ($delimiter != "") $delimiter else layered_delimiter(source, attrs, $context.snapshot_before, $context.snapshot_after, $context.source_prefix)
+											$out = $out.concat(token($delimiter, $tags.len()))
+											$tags = $tags.append($rendered_html)
 										}
 									}
 									Err(_) => {
@@ -2542,12 +3231,12 @@ QuoteResult : { source : Str, prefix : Str, tags : List(Str), deferred : List({ 
 
 # Pass substitutions are restored after the enclosing text's attribute and
 # macro stages. They share the same counters and footnote registry.
-finish_render : Str, List({ name : Str, value : Str }), AsciiDocInline.State, QuoteResult, U64 -> { html : Str, state : AsciiDocInline.State }
-finish_render = |html, attrs, state, quoted, notes_start| {
+finish_render : Str, List({ name : Str, value : Str }), AsciiDocInline.State, QuoteResult, U64, SourceHint -> { html : Str, state : AsciiDocInline.State }
+finish_render = |html, attrs, state, quoted, notes_start, hint| {
 	var $state = state
 	var $tags = quoted.tags
 	for pass in quoted.deferred {
-		rendered = AsciiDocInline.render_state(pass.source, attrs, { subs: pass.subs }, $state)
+		rendered = render_dispatch(pass.source, attrs, { subs: pass.subs }, $state, hint)
 		$state = rendered.state
 		$tags = $tags.set(pass.slot, rendered.html) ?? $tags
 	}
@@ -2570,18 +3259,31 @@ finish_render = |html, attrs, state, quoted, notes_start| {
 	{ html: restore_tags(html, quoted.prefix, $tags), state: { ..$state, footnotes: $notes } }
 }
 
-deferred_pass : Str -> Try({ source : Str, subs : Str }, [Missing])
-deferred_pass = |source| {
+deferred_pass : Str -> Try({ source : Str, subs : Str, used : U64 }, [Missing])
+deferred_pass = |source| deferred_pass_cached(source, 0, empty_bracket_cursor).result
+
+deferred_pass_cached : Str, U64, BracketCursor -> { result : Try({ source : Str, subs : Str, used : U64 }, [Missing]), cursor : BracketCursor }
+deferred_pass_cached = |source, base, cursor| {
 	if !source.starts_with("pass:") {
-		return Err(Missing)
+		return { result: Err(Missing), cursor }
 	}
-	open = find(source, "[", 5)?
-	end = first_bracket_end(source, open)?
-	subs = slice(source, 5, open - 5)
-	if groups(subs).attributes or groups(subs).macros {
-		Ok({ source: slice(source, open + 1, end - open - 1), subs })
-	} else {
-		Err(Missing)
+	match find(source, "[", 5) {
+		Ok(open) => {
+			subs = slice(source, 5, open - 5)
+			selected = groups(subs)
+			# Pure quote/special-character passes are never deferred. Reject
+			# before searching their body; pass_match retains the actual match.
+			if !selected.attributes and !selected.macros {
+				return { result: Err(Missing), cursor }
+			}
+			searched = cached_bracket_end(source, open, base, cursor)
+			result = match searched.end {
+				Ok(end) => Ok({ source: slice(source, open + 1, end - open - 1), subs, used: end + 1 })
+				Err(_) => Err(Missing)
+			}
+			{ result, cursor: searched.cursor }
+		}
+		Err(_) => { result: Err(Missing), cursor }
 	}
 }
 
@@ -2915,20 +3617,25 @@ substitution_stages = |spec| {
 	$unique
 }
 
-render_ordered : Str, List({ name : Str, value : Str }), List(Str), AsciiDocInline.State -> { html : Str, state : AsciiDocInline.State }
-render_ordered = |input, attrs, stages, state| {
-	prior_notes = state.footnotes.len()
-	indexed = if (state.indexed_ref_count == state.refs.len()) state else AsciiDocInline.with_refs(state, state.refs)
-	refreshed = refresh_state(attrs, indexed)
-	extracted = if (stages.contains("macros") and quote_needed(input, { ..empty, macros: True })) quote_state(input, attrs, { ..empty, macros: True, ref_index: refreshed.ref_index }, refreshed) else { source: input, prefix: "", tags: [], deferred: [] }
+render_ordered_indexed : Str, List({ name : Str, value : Str }), List(Str), AsciiDocInline.State, SourceHint -> { html : Str, state : AsciiDocInline.State }
+render_ordered_indexed = |input, attrs, stages, state, hint| {
+	extract_passes = stages.contains("macros") and quote_needed(input, { ..empty, macros: True })
+	{ snapshot_before: incoming_before, snapshot_after: incoming_after, trusted_snapshot_generation, trusted_snapshot_token, dynamic_tags_possible, attributes: incoming_attributes, removed: incoming_removed, tag_prefix, footnotes, note_index, indexed_note_count, emitted_footnotes, refs, ref_index: incoming_refs, indexed_ref_count, snapshot: incoming_snapshot, snapshot_index: incoming_snapshot_index } = state
+	{ attributes, removed, snapshot, snapshot_index: cached_index, snapshot_before, snapshot_after } = refresh_hint(attrs, incoming_attributes, incoming_removed, incoming_snapshot, incoming_snapshot_index, incoming_before, incoming_after, trusted_snapshot_token, trusted_snapshot_generation, hint)
+	snapshot_index = if (cached_index.is_empty() and extract_passes) AsciiDocSource.from_dict(source_attribute_index(attrs)) else cached_index
+	ref_index = if (indexed_ref_count == refs.len()) incoming_refs else refs.fold(Dict.empty(), |found, ref| if (found.contains(ref.id)) found else found.insert(ref.id, ref.text))
+	context = { snapshot_before, snapshot_after, source_prefix: hint_prefix(hint), trusted_snapshot_generation: hint_generation(hint), trusted_snapshot_token: hint_token(hint), dynamic_tags_possible: dynamic_tags_possible and !attributes.is_empty(), emitted_footnotes, refs, ref_index, indexed_ref_count: refs.len(), snapshot, snapshot_index }
+	prior_notes = footnotes.len()
+	macro_groups = { ..empty, macros: True, ref_index }
+	extracted = if (extract_passes) quote_owned(input, attrs, snapshot_index, hint, dynamic_tags_possible, macro_groups, attributes, removed, tag_prefix) else { source: input, prefix: "", tags: [], deferred: [] }
 	var $text = extracted.source
-	var $state = refreshed
+	var $state = assemble_state(context, attributes, removed, tag_prefix, footnotes, note_index, indexed_note_count)
 	for stage in stages {
-		rendered = render_state_fixed($text, attrs, { subs: stage }, $state, True)
-		$text = rendered.html
-		$state = rendered.state
+		{ html, state: next } = render_state_indexed($text, attrs, { subs: stage }, $state, True, hint)
+		$text = html
+		$state = next
 	}
-	finish_render($text, attrs, $state, extracted, prior_notes)
+	finish_render($text, attrs, $state, extracted, prior_notes, hint)
 }
 
 expect AsciiDocInline.render_with("*<b>*", [], { subs: "quotes,specialcharacters" }) == "&lt;strong&gt;&lt;b&gt;&lt;/strong&gt;"
@@ -3051,6 +3758,18 @@ tag_attributes = |prefix, tags| {
 	$attrs
 }
 
+restore_view_tags : Str, AttributeView -> Str
+restore_view_tags = |input, attrs| {
+	if attrs.dynamic_tags_possible {
+		# Retain exact Dict iteration order for arbitrary user replacements.
+		return restore_tag_attributes(input, materialize_view(attrs))
+	}
+	# Ordinary counters cannot add reserved tag bindings. Avoid enumerating
+	# their entire growing dictionary for every mailto subject/body.
+	tags = [attrs.source_before, (if (AsciiDocSource.is_persistent(attrs.source_index)) AsciiDocSource.tag_attributes(attrs.source_index) else attrs.source), attrs.source_after].fold([], |found, part| found.concat(part.keep_if(|attr| attr.name.starts_with("__inline-tag:") and !attrs.removed.contains(attr.name) and !attrs.values.contains(attr.name)))).concat(attrs.appended)
+	restore_tag_attributes(input, tags)
+}
+
 restore_tag_attributes : Str, List({ name : Str, value : Str }) -> Str
 restore_tag_attributes = |input, attrs| {
 	var $text = input
@@ -3080,9 +3799,9 @@ expect AsciiDocInline.render("image:cat.png[alt=\"A &amp; B\"]", []) == "<span c
 
 expect AsciiDocInline.render_with("image:cat.png[A & B]", [], { subs: "specialcharacters,macros" }) == "<span class=\"image\"><img src=\"cat.png\" alt=\"A &amp; B\"></span>"
 
-reference_label : List({ name : Str, value : Str }), Groups, Str -> Try(Str, [Missing])
+reference_label : AttributeView, Groups, Str -> Try(Str, [Missing])
 reference_label = |attrs, g, id| {
-	match lookup(attrs, "ref:${id}") {
+	match lookup_view(attrs, "ref:${id}") {
 		Ok(text) => Ok(text)
 		Err(_) => match g.ref_index.get(id) {
 			Ok(text) => Ok(text)
@@ -3130,8 +3849,8 @@ expect AsciiDocInline.render("https://example.test]", []) == "<a href=\"https://
 # Find a footnote's closing bracket over the original bytes. Only actual
 # nested macros require a bounded substring; ordinary text never copies a
 # source suffix or validates the remainder of the paragraph again.
-footnote_end_at : Str, List(U8), U64, List({ name : Str, value : Str }), Groups -> Try(U64, [Missing])
-footnote_end_at = |source, bytes, open, attrs, g| {
+footnote_end_view : Str, List(U8), U64, AttributeView, Groups -> Try(U64, [Missing])
+footnote_end_view = |source, bytes, open, attrs, g| {
 	var $pos = open + 1
 	note = "footnote:".to_utf8()
 	note_ref = "footnoteref:".to_utf8()
@@ -3158,7 +3877,7 @@ footnote_end_at = |source, bytes, open, attrs, g| {
 						$end = $end + 1
 					}
 				}
-				parse_macro(slice(source, $pos, $end - $pos + if ($end < bytes.len()) 1 else 0), attrs, g, 0).used
+				parse_macro_view(slice(source, $pos, $end - $pos + if ($end < bytes.len()) 1 else 0), attrs, g, 0).used
 			} else 0
 			$pos = $pos + if (nested > 0) nested else 1
 		}
@@ -3307,4 +4026,816 @@ expect {
 	initial = { ..AsciiDocInline.initial_state, emitted_footnotes: [7], refs }
 	result = AsciiDocInline.render_state("{note}", attrs, { subs: "normal" }, initial)
 	result.state.emitted_footnotes == [7] and result.state.refs == refs and result.state.ref_index.get("go") == Ok("Go") and result.state.indexed_ref_count == 1 and result.state.snapshot == attrs and result.state.indexed_note_count == 1
+}
+
+# Explicit attribute stages carry distinct counters through repeated calls.
+expect {
+	var $state = AsciiDocInline.initial_state
+	var $index = 0.U64
+	while $index < 64 {
+		{ html: _, state: next } = AsciiDocInline.render_state("{counter:key${$index.to_str()}}", [], { subs: "attributes,replacements" }, $state)
+		$state = next
+		$index = $index + 1
+	}
+	result = AsciiDocInline.render_state("{key0} {key63} {counter:key0}", [], { subs: "attributes" }, $state)
+	result.html == "1 1 2" and result.state.attributes.len() == 64
+}
+
+# Macro-only stages reuse the document note registry without renumbering refs.
+expect {
+	var $state = AsciiDocInline.initial_state
+	var $index = 0.U64
+	while $index < 64 {
+		{ html: _, state: next } = AsciiDocInline.render_state("footnote:note${$index.to_str()}[Note ${$index.to_str()}.]", [], { subs: "macros" }, $state)
+		$state = next
+		$index = $index + 1
+	}
+	result = AsciiDocInline.render_state("footnote:note0[] footnote:note63[]", [], { subs: "macros" }, $state)
+	result.state.footnotes.len() == 64 and result.state.note_index.get("note0") == Ok(1) and result.state.note_index.get("note63") == Ok(64) and result.html.contains("href=\"#_footnotedef_1\"") and result.html.contains("href=\"#_footnotedef_64\"")
+}
+
+# Preserve preview capture behavior during this ownership change. Native
+# Asciidoctor currently captures 6 here; the established parser captures 5.
+# This known mismatch is retained separately, not claimed as oracle parity.
+expect {
+	result = AsciiDocInline.render_state("{set:captured:pass:a[{counter:n}]} {captured} {counter:n}", [{ name: "n", value: "4" }], { subs: "normal" }, AsciiDocInline.initial_state)
+	result.html == " 5 5" and result.state.attributes.get("captured") == Ok("5") and result.state.attributes.get("n") == Ok("6")
+}
+
+# Immediate stem rendering still reads dynamic dialect attributes.
+expect {
+	first = AsciiDocInline.render_state("{set:stem:latexmath}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("stem:[x < y]", [], { subs: "normal" }, first.state).html == "\\(x &lt; y\\)"
+}
+
+# Role-prefixed and escaped passes retain immediate matching behavior.
+expect {
+	first = AsciiDocInline.render_state("{set:x:dynamic}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("Text [role]pass:a[{x}] and \\pass:a[{x}] and pass:a[{x}]", [], { subs: "normal" }, first.state).html == "Text dynamic and pass:a[dynamic] and dynamic"
+}
+
+# A deferred pass enclosed in a single-plus span shares the cached delimiter.
+expect {
+	first = AsciiDocInline.render_state("{set:mark:\u(1)}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("*bold* +pass:a[{mark}]+ {counter:n}", [], { subs: "normal" }, first.state).html == "<strong>bold</strong> \u(1) 1"
+}
+
+# Dynamic macro settings override the first source binding and can hide it.
+expect {
+	attrs = [{ name: "imagesdir", value: "first" }, { name: "imagesdir", value: "second" }]
+	original = AsciiDocInline.render_state("image:cat.png[]", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	set = AsciiDocInline.render_state("{set:imagesdir:dynamic}", attrs, { subs: "normal" }, original.state)
+	changed = AsciiDocInline.render_state("image:cat.png[]", attrs, { subs: "normal" }, set.state)
+	unset = AsciiDocInline.render_state("{set:imagesdir!}", attrs, { subs: "normal" }, changed.state)
+	hidden = AsciiDocInline.render_state("image:cat.png[]", attrs, { subs: "normal" }, unset.state)
+	original.html.contains("src=\"first/cat.png\"") and changed.html.contains("src=\"dynamic/cat.png\"") and hidden.html.contains("src=\"cat.png\"")
+}
+
+# Empty dynamic values still enable presence-based macro settings.
+expect {
+	set = AsciiDocInline.render_state("{set:experimental:}", [], { subs: "normal" }, AsciiDocInline.initial_state)
+	AsciiDocInline.render_state("kbd:[Enter]", [], { subs: "normal" }, set.state).html == "<kbd>Enter</kbd>"
+}
+
+# An immediate role-prefixed pass reads the dynamic value, but its counter
+# writes remain local; deferred passes intentionally update the shared state.
+expect {
+	attrs = [{ name: "n", value: "4" }]
+	first = AsciiDocInline.render_state("{counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	immediate = AsciiDocInline.render_state("Text [role]pass:a[{counter:n}] {counter:n}", attrs, { subs: "normal" }, first.state)
+	deferred = AsciiDocInline.render_state("Text pass:a[{counter:n}] {counter:n}", attrs, { subs: "normal" }, immediate.state)
+	first.html == "5" and immediate.html == "Text 6 6" and immediate.state.attributes.get("n") == Ok("6") and deferred.html == "Text 8 7" and deferred.state.attributes.get("n") == Ok("8")
+}
+
+# A pure immediate stage has the same ordered scanner semantics without a
+# fresh document state, including aliases and source/value collisions.
+expect {
+	view = { ..static_view([{ name: "mark", value: "\u(1)" }]), values: AsciiDocDict.empty().insert("n", "4") }
+	["q", "specialcharacters", "replacements", "post_replacements"].all(|stage|
+		render_with_view("*word* < & ... +\nnext", view, { subs: stage }) == AsciiDocInline.render_with("*word* < & ... +\nnext", materialize_view(view), { subs: stage }))
+}
+
+# Preview only a slot captured by a literal set expression. Unrelated sets,
+# escaped openings and a line break must not force discarded child renders.
+expect {
+	view = static_view([{ name: "n", value: "4" }])
+	captured = quote_view("{set:x:pass:a[{counter:n}]}", view, normal)
+	before = quote_view("{set:x:value} pass:a[{counter:n}]", view, normal)
+	after = quote_view("pass:a[{counter:n}] {set:x:value}", view, normal)
+	escaped = quote_view("\\{set:x:pass:a[{counter:n}]}", view, normal)
+	newline = quote_view("{set:x:\npass:a[{counter:n}]}", view, normal)
+	captured.tags == ["5"] and before.tags == [""] and after.tags == [""] and escaped.tags == [""] and newline.tags == [""]
+}
+
+# Chunk boundaries cannot interrupt a set prefix, while protected slot bytes
+# must not close a capture containing another protected pass.
+expect {
+	first = capture_set("{se", { matched: 0, active: False, previous: 0 })
+	second = capture_set("t:x:", first)
+	third = capture_set(token("\u(1)", 0), second)
+	end = capture_set("} pass", third)
+	second.active and third.active and !end.active
+}
+
+# Cached source lookup keeps the first binding and invalidates when a later
+# snapshot changes it, even with no dynamic overrides to reconcile.
+expect {
+	attrs = [{ name: "imagesdir", value: "first" }, { name: "imagesdir", value: "second" }]
+	first = AsciiDocInline.render_state("image:cat.png[]", attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	same = AsciiDocInline.render_state("image:cat.png[]", attrs, { subs: "normal" }, first.state)
+	next = AsciiDocInline.render_state("image:cat.png[]", [{ name: "imagesdir", value: "new" }], { subs: "normal" }, same.state)
+	first.state.snapshot_index.get("imagesdir") == Ok("first") and same.html == first.html and next.html.contains("src=\"new/cat.png\"")
+}
+
+# Query restoration preserves duplicate source entries and appended tag order
+# while excluding overridden/removed source bindings from the effective view.
+expect {
+	view = { ..static_view([{ name: "__inline-tag:x", value: "y" }, { name: "__inline-tag:y", value: "z" }]), values: AsciiDocDict.empty().insert("counter", "1"), appended: [{ name: "__inline-tag:z", value: "done" }] }
+	restore_view_tags("x", view) == "done" and restore_view_tags("x", view) == restore_tag_attributes("x", materialize_view(view))
+}
+
+# Arbitrary dynamic replacement names retain their original dictionary order,
+# including a dynamic binding that shadows a source tag binding.
+expect {
+	view = { ..static_view([{ name: "__inline-tag:x", value: "wrong" }, { name: "__inline-tag:y", value: "done" }]), dynamic_tags_possible: True, values: AsciiDocDict.empty().insert("__inline-tag:x", "y").insert("unrelated", "1") }
+	restore_view_tags("x", view) == "done" and restore_view_tags("x", view) == restore_tag_attributes("x", materialize_view(view))
+}
+
+expect {
+	view = { ..static_view([{ name: "__inline-tag:x", value: "wrong" }]), removed: AsciiDocDict.empty().insert("__inline-tag:x", True), appended: [{ name: "__inline-tag:x", value: "right" }] }
+	restore_view_tags("x", view) == "right"
+}
+
+# A caller may seed arbitrary private bindings through the initial state.
+# The initial cache is conservative until an empty registry is observed.
+expect {
+	seeded = { ..AsciiDocInline.initial_state, attributes: AsciiDocDict.empty().insert("__inline-tag:X", "Y") }
+	result = AsciiDocInline.render_state("mailto:a@example.test[Name,X]", [], { subs: "normal" }, seeded)
+	result.html == "<a href=\"mailto:a@example.test?subject=Y\">Name</a>"
+}
+
+# Trusted document snapshots reuse source lookup without structural List
+# equality, including deferred nested calls and same-value source revisions.
+expect {
+	attrs = [{ name: "n", value: "4" }, { name: "__revision:n", value: "1" }]
+	index = { first: source_attribute_index(attrs), token: "snapshot-one", prefix: "\u(1)" }
+	first = AsciiDocInline.render_indexed_state("{counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state, index)
+	passed = AsciiDocInline.render_indexed_state("pass:a[{counter:n}]", attrs, { subs: "normal" }, first.state, index)
+	redefined = [{ name: "n", value: "4" }, { name: "__revision:n", value: "2" }]
+	next = AsciiDocInline.render_indexed_state("{counter:n}", redefined, { subs: "normal" }, passed.state, { first: source_attribute_index(redefined), token: "snapshot-two", prefix: "\u(1)" })
+	first.html == "5" and passed.html == "6" and passed.state.snapshot == attrs and passed.state.trusted_snapshot_token == "snapshot-one" and next.html == "5" and next.state.trusted_snapshot_token == "snapshot-two"
+}
+
+# A legacy/manual render invalidates the trusted token, so returning to an
+# indexed snapshot reconciles a changed value rather than accepting stale state.
+expect {
+	attrs = [{ name: "n", value: "4" }]
+	index = { first: source_attribute_index(attrs), token: "snapshot-one", prefix: "\u(1)" }
+	first = AsciiDocInline.render_indexed_state("{counter:n}", attrs, { subs: "normal" }, AsciiDocInline.initial_state, index)
+	manual = AsciiDocInline.render_state("{counter:n}", [{ name: "n", value: "7" }], { subs: "normal" }, first.state)
+	next = AsciiDocInline.render_indexed_state("{counter:n}", attrs, { subs: "normal" }, manual.state, index)
+	manual.html == "8" and manual.state.trusted_snapshot_token == "" and next.html == "5"
+}
+
+# Stage loops and source removals keep the indexed entry equivalent to the
+# conservative entry while preserving the caller's final semantic snapshot.
+expect {
+	attrs = [{ name: "imagesdir", value: "first" }, { name: "imagesdir", value: "second" }]
+	index = { first: source_attribute_index(attrs), token: "snapshot-one", prefix: "\u(1)" }
+	input = "{set:imagesdir!} image:cat.png[]"
+	indexed = AsciiDocInline.render_indexed_state(input, attrs, { subs: "attributes,macros" }, AsciiDocInline.initial_state, index)
+	legacy = AsciiDocInline.render_state(input, attrs, { subs: "attributes,macros" }, AsciiDocInline.initial_state)
+	indexed.html == legacy.html and indexed.state.removed == legacy.state.removed and indexed.state.snapshot == attrs and indexed.state.trusted_snapshot_token == index.token
+}
+
+# The source certificate includes shadowed and removed values, preserving the
+# existing conservative collision boundary rather than just effective values.
+expect {
+	view = { ..static_view([{ name: "mark", value: "\u(1)\u(1)\u(1)\u(1)" }]), values: AsciiDocDict.empty().insert("mark", "dynamic"), removed: AsciiDocDict.empty().insert("mark", True) }
+	certified = { ..view, source_prefix: "\u(1)\u(1)\u(1)\u(1)\u(1)" }
+	quote_view("*word*", view, normal) == quote_view("*word*", certified, normal)
+}
+
+# Input and synthetic appended values still extend an already certified
+# prefix; the source certificate does not certify either of these inputs.
+expect {
+	view = { ..static_view([{ name: "mark", value: "\u(1)" }]), appended: [{ name: "__inline-tag:x", value: "\u(1)\u(1)" }] }
+	certified = { ..view, source_prefix: "\u(1)\u(1)" }
+	input = "*word* \u(1)\u(1)\u(1)"
+	quote_view(input, view, normal) == quote_view(input, certified, normal)
+}
+
+# A dynamic value can require a longer prefix than the static certificate.
+# Immediate pure-stage passes and ordered stages retain the borrowed proof.
+expect {
+	attrs = [{ name: "source-mark", value: "\u(1)" }]
+	index = { first: source_attribute_index(attrs), token: "certified-source", prefix: "\u(1)\u(1)" }
+	first = AsciiDocInline.render_indexed_state("{set:dynamic-mark:\u(1)\u(1)\u(1)}", attrs, { subs: "normal" }, AsciiDocInline.initial_state, index)
+	input = "*word* pass:q[_nested_] {dynamic-mark}"
+	indexed = AsciiDocInline.render_indexed_state(input, attrs, { subs: "quotes,attributes,macros" }, first.state, index)
+	legacy = AsciiDocInline.render_state(input, attrs, { subs: "quotes,attributes,macros" }, first.state)
+	indexed.html == legacy.html and indexed.state.attributes == legacy.state.attributes
+}
+
+# Arbitrary private caller prefixes cannot use the repeated-control length
+# proof and therefore retain the complete legacy source collision scan.
+expect {
+	view = { ..static_view([{ name: "mark", value: "CUSTOM" }]), prefix: "CUSTOM" }
+	certified = { ..view, source_prefix: "\u(1)" }
+	quote_view("*word*", view, normal) == quote_view("*word*", certified, normal)
+}
+
+# Anonymous/named footnote extraction reserves slots even without quoted
+# syntax. A source certificate preserves collisions in both text and values.
+expect {
+	attrs = [{ name: "mark", value: "\u(1)\u(1)" }]
+	index = { first: source_attribute_index(attrs), token: "note-source", prefix: "\u(1)\u(1)\u(1)" }
+	input = "\u(1)\u(1)\u(1) footnote:shared[A note {mark}.] footnote:shared[]"
+	indexed = AsciiDocInline.render_indexed_state(input, attrs, { subs: "normal" }, AsciiDocInline.initial_state, index)
+	legacy = AsciiDocInline.render_state(input, attrs, { subs: "normal" }, AsciiDocInline.initial_state)
+	indexed.html == legacy.html and indexed.state.footnotes == legacy.state.footnotes and indexed.state.note_index == legacy.state.note_index
+}
+
+# Layered lookup is exactly FIRST before -> base -> after, followed by
+# dynamic overrides/removals and the scanner's lower-priority appended tags.
+expect {
+	base = [{ name: "name", value: "base" }, { name: "imagesdir", value: "base-images" }]
+	before = [{ name: "name", value: "leading" }, { name: "name", value: "second-leading" }]
+	after = [{ name: "name", value: "trailing" }, { name: "experimental", value: "" }]
+	view = { ..static_view(base), source_index: AsciiDocSource.from_dict(source_attribute_index(base)), source_before: before, source_after: after, appended: [{ name: "name", value: "synthetic" }] }
+	changed = { ..view, values: AsciiDocDict.empty().insert("name", "dynamic") }
+	hidden = { ..view, removed: AsciiDocDict.empty().insert("name", True) }
+	lookup_view(view, "name") == Ok("leading") and lookup_view(changed, "name") == Ok("dynamic") and lookup_view(hidden, "name") == Ok("synthetic") and lookup_view(view, "experimental") == Ok("")
+}
+
+# Reusing a base token must still compare small overlays. A same-value
+# revision resets the counter, while changing unrelated metadata does not.
+expect {
+	base = [{ name: "n", value: "4" }]
+	first_index = source_attribute_index(base)
+	before = [{ name: "n", value: "8" }, { name: "__revision:n", value: "one" }]
+	hint = { first: first_index, token: "layer-base", prefix: "\u(1)", before, after: [] }
+	first = AsciiDocInline.render_layered_state("{counter:n}", base, { subs: "normal" }, AsciiDocInline.initial_state, hint)
+	second = AsciiDocInline.render_layered_state("{counter:n}", base, { subs: "normal" }, first.state, { ..hint, after: [{ name: "role", value: "new" }] })
+	revised = [{ name: "n", value: "8" }, { name: "__revision:n", value: "two" }]
+	third = AsciiDocInline.render_layered_state("{counter:n}", base, { subs: "normal" }, second.state, { ..hint, before: revised })
+	first.html == "9" and second.html == "10" and third.html == "9" and third.state.snapshot == base and third.state.snapshot_before == revised
+}
+
+# Deferred passes, explicit stage order, shared inserted notes and isolated
+# immediate previews all see local overlays, matching the old flat source.
+expect {
+	base = [{ name: "n", value: "4" }, { name: "note", value: "footnote:shared[An inserted note.]" }]
+	before = [{ name: "n", value: "8" }]
+	after = [{ name: "imagesdir", value: "assets" }]
+	hint = { first: source_attribute_index(base), token: "layer-base", prefix: "\u(1)", before, after }
+	flat = before.concat(base).concat(after)
+	["normal", "quotes,attributes,macros"].all(
+		|subs| {
+			input = "pass:a[{counter:n}] [role]pass:a[{counter:n}] {note} image:cat.png[]"
+			layered = AsciiDocInline.render_layered_state(
+				input,
+				base,
+				{ subs: subs },
+				AsciiDocInline.initial_state,
+				hint,
+			)
+			legacy = AsciiDocInline.render_state(
+				input,
+				flat,
+				{ subs: subs },
+				AsciiDocInline.initial_state,
+			)
+			layered.html == legacy.html and layered.state.attributes == legacy.state.attributes and layered.state.footnotes == legacy.state.footnotes and layered.state.snapshot_before == before and layered.state.snapshot_after == after
+		},
+	)
+}
+
+# Legacy calls drop old overlays only after reconciling their source values.
+expect {
+	base = [{ name: "n", value: "4" }]
+	hint = { first: source_attribute_index(base), token: "layer-base", prefix: "\u(1)", before: [{ name: "n", value: "8" }], after: [] }
+	first = AsciiDocInline.render_layered_state("{counter:n}", base, { subs: "normal" }, AsciiDocInline.initial_state, hint)
+	legacy = AsciiDocInline.render_state("{counter:n}", base, { subs: "normal" }, first.state)
+	first.html == "9" and legacy.html == "5" and legacy.state.snapshot_before.is_empty() and legacy.state.snapshot_after.is_empty() and legacy.state.trusted_snapshot_token == ""
+}
+
+# An uncertified layered source still checks every overlay value for private
+# slot collisions, even when that binding is shadowed by the dynamic registry.
+expect {
+	base = [{ name: "x", value: "base" }]
+	before = [{ name: "mark", value: "\u(1)\u(1)" }]
+	view = { ..static_view(base), source_index: AsciiDocSource.from_dict(source_attribute_index(base)), source_before: before, values: AsciiDocDict.empty().insert("mark", "dynamic") }
+	flat = { ..static_view(before.concat(base)), values: view.values }
+	quote_view("*word* pass:q[_nested_]", view, normal) == quote_view("*word* pass:q[_nested_]", flat, normal)
+}
+
+# Query replacement order remains the complete effective before/base/after
+# order, including duplicates and appended synthetic replacement attributes.
+expect {
+	view = { ..static_view([{ name: "__inline-tag:y", value: "z" }]), source_before: [{ name: "__inline-tag:x", value: "y" }], source_after: [{ name: "__inline-tag:z", value: "done" }], appended: [{ name: "__inline-tag:done", value: "final" }] }
+	restore_view_tags("x", view) == "final" and restore_view_tags("x", view) == restore_tag_attributes("x", materialize_view(view))
+}
+
+# Source generations distinguish same-value revisions without canonicalizing
+# the full snapshot; changing an unrelated source binding preserves overrides.
+expect {
+	first_store = AsciiDocSource.new("counter-document", [{ name: "n", value: "4" }])
+	first_key = AsciiDocSource.key(first_store)
+	first_hint = { first: AsciiDocSource.index(first_store), token: first_key.namespace, generation: first_key.generation, prefix: AsciiDocSource.prefix(first_store), before: [], after: [] }
+	first = AsciiDocInline.render_source_state("{counter:n}", [], { subs: "normal" }, AsciiDocInline.initial_state, first_hint)
+	revised = AsciiDocSource.define(first_store, "n", "4", False)
+	revised_key = AsciiDocSource.key(revised)
+	revised_hint = { first: AsciiDocSource.index(revised), token: revised_key.namespace, generation: revised_key.generation, prefix: AsciiDocSource.prefix(revised), before: [], after: [] }
+	second = AsciiDocInline.render_source_state("{counter:n}", [], { subs: "normal" }, first.state, revised_hint)
+	unrelated = AsciiDocSource.define(revised, "other", "value", False)
+	third = AsciiDocInline.render_source_state("{counter:n}", [], { subs: "normal" }, second.state, { ..revised_hint, first: AsciiDocSource.index(unrelated), generation: AsciiDocSource.key(unrelated).generation })
+	first.html == "5" and second.html == "5" and third.html == "6" and third.state.snapshot.is_empty() and third.state.trusted_snapshot_generation == 2 and AsciiDocSource.lookup(first_store, "__revision:n").is_err()
+}
+
+# Empty fallback Lists cannot make a parsed source equal to a legacy empty
+# environment; dropping that source resets live overrides before substitution.
+expect {
+	store = AsciiDocSource.new("counter-document", [{ name: "n", value: "4" }])
+	key = AsciiDocSource.key(store)
+	first = AsciiDocInline.render_source_state("{counter:n}", [], { subs: "normal" }, AsciiDocInline.initial_state, { first: AsciiDocSource.index(store), token: key.namespace, generation: key.generation, prefix: AsciiDocSource.prefix(store), before: [], after: [] })
+	legacy = AsciiDocInline.render_state("{counter:n}", [], { subs: "normal" }, first.state)
+	legacy.html == "1" and !AsciiDocSource.is_persistent(legacy.state.snapshot_index) and legacy.state.trusted_snapshot_generation == 0 and legacy.state.trusted_snapshot_token == ""
+}
+
+# Immediate children read parent values through an immutable view; their
+# counter/set/note writes remain isolated while deferred passes share state.
+expect {
+	store = AsciiDocSource.new("preview-document", [{ name: "n", value: "4" }])
+	key = AsciiDocSource.key(store)
+	hint = { first: AsciiDocSource.index(store), token: key.namespace, generation: key.generation, prefix: AsciiDocSource.prefix(store), before: [], after: [] }
+	initial = AsciiDocInline.render_source_state("{counter:n}", [], { subs: "normal" }, AsciiDocInline.initial_state, hint)
+	input = "[role]pass:a[{counter:n}] pass:a[{counter:n}] {counter:n}"
+	result = AsciiDocInline.render_source_state(input, [], { subs: "normal" }, initial.state, hint)
+	legacy_initial = AsciiDocInline.render_state("{counter:n}", AsciiDocSource.materialize(store), { subs: "normal" }, AsciiDocInline.initial_state)
+	legacy = AsciiDocInline.render_state(input, AsciiDocSource.materialize(store), { subs: "normal" }, legacy_initial.state)
+	result.html == legacy.html and result.state.attributes == legacy.state.attributes and result.state.snapshot_index == AsciiDocSource.index(store) and initial.state.attributes.get("n") == Ok("5")
+}
+
+# Isolated preview lookup and query restoration retain parent overrides,
+# removals, duplicate Flat source tags and appended tag replacement order.
+expect {
+	store = AsciiDocSource.new("preview-tags", [{ name: "__inline-tag:X", value: "Y" }, { name: "__inline-tag:Y", value: "Z" }])
+	view = { ..static_view([]), source_index: AsciiDocSource.index(store), source_prefix: AsciiDocSource.prefix(store), source_after: [{ name: "__inline-tag:Z", value: "done" }], appended: [{ name: "__inline-tag:done", value: "final" }], values: AsciiDocDict.empty().insert("n", "40"), dynamic_tags_possible: False }
+	query = render_with_view("mailto:a@example.test[Name,X]", view, { subs: "macros" })
+	counter = render_with_view("{counter:n} {set:local:value} {local}", view, { subs: "attributes" })
+	legacy = AsciiDocInline.render_with("{counter:n} {set:local:value} {local}", materialize_view(view), { subs: "attributes" })
+	query == "<a href=\"mailto:a@example.test?subject=final\">Name</a>" and counter == legacy and view.values.get("n") == Ok("40") and !view.values.contains("local")
+}
+
+# Definition-time readers preserve ordinary escaping, whole-value pass
+# selection, unknown/escaped references and bounded nested source expansion.
+expect {
+	attrs = [{ name: "name", value: "Roc" }, { name: "quoted", value: "*bold*" }, { name: "mark", value: "\u(1)\u(1)" }]
+	store = AsciiDocSource.new("definition-document", attrs)
+	["{name} < &", "{quoted}", "pass:q[*{name}*]", "pass:a[{name}]", "\\{name} {missing}", "{mark} *x*"].all(|source| AsciiDocInline.attribute_value_source(source, store) == AsciiDocInline.attribute_value(source, attrs))
+}
+
+# Delta-driven reset decisions match the conservative flat transition across
+# skipped versions, same-value definitions, tombstones and temporary restores.
+expect {
+	initial = AsciiDocSource.new_parsed("delta-parity", [{ name: "n", value: "4" }, { name: "gone", value: "source" }, { name: "blocked", value: "source" }])
+	unrelated = AsciiDocSource.define_parsed(initial, "other", "one", False)
+	same = AsciiDocSource.define_parsed(unrelated, "n", "4", False)
+	unset = AsciiDocSource.define_parsed(same, "gone", "", True)
+	readded = AsciiDocSource.define_parsed(unset, "gone", "source", False)
+	temporary = AsciiDocSource.set_parsed(readded, "leveloffset", "2")
+	restored = AsciiDocSource.unset_parsed(temporary, "leveloffset")
+	changed_reserved = AsciiDocSource.define_parsed(restored, "__revision:n", "17", False)
+	values = AsciiDocDict.empty().insert("n", "8").insert("gone", "local").insert("leveloffset", "9").insert("__revision:n", "local revision")
+	removed = AsciiDocDict.empty().insert("blocked", True)
+	[(initial, unrelated), (initial, same), (initial, unset), (initial, readded), (initial, temporary), (initial, restored), (initial, changed_reserved), (temporary, restored), (changed_reserved, initial)].all(
+		|(previous, next)| {
+			old_key = AsciiDocSource.key(previous)
+			next_key = AsciiDocSource.key(next)
+			actual = refresh_hint([], values, removed, [], AsciiDocSource.index(previous), [], [], old_key.namespace, old_key.generation, Ok({ first: AsciiDocSource.index(next), token: next_key.namespace, generation: next_key.generation, prefix: AsciiDocSource.prefix(next), before: [], after: [] }))
+			old_flat = AsciiDocSource.materialize(previous)
+			new_flat = AsciiDocSource.materialize(next)
+			expected = refresh_hint(new_flat, values, removed, old_flat, AsciiDocSource.from_dict(source_attribute_index(old_flat)), [], [], "", 0, Ok({ first: AsciiDocSource.from_dict(source_attribute_index(new_flat)), token: "", generation: 0, prefix: "\u(1)", before: [], after: [] }))
+			actual.attributes == expected.attributes and actual.removed == expected.removed
+		},
+	)
+}
+
+# An ordinary fork can have the same key while its source value differs.
+expect {
+	base = AsciiDocSource.new("manual-fork", [{ name: "n", value: "4" }])
+	left = AsciiDocSource.set(base, "n", "5")
+	right = AsciiDocSource.set(base, "n", "6")
+	key = AsciiDocSource.key(left)
+	actual = refresh_hint([], AsciiDocDict.empty().insert("n", "99"), AsciiDocDict.empty(), [], AsciiDocSource.index(left), [], [], key.namespace, key.generation, Ok({ first: AsciiDocSource.index(right), token: key.namespace, generation: key.generation, prefix: AsciiDocSource.prefix(right), before: [], after: [] }))
+	actual.attributes.is_empty()
+}
+
+# Both the raw reserved name and its revision alias can be dynamic bindings.
+expect {
+	base = AsciiDocSource.new_parsed("overlay-revision", [{ name: "n", value: "4" }])
+	key = AsciiDocSource.key(base)
+	actual = refresh_hint([], AsciiDocDict.empty().insert("n", "8").insert("__revision:n", "local"), AsciiDocDict.empty(), [], AsciiDocSource.index(base), [{ name: "__revision:n", value: "1" }], [], key.namespace, key.generation, Ok({ first: AsciiDocSource.index(base), token: key.namespace, generation: key.generation, prefix: AsciiDocSource.prefix(base), before: [{ name: "__revision:n", value: "2" }], after: [] }))
+	actual.attributes.is_empty()
+}
+
+# Many unrelated revisions expose only their own names, retaining all live
+# overrides; a changed source revision still clears an existing removal.
+expect {
+	initial = AsciiDocSource.new_parsed("bounded-delta", [{ name: "blocked", value: "same" }])
+	var $next = initial
+	var $values = AsciiDocDict.empty()
+	var $i = 0.U64
+	while $i < 128 {
+		$values = $values.insert("key${$i.to_str()}", "live")
+		$next = AsciiDocSource.define_parsed($next, "unrelated", $i.to_str(), False)
+		$i = $i + 1
+	}
+	old_key = AsciiDocSource.key(initial)
+	next_key = AsciiDocSource.key($next)
+	actual = refresh_hint([], $values, AsciiDocDict.empty().insert("blocked", True), [], AsciiDocSource.index(initial), [], [], old_key.namespace, old_key.generation, Ok({ first: AsciiDocSource.index($next), token: next_key.namespace, generation: next_key.generation, prefix: AsciiDocSource.prefix($next), before: [], after: [] }))
+	changed = AsciiDocSource.define_parsed($next, "blocked", "same", False)
+	changed_key = AsciiDocSource.key(changed)
+	reset = refresh_hint([], actual.attributes, actual.removed, [], actual.snapshot_index, [], [], next_key.namespace, next_key.generation, Ok({ first: AsciiDocSource.index(changed), token: changed_key.namespace, generation: changed_key.generation, prefix: AsciiDocSource.prefix(changed), before: [], after: [] }))
+	(AsciiDocSource.changed_names(AsciiDocSource.index(initial), AsciiDocSource.index($next)) ?? []).len() == 2 and actual.attributes.len() == 128 and actual.removed.contains("blocked") and reset.attributes.len() == 128 and reset.removed.is_empty()
+}
+
+# Caller-supplied dynamic maps keep builtin iteration order across deletion
+# and reinsertion, including ordered tag restoration and isolated previews.
+expect {
+	original = Dict.empty().insert("n", "9").insert("__inline-tag:x", "y").insert("__inline-tag:y", "done").insert("spare", "kept")
+	owned = AsciiDocDict.from_dict(original)
+	changed = owned.remove("__inline-tag:x").insert("__inline-tag:x", "done")
+	model = original.remove("__inline-tag:x").insert("__inline-tag:x", "done")
+	view = { ..static_view([]), values: changed, dynamic_tags_possible: True }
+	seeded = { ..AsciiDocInline.initial_state, attributes: owned }
+	preview = AsciiDocInline.render_state("pass:a[{counter:n}] {counter:n}", [], { subs: "normal" }, seeded)
+	changed.to_list() == model.to_list() and owned.to_list() == original.to_list() and materialize_view(view) == model.to_list().map(|(name, value)| { name, value }) and restore_view_tags("x", view) == restore_tag_attributes("x", materialize_view(view)) and preview.html == "11 10" and seeded.attributes.get("n") == Ok("9") and preview.state.attributes.get("n") == Ok("11")
+}
+
+# Pass extraction must retain Unicode boundaries across ordinary runs, matches,
+# and the later shared-state deferred evaluation.
+expect AsciiDocInline.render("é pass:q[*Roc*] 😀 pass:q[_end_]", []) == "é <strong>Roc</strong> 😀 <em>end</em>"
+expect AsciiDocInline.render("é pass:a[{counter:n}] 😀 {counter:n}", []) == "é 2 😀 1"
+
+# Escaped macro and role prefixes must retain the surrounding Unicode while
+# bounded prefix removal leaves the original matching/capture behavior intact.
+expect AsciiDocInline.render("é \\link:x[é] 😀", []) == "é link:x[é] 😀"
+expect AsciiDocInline.render("é [.red]++😀 & é++終", []) == "é <span class=\"red\">😀 &amp; é</span>終"
+expect AsciiDocInline.render("é & < 😀 {x} 終", [{ name: "x", value: "Roc" }]) == "é &amp; &lt; 😀 Roc 終"
+
+# The macro prefix is already matched ASCII; EOF and a multibyte following
+# character cannot be the reserved second colon.
+expect AsciiDocInline.render("link:é[終] link: link::é[終]", []) == "<a href=\"é\">終</a> link: link::é[終]"
+
+# Angle prefixes and label searches preserve Unicode, EOF and the boundary
+# between a bare URL and a later unrelated bracket.
+expect AsciiDocInline.render("é <https://é> 😀 <", []) == "é <a href=\"https://é\" class=\"bare\">https://é</a> 😀 &lt;"
+expect AsciiDocInline.render("é \\<https://é> 😀", []) == "é &lt;https://é&gt; 😀"
+expect AsciiDocInline.render("https://é tail [later]", []) == "<a href=\"https://é\" class=\"bare\">https://é</a> tail [later]"
+expect AsciiDocInline.render("https://é[終] tail", []) == "<a href=\"https://é\">終</a> tail"
+
+# Missing closers stay literal, but whitespace does not terminate a legacy
+# angle URL. Separate closers and intervening macro spans advance the cache.
+expect AsciiDocInline.render("<https://a <http://b", []) == "&lt;https://a &lt;http://b"
+expect AsciiDocInline.render("<https://é tail>", []) == "<a href=\"https://é\" class=\"bare\">https://é</a> tail"
+expect AsciiDocInline.render("<https://a> link:x[Label > inside] <http://b>", []) == "<a href=\"https://a\" class=\"bare\">https://a</a> <a href=\"x\">Label &gt; inside</a> <a href=\"http://b\" class=\"bare\">http://b</a>"
+
+# A closer immediately preceded by either one or two backslashes is escaped;
+# earlier/repeated absolute queries must match the unchanged independent scan.
+expect {
+	source = "[a\\]b\\\\]c] [d]"
+	first = cached_bracket_end(source, 0, 0, empty_bracket_cursor)
+	second = cached_bracket_end(source, 11, 0, first.cursor)
+	earlier = cached_bracket_end(source, 0, 0, second.cursor)
+	suffix = source.drop_prefix("[a\\]b\\\\]c] ")
+	retained = cached_bracket_end(suffix, 0, 11, second.cursor)
+	first.end == Ok(9) and second.end == Ok(13) and earlier.end == Ok(9) and retained.end == Ok(2) and first.end == first_bracket_end(source, 0) and retained.end == first_bracket_end(suffix, 0)
+}
+
+expect {
+	source = "[a\\] [b\\\\]"
+	var $cursor = empty_bracket_cursor
+	var $same = True
+	for open in [0, 5, 0, 5] {
+		result = cached_bracket_end(source, open, 0, $cursor)
+		$cursor = result.cursor
+		$same = $same and result.end == Err(Missing) and result.end == first_bracket_end(source, open)
+	}
+	$same and parse_macro_view("link:é[missing link:x[also", static_view([]), normal, 0).used == 0
+}
+
+# Deferred extraction preserves escaped closing bytes in its raw body; a role
+# prefix uses its separate raw ] matcher before the shared body-close cache.
+expect {
+	prefix = "pass:a[é\\]tail] "
+	source = "${prefix}[.red]pass:q[x]"
+	deferred = deferred_pass_cached(source, 0, empty_bracket_cursor)
+	role = pass_match_cached(source.drop_prefix(prefix), 0, static_view([]), False, False, prefix.count_utf8_bytes(), deferred.cursor, empty_role_cursor)
+	preserved = match deferred.result {
+		Ok(value) => value.source == "é\\]tail"
+		Err(_) => False
+	}
+	preserved and role.matched.body == "x" and role.matched.used == "[.red]pass:q[x]".count_utf8_bytes()
+}
+
+expect {
+	source = "pass:a[é\\] pass:m[broken"
+	quoted = quote_view(source, static_view([]), normal)
+	quoted.source == source and quoted.tags.is_empty() and quoted.deferred.is_empty()
+}
+
+expect AsciiDocInline.render("pass:q[é\\]tail]", []) == "é]tail"
+
+# Exact expected substitutions were independently captured from pinned
+# Asciidoctor2.0.23; boundary, escape, and Unicode classes are distinct.
+
+# url-boundary-space-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-space-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-tab-bare
+expect AsciiDocInline.render("Before\thttps://a.b", []) == "Before\t<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-tab-formal
+expect AsciiDocInline.render("Before\thttps://a.b[Link]", []) == "Before\t<a href=\"https://a.b\">Link</a>"
+
+# url-boundary-nbsp-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-nbsp-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-ogham-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-ogham-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-em-space-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-em-space-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-narrow-nbsp-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-narrow-nbsp-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-medium-space-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before <a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-medium-space-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before <a href=\"https://a.b\">Link</a>"
+
+# url-boundary-ideographic-bare
+expect AsciiDocInline.render("Before　https://a.b", []) == "Before　<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-ideographic-formal
+expect AsciiDocInline.render("Before　https://a.b[Link]", []) == "Before　<a href=\"https://a.b\">Link</a>"
+
+# url-boundary-lf-bare
+expect AsciiDocInline.render("Before\nhttps://a.b", []) == "Before\n<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-lf-formal
+expect AsciiDocInline.render("Before\nhttps://a.b[Link]", []) == "Before\n<a href=\"https://a.b\">Link</a>"
+
+# url-boundary-cr-bare
+expect AsciiDocInline.render("Before\rhttps://a.b", []) == "Before\rhttps://a.b"
+
+# url-boundary-cr-formal
+expect AsciiDocInline.render("Before\rhttps://a.b[Link]", []) == "Before\rhttps://a.b[Link]"
+
+# url-boundary-vt-bare
+expect AsciiDocInline.render("Before\u(b)https://a.b", []) == "Before\u(b)https://a.b"
+
+# url-boundary-vt-formal
+expect AsciiDocInline.render("Before\u(b)https://a.b[Link]", []) == "Before\u(b)https://a.b[Link]"
+
+# url-boundary-ff-bare
+expect AsciiDocInline.render("Before\u(c)https://a.b", []) == "Before\u(c)https://a.b"
+
+# url-boundary-ff-formal
+expect AsciiDocInline.render("Before\u(c)https://a.b[Link]", []) == "Before\u(c)https://a.b[Link]"
+
+# url-boundary-nul-bare
+expect AsciiDocInline.render("Before\u(0)https://a.b", []) == "Before\u(0)https://a.b"
+
+# url-boundary-nul-formal
+expect AsciiDocInline.render("Before\u(0)https://a.b[Link]", []) == "Before\u(0)https://a.b[Link]"
+
+# url-boundary-zero-width-bare
+expect AsciiDocInline.render("Before​https://a.b", []) == "Before​https://a.b"
+
+# url-boundary-zero-width-formal
+expect AsciiDocInline.render("Before​https://a.b[Link]", []) == "Before​https://a.b[Link]"
+
+# url-boundary-line-separator-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before https://a.b"
+
+# url-boundary-line-separator-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before https://a.b[Link]"
+
+# url-boundary-paragraph-separator-bare
+expect AsciiDocInline.render("Before https://a.b", []) == "Before https://a.b"
+
+# url-boundary-paragraph-separator-formal
+expect AsciiDocInline.render("Before https://a.b[Link]", []) == "Before https://a.b[Link]"
+
+# url-boundary-angle-raw
+expect AsciiDocInline.render("<https://a.b>", []) == "<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-angle-http
+expect AsciiDocInline.render("<http://a.b>", []) == "<a href=\"http://a.b\" class=\"bare\">http://a.b</a>"
+
+# url-boundary-angle-missing
+expect AsciiDocInline.render("<https://a.b", []) == "&lt;https://a.b"
+
+# url-boundary-angle-escaped
+expect AsciiDocInline.render("\\<https://a.b>", []) == "&lt;https://a.b&gt;"
+
+# url-boundary-angle-url-escaped
+expect AsciiDocInline.render("<\\https://a.b>", []) == "&lt;https://a.b&gt;"
+
+# url-boundary-angle-both-escaped
+expect AsciiDocInline.render("\\<\\https://a.b>", []) == "&lt;\\https://a.b&gt;"
+
+# url-boundary-angle-entity
+expect AsciiDocInline.render("&lt;https://a.b&gt;", []) == "<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-angle-escaped-entity
+expect AsciiDocInline.render("\\&lt;https://a.b&gt;", []) == "&amp;lt;<a href=\"https://a.b&gt\" class=\"bare\">https://a.b&gt</a>;"
+
+# url-boundary-quoted-bare
+expect AsciiDocInline.render("\"https://a.b\"", []) == "\"https://a.b\""
+
+# url-boundary-quoted-formal
+expect AsciiDocInline.render("\"https://a.b[Link]\"", []) == "\"<a href=\"https://a.b\">Link</a>\""
+
+# url-boundary-single-quoted-bare
+expect AsciiDocInline.render("'https://a.b'", []) == "'https://a.b'"
+
+# url-boundary-single-quoted-formal
+expect AsciiDocInline.render("'https://a.b[Link]'", []) == "'<a href=\"https://a.b\">Link</a>'"
+
+# url-boundary-word-formal
+expect AsciiDocInline.render("xhttps://a.b[Link]", []) == "xhttps://a.b[Link]"
+
+# url-boundary-colon-formal
+expect AsciiDocInline.render(":https://a.b[Link]", []) == ":https://a.b[Link]"
+
+# url-boundary-literal-link-valid
+expect AsciiDocInline.render("xlink:https://a.b[Link]", []) == "x<a href=\"https://a.b\">Link</a>"
+
+# url-boundary-literal-link-bare
+expect AsciiDocInline.render("xlink:https://a.b", []) == "xlink:https://a.b"
+
+# url-boundary-literal-link-escaped-valid
+expect AsciiDocInline.render("\\link:https://a.b[Link]", []) == "\\<a href=\"https://a.b\">Link</a>"
+
+# url-boundary-url-escaped-formal
+expect AsciiDocInline.render("\\https://a.b[Link]", []) == "https://a.b[Link]"
+
+# url-boundary-unicode-letter
+expect AsciiDocInline.render("東京https://a.b", []) == "東京https://a.b"
+
+# url-boundary-emoji
+expect AsciiDocInline.render("🙂https://a.b", []) == "🙂https://a.b"
+
+# url-boundary-semicolon
+expect AsciiDocInline.render("word;https://a.b", []) == "word;<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# url-boundary-closing-bracket
+expect AsciiDocInline.render("word]https://a.b", []) == "word]<a href=\"https://a.b\" class=\"bare\">https://a.b</a>"
+
+# Pinned malformed macro boundary: link-boundary-link-incomplete
+expect AsciiDocInline.render("link:https://a.b[", []) == "link:https://a.b["
+
+# Pinned malformed macro boundary: link-boundary-unknown-prefix
+expect AsciiDocInline.render("foo:https://a.b[", []) == "foo:https://a.b["
+
+# Pinned malformed macro boundary: link-boundary-word-prefix
+expect AsciiDocInline.render("xhttps://a.b[", []) == "xhttps://a.b["
+
+# Pinned malformed macro boundary: link-boundary-double-colon-prefix
+expect AsciiDocInline.render("::https://a.b[", []) == "::https://a.b["
+
+# Pinned malformed macro boundary: link-boundary-link-double-colon
+expect AsciiDocInline.render("link::https://a.b[", []) == "link::https://a.b["
+
+# Pinned malformed macro boundary: link-boundary-escaped-link
+expect AsciiDocInline.render("\\link:https://a.b[", []) == "\\link:https://a.b["
+
+# Pinned malformed macro boundary: link-boundary-image-incomplete
+expect AsciiDocInline.render("image:https://a.b[", []) == "image:https://a.b["
+
+# A raw role closes at an escaped ], unlike an escaped passthrough body.
+expect {
+	source = "[.red\\]++é++"
+	raw = cached_role_end(source, 0, 0, empty_role_cursor)
+	matched = pass_match(source, 0, static_view([]), False, False)
+	raw.end == Ok(6) and first_bracket_end(source, 0) == Err(Missing) and matched.role == ".red\\" and matched.body == "é" and matched.used == source.count_utf8_bytes()
+}
+
+# Repeated absent role closers share the scan's raw cursor; a separate direct
+# matcher starts fresh and still accepts a later independent closed role.
+expect {
+	prefix = "[broken pass:q"
+	source = "${prefix}[unfinished"
+	first = pass_match_cached(source, 0, static_view([]), False, False, 0, empty_bracket_cursor, empty_role_cursor)
+	second = pass_match_cached(source.drop_prefix(prefix), 0, static_view([]), False, False, prefix.count_utf8_bytes(), first.cursor, first.role_cursor)
+	independent = pass_match("[.red]++ok++", 0, static_view([]), False, False)
+	first.matched.used == 0 and second.matched.used == 0 and independent.body == "ok" and independent.role == ".red"
+}
+
+# Raw-role lookups also preserve stale-found refresh, earlier query fallback,
+# and relative indexes through retained views of the same immutable source.
+expect {
+	source = "[a] [b] [c]"
+	first = cached_role_end(source, 0, 0, empty_role_cursor)
+	second = cached_role_end(source, 4, 0, first.cursor)
+	earlier = cached_role_end(source, 0, 0, second.cursor)
+	last = cached_role_end(source, 8, 0, earlier.cursor)
+	suffix = source.drop_prefix("[a] ")
+	retained = cached_role_end(suffix, 0, 4, second.cursor)
+	first.end == Ok(2) and second.end == Ok(6) and earlier.end == Ok(2) and last.end == Ok(10) and retained.end == Ok(2) and last.end == find(source, "]", 9) and retained.end == find(suffix, "]", 1)
+}
+
+# The legacy raw pass scanner still balances nested brackets; the raw-role
+# and escaped-body cursors must never replace that separate grammar.
+expect scan_view("pass:q[é [inner] tail]", static_view([]), { ..normal, quotes: False, passes_done: False }, 0) == "é [inner] tail"
+expect bracket_end("[a\\]tail]", 0) == Ok(3) and first_bracket_end("[a\\]tail]", 0) == Ok(8)
+
+# Reusing a fixed-needle cursor preserves the earliest match for retained
+# suffixes, stale found positions, backwards queries and an earlier Missing.
+expect {
+	source = "é]] x]] tail"
+	first = cached_literal_end(source, "]]", 0, 0, empty_bracket_cursor)
+	second = cached_literal_end(source, "]]", 4, 0, first.cursor)
+	earlier = cached_literal_end(source, "]]", 0, 0, second.cursor)
+	missing = cached_literal_end(source, "]]", source.count_utf8_bytes(), 0, second.cursor)
+	backwards = cached_literal_end(source, "]]", 0, 0, missing.cursor)
+	suffix = source.drop_prefix("é]] ")
+	retained = cached_literal_end(suffix, "]]", 0, 5, second.cursor)
+	first.end == Ok(2) and second.end == Ok(6) and earlier.end == Ok(2) and backwards.end == Ok(2) and missing.end == Err(Missing) and retained.end == Ok(1) and retained.end == find(suffix, "]]", 0)
+}
+
+# A newline invalidates the earlier anchor, while a later anchor in the same
+# scan remains valid. The cached newline is not a permanent rejection flag.
+expect AsciiDocInline.render("[[bad\nid]] [[ok]]", []) == "[[bad\nid]] <a id=\"ok\"></a>"
+expect AsciiDocInline.render("((é)) (((hidden))) <<target,label>>", []) == "é  <a href=\"#target\">label</a>"
+
+# Exact ordinary aliases borrow the stored value without reescaping it.
+expect {
+	attrs = [{ name: "leaf", value: "value" }, { name: "empty", value: "" }, { name: "unicode", value: "Roc café 東京" }, { name: "lt", value: "literal" }]
+	store = AsciiDocSource.new("simple-definition", attrs)
+	AsciiDocInline.attribute_value_source("{leaf}", store) == "value" and AsciiDocInline.attribute_value_source("{empty}", store) == "" and AsciiDocInline.attribute_value_source("{unicode}", store) == "Roc café 東京" and AsciiDocInline.attribute_value_source("{lt}", store) == "literal"
+}
+
+# List-backed canonical rendering is an independent fallback reference; this
+# overload does not use the new persistent-store shortcut.
+expect {
+	attrs = [{ name: "leaf", value: "value" }, { name: "empty", value: "" }, { name: "nested", value: "{leaf}" }, { name: "markup", value: "<b> &amp;" }, { name: "escaped", value: "\\{leaf}" }, { name: "passleaf", value: "pass:q[*bold*]" }, { name: "control", value: "\u(1)0\u(1)" }, { name: "whitespace", value: "  value  " }, { name: "tab", value: "a\tb" }, { name: "line", value: "a\nb" }]
+	store = AsciiDocSource.new("simple-definition-fallback", attrs)
+	inputs = ["{leaf}", "{empty}", "{LEAF}", "{unknown}", "{lt}", "{blank}", "{nested}", "{markup}", "{escaped}", "{passleaf}", "{control}", "{whitespace}", "{tab}", "{line}", "\\{leaf}", "{{leaf}}", "{leaf", "{leaf} suffix", "prefix {leaf}", "{counter:n}", "{set:leaf:new}{leaf}", "pass:q[*{leaf}*]", "pass:a[{leaf}]"]
+	inputs.all(|input| AsciiDocInline.attribute_value_source(input, store) == AsciiDocInline.attribute_value(input, attrs))
+}
+
+expect {
+	long = "${Str.join_with(List.repeat("a", 4095), "")}é"
+	attrs = [{ name: "long", value: long }]
+	store = AsciiDocSource.new("simple-definition-bounds", attrs)
+	actual = AsciiDocInline.attribute_value_source("{long}", store)
+	actual.to_utf8().len() == 4095 and actual == AsciiDocInline.attribute_value("{long}", attrs)
+}
+
+# Attribute-only insertion preserves protected-looking literal values. Later
+# special-character stages still run in their declared order.
+expect {
+	values = ["a+", "<b>&+", "footnote:[literal]+", "{counter:n}+", "\u(1)0\u(1)+"]
+	values.all(
+		|value| {
+			attrs = [{ name: "leaf", value }]
+			AsciiDocInline.render_with("{leaf}", attrs, { subs: "attributes" }) == value and AsciiDocInline.render_with("{leaf}", attrs, { subs: "attributes,specialcharacters" }) == escape(value) and AsciiDocInline.render_with("{leaf}", attrs, { subs: "specialcharacters,attributes" }) == value
+		},
+	)
+}
+
+# Literal private-slot bytes survive carried dynamic state and a lone plus.
+expect {
+	first = AsciiDocInline.render_state("{set:x:\u(1)0\u(1)<b>}", [], { subs: "attributes" }, AsciiDocInline.initial_state)
+	literal = AsciiDocInline.render_state("Lead {x} + tail", [], { subs: "normal" }, first.state)
+	linebreak = AsciiDocInline.render_state("{x} +", [], { subs: "normal" }, first.state)
+	literal.html == "Lead \u(1)0\u(1)<b> + tail" and linebreak.html == "\u(1)0\u(1)<b><br>"
+}
+
+# Inserted plain values stay literal after quote and pass extraction.
+expect {
+	values = ["a+", "a++b", "café+", "x>+", "*word*+", "`code`+"]
+	values.all(|value| AsciiDocInline.render_with("{leaf}", [{ name: "leaf", value }], { subs: "normal" }) == value)
 }

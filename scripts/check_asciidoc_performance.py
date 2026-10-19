@@ -26,8 +26,14 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.setrecursionlimit(10000)
 sys.path.insert(0, str(ROOT / 'scripts'))
-from review_roc_syntax import Worker
+from review_roc_syntax import Worker as JsonlWorker
 from review_asciidoc import DEFAULT_HOME, canonical_projection, canonical_html
+
+
+class Worker(JsonlWorker):
+    """Performance accepts both reply protocols; syntax workers remain v1."""
+    def __init__(self, command, timeout=5.0, max_response=16 * 1024 * 1024, env=None):
+        super().__init__(command, timeout, max_response, env=env, protocol_versions=(1, 2))
 
 
 def digest(path):
@@ -73,7 +79,7 @@ def oracle_environment(gem_home):
 def retained_run(report):
     return {key: report[key] for key in (
         'command', 'machine', 'seed', 'driver_sha256', 'worker_transport_sha256',
-        'candidate_build', 'reference', 'measurement_policy', 'batch_policy', 'progress', 'max_ratio', 'deadline_seconds') if key in report}
+        'candidate_build', 'reference', 'measurement_policy', 'scaling_policy', 'correctness_policy', 'worker_protocols', 'batch_policy', 'progress', 'max_ratio', 'deadline_seconds') if key in report}
 
 
 def source_identity(root):
@@ -177,11 +183,55 @@ def static_attribute_nonparagraph(size, context):
         body = '* https://a.b\n' * size
     elif context == 'listing':
         body = '----\nx < y & z\n----\n\n' * size
+    elif context == 'image':
+        body = 'image::cat.png[Cat]\n\n' * size
+    elif context == 'varied-image':
+        body = ''.join(f'image::cat{i}.png[Cat {i}]\n\n' for i in range(size))
     elif context == 'asciidoc-table':
         body = '[cols="a",options=noheader]\n|===\n' + '|https://a.b\n\n' * size + '|===\n'
     else:
         body = ''.join(f'== *S{i}*\n\n' for i in range(size))
     return definitions + '\n\n' + body
+
+
+def static_base_revisions(size, *, varied=False, urls=False):
+    definitions = '\n'.join(f':k{i}: initial' for i in range(size))
+    if varied:
+        body = ''.join(f':k{i}!:\n:k{i}: v{i}\n\n{{k{i}}}\n\n' for i in range(size))
+    else:
+        paragraph = 'https://a.b' if urls else 'Value {k0}.'
+        body = ''.join(f':k0: value{i}\n\n{paragraph}\n\n' for i in range(size))
+    return definitions + '\n\n' + body
+
+
+def static_many_tables(size):
+    definitions = '\n'.join(f':k{i}: initial' for i in range(size))
+    return definitions + '\n\n' + '[cols="1",options=noheader]\n|===\n|x\n|===\n\n' * size
+
+
+def live_dynamic_source_redefinitions(size, kind):
+    sets = kind == 'sets'
+    seed = ' '.join(f'{{set:key{i}:value{i}}}' if sets else f'{{counter:key{i}}}' for i in range(size))
+    source = 'Begin.\n\nSeed ' + seed + (' done.\n\n' if sets else '.\n\n')
+    blocks = []
+    for index in range(size):
+        reset = kind == 'counter-reset' and index == size // 2
+        definition = f':unrelated: {index}\n' + (':key0: 40\n' if reset else '')
+        first = '{counter:key0}' if reset else '{key0}'
+        blocks.append(definition + f'\nProbe {first} {{key{size - 1}}} {{unrelated}}.\n\n')
+    final = f'Final {{key0}} {{key{size - 1}}} {{unrelated}}.\n' if sets else f'Final {{counter:key0}} {{counter:key{size - 1}}} {{unrelated}}.\n'
+    return source + ''.join(blocks) + final
+
+
+def each_live_counter_reset(size):
+    seed = ' '.join(f'{{counter:key{i}}}' for i in range(size))
+    body = ''.join(f':key{i}: 40\n\nProbe {{counter:key{i}}}.\n\n' for i in range(size))
+    return 'Begin.\n\nSeed ' + seed + '.\n\n' + body + f'Final {{counter:key0}} {{counter:key{size - 1}}}.\n'
+
+
+def alternating_rich_simple_counters(size):
+    blocks = ''.join(f'Counter {{counter:key{i}}}.\n\nBody.\n\n' for i in range(size))
+    return blocks + f'Final {{counter:key0}} {{counter:key{size - 1}}}.\n'
 
 
 def geometric(sizes):
@@ -212,6 +262,19 @@ def geometric(sizes):
         'static-attributes-listing-blocks': lambda n: static_attribute_nonparagraph(n, 'listing'),
         'static-attributes-formatted-sections': lambda n: static_attribute_nonparagraph(n, 'section'),
         'static-attributes-asciidoc-table-cells': lambda n: static_attribute_nonparagraph(n, 'asciidoc-table'),
+        'static-attributes-image-blocks': lambda n: static_attribute_nonparagraph(n, 'image'),
+        'static-attributes-varied-image-blocks': lambda n: static_attribute_nonparagraph(n, 'varied-image'),
+        'static-base-attribute-revisions-url': lambda n: static_base_revisions(n, urls=True),
+        'static-base-attribute-revisions-text': static_base_revisions,
+        'static-base-attribute-revisions-varied-unset-readd': lambda n: static_base_revisions(n, varied=True),
+        'static-attributes-many-tables': static_many_tables,
+        'live-dynamic-source-redefinitions-counters': lambda n: live_dynamic_source_redefinitions(n, 'counters'),
+        'live-dynamic-source-redefinitions-sets': lambda n: live_dynamic_source_redefinitions(n, 'sets'),
+        'live-dynamic-source-redefinitions-counter-reset': lambda n: live_dynamic_source_redefinitions(n, 'counter-reset'),
+        'live-dynamic-source-redefinitions-each-counter-reset': each_live_counter_reset,
+        'alternating-rich-simple-counters': alternating_rich_simple_counters,
+        'alternating-rich-simple-counters-option': alternating_rich_simple_counters,
+        'alternating-rich-simple-counters-restored-standard-option': alternating_rich_simple_counters,
         'mailto-positional-query-counter-blocks': lambda n: counter_macro_blocks(n, 'mailto:x@y.z[N,S,B]'),
         'attribute-aliases': attribute_aliases,
         'many-crossrefs': lambda n: '\n\n'.join('[[target' + str(i) + ']]\n== Section ' + str(i) + '\n\nSee <<target' + str(i) + '>>.' for i in range(n)),
@@ -227,6 +290,8 @@ def geometric(sizes):
         'conditional-value': lambda n: conditional_document(n, values=True),
         'formatting-adversary': lambda n: ('*a _b `c ' * n) + 'tail',
         'unclosed-delimiter': lambda n: '----\n' + 'x\n' * n,
+        'default-callout-comment': lambda n: '----\n' + 'code <!--1-->\n' * n + '----',
+        'default-callout-escaped': lambda n: '----\n' + 'code \\<1>\n' * n + '----',
         'nested-containers': lambda n: '\n'.join('=' * (4 + i) for i in range(n)) + '\ntext\n' + '\n'.join('=' * (4 + i) for i in reversed(range(n))),
     }
     priority = ['many-sections','many-footnotes','many-crossrefs','attribute-redefinitions','plain-punctuation-adversary',
@@ -239,6 +304,13 @@ def geometric(sizes):
                 'mutating-preview-counter-blocks','static-attributes-url-blocks',
                 'static-attributes-url-list-items','static-attributes-listing-blocks',
                 'static-attributes-formatted-sections','static-attributes-asciidoc-table-cells',
+                'static-attributes-image-blocks','static-attributes-varied-image-blocks',
+                'static-base-attribute-revisions-url','static-base-attribute-revisions-text',
+                'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
+                'live-dynamic-source-redefinitions-counters','live-dynamic-source-redefinitions-sets',
+                'live-dynamic-source-redefinitions-counter-reset','live-dynamic-source-redefinitions-each-counter-reset',
+                'alternating-rich-simple-counters','alternating-rich-simple-counters-option',
+                'alternating-rich-simple-counters-restored-standard-option',
                 'mailto-positional-query-counter-blocks']
     for family in [*priority,*(name for name in families if name not in priority)]:
         make = families[family]
@@ -255,19 +327,76 @@ def geometric(sizes):
                       'url-counter-blocks','mutating-preview-counter-blocks',
                       'static-attributes-url-blocks','static-attributes-url-list-items',
                       'static-attributes-listing-blocks','static-attributes-formatted-sections',
-                      'static-attributes-asciidoc-table-cells',
-                      'mailto-positional-query-counter-blocks') and max(sizes) >= 1024:
+                      'static-attributes-asciidoc-table-cells','static-attributes-image-blocks',
+                      'static-attributes-varied-image-blocks',
+                      'mailto-positional-query-counter-blocks','default-callout-comment',
+                      'default-callout-escaped') and max(sizes) >= 1024:
             family_sizes = sorted(set(sizes) | {2048,4096})
+        if family in ('static-base-attribute-revisions-url','static-base-attribute-revisions-text',
+                      'static-base-attribute-revisions-varied-unset-readd','static-attributes-many-tables',
+                      'live-dynamic-source-redefinitions-counters','live-dynamic-source-redefinitions-sets',
+                      'live-dynamic-source-redefinitions-counter-reset','live-dynamic-source-redefinitions-each-counter-reset',
+                      'alternating-rich-simple-counters','alternating-rich-simple-counters-option',
+                      'alternating-rich-simple-counters-restored-standard-option'):
+            # Larger runs wait for qualification of the persistent snapshot fix.
+            family_sizes = [size for size in sizes if size in (128,256,512)]
         if family == 'table-footnotes' and max(sizes) >= 1024:
             # The footer's repeated prior-note scans become clear at 8,192
             # cells, still within the default 256 KiB source bound.
             family_sizes = sorted(set(family_sizes) | {8192})
         for size in family_sizes:
-            yield {'id': f'scaling-{family}-{size}', 'family': family, 'size': size, 'source': make(size),
-                   'provenance': {'generator': family, 'parameter': size, 'geometric': True}}
+            case = {'id': f'scaling-{family}-{size}', 'family': family, 'size': size, 'source': make(size),
+                    'provenance': {'generator': family, 'parameter': size, 'geometric': True}}
+            if family in ('alternating-rich-simple-counters','alternating-rich-simple-counters-option',
+                          'alternating-rich-simple-counters-restored-standard-option'):
+                case['expect'] = {'html_contains':['<p>Counter 1.</p>','<p>Body.</p>','<p>Final 2 2.</p>']}
+            if family == 'default-callout-comment':
+                case['expect'] = {'contexts':['listing'], 'html_contains':['code &lt;!--<b class=\"conum\">(1)</b>--&gt;']}
+            elif family == 'default-callout-escaped':
+                case['expect'] = {'contexts':['listing'], 'html_contains':['code &lt;1&gt;'], 'html_excludes':['class=\"conum\"']}
+            if family == 'alternating-rich-simple-counters-option':
+                case['id'] = f'scaling-alternating-rich-simple-counters-{size}-same-standard-option'
+                case['attributes'] = [{'name':'outfilesuffix','value':'.html'}]
+                case['provenance'].update(options_probe='same-value-standard-option', measurement_status='measured-regression')
+            elif family == 'alternating-rich-simple-counters-restored-standard-option':
+                case['id'] = f'scaling-alternating-rich-simple-counters-{size}-restored-standard-option'
+                case['attributes'] = [{'name':'outfilesuffix','value':'.x'}, {'name':'outfilesuffix','value':'.html'}]
+                case['provenance'].update(options_probe='changed-then-restored-standard-option', measurement_status='unmeasured')
+            yield case
 
 
-def corpus(args):
+
+def measured_regressions(sizes):
+    """Append bounded measured regressions without reordering historical inputs."""
+    selected = [size for size in (128, 256, 512) if size in sizes]
+    for family in ('header-first-section-quote-counters',
+                   'header-first-section-mutating-previews'):
+        for size in selected:
+            if family == 'header-first-section-quote-counters':
+                title = ' '.join(f'{{counter:key{i}}} pass:q[*word*]' for i in range(size))
+            else:
+                title = ' '.join(f'pass:a[{{counter:key{i}}}] {{set:last:value}}' for i in range(size))
+            yield {'id': f'scaling-{family}-body-{size}', 'family': family, 'size': size,
+                   'source': '= Header {project}\n:project: Roc\n\n== ' + title + '\n\nBody.',
+                   'expect': {'html_contains': ['<p>Body.</p>']},
+                   'provenance': {'geometric': True, 'reason': 'First-body section title grows live counters during immediate pass/preview operations, with a static body. The separately retained counter-observing body reveals an inherited native/Ruby title-side-effect difference.'}}
+    for size in selected:
+        bits = size.bit_length() - 1
+        names = ['k' + ''.join('c8' if bit == '1' else 'az' for bit in f'{i:0{bits}b}')
+                 for i in range(size)]
+        name_hash = 5381
+        for byte in names[0].encode():
+            name_hash = (name_hash * 33 + byte) % 4294967296
+        yield {'id': f'scaling-source-store-colliding-attribute-names-{size}',
+               'family': 'source-store-colliding-attribute-names', 'size': size,
+               'source': '\n'.join(f':{name}: value{i}' for i, name in enumerate(names))
+                         + '\n\nBody {' + names[0] + '} {' + names[-1] + '}.',
+               'expect': {'html_contains': [f'<p>Body value0 value{size-1}.</p>']},
+               'provenance': {'geometric': True, 'reason': 'All valid lowercase/digit attribute names collide under the current uint32 DJB ordering hash; az and c8 equal polynomial contributions. Measures exact-name collision fallback, never hash identity.',
+                              'name_length': len(names[0]), 'name_hash': name_hash}}
+
+
+def historical_corpus(args):
     if args.replay:
         for path in args.replay:
             value = json.loads(path.read_text())
@@ -296,42 +425,215 @@ def corpus(args):
             if source.is_file() and not source.is_symlink() and not any(p.startswith('.') for p in source.relative_to(path).parts):
                 yield {'id': 'corpus-' + digest(source), 'family': 'corpus', 'source': source.read_text(),
                        'provenance': {'path': str(source), 'sha256': digest(source)}}
+    yield from measured_regressions(args.sizes)
+
+
+def fixed_performance_guards(args):
+    """Load retained measurement inputs without flattening their families."""
+    path = args.root / 'scripts/asciidoc/performance-guards.json'
+    if not path.exists():
+        raise ValueError('required performance guard file missing: ' + str(path))
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict) or value.get('schema_version') != 1 or not isinstance(value.get('cases'), list):
+        raise ValueError('invalid performance guard schema: ' + str(path))
+    guard_sha256 = digest(path)
+    expanded = max(args.sizes, default=0) >= 1024
+    for case in value['cases']:
+        if (case.get('size', 0) > 512 and case.get('scaling_input', 'source') == 'source'
+                and not expanded):
+            continue
+        yield {**case, 'provenance': {**case.get('provenance', {}),
+               'performance_guard': str(path), 'performance_guard_sha256': guard_sha256}}
+
+
+def corpus(args):
+    # Replay and smoke keep their historical early returns, without opening
+    # the guard file or changing their input inventory.
+    if args.replay or args.smoke:
+        yield from historical_corpus(args)
+        return
+    # Fail missing, malformed or unsupported guard data before any expensive
+    # historical request runs. Retained guards still appear only at the end.
+    guards = list(fixed_performance_guards(args))
+    seen = {}
+    for case in historical_corpus(args):
+        seen.setdefault(case['id'], set()).add(case_identity(case))
+        yield case
+    for case in guards:
+        fingerprint = case_identity(case)
+        if case['id'] in seen:
+            if seen[case['id']] != {fingerprint}:
+                raise ValueError('performance guard duplicate ID has different request fingerprint: ' + case['id'])
+            continue
+        seen[case['id']] = {fingerprint}
+        yield case
 
 
 def request(case, mode, iterations, warmup=0):
-    return {'id': case['id'], 'source': case['source'], 'includes': [{'path': path, 'source': source} for path, source in sorted(case.get('includes', {}).items())],
+    value = {'id': case['id'], 'source': case['source'], 'includes': [{'path': path, 'source': source} for path, source in sorted(case.get('includes', {}).items())],
             'expand': 'includes' in case, 'mode': mode, 'iterations': iterations, 'warmup': warmup}
+    attributes = case.get('attributes', [])
+    if not isinstance(attributes, list) or any(not isinstance(a, dict) or set(a) != {'name', 'value'} or not isinstance(a['name'], str) or not isinstance(a['value'], str) for a in attributes):
+        raise ValueError('attributes must be an ordered list of string name/value records')
+    if attributes:
+        value['attributes'] = attributes
+    return value
 
 
 
-def case_identity(case):
-    """Include virtual sources and expansion policy in retained-input keys."""
-    value = request(case, 'parse', 0)
+def request_identity(value):
     payload = {key: value[key] for key in ('source', 'includes', 'expand')}
+    if value.get('attributes'):
+        payload['attributes'] = value['attributes']
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
 
 
-def validate_reply(value, case, iterations):
+def case_identity(case):
+    """The historical source/options fingerprint excludes measurement fields."""
+    return request_identity(request(case, 'parse', 0))
+
+
+_CHECKED_TIMING = object()
+
+
+def validate_reply(value, case, iterations, *, mode=None, warmup=None, allow_unchecked_timing=False):
     if value.get('error'):
         raise ValueError('worker error: ' + json.dumps(value))
-    if value.get('version') != 1 or value.get('id') != case['id'] or value.get('iterations') != iterations or value.get('successes') != iterations:
+    version = value.get('version')
+    if (type(version) is not int or version not in (1, 2) or value.get('id') != case['id']
+            or type(value.get('iterations')) is not int or value['iterations'] != iterations
+            or type(value.get('successes')) is not int or value['successes'] != iterations):
         raise ValueError('worker protocol/count mismatch')
-    if not isinstance(value.get('elapsed_ns'), int) or value['elapsed_ns'] < 0:
+    if type(value.get('elapsed_ns')) is not int or value['elapsed_ns'] < 0:
         raise ValueError('invalid elapsed time')
-    if not isinstance(value.get('checksum'), int) or value['checksum'] < iterations:
+    if type(value.get('checksum')) is not int or value['checksum'] < iterations:
         raise ValueError('operation result was not consumed')
-    if not isinstance(value.get('projection'), dict) or not isinstance(value.get('html'), str):
-        raise ValueError('correctness result missing')
+    if version == 2:
+        phase = 'correctness' if iterations == 0 else 'timing'
+        if value.get('phase') != phase or value.get('mode') not in ('parse', 'render') or (mode is not None and value['mode'] != mode):
+            raise ValueError('worker protocol phase/mode mismatch')
+        if type(value.get('warmup')) is not int or value['warmup'] < 0 or (warmup is not None and value['warmup'] != warmup):
+            raise ValueError('worker warmup count mismatch')
+        if iterations == 0:
+            metric = value.get('operation_checksum')
+            if type(metric) is not int or metric < 1 or value['checksum'] != value['warmup'] * metric:
+                raise ValueError('invalid fresh operation checksum')
+        elif not allow_unchecked_timing and value.get('_checked_timing') is not _CHECKED_TIMING:
+            raise ValueError('compact timing requires a fresh checked context')
+    if version == 1 or iterations == 0:
+        if not isinstance(value.get('projection'), dict) or not isinstance(value.get('html'), str):
+            raise ValueError('correctness result missing')
     return value
 
 
 def equivalent(candidate, reference):
+    if candidate.get('version') == 2 and candidate.get('phase') == 'timing':
+        if candidate.get('_checked_timing') is not _CHECKED_TIMING:
+            raise ValueError('compact timing requires a fresh checked context')
+        return
     if canonical_projection(candidate['projection']) != canonical_projection(reference['projection']):
         raise ValueError('candidate/reference block projections differ')
     if candidate['html'] == reference['html']:
         return
     if canonical_html(candidate['html']) != canonical_html(reference['html']):
         raise ValueError('candidate/reference rendered DOM differs')
+
+
+def worker_stamp(worker):
+    transport = getattr(worker, 'worker', worker)
+    process = getattr(transport, 'proc', None)
+    return (id(worker), id(transport), id(process), getattr(process, 'pid', None))
+
+
+class CheckedTimingWorker:
+    """One case/mode and one worker instance, authenticated by a full zero check.
+
+    No output is synthesized for compact replies. The private marker merely
+    records that the exact request/count/engine checksum was validated here.
+    """
+    def __init__(self, worker, case, mode, before):
+        validate_reply(before, case, 0, mode=mode, warmup=0)
+        self.worker = worker
+        self.instance = worker_stamp(worker)
+        # Retain the original transport identity even if a wrapper swaps it.
+        self.transport = getattr(worker, 'worker', worker)
+        self.case = case
+        self.fingerprint = case_identity(case)
+        self.mode = mode
+        self.before = before
+        self.active = True
+
+    def request(self, value):
+        try:
+            if not self.active or worker_stamp(self.worker) != self.instance:
+                raise ValueError('checked worker context expired')
+            if request_identity(value) != self.fingerprint or value.get('mode') != self.mode or type(value.get('iterations')) is not int or value['iterations'] <= 0:
+                raise ValueError('timing request differs from checked case/mode')
+            reply = validate_reply(self.worker.request(value), self.case, value['iterations'], mode=self.mode,
+                                   warmup=value['warmup'], allow_unchecked_timing=True)
+            if worker_stamp(self.worker) != self.instance:
+                raise ValueError('checked worker context expired during request')
+            if reply['version'] != self.before['version']:
+                raise ValueError('worker protocol changed within checked context')
+            if reply['version'] == 2:
+                if reply['checksum'] != (value['iterations'] + value['warmup']) * self.before['operation_checksum']:
+                    raise ValueError('timing checksum differs from fresh per-engine operation')
+                for key in ('oracle_version', 'oracle_code_sha256', 'include_io'):
+                    if key in self.before and reply.get(key) != self.before[key]:
+                        raise ValueError('reference identity changed during timing')
+                reply['_checked_timing'] = _CHECKED_TIMING
+            else:
+                equivalent(reply, self.before)
+            return reply
+        except Exception:
+            self.active = False
+            raise
+
+    def invalidate(self):
+        self.active = False
+
+
+def reference_identity(reply, before=None):
+    if reply.get('oracle_version') != '2.0.23' or not isinstance(reply.get('oracle_code_sha256'), str) or len(reply['oracle_code_sha256']) != 64:
+        raise ValueError('pinned reference identity missing or wrong version')
+    if reply.get('include_io') != 'caller-map-memory':
+        raise ValueError('reference caller-map memory IO contract missing')
+    if before is not None:
+        for key in ('oracle_version', 'oracle_code_sha256', 'include_io', 'include_path_metadata'):
+            if reply.get(key) != before.get(key):
+                raise ValueError('reference identity changed after timing')
+
+
+def correctness_proof(checks):
+    def digest_value(value):
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return [{'version': value['version'], 'phase': value.get('phase', 'legacy-full'),
+             'operation_checksum': value.get('operation_checksum'),
+             'projection_sha256': digest_value(canonical_projection(value['projection'])),
+             'rendered_dom_sha256': digest_value(canonical_html(value['html'])),
+             'html_sha256': hashlib.sha256(value['html'].encode()).hexdigest()}
+            for value in checks]
+
+
+def finish_correctness(workers, case, mode, before, after):
+    """Fresh self/cross checks even when a timing qualification failed.
+
+    `after` is filled incrementally, so a partial failure remains retainable.
+    The bounded worker/deadline policy still applies to each fresh operation.
+    """
+    for index, worker in enumerate(workers):
+        value = worker.request(request(case, mode, 0))
+        after.append(value)
+        validate_reply(value, case, 0, mode=mode, warmup=0)
+    for index, value in enumerate(after):
+        if value['version'] != before[index]['version']:
+            raise ValueError('worker protocol changed after timing')
+        equivalent(value, before[index])
+        if value['version'] == 2 and value['operation_checksum'] != before[index]['operation_checksum']:
+            raise ValueError('fresh per-engine operation checksum drifted after timing')
+    equivalent(*after)
+    reference_identity(after[1], before[1])
+    return correctness_proof(after)
 
 
 def calibrate(worker, case, mode, window_ns, max_iterations, expected, *, progress=None, engine=None):
@@ -498,21 +800,53 @@ def ratchet(candidate, reference, max_ratio=1.0):
             'noisy': max(candidate['coefficient_of_variation'], reference['coefficient_of_variation']) > 0.25}
 
 
+
+def scaling_measure(case):
+    """Measure source bytes by default, or the canonical semantic request.
+
+    Request size uses compact sorted-key UTF-8 JSON of source, includes,
+    expand and nonempty ordered attributes. Measurement fields and IDs are
+    excluded. A case cannot supply its own numeric input-size override.
+    """
+    basis = case.get('scaling_input', 'source')
+    if basis not in ('source', 'request') or not isinstance(basis, str):
+        raise ValueError('scaling_input must be source or request')
+    if basis == 'source':
+        size = len(case['source'].encode())
+    else:
+        value = request(case, 'parse', 0)
+        payload = {key: value[key] for key in ('source', 'includes', 'expand')}
+        if value.get('attributes'):
+            payload['attributes'] = value['attributes']
+        size = len(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode())
+    return {'scaling_input': basis, 'scaling_input_bytes': size}
+
+
 def scaling(records, max_exponent=1.3):
-    previous = {}; checks = []
-    for row in sorted(records, key=lambda item: (item['mode'], item['case'].get('family',''), len(item['case']['source'].encode()))):
+    previous = {}; checks = []; bases = {}
+    measured = [(row, scaling_measure(row['case'])) for row in records]
+    for row, measure in sorted(measured, key=lambda item: (item[0]['mode'], item[0]['case'].get('family',''), item[1]['scaling_input_bytes'])):
         case = row['case']
         if not case.get('provenance', {}).get('geometric') or 'candidate' not in row:
             continue
-        key = row['mode'], case['family']
-        before = previous.get(key); previous[key] = row
+        family = case['family']
+        basis = measure['scaling_input']
+        if family in bases and bases[family] != basis:
+            raise ValueError('mixed scaling_input metrics in family: ' + family)
+        bases[family] = basis
+        key = row['mode'], family
+        before = previous.get(key); previous[key] = row, measure
         if before:
-            growth = len(case['source'].encode()) / len(before['case']['source'].encode())
+            before_row, before_measure = before
+            if before_measure['scaling_input_bytes'] <= 0:
+                raise ValueError('geometric scaling input must have positive byte length')
+            growth = measure['scaling_input_bytes'] / before_measure['scaling_input_bytes']
             if growth <= 1:
                 continue
-            ratio = row['candidate']['median_ns'] / before['candidate']['median_ns']
+            ratio = row['candidate']['median_ns'] / before_row['candidate']['median_ns']
             exponent = math.log(ratio) / math.log(growth)
-            checks.append({'mode': row['mode'], 'family': case['family'], 'from': before['case']['id'], 'to': case['id'],
+            checks.append({'mode': row['mode'], 'family': family, 'from': before_row['case']['id'], 'to': case['id'],
+                           'scaling_input': basis, 'from_input_bytes': before_measure['scaling_input_bytes'], 'to_input_bytes': measure['scaling_input_bytes'],
                            'byte_growth': growth, 'time_growth': ratio, 'exponent': exponent,
                            'max_exponent': max_exponent, 'regression': exponent > max_exponent})
     return checks
@@ -621,10 +955,13 @@ def main(argv=None):
     journal.write_text('')
     report = {'schema_version': 2, 'batch_policy': args.batch_policy, 'progress': args.progress, 'smoke': args.smoke, 'max_ratio': args.max_ratio,
               'timed_operations': args.modes, 'deadline_seconds': args.deadline_seconds,
-              'resource_policy': 'nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
+              'resource_policy': 'source-revision, live-dynamic/source-redefinition, alternating Rich/simple and many-small-table guards use bounded sizes 128/256/512 pending larger qualification; nested timing families use depths 2..32; package tests verify explicit rejection beyond the 64-level parser limit', 'seed': args.seed, 'records': [], 'scaling': [], 'failures': [],
               'command': [sys.executable, str(Path(__file__).resolve()), *(argv if argv is not None else sys.argv[1:])],
               'machine': {'system': platform.platform(), 'processor': platform.processor(), 'cores': os.cpu_count()},
               'measurement_policy': 'strict per-input1.0x median gate; recorded batch_policy selects shared or independent counts, each elapsed duration divided by its own operation count; short batches pass only with CV<=0.25, conservative ratio interval upper<=limit and >=100us minimum; near-threshold/noisy/replay/geometric inputs use full duration; noisy qualified batches refine within four attempts before failing; all attempts retained; warmup/correctness/IPC/serialization excluded; smoke never asserts timings',
+              'correctness_policy': 'fresh full zero-iteration candidate/reference projection+DOM checks before AND after every case/mode timing; self+cross drift checks; v2 exact per-engine checksum from separate fresh operation; v1 full output checked on every positive response; contexts expire on error/restart',
+              'scaling_policy': 'default source UTF-8 bytes; explicit scaling_input=request uses canonical compact sorted-key UTF-8 JSON of source/includes/expand and nonempty ordered attributes; excludes id/mode/iterations/warmup; mixed family metrics rejected; exponent ceiling unchanged',
+              'worker_protocols': [1, 2],
               'driver_sha256': digest(__file__), 'worker_transport_sha256': digest(ROOT / 'scripts/review_roc_syntax.py'),
               'host_monotonic_nominal_resolution_ns': max(1,math.ceil(time.get_clock_info('monotonic').resolution*1000000000))}
     workers = []
@@ -648,37 +985,42 @@ def main(argv=None):
         workers = start_workers()
         for case in corpus(args):
             for mode in args.modes:
-                row = {'case': case, 'mode': mode, 'source_sha256': hashlib.sha256(case['source'].encode()).hexdigest(), 'request_sha256': case_identity(case)}
+                row = {'case': case, 'mode': mode, 'source_sha256': hashlib.sha256(case['source'].encode()).hexdigest(), 'request_sha256': case_identity(case), **scaling_measure(case)}
                 progress = (lambda message: print(f"AsciiDoc performance [{case['id']} {mode}]: {message}", file=sys.stderr, flush=True)) if args.progress else None
                 if progress: progress('begin')
+                checks, after_checks, timing_workers = [], [], []
                 try:
                     enforce_deadline(deadline)
-                    checks = []
                     for index,worker in enumerate(workers):
                         if progress: progress(f'correctness engine={"candidate" if index==0 else "reference"} iterations=0')
-                        checks.append(validate_reply(worker.request(request(case,mode,0)),case,0))
+                        value = worker.request(request(case,mode,0))
+                        checks.append(value)
+                        validate_reply(value,case,0,mode=mode,warmup=0)
                     equivalent(*checks)
-                    if checks[1].get('oracle_version') != '2.0.23' or len(checks[1].get('oracle_code_sha256','')) != 64:
-                        raise ValueError('pinned reference identity missing or wrong version')
+                    reference_identity(checks[1])
                     report['reference']['gem_code_sha256'] = checks[1]['oracle_code_sha256']
-                    if checks[1].get('include_io') != 'caller-map-memory':
-                        raise ValueError('reference caller-map memory IO contract missing')
                     report['reference']['include_io'] = checks[1]['include_io']
                     report['reference']['include_path_metadata'] = checks[1]['include_path_metadata']
-                    row['correctness'] = {'projection': True, 'rendered_dom': True}
+                    row['correctness'] = {'projection': True, 'rendered_dom': True,
+                                          'request_sha256': row['request_sha256'], 'mode': mode,
+                                          'before': correctness_proof(checks), 'after': None}
+                    timing_workers = [CheckedTimingWorker(worker, case, mode, checks[index]) for index,worker in enumerate(workers)]
                     window = int((1 if args.smoke else args.window_ms) * 1000000)
                     stable = args.smoke or args.stable_all or bool(args.replay) or case.get('provenance',{}).get('geometric',False)
                     row['measurement_strategy'] = 'full-duration' if stable else 'adaptive-headroom-screen'
                     if stable:
-                        counts = [calibrate(worker,case,mode,window,args.max_iterations,checks[1],progress=progress,engine='candidate' if index==0 else 'reference') for index,worker in enumerate(workers)]
+                        counts = [calibrate(worker,case,mode,window,args.max_iterations,checks[1],progress=progress,engine='candidate' if index==0 else 'reference') for index,worker in enumerate(timing_workers)]
                     else:
-                        count = calibrate_common(workers,case,mode,window,args.max_iterations,checks[1],progress=progress)
+                        count = calibrate_common(timing_workers,case,mode,window,args.max_iterations,checks[1],progress=progress)
                         counts = [count,count]
                     sampler = sample_pair_per_engine if args.batch_policy == 'per-engine' else sample_pair
                     iterations = counts if args.batch_policy == 'per-engine' else max(counts)
-                    measured, attempts = sampler(workers,case,mode,iterations,window,1 if args.smoke else args.samples,args.max_iterations,checks[1],screen=not stable,max_ratio=args.max_ratio,progress=progress)
+                    measured, attempts = sampler(timing_workers,case,mode,iterations,window,1 if args.smoke else args.samples,args.max_iterations,checks[1],screen=not stable,max_ratio=args.max_ratio,progress=progress)
                     row['candidate'],row['reference'] = measured
                     row['measurement_attempts'] = attempts
+                    if progress: progress('post-timing fresh correctness')
+                    row['correctness']['after'] = finish_correctness(workers, case, mode, checks, after_checks)
+                    for worker in timing_workers: worker.invalidate()
                     row['timing_qualification'] = attempts[-1]['qualification']
                     row['comparison'] = ratchet(row['candidate'],row['reference'],args.max_ratio)
                     row['status'] = 'protocol-smoke' if args.smoke else 'noisy' if row['comparison']['noisy'] else 'slow' if row['comparison']['regression'] else 'pass'
@@ -686,6 +1028,21 @@ def main(argv=None):
                     if not args.smoke and row['status'] != 'pass':
                         report['failures'].append({'id':case['id'],'mode':mode,'kind':row['status']})
                 except Exception as error:
+                    # Failed timings cannot pass without post-checks either.
+                    # Keep the original qualification error/attempts if a
+                    # bounded post-check also fails or the worker has died.
+                    if timing_workers and not after_checks:
+                        try:
+                            row['correctness']['after'] = finish_correctness(workers, case, mode, checks, after_checks)
+                        except Exception as after_error:
+                            row.setdefault('correctness', {})['after_error'] = str(after_error)
+                    for worker in timing_workers: worker.invalidate()
+                    if checks or after_checks:
+                        artifact = args.output / 'correctness' / (row['request_sha256'] + '-' + mode + '-correctness.json')
+                        artifact.parent.mkdir(exist_ok=True)
+                        artifact.write_text(json.dumps({'request': request(case, mode, 0), 'before': checks, 'after': after_checks,
+                                                        'error': str(error), 'run': retained_run(report)}, indent=2)+'\n')
+                        row['correctness_artifact'] = str(artifact)
                     row['status'] = 'error'; row['error'] = str(error)
                     if isinstance(error, TimingQualificationError):
                         row['measurement_attempts'] = error.measurement_attempts

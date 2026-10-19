@@ -53,7 +53,7 @@ encode_block = |block| {
 			context = node.context
 			level = if (context == "section") node.level else 0
 			source = if (["list_item", "image", "video", "audio", "table"].contains(context)) "" else node.source
-			title = if (context == "list_item") "" else AsciiDoc.render_inline(node.title, node.attrs)
+			title = if (context == "list_item") "" else AsciiDoc.render_inline_attributes(node.title, node.attrs)
 			var $blocks = []
 			for item in node.blocks {
 				if context == "dlist" and has_definition(item) {

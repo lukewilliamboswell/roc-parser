@@ -1,0 +1,2467 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original minimal URL boundary inputs retained with explicit pinned-oracle structural expectations, fresh full native projection/DOM parity required.",
+    "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7"
+  },
+  "coverage": [
+    {
+      "category": "inline-unicode-boundaries",
+      "required_cases": [
+        "url-boundary-space-bare",
+        "url-boundary-space-formal",
+        "url-boundary-tab-bare",
+        "url-boundary-tab-formal",
+        "url-boundary-nbsp-bare",
+        "url-boundary-nbsp-formal",
+        "url-boundary-ogham-bare",
+        "url-boundary-ogham-formal",
+        "url-boundary-em-space-bare",
+        "url-boundary-em-space-formal",
+        "url-boundary-narrow-nbsp-bare",
+        "url-boundary-narrow-nbsp-formal",
+        "url-boundary-medium-space-bare",
+        "url-boundary-medium-space-formal",
+        "url-boundary-ideographic-bare",
+        "url-boundary-ideographic-formal",
+        "url-boundary-lf-bare",
+        "url-boundary-lf-formal",
+        "url-boundary-cr-bare",
+        "url-boundary-cr-formal",
+        "url-boundary-vt-bare",
+        "url-boundary-vt-formal",
+        "url-boundary-ff-bare",
+        "url-boundary-ff-formal",
+        "url-boundary-nul-bare",
+        "url-boundary-nul-formal",
+        "url-boundary-zero-width-bare",
+        "url-boundary-zero-width-formal",
+        "url-boundary-line-separator-bare",
+        "url-boundary-line-separator-formal",
+        "url-boundary-paragraph-separator-bare",
+        "url-boundary-paragraph-separator-formal",
+        "url-boundary-angle-raw",
+        "url-boundary-angle-http",
+        "url-boundary-angle-missing",
+        "url-boundary-angle-escaped",
+        "url-boundary-angle-url-escaped",
+        "url-boundary-angle-both-escaped",
+        "url-boundary-angle-entity",
+        "url-boundary-angle-escaped-entity",
+        "url-boundary-quoted-bare",
+        "url-boundary-quoted-formal",
+        "url-boundary-single-quoted-bare",
+        "url-boundary-single-quoted-formal",
+        "url-boundary-word-formal",
+        "url-boundary-colon-formal",
+        "url-boundary-literal-link-valid",
+        "url-boundary-literal-link-bare",
+        "url-boundary-literal-link-escaped-valid",
+        "url-boundary-url-escaped-formal",
+        "url-boundary-unicode-letter",
+        "url-boundary-emoji",
+        "url-boundary-semicolon",
+        "url-boundary-closing-bracket",
+        "link-boundary-link-incomplete",
+        "link-boundary-unknown-prefix",
+        "link-boundary-url-incomplete",
+        "link-boundary-word-prefix",
+        "link-boundary-colon-prefix",
+        "link-boundary-double-colon-prefix",
+        "link-boundary-link-double-colon",
+        "link-boundary-bare-valid",
+        "link-boundary-link-valid",
+        "link-boundary-escaped-link",
+        "link-boundary-escaped-url",
+        "link-boundary-paren-link-incomplete",
+        "link-boundary-quoted-url-incomplete",
+        "link-boundary-footnote-valid-link",
+        "link-boundary-image-valid",
+        "link-boundary-image-incomplete"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-space-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "4ba9a56a326d400ae5915f85d54c50fe44337e5802d1f684b8fed1daec1d6670",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-space-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-space-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "162b622054491a8773afadb666aa119560c93f0645ffd0164c1c924e4bbe90db",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-space-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\thttps://a.b",
+      "id": "url-boundary-tab-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\thttps://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "f00a7dc9c167db2ea7feaca847a58f0058c0b2a198cfab91fbc2aac2ea082bcc",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-tab-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\thttps://a.b[Link]",
+      "id": "url-boundary-tab-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\thttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "484b31546627c2c19963a91acfd70c9b6f37555ef78a4bc704393bc3d5a7ef63",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-tab-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-nbsp-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "277f0f4e5a6d26b96982de794e389330b65d4ed3df74f0dd108785d175e3bc51",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-nbsp-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-nbsp-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "9fddc7189c0233fb2a8b862a4935c53dfc771988890ca5373894fcf9eb495a4f",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-nbsp-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-ogham-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "15b66a1eec8a942a3795514ae1c249149167ca9d6e025de8a0476ebf41332ada",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ogham-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-ogham-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "9886acd31be395ee2d1164accff7969a32c306b053a7c00b3b04797c54097b37",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ogham-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-em-space-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "b71aee276ee0e25ff71e13fb67870fba575fd8df9fe59005430704c20640ca3a",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-em-space-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-em-space-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "82cfd6c1678c1b25fb8f11c0669d265ae7727ad6ce4716a304d79e718c31b331",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-em-space-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-narrow-nbsp-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "00efaa4799007fdb34f6d87e60e51cdf5ad0d0e6870f524c3a195f8544dfe06a",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-narrow-nbsp-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-narrow-nbsp-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "3e1fae001b29709a45a197e1cf774e157b3c6d84cbe229a499161e44a05ad62a",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-narrow-nbsp-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-medium-space-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "a100bbae94cb5da58ce5228dd45a3f2de6d18b02e24fa6c9f453cf34ca55eae6",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-medium-space-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-medium-space-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "48d51a7cbbdaeeb7163a7eb2ed12b4245941d34563eae45e9c582fde8959b338",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-medium-space-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before　https://a.b",
+      "id": "url-boundary-ideographic-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before　https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "8c3effdd88502f94aad3ace0ec8496896fce5ea833331a73284960fd011af083",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ideographic-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before　https://a.b[Link]",
+      "id": "url-boundary-ideographic-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before　https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "d2d42df41dd37ac8e394ff50dc522672074009d43a8bd8bc615f54a426e6664b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ideographic-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\nhttps://a.b",
+      "id": "url-boundary-lf-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\nhttps://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "6688a0d059d3a90dec4e4267446729c65d52b4de237c2722db88e70ca95e71bf",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-lf-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\nhttps://a.b[Link]",
+      "id": "url-boundary-lf-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\nhttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "5e986739915a1f15097d6b77aaf8e7876390249fab053443ede292c7edb6f1fa",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-lf-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\rhttps://a.b",
+      "id": "url-boundary-cr-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\rhttps://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "263a8102760ab41e6ec72fdb9d66bf4fef66c53789e5ad290098a11473bce94e",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-cr-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\rhttps://a.b[Link]",
+      "id": "url-boundary-cr-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\rhttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "9fe8f38ea7dab5c8e4ad50e1df6459dab9aa5f8e61990e29b34e399a8759b07d",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-cr-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\u000bhttps://a.b",
+      "id": "url-boundary-vt-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\u000bhttps://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "5d9f862ed59216378ef3f378578e8b03e224fd955aa7743b4bc10e56c92833fe",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-vt-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\u000bhttps://a.b[Link]",
+      "id": "url-boundary-vt-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\u000bhttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "bbb5ecc05367dd8cdb153ed7488743fed479b57bd74047e1e01eea6abc7d841d",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-vt-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\fhttps://a.b",
+      "id": "url-boundary-ff-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\fhttps://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "0491a9291d67ad1277f90eff041be28a34c8c8091af7182491276da6b8c9bf37",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ff-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\fhttps://a.b[Link]",
+      "id": "url-boundary-ff-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\fhttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "5651a5bc608dcd2c0fd67daa96fd1b2b5bd7c7df4dc2dfd9022d0cac67d7444b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-ff-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\u0000https://a.b",
+      "id": "url-boundary-nul-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\u0000https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "896c706b1c0990595ec0ded4259ad72529b936a76e2e21d67b3efd92e7576d9b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-nul-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before\u0000https://a.b[Link]",
+      "id": "url-boundary-nul-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before\u0000https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "761f35f8a097d9eb0a74cff75845279852369f5c98a6717b84c1a85a9152f395",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-nul-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before​https://a.b",
+      "id": "url-boundary-zero-width-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before​https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "58093e12c1d921ff40ac4bfa5cdbd17371e77ca9688fddcc0521aedaa620fcae",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-zero-width-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before​https://a.b[Link]",
+      "id": "url-boundary-zero-width-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before​https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "66c91604ba8ca157abb72e3a913e7edc0c68b69d76c481b8221855c2f074af7e",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-zero-width-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-line-separator-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "91d3cdb3e56cb347df98bf75caad15bec71e974e0d47c017c439bc9fff5768f7",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-line-separator-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-line-separator-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "5feba47d60b3435fbaf737e41e1fdf67b4519c27a25fe0a37cb83734157d2d3b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-line-separator-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b",
+      "id": "url-boundary-paragraph-separator-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "90f10ec3dda6b49df96792a05ede1b082924b20ad6a461b74b38d00362194074",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-paragraph-separator-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "Before https://a.b[Link]",
+      "id": "url-boundary-paragraph-separator-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Before https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "1d7c4df3941a3073eb05086ad97ad174aec28fd59ae2026c25441f4e4124fa72",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-paragraph-separator-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "<https://a.b>",
+      "id": "url-boundary-angle-raw",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "<https://a.b>",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "f32121041ff66f349cc0ce9a7a70eccb300ea31ed0454ae054aae3f41c924f5b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-raw",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "<http://a.b>",
+      "id": "url-boundary-angle-http",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "<http://a.b>",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "05ba916bb5591e0219bfc2c5d386f611bc75d55043eb16b05e7a44cef0665de6",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-http",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "<https://a.b",
+      "id": "url-boundary-angle-missing",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "<https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "eb163ec9f90d3a5ced41b14cdf07e1dfe833882494642ffebc7cc277a43fa72b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-missing",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\<https://a.b>",
+      "id": "url-boundary-angle-escaped",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\<https://a.b>",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "c2d20abd35ed177a8bdfe06bd175cb329d79ccb028918c53b6f9c1c6dd9632c3",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-escaped",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "<\\https://a.b>",
+      "id": "url-boundary-angle-url-escaped",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "<\\https://a.b>",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "01b8fba9777bcbae733e7c472280098af5fc2f62046d697db1092a8530aaeb86",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-url-escaped",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\<\\https://a.b>",
+      "id": "url-boundary-angle-both-escaped",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\<\\https://a.b>",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "0ce4fba00cb53ae7764f1e0751b3e319afae7abc690c7d8f25962342e9890634",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-both-escaped",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "&lt;https://a.b&gt;",
+      "id": "url-boundary-angle-entity",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "&lt;https://a.b&gt;",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "21e9da2003bfac516a8e0fdab77c33341e1634f87d3e93d8d1a2c65f5dc7937a",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-entity",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\&lt;https://a.b&gt;",
+      "id": "url-boundary-angle-escaped-entity",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\&lt;https://a.b&gt;",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "09f37b27de26e7c1b9d69dbfee06791d1df7dfbe5e2a188da61b480e3e98b09b",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-angle-escaped-entity",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\"https://a.b\"",
+      "id": "url-boundary-quoted-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\"https://a.b\"",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "20369a019dc82bc6833886242ed9c33fad63809c59c3a0683f6115be7811772d",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-quoted-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\"https://a.b[Link]\"",
+      "id": "url-boundary-quoted-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\"https://a.b[Link]\"",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "21fbfe518eb424f340736a6ff4a1ea890a81638b6a402f5addb29f8f309924f0",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-quoted-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "'https://a.b'",
+      "id": "url-boundary-single-quoted-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "'https://a.b'",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "a3240c3c91cdfbbc89beb7aaa1a5168e40cae0edacebcedeabea90ff5ef520e3",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-single-quoted-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "'https://a.b[Link]'",
+      "id": "url-boundary-single-quoted-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "'https://a.b[Link]'",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "6496cbd1336ca05f1e4775ea4ef3025d27d462f3a6442f7b6e8da8e5aecba046",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-single-quoted-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "xhttps://a.b[Link]",
+      "id": "url-boundary-word-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xhttps://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "41ae94c4d41a310955cf5764de7b8527ce14b6d25c3d513bbe48c1488e52c494",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-word-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": ":https://a.b[Link]",
+      "id": "url-boundary-colon-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "212d64d2f5a8a685cc5e25c6de5c46b449701ba6a8b6115407847a3d76ab99ca",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-colon-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "xlink:https://a.b[Link]",
+      "id": "url-boundary-literal-link-valid",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xlink:https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "bda631e6ee840c979ab14b500e23613720f8701b45ae83d716210f895456fa0e",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-literal-link-valid",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "xlink:https://a.b",
+      "id": "url-boundary-literal-link-bare",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xlink:https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "1f1e3d41929c28ee97ef8cab3b5a49f9fda350240eea70fe6e27fae6ea82c857",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-literal-link-bare",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\link:https://a.b[Link]",
+      "id": "url-boundary-literal-link-escaped-valid",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\link:https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "cc08765af6c6f1f079f9b9523752f591e0323e0f486ee76d1a56b000ec820bc4",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-literal-link-escaped-valid",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\https://a.b[Link]",
+      "id": "url-boundary-url-escaped-formal",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "56f908a580d4bbc3e435bfbe6e38656c3c812eeeafa5c450178d59451ad52686",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-url-escaped-formal",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "東京https://a.b",
+      "id": "url-boundary-unicode-letter",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "東京https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "b40d1d7fa3a3c5aa7efaca808ddf8e9a6f8a282552dd7b6e36f94f2c66d07a8d",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-unicode-letter",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "🙂https://a.b",
+      "id": "url-boundary-emoji",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "🙂https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "05f649ed63b47e6e328789bffa7a3ca55b954d3bad0047fcb5a92b1c18468db1",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-emoji",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "word;https://a.b",
+      "id": "url-boundary-semicolon",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "word;https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "10dac508e7190011b06849f43a1229956490ae8bb1c3f47e76fa9bbdc11f1a32",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-semicolon",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "word]https://a.b",
+      "id": "url-boundary-closing-bracket",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "word]https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "0a6b591bd10f5363631ca84a54429601d90c05dc6c16d6e8602e90be3c44e77d",
+        "source_cohort_sha256": "e22f8366f05eb199cb705a3c110afad75df5597b7d2122313b1d0be954716a62",
+        "source_case_id": "url-boundary-closing-bracket",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "link:https://a.b[",
+      "id": "link-boundary-link-incomplete",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "link:https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "d2989c4d6477976ae724e4dfab870db5da42d497397c31eca68515565c57762e",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-link-incomplete",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "foo:https://a.b[",
+      "id": "link-boundary-unknown-prefix",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "foo:https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "c636142e410684754675d783098d93e3efdaa58f790eedffb55f44f804e42f2e",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-unknown-prefix",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "https://a.b[",
+      "id": "link-boundary-url-incomplete",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "c32ff55b8cfbcfcdd99fef31c925e0d6b17a7f8b04c833f113aff1a6395a2a4e",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-url-incomplete",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "xhttps://a.b[",
+      "id": "link-boundary-word-prefix",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xhttps://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "2bc52b1802826a6a4509957e86a589f296d1dd13841a27299337c9fa27dede07",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-word-prefix",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": ":https://a.b[",
+      "id": "link-boundary-colon-prefix",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "c39792086952152e57aaea2f1337db7529b49f2b467eeab61f5b36ae30f91247",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-colon-prefix",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "::https://a.b[",
+      "id": "link-boundary-double-colon-prefix",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "::https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "7d952c6ef2ee2a0f2bca241512c1e219b678aadf8c30d72c240775902fd19cc9",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-double-colon-prefix",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "link::https://a.b[",
+      "id": "link-boundary-link-double-colon",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "link::https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "c32196c3c1f792efe780cc7df0ee169e8484394139438b210cbaa7f89fffd771",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-link-double-colon",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "https://a.b",
+      "id": "link-boundary-bare-valid",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://a.b",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "fa7dedf031f4d59b85114506f2041c78c899997728629c1ac9edf2f95131192c",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-bare-valid",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "link:https://a.b[Link]",
+      "id": "link-boundary-link-valid",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "link:https://a.b[Link]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "624a2af33e46a610ede5255cf98bdb9b3f8a27aa564f58d772914fafba931d9f",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-link-valid",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\link:https://a.b[",
+      "id": "link-boundary-escaped-link",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\link:https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "a46ba39983a247c2a02ddf73edcf5400be992a8598596744fa3bea030c67369c",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-escaped-link",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\\https://a.b[",
+      "id": "link-boundary-escaped-url",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "ad085fbd3b09df81d640607863f45f9a6beef631384c36deebf92b09660e2251",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-escaped-url",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "(link:https://a.b[",
+      "id": "link-boundary-paren-link-incomplete",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "(link:https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "f86858196e19208512874871424d8d3eab92e043cdfef553282047467ed60a95",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-paren-link-incomplete",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "\"https://a.b[\"",
+      "id": "link-boundary-quoted-url-incomplete",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\"https://a.b[\"",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "71f8cd74e336d472adf6395df8f7cfc0fba40954da0862d9a152f92b2bc3b89a",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-quoted-url-incomplete",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "footnote:[link:https://a.b[Link]]",
+      "id": "link-boundary-footnote-valid-link",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "footnote:[link:https://a.b[Link]]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "8b14a519773cb03177dd536985a8096e4dfc792ce6b3b6431f7cb4c5dc968e63",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-footnote-valid-link",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "image:https://a.b[Alt]",
+      "id": "link-boundary-image-valid",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:https://a.b[Alt]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "23bfdbc0cd530a5b68f8a266f079d38e729e9dd97cb863424b8890ffc96646bf",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-image-valid",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    },
+    {
+      "source": "image:https://a.b[",
+      "id": "link-boundary-image-incomplete",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "url"
+      ],
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:https://a.b[",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "provenance": {
+        "source_request_identity": "0119b87923f668827719e1c78fe6d86daf5483bb8661b11fa0934fb2516404e9",
+        "source_cohort_sha256": "dd19805fbacafa8a50144ac34cb45121952de4846d4e49f7cb08a22ff7ab370a",
+        "source_case_id": "link-boundary-image-incomplete",
+        "verification_report_sha256": "9c9fbe04606abdc5a29e7e282754d11db9b4fedaa817f7e3f7799f9ffb7571b7",
+        "candidate_source_identity": "8f98a8338f7b3b60eeb3fa5bb7464fd05a8ab30c59c84416797d56b0f6c6b5aa",
+        "expectation_origin": "Pinned Asciidoctor2.0.23 structural projection retained explicitly; complete rendered DOM remains independently checked at runtime."
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/autolinks/"
+      ]
+    }
+  ]
+}

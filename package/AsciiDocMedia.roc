@@ -1,120 +1,149 @@
+import AsciiDocSource
+
 ## Pure HTML5 conversion of AsciiDoc block image, video and audio nodes.
 ## The caller supplies document attributes together with block attributes,
 ## and a rendered (and, for images, captioned) title.
 AsciiDocMedia :: [].{
 	render : { context : Str, target : Str, title : Str, id : Str, attrs : List({ name : Str, value : Str }) } -> Str
-	render = |node| {
-		attrs = node.attrs
-		id = if (node.id == "") "" else " id=\"${encode(node.id)}\""
-		role = get(attrs, "role") ?? ""
-		role_class = if (role == "") "" else " ${role}"
-		float = match get(attrs, "float") {
-			Ok(value) => " ${value}"
-			Err(_) => ""
-		}
-		align = match get(attrs, "align") {
-			Ok(value) => " text-${value}"
-			Err(_) => ""
-		}
-		classes = "${node.context}block${if (node.context == "audio") "" else "${float}${align}"}${role_class}"
-		width = dimension(attrs, "width", "2")
-		height = dimension(attrs, "height", "3")
-		title = if (node.title == "") "" else "\n<div class=\"title\">${node.title}</div>"
-		body = match node.context {
-			"image" => {
-				positional_alt = get(attrs, "1") ?? ""
-				alt = get(attrs, "alt") ?? (if (positional_alt == "") default_alt(node.target) else positional_alt)
-				src = uri(node.target, attrs)
-				img = "<img src=\"${encode(src)}\" alt=\"${encode(alt)}\"${width}${height}>"
-				content = match get(attrs, "link") {
-					Ok(link) => "<a class=\"image\" href=\"${encode(link)}\"${link_constraints(attrs)}>${img}</a>"
-					Err(_) => img
-				}
-				"<div${id} class=\"${classes}\">\n<div class=\"content\">\n${content}\n</div>${title}\n</div>"
-			}
-			"audio" => {
-				autoplay = flag(attrs, "autoplay")
-				controls = if (option(attrs, "nocontrols")) "" else " controls"
-				loop = flag(attrs, "loop")
-				title_above = if (node.title == "") "" else "<div class=\"title\">${node.title}</div>\n"
-				"<div${id} class=\"${classes}\">\n${title_above}<div class=\"content\">\n<audio src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${autoplay}${controls}${loop}>\nYour browser does not support the audio tag.\n</audio>\n</div>\n</div>"
-			}
-			"video" => {
-				poster = get(attrs, "poster") ?? (get(attrs, "1") ?? "")
-				fullscreen = if (option(attrs, "nofullscreen")) "" else " allowfullscreen"
-				scheme = get(attrs, "asset-uri-scheme") ?? "https"
-				scheme_prefix = if (scheme == "") "" else "${scheme}:"
-				content = if poster == "youtube" {
-					segments = node.target.split_on("/")
-					first = segments.first() ?? ""
-					ids = first.split_on(",")
-					target = ids.first() ?? ""
-					list = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "list")
-					playlist = if (ids.len() > 1) Ok(Str.join_with(ids.drop_first(1), ",")) else get(attrs, "playlist")
-					list_param = match list {
-						Ok(value) => "&amp;list=${value}"
-						Err(_) => match playlist {
-							Ok(value) => "&amp;playlist=${target},${value}"
-							Err(_) => if (option(attrs, "loop")) "&amp;playlist=${target}" else ""
-						}
-					}
-					related = if (option(attrs, "related")) "1" else "0"
-					start = query(attrs, "start", "start")
-					end = query(attrs, "end", "end")
-					autoplay = if (option(attrs, "autoplay")) "&amp;autoplay=1" else ""
-					loop = if (option(attrs, "loop")) "&amp;loop=1" else ""
-					muted = if (option(attrs, "muted")) "&amp;mute=1" else ""
-					controls = if (option(attrs, "nocontrols")) "&amp;controls=0" else ""
-					fs = if (option(attrs, "nofullscreen")) "&amp;fs=0" else ""
-					modest = if (option(attrs, "modest")) "&amp;modestbranding=1" else ""
-					theme = query(attrs, "theme", "theme")
-					lang = query(attrs, "lang", "hl")
-					"<iframe${width}${height} src=\"${scheme_prefix}//www.youtube.com/embed/${target}?rel=${related}${start}${end}${autoplay}${loop}${muted}${controls}${list_param}${fs}${modest}${theme}${lang}\" frameborder=\"0\"${fullscreen}></iframe>"
-				} else if poster == "vimeo" {
-					segments = node.target.split_on("/")
-					target = segments.first() ?? ""
-					hash = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "hash")
-					var $params = []
-					match hash {
-						Ok(value) => {
-							$params = $params.append("h=${value}")
-						}
-						Err(_) => {}
-					}
-					for opt in ["autoplay", "loop", "muted"] {
-						if option(attrs, opt) {
-							$params = $params.append("${opt}=1")
-						}
-					}
-					query_string = if ($params.is_empty()) "" else "?${Str.join_with($params, "&amp;")}"
-					start = match get(attrs, "start") {
-						Ok(value) => "#at=${value}"
-						Err(_) => ""
-					}
-					"<iframe${width}${height} src=\"${scheme_prefix}//player.vimeo.com/video/${target}${query_string}${start}\" frameborder=\"0\"${fullscreen}></iframe>"
-				} else {
-					poster_attribute = if (poster == "") "" else " poster=\"${encode(uri(poster, attrs))}\""
-					preload = match get(attrs, "preload") {
-						Ok(value) if value != "" => " preload=\"${encode(value)}\""
-						_ => ""
-					}
-					autoplay = flag(attrs, "autoplay")
-					muted = flag(attrs, "muted")
-					controls = if (option(attrs, "nocontrols")) "" else " controls"
-					loop = flag(attrs, "loop")
-					"<video src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${width}${height}${poster_attribute}${autoplay}${muted}${controls}${loop}${preload}>\nYour browser does not support the video tag.\n</video>"
-				}
-				"<div${id} class=\"${classes}\">${title}\n<div class=\"content\">\n${content}\n</div>\n</div>"
-			}
-			_ => ""
-		}
-		body
-	}
+	render = |node| render_media(node, Legacy(node.attrs))
+
+	## Internal prepared-renderer entry. The supplied index retains the first
+	## binding for every source and local media attribute, exactly as render.
+	render_indexed : { context : Str, target : Str, title : Str, id : Str, attrs : List({ name : Str, value : Str }) }, Dict(Str, Str) -> Str
+	render_indexed = |node, first| render_media(node, Indexed(first))
+
+	## Leading local attributes win over shared document bindings; trailing
+	## local attributes remain the final source fallback, matching flat render.
+	render_view : { context : Str, target : Str, title : Str, id : Str, attrs : List({ name : Str, value : Str }) }, { first : AsciiDocSource.Index, before : List({ name : Str, value : Str }), after : List({ name : Str, value : Str }) } -> Str
+	render_view = |node, view| render_media(node, Layered(view))
 }
 
-get : List({ name : Str, value : Str }), Str -> Try(Str, [Missing])
-get = |attrs, name| {
-	for attr in attrs {
+MediaAttributes : [Legacy(List({ name : Str, value : Str })), Indexed(Dict(Str, Str)), Layered({ first : AsciiDocSource.Index, before : List({ name : Str, value : Str }), after : List({ name : Str, value : Str }) })]
+
+render_media : { context : Str, target : Str, title : Str, id : Str, attrs : List({ name : Str, value : Str }) }, MediaAttributes -> Str
+render_media = |node, attrs| {
+	id = if (node.id == "") "" else " id=\"${encode(node.id)}\""
+	role = get(attrs, "role") ?? ""
+	role_class = if (role == "") "" else " ${role}"
+	float = match get(attrs, "float") {
+		Ok(value) => " ${value}"
+		Err(_) => ""
+	}
+	align = match get(attrs, "align") {
+		Ok(value) => " text-${value}"
+		Err(_) => ""
+	}
+	classes = "${node.context}block${if (node.context == "audio") "" else "${float}${align}"}${role_class}"
+	width = dimension(attrs, "width", "2")
+	height = dimension(attrs, "height", "3")
+	title = if (node.title == "") "" else "\n<div class=\"title\">${node.title}</div>"
+	body = match node.context {
+		"image" => {
+			positional_alt = get(attrs, "1") ?? ""
+			alt = get(attrs, "alt") ?? (if (positional_alt == "") default_alt(node.target) else positional_alt)
+			src = uri(node.target, attrs)
+			img = "<img src=\"${encode(src)}\" alt=\"${encode(alt)}\"${width}${height}>"
+			content = match get(attrs, "link") {
+				Ok(link) => "<a class=\"image\" href=\"${encode(link)}\"${link_constraints(attrs)}>${img}</a>"
+				Err(_) => img
+			}
+			"<div${id} class=\"${classes}\">\n<div class=\"content\">\n${content}\n</div>${title}\n</div>"
+		}
+		"audio" => {
+			autoplay = flag(attrs, "autoplay")
+			controls = if (option(attrs, "nocontrols")) "" else " controls"
+			loop = flag(attrs, "loop")
+			title_above = if (node.title == "") "" else "<div class=\"title\">${node.title}</div>\n"
+			"<div${id} class=\"${classes}\">\n${title_above}<div class=\"content\">\n<audio src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${autoplay}${controls}${loop}>\nYour browser does not support the audio tag.\n</audio>\n</div>\n</div>"
+		}
+		"video" => {
+			poster = get(attrs, "poster") ?? (get(attrs, "1") ?? "")
+			fullscreen = if (option(attrs, "nofullscreen")) "" else " allowfullscreen"
+			scheme = get(attrs, "asset-uri-scheme") ?? "https"
+			scheme_prefix = if (scheme == "") "" else "${scheme}:"
+			content = if poster == "youtube" {
+				segments = node.target.split_on("/")
+				first = segments.first() ?? ""
+				ids = first.split_on(",")
+				target = ids.first() ?? ""
+				list = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "list")
+				playlist = if (ids.len() > 1) Ok(Str.join_with(ids.drop_first(1), ",")) else get(attrs, "playlist")
+				list_param = match list {
+					Ok(value) => "&amp;list=${value}"
+					Err(_) => match playlist {
+						Ok(value) => "&amp;playlist=${target},${value}"
+						Err(_) => if (option(attrs, "loop")) "&amp;playlist=${target}" else ""
+					}
+				}
+				related = if (option(attrs, "related")) "1" else "0"
+				start = query(attrs, "start", "start")
+				end = query(attrs, "end", "end")
+				autoplay = if (option(attrs, "autoplay")) "&amp;autoplay=1" else ""
+				loop = if (option(attrs, "loop")) "&amp;loop=1" else ""
+				muted = if (option(attrs, "muted")) "&amp;mute=1" else ""
+				controls = if (option(attrs, "nocontrols")) "&amp;controls=0" else ""
+				fs = if (option(attrs, "nofullscreen")) "&amp;fs=0" else ""
+				modest = if (option(attrs, "modest")) "&amp;modestbranding=1" else ""
+				theme = query(attrs, "theme", "theme")
+				lang = query(attrs, "lang", "hl")
+				"<iframe${width}${height} src=\"${scheme_prefix}//www.youtube.com/embed/${target}?rel=${related}${start}${end}${autoplay}${loop}${muted}${controls}${list_param}${fs}${modest}${theme}${lang}\" frameborder=\"0\"${fullscreen}></iframe>"
+			} else if poster == "vimeo" {
+				segments = node.target.split_on("/")
+				target = segments.first() ?? ""
+				hash = if (segments.len() > 1) Ok(Str.join_with(segments.drop_first(1), "/")) else get(attrs, "hash")
+				var $params = []
+				match hash {
+					Ok(value) => {
+						$params = $params.append("h=${value}")
+					}
+					Err(_) => {}
+				}
+				for opt in ["autoplay", "loop", "muted"] {
+					if option(attrs, opt) {
+						$params = $params.append("${opt}=1")
+					}
+				}
+				query_string = if ($params.is_empty()) "" else "?${Str.join_with($params, "&amp;")}"
+				start = match get(attrs, "start") {
+					Ok(value) => "#at=${value}"
+					Err(_) => ""
+				}
+				"<iframe${width}${height} src=\"${scheme_prefix}//player.vimeo.com/video/${target}${query_string}${start}\" frameborder=\"0\"${fullscreen}></iframe>"
+			} else {
+				poster_attribute = if (poster == "") "" else " poster=\"${encode(uri(poster, attrs))}\""
+				preload = match get(attrs, "preload") {
+					Ok(value) if value != "" => " preload=\"${encode(value)}\""
+					_ => ""
+				}
+				autoplay = flag(attrs, "autoplay")
+				muted = flag(attrs, "muted")
+				controls = if (option(attrs, "nocontrols")) "" else " controls"
+				loop = flag(attrs, "loop")
+				"<video src=\"${encode(uri(node.target, attrs))}${time_fragment(attrs)}\"${width}${height}${poster_attribute}${autoplay}${muted}${controls}${loop}${preload}>\nYour browser does not support the video tag.\n</video>"
+			}
+			"<div${id} class=\"${classes}\">${title}\n<div class=\"content\">\n${content}\n</div>\n</div>"
+		}
+		_ => ""
+	}
+	body
+}
+
+get : MediaAttributes, Str -> Try(Str, [Missing])
+get = |attrs, name| match attrs {
+	Layered(view) => match first_value(view.before, name) {
+		Ok(value) => Ok(value)
+		Err(_) => match view.first.get(name) {
+			Ok(value) => Ok(value)
+			Err(_) => first_value(view.after, name)
+		}
+	}
+	Indexed(first) => first.get(name).map_err(|_| Missing)
+	Legacy(source) => first_value(source, name)
+}
+
+first_value : List({ name : Str, value : Str }), Str -> Try(Str, [Missing])
+first_value = |source, name| {
+	for attr in source {
 		if attr.name == name {
 			return Ok(attr.value)
 		}
@@ -122,7 +151,7 @@ get = |attrs, name| {
 	Err(Missing)
 }
 
-option : List({ name : Str, value : Str }), Str -> Bool
+option : MediaAttributes, Str -> Bool
 option = |attrs, name| {
 	if get(attrs, "${name}-option").is_ok() or get(attrs, "%${name}").is_ok() {
 		return True
@@ -137,10 +166,10 @@ option = |attrs, name| {
 	False
 }
 
-flag : List({ name : Str, value : Str }), Str -> Str
+flag : MediaAttributes, Str -> Str
 flag = |attrs, name| if (option(attrs, name)) " ${name}" else ""
 
-dimension : List({ name : Str, value : Str }), Str, Str -> Str
+dimension : MediaAttributes, Str, Str -> Str
 dimension = |attrs, name, positional| match (
 	match get(attrs, name) {
 		Ok(value) => Ok(value)
@@ -151,13 +180,13 @@ dimension = |attrs, name, positional| match (
 	Err(_) => ""
 }
 
-query : List({ name : Str, value : Str }), Str, Str -> Str
+query : MediaAttributes, Str, Str -> Str
 query = |attrs, name, parameter| match get(attrs, name) {
 	Ok(value) => "&amp;${parameter}=${value}"
 	Err(_) => ""
 }
 
-time_fragment : List({ name : Str, value : Str }) -> Str
+time_fragment : MediaAttributes -> Str
 time_fragment = |attrs| {
 	start = get(attrs, "start")
 	end = get(attrs, "end")
@@ -169,7 +198,7 @@ time_fragment = |attrs| {
 	}"
 }
 
-link_constraints : List({ name : Str, value : Str }) -> Str
+link_constraints : MediaAttributes -> Str
 link_constraints = |attrs| {
 	nofollow = option(attrs, "nofollow")
 	match get(attrs, "window") {
@@ -183,7 +212,7 @@ link_constraints = |attrs| {
 	}
 }
 
-uri : Str, List({ name : Str, value : Str }) -> Str
+uri : Str, MediaAttributes -> Str
 uri = |target, attrs| {
 	directory = get(attrs, "imagesdir") ?? ""
 	path = if (directory == "" or target.contains(":") or target.starts_with("/")) target else "${directory}/${target}"
@@ -431,3 +460,57 @@ expect AsciiDocMedia.render({ context: "audio", target: "song.mp3", title: "", i
 
 # Live oracle media regression: media-full-audio-metadata
 expect AsciiDocMedia.render({ context: "audio", target: "song.mp3", title: "Audio <strong>title</strong>", id: "song", attrs: [{ name: "role", value: "red" }] }) == "<div id=\"song\" class=\"audioblock red\">\n<div class=\"title\">Audio <strong>title</strong></div>\n<div class=\"content\">\n<audio src=\"song.mp3\" controls>\nYour browser does not support the audio tag.\n</audio>\n</div>\n</div>"
+
+# Indexed media must retain the legacy first-binding rule, including empty
+# presence-based options and named dimensions before positional fallback.
+expect {
+	attrs = [{ name: "alt", value: "Source alt" }, { name: "alt", value: "Local alt" }, { name: "imagesdir", value: "assets" }, { name: "imagesdir", value: "wrong" }, { name: "width", value: "" }, { name: "2", value: "100" }, { name: "nofollow-option", value: "" }, { name: "link", value: "guide.html" }]
+	first = attrs.fold(Dict.empty(), |index, attr| if (index.contains(attr.name)) index else index.insert(attr.name, attr.value))
+	node = { context: "image", target: "cat.png", title: "Figure 1. Cat", id: "cat", attrs }
+	indexed = AsciiDocMedia.render_indexed(node, first)
+	indexed == AsciiDocMedia.render(node) and indexed.contains("src=\"assets/cat.png\" alt=\"Source alt\" width=\"\"") and indexed.contains("rel=\"nofollow\"")
+}
+
+# The same indexed lookup environment covers HTML5 media, both hosted video
+# dialects, positional fallback, and option aliases without changing HTML.
+expect {
+	attrs = [{ name: "role", value: "first" }, { name: "role", value: "last" }, { name: "options", value: "autoplay,loop,muted" }, { name: "opts", value: "nocontrols" }, { name: "start", value: "2" }, { name: "end", value: "9" }, { name: "2", value: "100" }, { name: "3", value: "80" }, { name: "imagesdir", value: "assets" }]
+	["audio", "video"].all(
+		|context| ["", "youtube", "vimeo"].all(
+			|provider| {
+				bindings = [{ name: "1", value: provider }].concat(attrs)
+				first = bindings.fold(Dict.empty(), |index, attr| if (index.contains(attr.name)) index else index.insert(attr.name, attr.value))
+				node = { context, target: "clip.mp4", title: "Media", id: "clip", attrs: bindings }
+				AsciiDocMedia.render_indexed(node, first) == AsciiDocMedia.render(node)
+			},
+		),
+	)
+}
+
+# A prepared caller can share a large source index while targets and local
+# alt text vary; lookup never depends on the first image's metadata.
+expect {
+	["one", "two", "three"].all(
+		|name| {
+			attrs = [{ name: "alt", value: name }, { name: "imagesdir", value: "assets" }]
+			first = attrs.fold(Dict.empty(), |index, attr| if (index.contains(attr.name)) index else index.insert(attr.name, attr.value))
+			node = { context: "image", target: "${name}.png", title: "", id: "", attrs }
+			AsciiDocMedia.render_indexed(node, first) == AsciiDocMedia.render(node)
+		},
+	)
+}
+
+# A layered prepared caller need not copy a large base dictionary when local
+# image metadata differs. Leading/local/base/trailing precedence stays exact.
+expect {
+	base = [{ name: "alt", value: "Source" }, { name: "imagesdir", value: "assets" }]
+	first = base.fold(Dict.empty(), |index, attr| if (index.contains(attr.name)) index else index.insert(attr.name, attr.value))
+	["One", "Two", "Three"].all(
+		|alt| {
+			before = [{ name: "alt", value: alt }, { name: "width", value: "" }]
+			after = [{ name: "alt", value: "Ignored" }, { name: "2", value: "100" }, { name: "link", value: "guide.html" }]
+			node = { context: "image", target: "${alt}.png", title: "", id: "", attrs: before.concat(base).concat(after) }
+			AsciiDocMedia.render_view(node, { first: AsciiDocSource.from_dict(first), before, after }) == AsciiDocMedia.render(node)
+		},
+	)
+}
