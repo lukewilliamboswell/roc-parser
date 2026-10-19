@@ -80,7 +80,7 @@ class SyntaxPinTests(unittest.TestCase):
                 self.assertNotIn('--global-cache-dir', args)
                 self.assertEqual(kwargs['env']['ZIG_GLOBAL_CACHE_DIR'], str(cache / 'zig-global-cache'))
                 return subprocess.CompletedProcess(args, 0, '', '')
-            with patch.object(module, 'run', side_effect=command), patch.object(module, 'source_tree', return_value=cache / 'src') as source, patch.object(sys, 'argv', ['build_oracle.py', '--cache-dir', str(cache)]):
+            with patch.object(module, 'run', side_effect=command), patch.object(module, 'source_tree', return_value=cache / 'src') as source, patch.object(module, 'select_git_source', return_value=None), patch.object(sys, 'argv', ['build_oracle.py', '--cache-dir', str(cache)]):
                 module.main()
             receipt = json.loads(binary.with_suffix('.json').read_text())
             self.assertEqual(receipt['compiler_revision'], import_roc_syntax_snapshots.REFERENCE_COMMIT)
