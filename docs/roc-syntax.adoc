@@ -128,8 +128,8 @@ For the local per-input speed ratchet against the actual compiler parser, add
 repeatedly in optimized builds; startup, JSON transport and tree projection are
 outside the timed region. Reports contain per-input medians, samples and ratios,
 and retain failing inputs for replay. The target ceiling is
-`--max-reference-ratio 1.5`. The initial implementation substantially exceeds
-that target; the ratchet deliberately reports those failures for investigation.
+`--max-reference-ratio 1.5`. Every input in the full comparison meets it on the
+development machine; the ratchet reports any input that regresses past it.
 See {src}/docs/benchmarks.adoc[the measurement protocol and replay commands].
 
 CI uses only `--reference-performance smoke`: two tiny inputs with a short

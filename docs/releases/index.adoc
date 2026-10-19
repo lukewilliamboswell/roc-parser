@@ -13,6 +13,10 @@ release workflow can publish it unchanged as the GitHub release description.
 The notes start with the upgrade impact: every change your code or data might
 notice.
 
+* {src}/docs/releases/2.1.0.md[roc-parser 2.1.0 release notes]: Roc source tokens and syntax trees for
+  tooling, AsciiDoc parsing and HTML rendering, and source-preserving YAML
+  highlighting. Requires Roc `nightly-2026-10-18-1df370f`.
+
 * {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes]: a redesigned API with an upgrade guide, type-directed decoding
   of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
   HTTP, XML 1.0 well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and
@@ -31,28 +35,3 @@ Earlier releases are described on the
 
 * {repo}/releases/tag/2.1.0-rc.1[2.1.0-rc.1]: current Roc syntax tooling for downstream testing,
   with performance optimization continuing on the feature branch.
-
-== Unreleased
-
-`RocSyntax` adds source-backed tokens and a tolerant indexed syntax tree for
-highlighters and source analysis tools. Expressions, patterns, type declarations,
-constraints and all header forms retain their syntax structure. Parsing has
-explicit nesting and token limits and does not perform binding or type analysis.
-Legacy Rust syntax is outside scope. See <<roc-syntax>> for the supported tooling
-workflow and source-location conventions.
-
-Development tooling adds a persistent compiler reference worker, independent
-generated syntax checks, raw and structured fuzz targets, an upstream snapshot
-corpus importer, and runtime/allocation/scaling checks. The feedback loop is
-available through `scripts/check_roc_syntax.py`.
-
-`AsciiDoc` adds block parsing, virtual-source preprocessing and embedded HTML
-rendering. A pinned Asciidoctor oracle checks authored fixtures, independent
-generated models and reproducible mutations. Native fuzz targets and a local
-1.0-times-oracle performance gate exercise correctness and scaling. CI runs a
-minimal performance harness smoke check. See <<asciidoc>> for scope and commands.
-
-`Yaml.tokenize_str` and `Yaml.tokenize_bytes` preserve original source spans
-for highlighting, including comments, whitespace and malformed snippets.
-`Yaml.highlight_category` supplies theme categories shared by HTML and PDF
-renderers. Semantic decoding support is unchanged. See <<yaml-source>>.
