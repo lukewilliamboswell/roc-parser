@@ -13,8 +13,10 @@ release workflow can publish it unchanged as the GitHub release description.
 The notes start with the upgrade impact: every change your code or data might
 notice.
 
-* {src}/docs/releases/unreleased.md[Unreleased changes]: compile-time quotations,
-  checked imported constants, typed decoding, and configurable validation.
+* {src}/docs/releases/unreleased.md[Unreleased changes]: `JsonValue`, a lossless
+  JSON module with strict defaults, opt-in relaxations and checks, and a
+  writer; compile-time quotations, checked imported constants, typed decoding,
+  and configurable validation. Requires Roc `nightly-2026-10-21-5349569`.
 
 * {src}/docs/releases/2.1.0.md[roc-parser 2.1.0 release notes]: Roc source tokens and syntax trees for
   tooling, AsciiDoc parsing and HTML rendering, and source-preserving YAML
