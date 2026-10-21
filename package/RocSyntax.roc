@@ -1,3 +1,5 @@
+import Literal as Quotation
+
 ## Lossless parsing of Roc source into tokens, syntax trees and diagnostics.
 ## Byte spans are half-open. Comments and whitespace are tokens.
 ##
@@ -12,7 +14,12 @@
 ## Nesting is bounded at 128; documents over 1,048,576 tokens retain all tokens but
 ## skip syntax construction with `Limited` status. Malformed input returns a
 ## partial tree and diagnostics, including arbitrary non-UTF-8 source bytes.
-RocSyntax :: [].{
+##
+## [RocSyntax.validate] and quoted `RocSyntax` values require complete file syntax
+## without recovery diagnostics. Validation also rejects `...` placeholder
+## expressions by default; strings and comments containing `...` are ordinary
+## source text. This checks syntax, not name resolution or type correctness.
+RocSyntax := { source : List(U8), tokens : List(RocSyntax.Token), nodes : List(RocSyntax.Node), children : List(U64), diagnostics : List(RocSyntax.Diagnostic), status : RocSyntax.Status, root : U64, consumed : Bool }.{
 
 	## A UTF-8 byte interval; `end` is excluded.
 	Span : { start : U64, end : U64 }
@@ -41,6 +48,40 @@ RocSyntax :: [].{
 
 	## Source-backed tokens and a flat, indexed syntax tree with recovery status.
 	Parsed : { source : List(U8), tokens : List(Token), nodes : List(Node), children : List(U64), diagnostics : List(Diagnostic), status : Status, root : U64, consumed : Bool }
+
+	## Optional checks applied after complete file syntax has been established.
+	LintProps := { placeholders : Bool ?? True }
+
+	## Complete file source, its diagnostic name, and optional syntax lints.
+	ValidateProps := { source : Str, name : Str ?? "<literal>", lints : LintProps ?? {} }
+
+	## Check quoted file source using the default validation options.
+	## The source, tokens, nodes and diagnostics are available as record fields.
+	from_quote : Str -> Try(RocSyntax, [BadQuotedBytes(Str)])
+	from_quote = |source| validate({
+		source,
+	}).map_ok(|value| RocSyntax.(value))
+
+	## Parse one complete Roc source file and return its existing syntax tree.
+	## Recovery, unsupported syntax, resource limits, and unread input fail.
+	## Disable only the placeholder lint with `lints: { placeholders: False }`.
+	validate : ValidateProps -> Try(Parsed, [BadQuotedBytes(Str)])
+	validate = |props| {
+		parsed = parse_str(props.source)
+		if parsed.status != Complete or !parsed.consumed or !parsed.diagnostics.is_empty() {
+			return Err(quotation_parse_error(props, parsed))
+		}
+		if props.lints.placeholders {
+			match quotation_placeholder_offset(parsed.nodes) {
+				Ok(offset) => {
+					position = Quotation.position(props.source, offset)
+					return Err(Quotation.error({ name: props.name, format: "RocSyntax", message: "placeholder expression (...) is not allowed; set lints.placeholders to False to allow it", line: position.line, column: position.column }))
+				}
+				Err(Missing) => {}
+			}
+		}
+		Ok(parsed)
+	}
 
 	## Lexer-only result; suitable for highlighting without constructing a tree.
 	Tokenized : { source : List(U8), tokens : List(Token), diagnostics : List(Diagnostic), status : Status }
@@ -102,6 +143,61 @@ RocSyntax :: [].{
 	## Parse one file header and require complete input consumption.
 	parse_header_str : Str -> Parsed
 	parse_header_str = |source| parse_source(source.to_utf8(), HeaderMode)
+}
+
+quotation_parse_error : RocSyntax.ValidateProps, RocSyntax.Parsed -> [BadQuotedBytes(Str)]
+quotation_parse_error = |props, parsed| {
+	match quotation_earliest_diagnostic(parsed.diagnostics) {
+		Ok(diagnostic) => {
+			position = Quotation.position(props.source, diagnostic.start)
+			Quotation.error({ name: props.name, format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.code), line: position.line, column: position.column })
+		}
+		Err(Missing) => {
+			message = match parsed.status {
+				Recovered => "recovered syntax is not a complete Roc source file"
+				Unsupported => "unsupported Roc syntax"
+				Limited => "Roc syntax resource limit exceeded"
+				Complete => "the parser did not consume the complete Roc source file"
+			}
+			Quotation.error({ name: props.name, format: "RocSyntax", message })
+		}
+	}
+}
+
+quotation_earliest_diagnostic : List(RocSyntax.Diagnostic) -> Try(RocSyntax.Diagnostic, [Missing])
+quotation_earliest_diagnostic = |diagnostics| diagnostics.fold(
+	Err(Missing),
+	|earliest, diagnostic| match earliest {
+		Ok(previous) if previous.start <= diagnostic.start => Ok(previous)
+		_ => Ok(diagnostic)
+	},
+)
+
+quotation_placeholder_offset : List(RocSyntax.Node) -> Try(U64, [Missing])
+quotation_placeholder_offset = |nodes| nodes.fold(
+	Err(Missing),
+	|earliest, node| if node.kind == Ellipsis {
+		match earliest {
+			Ok(offset) if offset <= node.start => Ok(offset)
+			_ => Ok(node.start)
+		}
+	} else earliest,
+)
+
+quotation_diagnostic_message : RocSyntax.DiagnosticCode -> Str
+quotation_diagnostic_message = |code| match code {
+	InvalidByte => "InvalidByte: invalid source byte"
+	InvalidUtf8 => "InvalidUtf8: invalid UTF-8 source text"
+	BidiControlInSource => "BidiControlInSource: bidirectional control character in source"
+	Utf8ByteOrderMark => "Utf8ByteOrderMark: unexpected UTF-8 byte order mark"
+	UnclosedString => "UnclosedString: unterminated string literal"
+	UnclosedDelimiter => "UnclosedDelimiter: unclosed or mismatched delimiter"
+	UnexpectedToken => "UnexpectedToken: unexpected token in Roc source"
+	InvalidNumber => "InvalidNumber: invalid numeric literal"
+	InvalidEscape => "InvalidEscape: invalid escape sequence"
+	InvalidCharacter => "InvalidCharacter: invalid character literal"
+	UnsupportedSyntax => "UnsupportedSyntax: unsupported Roc syntax"
+	ResourceLimit => "ResourceLimit: Roc syntax resource limit exceeded"
 }
 
 Lexed : { tokens : List(RocSyntax.Token), diagnostics : List(RocSyntax.Diagnostic), unsupported : Bool }
@@ -753,6 +849,118 @@ keyword_swar = |source, start, end| {
 }
 
 ParseMode : [FileMode, ExpressionMode, StatementMode, HeaderMode]
+
+expect {
+	props = RocSyntax.ValidateProps.{ source: "answer = 42\n" }
+	lints = RocSyntax.LintProps.{}
+	props.name == "<literal>" and props.lints.placeholders and lints.placeholders and RocSyntax.validate(props) == Ok(RocSyntax.parse_str(props.source))
+}
+
+expect {
+	source = "module [answer]\nanswer : Str\nanswer = 42\n"
+	# Validation checks complete syntax, without resolving names or types.
+	RocSyntax.validate({
+		source,
+	}) == Ok(RocSyntax.parse_str(source))
+}
+
+expect {
+	["", "# comments only ...\n", "import Foo\nanswer = unknown_name\n"].all(
+		|source| RocSyntax.validate({
+			source,
+		}) == Ok(RocSyntax.parse_str(source)),
+	)
+}
+
+expect {
+	quoted : RocSyntax
+	quoted = "answer = 42\n"
+	parsed = RocSyntax.parse_str("answer = 42\n")
+	quoted.source == parsed.source and quoted.tokens == parsed.tokens and quoted.nodes == parsed.nodes and quoted.children == parsed.children and quoted.diagnostics == parsed.diagnostics and quoted.status == parsed.status and quoted.root == parsed.root and quoted.consumed == parsed.consumed and RocSyntax.from_quote("answer = 42\n").map_ok(|value| value.nodes) == Ok(parsed.nodes)
+}
+
+expect {
+	source = "answer = ...\n"
+	RocSyntax.parse_str(source).status == Complete and RocSyntax.validate({
+		source,
+	}) == Err(BadQuotedBytes("<literal>:1:10: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it")) and RocSyntax.from_quote(source).is_err()
+}
+
+expect {
+	source = "# ... is allowed in a comment\r\nanswer = [1, ...]\n"
+	RocSyntax.validate({ source, name: "snippet.roc" }) == Err(BadQuotedBytes("snippet.roc:2:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
+}
+
+expect {
+	["answer = ...\n", "answer = [1, ...]\n", "answer = || { ... }\n", "answer = \"value: \${...}\"\n"].all(
+		|source| RocSyntax.validate({ source, lints: { placeholders: False } }) == Ok(RocSyntax.parse_str(source)) and RocSyntax.validate({
+			source,
+		}).is_err(),
+	)
+}
+
+expect {
+	["answer = \"...\"\n", "# ...\nanswer = 1 # ...\n", "answer = \\\\...\n\\\\still ...\n", "answer = \"before ... \${name} after ...\"\n", "answer = [1, 2] # ...\n"].all(
+		|source| RocSyntax.validate({
+			source,
+		}) == Ok(RocSyntax.parse_str(source)),
+	)
+}
+
+expect {
+	source = "first = || { ... }\nsecond = ...\n"
+	RocSyntax.validate({ source, name: "two.roc" }) == Err(BadQuotedBytes("two.roc:1:14: RocSyntax: placeholder expression (...) is not allowed; set lints.placeholders to False to allow it"))
+}
+
+expect {
+	["answer = [1, 2\n", "answer = \"unfinished\n", "answer = 01\n", "answer = \"\\q\"\n", "1 + 2\n"].all(
+		|source| RocSyntax.validate({
+			source,
+		}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err() and RocSyntax.from_quote(source).is_err(),
+	)
+}
+
+expect {
+	source = "ok = 1\r\nbad = 01\r\n"
+	RocSyntax.validate({ source, name: "numbers.roc" }) == Err(BadQuotedBytes("numbers.roc:2:7: RocSyntax: InvalidNumber: invalid numeric literal"))
+}
+
+expect {
+	# Lexer diagnostics can precede earlier parser diagnostics in the list.
+	source = "bad = [1\nnext = \"\\q\"\n"
+	parsed = RocSyntax.parse_str(source)
+	match quotation_earliest_diagnostic(parsed.diagnostics) {
+		Ok(diagnostic) => {
+			position = Quotation.position(source, diagnostic.start)
+			RocSyntax.validate({ source, name: "ordered.roc" }) == Err(Quotation.error({ name: "ordered.roc", format: "RocSyntax", message: quotation_diagnostic_message(diagnostic.code), line: position.line, column: position.column })) and parsed.diagnostics.all(|other| diagnostic.start <= other.start)
+		}
+		Err(Missing) => False
+	}
+}
+
+expect {
+	source = "answer = &\n"
+	parsed = RocSyntax.parse_str(source)
+	parsed.status == Unsupported and RocSyntax.validate({
+		source,
+	}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err()
+}
+
+expect {
+	source = "answer = ${Str.join_with(List.repeat("[", 140), "")}1${Str.join_with(List.repeat("]", 140), "")}\n"
+	parsed = RocSyntax.parse_str(source)
+	parsed.status == Limited and parsed.diagnostics.any(|diagnostic| diagnostic.code == ResourceLimit) and RocSyntax.validate({
+		source,
+	}).is_err() and RocSyntax.validate({ source, lints: { placeholders: False } }).is_err()
+}
+
+expect {
+	# A missing diagnostic must not manufacture a location for a failed status.
+	source = "answer = 1\n"
+	props = RocSyntax.ValidateProps.{ source, name: "status.roc" }
+	parsed = RocSyntax.parse_str(source)
+	quotation_parse_error(props, { ..parsed, status: Unsupported, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: unsupported Roc syntax") and quotation_parse_error(props, { ..parsed, status: Limited, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: Roc syntax resource limit exceeded") and quotation_parse_error(props, { ..parsed, status: Recovered, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: recovered syntax is not a complete Roc source file") and quotation_parse_error(props, { ..parsed, consumed: False, diagnostics: [] }) == BadQuotedBytes("status.roc: RocSyntax: the parser did not consume the complete Roc source file")
+}
 
 expect {
 	p = RocSyntax.parse_str("answer = 1 + 2 * 3\n")
