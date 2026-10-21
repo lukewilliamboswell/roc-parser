@@ -54,6 +54,32 @@ def parse_xml(text: str) -> int:
     return xml_walk(ElementTree.fromstring(text))
 
 
+def json_walk(value) -> int:
+    if isinstance(value, dict):
+        return 7 + sum(len(k) + json_walk(v) for k, v in value.items())
+    if isinstance(value, list):
+        return 6 + sum(json_walk(v) for v in value)
+    if isinstance(value, str):
+        return 5 + len(value)
+    if value is None:
+        return 1
+    if isinstance(value, bool):
+        return 2
+    return 3
+
+
+def json_parser():
+    # CPython refuses to convert integers longer than 4300 digits by default
+    # (a denial-of-service guard); lift it so json/huge-number is measured.
+    if hasattr(sys, "set_int_max_str_digits"):
+        sys.set_int_max_str_digits(0)
+
+    def parse(text: str) -> int:
+        return json_walk(json.loads(text))
+
+    return parse
+
+
 def markdown_parser():
     from markdown_it import MarkdownIt
 
@@ -101,6 +127,8 @@ def implementation(name: str):
         return parse_yaml_with("CSafeLoader")
     if name == "etree":
         return parse_xml
+    if name == "json":
+        return json_parser()
     if name == "markdown-it-py":
         return markdown_parser()
     if name == "h11":

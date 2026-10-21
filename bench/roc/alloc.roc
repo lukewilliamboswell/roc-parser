@@ -6,6 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.HTTP
+import parser.JsonValue
 import parser.Markdown
 import parser.RocSyntax
 import parser.Parser
@@ -33,6 +34,7 @@ parse = |format, input| {
 		"csv" => CSV.parse_with(Parser.many(CSV.field(CSV.string)), input).is_ok()
 		"yaml" => Yaml.parse_str(input).is_ok()
 		"xml" => Xml.parse_str(input).is_ok()
+		"json" => JsonValue.parse_str(input).is_ok()
 		"markdown" => Markdown.parse_str(input).len() + 1 > 0
 		"http" =>
 			if input.starts_with("HTTP/") {

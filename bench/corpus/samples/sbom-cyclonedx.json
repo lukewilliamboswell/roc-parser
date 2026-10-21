@@ -1,0 +1,2045 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:26ff63d1-4ff3-4df2-a27e-a73c89aaf6f4",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-01T09:00:00Z",
+    "lifecycles": [
+      {
+        "phase": "build"
+      },
+      {
+        "phase": "post-build"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "author": "Example Systems Ltd",
+          "name": "sbom-builder",
+          "version": "2.4.1",
+          "hashes": [
+            {
+              "alg": "SHA-256",
+              "content": "e7138a1c32bf52542da4ad811cd290c7e0cddb8ff7c4200a9c278e7253d7aee1"
+            }
+          ]
+        },
+        {
+          "type": "application",
+          "name": "lock-cataloger",
+          "version": "0.98.0"
+        }
+      ]
+    },
+    "authors": [
+      {
+        "name": "Release Engineering",
+        "email": "release@example.org"
+      }
+    ],
+    "component": {
+      "type": "container",
+      "bom-ref": "pkg:oci/harbor-gateway@sha256%3A0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4?tag=4.2.0",
+      "name": "harbor-gateway",
+      "version": "4.2.0",
+      "description": "API gateway container image (linux/amd64, linux/arm64)",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "purl": "pkg:oci/harbor-gateway@sha256%3A0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4?tag=4.2.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4"
+        }
+      ]
+    },
+    "manufacturer": {
+      "name": "Example Systems Ltd",
+      "url": [
+        "https://example.org"
+      ],
+      "address": {
+        "country": "NZ",
+        "locality": "Ōtautahi Christchurch",
+        "streetAddress": "1 Example Lane"
+      }
+    },
+    "properties": [
+      {
+        "name": "example:image:labels:org.opencontainers.image.created",
+        "value": "2026-10-01T08:57:12Z"
+      },
+      {
+        "name": "example:image:size",
+        "value": "84213760"
+      },
+      {
+        "name": "example:image:layers",
+        "value": "7"
+      },
+      {
+        "name": "example:build:reproducible",
+        "value": "true"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40harbor/ui-shell@4.2.0",
+      "group": "@harbor",
+      "name": "ui-shell",
+      "version": "4.2.0",
+      "description": "Application shell \u0026 layout primitives for the gateway console",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9d38c7945e695cac902f301faa4772ffe64cf463d218751ad870bcf2b8626f4e"
+        },
+        {
+          "alg": "SHA-512",
+          "content": "1856755ae203fa536c01d510464a73d601a7ce730dd3b9722d1b365da3a9e56219a5a3b34522b22678fa4d1898bbee4b1b0075e7c28f5fc56cb6a338037ff123"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40harbor/ui-shell@4.2.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/ui-shell"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/npm/ui-shell/-/ui-shell-4.2.0.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.69,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 1,
+                "value": "/app/package-lock.json"
+              },
+              {
+                "technique": "hash-comparison",
+                "confidence": 0.85
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "/app/package-lock.json",
+            "line": 1826,
+            "offset": 838323865520
+          }
+        ]
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tidewater-router@7.0.11",
+      "name": "tidewater-router",
+      "version": "7.0.11",
+      "description": "Client-side router with nested \"outlet\" support",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7b5f5f0ad7b7c7c11427c71c6fe982fe5f91d5b65d24b94cfba4f52ff5b17f4e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/tidewater-router@7.0.11",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/tidewater-router"
+        }
+      ],
+      "authors": [
+        {
+          "name": "Zoë Ångström",
+          "email": "maintainer1@example.org"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/quillfeather-markdown@3.4.2",
+      "name": "quillfeather-markdown",
+      "version": "3.4.2",
+      "description": "Markdown to DOM renderer\nwith GFM tables",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "36989e71aafb657d15229ed9ecb3c46dd1deb78f38456f8641813f0c20c4fd77"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/quillfeather-markdown@3.4.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/quillfeather-markdown"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/npm/quillfeather-markdown/-/quillfeather-markdown-3.4.2.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "supplier": {
+        "name": "Example Mirror Co-operative",
+        "url": [
+          "https://mirror.example.org"
+        ]
+      },
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/lanternfish-state@2.9.0",
+      "name": "lanternfish-state",
+      "version": "2.9.0",
+      "description": "Observable stores with time-travel debugging",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1e7a85173f4c0077ddb17e5fff78e78e01b72f3ec4d79221394e3c2bcaee9a1e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/lanternfish-state@2.9.0",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/lanternfish-state"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40saltmarsh/http-client@5.1.0",
+      "group": "@saltmarsh",
+      "name": "http-client",
+      "version": "5.1.0",
+      "description": "Fetch wrapper with retries, back-off \u0026 tracing",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f14ca830f012fe62c20d1885bd9a040a8faaebeb20f8960e1d96523f6766c18f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40saltmarsh/http-client@5.1.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/http-client"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/npm/http-client/-/http-client-5.1.0.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+      "group": "@saltmarsh",
+      "name": "schema-check",
+      "version": "2.0.0-rc.3",
+      "description": "JSON Schema 2020-12 validator",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "888dee01ac1ea64c5d0efb38a06080b23e75b01b7245503c9d4b2878233bac8d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/@saltmarsh/schema-check"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/copperleaf-i18n@6.3.2",
+      "name": "copperleaf-i18n",
+      "version": "6.3.2",
+      "description": "Message catalogues with ICU plurals: {count, plural, one {# item} other {# items}}",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9501a77a78ee44f625b9d60963cfaf6331d14f1c25e90752ab686212466da4b2"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/copperleaf-i18n@6.3.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/copperleaf-i18n"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/npm/copperleaf-i18n/-/copperleaf-i18n-6.3.2.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/mossbank-test-utils@1.0.4",
+      "name": "mossbank-test-utils",
+      "version": "1.0.4",
+      "description": "Test helpers; development only",
+      "scope": "optional",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f884e33306712828a90324968b4c904c47e9c5b653ea479d890e9b7806f80c8a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/mossbank-test-utils@1.0.4",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/mossbank-test-utils"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "npm-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/package-lock.json"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/kelpforest@2.14.1",
+      "name": "kelpforest",
+      "version": "2.14.1",
+      "description": "Async task queue with Redis and SQLite back ends",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1cdad4144f97a20b01dfbab5c769f84cf581ed39f4d49e5a875fd62ebf1e235a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/kelpforest@2.14.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/kelpforest"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/pypi/kelpforest/-/kelpforest-2.14.1.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "authors": [
+        {
+          "name": "José Núñez",
+          "email": "maintainer8@example.org"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "pypi-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/requirements.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/driftwood-yaml@6.0.2",
+      "name": "driftwood-yaml",
+      "version": "6.0.2",
+      "description": "YAML 1.2 loader with a C accelerator",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "390bc1236f38755242496fa8c49e9c07f507ab94a7a2d2ae2d7ebbbf76349470"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/driftwood-yaml@6.0.2",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/driftwood-yaml"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "pypi-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/requirements.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/gullwing-http@0.27.0",
+      "name": "gullwing-http",
+      "version": "0.27.0",
+      "description": "HTTP/1.1 and HTTP/2 client",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "282f432039d65ae9c40b1e93ec5e1e19ed15896a2d8f48df69648dc817f1dc56"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/gullwing-http@0.27.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/gullwing-http"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/pypi/gullwing-http/-/gullwing-http-0.27.0.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "pypi-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/requirements.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/anemone-crypto@44.0.1",
+      "name": "anemone-crypto",
+      "version": "44.0.1",
+      "description": "Cryptographic recipes and primitives",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "15d08e5f1424221acacbbfe1c8cad5fbc1ce84e1f6ebffea73572d251fbb396c"
+        },
+        {
+          "alg": "SHA-512",
+          "content": "8fbdde700f246cd1f39b07436014e72ccc1b70ee8d49f36d5ea042057573131b1b312775a1a01e124fcfec2e7e0bbcd8d23529d8f81be383b527780bed5b5d05"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR BSD-3-Clause"
+        }
+      ],
+      "purl": "pkg:pypi/anemone-crypto@44.0.1",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/anemone-crypto"
+        }
+      ],
+      "supplier": {
+        "name": "Example Mirror Co-operative",
+        "url": [
+          "https://mirror.example.org"
+        ]
+      },
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "pypi-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/requirements.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/coral-templates@3.1.6",
+      "name": "coral-templates",
+      "version": "3.1.6",
+      "description": "Sandboxed templates with {{ autoescape }}",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "75014ae45655d1c1cf56af26e3123f7914f9fbbbc496aa29e2bee5f20a892d15"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/coral-templates@3.1.6",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/coral-templates"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/pypi/coral-templates/-/coral-templates-3.1.6.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "pypi-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/requirements.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/ferrous-json@1.0.140",
+      "name": "ferrous-json",
+      "version": "1.0.140",
+      "description": "JSON (de)serialisation",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "db559be3cc6dad01e77200a90488b7139bfc4c3163464585ca37e609ec39566a"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/ferrous-json@1.0.140",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/ferrous-json"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/tidal-runtime@1.44.2",
+      "name": "tidal-runtime",
+      "version": "1.44.2",
+      "description": "Event-driven, non-blocking I/O runtime",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "243e6fab5a888d3d2ee33bfc6918a23ce104a967bccd135570fa58455a7ae1bd"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:cargo/tidal-runtime@1.44.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/tidal-runtime"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/cargo/tidal-runtime/-/tidal-runtime-1.44.2.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/crabpot-tls@0.23.27",
+      "name": "crabpot-tls",
+      "version": "0.23.27",
+      "description": "TLS 1.2/1.3 in safe Rust",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e24052609c334e299c186fdf53faf53d96b19812dfa3531ab7d2b6a2ee999591"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR ISC OR MIT"
+        }
+      ],
+      "purl": "pkg:cargo/crabpot-tls@0.23.27",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/crabpot-tls"
+        }
+      ],
+      "authors": [
+        {
+          "name": "Aroha Te Rangi",
+          "email": "maintainer15@example.org"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.55,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 1,
+                "value": "/src/Cargo.lock"
+              },
+              {
+                "technique": "hash-comparison",
+                "confidence": 0.85
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "/src/Cargo.lock",
+            "line": 2332,
+            "offset": 757651942934
+          }
+        ]
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/reef-regex@1.11.1",
+      "name": "reef-regex",
+      "version": "1.11.1",
+      "description": "Linear-time regular expressions",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e3acf3c6eb757c59860454a96eaa92d66fb71e402c90d2170a5f479c27c1eb48"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/reef-regex@1.11.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/reef-regex"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/cargo/reef-regex/-/reef-regex-1.11.1.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/nautilus-time@0.3.41",
+      "name": "nautilus-time",
+      "version": "0.3.41",
+      "description": "Date and time with leap-second-aware parsing",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "639d52b8872df5e314fab7ce6f544681cf872878daa16b886affeb6d7130433e"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/nautilus-time@0.3.41",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/nautilus-time"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/unicode-dune@1.0.18",
+      "name": "unicode-dune",
+      "version": "1.0.18",
+      "description": "Unicode identifier tables (UAX #31)",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0b9369b93f866eace4d165f8afe865333bf4ac6dbef9848d7482c8cbfcabb181"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "(MIT OR Apache-2.0) AND Unicode-3.0"
+        }
+      ],
+      "purl": "pkg:cargo/unicode-dune@1.0.18",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://example.org/projects/unicode-dune"
+        },
+        {
+          "type": "distribution",
+          "url": "https://registry.example.org/cargo/unicode-dune/-/unicode-dune-1.0.18.tgz?sig=1\u0026mirror=eu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "cargo-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/Cargo.lock"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+      "group": "example.com/harbor",
+      "name": "proxy-core",
+      "version": "v1.12.4",
+      "description": "Reverse proxy \u0026 load balancer core",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1206d6391718b2865d592706f2df9c14c58d34ffe9c79ceddbaa3f67553d6ee9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/example.com/harbor/proxy-core"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "golang-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/go.sum"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/example.org/x/sync@v0.14.0",
+      "group": "example.org/x",
+      "name": "sync",
+      "version": "v0.14.0",
+      "description": "Concurrency primitives: errgroup, semaphore",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "58670b24ddf59ee91433861e0e7ee695c29709c1a2bce7c226b43b5ed9d2d3e9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:golang/example.org/x/sync@v0.14.0",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/example.org/x/sync"
+        }
+      ],
+      "supplier": {
+        "name": "Example Mirror Co-operative",
+        "url": [
+          "https://mirror.example.org"
+        ]
+      },
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "golang-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/go.sum"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/example.org/x/net@v0.38.0",
+      "group": "example.org/x",
+      "name": "net",
+      "version": "v0.38.0",
+      "description": "Supplementary network libraries (http2, idna)",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4c2c0cc9abaefe91f6638b8fd56471847ca95d888237378307d28010698fdf45"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:golang/example.org/x/net@v0.38.0",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/example.org/x/net"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "golang-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/go.sum"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/example.com/seagrass/yaml@v3.0.1",
+      "group": "example.com/seagrass",
+      "name": "yaml",
+      "version": "v3.0.1",
+      "description": "YAML support for Go",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f025306f040467adabb3cb530099193a2186ba995c5d47c98d0dc9f21e302062"
+        },
+        {
+          "alg": "SHA-512",
+          "content": "5491225e8fae1fe3dc5db33b0f5eceb45fe524938664586838b09d5c153ccdcca42f118bb534b8c87cc4a90f5f4ebb376ec971acab8d8b11dbddec101418846c"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT AND Apache-2.0"
+        }
+      ],
+      "purl": "pkg:golang/example.com/seagrass/yaml@v3.0.1",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/example.com/seagrass/yaml"
+        }
+      ],
+      "authors": [
+        {
+          "name": "Dmitri Volkov",
+          "email": "maintainer22@example.org"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "golang-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/go.sum"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/example.com/limpet/jwt@v5.2.2",
+      "group": "example.com/limpet",
+      "name": "jwt",
+      "version": "v5.2.2",
+      "description": "JSON Web Tokens",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7f4daf8c2c8ab8df3919adbfa546cec8c86bdcf07ac87e7b434e77ac917537d3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:golang/example.com/limpet/jwt@v5.2.2",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/example.com/limpet/jwt"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "golang-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/src/go.sum"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar",
+      "group": "org.example.harbor",
+      "name": "gateway-sdk",
+      "version": "4.2.0",
+      "description": "Java SDK for the gateway admin API",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "fd31735ce1bec1400300e49f0c85d2b71b53679f208030bea6630096af7540dc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/org.example.harbor/gateway-sdk"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "maven-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/lib/gateway-sdk-4.2.0.jar"
+        },
+        {
+          "name": "example:metadata:virtualPath",
+          "value": "/app/lib/gateway-sdk-4.2.0.jar:META-INF/MANIFEST.MF"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.example.saltmarsh/jackdaw-core@2.18.3?type=jar",
+      "group": "org.example.saltmarsh",
+      "name": "jackdaw-core",
+      "version": "2.18.3",
+      "description": "Streaming JSON parser \u0026 generator",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d3abbc6b0f7ed4d6c924d2e6ab03ee2235d7eb508ffc5218f3dc869cd763fc6f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:maven/org.example.saltmarsh/jackdaw-core@2.18.3?type=jar",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/org.example.saltmarsh/jackdaw-core"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "maven-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/lib/jackdaw-core-2.18.3.jar"
+        },
+        {
+          "name": "example:metadata:virtualPath",
+          "value": "/app/lib/jackdaw-core-2.18.3.jar:META-INF/MANIFEST.MF"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.example.kittiwake/breakwater-net@4.1.119.Final?type=jar",
+      "group": "org.example.kittiwake",
+      "name": "breakwater-net",
+      "version": "4.1.119.Final",
+      "description": "Asynchronous event-driven network framework",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6dfdbe23a1baed4cee2a3e56624403dd7d1b9ded871770bf1805d744b77e81c5"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:maven/org.example.kittiwake/breakwater-net@4.1.119.Final?type=jar",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/org.example.kittiwake/breakwater-net"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "maven-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/lib/breakwater-net-4.1.119.Final.jar"
+        },
+        {
+          "name": "example:metadata:virtualPath",
+          "value": "/app/lib/breakwater-net-4.1.119.Final.jar:META-INF/MANIFEST.MF"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.example.petrel/quayside-collections@33.4.0-jre?type=jar",
+      "group": "org.example.petrel",
+      "name": "quayside-collections",
+      "version": "33.4.0-jre",
+      "description": "Core collections \u0026 caching",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c155c6be97cddeee5b88fa2b69e028815b4c0a48a4eb2f6e73275a0cff26f63a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:maven/org.example.petrel/quayside-collections@33.4.0-jre?type=jar",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/org.example.petrel/quayside-collections"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "maven-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/app/lib/quayside-collections-33.4.0-jre.jar"
+        },
+        {
+          "name": "example:metadata:virtualPath",
+          "value": "/app/lib/quayside-collections-33.4.0-jre.jar:META-INF/MANIFEST.MF"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/kelp-deflate@2.2.4?download_url=https://downloads.example.org/kelp-deflate-2.2.4.tar.gz",
+      "name": "kelp-deflate",
+      "version": "2.2.4",
+      "description": "zlib replacement with SIMD optimisations",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1f133677c61490158946e894178ff45230b6c34a8bdb1374747bdeb4829ecdd6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Zlib",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:generic/kelp-deflate@2.2.4?download_url=https://downloads.example.org/kelp-deflate-2.2.4.tar.gz",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/kelp-deflate"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "generic-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/opt/vendor/kelp-deflate"
+        },
+        {
+          "name": "example:build:configure-flags",
+          "value": "--enable-static --disable-shared CFLAGS=\"-O2 -fPIC\""
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/seabed-sql@3.49.1?download_url=https://downloads.example.org/seabed-sql-3.49.1.tar.gz",
+      "name": "seabed-sql",
+      "version": "3.49.1",
+      "description": "Embedded SQL database engine",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "cce320c2cc0d5901b7eda24bcdc7de7f84fb3f4ebdb83a3302bab76e9fdd7bb8"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "blessing",
+            "acknowledgement": "concluded"
+          }
+        }
+      ],
+      "purl": "pkg:generic/seabed-sql@3.49.1?download_url=https://downloads.example.org/seabed-sql-3.49.1.tar.gz",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/seabed-sql"
+        }
+      ],
+      "authors": [
+        {
+          "name": "Ngozi Okafor",
+          "email": "maintainer29@example.org"
+        }
+      ],
+      "supplier": {
+        "name": "Example Mirror Co-operative",
+        "url": [
+          "https://mirror.example.org"
+        ]
+      },
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "generic-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/opt/vendor/seabed-sql"
+        },
+        {
+          "name": "example:build:configure-flags",
+          "value": "--enable-static --disable-shared CFLAGS=\"-O2 -fPIC\""
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/libyuzu@0.10.1?download_url=https://downloads.example.org/libyuzu-0.10.1.tar.gz",
+      "name": "libyuzu",
+      "version": "0.10.1",
+      "description": "Image codec, vendored under third_party/",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "49007df6c52083d398e2ad81d7b00a86210922f2c02ae0b06bd63c8fe506b9a3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:generic/libyuzu@0.10.1?download_url=https://downloads.example.org/libyuzu-0.10.1.tar.gz",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/libyuzu"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "generic-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/opt/vendor/libyuzu"
+        },
+        {
+          "name": "example:build:configure-flags",
+          "value": "--enable-static --disable-shared CFLAGS=\"-O2 -fPIC\""
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.59,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 1,
+                "value": "/opt/vendor/libyuzu"
+              },
+              {
+                "technique": "hash-comparison",
+                "confidence": 0.85
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "/opt/vendor/libyuzu",
+            "line": 3915,
+            "offset": 875312155627
+          }
+        ]
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/shoreline-tzdb@2026a?download_url=https://downloads.example.org/shoreline-tzdb-2026a.tar.gz",
+      "name": "shoreline-tzdb",
+      "version": "2026a",
+      "description": "Time zone database (Europe/Zürich, Asia/Tōkyō, …)",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "518bdfc458b2417c61cf2020a09c8c4f5e8b28ee25e0117677b57f01c0c286c7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "LicenseRef-public-domain",
+            "acknowledgement": "concluded"
+          }
+        }
+      ],
+      "purl": "pkg:generic/shoreline-tzdb@2026a?download_url=https://downloads.example.org/shoreline-tzdb-2026a.tar.gz",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://git.example.org/shoreline-tzdb"
+        }
+      ],
+      "properties": [
+        {
+          "name": "example:package:found-by",
+          "value": "generic-lock-cataloger"
+        },
+        {
+          "name": "example:location:0:path",
+          "value": "/opt/vendor/shoreline-tzdb"
+        },
+        {
+          "name": "example:build:configure-flags",
+          "value": "--enable-static --disable-shared CFLAGS=\"-O2 -fPIC\""
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "internal:harbor-gateway/plugins",
+      "name": "plugins",
+      "version": "4.2.0",
+      "description": "First-party plugins bundled with the gateway",
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "internal:harbor-gateway/plugins/auth-oidc",
+          "name": "auth-oidc",
+          "version": "4.2.0",
+          "licenses": [
+            {
+              "license": {
+                "name": "Proprietary",
+                "text": {
+                  "contentType": "text/plain",
+                  "content": "© 2026 Example Systems Ltd. All rights reserved."
+                }
+              }
+            }
+          ],
+          "properties": [
+            {
+              "name": "example:plugin:priority",
+              "value": "10"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "internal:harbor-gateway/plugins/rate-limit",
+          "name": "rate-limit",
+          "version": "4.2.0",
+          "licenses": [
+            {
+              "license": {
+                "name": "Proprietary",
+                "text": {
+                  "contentType": "text/plain",
+                  "content": "© 2026 Example Systems Ltd. All rights reserved."
+                }
+              }
+            }
+          ],
+          "properties": [
+            {
+              "name": "example:plugin:priority",
+              "value": "20"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "internal:harbor-gateway/plugins/waf-rules",
+          "name": "waf-rules",
+          "version": "4.2.0",
+          "licenses": [
+            {
+              "license": {
+                "name": "Proprietary",
+                "text": {
+                  "contentType": "text/plain",
+                  "content": "© 2026 Example Systems Ltd. All rights reserved."
+                }
+              }
+            }
+          ],
+          "properties": [
+            {
+              "name": "example:plugin:priority",
+              "value": "30"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "internal:harbor-gateway/plugins/geo-routing",
+          "name": "geo-routing",
+          "version": "4.2.0",
+          "licenses": [
+            {
+              "license": {
+                "name": "Proprietary",
+                "text": {
+                  "contentType": "text/plain",
+                  "content": "© 2026 Example Systems Ltd. All rights reserved."
+                }
+              }
+            }
+          ],
+          "properties": [
+            {
+              "name": "example:plugin:priority",
+              "value": "40"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "internal:harbor-gateway/plugins/audit-log",
+          "name": "audit-log",
+          "version": "4.2.0",
+          "licenses": [
+            {
+              "license": {
+                "name": "Proprietary",
+                "text": {
+                  "contentType": "text/plain",
+                  "content": "© 2026 Example Systems Ltd. All rights reserved."
+                }
+              }
+            }
+          ],
+          "properties": [
+            {
+              "name": "example:plugin:priority",
+              "value": "90"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "bom-ref": "service:admin-api",
+      "provider": {
+        "name": "Example Systems Ltd",
+        "url": [
+          "https://example.org"
+        ]
+      },
+      "name": "admin-api",
+      "version": "4.2.0",
+      "endpoints": [
+        "https://gateway.example.org/admin/v1",
+        "https://gateway.example.org/admin/v1/health?verbose=1\u0026format=json"
+      ],
+      "authenticated": true,
+      "x-trust-boundary": true,
+      "data": [
+        {
+          "flow": "inbound",
+          "classification": "PII"
+        },
+        {
+          "flow": "outbound",
+          "classification": "public"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:oci/harbor-gateway@sha256%3A0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4?tag=4.2.0",
+      "dependsOn": [
+        "pkg:npm/%40harbor/ui-shell@4.2.0",
+        "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+        "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar",
+        "internal:harbor-gateway/plugins"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40harbor/ui-shell@4.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tidewater-router@7.0.11",
+      "dependsOn": [
+        "pkg:npm/mossbank-test-utils@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/quillfeather-markdown@3.4.2",
+      "dependsOn": [
+        "pkg:npm/copperleaf-i18n@6.3.2",
+        "pkg:npm/mossbank-test-utils@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/lanternfish-state@2.9.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40saltmarsh/http-client@5.1.0",
+      "dependsOn": [
+        "pkg:npm/%40harbor/ui-shell@4.2.0",
+        "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+        "pkg:npm/copperleaf-i18n@6.3.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+      "dependsOn": [
+        "pkg:npm/%40saltmarsh/http-client@5.1.0",
+        "pkg:npm/mossbank-test-utils@1.0.4",
+        "pkg:npm/quillfeather-markdown@3.4.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/copperleaf-i18n@6.3.2",
+      "dependsOn": [
+        "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+        "pkg:npm/lanternfish-state@2.9.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/mossbank-test-utils@1.0.4",
+      "dependsOn": [
+        "pkg:npm/%40saltmarsh/schema-check@2.0.0-rc.3",
+        "pkg:npm/lanternfish-state@2.9.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/kelpforest@2.14.1",
+      "dependsOn": [
+        "pkg:pypi/anemone-crypto@44.0.1",
+        "pkg:pypi/coral-templates@3.1.6",
+        "pkg:pypi/driftwood-yaml@6.0.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/driftwood-yaml@6.0.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/gullwing-http@0.27.0",
+      "dependsOn": [
+        "pkg:pypi/anemone-crypto@44.0.1",
+        "pkg:pypi/driftwood-yaml@6.0.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/anemone-crypto@44.0.1",
+      "dependsOn": [
+        "pkg:pypi/coral-templates@3.1.6",
+        "pkg:pypi/driftwood-yaml@6.0.2",
+        "pkg:pypi/kelpforest@2.14.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/coral-templates@3.1.6",
+      "dependsOn": [
+        "pkg:pypi/anemone-crypto@44.0.1",
+        "pkg:pypi/driftwood-yaml@6.0.2",
+        "pkg:pypi/gullwing-http@0.27.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ferrous-json@1.0.140",
+      "dependsOn": [
+        "pkg:cargo/reef-regex@1.11.1",
+        "pkg:cargo/unicode-dune@1.0.18"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tidal-runtime@1.44.2",
+      "dependsOn": [
+        "pkg:cargo/reef-regex@1.11.1",
+        "pkg:cargo/unicode-dune@1.0.18"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/crabpot-tls@0.23.27",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/reef-regex@1.11.1",
+      "dependsOn": [
+        "pkg:cargo/nautilus-time@0.3.41",
+        "pkg:cargo/tidal-runtime@1.44.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/nautilus-time@0.3.41",
+      "dependsOn": [
+        "pkg:cargo/reef-regex@1.11.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/unicode-dune@1.0.18",
+      "dependsOn": [
+        "pkg:cargo/crabpot-tls@0.23.27",
+        "pkg:cargo/ferrous-json@1.0.140",
+        "pkg:cargo/tidal-runtime@1.44.2"
+      ]
+    },
+    {
+      "ref": "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/example.org/x/sync@v0.14.0",
+      "dependsOn": [
+        "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+        "pkg:golang/example.com/seagrass/yaml@v3.0.1"
+      ]
+    },
+    {
+      "ref": "pkg:golang/example.org/x/net@v0.38.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/example.com/seagrass/yaml@v3.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:golang/example.com/limpet/jwt@v5.2.2",
+      "dependsOn": [
+        "pkg:golang/example.com/harbor/proxy-core@v1.12.4",
+        "pkg:golang/example.org/x/net@v0.38.0",
+        "pkg:golang/example.org/x/sync@v0.14.0"
+      ]
+    },
+    {
+      "ref": "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar",
+      "dependsOn": [
+        "pkg:maven/org.example.saltmarsh/jackdaw-core@2.18.3?type=jar"
+      ]
+    },
+    {
+      "ref": "pkg:maven/org.example.saltmarsh/jackdaw-core@2.18.3?type=jar",
+      "dependsOn": [
+        "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar",
+        "pkg:maven/org.example.kittiwake/breakwater-net@4.1.119.Final?type=jar",
+        "pkg:maven/org.example.petrel/quayside-collections@33.4.0-jre?type=jar"
+      ]
+    },
+    {
+      "ref": "pkg:maven/org.example.kittiwake/breakwater-net@4.1.119.Final?type=jar",
+      "dependsOn": [
+        "pkg:maven/org.example.harbor/gateway-sdk@4.2.0?type=jar"
+      ]
+    },
+    {
+      "ref": "pkg:maven/org.example.petrel/quayside-collections@33.4.0-jre?type=jar",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:generic/kelp-deflate@2.2.4?download_url=https://downloads.example.org/kelp-deflate-2.2.4.tar.gz",
+      "dependsOn": [
+        "pkg:generic/shoreline-tzdb@2026a?download_url=https://downloads.example.org/shoreline-tzdb-2026a.tar.gz"
+      ]
+    },
+    {
+      "ref": "pkg:generic/seabed-sql@3.49.1?download_url=https://downloads.example.org/seabed-sql-3.49.1.tar.gz",
+      "dependsOn": [
+        "pkg:generic/kelp-deflate@2.2.4?download_url=https://downloads.example.org/kelp-deflate-2.2.4.tar.gz"
+      ]
+    },
+    {
+      "ref": "pkg:generic/libyuzu@0.10.1?download_url=https://downloads.example.org/libyuzu-0.10.1.tar.gz",
+      "dependsOn": [
+        "pkg:generic/kelp-deflate@2.2.4?download_url=https://downloads.example.org/kelp-deflate-2.2.4.tar.gz",
+        "pkg:generic/seabed-sql@3.49.1?download_url=https://downloads.example.org/seabed-sql-3.49.1.tar.gz",
+        "pkg:generic/shoreline-tzdb@2026a?download_url=https://downloads.example.org/shoreline-tzdb-2026a.tar.gz"
+      ]
+    },
+    {
+      "ref": "pkg:generic/shoreline-tzdb@2026a?download_url=https://downloads.example.org/shoreline-tzdb-2026a.tar.gz",
+      "dependsOn": [
+        "pkg:generic/seabed-sql@3.49.1?download_url=https://downloads.example.org/seabed-sql-3.49.1.tar.gz"
+      ]
+    },
+    {
+      "ref": "internal:harbor-gateway/plugins",
+      "dependsOn": []
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "complete",
+      "assemblies": [
+        "pkg:oci/harbor-gateway@sha256%3A0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4?tag=4.2.0"
+      ]
+    },
+    {
+      "aggregate": "incomplete_first_party_only",
+      "dependencies": [
+        "pkg:oci/harbor-gateway@sha256%3A0b9448907d8d95bf53dea408acc675f4f9605a54f48707ef018af2694857e2b4?tag=4.2.0"
+      ]
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "bom-ref": "vuln-0001",
+      "id": "EXAMPLE-2026-0142",
+      "source": {
+        "name": "Example Advisory Database",
+        "url": "https://advisories.example.org/EXAMPLE-2026-0142"
+      },
+      "references": [
+        {
+          "id": "EXAMPLE-GHSA-7x2q-9f4m-wp3c",
+          "source": {
+            "name": "Example Mirror",
+            "url": "https://mirror.example.org/advisories/7x2q"
+          }
+        }
+      ],
+      "ratings": [
+        {
+          "source": {
+            "name": "Example Advisory Database"
+          },
+          "score": 7.5,
+          "severity": "high",
+          "method": "CVSSv31",
+          "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "score": 0.00043,
+          "severity": "info",
+          "method": "other",
+          "justification": "EPSS probability, 2026-10-01"
+        }
+      ],
+      "cwes": [
+        400,
+        1333
+      ],
+      "description": "A crafted pattern can make \"reef-regex\" use excessive memory when compiled.",
+      "detail": "Patterns with many nested repetitions, such as (a{1,1000}){1,1000}, expand to a\nprogram whose size grows with the product of the bounds.",
+      "recommendation": "Upgrade to 1.11.2 or later, or set a compile-size limit.",
+      "advisories": [
+        {
+          "title": "Advisory",
+          "url": "https://advisories.example.org/EXAMPLE-2026-0142.json"
+        }
+      ],
+      "created": "2026-08-30T00:00:00Z",
+      "published": "2026-09-02T12:00:00Z",
+      "updated": "2026-09-15T08:30:00Z",
+      "analysis": {
+        "state": "exploitable",
+        "justification": "requires_configuration",
+        "response": [
+          "update"
+        ],
+        "detail": "Patterns come from the admin API only."
+      },
+      "affects": [
+        {
+          "ref": "pkg:cargo/reef-regex@1.11.1",
+          "versions": [
+            {
+              "range": "vers:cargo/\u003e=1.9.0|\u003c1.11.2",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "bom-ref": "vuln-0002",
+      "id": "EXAMPLE-2026-0207",
+      "source": {
+        "name": "Example Advisory Database",
+        "url": "https://advisories.example.org/EXAMPLE-2026-0207"
+      },
+      "ratings": [
+        {
+          "score": 5.3,
+          "severity": "medium",
+          "method": "CVSSv4",
+          "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N"
+        }
+      ],
+      "cwes": [
+        22
+      ],
+      "description": "Path traversal in template loader: \"..\\\\\" sequences are not normalised on Windows.",
+      "created": "2026-09-20T00:00:00Z",
+      "published": "2026-09-21T00:00:00Z",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "The gateway runs on Linux only; templates are loaded from the image."
+      },
+      "affects": [
+        {
+          "ref": "pkg:pypi/coral-templates@3.1.6",
+          "versions": [
+            {
+              "version": "3.1.6",
+              "status": "affected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,11 @@ yaml-rust2 = "=0.10.3"
 serde_yaml = "=0.9.34"
 quick-xml = "=0.38.3"
 roxmltree = "=0.21.1"
+# Ordered objects and numbers kept as their text, like JsonValue.
+# unbounded_depth lets the comparator read json/deep-nesting-128: serde_json's
+# own limit stops at 127 nested arrays. serde names the Deserialize trait.
+serde_json = { version = "=1.0.151", features = ["preserve_order", "arbitrary_precision", "unbounded_depth"] }
+serde = "=1.0.229"
 pulldown-cmark = { version = "=0.13.0", default-features = false }
 comrak = { version = "=0.43.0", default-features = false }
 httparse = "=1.10.1"
