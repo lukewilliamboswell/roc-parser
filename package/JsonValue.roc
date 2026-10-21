@@ -1830,6 +1830,7 @@ expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ message: "arra
 
 # Members are counted as written, before repeated keys are removed.
 expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1 }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
 expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
 expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
 expect JsonValue.parse_with("{\"a\":1,\"a\":2}", { max_items: 2, duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
@@ -1859,6 +1860,7 @@ expect error_of("[{\"a\":1},\n{\"b\":[],\"b\":{}}]", {}) == Ok({ line: 2, column
 expect JsonValue.parse_with("{\"a\":{\"x\":[1]},\"a\":{\"x\":[1]},\"a\":{\"x\":[1]}}", { duplicates: CollapseIdentical }) == Ok(Object([{ key: "a", value: Object([{ key: "x", value: Array([Number("1")]) }]) }]))
 expect error_of("{\"a\":1,\"a\":2}", { duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "duplicate key \"a\" with a different value" })
 expect message_of("{\"a\":1,\"a\":1.0}", { duplicates: CollapseIdentical }) == "duplicate key \"a\" with a different value"
+expect message_of("{\"a\":{\"x\":1,\"y\":2},\"a\":{\"y\":2,\"x\":1}}", { duplicates: CollapseIdentical }) == "duplicate key \"a\" with a different value"
 
 # KeepFirst drops later members; KeepLast keeps the first position with the last value.
 expect JsonValue.parse_with("{\"a\":1,\"b\":2,\"a\":3}", { duplicates: KeepFirst }) == Ok(Object([{ key: "a", value: Number("1") }, { key: "b", value: Number("2") }]))
@@ -1933,6 +1935,8 @@ expect error_of("-NaN", { non_finite: True }) == Ok({ line: 1, column: 1, messag
 expect error_of("[-Inf]", { non_finite: True }) == Ok({ line: 1, column: 2, message: "expected a digit after '-'" })
 expect error_of("Infinityx", { non_finite: True }) == Ok({ line: 1, column: 9, message: "unexpected content after the JSON value" })
 expect JsonValue.parse_with("Infinity", { non_finite: True, max_number_digits: 8 }).is_ok() and message_of("-Infinity", { non_finite: True, max_number_digits: 8 }) == "number exceeds the limit of 8 characters"
+expect JsonValue.parse_with("NaN", { non_finite: True, max_number_digits: 3 }).is_ok() and error_of("[NaN]", { non_finite: True, max_number_digits: 2 }) == Ok({ line: 1, column: 2, message: "number exceeds the limit of 2 characters" })
+expect message_of("Infinity", { non_finite: True, max_number_digits: 7 }) == "number exceeds the limit of 7 characters"
 
 # Raw control characters inside strings and keys.
 expect JsonValue.parse_with("{\"a\tb\":\"\u(0)\n\u(1F)\"}", { control_characters: True }) == Ok(Object([{ key: "a\tb", value: String("\u(0)\n\u(1F)") }]))
