@@ -1,0 +1,2311 @@
+[
+  {
+    "name": "values/null",
+    "input": "null"
+  },
+  {
+    "name": "values/true",
+    "input": "true"
+  },
+  {
+    "name": "values/false",
+    "input": "false"
+  },
+  {
+    "name": "values/string",
+    "input": "\"a\""
+  },
+  {
+    "name": "values/empty-array",
+    "input": "[]"
+  },
+  {
+    "name": "values/empty-object",
+    "input": "{}"
+  },
+  {
+    "name": "values/nested",
+    "input": "{\"a\":[1,{\"b\":null}],\"c\":\"d\",\"e\":[true,false,[]],\"f\":{}}"
+  },
+  {
+    "name": "values/whitespace-everywhere",
+    "input": " \t\n\r[ 1 ,\t2 , { \"a\" : [ ] } ]\r\n "
+  },
+  {
+    "name": "values/empty-input",
+    "input": ""
+  },
+  {
+    "name": "values/only-whitespace",
+    "input": " \n\t "
+  },
+  {
+    "name": "values/trailing-content",
+    "input": "1 2"
+  },
+  {
+    "name": "values/two-objects",
+    "input": "{}{}"
+  },
+  {
+    "name": "values/literal-case",
+    "input": "True"
+  },
+  {
+    "name": "values/literal-truncated",
+    "input": "nul"
+  },
+  {
+    "name": "values/literal-trailing",
+    "input": "nullx"
+  },
+  {
+    "name": "values/no-break-space",
+    "input": "\u00a0[]"
+  },
+  {
+    "name": "values/form-feed",
+    "input": "\f[]"
+  },
+  {
+    "name": "values/vertical-tab",
+    "input": "[1,\u000b2]"
+  },
+  {
+    "name": "values/line-separator",
+    "input": "[\u2028]"
+  },
+  {
+    "name": "values/nul-byte-outside",
+    "input": "[1]\u0000"
+  },
+  {
+    "name": "structure/unclosed-array",
+    "input": "["
+  },
+  {
+    "name": "structure/unclosed-array-item",
+    "input": "[1"
+  },
+  {
+    "name": "structure/unclosed-object",
+    "input": "{\"a\":1"
+  },
+  {
+    "name": "structure/close-only",
+    "input": "]"
+  },
+  {
+    "name": "structure/object-close-only",
+    "input": "}"
+  },
+  {
+    "name": "structure/mismatched-array",
+    "input": "[}"
+  },
+  {
+    "name": "structure/mismatched-object",
+    "input": "{\"a\":1]"
+  },
+  {
+    "name": "structure/extra-close",
+    "input": "[]]"
+  },
+  {
+    "name": "structure/missing-comma",
+    "input": "[1 2]"
+  },
+  {
+    "name": "structure/double-comma",
+    "input": "[1,,2]"
+  },
+  {
+    "name": "structure/leading-comma",
+    "input": "[,1]"
+  },
+  {
+    "name": "structure/comma-only",
+    "input": "[,]"
+  },
+  {
+    "name": "structure/object-comma-only",
+    "input": "{,}"
+  },
+  {
+    "name": "structure/unquoted-key",
+    "input": "{a:1}"
+  },
+  {
+    "name": "structure/single-quoted-key",
+    "input": "{'a':1}"
+  },
+  {
+    "name": "structure/number-key",
+    "input": "{1:2}"
+  },
+  {
+    "name": "structure/missing-colon",
+    "input": "{\"a\" 1}"
+  },
+  {
+    "name": "structure/missing-value",
+    "input": "{\"a\":}"
+  },
+  {
+    "name": "structure/missing-member-comma",
+    "input": "{\"a\":1 \"b\":2}"
+  },
+  {
+    "name": "structure/key-without-value",
+    "input": "{\"a\"}"
+  },
+  {
+    "name": "structure/double-colon",
+    "input": "{\"a\"::1}"
+  },
+  {
+    "name": "structure/colon-in-array",
+    "input": "[1:2]"
+  },
+  {
+    "name": "numbers/zero",
+    "input": "[0]"
+  },
+  {
+    "name": "numbers/negative-zero",
+    "input": "[-0]"
+  },
+  {
+    "name": "numbers/one",
+    "input": "[1]"
+  },
+  {
+    "name": "numbers/negative",
+    "input": "[-12]"
+  },
+  {
+    "name": "numbers/fraction",
+    "input": "[1.5]"
+  },
+  {
+    "name": "numbers/negative-fraction",
+    "input": "[-0.5]"
+  },
+  {
+    "name": "numbers/exponent",
+    "input": "[1e10]"
+  },
+  {
+    "name": "numbers/exponent-upper",
+    "input": "[1E10]"
+  },
+  {
+    "name": "numbers/exponent-plus",
+    "input": "[1e+10]"
+  },
+  {
+    "name": "numbers/exponent-minus",
+    "input": "[1e-10]"
+  },
+  {
+    "name": "numbers/fraction-exponent",
+    "input": "[-1.25e-3]"
+  },
+  {
+    "name": "numbers/zero-exponent",
+    "input": "[0e0]"
+  },
+  {
+    "name": "numbers/negative-zero-fraction",
+    "input": "[-0.0e-0]"
+  },
+  {
+    "name": "numbers/trailing-zero-kept",
+    "input": "[1.0]"
+  },
+  {
+    "name": "numbers/trailing-zeros-kept",
+    "input": "[1.10]"
+  },
+  {
+    "name": "numbers/exponent-leading-zeros",
+    "input": "[1e007]"
+  },
+  {
+    "name": "numbers/big-integer",
+    "input": "[123456789012345678901234567890]"
+  },
+  {
+    "name": "numbers/long-fraction",
+    "input": "[3.141592653589793238462643383279]"
+  },
+  {
+    "name": "numbers/huge-exponent",
+    "input": "[1e999999999999]"
+  },
+  {
+    "name": "numbers/tiny-exponent",
+    "input": "[1e-999999999999]"
+  },
+  {
+    "name": "numbers/reject-leading-zero",
+    "input": "[01]"
+  },
+  {
+    "name": "numbers/reject-negative-leading-zero",
+    "input": "[-01]"
+  },
+  {
+    "name": "numbers/reject-double-zero",
+    "input": "[00]"
+  },
+  {
+    "name": "numbers/reject-plus",
+    "input": "[+1]"
+  },
+  {
+    "name": "numbers/reject-leading-dot",
+    "input": "[.5]"
+  },
+  {
+    "name": "numbers/reject-trailing-dot",
+    "input": "[1.]"
+  },
+  {
+    "name": "numbers/reject-dot-exponent",
+    "input": "[1.e3]"
+  },
+  {
+    "name": "numbers/reject-bare-exponent",
+    "input": "[1e]"
+  },
+  {
+    "name": "numbers/reject-bare-exponent-sign",
+    "input": "[1e+]"
+  },
+  {
+    "name": "numbers/reject-minus-only",
+    "input": "[-]"
+  },
+  {
+    "name": "numbers/reject-double-minus",
+    "input": "[--1]"
+  },
+  {
+    "name": "numbers/reject-hex",
+    "input": "[0x10]"
+  },
+  {
+    "name": "numbers/reject-underscore",
+    "input": "[1_000]"
+  },
+  {
+    "name": "numbers/reject-two-dots",
+    "input": "[1.5.3]"
+  },
+  {
+    "name": "numbers/reject-two-exponents",
+    "input": "[1e3e4]"
+  },
+  {
+    "name": "numbers/reject-arabic-indic-digit",
+    "input": "[\u0661]"
+  },
+  {
+    "name": "numbers/reject-fullwidth-digit",
+    "input": "[\uff11]"
+  },
+  {
+    "name": "numbers/reject-minus-dot",
+    "input": "[-.5]"
+  },
+  {
+    "name": "numbers/reject-zero-dot-exponent",
+    "input": "[0.e1]"
+  },
+  {
+    "name": "numbers/reject-lowercase-nan",
+    "input": "[nan]"
+  },
+  {
+    "name": "numbers/reject-inf",
+    "input": "[inf]"
+  },
+  {
+    "name": "numbers/reject-minus-space",
+    "input": "[- 1]"
+  },
+  {
+    "name": "numbers/reject-exponent-space",
+    "input": "[1 e3]"
+  },
+  {
+    "name": "numbers/top-level",
+    "input": "-12.5e+3"
+  },
+  {
+    "name": "numbers/top-level-trailing-space",
+    "input": "7 "
+  },
+  {
+    "name": "strings/all-escapes",
+    "input": "[\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"]"
+  },
+  {
+    "name": "strings/unicode-escapes",
+    "input": "[\"\\u0041\\u00e9\\u20ac\\u0000\"]"
+  },
+  {
+    "name": "strings/unicode-escape-uppercase",
+    "input": "[\"\\u00E9\\u20AC\"]"
+  },
+  {
+    "name": "strings/surrogate-pair",
+    "input": "[\"\\ud83d\\ude00\"]"
+  },
+  {
+    "name": "strings/surrogate-pair-uppercase",
+    "input": "[\"\\uD834\\uDD1E\"]"
+  },
+  {
+    "name": "strings/raw-non-ascii",
+    "input": "[\"é€😀\"]"
+  },
+  {
+    "name": "strings/noncharacter",
+    "input": "[\"\uffff\"]"
+  },
+  {
+    "name": "strings/raw-del",
+    "input": "[\"a\u007fb\"]"
+  },
+  {
+    "name": "strings/raw-c1-control",
+    "input": "[\"a\u0085b\"]"
+  },
+  {
+    "name": "strings/raw-line-separators",
+    "input": "[\"\u2028\u2029\"]"
+  },
+  {
+    "name": "strings/escaped-nul",
+    "input": "\"\\u0000\""
+  },
+  {
+    "name": "strings/empty",
+    "input": "\"\""
+  },
+  {
+    "name": "strings/reject-invalid-escape",
+    "input": "[\"\\x41\"]"
+  },
+  {
+    "name": "strings/reject-bell-escape",
+    "input": "[\"\\a\"]"
+  },
+  {
+    "name": "strings/reject-uppercase-u",
+    "input": "[\"\\U0041\"]"
+  },
+  {
+    "name": "strings/reject-short-unicode",
+    "input": "[\"\\u12\"]"
+  },
+  {
+    "name": "strings/reject-bad-hex",
+    "input": "[\"\\u12G4\"]"
+  },
+  {
+    "name": "strings/reject-unterminated",
+    "input": "[\"abc"
+  },
+  {
+    "name": "strings/reject-unterminated-escape",
+    "input": "[\"abc\\"
+  },
+  {
+    "name": "strings/reject-single-quotes",
+    "input": "['a']"
+  },
+  {
+    "name": "strings/reject-raw-tab",
+    "input": "[\"a\tb\"]"
+  },
+  {
+    "name": "strings/reject-raw-newline",
+    "input": "[\"a\nb\"]"
+  },
+  {
+    "name": "strings/reject-raw-cr",
+    "input": "[\"a\rb\"]"
+  },
+  {
+    "name": "strings/reject-raw-nul",
+    "input": "[\"a\u0000b\"]"
+  },
+  {
+    "name": "strings/reject-raw-unit-separator",
+    "input": "[\"\u001f\"]"
+  },
+  {
+    "name": "strings/reject-lone-high",
+    "input": "[\"\\ud800\"]"
+  },
+  {
+    "name": "strings/reject-lone-low",
+    "input": "[\"\\udc00\"]"
+  },
+  {
+    "name": "strings/reject-high-then-letter",
+    "input": "[\"\\ud800\\u0041\"]"
+  },
+  {
+    "name": "strings/reject-high-then-raw",
+    "input": "[\"\\ud800x\"]"
+  },
+  {
+    "name": "strings/reject-high-high-low",
+    "input": "[\"\\ud800\\ud800\\udc00\"]"
+  },
+  {
+    "name": "strings/reject-reversed-pair",
+    "input": "[\"\\udc00\\ud800\"]"
+  },
+  {
+    "name": "strings/reject-lone-surrogate-key",
+    "input": "{\"\\udfff\":1}"
+  },
+  {
+    "name": "utf8/reject-invalid-byte",
+    "input_hex": "5bff5d"
+  },
+  {
+    "name": "utf8/reject-invalid-in-string",
+    "input_hex": "5b22c328225d"
+  },
+  {
+    "name": "utf8/reject-overlong",
+    "input_hex": "5b22c0af225d"
+  },
+  {
+    "name": "utf8/reject-encoded-surrogate",
+    "input_hex": "5b22eda080225d"
+  },
+  {
+    "name": "utf8/reject-truncated",
+    "input_hex": "5b22e282"
+  },
+  {
+    "name": "utf8/reject-latin-1",
+    "input_hex": "5b22636166e9225d"
+  },
+  {
+    "name": "utf8/reject-utf16le-bom",
+    "input_hex": "fffe5b005d00"
+  },
+  {
+    "name": "utf8/reject-invalid-after-lines",
+    "input_hex": "5b0d0a312c0aff5d"
+  },
+  {
+    "name": "utf8/reject-invalid-in-comment",
+    "input_hex": "2f2f20ff0a5b5d",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "diagnostics/lf",
+    "input": "[\n1,\n?]"
+  },
+  {
+    "name": "diagnostics/crlf",
+    "input": "[\r\n1,\r\n?]"
+  },
+  {
+    "name": "diagnostics/cr",
+    "input": "[\r1,\r?]"
+  },
+  {
+    "name": "diagnostics/multibyte-column",
+    "input": "[\"é€😀\",?]"
+  },
+  {
+    "name": "diagnostics/at-end",
+    "input": "[1,"
+  },
+  {
+    "name": "diagnostics/after-trailing-newline",
+    "input": "[1,\n"
+  },
+  {
+    "name": "diagnostics/cr-at-end",
+    "input": "[1,\r"
+  },
+  {
+    "name": "comments/line-off",
+    "input": "// c\n[1]"
+  },
+  {
+    "name": "comments/line-on",
+    "input": "// c\n[1]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/block-off",
+    "input": "[1/* c */,2]"
+  },
+  {
+    "name": "comments/block-on",
+    "input": "[1/* c */,2]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/everywhere",
+    "input": "/*a*/{/*b*/\"k\"/*c*/:/*d*/[/*e*/1/*f*/,//g\n2]/*h*/}//i",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/at-end-without-newline",
+    "input": "[1]// end",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/line-ends-at-cr",
+    "input": "// c\r[1]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/line-ends-at-crlf",
+    "input": "// c\r\n[1]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/only",
+    "input": "// nothing",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/only-block",
+    "input": "/**/",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/empty-block",
+    "input": "/**/[]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/stars",
+    "input": "/***/[]/****/",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-unterminated",
+    "input": "[1] /* open",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-unterminated-slash",
+    "input": "[/*/]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-nested",
+    "input": "/* /* */ */[]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-lone-slash",
+    "input": "[1 / 2]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-hash",
+    "input": "# c\n[]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-between-number",
+    "input": "[1/**/2]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/reject-after-minus",
+    "input": "[-/**/1]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/markers-in-string-strict",
+    "input": "[\"// not a comment\", \"/* nor this */\"]"
+  },
+  {
+    "name": "comments/markers-in-string-on",
+    "input": "[\"// not a comment\", \"/* nor this */\"]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/quote-in-comment",
+    "input": "[1 /* \" */, 2]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/escaped-quote-then-marker",
+    "input": "[\"\\\"//\", 1]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/brackets-in-comment",
+    "input": "[1 /* [[[[ */]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "comments/with-crlf-lines",
+    "input": "[\r\n1, // one\r\n2 /* two */\r\n]",
+    "options": {
+      "comments": true
+    }
+  },
+  {
+    "name": "trailing-commas/array-off",
+    "input": "[1,]"
+  },
+  {
+    "name": "trailing-commas/array-on",
+    "input": "[1,]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/object-off",
+    "input": "{\"a\":1,}"
+  },
+  {
+    "name": "trailing-commas/object-on",
+    "input": "{\"a\":1,}",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/nested-on",
+    "input": "[[1,],{\"a\":[],},]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/whitespace-before-close",
+    "input": "[1 , \n ]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-double",
+    "input": "[1,,]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-empty-array",
+    "input": "[,]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-empty-object",
+    "input": "{,}",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-after-colon",
+    "input": "{\"a\":,}",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-after-key",
+    "input": "{\"a\",}",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-top-level",
+    "input": "1,",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/reject-leading",
+    "input": "[,1]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/with-comment-needs-comments",
+    "input": "[1,/* c */]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "trailing-commas/with-comment",
+    "input": "[1,/* c */]",
+    "options": {
+      "trailing_commas": true,
+      "comments": true
+    }
+  },
+  {
+    "name": "trailing-commas/with-line-comment",
+    "input": "{\"a\":1, // c\n}",
+    "options": {
+      "trailing_commas": true,
+      "comments": true
+    }
+  },
+  {
+    "name": "trailing-commas/comma-in-string",
+    "input": "[\"a,]\",]",
+    "options": {
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "bom/off",
+    "input": "\ufeff{}"
+  },
+  {
+    "name": "bom/on",
+    "input": "\ufeff{}",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/on-without-bom",
+    "input": "{}",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/then-whitespace",
+    "input": "\ufeff \n[1]",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/reject-twice",
+    "input": "\ufeff\ufeff{}",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/reject-after-whitespace",
+    "input": " \ufeff{}",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/reject-inside",
+    "input": "[\ufeff1]",
+    "options": {
+      "bom": true
+    }
+  },
+  {
+    "name": "bom/in-string",
+    "input": "[\"\ufeff\"]"
+  },
+  {
+    "name": "bom/with-top-level-object",
+    "input": "\ufeff{}",
+    "options": {
+      "bom": true,
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "bom/reject-with-top-level-object",
+    "input": "\ufeff[]",
+    "options": {
+      "bom": true,
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "bom/then-comment",
+    "input": "\ufeff// c\n{}",
+    "options": {
+      "bom": true,
+      "comments": true
+    }
+  },
+  {
+    "name": "non-finite/nan-off",
+    "input": "NaN"
+  },
+  {
+    "name": "non-finite/nan-on",
+    "input": "NaN",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/infinity-off",
+    "input": "Infinity"
+  },
+  {
+    "name": "non-finite/infinity-on",
+    "input": "Infinity",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/minus-infinity-off",
+    "input": "-Infinity"
+  },
+  {
+    "name": "non-finite/minus-infinity-on",
+    "input": "-Infinity",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/array-off",
+    "input": "[NaN,Infinity,-Infinity,1]"
+  },
+  {
+    "name": "non-finite/array-on",
+    "input": "[NaN,Infinity,-Infinity,1]",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/object",
+    "input": "{\"a\":NaN,\"b\":{\"c\":-Infinity}}",
+    "options": {
+      "non_finite": true,
+      "sort_keys": true
+    }
+  },
+  {
+    "name": "non-finite/reject-plus-infinity",
+    "input": "+Infinity",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-minus-nan",
+    "input": "-NaN",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-lowercase",
+    "input": "nan",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-short",
+    "input": "Inf",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-trailing-digit",
+    "input": "[Infinity1]",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-exponent",
+    "input": "[NaNe1]",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/reject-quoted",
+    "input": "\"NaN\"",
+    "options": {
+      "non_finite": true
+    }
+  },
+  {
+    "name": "non-finite/with-interoperable-numbers",
+    "input": "[NaN]",
+    "options": {
+      "non_finite": true,
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "non-finite/finite-with-interoperable-numbers",
+    "input": "[1.5]",
+    "options": {
+      "non_finite": true,
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "non-finite/collapse-identical",
+    "input": "{\"a\":NaN,\"a\":NaN}",
+    "options": {
+      "non_finite": true,
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "control-characters/tab-on",
+    "input": "[\"a\tb\"]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/newline-on",
+    "input": "[\"a\nb\"]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/cr-on",
+    "input": "[\"a\r\nb\"]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/nul-on",
+    "input": "[\"a\u0000b\"]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/all-c0-on",
+    "input": "\"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\"",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/in-key-on",
+    "input": "{\"k\u0001\":1}",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/reject-outside-string",
+    "input": "[\u0001]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "control-characters/reject-key-off",
+    "input": "{\"k\u0001\":1}"
+  },
+  {
+    "name": "control-characters/del-always",
+    "input": "[\"\u007f\"]"
+  },
+  {
+    "name": "lone-surrogates/replace-high",
+    "input": "[\"\\ud800\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-low",
+    "input": "[\"\\udc00\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-high-high-low",
+    "input": "[\"\\ud800\\ud800\\udc00\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-reversed",
+    "input": "[\"\\udc00\\ud800\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-high-then-letter",
+    "input": "[\"\\ud800\\u0041x\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-at-end",
+    "input": "[\"a\\udbff\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/pair-unchanged",
+    "input": "[\"\\ud83d\\ude00\"]",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/replace-key",
+    "input": "{\"\\udfff\":1}",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/reject-keys-collide",
+    "input": "{\"\\ud800\":1,\"\\udc00\":2}",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/keep-last-keys-collide",
+    "input": "{\"\\ud800\":1,\"\\udc00\":2}",
+    "options": {
+      "lone_surrogates": "Replace",
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "lone-surrogates/reject-replacement-collides",
+    "input": "{\"\\ud800\":1,\"\ufffd\":2}",
+    "options": {
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "lone-surrogates/reject-explicit",
+    "input": "[\"\\ud800\"]",
+    "options": {
+      "lone_surrogates": "Reject"
+    }
+  },
+  {
+    "name": "lone-surrogates/collapse-equal-values",
+    "input": "{\"a\":\"\\ud800\",\"a\":\"\\udc00\"}",
+    "options": {
+      "lone_surrogates": "Replace",
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/reject-different",
+    "input": "{\"a\":1,\"a\":2}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-same",
+    "input": "{\"a\":1,\"a\":1}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-escaped-alias",
+    "input": "{\"a\":1,\"\\u0061\":2}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-escaped-alias-same",
+    "input": "{\"\\u00e9\":[1],\"é\":[1]}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-position",
+    "input": "{\"a\":1,\"b\":2,\"a\":3}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-three",
+    "input": "{\"a\":1,\"b\":2,\"a\":1,\"c\":3,\"a\":1}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-nested",
+    "input": "[{\"x\":{\"a\":1,\"a\":2}}]",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-empty-key",
+    "input": "{\"\":1,\"\":2}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/reject-many-keys",
+    "input": "{\"k0\":0,\"k1\":1,\"k2\":2,\"k3\":3,\"k4\":4,\"k5\":5,\"k6\":6,\"k7\":7,\"k8\":8,\"k9\":9,\"k10\":10,\"k11\":11,\"k12\":12,\"k13\":13,\"k14\":14,\"k15\":15,\"k16\":16,\"k17\":17,\"k18\":18,\"k19\":19,\"k0\":0,\"k19\":\"x\"}",
+    "options": {
+      "duplicates": "Reject"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-different",
+    "input": "{\"a\":1,\"a\":2}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-same",
+    "input": "{\"a\":1,\"a\":1}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-escaped-alias",
+    "input": "{\"a\":1,\"\\u0061\":2}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-escaped-alias-same",
+    "input": "{\"\\u00e9\":[1],\"é\":[1]}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-position",
+    "input": "{\"a\":1,\"b\":2,\"a\":3}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-three",
+    "input": "{\"a\":1,\"b\":2,\"a\":1,\"c\":3,\"a\":1}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-nested",
+    "input": "[{\"x\":{\"a\":1,\"a\":2}}]",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-empty-key",
+    "input": "{\"\":1,\"\":2}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-identical-many-keys",
+    "input": "{\"k0\":0,\"k1\":1,\"k2\":2,\"k3\":3,\"k4\":4,\"k5\":5,\"k6\":6,\"k7\":7,\"k8\":8,\"k9\":9,\"k10\":10,\"k11\":11,\"k12\":12,\"k13\":13,\"k14\":14,\"k15\":15,\"k16\":16,\"k17\":17,\"k18\":18,\"k19\":19,\"k0\":0,\"k19\":\"x\"}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-different",
+    "input": "{\"a\":1,\"a\":2}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-same",
+    "input": "{\"a\":1,\"a\":1}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-escaped-alias",
+    "input": "{\"a\":1,\"\\u0061\":2}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-escaped-alias-same",
+    "input": "{\"\\u00e9\":[1],\"é\":[1]}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-position",
+    "input": "{\"a\":1,\"b\":2,\"a\":3}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-three",
+    "input": "{\"a\":1,\"b\":2,\"a\":1,\"c\":3,\"a\":1}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-nested",
+    "input": "[{\"x\":{\"a\":1,\"a\":2}}]",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-empty-key",
+    "input": "{\"\":1,\"\":2}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-first-many-keys",
+    "input": "{\"k0\":0,\"k1\":1,\"k2\":2,\"k3\":3,\"k4\":4,\"k5\":5,\"k6\":6,\"k7\":7,\"k8\":8,\"k9\":9,\"k10\":10,\"k11\":11,\"k12\":12,\"k13\":13,\"k14\":14,\"k15\":15,\"k16\":16,\"k17\":17,\"k18\":18,\"k19\":19,\"k0\":0,\"k19\":\"x\"}",
+    "options": {
+      "duplicates": "KeepFirst"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-different",
+    "input": "{\"a\":1,\"a\":2}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-same",
+    "input": "{\"a\":1,\"a\":1}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-escaped-alias",
+    "input": "{\"a\":1,\"\\u0061\":2}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-escaped-alias-same",
+    "input": "{\"\\u00e9\":[1],\"é\":[1]}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-position",
+    "input": "{\"a\":1,\"b\":2,\"a\":3}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-three",
+    "input": "{\"a\":1,\"b\":2,\"a\":1,\"c\":3,\"a\":1}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-nested",
+    "input": "[{\"x\":{\"a\":1,\"a\":2}}]",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-empty-key",
+    "input": "{\"\":1,\"\":2}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-many-keys",
+    "input": "{\"k0\":0,\"k1\":1,\"k2\":2,\"k3\":3,\"k4\":4,\"k5\":5,\"k6\":6,\"k7\":7,\"k8\":8,\"k9\":9,\"k10\":10,\"k11\":11,\"k12\":12,\"k13\":13,\"k14\":14,\"k15\":15,\"k16\":16,\"k17\":17,\"k18\":18,\"k19\":19,\"k0\":0,\"k19\":\"x\"}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "duplicates/distinct-keys-case",
+    "input": "{\"a\":1,\"A\":2}"
+  },
+  {
+    "name": "duplicates/distinct-after-unescape",
+    "input": "{\"a\\u0000\":1,\"a\":2}"
+  },
+  {
+    "name": "duplicates/many-distinct-keys",
+    "input": "{\"key0\":0,\"key1\":1,\"key2\":2,\"key3\":3,\"key4\":4,\"key5\":5,\"key6\":6,\"key7\":7,\"key8\":8,\"key9\":9,\"key10\":10,\"key11\":11,\"key12\":12,\"key13\":13,\"key14\":14,\"key15\":15,\"key16\":16,\"key17\":17,\"key18\":18,\"key19\":19,\"key20\":20,\"key21\":21,\"key22\":22,\"key23\":23,\"key24\":24,\"key25\":25,\"key26\":26,\"key27\":27,\"key28\":28,\"key29\":29,\"key30\":30,\"key31\":31,\"key32\":32,\"key33\":33,\"key34\":34,\"key35\":35,\"key36\":36,\"key37\":37,\"key38\":38,\"key39\":39}"
+  },
+  {
+    "name": "duplicates/collapse-number-lexemes-differ",
+    "input": "{\"a\":1.0,\"a\":1}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-equal-objects",
+    "input": "{\"a\":{\"x\":[1,\"y\"]},\"a\":{\"x\":[1,\"y\"]}}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-member-order-differs",
+    "input": "{\"a\":{\"x\":1,\"y\":2},\"a\":{\"y\":2,\"x\":1}}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-escaped-values-equal",
+    "input": "{\"a\":\"\\u00e9\",\"a\":\"é\"}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/collapse-nested-collapsed-values",
+    "input": "{\"a\":{\"b\":1,\"b\":1},\"a\":{\"b\":1}}",
+    "options": {
+      "duplicates": "CollapseIdentical"
+    }
+  },
+  {
+    "name": "duplicates/keep-last-replaces-object",
+    "input": "{\"a\":{\"b\":1},\"a\":[2]}",
+    "options": {
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "top-level/any-scalar",
+    "input": "1",
+    "options": {
+      "top_level": "Any"
+    }
+  },
+  {
+    "name": "top-level/object-or-array-scalar",
+    "input": "1",
+    "options": {
+      "top_level": "ObjectOrArray"
+    }
+  },
+  {
+    "name": "top-level/object-scalar",
+    "input": "1",
+    "options": {
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "top-level/any-string",
+    "input": "\"s\"",
+    "options": {
+      "top_level": "Any"
+    }
+  },
+  {
+    "name": "top-level/object-or-array-string",
+    "input": "\"s\"",
+    "options": {
+      "top_level": "ObjectOrArray"
+    }
+  },
+  {
+    "name": "top-level/object-string",
+    "input": "\"s\"",
+    "options": {
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "top-level/any-null",
+    "input": "null",
+    "options": {
+      "top_level": "Any"
+    }
+  },
+  {
+    "name": "top-level/object-or-array-null",
+    "input": "null",
+    "options": {
+      "top_level": "ObjectOrArray"
+    }
+  },
+  {
+    "name": "top-level/object-null",
+    "input": "null",
+    "options": {
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "top-level/any-array",
+    "input": "[]",
+    "options": {
+      "top_level": "Any"
+    }
+  },
+  {
+    "name": "top-level/object-or-array-array",
+    "input": "[]",
+    "options": {
+      "top_level": "ObjectOrArray"
+    }
+  },
+  {
+    "name": "top-level/object-array",
+    "input": "[]",
+    "options": {
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "top-level/any-object",
+    "input": "{}",
+    "options": {
+      "top_level": "Any"
+    }
+  },
+  {
+    "name": "top-level/object-or-array-object",
+    "input": "{}",
+    "options": {
+      "top_level": "ObjectOrArray"
+    }
+  },
+  {
+    "name": "top-level/object-object",
+    "input": "{}",
+    "options": {
+      "top_level": "Object"
+    }
+  },
+  {
+    "name": "interoperable-numbers/max-safe-integer",
+    "input": "[9007199254740991]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/min-safe-integer",
+    "input": "[-9007199254740991]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/2-pow-53",
+    "input": "[9007199254740992]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/minus-2-pow-53",
+    "input": "[-9007199254740992]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/2-pow-53-plus-1",
+    "input": "[9007199254740993]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/negative-zero",
+    "input": "[-0]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/zero",
+    "input": "[0]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/integer-100-digits",
+    "input": "[1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/integer-with-fraction-17",
+    "input": "[12345678901234567.0]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/fraction-17",
+    "input": "[0.12345678901234567]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/fraction-18",
+    "input": "[0.123456789012345678]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/integer-part-18-digits-fraction",
+    "input": "[123456789012345678.5]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/trailing-zeros-ignored",
+    "input": "[1.00000000000000000000000000]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/leading-zeros-ignored",
+    "input": "[0.000000000000000000000012345678901234567]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/leading-zeros-18",
+    "input": "[0.0000000123456789012345678]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/exponent-17-digits",
+    "input": "[1.2345678901234567e10]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/exponent-18-digits",
+    "input": "[1.23456789012345678e10]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/1e308",
+    "input": "[1e308]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/1e309",
+    "input": "[1e309]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/minus-1e309",
+    "input": "[-1e309]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/1E400",
+    "input": "[1E400]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/1e-400",
+    "input": "[1e-400]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/zero-tiny-exponent",
+    "input": "[0e-400]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/zero-fraction",
+    "input": "[0.0]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/smallest-subnormal",
+    "input": "[5e-324]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/rounds-to-subnormal",
+    "input": "[3e-324]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/rounds-to-zero",
+    "input": "[2e-324]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/largest-double",
+    "input": "[1.7976931348623157e308]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/rounds-to-infinity",
+    "input": "[1.7976931348623159e308]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/integer-exponent",
+    "input": "[1e3]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/big-zeros",
+    "input": "[100000000000000000000.0]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/big-integer-zeros",
+    "input": "[100000000000000000000]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/fraction",
+    "input": "[1.5]",
+    "options": {
+      "interoperable_numbers": true
+    }
+  },
+  {
+    "name": "interoperable-numbers/off-allows-big",
+    "input": "[9007199254740993,1e400]"
+  },
+  {
+    "name": "depth/default-128-arrays",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "name": "depth/default-129-arrays",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "name": "depth/default-128-objects",
+    "input": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}"
+  },
+  {
+    "name": "depth/default-129-objects",
+    "input": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}"
+  },
+  {
+    "name": "depth/default-128-mixed",
+    "input": "[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":[{\"a\":1}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]"
+  },
+  {
+    "name": "depth/default-128-empty-innermost",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "name": "depth/default-129-empty-innermost",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+    "name": "depth/zero-scalar",
+    "input": "1",
+    "options": {
+      "max_depth": 0
+    }
+  },
+  {
+    "name": "depth/zero-array",
+    "input": "[]",
+    "options": {
+      "max_depth": 0
+    }
+  },
+  {
+    "name": "depth/zero-object",
+    "input": "{}",
+    "options": {
+      "max_depth": 0
+    }
+  },
+  {
+    "name": "depth/one-flat",
+    "input": "[1,2]",
+    "options": {
+      "max_depth": 1
+    }
+  },
+  {
+    "name": "depth/one-nested",
+    "input": "[[]]",
+    "options": {
+      "max_depth": 1
+    }
+  },
+  {
+    "name": "depth/two",
+    "input": "[{\"a\":1}]",
+    "options": {
+      "max_depth": 2
+    }
+  },
+  {
+    "name": "depth/two-exceeded",
+    "input": "[{\"a\":[]}]",
+    "options": {
+      "max_depth": 2
+    }
+  },
+  {
+    "name": "depth/siblings-do-not-add",
+    "input": "[[1],[2],[[3]]]",
+    "options": {
+      "max_depth": 3
+    }
+  },
+  {
+    "name": "depth/brackets-in-string",
+    "input": "[\"[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[\"]",
+    "options": {
+      "max_depth": 2
+    }
+  },
+  {
+    "name": "depth/raised-129-writer-too-deep",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "options": {
+      "max_depth": 129
+    }
+  },
+  {
+    "name": "depth/raised-200-writer-too-deep",
+    "input": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",
+    "options": {
+      "max_depth": 200
+    }
+  },
+  {
+    "name": "depth/unclosed-1000",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["
+  },
+  {
+    "name": "items/at-limit",
+    "input": "[1,2]",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/over-limit",
+    "input": "[1,2,3]",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/object-at-limit",
+    "input": "{\"a\":1,\"b\":2}",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/object-over-limit",
+    "input": "{\"a\":1,\"b\":2,\"c\":3}",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/zero-empty",
+    "input": "[]",
+    "options": {
+      "max_items": 0
+    }
+  },
+  {
+    "name": "items/zero-empty-object",
+    "input": "{}",
+    "options": {
+      "max_items": 0
+    }
+  },
+  {
+    "name": "items/zero-one",
+    "input": "[1]",
+    "options": {
+      "max_items": 0
+    }
+  },
+  {
+    "name": "items/per-container",
+    "input": "[[1,2],[3,4]]",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/nested-over",
+    "input": "[[1,2,3]]",
+    "options": {
+      "max_items": 2
+    }
+  },
+  {
+    "name": "items/duplicates-count-before-merging",
+    "input": "{\"a\":1,\"a\":2}",
+    "options": {
+      "max_items": 1,
+      "duplicates": "KeepLast"
+    }
+  },
+  {
+    "name": "items/trailing-comma-at-limit",
+    "input": "[1,2,]",
+    "options": {
+      "max_items": 2,
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "items/trailing-comma-over-limit",
+    "input": "[1,2,3,]",
+    "options": {
+      "max_items": 2,
+      "trailing_commas": true
+    }
+  },
+  {
+    "name": "strings-limit/at-limit",
+    "input": "[\"abc\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/over-limit",
+    "input": "[\"abcd\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/two-byte-at-limit",
+    "input": "[\"é\"]",
+    "options": {
+      "max_string_bytes": 2
+    }
+  },
+  {
+    "name": "strings-limit/multibyte-over",
+    "input": "[\"éé\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/escapes-decoded-at-limit",
+    "input": "[\"\\n\\n\\n\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/unicode-escapes-decoded-over",
+    "input": "[\"\\u00e9\\u00e9\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/emoji-over",
+    "input": "[\"😀\"]",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/surrogate-pair-at-limit",
+    "input": "[\"\\ud83d\\ude00\"]",
+    "options": {
+      "max_string_bytes": 4
+    }
+  },
+  {
+    "name": "strings-limit/key-over",
+    "input": "{\"abcd\":1}",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/key-at-limit",
+    "input": "{\"abc\":\"d\"}",
+    "options": {
+      "max_string_bytes": 3
+    }
+  },
+  {
+    "name": "strings-limit/zero-empty",
+    "input": "[\"\"]",
+    "options": {
+      "max_string_bytes": 0
+    }
+  },
+  {
+    "name": "strings-limit/zero-one",
+    "input": "[\"a\"]",
+    "options": {
+      "max_string_bytes": 0
+    }
+  },
+  {
+    "name": "strings-limit/replacement-counts-three-bytes",
+    "input": "[\"\\ud800\"]",
+    "options": {
+      "max_string_bytes": 3,
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "strings-limit/replacement-over",
+    "input": "[\"\\ud800\"]",
+    "options": {
+      "max_string_bytes": 2,
+      "lone_surrogates": "Replace"
+    }
+  },
+  {
+    "name": "numbers-limit/at-limit",
+    "input": "[123]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/over-limit",
+    "input": "[1234]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/sign-counts",
+    "input": "[-12]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/sign-over",
+    "input": "[-123]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/fraction-at-limit",
+    "input": "[1.5]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/fraction-over",
+    "input": "[1.25]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/exponent-at-limit",
+    "input": "[1e5]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/exponent-over",
+    "input": "[1e+5]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/mixed",
+    "input": "[1,22,333]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "numbers-limit/nan-at-limit",
+    "input": "[NaN]",
+    "options": {
+      "max_number_digits": 3,
+      "non_finite": true
+    }
+  },
+  {
+    "name": "numbers-limit/infinity-over",
+    "input": "[Infinity]",
+    "options": {
+      "max_number_digits": 3,
+      "non_finite": true
+    }
+  },
+  {
+    "name": "numbers-limit/string-not-counted",
+    "input": "[\"12345\"]",
+    "options": {
+      "max_number_digits": 3
+    }
+  },
+  {
+    "name": "writer/default",
+    "input": "{\"b\":1,\"a\":[1,2,{\"d\":null,\"c\":true}],\"é\":\"\\u00e9\",\"Z\":\"\\u0000\\u001f\\u007f\\n\\t\\\"\\\\\\/\",\"\\u00e0\":[],\"e\":{}}"
+  },
+  {
+    "name": "writer/indent-1",
+    "input": "{\"b\":1,\"a\":[1,2,{\"d\":null,\"c\":true}],\"é\":\"\\u00e9\",\"Z\":\"\\u0000\\u001f\\u007f\\n\\t\\\"\\\\\\/\",\"\\u00e0\":[],\"e\":{}}",
+    "options": {
+      "indent": 1
+    }
+  },
+  {
+    "name": "writer/indent-4-sorted",
+    "input": "{\"b\":1,\"a\":[1,2,{\"d\":null,\"c\":true}],\"é\":\"\\u00e9\",\"Z\":\"\\u0000\\u001f\\u007f\\n\\t\\\"\\\\\\/\",\"\\u00e0\":[],\"e\":{}}",
+    "options": {
+      "indent": 4,
+      "sort_keys": true
+    }
+  },
+  {
+    "name": "writer/indent-0-sorted",
+    "input": "{\"b\":1,\"a\":[1,2,{\"d\":null,\"c\":true}],\"é\":\"\\u00e9\",\"Z\":\"\\u0000\\u001f\\u007f\\n\\t\\\"\\\\\\/\",\"\\u00e0\":[],\"e\":{}}",
+    "options": {
+      "indent": 0,
+      "sort_keys": true
+    }
+  },
+  {
+    "name": "writer/sort-code-point-order",
+    "input": "{\"😀\":1,\"\uffff\":2,\"é\":3,\"z\":4,\"Z\":5,\"\":6,\"a\\u0000\":7,\"a\":8}",
+    "options": {
+      "sort_keys": true
+    }
+  },
+  {
+    "name": "writer/sort-nested",
+    "input": "[{\"b\":{\"y\":1,\"x\":2},\"a\":[{\"d\":1,\"c\":2}]}]",
+    "options": {
+      "sort_keys": true,
+      "indent": 3
+    }
+  },
+  {
+    "name": "writer/empty-containers",
+    "input": "{\"a\":[],\"b\":{},\"c\":[[]],\"d\":[{}]}"
+  },
+  {
+    "name": "writer/lexemes-exact",
+    "input": "[1.0,1E+2,-0,0.10,1e-7,123456789012345678901234567890]"
+  },
+  {
+    "name": "writer/escapes",
+    "input": "\"\\b\\f\\n\\r\\t\\u0001\\u001f\\u007f\\u0080\\u2028\\u2029\\ud83d\\ude00\\/\""
+  },
+  {
+    "name": "writer/raw-controls-escaped",
+    "input": "[\"\u0001\u001f\t\"]",
+    "options": {
+      "control_characters": true
+    }
+  },
+  {
+    "name": "writer/del-and-c1-not-escaped",
+    "input": "[\"\u007f\u0085\u009f\"]"
+  },
+  {
+    "name": "writer/non-ascii-pretty",
+    "input": "{\"clé\":[\"été\",\"日本語\",\"😀\"]}",
+    "options": {
+      "indent": 2
+    }
+  },
+  {
+    "name": "writer/scalar-pretty",
+    "input": "\"x\"",
+    "options": {
+      "indent": 4
+    }
+  },
+  {
+    "name": "writer/number-pretty",
+    "input": "-0.0",
+    "options": {
+      "indent": 2
+    }
+  },
+  {
+    "name": "writer/nested-pretty",
+    "input": "[[[1,[2]],{}]]",
+    "options": {
+      "indent": 2
+    }
+  },
+  {
+    "name": "writer/depth-128",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "options": {
+      "sort_keys": true
+    }
+  },
+  {
+    "name": "writer/too-deep-with-nan",
+    "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[NaN]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+    "options": {
+      "max_depth": 130,
+      "non_finite": true
+    }
+  }
+]
