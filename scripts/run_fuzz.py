@@ -80,6 +80,10 @@ TARGETS = dict(
         target("xml-raw", "xml", "raw", "xml", timeout=10),
         target("xml-roundtrip", max_input_size=1024),
         target("xml-malformed", max_input_size=1024),
+        target("json-raw", "json", "raw", "json", timeout=10),
+        # The first two bytes choose the options, so its seeds carry them.
+        target("json-options", "json-options", "raw", "json", timeout=10),
+        target("json-roundtrip", max_input_size=1024, timeout=10),
         target("csv", "csv", "fuzz-str", "csv"),
         target("csv-raw", "csv", "raw", "csv", timeout=10),
         target("csv-roundtrip", timeout=10),

@@ -46,6 +46,9 @@ jobs:
           - xml-raw
           - xml-roundtrip
           - xml-malformed
+          - json-raw
+          - json-options
+          - json-roundtrip
           - csv
           - csv-raw
           - csv-roundtrip
