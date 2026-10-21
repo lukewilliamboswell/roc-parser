@@ -51,6 +51,7 @@ import os
 from pathlib import Path
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -1015,6 +1016,16 @@ def seed_corpus(run_fuzz, target: str, corpus_dir: Path) -> None:
         (corpus_dir / ("review-" + hashlib.sha256(raw).hexdigest())).write_bytes(raw)
 
 
+def fresh_evidence_dir(work: Path) -> Path:
+    """The run's evidence folder, emptied: `roc-fuzz ci` refuses a non-empty one.
+
+    The corpus beside it is kept, so repeated campaigns build on each other.
+    """
+    evidence = work / "evidence"
+    shutil.rmtree(evidence, ignore_errors=True)
+    return evidence
+
+
 def fuzz_run(roc: str, target: str, seconds: float, seed: int, output: Path, smoke: bool) -> dict:
     """One libFuzzer run of a registered target, with run_fuzz.py's limits and dictionary."""
     work = output / target
@@ -1028,7 +1039,7 @@ def fuzz_run(roc: str, target: str, seconds: float, seed: int, output: Path, smo
     corpus_dir.mkdir(parents=True, exist_ok=True)
     seed_corpus(run_fuzz, target, corpus_dir)
     limit = "--runs=2000" if smoke else "--time=" + str(max(1, int(seconds)))
-    command = [str(binary), "ci", str(work / "evidence"), str(corpus_dir), limit, "--seed=" + str(seed), f"--max-input-size={config.max_input_size}", f"--timeout={config.timeout}", "--memory-limit=2048", "--print-final-stats"]
+    command = [str(binary), "ci", str(fresh_evidence_dir(work)), str(corpus_dir), limit, "--seed=" + str(seed), f"--max-input-size={config.max_input_size}", f"--timeout={config.timeout}", "--memory-limit=2048", "--print-final-stats"]
     if config.dictionary is not None:
         command.append("--dictionary=" + str(config.dictionary))
     start = time.monotonic()

@@ -534,5 +534,20 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(review.mutate(b'{"a":[1,2]}', random.Random(3)), review.mutate(b'{"a":[1,2]}', random.Random(3)))
 
 
+class CampaignTests(unittest.TestCase):
+    def test_repeated_runs_get_an_empty_evidence_folder_and_keep_the_corpus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "evidence").mkdir()
+            (work / "evidence" / "run.log").write_text("previous run\n")
+            (work / "corpus").mkdir()
+            (work / "corpus" / "input").write_bytes(b"[1]")
+            evidence = review.fresh_evidence_dir(work)
+            self.assertEqual(evidence, work / "evidence")
+            self.assertFalse(evidence.exists())
+            self.assertEqual((work / "corpus" / "input").read_bytes(), b"[1]")
+            self.assertEqual(review.fresh_evidence_dir(work), evidence)
+
+
 if __name__ == "__main__":
     unittest.main()
