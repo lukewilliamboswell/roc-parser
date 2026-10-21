@@ -1,6 +1,7 @@
 import MarkdownEntities
 import Parser
 import Utf8
+import Literal as Quotation
 import unicode.Case
 import unicode.GeneralCategory
 import unicode.Scalar
@@ -45,6 +46,31 @@ Markdown := [
 
 	## Compare two Markdown syntax trees structurally.
 	is_eq : _
+
+	## Optional checks for valid Markdown that may hide an editing mistake.
+	Lints := { unclosed_fences : Bool ?? True }
+
+	## Checked source, diagnostic name, and enabled lint rules.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", lints : Lints ?? {} }
+
+	## A checked Markdown document, available through `.blocks`.
+	Document := { blocks : List(Markdown) }.{
+
+		## Convert a quoted document with the default lint rules.
+		from_quote : Str -> Try(Document, [BadQuotedBytes(Str)])
+		from_quote = |source| Markdown.validate({ source: source }).map_ok(|blocks| { blocks: blocks })
+	}
+
+	## Parse Markdown once, rejecting implicit code-fence closures when enabled.
+	## This stricter check does not change CommonMark's permissive parse API.
+	validate : ValidationProps -> Try(List(Markdown), [BadQuotedBytes(Str)])
+	validate = |props| {
+		parsed = parse_document_metadata(props.source.to_utf8())
+		match parsed.unclosed_fences.first() {
+			Ok(line) if props.lints.unclosed_fences => Err(Quotation.error({ name: props.name, format: "Markdown", line, message: "unclosed_fences: code fence has no explicit closing delimiter" }))
+			_ => Ok(parsed.value)
+		}
+	}
 
 	## Heading levels from one through six.
 	Level := [One, Two, Three, Four, Five, Six].{
@@ -488,6 +514,7 @@ BlockState : {
 	leaf_reset : Bool,
 	leaf_added : List(Utf8.Bytes),
 	events : List(Event),
+	unclosed_fences : List(U64),
 }
 
 Nonspace : { pos : U64, column : U64, indent : U64, blank : Bool }
@@ -498,17 +525,22 @@ StartResult : [NoStart(BlockState), StartedContainer(BlockState), StartedLeaf(Bl
 
 ## Markdown has no syntax errors: every input is a document.
 parse_document : Utf8.Bytes -> List(Markdown)
-parse_document = |input| {
+parse_document = |input| parse_document_metadata(input).value
+
+parse_document_metadata : Utf8.Bytes -> { value : List(Markdown), unclosed_fences : List(U64) }
+parse_document_metadata = |input| {
 	all_lines = split_document_lines(input)
 	front = take_frontmatter(all_lines)
-	events = parse_block_lines(front.lines)
+	parsed = parse_block_lines(front.lines)
+	events = parsed.events
 	refs = collect_definitions(events)
 	blocks = List.from_iter(build_blocks(events, 0).blocks.iter().map(|block| resolve_inlines(block, refs)))
 
-	match front.frontmatter {
+	value = match front.frontmatter {
 		Ok(raw) => List.prepend(blocks, Frontmatter(raw))
 		Err(_) => blocks
 	}
+	{ value, unclosed_fences: parsed.unclosed_fences.map(|line| line + all_lines.len() - front.lines.len()) }
 }
 
 ## Line endings are LF, CRLF, or a lone CR; U+0000 becomes U+FFFD. A final line
@@ -587,7 +619,7 @@ new_open = |kind, line_number| {
 	{ kind, start: line_number, last: line_number, has_children: False, nesting: 0 }
 }
 
-parse_block_lines : List(Utf8.Bytes) -> List(Event)
+parse_block_lines : List(Utf8.Bytes) -> { events : List(Event), unclosed_fences : List(U64) }
 parse_block_lines = |lines| {
 	var $state = {
 		stack: [new_open(DocumentBlock, 0)],
@@ -605,6 +637,7 @@ parse_block_lines = |lines| {
 		leaf_reset: False,
 		leaf_added: [],
 		events: [],
+		unclosed_fences: [],
 	}
 	var $events = []
 	var $leaf = []
@@ -626,7 +659,7 @@ parse_block_lines = |lines| {
 	while $closing.depth > 1 {
 		$closing = close_tip($closing, $closing.line_number)
 	}
-	$events.concat($closing.events)
+	{ events: $events.concat($closing.events), unclosed_fences: $closing.unclosed_fences }
 }
 
 tip_kind : BlockState -> OpenKind
@@ -885,7 +918,7 @@ continue_block = |s, open, index| {
 		FencedBlock(fence) => {
 			rest = drop_n(s.line, ns.pos)
 			if ns.indent <= 3 and is_closing_fence(rest, fence.fence_char, fence.fence_len) {
-				closed = close_tip(set_tip_last(s, s.line_number), s.line_number)
+				closed = finish_tip(set_tip_last(s, s.line_number), s.line_number)
 				Consumed(closed)
 			} else {
 				var $next = s
@@ -1072,6 +1105,16 @@ is_indented_kind = |kind| {
 ## Pop the innermost open block, finish it, and record it.
 close_tip : BlockState, U64 -> BlockState
 close_tip = |s, line_number| {
+	next = match tip_kind(s) {
+		FencedBlock(_) => { ..s, unclosed_fences: s.unclosed_fences.append(tip_open(s).start) }
+		_ => s
+	}
+	finish_tip(next, line_number)
+}
+
+# Explicit fence delimiters finish the leaf without recording a lint.
+finish_tip : BlockState, U64 -> BlockState
+finish_tip = |s, line_number| {
 	open = tip_open(s)
 	match open.kind {
 		DocumentBlock => s
@@ -4628,4 +4671,30 @@ drop_last_n : List(a), U64 -> List(a)
 drop_last_n = |list, n| {
 	len = list.len()
 	if (n >= len) [] else list.sublist({ start: 0, len: len - n })
+}
+
+# Fence linting comes from block-parser closures, including container exits.
+expect {
+	document : Markdown.Document
+	document = "# Checked\n\n```roc\nvalue\n```"
+	document.blocks == Markdown.parse_str("# Checked\n\n```roc\nvalue\n```")
+}
+expect match Markdown.validate({ source: "---\ntitle: Test\n---\n```roc\nvalue", name: "notes.md" }) {
+	Err(BadQuotedBytes(message)) => message.contains("notes.md:4: Markdown: unclosed_fences")
+	Ok(_) => False
+}
+expect match Markdown.validate({ source: "> ```\n> code\noutside" }) {
+	Err(BadQuotedBytes(message)) => message.contains("unclosed_fences")
+	Ok(_) => False
+}
+expect Markdown.validate({ source: "> ```\n> code\n> ```\noutside" }).is_ok()
+expect Markdown.validate({ source: "    ```\n    code\n\n<script>\n~~~\n</script>\n\ntext ```inline" }).is_ok()
+expect Markdown.validate({ source: "```\n~~~\n```" }).is_ok()
+expect match Markdown.validate({ source: "```\ncode", lints: { unclosed_fences: False } }) {
+	Ok(blocks) => blocks == Markdown.parse_str("```\ncode")
+	Err(_) => False
+}
+expect match Markdown.validate({ source: "- ```\n  code\n- next" }) {
+	Err(BadQuotedBytes(message)) => message.contains("unclosed_fences")
+	Ok(_) => False
 }

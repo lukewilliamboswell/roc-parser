@@ -1,5 +1,6 @@
 import Parser
 import Utf8
+import Literal as Quotation
 
 ## Parse HTTP/1.x requests and responses, following the message syntax of
 ## RFC 9112 and the field syntax of RFC 9110.
@@ -44,6 +45,44 @@ import Utf8
 ## reason phrases must be valid UTF-8 to be represented as `Str`; other
 ## obs-text bytes are rejected.
 HTTP :: [].{
+
+	## Reject repeated identical Content-Length values, including comma lists.
+	Lints := { repeated_content_length : Bool ?? True }
+
+	## A complete source message and its quotation validation options.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", lints : Lints ?? {} }
+
+	## A complete checked request; HTTP source retains mandatory CRLF endings.
+	RequestLiteral := { value : Request }.{
+
+		## Parse and validate a complete request during literal conversion.
+		from_quote : Str -> Try(RequestLiteral, [BadQuotedBytes(Str)])
+		from_quote = |source| HTTP.validate_request({ source: source }).map_ok(|value| { value: value })
+	}
+
+	## A complete checked response, available through `.value`.
+	ResponseLiteral := { value : Response }.{
+
+		## Parse and validate a complete response during literal conversion.
+		from_quote : Str -> Try(ResponseLiteral, [BadQuotedBytes(Str)])
+		from_quote = |source| HTTP.validate_response({ source: source }).map_ok(|value| { value: value })
+	}
+
+	## Parse exactly one request, then check enabled lint rules.
+	validate_request : ValidationProps -> Try(Request, [BadQuotedBytes(Str)])
+	validate_request = |props| {
+		parsed = read_request_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
+		validate_message(props, parsed.rest, parsed.fields)?
+		Ok(parsed.value)
+	}
+
+	## Parse exactly one response, then check enabled lint rules.
+	validate_response : ValidationProps -> Try(Response, [BadQuotedBytes(Str)])
+	validate_response = |props| {
+		parsed = read_response_metadata(props.source.to_utf8()).map_err(|error| quotation_error(props, error))?
+		validate_message(props, parsed.rest, parsed.fields)?
+		Ok(parsed.value)
+	}
 
 	## A request method (RFC 9110 section 9).
 	##
@@ -255,7 +294,11 @@ read_requests = |bytes, total, requests| {
 }
 
 read_request : Bytes -> Try({ value : HTTP.Request, rest : Bytes }, Failure)
-read_request = |input| {
+read_request = |input| read_request_metadata(input).map_ok(|parsed| { value: parsed.value, rest: parsed.rest })
+
+# Preserve framing fields as a private sidecar for quotation linting.
+read_request_metadata : Bytes -> Try({ value : HTTP.Request, rest : Bytes, fields : List(Field) }, Failure)
+read_request_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_request_line(line)?
 	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
@@ -272,12 +315,15 @@ read_request = |input| {
 				Unframed => take_body(Length(0), head.rest, body_start)?
 				other => take_body(other, head.rest, body_start)?
 			}
-		Ok({ value: { method: start.method, target: start.target, version, headers: head.headers, body: framed.body }, rest: framed.rest })
+		Ok({ value: { method: start.method, target: start.target, version, headers: head.headers, body: framed.body }, rest: framed.rest, fields: head.fields })
 	}
 }
 
 read_response : Bytes -> Try({ value : HTTP.Response, rest : Bytes }, Failure)
-read_response = |input| {
+read_response = |input| read_response_metadata(input).map_ok(|parsed| { value: parsed.value, rest: parsed.rest })
+
+read_response_metadata : Bytes -> Try({ value : HTTP.Response, rest : Bytes, fields : List(Field) }, Failure)
+read_response_metadata = |input| {
 	{ line, rest } = take_line(input)?
 	start = parse_status_line(line)?
 	head = parse_fields(rest, line.len() + 2, { headers: [], fields: [], rest: [] })?
@@ -291,7 +337,31 @@ read_response = |input| {
 		} else {
 			take_body(body_framing, head.rest, input.len() - head.rest.len())?
 		}
-	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.headers, body: framed.body }, rest: framed.rest })
+	Ok({ value: { version, status_code: code, reason: start.reason, headers: head.headers, body: framed.body }, rest: framed.rest, fields: head.fields })
+}
+
+quotation_error : HTTP.ValidationProps, Failure -> [BadQuotedBytes(Str)]
+quotation_error = |props, error| {
+	position = Quotation.position(props.source, error.offset)
+	Quotation.error({ name: props.name, format: "HTTP", message: error.message, line: position.line, column: position.column })
+}
+
+validate_message : HTTP.ValidationProps, Bytes, List(Field) -> Try({}, [BadQuotedBytes(Str)])
+validate_message = |props, rest, fields| {
+	if !rest.is_empty() {
+		return Err(quotation_error(props, { offset: props.source.to_utf8().len() - rest.len(), message: "unexpected content after the HTTP message" }))
+	}
+	if props.lints.repeated_content_length {
+		lengths = values_named(fields, ContentLength)
+		if lengths.len() > 1 {
+			return Err(quotation_error(props, { offset: (lengths.get(1) ?? { value: [], offset: 0 }).offset, message: "repeated_content_length: repeated Content-Length field" }))
+		}
+		match lengths.first() {
+			Ok(field) if elements(field.value).len() > 1 => return Err(quotation_error(props, { offset: field.offset, message: "repeated_content_length: Content-Length contains repeated values" }))
+			_ => {}
+		}
+	}
+	Ok({})
 }
 
 at_least_1_1 : HTTP.Version -> Bool
@@ -972,4 +1042,34 @@ expect {
 		Ok(req) => req.method == Get and HTTP.header(req.headers, "host") == Ok("example.com")
 		Err(_) => False
 	}
+}
+
+# Complete quotation adapters preserve ordinary HTTP framing behavior.
+expect {
+	request : HTTP.RequestLiteral
+	request = "GET /quoted HTTP/1.1\r\nHost: a\r\n\r\n"
+	response : HTTP.ResponseLiteral
+	response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
+	request.value.target == "/quoted" and response.value.body == "hi".to_utf8()
+}
+expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nContent-Length: 0\r\n\r\n", name: "request.http" }) {
+	Err(BadQuotedBytes(message)) => message.contains("request.http:4:1: HTTP: repeated_content_length")
+	Ok(_) => False
+}
+expect HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n", lints: { repeated_content_length: False } }).is_ok()
+expect match HTTP.validate_response({ source: "HTTP/1.1 200 OK\r\nContent-Length: 0, 0\r\n\r\n" }) {
+	Err(BadQuotedBytes(message)) => message.contains("repeated_content_length")
+	Ok(_) => False
+}
+expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\nContent-Length: 0, 1\r\n\r\n", lints: { repeated_content_length: False } }) {
+	Err(BadQuotedBytes(message)) => message.contains("conflicting Content-Length")
+	Ok(_) => False
+}
+expect match HTTP.validate_request({ source: "GET / HTTP/1.1\r\nHost: a\r\n\r\nGET /next HTTP/1.1\r\nHost: a\r\n\r\n" }) {
+	Err(BadQuotedBytes(message)) => message.contains("unexpected content after the HTTP message")
+	Ok(_) => False
+}
+expect match HTTP.validate_request({ source: "GET / HTTP/1.1\nHost: a\n\n" }) {
+	Err(BadQuotedBytes(message)) => message.contains("LF not preceded by CR")
+	Ok(_) => False
 }

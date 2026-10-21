@@ -1,5 +1,6 @@
 import Parser
 import Utf8
+import Literal as Quotation
 
 ## XML document tree and parser based on the XML 1.0 (Fifth Edition)
 ## specification.
@@ -46,6 +47,30 @@ Xml := {
 
 	## Hash an XML document, so documents can be `Dict` keys and `Set` members.
 	to_hash : _
+
+	## Optional checks for suspicious XML that is otherwise well formed.
+	Lints := { non_utf8_declaration : Bool ?? True }
+
+	## Checked source and enabled lint rules. A source name appears in errors.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", lints : Lints ?? {} }
+
+	## Parse complete XML, rejecting enabled lints after native parse errors.
+	## Input is already UTF-8, so a different declared encoding is suspicious.
+	validate : ValidationProps -> Try(Xml, [BadQuotedBytes(Str)])
+	validate = |props| {
+		xml = Xml.parse_str(props.source).map_err(|InvalidXml(error)| Quotation.error({ name: props.name, format: "XML", message: error.message, line: error.line, column: error.column }))?
+		if props.lints.non_utf8_declaration {
+			match xml.declaration {
+				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(Quotation.error({ name: props.name, format: "XML", line: 1, message: "non_utf8_declaration: input is UTF-8 but declares ${encoding}" }))
+				_ => {}
+			}
+		}
+		Ok(xml)
+	}
+
+	## Use a well-formed, lint-checked XML document as a quoted value.
+	from_quote : Str -> Try(Xml, [BadQuotedBytes(Str)])
+	from_quote = |source| Xml.validate({ source: source })
 
 	## An XML attribute name and decoded value.
 	##
@@ -1427,3 +1452,19 @@ expect Xml.parse_str("<p>Hello, <b>world</b>!</p>").map_ok(|xml| xml.root.text()
 # Doc examples: parse_str and parser.
 expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
 expect Xml.parse_str("<a>&nbsp;</a>") == Err(InvalidXml({ line: 1, column: 4, message: "undeclared entity &nbsp;" }))
+
+# Quotation validation keeps native XML failures ahead of lint failures.
+expect {
+	xml : Xml
+	xml = "<root><child>quoted</child></root>"
+	xml.root.text() == "quoted"
+}
+expect match Xml.validate({ source: "<?xml version='1.0' encoding='latin1'?><a/>", name: "feed.xml" }) {
+	Err(BadQuotedBytes(message)) => message.contains("feed.xml:1: XML: non_utf8_declaration")
+	Ok(_) => False
+}
+expect Xml.validate({ source: "<?xml version='1.0' encoding='latin1'?><a/>", lints: { non_utf8_declaration: False } }).is_ok()
+expect match Xml.validate({ source: "<?xml version='1.0' encoding='latin1'?><a></b>" }) {
+	Err(BadQuotedBytes(message)) => !message.contains("non_utf8_declaration") and message.contains("XML")
+	Ok(_) => False
+}
