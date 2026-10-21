@@ -243,6 +243,27 @@ class PackageExamplesTests(unittest.TestCase):
             with zipfile.ZipFile(output) as bundle:
                 self.assertIn(self.URL, bundle.read("roc-parser-examples-2.0.0/examples/b.roc").decode())
 
+    def test_adjacent_imported_assets_are_preserved_without_rewriting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            examples = self.make_examples(root)
+            assets = examples / "assets"
+            assets.mkdir()
+            contents = {
+                "settings.yaml": b"port: 8080\r\n",
+                "data.csv": b"name,age\nAda,36\n",
+                "document.xml": b"<a/>\n",
+                "source.roc": b"answer = 42\n",
+                "nested/examples/source.roc": b"answer = 43\n",
+            }
+            for name, content in contents.items():
+                (assets / name).parent.mkdir(parents=True, exist_ok=True)
+                (assets / name).write_bytes(content)
+            archive = helpers.package_examples(examples, self.URL, "2.0.0", root / "examples.zip")
+            with zipfile.ZipFile(archive) as bundle:
+                for name, content in contents.items():
+                    self.assertEqual(bundle.read(f"roc-parser-examples-2.0.0/examples/assets/{name}"), content)
+
     def test_an_example_without_one_parser_dependency_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

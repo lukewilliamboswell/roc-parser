@@ -1,5 +1,41 @@
 ## Pure AsciiDoc block parsing and HTML rendering.
-AsciiDoc :: [].{
+AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
+
+	## Reject active include directives that were left unexpanded.
+	Lints := { unexpanded_includes : Bool ?? True }
+
+	## Source and pure preprocessing options for checked conversion.
+	## Includes are supplied explicitly; validation never reads files.
+	ValidationProps := {
+		source : Str,
+		name : Str ?? "<literal>",
+		lints : Lints ?? {},
+		includes : List({ path : Str, source : Str }) ?? [],
+		attributes : List(Attribute) ?? [],
+		max_depth : U64 ?? 16,
+		expand_includes : Bool ?? False,
+	}
+
+	## Parse once, reporting native failures before enabled lint failures.
+	validate : ValidationProps -> Try(Document, [BadQuotedBytes(Str)])
+	validate = |props| {
+		parsed = parse_document_metadata(props.source, { includes: props.includes, attributes: props.attributes, max_depth: props.max_depth, expand_includes: props.expand_includes }).map_err(
+			|error| {
+				match error {
+					InvalidAsciiDoc(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: detail.message, line: detail.line })
+					Unsupported(detail) => Quotation.error({ name: props.name, format: "AsciiDoc", message: "unsupported: ${detail.message}", line: detail.line })
+				}
+			},
+		)?
+		match parsed.unexpanded_includes.first() {
+			Ok(error) if props.lints.unexpanded_includes => Err(Quotation.error({ name: if (error.path == "") props.name else error.path, format: "AsciiDoc", message: error.message, line: error.line }))
+			_ => Ok(parsed.value)
+		}
+	}
+
+	## A quoted document uses the default pure preprocessing and lint rules.
+	from_quote : Str -> Try(AsciiDoc, [BadQuotedBytes(Str)])
+	from_quote = |source| AsciiDoc.validate({ source: source }).map_ok(|document| AsciiDoc.(document))
 
 	## Parsed title and source-preserving blocks.
 	Document : { title : Str, blocks : List(Block) }
@@ -45,96 +81,7 @@ AsciiDoc :: [].{
 
 	## Parse using only caller-supplied include sources; never reads files.
 	parse_with : Str, Options -> Try(Document, [Unsupported(Error), InvalidAsciiDoc(Error)])
-	parse_with = |source, options| {
-		if source.to_utf8().len() > 262144 {
-			return Err(InvalidAsciiDoc({ offset: 0, line: 1, message: "AsciiDoc source exceeds 262144-byte limit" }))
-		}
-		processed = match AsciiDocPreprocess.run_scoped(source, options) {
-			Ok(value) => value
-			Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ offset: error.offset, line: error.line, message: error.message }))
-		}
-		structure = structural_lines(processed.lines)
-		validate_nesting(structure)?
-		validate_list_nesting(structure)?
-		source_lines = processed.lines.map(|line| { text: trim_end(line.text), attrs: line.attributes })
-		var $lines = normalize_headings(source_lines)
-		var $header_ready = False
-		while !$header_ready and !$lines.is_empty() {
-			first = ($lines.first() ?? empty_line).text
-			if first == "" or (first.starts_with("//") and delimiter(first) != "comment") {
-				$lines = $lines.drop_first(1)
-			}
-			else if delimiter(first) == "comment" {
-				$lines = take_delimited($lines.drop_first(1), first).rest
-			}
-			else {
-				$header_ready = True
-			}
-		}
-		var $candidate = $lines
-		var $discrete = False
-		var $document_id = ""
-		var $document_reftext = ""
-		while !$candidate.is_empty() and is_block_metadata(($candidate.first() ?? empty_line).text) {
-			metadata_line = ($candidate.first() ?? empty_line).text
-			metadata = parse_metadata(metadata_line)
-			if metadata_line.starts_with("[[") and metadata_line.ends_with("]]") {
-				parts = split_attributes(Str.from_utf8_lossy(metadata_line.to_utf8().drop_first(2).drop_last(2)))
-				$document_id = parts.first() ?? ""
-				if parts.len() > 1 {
-					$document_reftext = unquote(parts.get(1) ?? "")
-				}
-			} else if attribute(metadata, "id") != "" {
-				$document_id = attribute(metadata, "id")
-			}
-			if has_attr(metadata, "reftext") {
-				$document_reftext = attribute(metadata, "reftext")
-			}
-			if attribute(metadata, "1") == "discrete" {
-				$discrete = True
-			}
-			$candidate = $candidate.drop_first(1)
-			while !$candidate.is_empty() and (($candidate.first() ?? empty_line).text == "" or ($candidate.first() ?? empty_line).text.starts_with("//")) {
-				$candidate = $candidate.drop_first(1)
-			}
-		}
-		if !$discrete and ($candidate.first() ?? empty_line).text.starts_with("= ") {
-			$lines = $candidate
-		}
-		lines = $lines
-		match lines {
-			[first, .. as rest] if first.text.starts_with("= ") and numeric_prefix(attribute(first.attrs, "leveloffset")) == 0 => {
-				var $body = rest
-				var $metadata_lines = 0.U64
-				while !$body.is_empty() and ($body.first() ?? empty_line).text != "" and $metadata_lines < 2 {
-					candidate = ($body.first() ?? empty_line).text
-					if candidate.starts_with("//") {
-						$body = $body.drop_first(1)
-					}
-					else if $metadata_lines == 1 and candidate.trim().starts_with(":") {
-						break
-					}
-					else {
-						$body = $body.drop_first(1)
-						$metadata_lines = $metadata_lines + 1
-					}
-				}
-				raw_title = drop_text(first.text, 2).trim()
-				header_attrs = if ($body.is_empty()) processed.attributes else ($body.first() ?? empty_line).attrs
-				parsed = document_reference(parse_blocks($body, 98).blocks, $document_id, if ($document_reftext == "") raw_title else $document_reftext)
-				if raw_title.contains("{") or raw_title.contains("footnote:") or raw_title.contains("<<") or raw_title.contains("xref:") or has_attr(header_attrs, "doctitle") {
-					stored = store_header(parsed, raw_title, first.attrs, header_attrs)
-					stored_attrs = (render_node(stored.first() ?? empty_item)).attrs
-					refs = if (header_ref_independent(stored_attrs)) [] else identify_blocks(stored, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
-					header = prepare_header(stored_attrs, refs)
-					Ok({ title: header.html, blocks: if (parsed.is_empty() and header.state.footnotes.is_empty()) [] else stored })
-				} else {
-					Ok({ title: AsciiDoc.render_inline_attributes(raw_title, header_attrs), blocks: parsed })
-				}
-			}
-			_ => Ok({ title: "", blocks: parse_blocks(lines, 98).blocks })
-		}
-	}
+	parse_with = |source, options| parse_document_metadata(source, options).map_ok(|parsed| parsed.value)
 
 	## Render inline substitutions with caller-supplied attributes.
 	render_inline : Str, List(Attribute) -> Str
@@ -145,6 +92,7 @@ AsciiDoc :: [].{
 	render = |document| render_document(document)
 }
 
+import Literal as Quotation
 import AsciiDocInline
 import AsciiDocPreprocess
 import unicode.Case
@@ -155,6 +103,105 @@ import AsciiDocMedia
 import AsciiDocBlockHtml
 import AsciiDocAttributes
 import AsciiDocSource
+
+# Parser sidecar metadata is kept outside the public document and parse APIs.
+parse_document_metadata : Str, AsciiDoc.Options -> Try({ value : AsciiDoc.Document, unexpanded_includes : List(AsciiDocPreprocess.Error) }, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
+parse_document_metadata = |source, options| {
+	if source.to_utf8().len() > 262144 {
+		return Err(InvalidAsciiDoc({ offset: 0, line: 1, message: "AsciiDoc source exceeds 262144-byte limit" }))
+	}
+	checked = match AsciiDocPreprocess.run_scoped_checked(source, options) {
+		Ok(value) => value
+		Err(PreprocessError(error)) => return Err(InvalidAsciiDoc({ offset: error.offset, line: error.line, message: error.message }))
+	}
+	value = parse_processed(checked.processed)?
+	Ok({ value, unexpanded_includes: checked.unexpanded_includes })
+}
+
+parse_processed : AsciiDocPreprocess.ScopedResult -> Try(AsciiDoc.Document, [Unsupported(AsciiDoc.Error), InvalidAsciiDoc(AsciiDoc.Error)])
+parse_processed = |processed| {
+	structure = structural_lines(processed.lines)
+	validate_nesting(structure)?
+	validate_list_nesting(structure)?
+	source_lines = processed.lines.map(|line| { text: trim_end(line.text), attrs: line.attributes })
+	var $lines = normalize_headings(source_lines)
+	var $header_ready = False
+	while !$header_ready and !$lines.is_empty() {
+		first = ($lines.first() ?? empty_line).text
+		if first == "" or (first.starts_with("//") and delimiter(first) != "comment") {
+			$lines = $lines.drop_first(1)
+		}
+		else if delimiter(first) == "comment" {
+			$lines = take_delimited($lines.drop_first(1), first).rest
+		}
+		else {
+			$header_ready = True
+		}
+	}
+	var $candidate = $lines
+	var $discrete = False
+	var $document_id = ""
+	var $document_reftext = ""
+	while !$candidate.is_empty() and is_block_metadata(($candidate.first() ?? empty_line).text) {
+		metadata_line = ($candidate.first() ?? empty_line).text
+		metadata = parse_metadata(metadata_line)
+		if metadata_line.starts_with("[[") and metadata_line.ends_with("]]") {
+			parts = split_attributes(Str.from_utf8_lossy(metadata_line.to_utf8().drop_first(2).drop_last(2)))
+			$document_id = parts.first() ?? ""
+			if parts.len() > 1 {
+				$document_reftext = unquote(parts.get(1) ?? "")
+			}
+		} else if attribute(metadata, "id") != "" {
+			$document_id = attribute(metadata, "id")
+		}
+		if has_attr(metadata, "reftext") {
+			$document_reftext = attribute(metadata, "reftext")
+		}
+		if attribute(metadata, "1") == "discrete" {
+			$discrete = True
+		}
+		$candidate = $candidate.drop_first(1)
+		while !$candidate.is_empty() and (($candidate.first() ?? empty_line).text == "" or ($candidate.first() ?? empty_line).text.starts_with("//")) {
+			$candidate = $candidate.drop_first(1)
+		}
+	}
+	if !$discrete and ($candidate.first() ?? empty_line).text.starts_with("= ") {
+		$lines = $candidate
+	}
+	lines = $lines
+	match lines {
+		[first, .. as rest] if first.text.starts_with("= ") and numeric_prefix(attribute(first.attrs, "leveloffset")) == 0 => {
+			var $body = rest
+			var $metadata_lines = 0.U64
+			while !$body.is_empty() and ($body.first() ?? empty_line).text != "" and $metadata_lines < 2 {
+				candidate = ($body.first() ?? empty_line).text
+				if candidate.starts_with("//") {
+					$body = $body.drop_first(1)
+				}
+				else if $metadata_lines == 1 and candidate.trim().starts_with(":") {
+					break
+				}
+				else {
+					$body = $body.drop_first(1)
+					$metadata_lines = $metadata_lines + 1
+				}
+			}
+			raw_title = drop_text(first.text, 2).trim()
+			header_attrs = if ($body.is_empty()) processed.attributes else ($body.first() ?? empty_line).attrs
+			parsed = document_reference(parse_blocks($body, 98).blocks, $document_id, if ($document_reftext == "") raw_title else $document_reftext)
+			if raw_title.contains("{") or raw_title.contains("footnote:") or raw_title.contains("<<") or raw_title.contains("xref:") or has_attr(header_attrs, "doctitle") {
+				stored = store_header(parsed, raw_title, first.attrs, header_attrs)
+				stored_attrs = (render_node(stored.first() ?? empty_item)).attrs
+				refs = if (header_ref_independent(stored_attrs)) [] else identify_blocks(stored, { ids: Dict.empty(), refs: [], numbers: List.repeat(0, 6), examples: 0, figures: 0, tables: 0, toc: False }).state.refs
+				header = prepare_header(stored_attrs, refs)
+				Ok({ title: header.html, blocks: if (parsed.is_empty() and header.state.footnotes.is_empty()) [] else stored })
+			} else {
+				Ok({ title: AsciiDoc.render_inline_attributes(raw_title, header_attrs), blocks: parsed })
+			}
+		}
+		_ => Ok({ title: "", blocks: parse_blocks(lines, 98).blocks })
+	}
+}
 
 Line : { text : Str, attrs : AsciiDoc.Attributes }
 
@@ -2541,3 +2588,47 @@ expect {
 	html = AsciiDoc.render({ title: "", blocks: [Listing("footnote:[literal]"), Paragraph("Real footnote:[note]")] })
 	html.contains("<pre>footnote:[literal]</pre>") and html.contains("id=\"_footnoteref_1\"") and !html.contains("id=\"_footnoteref_2\"")
 }
+
+# Validation follows active preprocessing directives rather than AST text.
+expect {
+	document : AsciiDoc
+	document = "= Checked\n\nText"
+	document.title == "Checked" and document.blocks == [Paragraph("Text")]
+}
+expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", name: "book.adoc" }) {
+	Err(BadQuotedBytes(message)) => message.contains("book.adoc:1: AsciiDoc: unexpanded_includes")
+	Ok(_) => False
+}
+expect AsciiDoc.validate({ source: "include::chapter.adoc[]", lints: { unexpanded_includes: False } }).is_ok()
+expect AsciiDoc.validate({ source: "\\include::chapter.adoc[]\n\nlink:chapter.adoc[role=include]" }).is_ok()
+expect AsciiDoc.validate({ source: "ifdef::missing[]\ninclude::chapter.adoc[]\nendif::[]" }).is_ok()
+expect match AsciiDoc.validate({ source: "ifdef::enabled[include::chapter.adoc[]]", attributes: [{ name: "enabled", value: "" }] }) {
+	Err(BadQuotedBytes(message)) => message.contains("unexpanded_includes")
+	Ok(_) => False
+}
+expect match AsciiDoc.validate({ source: "include::chapter.adoc[]", expand_includes: True, includes: [{ path: "chapter.adoc", source: "Expanded" }] }) {
+	Ok(document) => document.blocks == [Paragraph("Expanded")]
+	Err(_) => False
+}
+expect match AsciiDoc.validate({ source: "include::missing.adoc[]", expand_includes: True }) {
+	Err(BadQuotedBytes(message)) => message.contains("virtual include not supplied") and !message.contains("unexpanded_includes")
+	Ok(_) => False
+}
+expect {
+	var $source = "include::unexpanded.adoc[]\n\n"
+	var $marker = "===="
+	var $depth = 0.U64
+	while $depth < 65 {
+		$source = "${$source}${$marker}\n"
+		$marker = "${$marker}="
+		$depth = $depth + 1
+	}
+	match AsciiDoc.validate({ source: $source }) {
+		Err(BadQuotedBytes(message)) => message.contains("block nesting exceeds") and !message.contains("unexpanded_includes")
+		Ok(_) => False
+	}
+}
+
+expect AsciiDoc.validate({ source: "////\ninclude::missing.adoc[]\n////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect AsciiDoc.validate({ source: "/////\ninclude::missing.adoc[]\n/////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect AsciiDoc.validate({ source: "----\ninclude::missing.adoc[]\n----" }).is_err()

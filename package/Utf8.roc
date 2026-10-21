@@ -1,4 +1,5 @@
 import Parser
+import Literal
 
 ## Parsers and helpers specialized to UTF-8 byte lists and Roc `Str` values.
 ##
@@ -9,6 +10,26 @@ Utf8 :: [].{
 
 	## UTF-8 input represented as a list of bytes.
 	Bytes : List(U8)
+
+	## Props for adapting a complete text parser to `from_quote`.
+	QuoteProps(a) := {
+		parser : Parser(Bytes, a),
+		source : Str,
+		name : Str ?? "<literal>",
+	}
+
+	## Parse all text and convert its furthest error into a quotation error.
+	## Use this inside a custom nominal type's `from_quote` method.
+	parse_quote : QuoteProps(a) -> Try(a, [BadQuotedBytes(Str)])
+	parse_quote = |props| {
+		match parse_str(props.parser, props.source) {
+			Ok(value) => Ok(value)
+			Err(ParseError(problem)) => {
+				position = Literal.position(props.source, problem.offset)
+				Err(Literal.error({ name: props.name, format: "parser", message: problem.message, line: position.line, column: position.column }))
+			}
+		}
+	}
 
 	## Parse a whole `Str` using a [Parser].
 	##
@@ -983,3 +1004,22 @@ expect Utf8.find_line_end("abc".to_utf8(), 5) == 5
 expect Utf8.find_any([], 0, Utf8.ByteClass.from_bytes(['x'])) == 0
 expect Utf8.ByteClass.from_bytes(['a']).complement().contains('b')
 expect Utf8.parse_str_partial(Utf8.span_class(Utf8.ByteClass.from_bytes(['a'])), "aaab").map_ok(|r| r.rest) == Ok("b")
+
+expect Utf8.parse_quote({ parser: Utf8.digits, source: "42" }) == Ok(42)
+
+expect match Utf8.parse_quote({ parser: Utf8.digits, source: "42x", name: "count.txt" }) {
+	Err(BadQuotedBytes(message)) => message.starts_with("count.txt:1:3: parser:")
+	Ok(_) => False
+}
+
+expect {
+	parser : Parser(Utf8.Bytes, U64)
+	parser = Parser.one_of([
+		Parser.const(1).skip(Utf8.string("ab")).skip(Utf8.codeunit('x')),
+		Parser.const(2).skip(Utf8.codeunit('a')),
+	])
+	match Utf8.parse_quote({ parser, source: "abz", name: "branch.txt" }) {
+		Err(BadQuotedBytes(message)) => message.starts_with("branch.txt:1:3: parser:")
+		Ok(_) => False
+	}
+}

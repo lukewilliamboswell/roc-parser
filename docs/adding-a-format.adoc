@@ -48,7 +48,8 @@ the existing formats are listed in <<property-testing>>.
    parsers, failing with `ParseError({ message, offset })`;
 ** `Try(a, [Missing])` for every optional value, and methods in the
    `.{ }` block, called in method-call style in examples;
-** no public function that can crash, on any input.
+** fallible parsing and validation functions return errors on every input;
+   explicit constant assertions such as `Literal.require` are documented separately.
 . If records are a natural target, also implement a format for
   type-directed decoding, as `CSV.Format` and `Yaml.Format` do, and expose
   `Toml.decode` with a `Parseable` where-clause alias. The parsers chapter of
@@ -59,11 +60,26 @@ explicit stack for nesting. The combinator style is convenient for small
 grammars, but every rewritten module (CSV, XML, HTTP, Markdown) moved to
 scanners to stay linear in the input size and to avoid deep recursion.
 
+Compile-time parsing is an enduring requirement for format modules. Make the
+document type nominal and implement `from_quote` by delegating to a checked
+`validate` function returning `Try(Toml, [BadQuotedBytes(Str)])`. Use a nominal
+props record with defaulted fields for the source name, format options, and
+configurable extra checks. Add `validate_as` when type-directed decoding is
+supported. Keep ordinary parsing acceptance unchanged. See
+<<compile-time-parsing>> for the quotation and imported-file contract.
+
 == 3. Write the tests
 
 Put `expect` tests next to the code they cover. For every rule, test an input
 that is accepted, one that is rejected, and the boundary between them. Add a
-test for each limit you chose in step 1. Run them:
+test for each limit you chose in step 1.
+
+Add compiler fixtures for valid and invalid quotations and imported text,
+including default checks and overrides. `scripts/check_literals.py` checks
+rejection by both `roc check` and `roc build`, and verifies the intended error
+message rather than accepting any compiler failure.
+
+Run the package tests:
 
 [source,bash]
 ----

@@ -30,10 +30,15 @@ AsciiDocPreprocess :: [].{
 	ScopedLine : { text : Str, attributes : AsciiDocAttributes.Attributes, path : Str, line : U64, offset : U64 }
 	ScopedResult : { source : Str, attributes : AsciiDocAttributes.Attributes, lines : List(ScopedLine) }
 	run_scoped : Str, Options -> Try(ScopedResult, [PreprocessError(Error)])
-	run_scoped = |source, options| {
+	run_scoped = |source, options| run_scoped_checked(source, options).map_ok(|result| result.processed)
+
+	## Parse once and retain actual active include directives left unexpanded.
+	## Used by document quotation validation without inspecting rendered text.
+	run_scoped_checked : Str, Options -> Try({ processed : ScopedResult, unexpanded_includes : List(Error) }, [PreprocessError(Error)])
+	run_scoped_checked = |source, options| {
 		attributes = AsciiDocSource.new_standard_parsed_options(source_namespace(source, options), options.attributes)
 		result = process(source, "", attributes, options, [], 0)?
-		Ok({ source: join(result.lines.map(|line| line.text), "\n"), attributes: AsciiDocAttributes.from_store(result.attributes), lines: result.lines })
+		Ok({ processed: { source: join(result.lines.map(|line| line.text), "\n"), attributes: AsciiDocAttributes.from_store(result.attributes), lines: result.lines }, unexpanded_includes: result.unexpanded_includes })
 	}
 
 	## Expand defined attribute references, preserving unknown references and
@@ -63,12 +68,12 @@ condition_source = |source, attributes| {
 	if (source.contains(",")) source.split_on(",").any(|name| AsciiDocSource.lookup(attributes, lower(trim(name))).is_ok()) else source.split_on("+").all(|name| AsciiDocSource.lookup(attributes, lower(trim(name))).is_ok())
 }
 
-Context : { definition_allowed : Bool, opaque : Str, header : Bool }
+Context : { definition_allowed : Bool, opaque : Str, header : Bool, lint_comment : Str }
 
-State : { lines : List(AsciiDocPreprocess.ScopedLine), attributes : AsciiDocSource.Store, context : Context }
+State : { lines : List(AsciiDocPreprocess.ScopedLine), attributes : AsciiDocSource.Store, context : Context, unexpanded_includes : List(AsciiDocPreprocess.Error) }
 
 process : Str, Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64 -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
-process = |source, path, attributes, options, stack, depth| process_lines(source_lines(source), path, attributes, options, stack, depth, { definition_allowed: True, opaque: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
+process = |source, path, attributes, options, stack, depth| process_lines(source_lines(source), path, attributes, options, stack, depth, { definition_allowed: True, opaque: "", lint_comment: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
 
 SourceLine : { text : Str, line : U64, offset : U64 }
 
@@ -93,11 +98,13 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 	var $snapshot_attrs = AsciiDocAttributes.flat([])
 
 	var $lines = []
+	var $unexpanded_includes = []
 	var $conditions = []
 	var $continuation = ""
 	var $expanded_size = 0
 	var $definition_allowed = context.definition_allowed
 	var $opaque = context.opaque
+	var $lint_comment = context.lint_comment
 	var $header = context.header
 	for input_line in input_lines {
 		emitted_before = $lines.len()
@@ -106,6 +113,16 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 		text = input_line.text
 		var $definition_text = ""
 		active = $conditions.all(|condition| condition.enabled)
+		# Track comment blocks for lint metadata without changing the ordinary
+		# preprocessor's directive or attribute handling. Delimiters may have
+		# any number of slashes >= 4; listing/literal includes remain active.
+		if active {
+			if $lint_comment == text {
+				$lint_comment = ""
+			} else if $lint_comment == "" and $opaque == "" and text.starts_with("////") and text.to_utf8().all(|byte| byte == '/') {
+				$lint_comment = text
+			}
+		}
 		if text.starts_with("endif::") and complete_directive(text) {
 			closing = directive(drop(text, 7))
 			target = lower(closing.target)
@@ -123,11 +140,13 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
 			} else if parts.target != "" and active and enabled {
 				if $opaque == "" and (!is_definition(parts.body) or $definition_allowed) {
-					nested = process_lines([{ text: parts.body, line: number, offset }], path, $attributes, options, stack, depth, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header })?
+					nested = process_lines([{ text: parts.body, line: number, offset }], path, $attributes, options, stack, depth, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+					$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 					$attributes = nested.attributes
 					$snapshot_ready = False
 					$definition_allowed = nested.context.definition_allowed
 					$opaque = nested.context.opaque
+					$lint_comment = nested.context.lint_comment
 					$header = nested.context.header
 					for line in nested.lines {
 						$lines = $lines.append(line)
@@ -192,7 +211,8 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
 						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
 						nested_attrs = if (include_offset == "") $attributes else AsciiDocSource.set_parsed($attributes, "leveloffset", effective_offset.to_str())
-						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header })?
+						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+						$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
 							Ok(previous) => AsciiDocSource.set_parsed(nested.attributes, "leveloffset", previous)
 							Err(_) => AsciiDocSource.unset_parsed(nested.attributes, "leveloffset")
@@ -200,6 +220,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						$snapshot_ready = False
 						$definition_allowed = nested.context.definition_allowed
 						$opaque = nested.context.opaque
+						$lint_comment = nested.context.lint_comment
 						$header = nested.context.header
 						shifted = nested.lines
 						for line in shifted {
@@ -211,6 +232,9 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 							return Err(PreprocessError({ path, line: number, offset, message: Str.concat("virtual include not supplied: ", resolved) }))
 						}
 						if !options.expand_includes {
+							if $lint_comment == "" {
+								$unexpanded_includes = $unexpanded_includes.append({ path, line: number, offset, message: "unexpanded_includes: include was not expanded: ${target}" })
+							}
 							if !$snapshot_ready {
 								$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
 								$snapshot_ready = True
@@ -256,7 +280,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			return Err(PreprocessError({ path, line: number, offset, message: "maximum expanded source size exceeded (1048576 bytes)" }))
 		}
 	}
-	Ok({ lines: $lines, attributes: $attributes, context: { definition_allowed: $definition_allowed, opaque: $opaque, header: $header } })
+	Ok({ lines: $lines, attributes: $attributes, context: { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment }, unexpanded_includes: $unexpanded_includes })
 }
 
 is_definition : Str -> Bool

@@ -72,6 +72,11 @@ def main() -> int:
     if status:
         return status
 
+    print("\nChecking compile-time literals and imported files...", flush=True)
+    status = run_checked([sys.executable, "scripts/check_literals.py"], env=env)
+    if status:
+        return status
+
     print("\nGenerating package docs...", flush=True)
     status = run_checked(
         [roc, "docs", "package/main.roc", f"--output={docs_dir}"],
