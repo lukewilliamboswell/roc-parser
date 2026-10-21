@@ -15,7 +15,7 @@ notice.
 
 * {src}/docs/releases/2.1.0.md[roc-parser 2.1.0 release notes]: Roc source tokens and syntax trees for
   tooling, AsciiDoc parsing and HTML rendering, and source-preserving YAML
-  highlighting. Requires Roc `nightly-2026-10-18-1df370f`.
+  highlighting. Requires Roc `nightly-2026-10-20-7a8a800`.
 
 * {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes]: a redesigned API with an upgrade guide, type-directed decoding
   of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
