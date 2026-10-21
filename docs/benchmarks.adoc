@@ -22,7 +22,7 @@ named in the report.
 
 [source,console]
 ----
-$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-20-7a8a800/roc
+$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-21-5349569/roc
 $ python3 scripts/bench.py --quick             # about two minutes
 $ python3 scripts/bench.py --allocations       # the full comparison
 ----

@@ -4,8 +4,8 @@
 
 Existing runtime parsing functions keep their signatures and acceptance rules.
 The new checked conversions also reject enabled lint checks by default; each
-check can be disabled through defaulted props. The compiler pin remains
-`nightly-2026-10-20-7a8a800`.
+check can be disabled through defaulted props. The compiler pin moves to
+`nightly-2026-10-21-5349569`.
 
 ## New features
 
