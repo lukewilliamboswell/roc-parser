@@ -6,6 +6,7 @@ app [main!] {
 import cli.Stdout
 import parser.CSV
 import parser.HTTP
+import parser.JsonValue
 import parser.Markdown
 import parser.Parser
 import parser.Utf8
@@ -51,6 +52,15 @@ yaml_value = |text| {
 config : Str -> Try({ title : Str, draft : Bool }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 config = |text| Yaml.decode(text)
 
+# JsonValue: a lossless tree; numbers keep their text, and it writes JSON too.
+json_sorted : Str -> Str
+json_sorted = |text| {
+	match JsonValue.parse_str(text) {
+		Ok(value) => JsonValue.to_str_with(value, { sort_keys: True }) ?? "not writable"
+		Err(InvalidJson(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+	}
+}
+
 # Markdown: parsing never fails, so `parse_str` returns the blocks directly.
 markdown_blocks : Str -> Str
 markdown_blocks = |text| Str.join_with(Markdown.parse_str(text).map(Str.inspect), "\n")
@@ -65,6 +75,7 @@ main! = |_args| {
 	Stdout.line!(xml_root("<a><b></a>"))?
 	Stdout.line!(yaml_value("title: Notes\ndraft: false\n"))?
 	Stdout.line!(Str.inspect(config("title: Notes\ndraft: false\n")))?
+	Stdout.line!(json_sorted("{\"version\": 2.10, \"name\": \"web\"}"))?
 	Stdout.line!(markdown_blocks("# Title\n\nSome *text*.\n"))?
 	Ok({})
 }

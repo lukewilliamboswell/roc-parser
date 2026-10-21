@@ -73,6 +73,15 @@ The package depends on one other package:
 `package/main.roc` names its release URL. Roc fetches it when it fetches
 roc-parser, so applications need not add it themselves.
 
+== The builtin `Json` module
+
+Roc auto-imports a builtin module named `Json`, which decodes JSON into
+records. roc-parser's JSON module is therefore named `JsonValue`: an
+`import parser.Json` would leave the alias unbound. Both modules report
+invalid input as `InvalidJson`, with a `Str` from the builtin and a
+`JsonValue.Error` record from `JsonValue`, so one function cannot pass both
+errors on with `?` unless it maps one of them (see <<json-builtin>>).
+
 == Changes in 2.0.0 at a glance
 
 Version 2.0.0 changes the API of every module and reworks every format parser
