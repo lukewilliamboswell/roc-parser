@@ -77,6 +77,8 @@ include::custom-format.adoc[leveloffset=+1]
 
 include::errors.adoc[leveloffset=+1]
 
+include::compile-time-parsing.adoc[leveloffset=+1]
+
 = Reference
 
 include::modules.adoc[leveloffset=+1]

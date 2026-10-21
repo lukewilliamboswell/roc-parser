@@ -7,7 +7,7 @@ import os
 import re
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Sequence
 
 try:
@@ -97,7 +97,9 @@ def validate_examples(examples_dir: Path = ROOT / "examples", archive: Path | No
         sources = {
             name: bundle.read(name).decode("utf-8")
             for name in bundle.namelist()
-            if name.endswith(".roc") and "/examples/" in name
+            if PurePosixPath(name).suffix == ".roc"
+            and len(PurePosixPath(name).parts) == 3
+            and PurePosixPath(name).parts[1] == "examples"
         }
     urls = set()
     for name, deps in example_dependencies(sources).items():

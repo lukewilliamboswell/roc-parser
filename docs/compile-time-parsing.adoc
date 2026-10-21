@@ -1,0 +1,150 @@
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+endif::[]
+
+[#compile-time-parsing]
+= Parse and validate during compilation
+
+Compile-time parsing and useful validation are enduring design goals for every
+format in roc-parser. A quoted document or an adjacent imported file should
+become a ready-to-use Roc value, with invalid input explained during compilation.
+The same pure parser supports runtime input; checked conversions add configurable
+checks without changing the ordinary parsing APIs.
+
+== Quoted documents
+
+Annotate a quotation with its target type. Roc calls that type's `from_quote`
+method during compilation. A malformed document, a failed decoding, or an
+enabled lint returns `Err(BadQuotedBytes(message))`, which Roc reports as a
+compiler error. Successful quotations become parsed constants.
+
+[source,roc]
+----
+include::examples/compile-time-parsing.roc[tag=quoted,indent=0]
+----
+
+`people.value` holds typed records; `table.records` holds the raw CSV fields as
+bytes, including the header. Raw CSV does not assume its first row is a header.
+
+[cols="1,2",options="header"]
+|===
+|Quotation type |Access to the parsed result
+|`Yaml` |The document tree itself
+|`Yaml.Decoded(a)` |`.value`, decoded as `a`
+|`CSV` |`.records`, raw CSV records
+|`CSV.Decoded(row)` |`.value`, a list of decoded rows
+|`Xml` |The document's `.root` and `.declaration`
+|`Markdown.Document` |`.blocks`, a list of Markdown blocks
+|`AsciiDoc` |`.title` and `.blocks`
+|`HTTP.RequestLiteral`, `HTTP.ResponseLiteral` |`.value`, the request or response
+|`RocSyntax` |`.source`, `.tokens`, `.nodes`, and the other parsed fields
+|===
+
+YAML's supported subset and XML's well-formedness rules apply to quotations too.
+XML quotations do not validate an XSD or process namespaces. Roc source quotations
+check supported syntax, not names or types. HTTP quotations contain exactly one
+complete message, with the CRLF line endings its grammar requires.
+
+== Adjacent files
+
+Keep the dedicated file extension for editor highlighting. Import the file as
+`Str`, then require a checked conversion in a top-level declaration:
+
+[source,roc]
+----
+include::examples/compile-time-parsing.roc[tag=imported,indent=0]
+----
+
+The imported file is read and the constant is parsed during compilation. The
+compiled program needs neither the file nor a runtime parser call for that
+constant. Roc file imports accept `Str` or `List(U8)`; they do not invoke a custom
+type's `from_quote` method directly.
+
+`Literal.require` unwraps a successful checked conversion and fails with its
+message otherwise. Use it for demanded top-level constants. With dynamic input,
+keep the validator's `Try` result and handle its error: a failing `require` call
+that executes at runtime crashes at runtime. Uninstantiated generic code is not
+a promise that its dependent quotations have been checked.
+
+== Props and extra checks
+
+Validators take a props record. `source` is required; `name` defaults to
+`"<literal>"`. Other fields have defaults, so callers supply only overrides:
+
+[source,roc]
+----
+include::examples/compile-time-parsing.roc[tag=configured,indent=0]
+----
+
+This accepts the YAML string `yes` deliberately. Without the override, the
+legacy-boolean check suggests quoting it or using `true` or `false`.
+
+Each format has `validate`; YAML and CSV also have `validate_as` for type-directed
+decoding. HTTP uses `validate_request` and `validate_response`. These functions
+return the natural parsed value in `Try(_, [BadQuotedBytes(Str)])`, so they can
+also be called from a custom type's `from_quote` method.
+
+The initial extra checks are enabled by default. Set an individual Boolean to
+`False` to accept that construct. Invalid syntax, type mismatches, unsupported
+features, and resource limits remain errors regardless of lint settings.
+
+[cols="1,2,3",options="header"]
+|===
+|Format |Lint field |Rejects
+|YAML |`legacy_booleans` |Unquoted `yes`, `no`, `on`, or `off` scalar values, ignoring case
+|CSV |`duplicate_headers`, `empty_headers` |Duplicate or empty names when a header mode is selected
+|XML |`non_utf8_declaration` |A non-UTF-8 declaration in already-decoded text
+|Markdown |`unclosed_fences` |A code fence closed implicitly rather than by a closing marker
+|AsciiDoc |`unexpanded_includes` |An active include directive left unexpanded
+|HTTP |`repeated_content_length` |Repeated identical Content-Length values
+|Roc source |`placeholders` |Placeholder `...` expressions
+|===
+
+Markdown's ordinary parser accepts every string. Its fence check is an additional
+policy, not a claim that CommonMark requires closing fences. Checks use parsed
+context, so quoted strings, comments, escaped directives, and code are handled
+according to their format.
+
+YAML typed props support `keys` (`SnakeCase`, `KebabCase`, or `CamelCase`) and
+`unknown_keys` (`Skip` or `Reject`), defaulting to `SnakeCase` and `Skip`.
+CSV props support `header: Absent`, `Exact`, or `Normalized`: raw validation
+defaults to `Absent`, typed validation to `Exact`. Normalized header checks use
+normalized names. Raw results retain the original header fields.
+AsciiDoc props expose explicit include sources and attributes, a depth limit of
+16, and `expand_includes: False` by default. Validation never discovers or reads
+include files itself.
+
+== Simple, useful errors
+
+An error names the source and format, gives an available line and byte column,
+and explains the first problem. For example:
+
+[source,text]
+----
+settings.yaml:2:7: YAML: unterminated flow collection
+----
+
+CSV errors also identify the record and field. Missing required fields are named
+even when there is no source coordinate. Syntax is checked before extra checks,
+and extra checks before decoding. Checks report the first relevant source
+location. These messages are a starting point that can improve without changing
+how callers select validation policy.
+
+== Your own quotation type
+
+`Utf8.parse_quote` adapts a combinator parser, requiring complete consumption and
+retaining its furthest-error location:
+
+[source,roc]
+----
+include::examples/compile-time-parsing.roc[tag=custom,indent=0]
+----
+
+For a format-specific application type, return a configured `validate_as` result
+from `from_quote`. This is also the place to add pure domain checks, returning a
+useful `BadQuotedBytes` explanation when they fail.
+
+The complete {src}/docs/examples/compile-time-parsing.roc[example] is checked,
+tested, and run in CI. Each format's quotation and imported-file rejection
+contracts are checked by {src}/scripts/check_literals.py[the compiler tests].

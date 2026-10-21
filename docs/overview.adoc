@@ -40,9 +40,11 @@ every input against it. With roc-parser:
 
 * The result is typed. A CSV row becomes `{ name : Str, moons : U64 }`, not a
   list of strings you still have to convert.
-* Invalid input is an `Err` value, never a crash. The ready-made parsers
+* Runtime parsing returns invalid input as an `Err` value. The ready-made parsers
   follow their published specifications, including the awkward corners, and
   report where the problem is.
+* <<compile-time-parsing,Checked quotations and imported constants>> turn invalid
+  source into compiler errors, with configurable checks and typed decoding.
 * A parser is built from smaller parsers, so each piece can be tested on its
   own with `expect`.
 

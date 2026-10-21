@@ -7,8 +7,9 @@ roc-parser turns text into typed [Roc](https://www.roc-lang.org/) values. It
 provides ready-made parsers for common formats and the
 [parser combinators](https://en.wikipedia.org/wiki/Parser_combinator) they are
 built from, so you can also describe formats of your own. It is pure Roc and
-works with any platform. Invalid input is returned as an error value, never a
-crash.
+works with any platform. Runtime parsers return invalid input as an error value.
+Checked literals and imported constants can reject invalid input during
+compilation, with configurable validation checks.
 
 | Format | Specification | Manual |
 | --- | --- | --- |
@@ -89,6 +90,10 @@ which CI runs. [Getting started](https://lukewilliamboswell.github.io/roc-parser
 explains it line by line.
 
 ## Documentation
+
+Compile-time parsing is an enduring goal for every supported format. See
+[quoted documents and imported files](docs/compile-time-parsing.adoc) for typed
+multiline literals, checked file imports, and validation props with defaults.
 
 - [The roc-parser manual](https://lukewilliamboswell.github.io/roc-parser/)
   ([PDF](https://lukewilliamboswell.github.io/roc-parser/roc-parser.pdf))

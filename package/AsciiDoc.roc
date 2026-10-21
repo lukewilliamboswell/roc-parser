@@ -2628,3 +2628,7 @@ expect {
 		Ok(_) => False
 	}
 }
+
+expect AsciiDoc.validate({ source: "////\ninclude::missing.adoc[]\n////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect AsciiDoc.validate({ source: "/////\ninclude::missing.adoc[]\n/////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
+expect AsciiDoc.validate({ source: "----\ninclude::missing.adoc[]\n----" }).is_err()

@@ -4,6 +4,7 @@ examples/csv-movies
 examples/markdown
 examples/xml-svg
 examples/roc-syntax
+examples/compile-time-parsing
 
 dist/
 .roc-parser-tmp/

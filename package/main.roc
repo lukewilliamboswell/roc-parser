@@ -5,6 +5,8 @@
 ## and runners. [CSV], [Yaml], [Xml], [Markdown] and [HTTP] parse their formats
 ## into Roc values, following RFC 4180, YAML 1.2, XML 1.0, CommonMark 0.31.2
 ## with GitHub extensions, and RFC 9112.
+## [Literal] checks imported constants; each format also supports quotation
+## conversion and configurable validation during compilation.
 ##
 ## The manual explains when to use each module, with tested examples:
 ## https://lukewilliamboswell.github.io/roc-parser/

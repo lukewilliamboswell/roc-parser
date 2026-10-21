@@ -1,0 +1,305 @@
+[
+  {
+    "name": "inline-formats",
+    "body": "yaml : Yaml\nyaml = \"name: app\"\nxml : Xml\nxml = \"<a/>\"\ncsv : CSV\ncsv = \"a,b\\n\"\nmarkdown : Markdown.Document\nmarkdown = \"# Hello\\n\"\nasciidoc : AsciiDoc\nasciidoc = \"= Hello\\n\\nworld\\n\"\nrequest : HTTP.RequestLiteral\nrequest = \"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n\"\nresponse : HTTP.ResponseLiteral\nresponse = \"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n\"\nroc : RocSyntax\nroc = \"answer = 42\\n\"\nvalue = yaml.get(\"name\") == Ok(Text(\"app\")) and xml.root.name() == Ok(\"a\") and csv.records.len() == 1 and markdown.blocks.len() == 1 and asciidoc.title == \"Hello\" and request.value.target == \"/\" and response.value.status_code == 200 and roc.consumed\n"
+  },
+  {
+    "name": "typed-and-multiline",
+    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\"\n"
+  },
+  {
+    "name": "imported-formats",
+    "body": "import \"settings.yaml\" as yaml_text : Str\nimport \"document.xml\" as xml_text : Str\nimport \"people.csv\" as csv_text : Str\nimport \"document.md\" as md_text : Str\nimport \"document.adoc\" as adoc_text : Str\nimport \"request.http\" as http_text : Str\nimport \"assets/source.roc\" as roc_text : Str\nconfig : { port : U16 }\nconfig = Literal.require(Yaml.validate_as({ source: yaml_text, name: \"settings.yaml\" }))\nxml = Literal.require(Xml.validate({ source: xml_text, name: \"document.xml\" }))\npeople : List({ name : Str, age : U8 })\npeople = Literal.require(CSV.validate_as({ source: csv_text, name: \"people.csv\" }))\nmarkdown = Literal.require(Markdown.validate({ source: md_text, name: \"document.md\" }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: adoc_text, name: \"document.adoc\" }))\nrequest = Literal.require(HTTP.validate_request({ source: http_text, name: \"request.http\" }))\nroc = Literal.require(RocSyntax.validate({ source: roc_text, name: \"assets/source.roc\" }))\nvalue = config.port == 8080 and xml.root.name() == Ok(\"a\") and people == [{ name: \"Ada\", age: 36 }] and markdown.len() == 1 and asciidoc.title == \"Hello\" and request.target == \"/\" and roc.consumed\n",
+    "assets": {
+      "settings.yaml": "port: 8080\n",
+      "document.xml": "<a/>",
+      "people.csv": "name,age\nAda,36\n",
+      "document.md": "# Hello\n",
+      "document.adoc": "= Hello\n\nworld\n",
+      "request.http": "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n",
+      "assets/source.roc": "answer = 42\n"
+    }
+  },
+  {
+    "name": "configured-checks",
+    "body": "yaml = Literal.require(Yaml.validate({ source: \"answer: yes\", lints: { legacy_booleans: False } }))\ncsv = Literal.require(CSV.validate({ source: \"a,a\\nx,y\\n\", header: Exact, lints: { duplicate_headers: False } }))\nempty_header = Literal.require(CSV.validate({ source: \",b\\nx,y\\n\", header: Exact, lints: { empty_headers: False } }))\nxml = Literal.require(Xml.validate({ source: \"<?xml version='1.0' encoding='ISO-8859-1'?><a/>\", lints: { non_utf8_declaration: False } }))\nmarkdown = Literal.require(Markdown.validate({ source: \"```\\nx\\n\", lints: { unclosed_fences: False } }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: \"include::missing.adoc[]\\n\", lints: { unexpanded_includes: False } }))\nrequest = Literal.require(HTTP.validate_request({ source: \"POST / HTTP/1.1\\r\\nHost: a\\r\\nContent-Length: 0\\r\\nContent-Length: 0\\r\\n\\r\\n\", lints: { repeated_content_length: False } }))\nroc = Literal.require(RocSyntax.validate({ source: \"answer = ...\\n\", lints: { placeholders: False } }))\nvalue = yaml.get(\"answer\") == Ok(Text(\"yes\")) and csv.len() == 2 and empty_header.len() == 2 and xml.root.name() == Ok(\"a\") and markdown.len() == 1 and !asciidoc.blocks.is_empty() and request.body.is_empty() and roc.consumed\n"
+  },
+  {
+    "name": "decoder-options",
+    "body": "config : { user_id : U8 }\nconfig = Literal.require(Yaml.validate_as({ source: \"user-id: 7\\n\", keys: KebabCase, unknown_keys: Reject }))\npeople : List({ full_name : Str })\npeople = Literal.require(CSV.validate_as({ source: \" Full Name \\nAda\\n\", header: Normalized }))\npairs : List((Str, U8))\npairs = Literal.require(CSV.validate_as({ source: \"Ada,36\\n\", header: Absent }))\nvalue = config.user_id == 7 and people == [{ full_name: \"Ada\" }] and pairs == [(\"Ada\", 36)]\n"
+  },
+  {
+    "name": "custom-combinator",
+    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits, source }).map_ok(|value| Count.{ value })\n}\ncount : Count\ncount = \"42\"\nvalue = count.value == 42\n"
+  },
+  {
+    "name": "inline-yaml-syntax",
+    "body": "value : Yaml\nvalue = \"a: [\"\n",
+    "errors": [
+      "invalid string",
+      "YAML"
+    ]
+  },
+  {
+    "name": "inline-xml-syntax",
+    "body": "value : Xml\nvalue = \"<a></b>\"\n",
+    "errors": [
+      "invalid string",
+      "XML"
+    ]
+  },
+  {
+    "name": "inline-csv-syntax",
+    "body": "value : CSV\nvalue = \"a,\\\"unterminated\"\n",
+    "errors": [
+      "invalid string",
+      "CSV"
+    ]
+  },
+  {
+    "name": "inline-markdown-fence",
+    "body": "value : Markdown.Document\nvalue = \"```\\nx\\n\"\n",
+    "errors": [
+      "invalid string",
+      "Markdown"
+    ]
+  },
+  {
+    "name": "inline-asciidoc-include",
+    "body": "value : AsciiDoc\nvalue = \"include::missing.adoc[]\"\n",
+    "errors": [
+      "invalid string",
+      "AsciiDoc"
+    ]
+  },
+  {
+    "name": "inline-http-framing",
+    "body": "value : HTTP.RequestLiteral\nvalue = \"GET / HTTP/1.1\\nHost: a\\n\\n\"\n",
+    "errors": [
+      "invalid string",
+      "HTTP"
+    ]
+  },
+  {
+    "name": "inline-roc-syntax",
+    "body": "value : RocSyntax\nvalue = \"answer = [\"\n",
+    "errors": [
+      "invalid string",
+      "Roc"
+    ]
+  },
+  {
+    "name": "inline-yaml-lint",
+    "body": "value : Yaml\nvalue = \"answer: yes\"\n",
+    "errors": [
+      "invalid string",
+      "YAML"
+    ]
+  },
+  {
+    "name": "inline-roc-placeholder",
+    "body": "value : RocSyntax\nvalue = \"answer = ...\"\n",
+    "errors": [
+      "invalid string",
+      "Roc"
+    ]
+  },
+  {
+    "name": "typed-yaml-missing",
+    "body": "value : Yaml.Decoded({ port : U16 })\nvalue = \"host: app\"\n",
+    "errors": [
+      "invalid string",
+      "YAML",
+      "port"
+    ]
+  },
+  {
+    "name": "typed-yaml-number",
+    "body": "value : Yaml.Decoded({ port : U8 })\nvalue = \"port: 999\"\n",
+    "errors": [
+      "invalid string",
+      "YAML"
+    ]
+  },
+  {
+    "name": "typed-csv-missing",
+    "body": "value : CSV.Decoded({ name : Str, age : U8 })\nvalue = \"name\\nAda\\n\"\n",
+    "errors": [
+      "invalid string",
+      "CSV",
+      "age"
+    ]
+  },
+  {
+    "name": "typed-csv-number",
+    "body": "value : CSV.Decoded({ age : U8 })\nvalue = \"age\\n999\\n\"\n",
+    "errors": [
+      "invalid string",
+      "CSV"
+    ]
+  },
+  {
+    "name": "imported-yaml-failure",
+    "body": "import \"bad.yaml\" as text : Str\nvalue = Literal.require(Yaml.validate({ source: text, name: \"bad.yaml\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.yaml",
+      "yaml"
+    ],
+    "assets": {
+      "bad.yaml": "a: [\n"
+    }
+  },
+  {
+    "name": "imported-xml-failure",
+    "body": "import \"bad.xml\" as text : Str\nvalue = Literal.require(Xml.validate({ source: text, name: \"bad.xml\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.xml",
+      "xml"
+    ],
+    "assets": {
+      "bad.xml": "<a></b>"
+    }
+  },
+  {
+    "name": "imported-csv-failure",
+    "body": "import \"bad.csv\" as text : Str\nvalue = Literal.require(CSV.validate({ source: text, name: \"bad.csv\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.csv",
+      "csv"
+    ],
+    "assets": {
+      "bad.csv": "a,\"broken"
+    }
+  },
+  {
+    "name": "imported-markdown-failure",
+    "body": "import \"bad.md\" as text : Str\nvalue = Literal.require(Markdown.validate({ source: text, name: \"bad.md\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.md",
+      "markdown"
+    ],
+    "assets": {
+      "bad.md": "```\nx\n"
+    }
+  },
+  {
+    "name": "imported-asciidoc-failure",
+    "body": "import \"bad.adoc\" as text : Str\nvalue = Literal.require(AsciiDoc.validate({ source: text, name: \"bad.adoc\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.adoc",
+      "asciidoc"
+    ],
+    "assets": {
+      "bad.adoc": "include::missing.adoc[]\n"
+    }
+  },
+  {
+    "name": "imported-http-failure",
+    "body": "import \"bad.http\" as text : Str\nvalue = Literal.require(HTTP.validate_request({ source: text, name: \"bad.http\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.http",
+      "http"
+    ],
+    "assets": {
+      "bad.http": "GET / HTTP/1.1\nHost: a\n\n"
+    }
+  },
+  {
+    "name": "imported-roc-failure",
+    "body": "import \"bad.roc\" as text : Str\nvalue = Literal.require(RocSyntax.validate({ source: text, name: \"bad.roc\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.roc",
+      "roc"
+    ],
+    "assets": {
+      "bad.roc": "answer = [\n"
+    }
+  },
+  {
+    "name": "csv-duplicate-headers",
+    "body": "value = Literal.require(CSV.validate({ source: \"name,name\\na,b\\n\", header: Exact, name: \"headers.csv\" }))\n",
+    "errors": [
+      "compile time crash",
+      "headers.csv",
+      "CSV",
+      "duplicate"
+    ]
+  },
+  {
+    "name": "csv-empty-header",
+    "body": "value = Literal.require(CSV.validate({ source: \",name\\na,b\\n\", header: Exact, name: \"headers.csv\" }))\n",
+    "errors": [
+      "compile time crash",
+      "headers.csv",
+      "CSV",
+      "empty"
+    ]
+  },
+  {
+    "name": "yaml-unknown-key",
+    "body": "value : { port : U16 }\nvalue = Literal.require(Yaml.validate_as({ source: \"port: 80\\ntypo: 1\\n\", name: \"settings.yaml\", unknown_keys: Reject }))\n",
+    "errors": [
+      "compile time crash",
+      "settings.yaml",
+      "YAML",
+      "typo"
+    ]
+  },
+  {
+    "name": "http-trailing-message",
+    "body": "value = Literal.require(HTTP.validate_request({ source: \"GET / HTTP/1.1\\r\\nHost: a\\r\\n\\r\\nGET /b HTTP/1.1\\r\\nHost: a\\r\\n\\r\\n\", name: \"pipeline.http\" }))\n",
+    "errors": [
+      "compile time crash",
+      "pipeline.http",
+      "HTTP"
+    ]
+  },
+  {
+    "name": "custom-combinator-trailing",
+    "body": "Count := { value : U64 }.{\n    from_quote : Str -> Try(Count, [BadQuotedBytes(Str)])\n    from_quote = |source| Utf8.parse_quote({ parser: Utf8.digits, source }).map_ok(|value| Count.{ value })\n}\nvalue : Count\nvalue = \"42x\"\n",
+    "errors": [
+      "invalid string",
+      "parser",
+      ":1:3"
+    ]
+  },
+  {
+    "name": "typed-yaml-custom-error",
+    "body": "Checked := [Never].{\n    parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : Checked, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), CustomYamlFailure(Str)]))\n    parser_for = |_| |_| Err(CustomYamlFailure(\"custom detail\"))\n}\nvalue : Yaml.Decoded(Checked)\nvalue = \"anything\"\n",
+    "errors": [
+      "invalid string",
+      "YAML",
+      "CustomYamlFailure",
+      "custom detail"
+    ]
+  },
+  {
+    "name": "typed-csv-custom-error",
+    "body": "Checked := [Never].{\n    parser_for : CSV.Format -> (CSV.State -> Try({ value : Checked, rest : CSV.State }, [InvalidCsv(CSV.Error), CustomCsvFailure(Str)]))\n    parser_for = |_| |_| Err(CustomCsvFailure(\"custom detail\"))\n}\nvalue : CSV.Decoded(Checked)\nvalue = \"header\\nvalue\"\n",
+    "errors": [
+      "invalid string",
+      "CSV",
+      "CustomCsvFailure",
+      "custom detail"
+    ]
+  },
+  {
+    "name": "http-response-rejection",
+    "body": "value : HTTP.ResponseLiteral\nvalue = \"not HTTP\"\n",
+    "errors": [
+      "invalid string",
+      "HTTP"
+    ]
+  },
+  {
+    "name": "commented-includes",
+    "body": "document : AsciiDoc\ndocument = \"/////\\ninclude::missing.adoc[]\\n/////\\n\\nText\"\nvalue = document.blocks == [Paragraph(\"Text\")]\n"
+  }
+]
