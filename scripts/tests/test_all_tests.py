@@ -11,6 +11,13 @@ class AllTestsScriptTests(unittest.TestCase):
         output = "Created: /tmp/example.tar.zst\nCompressed size: 42 bytes\n"
         self.assertEqual(all_tests.extract_bundle_path(output), Path("/tmp/example.tar.zst"))
 
+    def test_extract_bundle_path_resolves_relative_to_package(self) -> None:
+        output = "Created: ../.roc-parser-tmp/bundle/example.tar.zst\n"
+        self.assertEqual(
+            all_tests.extract_bundle_path(output),
+            all_tests.ROOT / "package/../.roc-parser-tmp/bundle/example.tar.zst",
+        )
+
     def test_extract_bundle_path_requires_created_line(self) -> None:
         with self.assertRaisesRegex(ValueError, "could not extract"):
             all_tests.extract_bundle_path("bundle complete\n")

@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -82,7 +82,7 @@ generate = |bytes| {
 		} else {
 			"${a.prefix}${Str.repeat(a.repeat, count)}${a.middle}${Str.repeat(a.after, count)}${a.suffix}"
 		}
-	{ text, name: if interleave "${a.name} + ${b.name}" else a.name, count }
+	{ text, name: if (interleave) "${a.name} + ${b.name}" else a.name, count }
 }
 
 test : Input -> Fuzz.Outcome

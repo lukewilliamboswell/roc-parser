@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original short macro inputs and independently authored raw-block predicates; full native HTML is compared to the live pinned oracle.",
+    "reference_family": "AsciiDoc inline macro attributes",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/macros/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; source only."
+  },
+  "coverage": [
+    {
+      "category": "inline-macro-attributes",
+      "required_cases": [
+        "inline-macro-attribute-000",
+        "inline-macro-attribute-001",
+        "inline-macro-attribute-002",
+        "inline-macro-attribute-003",
+        "inline-macro-attribute-004",
+        "inline-macro-attribute-005",
+        "inline-macro-attribute-006",
+        "inline-macro-attribute-007",
+        "inline-macro-attribute-008",
+        "inline-macro-attribute-009",
+        "inline-macro-attribute-010",
+        "inline-macro-attribute-011",
+        "inline-macro-attribute-012",
+        "inline-macro-attribute-013",
+        "inline-macro-attribute-014",
+        "inline-macro-attribute-015",
+        "inline-macro-attribute-016",
+        "inline-macro-attribute-017",
+        "inline-macro-attribute-018",
+        "inline-macro-attribute-019",
+        "inline-macro-attribute-020",
+        "inline-macro-attribute-021",
+        "inline-macro-attribute-022",
+        "inline-macro-attribute-023",
+        "inline-macro-attribute-024",
+        "inline-macro-attribute-025",
+        "inline-macro-attribute-026",
+        "inline-macro-attribute-027",
+        "inline-macro-attribute-028",
+        "inline-macro-attribute-029",
+        "inline-macro-attribute-030",
+        "inline-macro-attribute-031"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "inline-macro-attribute-000",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[role=external]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[role=external]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-001",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "link:doc.html[id=topic]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "link:doc.html[id=topic]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-002",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[\"a=b\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[\"a=b\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-003",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[A, B]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[A, B]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-004",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[A, B,role=x]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[A, B,role=x]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-005",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[alt=\"A, B\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt=\"A, B\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-006",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[alt='A, B']",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt='A, B']",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-007",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[\"A & B\",20,30]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[\"A & B\",20,30]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-008",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[Example,role='red big']",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[Example,role='red big']",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-009",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[Example,id=topic,role=x]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[Example,id=topic,role=x]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-010",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "mailto:a@example.test[Name,Subject,Body]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[Name,Subject,Body]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-011",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "link:doc.html[]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "link:doc.html[]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-012",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[window=\"_blank\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[window=\"_blank\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-013",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[Example,window=_self]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[Example,window=_self]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-014",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[role=x,Label]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[role=x,Label]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-015",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[\"a,b=c\",role=x]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[\"a,b=c\",role=x]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-016",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[\"A \\\"quote\\\" B\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[\"A \\\"quote\\\" B\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-017",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[alt='A \"quote\" B']",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt='A \"quote\" B']",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-018",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[alt=Pic,20,30]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt=Pic,20,30]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-019",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "mailto:a@example.test[Name,A topic,Line one & two]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[Name,A topic,Line one & two]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-020",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "mailto:a@example.test[\"Full name\",\"Roc & λ\",\"Body + more\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[\"Full name\",\"Roc & λ\",\"Body + more\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-021",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "mailto:a@example.test[role=x]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[role=x]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-022",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "mailto:a@example.test[Name,id=mail,role=contact,window=_blank]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[Name,id=mail,role=contact,window=_blank]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-023",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "xref:topic[role=ref]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xref:topic[role=ref]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-024",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "xref:topic[Text,id=ref,role=ref]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xref:topic[Text,id=ref,role=ref]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-025",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "https://example.test[Example,title=Help]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[Example,title=Help]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-026",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes"
+      ],
+      "source": "image:cat.png[Cat,title=\"Helpful image\",role=thumb,id=photo]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[Cat,title=\"Helpful image\",role=thumb,id=photo]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-027",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes",
+        "formatted-query-composition"
+      ],
+      "source": "mailto:a@example.test[Name,*bold* topic,_body_]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "mailto:a@example.test[Name,*bold* topic,_body_]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-028",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes",
+        "formatted-query-composition"
+      ],
+      "source": "image:cat.png[*Bold* alt]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[*Bold* alt]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-029",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes",
+        "formatted-query-composition"
+      ],
+      "source": "https://example.test[Name,role=*red*]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "https://example.test[Name,role=*red*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-030",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes",
+        "formatted-query-composition"
+      ],
+      "source": "image:cat.png[alt=\"A &amp; B\"]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[alt=\"A &amp; B\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "inline-macro-attribute-031",
+      "category": "inline-macro-attributes",
+      "features": [
+        "macro-attributes",
+        "formatted-query-composition"
+      ],
+      "source": "[subs=\"specialcharacters,macros\"]\nimage:cat.png[A & B]",
+      "support": "full",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image:cat.png[A & B]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "Asciidoctor table documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/tables/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "table-retained-mutations",
+      "required_cases": [
+        "table-retained-mutation-13-000193",
+        "table-retained-mutation-13-000293",
+        "table-retained-mutation-13-000396",
+        "table-retained-mutation-13-000515",
+        "table-retained-mutation-13-000538",
+        "table-retained-mutation-13-000826",
+        "table-retained-mutation-13-000926",
+        "table-retained-mutation-13-000930"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "table-retained-mutation-13-000193",
+      "category": "table-retained-mutations",
+      "features": [
+        "replace"
+      ],
+      "source": "[cols=\"1\"]\n<<target>>\n\nSecond\n|===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "<<target>>",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "Second",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000193",
+        "parent_id": "table-extended-paragraphs",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000293",
+      "category": "table-retained-mutations",
+      "features": [
+        "delete"
+      ],
+      "source": "|===\n|東京 |Café\n|==",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000293",
+        "parent_id": "table-extended-unicode",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000396",
+      "category": "table-retained-mutations",
+      "features": [
+        "duplicate"
+      ],
+      "source": "[cols=\"l\"]\n|===\n\n|===\n|  A\n B\n|===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "|  A\n B",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000396",
+        "parent_id": "table-extended-literal",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000515",
+      "category": "table-retained-mutations",
+      "features": [
+        "delete"
+      ],
+      "source": "[format=cs\n|===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "[format=cs",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000515",
+        "parent_id": "table-csv",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000538",
+      "category": "table-retained-mutations",
+      "features": [
+        "insert"
+      ],
+      "source": "|===\n|東京 |Café\n|é===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000538",
+        "parent_id": "table-extended-unicode",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000826",
+      "category": "table-retained-mutations",
+      "features": [
+        "truncate"
+      ],
+      "source": "[cols=\"m\"]\n|===\n|",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000826",
+        "parent_id": "table-extended-mono",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000926",
+      "category": "table-retained-mutations",
+      "features": [
+        "insert"
+      ],
+      "source": "[format=csv]\n|=== =\n\"A\nB\",C\nD,E\n|===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "|=== =\n\"A\nB\",C\nD,E",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000926",
+        "parent_id": "table-extended-csv-multiline",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    },
+    {
+      "id": "table-retained-mutation-13-000930",
+      "category": "table-retained-mutations",
+      "features": [
+        "replace"
+      ],
+      "source": "東京 493\ncafé 2660\n\n----\nnaïve façade 7105\ncafé 1678\n----\n\ncafé 1414\ncafé 7513\n\n|===\n\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "東京 493\ncafé 2660",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "naïve façade 7105\ncafé 1678",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "café 1414\ncafé 7513",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000930",
+        "parent_id": "model-13-264",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/"
+      ]
+    }
+  ]
+}

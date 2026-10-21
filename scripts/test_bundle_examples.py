@@ -60,7 +60,8 @@ def bundle_package(bundle_dir: Path) -> Path:
     if match is None:
         raise SystemExit("Could not find bundle path in roc bundle output")
 
-    bundle_path = Path(match.group(1))
+    # `roc bundle` runs in package/ and newer compilers print a path relative to it.
+    bundle_path = (ROOT / "package" / match.group(1)).resolve()
     if not bundle_path.is_file():
         raise SystemExit(f"Bundle was not created: {bundle_path}")
 

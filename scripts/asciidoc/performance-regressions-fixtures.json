@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original deterministic generator inputs; semantic assertions independently specified; no expectation copied from oracle output.",
+    "generator": "check_asciidoc_performance.generated",
+    "seed": 719
+  },
+  "coverage": [
+    {
+      "category": "performance-correctness",
+      "required_cases": [
+        "performance-regression-mutation-719-8",
+        "performance-regression-mutation-719-32",
+        "performance-regression-mutation-719-44",
+        "performance-regression-mutation-719-68",
+        "performance-regression-mutation-719-84"
+      ],
+      "scope": "future"
+    }
+  ],
+  "cases": [
+    {
+      "id": "performance-regression-mutation-719-8",
+      "category": "performance-correctness",
+      "features": [
+        "seeded-raw-mutation",
+        "----\n"
+      ],
+      "source": "* quiet river3930\n* sibling\n\n:value: amber8121\n\n{value}\n\n* \u6771\u4eac422\n* sibling\n\nifdef::backend-html5[amber7662]\n\n--------\n\nquiet river1117\n----\n\n----\nRoc1038\n----\n\n:value: quiet river6889\n\n{value}\n\nifdef::backend-html5[caf\u00e9373]\n\n:value: quiet river7397\n\n{value}\n\nNOTE: amber7594\n\n----\n\u6771\u4eac8922\n----",
+      "support": "future",
+      "expect": {
+        "html_contains": [
+          "quiet river1117",
+          "----"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ],
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-8",
+        "position": 113,
+        "insert": "----\n"
+      }
+    },
+    {
+      "id": "performance-regression-mutation-719-32",
+      "category": "performance-correctness",
+      "features": [
+        "seeded-raw-mutation",
+        "----\n"
+      ],
+      "source": "== ----\n\u6771\u4eac9906\n\n:value: Delta1068\n\n{value}\n\nNOTE: amber619\n\nifdef::backend-html5[caf\u00e9502]\n\n....\ncaf\u00e98439\n....",
+      "support": "future",
+      "expect": {
+        "html_contains": [
+          "<p>\u6771\u4eac9906</p>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ],
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-32",
+        "position": 3,
+        "insert": "----\n"
+      }
+    },
+    {
+      "id": "performance-regression-mutation-719-44",
+      "category": "performance-correctness",
+      "features": [
+        "seeded-raw-mutation",
+        "\n\n"
+      ],
+      "source": "|===\n|one |two\n|Delta64 |four\n|===\n\namber1740\n\n* Delta9669\n* sibling\n\n----\n\n\ncaf\u00e95411\n----\n\n== amber5719\n\n* quiet river4372\n* sibling",
+      "support": "future",
+      "expect": {
+        "html_contains": [
+          "<pre>caf\u00e95411</pre>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ],
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-44",
+        "position": 74,
+        "insert": "\n\n"
+      }
+    },
+    {
+      "id": "performance-regression-mutation-719-68",
+      "category": "performance-correctness",
+      "features": [
+        "seeded-raw-mutation",
+        "]"
+      ],
+      "source": "....\namber2308\n....\n\n|===\n|one |two\n|quiet river4296 |four\n|===\n\n|===\n|one |two\n|\u6771\u4eac7438 |four\n|===\n\n....\nRoc3714\n....\n\n|===]\n|one |two\n|\u6771\u4eac8021 |four\n|===\n\n----\ncaf\u00e93666\n----\n\n....\nDelta8757\n....",
+      "support": "future",
+      "expect": {
+        "html_contains": [
+          "|===]",
+          "\u6771\u4eac8021"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ],
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-68",
+        "position": 123,
+        "insert": "]"
+      }
+    },
+    {
+      "id": "performance-regression-mutation-719-84",
+      "category": "performance-correctness",
+      "features": [
+        "seeded-raw-mutation",
+        "----\n"
+      ],
+      "source": "----\ncaf\u00e98793\n----\n\n.----\n...\nRoc9740\n....\n\n* Delta6417\n* sibling\n\nifdef::backend-html5[amber823]",
+      "support": "future",
+      "expect": {
+        "html_contains": [
+          "Roc9740"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/blocks/"
+      ],
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-84",
+        "position": 21,
+        "insert": "----\n"
+      }
+    }
+  ]
+}

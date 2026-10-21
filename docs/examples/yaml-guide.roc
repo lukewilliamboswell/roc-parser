@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -153,7 +153,6 @@ main! = |_args| {
 		\\
 		\\indented: |2
 		\\    starts with two spaces
-		,
 	)
 	# end::block-run[]
 
@@ -164,7 +163,6 @@ main! = |_args| {
 		\\  name: compile
 		\\- - nested
 		\\  - compact
-		,
 	)
 	# end::sequences-run[]
 
@@ -172,7 +170,6 @@ main! = |_args| {
 	show!(
 		\\single: 'it''s # not a comment'
 		\\plain: text # this is a comment
-		,
 	)
 	show!(
 		"double: \"tab\\there, \\u00e9, \\x41\"",

@@ -1,0 +1,1402 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations retained verbatim with reviewed pinned-oracle structural expectations. Cases are regressions for malformed syntax and parser boundaries; the runtime also compares full rendered HTML.",
+    "reference_family": "Asciidoctor 2.0 documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle and explicitly supplied virtual include maps only."
+  },
+  "coverage": [
+    {
+      "category": "mutation-regressions",
+      "required_cases": [
+        "regression-mutation-13-000006",
+        "regression-mutation-13-000119",
+        "regression-mutation-13-000121",
+        "regression-mutation-13-000124",
+        "regression-mutation-13-000151",
+        "regression-mutation-13-000160",
+        "regression-mutation-13-000183",
+        "regression-mutation-13-000195",
+        "regression-mutation-13-000207",
+        "regression-mutation-13-000208",
+        "regression-mutation-13-000227",
+        "regression-mutation-13-000266",
+        "regression-mutation-13-000288",
+        "regression-mutation-13-000294",
+        "regression-mutation-13-000310",
+        "regression-mutation-13-000324",
+        "regression-mutation-13-000367",
+        "regression-mutation-13-000446",
+        "regression-mutation-13-000469",
+        "regression-mutation-13-000472",
+        "regression-mutation-13-000496",
+        "regression-mutation-13-000500",
+        "regression-mutation-13-000539",
+        "regression-mutation-13-000556",
+        "regression-mutation-13-000626",
+        "regression-mutation-13-000677",
+        "regression-mutation-13-000696",
+        "regression-mutation-13-000750",
+        "regression-mutation-13-000769",
+        "regression-mutation-13-000778",
+        "regression-mutation-13-000802",
+        "regression-mutation-13-000816",
+        "regression-mutation-13-000884",
+        "regression-mutation-13-000952",
+        "regression-mutation-13-000960"
+      ],
+      "scope": "full-regressions"
+    }
+  ],
+  "cases": [
+    {
+      "id": "regression-mutation-13-000006",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "video::a====\nghi\"]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "video::a====\nghi\"]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000006",
+        "parent_id": "media-full-youtube-playlist-attr",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000119",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": ":imagesdinclude::missing.adoc[]\nir: assets\n\nimage::cat.png[]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":imagesdinclude::missing.adoc[]\nir: assets",
+              "blocks": []
+            },
+            {
+              "context": "image",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000119",
+        "parent_id": "media-full-image-dir",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000121",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "video::clip.mp4[cover.png,6====\n40,360]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "video::clip.mp4[cover.png,6====\n40,360]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000121",
+        "parent_id": "media-full-video-poster",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000124",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": "v. ideo::clip.mp4[]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000124",
+        "parent_id": "media-full-video-default",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000151",
+      "category": "mutation-regressions",
+      "features": [
+        "duplicate"
+      ],
+      "source": ":range: 2..3\n\n----\ninclude::part.adoc[lines={range}]\n-\n\n----\ninclude::part.adoc[lines={range}]\n----",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "two\nthree\n-\n",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "two\nthree",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000151",
+        "parent_id": "preprocess-attribute-line-selector",
+        "operation": "duplicate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ],
+      "includes": {
+        "part.adoc": "one\ntwo\nthree\nfour"
+      }
+    },
+    {
+      "id": "regression-mutation-13-000160",
+      "category": "mutation-regressions",
+      "features": [
+        "delete"
+      ],
+      "source": ":imagesdir: assets\n\nvideo::clip.g]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "video::clip.g]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000160",
+        "parent_id": "media-full-video-directory",
+        "operation": "delete",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000183",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "[literal]\n😀--\nx\n--",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "😀--\nx\n--",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000183",
+        "parent_id": "block-style-literal-open",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000195",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "image::cat.png[alt=Cat,wi****\n=80]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::cat.png[alt=Cat,wi****\n=80]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000195",
+        "parent_id": "media-full-image-named",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000207",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "'''\n====\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "example",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000207",
+        "parent_id": "model-13-340",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000208",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "image::cat.png['A ",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::cat.png['A",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000208",
+        "parent_id": "media-full-image-quote-escape",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000227",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": ":imagesdir: assets\n\nimage::/cat.png[]* ",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::/cat.png[]*",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000227",
+        "parent_id": "media-full-image-absolute",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000266",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "image::ca",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::ca",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000266",
+        "parent_id": "media-full-image-link-nofollow",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000288",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": ":a: fox\n\n=  {a}",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "fox",
+          "blocks": []
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000288",
+        "parent_id": "block-literal-attributes",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000294",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": ":animal: fox\n\n[subs=attributes]\n--😀l}\n----",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "--😀l}",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000294",
+        "parent_id": "subs-attributes",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000310",
+      "category": "mutation-regressions",
+      "features": [
+        "duplicate"
+      ],
+      "source": "= quiet river 5081\n\n..t river 5081\n\n....\nΔοκιμή 3579\n🦊 6088\ncafé 1629\n....\n\n東京 4820\nquiet river 5963\namber 273\n\n🦊 6126\namber 6199",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "quiet river 5081",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": ".t river 5081",
+              "source": "Δοκιμή 3579\n🦊 6088\ncafé 1629",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "東京 4820\nquiet river 5963\namber 273",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "🦊 6126\namber 6199",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000310",
+        "parent_id": "model-13-183",
+        "operation": "duplicate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000324",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "= Δοκιμή 6777\r{name}\r\n東京 106\r\namber 7248\r\n----\r\n\r\n....\r\n🦊 3037\r\n....",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "Δοκιμή 6777\r{name}",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "\n....\n🦊 3037\n....",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000324",
+        "parent_id": "model-13-32",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000367",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "[q:name: value\note]\n--\nHello\n--",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "[q:name: value\note]",
+              "blocks": []
+            },
+            {
+              "context": "open",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Hello",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000367",
+        "parent_id": "block-style-quote-open",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000446",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "'''\n\n----\ncafé 7012\n東京 7824\n東京 6159\n----\n\n'''\n== ",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "café 7012\n東京 7824\n東京 6159",
+              "blocks": []
+            },
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "==",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000446",
+        "parent_id": "model-13-360",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000469",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "image::cat.*bold*",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::cat.*bold*",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000469",
+        "parent_id": "media-full-image-default",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000472",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "image::cat****\n]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::cat****\n]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000472",
+        "parent_id": "media-full-image-default",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000496",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": ".",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ".",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000496",
+        "parent_id": "model-13-97",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000500",
+      "category": "mutation-regressions",
+      "features": [
+        "duplicate"
+      ],
+      "source": "[caption=\"Picture: \"]\n.A cat\nimage::cat.png\nimage::cat.png[]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "A cat",
+              "source": "image::cat.png\nimage::cat.png[]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000500",
+        "parent_id": "media-full-image-custom-caption",
+        "operation": "duplicate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000539",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "|====\n|Cell",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000539",
+        "parent_id": "warning-table-unclosed",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000556",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "video::clip.mp4<<target>>r.png,640,360]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "video::clip.mp4<<target>>r.png,640,360]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000556",
+        "parent_id": "media-full-video-poster",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000626",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "= café 330\r\n\r\n....\r\nquiet river 6079\r\n....\r\n\r\namber 4921\r\namber 1704\r\nquiet river 2388\r\n\r\n== naïve façade 1492\r\n\r\n🦊 7466\r\ncafé 6009\r\nquiet river 2444\r\n\r\n=== quiet river 4516\r\n\r\n----\r\n🦊 3988\r\n🦊 891\r\n----\r\n\r\nΔοκιμή 2069\r\ncafé 1037\r\nΔοκιμή 2795\r\n\r\n'''\n---\r\n東京 4553\r\namber 7903\r\n----",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "café 330",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "quiet river 6079",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "amber 4921\namber 1704\nquiet river 2388",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "naïve façade 1492",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "🦊 7466\ncafé 6009\nquiet river 2444",
+                  "blocks": []
+                },
+                {
+                  "context": "section",
+                  "level": 2,
+                  "title": "quiet river 4516",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "listing",
+                      "level": 0,
+                      "title": "",
+                      "source": "🦊 3988\n🦊 891",
+                      "blocks": []
+                    },
+                    {
+                      "context": "paragraph",
+                      "level": 0,
+                      "title": "",
+                      "source": "Δοκιμή 2069\ncafé 1037\nΔοκιμή 2795",
+                      "blocks": []
+                    },
+                    {
+                      "context": "thematic_break",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "thematic_break",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "paragraph",
+                      "level": 0,
+                      "title": "",
+                      "source": "東京 4553\namber 7903",
+                      "blocks": []
+                    },
+                    {
+                      "context": "listing",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000626",
+        "parent_id": "model-13-75",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000677",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "****\n.",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "sidebar",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": ".",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000677",
+        "parent_id": "inline-edge-326",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000696",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": ":levelof",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":levelof",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000696",
+        "parent_id": "block-section-metadata-leveloffset",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000750",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "> Hello\n>",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "quote",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Hello",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000750",
+        "parent_id": "block-quote-markdown",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000769",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": ":sectid",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":sectid",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000769",
+        "parent_id": "block-section-ids-disabled",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000778",
+      "category": "mutation-regressions",
+      "features": [
+        "replace"
+      ],
+      "source": "[source,roc]\n://example.org).",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "://example.org).",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000778",
+        "parent_id": "inline-full-url-punctuation",
+        "operation": "replace",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000802",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "video::abc,def,ghi[youtube",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "video::abc,def,ghi[youtube",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000802",
+        "parent_id": "media-full-youtube-playlist",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000816",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "image::cat.svg[Cat,options=intera",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "image::cat.svg[Cat,options=intera",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000816",
+        "parent_id": "media-full-image-svg-secure",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000884",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": "'''\n== ",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "thematic_break",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "==",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000884",
+        "parent_id": "model-13-979",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000952",
+      "category": "mutation-regressions",
+      "features": [
+        "truncate"
+      ],
+      "source": "﻿:it",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": ":it",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000952",
+        "parent_id": "preprocess-bom-attribute",
+        "operation": "truncate",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "regression-mutation-13-000960",
+      "category": "mutation-regressions",
+      "features": [
+        "insert"
+      ],
+      "source": "----\r\n🦊 4847\r\n----\r\n\r\n----\r\n🦊 1847\r\n----\r\n\r\nquiet river 1305\r\n\r\n=\n\n= naïve façade 119\r\n\r\n----\r\nquiet river 7445\r\n----\r\n\r\n....\r\nquiet river 2873\r\n....\r\n\r\n....\r\nquiet river 9786\r\nΔοκιμή 3037\r\n....",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "🦊 4847",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "🦊 1847",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "quiet river 1305",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "=",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 0,
+              "title": "naïve façade 119",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 7445",
+                  "blocks": []
+                },
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 2873",
+                  "blocks": []
+                },
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river 9786\nΔοκιμή 3037",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "origin": {
+        "id": "mutation-13-000960",
+        "parent_id": "model-13-933",
+        "operation": "insert",
+        "seed": 13
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    }
+  ]
+}

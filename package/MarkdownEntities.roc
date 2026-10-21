@@ -36,7 +36,7 @@ compare_name = |name, start| {
 	var $comparing = Bool.True
 	while $comparing {
 		other = data.get(start + $index) ?? 0
-		mine = if $index < name.len() (name.get($index) ?? 0) else 0
+		mine = if ($index < name.len()) (name.get($index) ?? 0) else 0
 		if mine < other {
 			$result = Before
 			$comparing = Bool.False

@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -26,7 +26,7 @@ generate = |bytes| {
 	literal = bytes.sublist({ start: 2, len: lit_len })
 	body = bytes.drop_first(2 + lit_len)
 	# Mostly digits so the numeric paths reach the U64 boundary.
-	input = if unit >= 128 body.map(|b| if b < 200 '0' + b % 10 else b) else body
+	input = if (unit >= 128) body.map(|b| if (b < 200) '0' + b % 10 else b) else body
 	{ input, literal, unit, scale: U8.to_u64(bytes.get(1) ?? 0) / 5 }
 }
 
@@ -52,20 +52,20 @@ run = |name, parser, input| {
 		}
 		Err(ParseError({ message, offset })) => {
 			_ = message.count_utf8_bytes()
-			if offset > input.len() crash "${name}: failure offset is beyond the input"
+			if (offset > input.len()) crash "${name}: failure offset is beyond the input"
 			Err(Failed)
 		}
 	}
 }
 
 leading_digits : List(U8) -> U64
-leading_digits = |input| input.fold_until(0, |n, b| if b >= '0' and b <= '9' Continue(n + 1) else Break(n))
+leading_digits = |input| input.fold_until(0, |n, b| if (b >= '0' and b <= '9') Continue(n + 1) else Break(n))
 
 check_numbers : List(U8) -> {}
 check_numbers = |input| {
 	count = leading_digits(input)
 	prefix = input.sublist({ start: 0, len: count })
-	oracle = prefix.fold(0.U128, |acc, b| if acc > 18446744073709551615 acc else acc * 10 + U8.to_u128(b - '0'))
+	oracle = prefix.fold(0.U128, |acc, b| if (acc > 18446744073709551615) acc else acc * 10 + U8.to_u128(b - '0'))
 	builtin = U64.from_str(Str.from_utf8_lossy(prefix))
 	actual = Parser.run(Utf8.digits, input)
 	match actual {
@@ -89,7 +89,7 @@ check_numbers = |input| {
 			if count == 0 or U64.to_u128(val) != U8.to_u128((input.get(0) ?? 0) - '0') or rest != input.drop_first(1) {
 				crash "digit wrong"
 			}
-		Err(_) => if count > 0 crash "digit rejected a digit"
+		Err(_) => if (count > 0) crash "digit rejected a digit"
 	}
 	{}
 }
@@ -100,21 +100,21 @@ check_codeunits = |case| {
 	first = input.get(0)
 	match Parser.run(Utf8.any_codeunit, input) {
 		Ok({ value: val, rest: rest }) => {
-			if first != Ok(val) crash "any_codeunit value"
+			if (first != Ok(val)) crash "any_codeunit value"
 			check_suffix("any_codeunit", input, [val], rest)
 		}
-		Err(_) => if first.is_ok() crash "any_codeunit failed on non-empty input"
+		Err(_) => if (first.is_ok()) crash "any_codeunit failed on non-empty input"
 	}
 	match Parser.run(Utf8.codeunit(case.unit), input) {
 		Ok({ value: val, rest: rest }) => {
-			if first != Ok(case.unit) or val != case.unit crash "codeunit accepted wrong byte"
+			if (first != Ok(case.unit) or val != case.unit) crash "codeunit accepted wrong byte"
 			check_suffix("codeunit", input, [val], rest)
 		}
-		Err(_) => if first == Ok(case.unit) crash "codeunit rejected matching byte"
+		Err(_) => if (first == Ok(case.unit)) crash "codeunit rejected matching byte"
 	}
 	match Parser.run(Utf8.codeunit_satisfies(|b| b < case.unit), input) {
 		Ok({ value: val, rest: rest }) => {
-			if first != Ok(val) or val >= case.unit crash "codeunit_satisfies accepted wrong byte"
+			if (first != Ok(val) or val >= case.unit) crash "codeunit_satisfies accepted wrong byte"
 			check_suffix("codeunit_satisfies", input, [val], rest)
 		}
 		Err(_) =>
@@ -125,19 +125,19 @@ check_codeunits = |case| {
 	}
 	match Parser.run(Utf8.utf8(case.literal), input) {
 		Ok({ value: val, rest: rest }) => {
-			if val != case.literal or !input.starts_with(case.literal) crash "utf8 accepted non-prefix"
+			if (val != case.literal or !input.starts_with(case.literal)) crash "utf8 accepted non-prefix"
 			check_suffix("utf8", input, val, rest)
 		}
-		Err(_) => if input.starts_with(case.literal) crash "utf8 rejected a prefix"
+		Err(_) => if (input.starts_with(case.literal)) crash "utf8 rejected a prefix"
 	}
 	match Str.from_utf8(case.literal) {
 		Ok(text) =>
 			match Parser.run(Utf8.string(text), input) {
 				Ok({ value: val, rest: rest }) => {
-					if val != text or !input.starts_with(case.literal) crash "string accepted non-prefix"
+					if (val != text or !input.starts_with(case.literal)) crash "string accepted non-prefix"
 					check_suffix("string", input, case.literal, rest)
 				}
-				Err(_) => if input.starts_with(case.literal) crash "string rejected a prefix"
+				Err(_) => if (input.starts_with(case.literal)) crash "string rejected a prefix"
 			}
 		Err(_) => {}
 	}
@@ -147,21 +147,21 @@ check_codeunits = |case| {
 	}
 	match Parser.run(Utf8.rest_str, input) {
 		Ok({ value: val, rest: rest }) => {
-			if Str.from_utf8(input) != Ok(val) crash "rest_str value"
+			if (Str.from_utf8(input) != Ok(val)) crash "rest_str value"
 			check_suffix("rest_str", input, val.to_utf8(), rest)
 		}
-		Err(_) => if Str.from_utf8(input).is_ok() crash "rest_str rejected valid UTF-8"
+		Err(_) => if (Str.from_utf8(input).is_ok()) crash "rest_str rejected valid UTF-8"
 	}
 	match Parser.run(Parser.chomp_until(case.unit), input) {
 		Ok({ value: val, rest: rest }) => {
-			if val.contains(case.unit) or rest.get(0) != Ok(case.unit) crash "chomp_until stopped at wrong byte"
+			if (val.contains(case.unit) or rest.get(0) != Ok(case.unit)) crash "chomp_until stopped at wrong byte"
 			check_suffix("chomp_until", input, val, rest)
 		}
-		Err(_) => if input.contains(case.unit) crash "chomp_until missed the byte"
+		Err(_) => if (input.contains(case.unit)) crash "chomp_until missed the byte"
 	}
 	match Parser.run(Parser.chomp_while(|b| b < case.unit), input) {
 		Ok({ value: val, rest: rest }) => {
-			if val.any(|b| b >= case.unit) crash "chomp_while consumed a failing byte"
+			if (val.any(|b| b >= case.unit)) crash "chomp_while consumed a failing byte"
 			match rest.get(0) {
 				Ok(b) if b < case.unit => crash "chomp_while stopped early"
 				_ => {}
@@ -203,7 +203,7 @@ check_str_front_ends = |case| {
 				Ok(_) => {}
 				Err(ParseError({ message, offset })) => {
 					_ = message.count_utf8_bytes()
-					if offset > bytes.len() crash "parse_str failure offset is beyond the input"
+					if (offset > bytes.len()) crash "parse_str failure offset is beyond the input"
 				}
 			}
 			{}
@@ -226,7 +226,7 @@ check_scaling = |case| {
 		}
 		element = Parser.alt(Utf8.codeunit(case.unit).map(|b| [b]), Parser.one_of([Utf8.utf8(case.literal), Utf8.any_codeunit.map(|_| [])]))
 		match Parser.run(Parser.many(element.map(|_| {})), $big) {
-			Ok({ value: val, rest: rest }) => if val.len() == 0 and rest.len() != $big.len() crash "many consumed without values"
+			Ok({ value: val, rest: rest }) => if (val.len() == 0 and rest.len() != $big.len()) crash "many consumed without values"
 			Err(_) => crash "many failed"
 		}
 		_ = run("sep_by", Parser.sep_by(Utf8.digits, Utf8.codeunit(case.unit)), $big)

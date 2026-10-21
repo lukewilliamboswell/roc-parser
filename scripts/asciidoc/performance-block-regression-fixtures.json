@@ -1,0 +1,493 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "performance-block-correctness",
+      "required_cases": [
+        "performance-block-mutation-719-148",
+        "performance-block-mutation-719-300",
+        "performance-block-mutation-719-764",
+        "performance-block-mutation-719-892",
+        "performance-block-mutation-719-1844",
+        "performance-block-mutation-719-1964",
+        "performance-block-mutation-719-332"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "performance-block-mutation-719-148",
+      "family": "raw-mutation",
+      "source": "== amber4930\n\n* quiet river2135\n* sibling\n\nifdef::backend-html5[Roc8279]\n\ncafé9940\n\nifdef::backend-html5[amber6036]\n\n* Roc223\n* sibling\n\n:value: amber391\n\n{value}\n\n|===\n|one |two\n|quiet river1498 |four\n|===\n\n....\nquiet river2390\n....\n\n* quiet river7008\n\n\n* sibling\n\n* 東京1272\n* sibling",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-148",
+        "position": 252,
+        "insert": "\n\n"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "section",
+              "level": 1,
+              "title": "amber4930",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "ulist",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    }
+                  ]
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Roc8279",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "café9940",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "amber6036",
+                  "blocks": []
+                },
+                {
+                  "context": "ulist",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    }
+                  ]
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "{value}",
+                  "blocks": []
+                },
+                {
+                  "context": "table",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "literal",
+                  "level": 0,
+                  "title": "",
+                  "source": "quiet river2390",
+                  "blocks": []
+                },
+                {
+                  "context": "ulist",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    },
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-300",
+      "family": "raw-mutation",
+      "source": "NOTE: 東京318\n\n== café5422\n\n** 東京9850\n* sibling\n\n:value: quiet river267\n\n{value}\n\n----\nRoc1308\n----\n\nRoc4894",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-300",
+        "position": 26,
+        "insert": "*"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "admonition",
+              "level": 0,
+              "title": "",
+              "source": "東京318",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "café5422",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "ulist",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "list_item",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "ulist",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": [
+                            {
+                              "context": "list_item",
+                              "level": 0,
+                              "title": "",
+                              "source": "",
+                              "blocks": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "{value}",
+                  "blocks": []
+                },
+                {
+                  "context": "listing",
+                  "level": 0,
+                  "title": "",
+                  "source": "Roc1308",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "Roc4894",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-764",
+      "family": "raw-mutation",
+      "source": "* Delta7697\n*\n\n sibling\n\nNOTE: Roc5154",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-764",
+        "position": 13,
+        "insert": "\n\n"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "literal",
+                      "level": 0,
+                      "title": "",
+                      "source": "sibling",
+                      "blocks": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "context": "admonition",
+              "level": 0,
+              "title": "",
+              "source": "Roc5154",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-892",
+      "family": "raw-mutation",
+      "source": "....\nDelta9175\n....\n\n--\\--\nRoc4691\n----\n\n== quiet river7239\n\n|===\n|one |two\n|Roc3174 |four\n|===\n\n....\namber6012\n....",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-892",
+        "position": 23,
+        "insert": "\\"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "Delta9175",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "--\\--\nRoc4691",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "\n== quiet river7239\n\n|===\n|one |two\n|Roc3174 |four\n|===\n\n....\namber6012\n....",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-1844",
+      "family": "raw-mutation",
+      "source": "|===\n|one |two\n|Delta5040 |four\n|===\n\n:value: amber7370\n\n{value}\n\n.\\...\nDelta9629\n....",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1844",
+        "position": 67,
+        "insert": "\\"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "{value}",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "...",
+              "source": "Delta9629",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-1964",
+      "family": "raw-mutation",
+      "source": "quiet river8254\n\n|===\n|one |two\n|café9277 |four\n|===\n\n\\....\ncafé3877\n....",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-1964",
+        "position": 54,
+        "insert": "\\"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "quiet river8254",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\....\ncafé3877",
+              "blocks": []
+            },
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "performance-block-mutation-719-332",
+      "family": "raw-mutation",
+      "source": "|===\n|one |two\n|café2698 |four\n|===\n\n\\----\ncafé109\n----\n\nifdef::backend-html5[東京2608]\n\nA *bold* _word_ Delta9856\n\n* 東京6486\n* sibling\n\nNOTE: quiet river3713",
+      "provenance": {
+        "seed": 719,
+        "parent": "model-719-332",
+        "position": 37,
+        "insert": "\\"
+      },
+      "category": "performance-block-correctness",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "\\----\ncafé109",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "\n東京2608\n\nA *bold* _word_ Delta9856\n\n* 東京6486\n* sibling\n\nNOTE: quiet river3713",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

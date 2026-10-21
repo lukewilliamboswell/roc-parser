@@ -1,0 +1,2596 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original short inputs and independently authored HTML predicates. Full Roc output is also compared against the pinned live oracle by the runner.",
+    "reference_family": "AsciiDoc language documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; source only."
+  },
+  "coverage": [
+    {
+      "category": "inline-formatting",
+      "required_cases": [
+        "inline-full-strong",
+        "inline-full-emphasis",
+        "inline-full-code",
+        "inline-full-mark",
+        "inline-full-sup",
+        "inline-full-sub",
+        "inline-full-strong-unconstrained",
+        "inline-full-emphasis-unconstrained",
+        "inline-full-code-unconstrained",
+        "inline-full-mark-unconstrained",
+        "inline-full-nest-em",
+        "inline-full-nest-strong",
+        "inline-full-quote-role",
+        "inline-full-quote-many-roles",
+        "inline-full-quote-anchor",
+        "inline-full-escaped-strong",
+        "inline-full-constrained-word",
+        "inline-full-superscript-word"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-substitutions",
+      "required_cases": [
+        "inline-full-typographic-quotes",
+        "inline-full-apostrophe",
+        "inline-full-copyright",
+        "inline-full-arrows",
+        "inline-full-ellipsis",
+        "inline-full-em-dash",
+        "inline-full-entities",
+        "inline-full-escape-html",
+        "inline-full-hardbreak",
+        "inline-full-eof-hardbreak",
+        "inline-full-attr-quote-order",
+        "inline-full-attr-link",
+        "inline-full-intrinsics",
+        "inline-full-attr-escaped"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-passthroughs",
+      "required_cases": [
+        "inline-full-pass-raw",
+        "inline-full-pass-escape",
+        "inline-full-pass-single",
+        "inline-full-pass-macro",
+        "inline-full-pass-quotes",
+        "inline-full-pass-special",
+        "inline-full-pass-footnote"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-macros",
+      "required_cases": [
+        "inline-full-url",
+        "inline-full-url-label",
+        "inline-full-url-role",
+        "inline-full-url-window",
+        "inline-full-url-punctuation",
+        "inline-full-url-angle",
+        "inline-full-relative-link",
+        "inline-full-mailto",
+        "inline-full-email-auto",
+        "inline-full-inline-image",
+        "inline-full-inline-image-dimensions",
+        "inline-full-inline-image-named",
+        "inline-full-inline-image-link",
+        "inline-full-inline-anchor",
+        "inline-full-xref-external",
+        "inline-full-index-visible",
+        "inline-full-index-hidden"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-state",
+      "required_cases": [
+        "inline-full-footnote-one",
+        "inline-full-footnote-blocks",
+        "inline-full-footnote-reuse",
+        "inline-full-footnote-unresolved",
+        "inline-full-xref-section",
+        "inline-full-xref-explicit",
+        "inline-full-xref-punctuation"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-ui",
+      "required_cases": [
+        "inline-full-kbd",
+        "inline-full-kbd-plus",
+        "inline-full-button",
+        "inline-full-menu",
+        "inline-full-menu-reference"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-groups",
+      "required_cases": [
+        "inline-full-subs-none",
+        "inline-full-subs-quotes",
+        "inline-full-subs-normal-minus-quotes",
+        "inline-full-subs-attributes-plus-quotes",
+        "inline-full-attr-then-quotes",
+        "inline-full-quotes-then-attr"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-stem-attributes",
+      "required_cases": [
+        "inline-full-stem-default",
+        "inline-full-stem-latex",
+        "inline-full-stem-attribute",
+        "inline-full-stem-dollar-trim",
+        "inline-full-stem-escaped-special",
+        "inline-full-stem-custom-subs",
+        "inline-full-attr-uppercase"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-mutable-attributes",
+      "required_cases": [
+        "inline-state-counter-sequence",
+        "inline-state-counter-seeded",
+        "inline-state-counter-alpha",
+        "inline-state-counter-alpha-carry",
+        "inline-state-counter-lower-carry",
+        "inline-state-counter-string",
+        "inline-state-counter-leading-zero",
+        "inline-state-counter-decimal-string",
+        "inline-state-counter-negative",
+        "inline-state-counter-big",
+        "inline-state-counter-hidden",
+        "inline-state-counter-lines",
+        "inline-state-counter-blocks",
+        "inline-state-counter-existing",
+        "inline-state-counter-redefined",
+        "inline-state-counter-redefined-same",
+        "inline-state-set-blocks",
+        "inline-state-set-empty",
+        "inline-state-set-unset",
+        "inline-state-set-literal-quotes",
+        "inline-state-set-html",
+        "inline-state-counter-in-footnote",
+        "inline-state-counter-in-format",
+        "inline-state-counter-escaped"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-composition",
+      "required_cases": [
+        "inline-composition-attr-url-prefix",
+        "inline-composition-attr-labeled-url-prefix",
+        "inline-composition-attr-literal-pass",
+        "inline-composition-pass-counter-restoration",
+        "inline-composition-pass-counter-restoration-reversed",
+        "inline-composition-pass-counter-nested",
+        "inline-composition-pass-counter-nested-multiple",
+        "inline-composition-pass-set-restoration",
+        "inline-composition-pass-unclosed-nested-footnote"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-definition-values",
+      "required_cases": [
+        "inline-definition-definition-pass-quotes",
+        "inline-definition-definition-pass-raw",
+        "inline-definition-definition-pass-attributes",
+        "inline-definition-specialcharacters-only-entities"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-manual-regressions",
+      "required_cases": [
+        "inline-manual-manual-source-url",
+        "inline-manual-manual-explicit-source-url",
+        "inline-manual-code-bare-protocol",
+        "inline-manual-code-url-boundary"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-more-retained-mutations",
+      "required_cases": [
+        "inline-retained-code-double-backslash",
+        "inline-retained-nested-opening-brace",
+        "inline-retained-overlapping-emphasis",
+        "inline-retained-deferred-pass-malformed-brace"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-unicode-boundaries",
+      "required_cases": [
+        "inline-unicode-emoji-pass-boundary",
+        "inline-unicode-emoji-strong-boundary",
+        "inline-unicode-unicode-letter-boundary",
+        "inline-unicode-emoji-emphasis-boundary"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "inline-retained-boundary-mutations",
+      "required_cases": [
+        "inline-retained-adjacent-strong",
+        "inline-retained-adjacent-mark",
+        "inline-retained-retained-mark-boundary",
+        "inline-retained-retained-bracket-escape",
+        "inline-retained-retained-comma-link",
+        "inline-retained-multiline-anchor",
+        "inline-retained-ordinary-angle-escape"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "inline-full-strong",
+      "category": "inline-formatting",
+      "features": [
+        "strong"
+      ],
+      "source": "A *sample* here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong>sample</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-emphasis",
+      "category": "inline-formatting",
+      "features": [
+        "emphasis"
+      ],
+      "source": "A _sample_ here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<em>sample</em>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-code",
+      "category": "inline-formatting",
+      "features": [
+        "code"
+      ],
+      "source": "A `sample` here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<code>sample</code>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-mark",
+      "category": "inline-formatting",
+      "features": [
+        "mark"
+      ],
+      "source": "A #sample# here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<mark>sample</mark>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-sup",
+      "category": "inline-formatting",
+      "features": [
+        "sup"
+      ],
+      "source": "A ^sample^ here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<sup>sample</sup>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-sub",
+      "category": "inline-formatting",
+      "features": [
+        "sub"
+      ],
+      "source": "A ~sample~ here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<sub>sample</sub>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-strong-unconstrained",
+      "category": "inline-formatting",
+      "features": [
+        "strong-unconstrained"
+      ],
+      "source": "prefix**middle**suffix",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "prefix<strong>middle</strong>suffix"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-emphasis-unconstrained",
+      "category": "inline-formatting",
+      "features": [
+        "emphasis-unconstrained"
+      ],
+      "source": "prefix__middle__suffix",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "prefix<em>middle</em>suffix"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-code-unconstrained",
+      "category": "inline-formatting",
+      "features": [
+        "code-unconstrained"
+      ],
+      "source": "prefix``middle``suffix",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "prefix<code>middle</code>suffix"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-mark-unconstrained",
+      "category": "inline-formatting",
+      "features": [
+        "mark-unconstrained"
+      ],
+      "source": "prefix##middle##suffix",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "prefix<mark>middle</mark>suffix"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-nest-em",
+      "category": "inline-formatting",
+      "features": [
+        "nest-em"
+      ],
+      "source": "A *bold _and italic_* sentence.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong>bold <em>and italic</em></strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-nest-strong",
+      "category": "inline-formatting",
+      "features": [
+        "nest-strong"
+      ],
+      "source": "An _italic *and bold* text_ sentence.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<em>italic <strong>and bold</strong> text</em>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-quote-role",
+      "category": "inline-formatting",
+      "features": [
+        "quote-role"
+      ],
+      "source": "A [.red]#warning# here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<span class=\"red\">warning</span>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-quote-many-roles",
+      "category": "inline-formatting",
+      "features": [
+        "quote-many-roles"
+      ],
+      "source": "A [.red.big]*warning* here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong class=\"red big\">warning</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-quote-anchor",
+      "category": "inline-formatting",
+      "features": [
+        "quote-anchor"
+      ],
+      "source": "A [#inline-id]#target# here.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<span id=\"inline-id\">target</span>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-escaped-strong",
+      "category": "inline-formatting",
+      "features": [
+        "escaped-strong"
+      ],
+      "source": "A \\*literal* sample.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "*literal*"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-constrained-word",
+      "category": "inline-formatting",
+      "features": [
+        "constrained-word"
+      ],
+      "source": "a*b*c and a_b_c",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "a*b*c and a_b_c"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-superscript-word",
+      "category": "inline-formatting",
+      "features": [
+        "superscript-word"
+      ],
+      "source": "Equation x^2^ and H~2~O.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "x<sup>2</sup>",
+          "H<sub>2</sub>O"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-typographic-quotes",
+      "category": "inline-substitutions",
+      "features": [
+        "typographic-quotes"
+      ],
+      "source": "Say \"`hello`\" and '`goodbye`'.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&#8220;hello&#8221;",
+          "&#8216;goodbye&#8217;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-apostrophe",
+      "category": "inline-substitutions",
+      "features": [
+        "apostrophe"
+      ],
+      "source": "We can't stop.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "can&#8217;t"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-copyright",
+      "category": "inline-substitutions",
+      "features": [
+        "copyright"
+      ],
+      "source": "A (C), (R), (TM) notice.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&#169;",
+          "&#174;",
+          "&#8482;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-arrows",
+      "category": "inline-substitutions",
+      "features": [
+        "arrows"
+      ],
+      "source": "A -> B <- C => D <= E",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&#8594;",
+          "&#8592;",
+          "&#8658;",
+          "&#8656;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-ellipsis",
+      "category": "inline-substitutions",
+      "features": [
+        "ellipsis"
+      ],
+      "source": "Wait... then continue.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&#8230;&#8203;"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-em-dash",
+      "category": "inline-substitutions",
+      "features": [
+        "em-dash"
+      ],
+      "source": "One -- two and a--b.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&#8201;&#8212;&#8201;",
+          "a&#8212;&#8203;b"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-entities",
+      "category": "inline-substitutions",
+      "features": [
+        "entities"
+      ],
+      "source": "A &copy; &#34; &#xA0; & bare.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&copy;",
+          "&#34;",
+          "&#xA0;",
+          "&amp; bare"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-escape-html",
+      "category": "inline-substitutions",
+      "features": [
+        "escape-html"
+      ],
+      "source": "A <tag> & text.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&lt;tag&gt; &amp; text"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-hardbreak",
+      "category": "inline-substitutions",
+      "features": [
+        "hardbreak"
+      ],
+      "source": "First +\nsecond +\nthird",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "First<br>\nsecond<br>\nthird"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-eof-hardbreak",
+      "category": "inline-substitutions",
+      "features": [
+        "eof-hardbreak"
+      ],
+      "source": "Last +",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Last<br>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-attr-quote-order",
+      "category": "inline-substitutions",
+      "features": [
+        "attr-quote-order"
+      ],
+      "source": ":who: *Roc*\n\nHello {who}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Hello *Roc*."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-attr-link",
+      "category": "inline-substitutions",
+      "features": [
+        "attr-link"
+      ],
+      "source": ":site: https://example.org\n\nVisit {site}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "href=\"https://example.org\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-intrinsics",
+      "category": "inline-substitutions",
+      "features": [
+        "intrinsics"
+      ],
+      "source": "A{sp}{plus}{sp}{cpp}{nbsp}end",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A &#43; C&#43;&#43;&#160;end"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-attr-escaped",
+      "category": "inline-substitutions",
+      "features": [
+        "attr-escaped"
+      ],
+      "source": ":who: Roc\n\nHello \\{who}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Hello {who}."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-raw",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-raw"
+      ],
+      "source": "One +++<b>raw</b>+++ end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One <b>raw</b> end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-escape",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-escape"
+      ],
+      "source": "One ++<b>raw</b>++ end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One &lt;b&gt;raw&lt;/b&gt; end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-single",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-single"
+      ],
+      "source": "One +*raw*+ end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One *raw* end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-macro",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-macro"
+      ],
+      "source": "One pass:[<b>raw</b>] end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One <b>raw</b> end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-quotes",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-quotes"
+      ],
+      "source": "One pass:q[*bold*] end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One <strong>bold</strong> end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-special",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-special"
+      ],
+      "source": "One pass:c[<b>] end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "One &lt;b&gt; end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-pass-footnote",
+      "category": "inline-passthroughs",
+      "features": [
+        "pass-footnote"
+      ],
+      "source": "Raw +++footnote:[unparsed]+++ text.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Raw footnote:[unparsed] text."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url",
+      "category": "inline-macros",
+      "features": [
+        "url"
+      ],
+      "source": "Visit https://example.org now.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "href=\"https://example.org\" class=\"bare\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url-label",
+      "category": "inline-macros",
+      "features": [
+        "url-label"
+      ],
+      "source": "Visit https://example.org[Example] now.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org\">Example</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url-role",
+      "category": "inline-macros",
+      "features": [
+        "url-role"
+      ],
+      "source": "Visit https://example.org[Example,role=external].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"external\">Example</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url-window",
+      "category": "inline-macros",
+      "features": [
+        "url-window"
+      ],
+      "source": "Visit https://example.org[Example^].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "target=\"_blank\" rel=\"noopener\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url-punctuation",
+      "category": "inline-macros",
+      "features": [
+        "url-punctuation"
+      ],
+      "source": "See (https://example.org).",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "https://example.org</a>)."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-url-angle",
+      "category": "inline-macros",
+      "features": [
+        "url-angle"
+      ],
+      "source": "See <https://example.org>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "See <a href=\"https://example.org\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-relative-link",
+      "category": "inline-macros",
+      "features": [
+        "relative-link"
+      ],
+      "source": "See link:guide.html[Guide].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"guide.html\">Guide</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-mailto",
+      "category": "inline-macros",
+      "features": [
+        "mailto"
+      ],
+      "source": "Email mailto:hello@example.org[Hello].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"mailto:hello@example.org\">Hello</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-email-auto",
+      "category": "inline-macros",
+      "features": [
+        "email-auto"
+      ],
+      "source": "Email hello@example.org today.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"mailto:hello@example.org\">hello@example.org</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-inline-image",
+      "category": "inline-macros",
+      "features": [
+        "inline-image"
+      ],
+      "source": "See image:cat.png[Cat].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<img src=\"cat.png\" alt=\"Cat\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-inline-image-dimensions",
+      "category": "inline-macros",
+      "features": [
+        "inline-image-dimensions"
+      ],
+      "source": "See image:cat.png[Cat,120,80].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"120\" height=\"80\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-inline-image-named",
+      "category": "inline-macros",
+      "features": [
+        "inline-image-named"
+      ],
+      "source": "See image:cat.png[alt=Cat,width=120].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"Cat\" width=\"120\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-inline-image-link",
+      "category": "inline-macros",
+      "features": [
+        "inline-image-link"
+      ],
+      "source": "See image:cat.png[Cat,link=guide.html].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a class=\"image\" href=\"guide.html\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-inline-anchor",
+      "category": "inline-macros",
+      "features": [
+        "inline-anchor"
+      ],
+      "source": "A [[target]]target.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a id=\"target\"></a>target"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-xref-external",
+      "category": "inline-macros",
+      "features": [
+        "xref-external"
+      ],
+      "source": "See xref:guide.adoc#start[Guide].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"guide.html#start\">Guide</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-index-visible",
+      "category": "inline-macros",
+      "features": [
+        "index-visible"
+      ],
+      "source": "A ((sunset)) scene.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A sunset scene."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-index-hidden",
+      "category": "inline-macros",
+      "features": [
+        "index-hidden"
+      ],
+      "source": "A (((sunset))) scene.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A  scene."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-footnote-one",
+      "category": "inline-state",
+      "features": [
+        "footnote-one"
+      ],
+      "source": "A footnote:[First *note*.] sentence.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnoteref_1\"",
+          "First <strong>note</strong>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-footnote-blocks",
+      "category": "inline-state",
+      "features": [
+        "footnote-blocks"
+      ],
+      "source": "First footnote:first[One.].\n\nSecond footnote:[Two.], refer footnote:first[].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "id=\"_footnoteref_1\"",
+          "id=\"_footnoteref_2\"",
+          "href=\"#_footnotedef_1\"",
+          "One.",
+          "Two."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-footnote-reuse",
+      "category": "inline-state",
+      "features": [
+        "footnote-reuse"
+      ],
+      "source": "First footnote:n[One.], second footnote:n[Ignored.].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"footnoteref\"",
+          "One."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-footnote-unresolved",
+      "category": "inline-state",
+      "features": [
+        "footnote-unresolved"
+      ],
+      "source": "Missing footnote:unknown[].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"footnoteref red\"",
+          "[unknown]"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-xref-section",
+      "category": "inline-state",
+      "features": [
+        "xref-section"
+      ],
+      "source": "== Introduction\n\nSee <<_introduction>>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "href=\"#_introduction\">Introduction</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-xref-explicit",
+      "category": "inline-state",
+      "features": [
+        "xref-explicit"
+      ],
+      "source": "[#custom]\n== A *bold* title\n\nSee <<custom>>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "href=\"#custom\">A <strong>bold</strong> title</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-xref-punctuation",
+      "category": "inline-state",
+      "features": [
+        "xref-punctuation"
+      ],
+      "source": "== ! Leading punctuation\n\nSee <<_leading_punctuation>>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "href=\"#_leading_punctuation\">! Leading punctuation</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-kbd",
+      "category": "inline-ui",
+      "features": [
+        "kbd"
+      ],
+      "source": ":experimental:\n\nPress kbd:[Ctrl+C].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<span class=\"keyseq\"><kbd>Ctrl</kbd>+<kbd>C</kbd></span>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-kbd-plus",
+      "category": "inline-ui",
+      "features": [
+        "kbd-plus"
+      ],
+      "source": ":experimental:\n\nPress kbd:[Ctrl++].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<kbd>Ctrl</kbd>+<kbd>+</kbd>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-button",
+      "category": "inline-ui",
+      "features": [
+        "button"
+      ],
+      "source": ":experimental:\n\nPress btn:[Save].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<b class=\"button\">Save</b>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-menu",
+      "category": "inline-ui",
+      "features": [
+        "menu"
+      ],
+      "source": ":experimental:\n\nChoose menu:File[New > Project].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"menu\">File</b>",
+          "class=\"submenu\">New</b>",
+          "class=\"menuitem\">Project</b>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-menu-reference",
+      "category": "inline-ui",
+      "features": [
+        "menu-reference"
+      ],
+      "source": ":experimental:\n\nChoose menu:View[].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<b class=\"menuref\">View</b>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-subs-none",
+      "category": "inline-groups",
+      "features": [
+        "subs-none"
+      ],
+      "source": "[subs=\"none\"]\nParagraph *raw* & <tag>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Paragraph *raw* & <tag>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-subs-quotes",
+      "category": "inline-groups",
+      "features": [
+        "subs-quotes"
+      ],
+      "source": "[subs=\"quotes\"]\nParagraph *bold* & <tag>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Paragraph <strong>bold</strong> & <tag>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-subs-normal-minus-quotes",
+      "category": "inline-groups",
+      "features": [
+        "subs-normal-minus-quotes"
+      ],
+      "source": "[subs=\"normal,-quotes\"]\nParagraph *raw* & <tag>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Paragraph *raw* &amp; &lt;tag&gt;."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-subs-attributes-plus-quotes",
+      "category": "inline-groups",
+      "features": [
+        "subs-attributes-plus-quotes"
+      ],
+      "source": ":who: Roc\n\n[subs=\"attributes,+quotes\"]\nHello *{who}*.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Hello <strong>Roc</strong>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-full-attr-then-quotes",
+      "category": "inline-groups",
+      "features": [
+        "attr-then-quotes"
+      ],
+      "source": ":who: *Roc*\n\n[subs=\"attributes,quotes\"]\n{who}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong>Roc</strong>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/apply-subs-to-blocks/"
+      ]
+    },
+    {
+      "id": "inline-full-quotes-then-attr",
+      "category": "inline-groups",
+      "features": [
+        "quotes-then-attr"
+      ],
+      "source": ":who: *Roc*\n\n[subs=\"quotes,attributes\"]\n{who}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "*Roc*"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/apply-subs-to-blocks/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-default",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-default"
+      ],
+      "source": "A stem:[x + y] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\$x + y\\$"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-latex",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-latex"
+      ],
+      "source": "A latexmath:[x^2 + y_1] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\(x^2 + y_1\\)"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-attribute",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-attribute"
+      ],
+      "source": ":stem: tex\n\nA stem:[x^2] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\(x^2\\)"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-dollar-trim",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-dollar-trim"
+      ],
+      "source": "A latexmath:[$x$] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\(x\\)"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-escaped-special",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-escaped-special"
+      ],
+      "source": "A stem:[a < b & c] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\$a &lt; b &amp; c\\$"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-stem-custom-subs",
+      "category": "inline-stem-attributes",
+      "features": [
+        "stem-custom-subs"
+      ],
+      "source": "A latexmath:q[*x*] formula.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "\\(<strong>x</strong>\\)"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-full-attr-uppercase",
+      "category": "inline-stem-attributes",
+      "features": [
+        "attr-uppercase"
+      ],
+      "source": ":name: Roc\n\nHello {NAME}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Hello Roc."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/stem/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-sequence",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-sequence"
+      ],
+      "source": "A {counter:n} {counter:n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 1 2 3."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-seeded",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-seeded"
+      ],
+      "source": "A {counter:n:5} {counter:n} {counter:n:10} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 5 6 7 8."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-alpha",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-alpha"
+      ],
+      "source": "A {counter:n:A} {counter:n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A A B C."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-alpha-carry",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-alpha-carry"
+      ],
+      "source": "A {counter:n:Z} {counter:n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A Z AA AB."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-lower-carry",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-lower-carry"
+      ],
+      "source": "A {counter:n:z} {counter:n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A z aa ab."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-string",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-string"
+      ],
+      "source": "A {counter:n:foo} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A foo fop."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-leading-zero",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-leading-zero"
+      ],
+      "source": "A {counter:n:005} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 005 006."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-decimal-string",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-decimal-string"
+      ],
+      "source": "A {counter:n:9.9} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 9.9 10.0."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-negative",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-negative"
+      ],
+      "source": "A {counter:n:-2} {counter:n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A -2 -1 0."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-big",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-big"
+      ],
+      "source": "A {counter:n:999999999999999999999} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 999999999999999999999 1000000000000000000000."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-hidden",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-hidden"
+      ],
+      "source": "A{counter2:n}B {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "AB 2."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-lines",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-lines"
+      ],
+      "source": "{counter2:n}\nThen {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Then 2."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-blocks",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-blocks"
+      ],
+      "source": "First {counter:n}.\n\nSecond {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "First 1.",
+          "Second 2."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-existing",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-existing"
+      ],
+      "source": ":n: 5\n\nA {counter:n} {n} {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 6 6 7."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-redefined",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-redefined"
+      ],
+      "source": ":n: 1\n\nFirst {counter:n}.\n\n:n: 5\n\nSecond {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "First 2.",
+          "Second 6."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-redefined-same",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-redefined-same"
+      ],
+      "source": ":n: 1\n\nFirst {counter:n}.\n\n:n: 1\n\nSecond {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "First 2.",
+          "Second 2."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-set-blocks",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "set-blocks"
+      ],
+      "source": ":name: old\n\n{set:name:new}First {name}.\n\nSecond {name}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "First new.",
+          "Second new."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-set-empty",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "set-empty"
+      ],
+      "source": "A{set:name:}{name}B.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "AB."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-set-unset",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "set-unset"
+      ],
+      "source": ":name: old\n\n{set:name!}Removed {name}.\n\nLater {name}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Later {name}."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-set-literal-quotes",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "set-literal-quotes"
+      ],
+      "source": "{set:name:*bold*}A {name}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A *bold*."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-set-html",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "set-html"
+      ],
+      "source": "{set:name:<b> &}A {name}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A &lt;b&gt; &amp;."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-in-footnote",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-in-footnote"
+      ],
+      "source": "A footnote:[Note {counter:n}.] and {n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "and 1.",
+          "Note 1."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-in-format",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-in-format"
+      ],
+      "source": "*{counter:n}* and {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong>1</strong> and 2."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-state-counter-escaped",
+      "category": "inline-mutable-attributes",
+      "features": [
+        "counter-escaped"
+      ],
+      "source": "\\{counter:n} and {counter:n}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "{counter:n} and 1."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/counters/"
+      ]
+    },
+    {
+      "id": "inline-composition-attr-url-prefix",
+      "category": "inline-composition",
+      "features": [
+        "attr-url-prefix"
+      ],
+      "source": ":scheme: https\n\nA {scheme}://example.org link.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org\" class=\"bare\">https://example.org</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-attr-labeled-url-prefix",
+      "category": "inline-composition",
+      "features": [
+        "attr-labeled-url-prefix"
+      ],
+      "source": ":scheme: https\n\n{scheme}://example.org[Link]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org\">Link</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-attr-literal-pass",
+      "category": "inline-composition",
+      "features": [
+        "attr-literal-pass"
+      ],
+      "source": ":x: ++*text*++\n\nA {x} end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A ++*text*++ end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-counter-restoration",
+      "category": "inline-composition",
+      "features": [
+        "pass-counter-restoration"
+      ],
+      "source": "pass:a[{counter:n}] {counter:n}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "2 1"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-counter-restoration-reversed",
+      "category": "inline-composition",
+      "features": [
+        "pass-counter-restoration-reversed"
+      ],
+      "source": "{counter:n} pass:a[{counter:n}]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "1 2"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-counter-nested",
+      "category": "inline-composition",
+      "features": [
+        "pass-counter-nested"
+      ],
+      "source": "+pass:a[{counter:n}]+ {counter:n}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "2 1"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-counter-nested-multiple",
+      "category": "inline-composition",
+      "features": [
+        "pass-counter-nested-multiple"
+      ],
+      "source": "A pass:a[{counter:n}] +pass:a[{counter:n}]+ {counter:n}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A 2 3 1"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-set-restoration",
+      "category": "inline-composition",
+      "features": [
+        "pass-set-restoration"
+      ],
+      "source": ":x: old\n\npass:a[{set:x:new}] {x}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          " old"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-composition-pass-unclosed-nested-footnote",
+      "category": "inline-composition",
+      "features": [
+        "pass-unclosed-nested-footnote"
+      ],
+      "source": "pass:m[footnote:[A.]] footnote:[B.]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "footnote:[A.] <sup class=\"footnote\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/"
+      ]
+    },
+    {
+      "id": "inline-definition-definition-pass-quotes",
+      "category": "inline-definition-values",
+      "features": [
+        "definition-pass-quotes"
+      ],
+      "source": ":x: pass:q[*Roc*]\n\nA {x}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A <strong>Roc</strong>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entry-substitutions/"
+      ]
+    },
+    {
+      "id": "inline-definition-definition-pass-raw",
+      "category": "inline-definition-values",
+      "features": [
+        "definition-pass-raw"
+      ],
+      "source": ":x: pass:[<b>raw</b>]\n\nA {x}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A <b>raw</b>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entry-substitutions/"
+      ]
+    },
+    {
+      "id": "inline-definition-definition-pass-attributes",
+      "category": "inline-definition-values",
+      "features": [
+        "definition-pass-attributes"
+      ],
+      "source": ":name: Roc\n:x: pass:a[{name}]\n\nA {x}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A Roc."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entry-substitutions/"
+      ]
+    },
+    {
+      "id": "inline-definition-specialcharacters-only-entities",
+      "category": "inline-definition-values",
+      "features": [
+        "specialcharacters-only-entities"
+      ],
+      "source": "[subs=specialcharacters]\nA &copy; &#123; <b>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A &amp;copy; &amp;#123; &lt;b&gt;."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/attributes/attribute-entry-substitutions/"
+      ]
+    },
+    {
+      "id": "inline-manual-manual-source-url",
+      "category": "inline-manual-regressions",
+      "features": [
+        "manual-source-url"
+      ],
+      "source": ":src: https://example.org/repo\n\n{src}/docs/a.roc[Source]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org/repo/docs/a.roc\">Source</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/url-macro/"
+      ]
+    },
+    {
+      "id": "inline-manual-manual-explicit-source-url",
+      "category": "inline-manual-regressions",
+      "features": [
+        "manual-explicit-source-url"
+      ],
+      "source": ":src: https://example.org/repo\n\nlink:{src}/docs/a.roc[Source]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org/repo/docs/a.roc\">Source</a>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/url-macro/"
+      ]
+    },
+    {
+      "id": "inline-manual-code-bare-protocol",
+      "category": "inline-manual-regressions",
+      "features": [
+        "code-bare-protocol"
+      ],
+      "source": "`http://` and `https://`.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<code>http://</code> and <code>https://</code>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/url-macro/"
+      ]
+    },
+    {
+      "id": "inline-manual-code-url-boundary",
+      "category": "inline-manual-regressions",
+      "features": [
+        "code-url-boundary"
+      ],
+      "source": "`https://example.org`.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<code><a href=\"https://example.org\" class=\"bare\">https://example.org</a></code>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/url-macro/"
+      ]
+    },
+    {
+      "id": "inline-retained-code-double-backslash",
+      "category": "inline-more-retained-mutations",
+      "features": [
+        "code-double-backslash"
+      ],
+      "source": "Each `\\\\` starts a line.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<code>\\\\</code>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-nested-opening-brace",
+      "category": "inline-more-retained-mutations",
+      "features": [
+        "nested-opening-brace"
+      ],
+      "source": ":name: Roc\n\nHello {NAM {NAME}.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Hello {NAM Roc."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-overlapping-emphasis",
+      "category": "inline-more-retained-mutations",
+      "features": [
+        "overlapping-emphasis"
+      ],
+      "source": "Test _____ end.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Test <em>_</em> end."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-deferred-pass-malformed-brace",
+      "category": "inline-more-retained-mutations",
+      "features": [
+        "deferred-pass-malformed-brace"
+      ],
+      "source": ":x: old\n\npass:a[{set:x:new}] { {x}",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          " { old"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-unicode-emoji-pass-boundary",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "emoji-pass-boundary"
+      ],
+      "source": "Test (😀+a & b+.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Test (😀a &amp; b."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-unicode-emoji-strong-boundary",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "emoji-strong-boundary"
+      ],
+      "source": "😀*bold*😀",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "😀<strong>bold</strong>😀"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-unicode-unicode-letter-boundary",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "unicode-letter-boundary"
+      ],
+      "source": "α*bold*β",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "α*bold*β"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-unicode-emoji-emphasis-boundary",
+      "category": "inline-unicode-boundaries",
+      "features": [
+        "emoji-emphasis-boundary"
+      ],
+      "source": "😀_em_😀",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "😀<em>em</em>😀"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-adjacent-strong",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "adjacent-strong"
+      ],
+      "source": "Test *a**b*.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<strong>a</strong>*b*"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-adjacent-mark",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "adjacent-mark"
+      ],
+      "source": "Test #a##b#.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<mark>a</mark>#b#"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-retained-mark-boundary",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "retained-mark-boundary"
+      ],
+      "source": "Test \\##x_y##._y##.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<mark>#x_y</mark>#._y##."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-retained-bracket-escape",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "retained-bracket-escape"
+      ],
+      "source": "Test \\[source,roc]\n`α β``.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Test \\[source,roc]\n<code>α β`</code>."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-retained-comma-link",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "retained-comma-link"
+      ],
+      "source": "Visit https://example.org[Example,endif::[]\nrole=external].",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a href=\"https://example.org\">Example,endif::[</a>\nrole=external]."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-multiline-anchor",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "multiline-anchor"
+      ],
+      "source": "A [[first\nsecond]] anchor.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "A [[first\nsecond]] anchor."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-ordinary-angle-escape",
+      "category": "inline-retained-boundary-mutations",
+      "features": [
+        "ordinary-angle-escape"
+      ],
+      "source": "Test \\<b>.",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Test \\&lt;b&gt;."
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    }
+  ]
+}

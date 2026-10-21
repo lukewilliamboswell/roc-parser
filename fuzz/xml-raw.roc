@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -54,7 +54,7 @@ line_lengths = |bytes| {
 		if byte == '\n' or byte == '\r' {
 			$lengths = $lengths.append($current)
 			$current = 0
-			$index = if byte == '\r' and bytes.get($index + 1) == Ok('\n') $index + 2 else $index + 1
+			$index = if (byte == '\r' and bytes.get($index + 1) == Ok('\n')) $index + 2 else $index + 1
 		} else {
 			$current = $current + 1
 			$index = $index + 1

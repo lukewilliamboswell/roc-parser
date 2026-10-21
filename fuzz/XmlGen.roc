@@ -62,7 +62,7 @@ XmlGen := {}.{
 			byte = bytes.get($index) ?? 0
 			crlf = byte == '\r' and bytes.get($index + 1) == Ok('\n') and $index + 1 < offset
 			if byte == '\n' or byte == '\r' {
-				$index = if crlf $index + 2 else $index + 1
+				$index = if (crlf) $index + 2 else $index + 1
 				$line = $line + 1
 				$start = $index
 			} else {
@@ -96,8 +96,6 @@ XmlGen := {}.{
 		"${Str.inspect(text)}\nXML-HEX: ${hex}"
 	}
 }
-
-
 
 pick = XmlGen.pick
 
@@ -147,7 +145,7 @@ gen_declaration : Cur -> { pieces : List(Piece), value : Try(Xml.Declaration, [M
 gen_declaration = |start| {
 	kind = pick(start, 4)
 	bom = pick(kind.cur, 4)
-	bom_text = if bom.n == 0 "\u(FEFF)" else ""
+	bom_text = if (bom.n == 0) "\u(FEFF)" else ""
 	if kind.n == 0 {
 		{ pieces: [Lit(bom_text)], value: Err(Missing), cur: bom.cur }
 	} else {
@@ -159,8 +157,8 @@ gen_declaration = |start| {
 		standalone = choose(encoding.cur, ["", "yes", "no"])
 		trailing = choose(standalone.cur, ["", " ", "\n"])
 		q = quote.s
-		encoding_text = if encoding.s.is_empty() "" else " encoding${eq.s}${q}${encoding.s}${q}"
-		standalone_text = if standalone.s.is_empty() "" else " standalone${eq.s}${q}${standalone.s}${q}"
+		encoding_text = if (encoding.s.is_empty()) "" else " encoding${eq.s}${q}${encoding.s}${q}"
+		standalone_text = if (standalone.s.is_empty()) "" else " standalone${eq.s}${q}${standalone.s}${q}"
 		text = "${bom_text}<?xml version${eq.s}${q}1.${minor.to_str()}${q}${encoding_text}${standalone_text}${trailing.s}?>"
 		encoding_value =
 			if encoding.s.is_empty() {
@@ -179,7 +177,7 @@ gen_declaration = |start| {
 }
 
 ascii_lower : Str -> Str
-ascii_lower = |text| Str.from_utf8(text.to_utf8().map(|b| if b >= 'A' and b <= 'Z' b + 32 else b)) ?? text
+ascii_lower = |text| Str.from_utf8(text.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b)) ?? text
 
 ## Whitespace, comments, and processing instructions outside the root.
 gen_misc : Cur -> { pieces : List(Piece), cur : Cur }
@@ -254,7 +252,7 @@ gen_raw = |start, _comment| {
 
 hex_digits : U32, Bool -> Str
 hex_digits = |code, upper| {
-	digits = if upper "0123456789ABCDEF".to_utf8() else "0123456789abcdef".to_utf8()
+	digits = if (upper) "0123456789ABCDEF".to_utf8() else "0123456789abcdef".to_utf8()
 	var $out = []
 	var $rest = code
 	while $rest > 0 or $out.is_empty() {
@@ -305,7 +303,7 @@ after_literal : Raw, Str -> Raw
 after_literal = |raw, text| {
 	bytes = text.to_utf8()
 	last = bytes.last() ?? 0
-	brackets = if text == "]" raw.brackets + 1 else 0
+	brackets = if (text == "]") raw.brackets + 1 else 0
 	{ cr: last == '\r', brackets }
 }
 
@@ -326,9 +324,9 @@ gen_char_data = |start, raw_start| {
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [0x61] }
 		forbidden =
 			char.text == "<"
-			or char.text == "&"
-			or (char.text == ">" and $raw.brackets >= 2)
-			or ($raw.cr and Str.starts_with(char.text, "\n"))
+				or char.text == "&"
+				or (char.text == ">" and $raw.brackets >= 2)
+				or ($raw.cr and Str.starts_with(char.text, "\n"))
 		if style.n <= 2 and !forbidden {
 			$text = Str.concat($text, char.text)
 			$value = Str.concat($value, normalize_line_ends(char.text))
@@ -451,7 +449,7 @@ gen_element = |start, depth| {
 	}
 	trailing = choose($cur, ["", "", " ", "\n"])
 	$pieces = $pieces.append(Mark(TagSlot)).append(Lit(trailing.s))
-	child_count = pick(trailing.cur, if depth >= max_depth 4 else 7)
+	child_count = pick(trailing.cur, if (depth >= max_depth) 4 else 7)
 	$cur = child_count.cur
 	if child_count.n == 0 {
 		form = pick($cur, 2)
@@ -465,7 +463,7 @@ gen_element = |start, depth| {
 	var $raw = fresh_raw
 	$index = 0
 	while $index < child_count.n {
-		kind = pick($cur, if depth >= max_depth 4 else 6)
+		kind = pick($cur, if (depth >= max_depth) 4 else 6)
 		$cur = kind.cur
 		match kind.n {
 			0 | 1 => {
@@ -484,7 +482,7 @@ gen_element = |start, depth| {
 			}
 			3 => {
 				misc = pick($cur, 2)
-				item = if misc.n == 0 gen_comment(misc.cur) else gen_pi(misc.cur)
+				item = if (misc.n == 0) gen_comment(misc.cur) else gen_pi(misc.cur)
 				$pieces = $pieces.concat(item.pieces)
 				$raw = fresh_raw
 				$cur = item.cur

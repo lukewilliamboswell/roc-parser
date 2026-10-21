@@ -49,7 +49,10 @@ def check(app: Path, roc: str) -> bool:
     for command in ([roc, "fmt", "--check", name], [roc, "check", name]):
         if run(command, cwd) is None:
             return False
-    if EXPECT_RE.search(app.read_text(encoding="utf-8")) and run([roc, "test", name], cwd) is None:
+    # nightly-2026-10-18 segfaults when `roc test` reuses the cache `roc check`
+    # just wrote for some apps; 10-17 does not. Drop this once roc-lang/roc#12437
+    # is fixed.
+    if EXPECT_RE.search(app.read_text(encoding="utf-8")) and run([roc, "test", "--no-cache", name], cwd) is None:
         return False
     result = run([roc, name], cwd)
     if result is None:

@@ -16,7 +16,9 @@ crash.
 | YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
 | XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
 | Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) |
+| AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) |
 | HTTP/1.1 | RFC 9112 and RFC 9110 message syntax | [Reading HTTP](https://lukewilliamboswell.github.io/roc-parser/#http) |
+| Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
 | Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |
 
 It reads complete inputs held in memory. It does not stream, and it does not
@@ -42,7 +44,7 @@ app's header, then decode some CSV into records:
 
 ```roc
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst",
 }
 

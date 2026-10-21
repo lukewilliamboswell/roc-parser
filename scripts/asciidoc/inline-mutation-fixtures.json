@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original mutation inputs retained from the deterministic seed13 differential campaign; independently specified paragraph expectations and required complete live HTML comparison.",
+    "reference_family": "AsciiDoc text syntax",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/text/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; complete HTML compared by runner."
+  },
+  "coverage": [
+    {
+      "category": "inline-retained-mutations",
+      "required_cases": [
+        "inline-retained-mutation-13-000247",
+        "inline-retained-mutation-13-000263",
+        "inline-retained-mutation-13-000272",
+        "inline-retained-mutation-13-000332",
+        "inline-retained-mutation-13-000353",
+        "inline-retained-mutation-13-000429",
+        "inline-retained-mutation-13-000475",
+        "inline-retained-mutation-13-000771"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "inline-retained-mutation-13-000247",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "Test !+++",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000263",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "Test [.red]+++<b>+++<b>+++.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000272",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "A footnote:[A note. footnote:[A note.]",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000332",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "Test (+. ++x_y+++!.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000353",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "See <https://examp====\n.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000429",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "Test !**x *bold* [[target]]\ny**_.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000475",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "Test \\++alpha+",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    },
+    {
+      "id": "inline-retained-mutation-13-000771",
+      "category": "inline-retained-mutations",
+      "features": [
+        "malformed-inline-boundaries"
+      ],
+      "source": "One +++<b>raw<e +++<b>raw</b>+++ end.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/"
+      ]
+    }
+  ]
+}

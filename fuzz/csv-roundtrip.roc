@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -84,7 +84,7 @@ generate = |bytes| {
 			$cur = force.cur
 			is_last_row = $row_index + 1 == row_count.n
 			lone_empty_last = is_last_row and final_break.n == 0 and field_count.n == 0 and field.s == ""
-			cell = if needs_quotes(field.s) or force.n == 0 or lone_empty_last quote(field.s) else field.s
+			cell = if (needs_quotes(field.s) or force.n == 0 or lone_empty_last) quote(field.s) else field.s
 			$fields = $fields.append(field.s)
 			$cells = $cells.append(cell)
 			$field_index = $field_index + 1
@@ -96,7 +96,7 @@ generate = |bytes| {
 		line_break =
 			match break_choice.n {
 				0 => "\r\n"
-				1 => if $previous_break == "\r" and row_text == "" "\r" else "\n"
+				1 => if ($previous_break == "\r" and row_text == "") "\r" else "\n"
 				_ => "\r"
 			}
 		is_last = $row_index + 1 == row_count.n

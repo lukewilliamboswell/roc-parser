@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -16,7 +16,7 @@ test = |bytes| {
 	match bytes {
 		[] => Fuzz.reject
 		[mode, .. as message] => {
-			if mode % 2 == 0 HttpCheck.check_request(message) else HttpCheck.check_response(message)
+			if (mode % 2 == 0) HttpCheck.check_request(message) else HttpCheck.check_response(message)
 			Fuzz.keep
 		}
 	}
@@ -27,7 +27,7 @@ show = |bytes| {
 	match bytes {
 		[mode, .. as message] => {
 			digits = message.fold([], |acc, b| acc.append(hex_digit(b // 16)).append(hex_digit(b % 16)))
-			kind = if mode % 2 == 0 "Q" else "S"
+			kind = if (mode % 2 == 0) "Q" else "S"
 			"${HttpCheck.show(message)}\nhex: ${kind}${Str.from_utf8(digits) ?? ""}"
 		}
 		[] => "(empty)"
@@ -35,7 +35,7 @@ show = |bytes| {
 }
 
 hex_digit : U8 -> U8
-hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
+hex_digit = |n| if (n < 10) n + '0' else n - 10 + 'a'
 
 target = Fuzz.target_with({
 	name: "http-raw",

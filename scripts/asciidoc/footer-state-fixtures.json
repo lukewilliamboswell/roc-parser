@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Independent nested table sources with live pinned-oracle assertions.",
+    "oracle_pin": "asciidoctor 2.0.23"
+  },
+  "cases": [
+    {
+      "id": "footer-state-nested-range",
+      "category": "document-footer-state",
+      "source": "Before footnote:[Root before].\n\n[cols=\"a\"]\n|===\n|Outer before footnote:[Outer before].\n\n[cols=\"a\"]\n!===\n!Inner footnote:[Inner].\n!===\n\nOuter after footnote:[Outer after].\n|===\n\nAfter footnote:[Root after].",
+      "features": [
+        "nested-tables",
+        "footnotes",
+        "emission-ranges"
+      ],
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "table",
+          "paragraph"
+        ],
+        "html_contains": [
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\"",
+          "id=\"_footnotedef_3\"",
+          "id=\"_footnotedef_4\"",
+          "id=\"_footnotedef_5\""
+        ]
+      }
+    },
+    {
+      "id": "footer-state-nested-named",
+      "category": "document-footer-state",
+      "source": "Before footnote:root[Root].\n\n[cols=\"a\"]\n|===\n|Outer footnote:shared[Shared].\n\n[cols=\"a\"]\n!===\n!Inner footnote:inner[Inner].\n!===\n\nAgain footnote:shared[].\n|===\n\nAfter footnote:root[].",
+      "features": [
+        "nested-tables",
+        "footnotes",
+        "emission-ranges"
+      ],
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "table",
+          "paragraph"
+        ],
+        "html_contains": [
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\"",
+          "id=\"_footnotedef_3\""
+        ]
+      }
+    },
+    {
+      "id": "footer-state-suppressed-nested",
+      "category": "document-footer-state",
+      "source": ":nofootnotes:\n\nBefore footnote:[Before].\n\n[cols=\"a\"]\n|===\n|Outer footnote:[Outer].\n\n[cols=\"a\"]\n!===\n!Inner footnote:[Inner].\n!===\n|===\n\nAfter footnote:[After].",
+      "features": [
+        "nested-tables",
+        "footnotes",
+        "emission-ranges"
+      ],
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "table",
+          "paragraph"
+        ],
+        "html_excludes": [
+          "<div class=\"footnote\" id=\"_footnotedef_"
+        ],
+        "html_contains": [
+          "_footnoteref_4"
+        ]
+      }
+    },
+    {
+      "id": "footer-state-prior-sibling-nested",
+      "category": "document-footer-state",
+      "source": "Before footnote:root[Root].\n\n[cols=\"a\"]\n|===\n|First cell footnote:[First].\n|Second cell before footnote:[Second].\n\n[cols=\"a\"]\n!===\n!Nested footnote:[Nested].\n!===\n\nSecond cell after footnote:[After].\n|===\n\nRoot again footnote:root[].",
+      "features": [
+        "nested-tables",
+        "footnotes",
+        "emission-ranges",
+        "sibling-cells"
+      ],
+      "support": "complete",
+      "expect": {
+        "contexts": [
+          "paragraph",
+          "table",
+          "paragraph"
+        ],
+        "html_contains": [
+          "id=\"_footnotedef_1\"",
+          "id=\"_footnotedef_2\"",
+          "id=\"_footnotedef_3\"",
+          "id=\"_footnotedef_4\"",
+          "id=\"_footnotedef_5\"",
+          "href=\"#_footnotedef_1\""
+        ],
+        "html_excludes": [
+          "id=\"_footnotedef_6\""
+        ]
+      }
+    }
+  ],
+  "coverage": [
+    {
+      "category": "document-footer-state",
+      "required_cases": [
+        "footer-state-nested-range",
+        "footer-state-nested-named",
+        "footer-state-suppressed-nested",
+        "footer-state-prior-sibling-nested"
+      ],
+      "scope": "complete"
+    }
+  ]
+}

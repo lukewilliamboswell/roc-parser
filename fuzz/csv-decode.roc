@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -86,10 +86,10 @@ pick_f64 = |start| {
 			sign = pick(mantissa.cur, 2)
 			power = pick(sign.cur, 41)
 			magnitude = U64.to_f64(mantissa.n % 9007199254740992)
-			var $value = if sign.n == 0 magnitude else -magnitude
+			var $value = if (sign.n == 0) magnitude else -magnitude
 			var $step = 0
 			while $step < power.n {
-				$value = if power.n > 20 $value / 2.0 else $value * 2.0
+				$value = if (power.n > 20) $value / 2.0 else $value * 2.0
 				$step = $step + 1
 			}
 			{ value: $value, text: $value.to_str(), cur: power.cur }
@@ -145,7 +145,7 @@ needs_quotes = |text| {
 cell : Str, Cur -> { text : Str, cur : Cur }
 cell = |field, cur| {
 	force = pick(cur, 3)
-	text = if needs_quotes(field) or force.n == 0 "\"${Str.replace_each(field, "\"", "\"\"")}\"" else field
+	text = if (needs_quotes(field) or force.n == 0) "\"${Str.replace_each(field, "\"", "\"\"")}\"" else field
 	{ text, cur: force.cur }
 }
 
@@ -158,7 +158,7 @@ generate = |bytes| {
 	var $cur = note.cur
 	var $rows = []
 	var $lines = []
-	var $header_lines = [Str.join_with(order.map(|column| column_names.get(column) ?? "").concat(if note.n == 1 ["note"] else []), ",")]
+	var $header_lines = [Str.join_with(order.map(|column| column_names.get(column) ?? "").concat(if (note.n == 1) ["note"] else []), ",")]
 	var $first_bad = Err(AllValid)
 	var $index = 0
 	while $index < row_count.n + 1 {
@@ -191,7 +191,7 @@ generate = |bytes| {
 			}
 			_ => {}
 		}
-		ordered = order.map(|column| $base.get(column) ?? "").concat(if note.n == 1 ["n"] else [])
+		ordered = order.map(|column| $base.get(column) ?? "").concat(if (note.n == 1) ["n"] else [])
 		{ positional, named } =
 			match $kind {
 				Ok(ExtraField) => { positional: $base.append("extra"), named: ordered.append("extra") }
@@ -276,7 +276,7 @@ positional_error = |index, defect| {
 ## record 1, and columns follow the chosen order.
 named_error : Input, U64, Defect -> Expected
 named_error = |input, index, defect| {
-	width = if input.note 4 else 3
+	width = if (input.note) 4 else 3
 	position = |column| (input.order.find_first_index(|c| c == column) ?? 0) + 1
 	field =
 		match defect {

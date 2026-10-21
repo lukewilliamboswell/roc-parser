@@ -1,0 +1,68 @@
+= Independent generated syntax models
+
+`scripts/review_roc_syntax.py --generated N --seed S` generates equal lanes of
+complete files, block expressions, type annotations in statement mode, and
+expressions. Each lane builds an independent grammar model before printing
+source or constructing the expected normalized tree. Both workers must accept
+and match that model; agreement between workers alone does not pass.
+
+The file lane combines module/hosted/app/package headers, aliased imports and
+exposes, aliases/nominal/opaque declarations, associated annotation/definition
+blocks, constrained annotations, and a definition containing a statement
+sequence. Block sequences combine mutable declarations, destructuring,
+expectations, while/for loops and a final expression. Type recursion combines
+applications, functions, tuples, records and tag unions. Pattern recursion
+combines identifiers, wildcards, lists and tuples. Six arithmetic operators
+exercise additive/multiplicative precedence and left associativity. Their printer
+adds grouping only when a child's precedence or right association requires it.
+Other grammar delimiters and grouping disambiguate constructs independently.
+
+Tune `--expression-depth` (default 5, range 0..8), `--pattern-depth` (3, 0..6),
+`--type-depth` (4, 0..6), and `--statements` (4, 1..16). These are recursive
+subtree budgets, not total AST height: a file has a fixed header/declaration
+skeleton, each block has a final expression, and a where-method has a function
+skeleton. Branching and sequence counts remain bounded. Reports retain all
+budgets and the seed; mismatch artifacts retain exact input and expected model.
+Increasing budgets changes the deterministic stream and is not a replay of a
+smaller-budget run. Retained artifacts provide exact replay across such changes.
+
+This generator does not claim every grammar production or valid composition.
+It intentionally generates parser inputs without name resolution or type
+checking. It currently omits platform headers, targets, where-alias constraints,
+associated nested types, most literal/pattern extensions, arrows/pipes, optional
+calls and malformed inputs; dedicated fixtures, corpus and mutation lanes cover
+those areas separately. Adding one sample does not establish production coverage.
+
+For native model contracts, set `ROC_SYNTAX_ORACLE` to the pinned native worker
+and run `python3 -m unittest discover -s scripts/tests -p test_roc_syntax_model_cases.py`.
+The live test checks three deterministic seeds, 1,000 cases each by default;
+`ROC_SYNTAX_MODEL_CASES` controls cases per seed. Ordinary unit tests also verify
+handwritten precedence examples, complete-file declaration identity, depth
+controls and family composition without either worker.
+
+== Pure Roc structured fuzzing
+
+`fuzz/roc-syntax-structured.roc` independently models expression, block and
+complete-file families. Its first five input bytes select family (modulo 3),
+expression depth (modulo 7), pattern depth (modulo 5), type depth (modulo 5), and
+statement count (modulo 4, plus one). Missing bytes choose zero. Remaining bytes
+choose constructors; all recursion and sequence counts are bounded. This makes
+both shallow and deeper inputs reachable in one mutation campaign, rather than
+fixing expression/pattern depths at 4/2.
+
+The file model combines module/hosted/app headers, an aliased import with an
+exposed item, a nominal declaration and an annotation with recursively generated
+types, and a definition containing generated statements. Type models combine
+named/variable, application, tuple, function and record types. Statement models
+combine declarations, mutable declarations, expectations, while and for loops;
+loop bodies and statement values use the independent expression/pattern model.
+AST matchers check exact child counts, names and recursively expected structure.
+The additive/multiplicative printer preserves precedence and association without
+blanket binary-expression parentheses. Every expression/block case additionally
+checks composition into an ungrouped addition/multiplication expression.
+
+Pure Roc file generation currently has a fixed five-member file skeleton and
+fixed imported names, exposes, dependency path and type-parameter names. It omits
+package/platform headers, constraints and associated blocks; the Python model
+covers package headers, where-methods and associated blocks. Both models remain
+syntax-only: unresolved identifiers and incompatible types are intentional.

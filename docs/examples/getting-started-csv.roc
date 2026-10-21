@@ -1,6 +1,6 @@
 # tag::header[]
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "../../package/main.roc",
 }
 # end::header[]
@@ -23,7 +23,7 @@ planets = |text| CSV.parse(text)
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
-		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if p.moons == 1 "moon" else "moons"}"), "\n")
+		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if (p.moons == 1) "moon" else "moons"}"), "\n")
 		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${error.message}"
 		Err(MissingRequiredField(name)) => "no ${name} column"
 	}

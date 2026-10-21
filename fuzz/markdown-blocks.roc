@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -103,7 +103,7 @@ gen_words = |start, max| {
 }
 
 inline_text : Str -> List(Markdown.Inline)
-inline_text = |text| if text.is_empty() [] else [Text(text)]
+inline_text = |text| if (text.is_empty()) [] else [Text(text)]
 
 ## --- Leaf blocks -----------------------------------------------------------
 
@@ -121,9 +121,9 @@ gen_paragraph = |start, flush| {
 		$cur = trail.cur
 		# Up to three leading spaces; one trailing space (two would be a hard
 		# break), any number on the last line.
-		lead = if indent.n < 4 and !(flush and $index == 0) spaces(indent.n) else ""
+		lead = if (indent.n < 4 and !(flush and $index == 0)) spaces(indent.n) else ""
 		last = $index == count.n
-		tail = if trail.n == 1 " " else if trail.n == 2 and last "   " else ""
+		tail = if (trail.n == 1) " " else if (trail.n == 2 and last) "   " else ""
 		$lines = $lines.append({ text: "${lead}${ws.text}${tail}", lazy: $index > 0, blank: False })
 		$texts = $texts.append(ws.text)
 		$index = $index + 1
@@ -140,7 +140,7 @@ gen_atx = |start, flush| {
 	closing = pick(ws.cur, 4)
 	close_len = pick(closing.cur, 8)
 	trail = pick(close_len.cur, 3)
-	content = if empty.n == 0 "" else ws.text
+	content = if (empty.n == 0) "" else ws.text
 	hashes = repeat("#", level.n + 1)
 	closer =
 		if closing.n == 0 {
@@ -148,9 +148,9 @@ gen_atx = |start, flush| {
 		} else {
 			spaces(trail.n)
 		}
-	body = if content.is_empty() closer else " ${content}${closer}"
+	body = if (content.is_empty()) closer else " ${content}${closer}"
 	node = Heading({ level: level_of(level.n), content: inline_text(content) })
-	{ lines: [text_line("${spaces(if flush 0 else indent.n)}${hashes}${body}")], node, kind: KAtx, cur: trail.cur }
+	{ lines: [text_line("${spaces(if (flush) 0 else indent.n)}${hashes}${body}")], node, kind: KAtx, cur: trail.cur }
 }
 
 level_of : U64 -> Markdown.Level
@@ -172,7 +172,7 @@ gen_setext = |start, flush| {
 	len = pick(style.cur, 4)
 	indent = pick(len.cur, 4)
 	trail = pick(indent.cur, 3)
-	marker = if style.n == 0 "=" else "-"
+	marker = if (style.n == 0) "=" else "-"
 	underline = "${spaces(indent.n)}${repeat(marker, len.n + 1)}${spaces(trail.n)}"
 	content =
 		match para.node {
@@ -181,7 +181,7 @@ gen_setext = |start, flush| {
 		}
 	# Continuation lines of a setext heading are kept with their prefixes.
 	lines = para.lines.map(|line| { ..line, lazy: False }).append(text_line(underline))
-	{ lines, node: Heading({ level: if style.n == 0 One else Two, content }), kind: KSetext, cur: trail.cur }
+	{ lines, node: Heading({ level: if (style.n == 0) One else Two, content }), kind: KSetext, cur: trail.cur }
 }
 
 gen_break : Cur, U8, Bool -> Gen
@@ -190,7 +190,7 @@ gen_break = |start, marker, flush| {
 	gap = pick(count.cur, 3)
 	indent = pick(gap.cur, 4)
 	marker_text = Str.from_utf8([marker]) ?? "*"
-	text = "${spaces(if flush 0 else indent.n)}${Str.join_with(List.repeat(marker_text, count.n + 3), spaces(gap.n))}"
+	text = "${spaces(if (flush) 0 else indent.n)}${Str.join_with(List.repeat(marker_text, count.n + 3), spaces(gap.n))}"
 	{ lines: [text_line(text)], node: ThematicBreak, kind: KBreak, cur: indent.cur }
 }
 
@@ -226,18 +226,18 @@ leading_spaces = |text| {
 gen_fenced : Cur, Bool, Bool -> Gen
 gen_fenced = |start, may_be_unclosed, flush| {
 	style = pick(start, 2)
-	fence_char = if style.n == 0 "`" else "~"
+	fence_char = if (style.n == 0) "`" else "~"
 	len = pick(style.cur, 3)
 	fence_len = len.n + 3
 	indent_choice = pick(len.cur, 4)
-	indent = { ..indent_choice, n: if flush 0 else indent_choice.n }
+	indent = { ..indent_choice, n: if (flush) 0 else indent_choice.n }
 	info_choice = pick(indent.cur, 4)
 	info_word = words.get(info_choice.n) ?? "roc"
-	info = if info_choice.n == 0 "" else if info_choice.n == 3 "${info_word} x=1" else info_word
+	info = if (info_choice.n == 0) "" else if (info_choice.n == 3) "${info_word} x=1" else info_word
 	info_gap = pick(info_choice.cur, 3)
 	# A tab would be partly consumed by the indentation removal below.
 	body_raw = gen_code_lines(info_gap.cur, 4)
-	body = { ..body_raw, lines: body_raw.lines.map(|line| if indent.n > 0 Str.replace_each(line, "\t", "  ") else line) }
+	body = { ..body_raw, lines: body_raw.lines.map(|line| if (indent.n > 0) Str.replace_each(line, "\t", "  ") else line) }
 	close_extra = pick(body.cur, 3)
 	close_indent = pick(close_extra.cur, 4)
 	close_trail = pick(close_indent.cur, 3)
@@ -249,12 +249,12 @@ gen_fenced = |start, may_be_unclosed, flush| {
 	expected_lines = body.lines.map(
 		|line| {
 			lead = leading_spaces(line)
-			strip = if lead < indent.n lead else indent.n
+			strip = if (lead < indent.n) lead else indent.n
 			Str.from_utf8(line.to_utf8().drop_first(strip)) ?? line
 		},
 	)
-	code_lines = body.lines.map(|line| if line.is_empty() blank_line else text_line(line))
-	lines = [text_line(open)].concat(code_lines).concat(if is_unclosed [] else [text_line(close)])
+	code_lines = body.lines.map(|line| if (line.is_empty()) blank_line else text_line(line))
+	lines = [text_line(open)].concat(code_lines).concat(if (is_unclosed) [] else [text_line(close)])
 	pre = Str.join_with(expected_lines.map(|line| "${line}\n"), "")
 	{ lines, node: Code({ info, pre }), kind: KFenced, cur: unclosed.cur }
 }
@@ -275,7 +275,7 @@ gen_indented = |start| {
 			$lines = $lines.append(blank_line)
 			$expected = $expected.append("")
 		} else {
-			extra = if kind.n == 1 "  " else if kind.n == 2 "\t" else ""
+			extra = if (kind.n == 1) "  " else if (kind.n == 2) "\t" else ""
 			$lines = $lines.append(text_line("    ${extra}${ws.text}"))
 			$expected = $expected.append("${extra}${ws.text}")
 		}
@@ -319,7 +319,7 @@ gen_html : Cur, U64, Bool -> Gen
 gen_html = |start, opener_index, flush| {
 	opener = html_openers.get(opener_index) ?? { text: "<div>", html_type: 6 }
 	indent_choice = pick(start, 4)
-	indent = { ..indent_choice, n: if flush 0 else indent_choice.n }
+	indent = { ..indent_choice, n: if (flush) 0 else indent_choice.n }
 	count = pick(indent.cur, 3)
 	var $cur = count.cur
 	var $body = []
@@ -337,10 +337,10 @@ gen_html = |start, opener_index, flush| {
 		$index = $index + 1
 	}
 	first = "${spaces(indent.n)}${opener.text}"
-	all = if opener.html_type <= 5 [first].concat($body).append("end ${html_closer(opener.html_type)}") else [first].concat($body)
-	lines = all.map(|line| if line.is_empty() blank_line else text_line(line))
+	all = if (opener.html_type <= 5) [first].concat($body).append("end ${html_closer(opener.html_type)}") else [first].concat($body)
+	lines = all.map(|line| if (line.is_empty()) blank_line else text_line(line))
 	text = Str.join_with(all.map(|line| "${line}\n"), "")
-	kind = if opener.html_type <= 5 KHtmlComment else KHtmlBlankEnded
+	kind = if (opener.html_type <= 5) KHtmlComment else KHtmlBlankEnded
 	{ lines, node: HtmlBlock(text), kind, cur: $cur }
 }
 
@@ -371,7 +371,7 @@ gen_table = |start| {
 				_ => ":${d}:"
 			}
 		$header = $header.append(ws.text)
-		$delims = $delims.append(if pad.n == 0 delim else " ${delim} ")
+		$delims = $delims.append(if (pad.n == 0) delim else " ${delim} ")
 		$align = $align.append(alignment_of(a.n))
 		$index = $index + 1
 	}
@@ -389,7 +389,7 @@ gen_table = |start| {
 			empty = pick($cur, 5)
 			ws = gen_words(empty.cur, 2)
 			$cur = ws.cur
-			$row = $row.append(if empty.n == 0 "" else ws.text)
+			$row = $row.append(if (empty.n == 0) "" else ws.text)
 			$c = $c + 1
 		}
 		$rows = $rows.append($row)
@@ -406,7 +406,7 @@ gen_table = |start| {
 		if outer == 0 or outer == 1 or (outer == 3 and columns == 1) {
 			render_row($delims, outer, True)
 		} else {
-			"${Str.join_with($delims.map(Str.trim), "|")}${if outer == 2 "|" else ""}"
+			"${Str.join_with($delims.map(Str.trim), "|")}${if (outer == 2) "|" else ""}"
 		}
 	lines = [text_line(header_line), text_line(delim_line)].concat($rows.map(|row| text_line(render_row(row, outer, True))))
 	node = Table({ header: $header.map(inline_text), align: $align, rows: $expected_rows })
@@ -436,7 +436,7 @@ render_row = |cells, outer, needs_pipe| {
 	trailing = outer == 0 or outer == 2 or ends_empty
 	# Without a leading pipe the row starts at its first cell, so that it can
 	# sit directly after a list marker.
-	"${if leading "|" else ""}${if leading body else Str.drop_prefix(body, " ")}${if trailing "|" else ""}"
+	"${if (leading) "|" else ""}${if (leading) body else Str.drop_prefix(body, " ")}${if (trailing) "|" else ""}"
 }
 
 alignment_of : U64 -> Markdown.Alignment
@@ -498,7 +498,7 @@ Choice : { start : Start, cur : Cur }
 ## before generating it.
 choose_start : Cur, U64, Bool -> Choice
 choose_start = |start, depth, allow_indented| {
-	kind = pick(start, if depth >= 3 9 else 11)
+	kind = pick(start, if (depth >= 3) 9 else 11)
 	detail = pick(kind.cur, 256)
 	cur = detail.cur
 	chosen =
@@ -509,7 +509,7 @@ choose_start = |start, depth, allow_indented| {
 			3 => SSetext
 			4 => SBreak(['*', '-', '_'].get(detail.n % 3) ?? '*')
 			5 => SFenced
-			6 => if allow_indented SIndented else SParagraph
+			6 => if (allow_indented) SIndented else SParagraph
 			7 => {
 				index = detail.n % html_openers.len()
 				SHtml({ index, html_type: (html_openers.get(index) ?? { text: "", html_type: 6 }).html_type })
@@ -518,8 +518,8 @@ choose_start = |start, depth, allow_indented| {
 			9 => SQuote
 			_ => {
 				ordered = detail.n % 2 == 0
-				marker = if ordered (if detail.n % 4 == 0 '.' else ')') else (['-', '+', '*'].get(detail.n % 3) ?? '-')
-				SList({ ordered, marker, start: if detail.n % 5 == 0 7 else if detail.n % 3 == 0 0 else 1, first_blank: detail.n % 7 == 0 })
+				marker = if (ordered) (if (detail.n % 4 == 0) '.' else ')') else (['-', '+', '*'].get(detail.n % 3) ?? '-')
+				SList({ ordered, marker, start: if (detail.n % 5 == 0) 7 else if (detail.n % 3 == 0) 0 else 1, first_blank: detail.n % 7 == 0 })
 			}
 		}
 	{ start: chosen, cur }
@@ -661,7 +661,7 @@ gen_quote = |start, depth, flush| {
 	inner = gen_sequence(style.cur, depth, 3, False, False)
 	# `>` then an optional space; content starting with a space needs the
 	# space written out so the content keeps its indentation.
-	lead = if style.n == 3 and !flush " " else ""
+	lead = if (style.n == 3 and !flush) " " else ""
 	var $cur = inner.cur
 	var $out = []
 	for line in inner.lines {
@@ -672,7 +672,7 @@ gen_quote = |start, depth, flush| {
 		prefixed =
 			if line.blank {
 				# Not blank any more for enclosing containers: the `>` must stay.
-				{ text: if form.n == 0 "${lead}> " else "${lead}>", lazy: False, blank: False }
+				{ text: if (form.n == 0) "${lead}> " else "${lead}>", lazy: False, blank: False }
 			} else if line.lazy and drop.n == 0 and !$out.is_empty() {
 				line
 			} else if form.n == 0 and !starts_space {
@@ -698,8 +698,8 @@ gen_list = |start, depth, info, flush| {
 	var $index = 0
 	marker_char = Str.from_utf8([info.marker]) ?? "-"
 	while $index <= count.n {
-		number = if $index == 0 info.start else info.start + $index
-		marker = if info.ordered "${number.to_str()}${marker_char}" else marker_char
+		number = if ($index == 0) info.start else info.start + $index
+		marker = if (info.ordered) "${number.to_str()}${marker_char}" else marker_char
 		indent_choice = pick($cur, 4)
 		gap = pick(indent_choice.cur, 4)
 		shape = pick(gap.cur, 8)
@@ -707,13 +707,13 @@ gen_list = |start, depth, info, flush| {
 		$cur = task_choice.cur
 		# A later marker must be indented less than the previous item's content,
 		# or it would start a nested list.
-		limit = if $prev_content - 1 < 3 $prev_content - 1 else 3
-		marker_indent = if flush and $index == 0 0 else if indent_choice.n < limit indent_choice.n else limit
+		limit = if ($prev_content - 1 < 3) $prev_content - 1 else 3
+		marker_indent = if (flush and $index == 0) 0 else if (indent_choice.n < limit) indent_choice.n else limit
 		marker_width = marker.to_utf8().len()
 		# The first item may start empty or blank only when the list does not
 		# interrupt a paragraph (`first_blank`).
-		empty = if $index == 0 info.first_blank and shape.n % 2 == 0 else shape.n == 7
-		blank_start = !empty and (if $index == 0 info.first_blank else shape.n == 6)
+		empty = if ($index == 0) info.first_blank and shape.n % 2 == 0 else shape.n == 7
+		blank_start = !empty and (if ($index == 0) info.first_blank else shape.n == 6)
 		item =
 			if empty {
 				empty_item = { task: NoTask, blocks: [] }
@@ -721,15 +721,15 @@ gen_list = |start, depth, info, flush| {
 			} else {
 				inner = gen_sequence($cur, depth, 2, False, !blank_start)
 				$cur = inner.cur
-				content_width = marker_indent + marker_width + (if blank_start 1 else gap.n + 1)
+				content_width = marker_indent + marker_width + (if (blank_start) 1 else gap.n + 1)
 				first_paragraph =
 					match inner.first_start {
 						SParagraph => True
 						_ => False
 					}
-				task = if first_paragraph and !blank_start and task_choice.n < 3 task_choice.n else 3
-				task_text = if task == 0 "[ ] " else if task == 1 "[x] " else if task == 2 "[X] " else ""
-				task_state = if task == 0 Unchecked else if task < 3 Checked else NoTask
+				task = if (first_paragraph and !blank_start and task_choice.n < 3) task_choice.n else 3
+				task_text = if (task == 0) "[ ] " else if (task == 1) "[x] " else if (task == 2) "[X] " else ""
+				task_state = if (task == 0) Unchecked else if (task < 3) Checked else NoTask
 				marker_prefix = "${spaces(marker_indent)}${marker}${spaces(gap.n + 1)}${task_text}"
 				prefixed = prefix_lines(inner.lines, marker_prefix, spaces(content_width), "", $cur)
 				$cur = prefixed.cur
@@ -760,7 +760,7 @@ gen_list = |start, depth, info, flush| {
 		$prev_content = item.content
 		$index = $index + 1
 	}
-	kind = if info.ordered Ordered({ start: info.start }) else Unordered
+	kind = if (info.ordered) Ordered({ start: info.start }) else Unordered
 	{ lines: $lines, node: ListBlock({ kind, loose: $loose, items: $items }), kind: KList({ ordered: info.ordered, marker: info.marker }), cur: $cur }
 }
 
@@ -773,7 +773,7 @@ generate = |bytes| {
 	seq = gen_sequence({ bytes, pos: 0 }, 0, 5, True, False)
 	# A first line of exactly `---` with another later would be frontmatter.
 	lines = seq.lines.map(|line| line.text)
-	safe = if lines.first() == Ok("---") List.set(lines, 0, "***") ?? lines else lines
+	safe = if (lines.first() == Ok("---")) List.set(lines, 0, "***") ?? lines else lines
 	markdown = Str.join_with(safe.map(|line| "${line}\n"), "")
 	{ markdown, expected: seq.nodes }
 }
@@ -837,7 +837,7 @@ encode_block = |block| {
 					Ordered({ start }) => start.to_str()
 				}
 			items_json = Str.join_with(items.map(|item| "[\"${item.task.to_str()}\",${encode_blocks(item.blocks)}]"), ",")
-			"[\"list\",${kind_json},${if loose "false" else "true"},[${items_json}]]"
+			"[\"list\",${kind_json},${if (loose) "false" else "true"},[${items_json}]]"
 		}
 		Code({ info, pre }) => "[\"code\",${json_string(info)},${json_string(pre)}]"
 		ThematicBreak => "[\"hr\"]"

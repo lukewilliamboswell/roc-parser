@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -53,7 +53,7 @@ largest : List(List(U64)) -> U64
 largest = |numbers|
 	numbers
 		.map(List.sum)
-		.sort_with(|a, b| if a < b After else if a > b Before else Same)
+		.sort_with(|a, b| if (a < b) After else if (a > b) Before else Same)
 		.first()
 		?? 0
 

@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -80,7 +80,7 @@ show_rows : Rows -> Str
 show_rows = |rows| Str.inspect(rows.map(|row| row.map(|field| Str.from_utf8(field) ?? "<invalid utf8>")))
 
 quote_bytes : List(U8) -> List(U8)
-quote_bytes = |field| field.fold(['"'], |acc, b| if b == '"' acc.concat(['"', '"']) else acc.append(b)).append('"')
+quote_bytes = |field| field.fold(['"'], |acc, b| if (b == '"') acc.concat(['"', '"']) else acc.append(b)).append('"')
 
 needs_quotes : List(U8) -> Bool
 needs_quotes = |field| field.contains(',') or field.contains('\r') or field.contains('\n') or field.first() == Ok('"')
@@ -93,7 +93,7 @@ serialize = |rows, always, line_break| {
 	lines = rows.map(
 		|row| {
 			lone_empty = row == [[]]
-			cells = row.map(|field| if always or lone_empty or needs_quotes(field) quote_bytes(field) else field)
+			cells = row.map(|field| if (always or lone_empty or needs_quotes(field)) quote_bytes(field) else field)
 			join_bytes(cells, [','])
 		},
 	)
@@ -198,7 +198,7 @@ test = |bytes| {
 		_ = parse(pathological(bytes))
 		Fuzz.keep
 	} else {
-		check_bytes(if bytes.first() == Ok(0x01) bytes.drop_if(|b| b == 0xC3) else bytes)
+		check_bytes(if (bytes.first() == Ok(0x01)) bytes.drop_if(|b| b == 0xC3) else bytes)
 		match Str.from_utf8(bytes) {
 			Err(_) => Fuzz.reject
 			Ok(input) => {
@@ -238,5 +238,5 @@ target = Fuzz.target_with({
 	name: "csv-raw",
 	generator: Fuzz.raw_bytes,
 	test,
-	show: |bytes| if bytes.len() == 3 and bytes.first() == Ok(0xFF) "pathological ${Str.inspect(bytes.sublist({ start: 0, len: 3 }))}" else Str.inspect(Str.from_utf8(bytes) ?? "<invalid utf8>"),
+	show: |bytes| if (bytes.len() == 3 and bytes.first() == Ok(0xFF)) "pathological ${Str.inspect(bytes.sublist({ start: 0, len: 3 }))}" else Str.inspect(Str.from_utf8(bytes) ?? "<invalid utf8>"),
 })

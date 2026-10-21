@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -68,7 +68,7 @@ hex = |bytes| {
 }
 
 hex_digit : U8 -> U8
-hex_digit = |n| if n < 10 n + '0' else n - 10 + 'a'
+hex_digit = |n| if (n < 10) n + '0' else n - 10 + 'a'
 
 json_string : Str -> Str
 json_string = |text| "\"${Str.from_utf8_lossy(escape_json(text.to_utf8(), []))}\""

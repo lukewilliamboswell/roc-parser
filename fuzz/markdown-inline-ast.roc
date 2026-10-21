@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.2/9weENCAXVZV14WFpwHqP3rpn46EDJWQQknSLpa1Hg5nL.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -47,11 +47,11 @@ Input : { md : Str, doc : Bool, expected : List(Markdown.Inline) }
 pick : Cursor, U64 -> { value : U64, cursor : Cursor }
 pick = |cursor, n| {
 	byte = cursor.bytes.get(cursor.pos) ?? 0
-	{ value: if n == 0 0 else U8.to_u64(byte) % n, cursor: { ..cursor, pos: cursor.pos + 1 } }
+	{ value: if (n == 0) 0 else U8.to_u64(byte) % n, cursor: { ..cursor, pos: cursor.pos + 1 } }
 }
 
 remaining : Cursor -> U64
-remaining = |cursor| if cursor.pos >= cursor.bytes.len() 0 else cursor.bytes.len() - cursor.pos
+remaining = |cursor| if (cursor.pos >= cursor.bytes.len()) 0 else cursor.bytes.len() - cursor.pos
 
 words : List(Str)
 words = ["a", "foo", "Bar", "x1", "42", "é", "straße", "Ωmega", "日本", "z"]
@@ -87,7 +87,7 @@ separators = |allow_newline| {
 		{ md: " — ", text: " — " },
 		{ md: "-", text: "-" },
 	]
-	if allow_newline base.append({ md: "\n", text: "\n" }) else base
+	if (allow_newline) base.append({ md: "\n", text: "\n" }) else base
 }
 
 ## A text run that starts and ends with a word.
@@ -126,8 +126,8 @@ gen_sequence = |cursor, ctx, max_nodes| {
 	while $index < count.value and remaining($cursor) > 0 {
 		node = gen_node($cursor, ctx)
 		after = gen_text(node.cursor, ctx)
-		before_text = if node.spaced " " else ""
-		after_text = if node.spaced " " else ""
+		before_text = if (node.spaced) " " else ""
+		after_text = if (node.spaced) " " else ""
 		$nodes = $nodes.append(Text(before_text)).concat(node.nodes).append(Text(Str.concat(after_text, after.text)))
 		$md = Str.concat(Str.concat(Str.concat($md, before_text), node.md), Str.concat(after_text, after.md))
 		$defs = $defs.concat(node.defs)
@@ -140,20 +140,20 @@ gen_sequence = |cursor, ctx, max_nodes| {
 ## One non-text node; `spaced` asks the caller to surround it with spaces.
 gen_node : Cursor, Context -> { nodes : List(Markdown.Inline), md : Str, defs : List(Str), cursor : Cursor, spaced : Bool }
 gen_node = |cursor, ctx| {
-	kind = pick(cursor, if ctx.depth >= 3 5 else 11)
+	kind = pick(cursor, if (ctx.depth >= 3) 5 else 11)
 	c = kind.cursor
 	match kind.value {
 		0 => gen_code(c)
 		1 => gen_html(c, ctx.doc)
-		2 => if ctx.doc gen_code(c) else gen_break(c)
+		2 => if (ctx.doc) gen_code(c) else gen_break(c)
 		3 => gen_autolink(c, ctx)
 		4 => gen_code(c)
 		5 => gen_delimited(c, ctx, Emph)
 		6 => gen_delimited(c, ctx, Strong)
 		7 => gen_delimited(c, ctx, Del)
-		8 => if ctx.in_link gen_delimited(c, ctx, Emph) else gen_link(c, ctx, False)
+		8 => if (ctx.in_link) gen_delimited(c, ctx, Emph) else gen_link(c, ctx, False)
 		9 => gen_link(c, ctx, True)
-		_ => if ctx.in_link gen_delimited(c, ctx, Strong) else gen_link(c, ctx, False)
+		_ => if (ctx.in_link) gen_delimited(c, ctx, Strong) else gen_link(c, ctx, False)
 	}
 }
 
@@ -178,7 +178,7 @@ html_samples = ["<span>", "</span>", "<a href=\"x\" title='y z'>", "<br/>", "<!-
 gen_html : Cursor, Bool -> { nodes : List(Markdown.Inline), md : Str, defs : List(Str), cursor : Cursor, spaced : Bool }
 gen_html = |cursor, doc| {
 	# The last sample spans two lines; documents stay on one line.
-	choice = pick(cursor, if doc html_samples.len() - 1 else html_samples.len())
+	choice = pick(cursor, if (doc) html_samples.len() - 1 else html_samples.len())
 	html = html_samples.get(choice.value) ?? "<span>"
 	leaf(choice.cursor, [HtmlInline(html)], html)
 }
@@ -204,7 +204,7 @@ gen_code = |cursor| {
 	last = bytes.last() ?? 0
 	all_spaces = bytes.all(|b| b == ' ')
 	pad = first == '`' or last == '`' or (first == ' ' and last == ' ' and !all_spaces)
-	inner = if pad " ${$content} " else $content
+	inner = if (pad) " ${$content} " else $content
 	leaf($cursor, [InlineCode($content)], "${fence}${inner}${fence}")
 }
 
@@ -249,9 +249,9 @@ gen_delimited = |cursor, ctx, kind| {
 	form = pick(cursor, 2)
 	marker =
 		match kind {
-			Emph => if form.value == 0 "*" else "_"
-			Strong => if form.value == 0 "**" else "__"
-			Del => if form.value == 0 "~~" else "~"
+			Emph => if (form.value == 0) "*" else "_"
+			Strong => if (form.value == 0) "**" else "__"
+			Del => if (form.value == 0) "~~" else "~"
 		}
 	char = (marker.to_utf8().first()) ?? '*'
 	inner_ctx = { ..ctx, depth: ctx.depth + 1, ancestors: ctx.ancestors.append(char) }
@@ -362,8 +362,8 @@ gen_link = |cursor, ctx, image| {
 	form = pick(title.cursor, 8)
 	# Spaces around a destination are not part of the URL.
 	target = { href: Str.trim(dest.href), title: title.title }
-	node = if image Image({ alt: label.nodes, target }) else Link({ label: label.nodes, target })
-	open = if image "![" else "["
+	node = if (image) Image({ alt: label.nodes, target }) else Link({ label: label.nodes, target })
+	open = if (image) "![" else "["
 	destination = render_destination(dest.href, form.value % 2)
 	title_md = render_title(title.title, form.value % 3)
 	# Shortcut and collapsed references use the label text itself as the
@@ -379,9 +379,9 @@ gen_link = |cursor, ctx, image| {
 
 			_ if plain_label => {
 				labelled = prefix_label(label.nodes, "${unique} ")
-				labelled_node = if image Image({ alt: labelled, target }) else Link({ label: labelled, target })
+				labelled_node = if (image) Image({ alt: labelled, target }) else Link({ label: labelled, target })
 				raw = "${unique} ${label.md}"
-				suffix = if form.value == 5 "[]" else ""
+				suffix = if (form.value == 5) "[]" else ""
 				{ nodes: [labelled_node], md: "${open}${raw}]${suffix}", defs: label.defs.append("[${raw}]: ${destination}${title_md}"), cursor: form.cursor, spaced: False }
 			}
 
@@ -470,5 +470,5 @@ target = Fuzz.target_with({
 	name: "markdown-inline-ast",
 	generator: Fuzz.map(Fuzz.raw_bytes, generate),
 	test,
-	show: |input| "${if input.doc "doc" else "inline"}: ${Str.inspect(input.md)}\n=> ${show(input.expected)}",
+	show: |input| "${if (input.doc) "doc" else "inline"}: ${Str.inspect(input.md)}\n=> ${show(input.expected)}",
 })

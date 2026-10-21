@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original seeded mutations preserved verbatim with reviewed pinned-oracle structural expectations; full HTML is compared at runtime.",
+    "reference_family": "AsciiDoc block and document structure",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle."
+  },
+  "coverage": [
+    {
+      "category": "core-retained-dd30-mutations",
+      "required_cases": [
+        "core-retained-dd30-mutation-1-000023",
+        "core-retained-dd30-mutation-1-000061",
+        "core-retained-dd30-mutation-1-000096",
+        "core-retained-dd30-mutation-1-000122"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "core-retained-dd30-mutation-1-000023",
+      "source": "[cols=\".^,.ifdef::name[]\n\n|===",
+      "parent_id": "table-extended-valign",
+      "sha256": "91bb8b06a17f29777f258181164e49e1d9684b6e80d0e9756e3b76734ebc713c",
+      "operation": "replace",
+      "category": "core-retained-dd30-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "core-retained-dd30-mutation-1-000061",
+      "source": "[cols=\"a\"]\n|===\n|== Cell\n\nText\n|==[[target]]\n=",
+      "parent_id": "document-full-asciidoc-cell-section",
+      "sha256": "f65faa0b1342535650246de354401674ed21fd5d8b94c6eb6892aaf79dec283d",
+      "operation": "replace",
+      "category": "core-retained-dd30-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "core-retained-dd30-mutation-1-000096",
+      "source": "[cols=\"1,1\"]\n|===\n= ]. |Two footnote:[Second].\n|===",
+      "parent_id": "document-full-footnotes-table",
+      "sha256": "2f8c353ff401dbe61055d9fa310e363999ad200a09038d275e55bf147379b973",
+      "operation": "replace",
+      "category": "core-retained-dd30-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "core-retained-dd30-mutation-1-000122",
+      "source": "[[include::missing.adoc[]\nt]]\n\n|===\n\"A\nB\",C\nD,E\n|===",
+      "parent_id": "document-retained-mutation-13-000889",
+      "sha256": "cd812aab7a0f3aa41e94690ba465fe338ba4ef9d7ff7c37310665eada43fa3a0",
+      "operation": "replace",
+      "category": "core-retained-dd30-mutations",
+      "support": "complete",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "[[include::missing.adoc[]\nt]]",
+              "blocks": []
+            },
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

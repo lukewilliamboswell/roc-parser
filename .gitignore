@@ -3,6 +3,7 @@ examples/numbers
 examples/csv-movies
 examples/markdown
 examples/xml-svg
+examples/roc-syntax
 
 dist/
 .roc-parser-tmp/

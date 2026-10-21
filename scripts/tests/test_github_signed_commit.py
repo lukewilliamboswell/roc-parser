@@ -37,6 +37,8 @@ class GitHubSignedCommitTests(unittest.TestCase):
                     "user.name=Test",
                     "-c",
                     "user.email=test@example.com",
+                    "-c",
+                    "commit.gpgsign=false",
                     "commit",
                     "-q",
                     "-m",

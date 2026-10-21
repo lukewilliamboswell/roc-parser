@@ -426,7 +426,7 @@ build_class = |members| {
 				Err(NotFound) => {
 					k = $shapes.len()
 					$shapes = $shapes.append(row)
-					$hi = $hi.append(if k < 8 (1.U8).shl_wrap(k.to_u8_wrap()) else 0)
+					$hi = $hi.append(if (k < 8) (1.U8).shl_wrap(k.to_u8_wrap()) else 0)
 				}
 			}
 		}
@@ -462,7 +462,7 @@ build_class = |members| {
 	}
 	exact = $exact
 	last = exact.last() ?? 0
-	kind = if exact.len() >= 1 and exact.len() <= 3 Exact else if shapes.len() <= 8 Nibbles else Bytewise
+	kind = if (exact.len() >= 1 and exact.len() <= 3) Exact else if (shapes.len() <= 8) Nibbles else Bytewise
 	{
 		lo,
 		hi,
@@ -490,7 +490,7 @@ scan_class = |bytes, pos, class, want| {
 				match U8x16.load(bytes, $i) {
 					Ok(v) => {
 						inside = U8x16.to_bitmask(U8x16.bitwise_or(U8x16.bitwise_or(U8x16.eq_lanes(v, a), U8x16.eq_lanes(v, b)), U8x16.eq_lanes(v, c)))
-						mask = if want inside else inside.bitwise_not()
+						mask = if (want) inside else inside.bitwise_not()
 						if mask != 0 {
 							$i = $i + U16.count_trailing_zero_bits(mask).to_u64()
 							$scanning = False
@@ -516,7 +516,7 @@ scan_class = |bytes, pos, class, want| {
 						lo = U8x16.table_lookup(lo_table, U8x16.bitwise_and(v, nibble))
 						hi = U8x16.table_lookup(hi_table, U8x16.shr_zf_wrap(v, 4))
 						outside = U8x16.to_bitmask(U8x16.eq_lanes(U8x16.bitwise_and(lo, hi), zero))
-						mask = if want outside.bitwise_not() else outside
+						mask = if (want) outside.bitwise_not() else outside
 						if mask != 0 {
 							$i = $i + U16.count_trailing_zero_bits(mask).to_u64()
 							$scanning = False
@@ -907,7 +907,7 @@ expect {
 	both : Str -> Try(U64, [ParseError({ message : Str, offset : U64 }), TooBig])
 	both = |text| {
 		n = Utf8.parse_str(Utf8.digits, text)?
-		if n > 100 Err(TooBig) else Ok(n)
+		if (n > 100) Err(TooBig) else Ok(n)
 	}
 	both("7") == Ok(7) and both("700") == Err(TooBig) and both("x").is_err()
 }
@@ -954,8 +954,8 @@ expect {
 			class = Utf8.ByteClass.from_predicate(member)
 			every_byte.all(
 				|byte| {
-					other = if member('a') 0x00 else 'a'
-					filler = if member(other) 0x01 else other
+					other = if (member('a')) 0x00 else 'a'
+					filler = if (member(other)) 0x01 else other
 					run = List.repeat(byte, 37)
 					[0, 5, 15, 16, 31, 40].all(
 						|at| {

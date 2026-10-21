@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import hashlib
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "run_fuzz.py"
@@ -122,6 +124,30 @@ class TargetSelectionTests(unittest.TestCase):
     def test_all_cannot_be_combined_with_a_target(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot be combined"):
             run_fuzz.resolve_targets(["all", "csv"])
+
+class SyntaxBuildIdentityTests(unittest.TestCase):
+    def test_matching_cached_binary_identity_can_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary=Path(tmp)/'target'; binary.write_bytes(b'executable')
+            manifest={"identity":{"source":"current"},"binary_sha256":hashlib.sha256(binary.read_bytes()).hexdigest()}
+            binary.with_suffix('.build.json').write_text(json.dumps(manifest))
+            with patch.object(run_fuzz,'binary_path',return_value=binary), patch.object(run_fuzz,'build_identity',return_value={"source":"current"}):
+                self.assertEqual(run_fuzz.build_target('roc-syntax-raw','roc',True)[0],0)
+
+    def test_changed_source_or_binary_cannot_replay_silently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary=Path(tmp)/'target'; binary.write_bytes(b'executable')
+            for manifest in [{"identity":{"source":"old"},"binary_sha256":hashlib.sha256(binary.read_bytes()).hexdigest()},
+                             {"identity":{"source":"current"},"binary_sha256":"tampered"}]:
+                binary.with_suffix('.build.json').write_text(json.dumps(manifest))
+                with patch.object(run_fuzz,'binary_path',return_value=binary), patch.object(run_fuzz,'build_identity',return_value={"source":"current"}):
+                    self.assertEqual(run_fuzz.build_target('roc-syntax-raw','roc',True)[0],2)
+
+    def test_missing_manifest_cannot_replay_silently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary=Path(tmp)/'target'; binary.write_bytes(b'executable')
+            with patch.object(run_fuzz,'binary_path',return_value=binary), patch.object(run_fuzz,'build_identity',return_value={}):
+                self.assertEqual(run_fuzz.build_target('roc-syntax-raw','roc',True)[0],2)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -29,7 +29,7 @@ encode : Yaml -> Str
 encode = |value| {
 	match value {
 		Null => "[\"null\"]"
-		Bool(boolean) => if boolean "[\"bool\",true]" else "[\"bool\",false]"
+		Bool(boolean) => if (boolean) "[\"bool\",true]" else "[\"bool\",false]"
 		Int(integer) => "[\"int\",${json_string(integer.to_str())}]"
 		Float(float) => "[\"float\",${json_string(float.to_str())}]"
 		Text(text) => "[\"string\",${json_string(text)}]"
@@ -48,9 +48,9 @@ escape_json = |bytes, out| {
 		['"', .. as rest] => escape_json(rest, out.concat(['\\', '"']))
 		['\\', .. as rest] => escape_json(rest, out.concat(['\\', '\\']))
 		[byte, .. as rest] if byte < 32 => {
-			hi = if byte < 16 '0' else '1'
-			lo = if byte < 16 byte else byte - 16
-			digit = if lo < 10 lo + '0' else lo - 10 + 'a'
+			hi = if (byte < 16) '0' else '1'
+			lo = if (byte < 16) byte else byte - 16
+			digit = if (lo < 10) lo + '0' else lo - 10 + 'a'
 			escape_json(rest, out.concat(['\\', 'u', '0', '0', hi, digit]))
 		}
 		[byte, .. as rest] => escape_json(rest, out.append(byte))

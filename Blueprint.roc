@@ -26,7 +26,7 @@
 app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.3.0/DdfMePZbeL5hodg7j4B6Jzpm9t555B9SPPAJNQ5WzCR9.tar.zst" }
 
 bench_tools = [
-	"rocpkgs.nightly-2026-09-29-7f11a82",
+	"rocpkgs.nightly-2026-10-20-7a8a800",
 	"go",
 	"cargo",
 	"rustc",
@@ -39,13 +39,17 @@ config = [
 	Systems(["x86_64-linux", "aarch64-darwin"]),
 	Overlay("github:roc-lang/roc-overlay"),
 	Shell("default", [Tools(bench_tools)]),
-	Raw("nix", "shell:default", Attrs([
-		# scripts/bench.py records that it ran here, and which Blueprint.lock.
-		("ROC_PARSER_BLUEPRINT", Str("1")),
-		# The blueprint CLI exports ROC for its own (older) compiler, and the
-		# scripts honour ROC; reset it to the pinned roc on PATH.
-		("ROC", Str("roc")),
-	])),
+	Raw(
+		"nix",
+		"shell:default",
+		Attrs([
+			# scripts/bench.py records that it ran here, and which Blueprint.lock.
+			("ROC_PARSER_BLUEPRINT", Str("1")),
+			# The blueprint CLI exports ROC for its own (older) compiler, and the
+			# scripts honour ROC; reset it to the pinned roc on PATH.
+			("ROC", Str("roc")),
+		]),
+	),
 	Task("bench", [Run(["python3", "scripts/bench.py", "--allocations"])]),
 	Task("bench-quick", [Run(["python3", "scripts/bench.py", "--quick"])]),
 	Task("test", [Run(["python3", "scripts/all_tests.py"])]),

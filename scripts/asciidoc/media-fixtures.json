@@ -1,0 +1,1150 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original media inputs and independently authored HTML predicates; full output is checked against live pinned oracle.",
+    "reference_family": "AsciiDoc language documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/macros/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Secure pinned oracle; no media reads."
+  },
+  "coverage": [
+    {
+      "category": "media-image",
+      "required_cases": [
+        "media-full-image-default",
+        "media-full-image-alt",
+        "media-full-image-alt-filename",
+        "media-full-image-alt-multidot",
+        "media-full-image-size",
+        "media-full-image-size-percent",
+        "media-full-image-named",
+        "media-full-image-quoted",
+        "media-full-image-quote-escape",
+        "media-full-image-special",
+        "media-full-image-role",
+        "media-full-image-id",
+        "media-full-image-title",
+        "media-full-image-two-titles",
+        "media-full-image-caption",
+        "media-full-image-custom-caption",
+        "media-full-image-dir",
+        "media-full-image-dir-trailing",
+        "media-full-image-dir-parent",
+        "media-full-image-absolute",
+        "media-full-image-remote",
+        "media-full-image-space",
+        "media-full-image-align-float",
+        "media-full-image-link",
+        "media-full-image-link-window",
+        "media-full-image-link-nofollow",
+        "media-full-image-svg-secure",
+        "media-full-image-data-uri-secure"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "media-video",
+      "required_cases": [
+        "media-full-video-default",
+        "media-full-video-size",
+        "media-full-video-poster",
+        "media-full-video-named",
+        "media-full-video-directory",
+        "media-full-video-start-end",
+        "media-full-video-end",
+        "media-full-video-start",
+        "media-full-video-options",
+        "media-full-video-preload",
+        "media-full-video-metadata"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "media-youtube",
+      "required_cases": [
+        "media-full-youtube-default",
+        "media-full-youtube-size",
+        "media-full-youtube-time",
+        "media-full-youtube-options",
+        "media-full-youtube-theme-lang",
+        "media-full-youtube-list",
+        "media-full-youtube-playlist",
+        "media-full-youtube-list-attr",
+        "media-full-youtube-playlist-attr",
+        "media-full-youtube-scheme",
+        "media-full-youtube-no-scheme"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "media-vimeo",
+      "required_cases": [
+        "media-full-vimeo-default",
+        "media-full-vimeo-hash",
+        "media-full-vimeo-hash-attr",
+        "media-full-vimeo-time",
+        "media-full-vimeo-options",
+        "media-full-vimeo-combined"
+      ],
+      "scope": "full"
+    },
+    {
+      "category": "media-audio",
+      "required_cases": [
+        "media-full-audio-default",
+        "media-full-audio-directory",
+        "media-full-audio-time",
+        "media-full-audio-options",
+        "media-full-audio-metadata"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "media-full-image-default",
+      "category": "media-image",
+      "features": [
+        "image-default"
+      ],
+      "source": "image::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<img src=\"cat.png\" alt=\"cat\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-alt",
+      "category": "media-image",
+      "features": [
+        "image-alt"
+      ],
+      "source": "image::cat.png[A cat]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"A cat\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-alt-filename",
+      "category": "media-image",
+      "features": [
+        "image-alt-filename"
+      ],
+      "source": "image::some-big_cat.svg[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"some big cat\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-alt-multidot",
+      "category": "media-image",
+      "features": [
+        "image-alt-multidot"
+      ],
+      "source": "image::some.big_cat.svg[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"some.big cat\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-size",
+      "category": "media-image",
+      "features": [
+        "image-size"
+      ],
+      "source": "image::cat.png[Cat,100,80]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"100\" height=\"80\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-size-percent",
+      "category": "media-image",
+      "features": [
+        "image-size-percent"
+      ],
+      "source": "image::cat.png[Cat,50%,100%]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"50%\" height=\"100%\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-named",
+      "category": "media-image",
+      "features": [
+        "image-named"
+      ],
+      "source": "image::cat.png[alt=Cat,width=100,height=80]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"Cat\" width=\"100\" height=\"80\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-quoted",
+      "category": "media-image",
+      "features": [
+        "image-quoted"
+      ],
+      "source": "image::cat.png[\"Cat, sleeping\",100,80]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"Cat, sleeping\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-quote-escape",
+      "category": "media-image",
+      "features": [
+        "image-quote-escape"
+      ],
+      "source": "image::cat.png['A \"cat\"']",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"A &quot;cat&quot;\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-special",
+      "category": "media-image",
+      "features": [
+        "image-special"
+      ],
+      "source": "image::cat.png[A <cat> & friend]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "alt=\"A &lt;cat&gt; &amp; friend\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-role",
+      "category": "media-image",
+      "features": [
+        "image-role"
+      ],
+      "source": "[.red.big]\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"imageblock red big\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-id",
+      "category": "media-image",
+      "features": [
+        "image-id"
+      ],
+      "source": "[#picture]\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "id=\"picture\" class=\"imageblock\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-title",
+      "category": "media-image",
+      "features": [
+        "image-title"
+      ],
+      "source": ".A *cat*\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<div class=\"title\">Figure 1. A <strong>cat</strong></div>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-two-titles",
+      "category": "media-image",
+      "features": [
+        "image-two-titles"
+      ],
+      "source": ".First\nimage::a.png[]\n\n.Second\nimage::b.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Figure 1. First",
+          "Figure 2. Second"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-caption",
+      "category": "media-image",
+      "features": [
+        "image-caption"
+      ],
+      "source": ":figure-caption: Illustration\n\n.A cat\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Illustration 1. A cat"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-custom-caption",
+      "category": "media-image",
+      "features": [
+        "image-custom-caption"
+      ],
+      "source": "[caption=\"Picture: \"]\n.A cat\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "Picture: A cat"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-dir",
+      "category": "media-image",
+      "features": [
+        "image-dir"
+      ],
+      "source": ":imagesdir: assets\n\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-dir-trailing",
+      "category": "media-image",
+      "features": [
+        "image-dir-trailing"
+      ],
+      "source": ":imagesdir: assets/\n\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-dir-parent",
+      "category": "media-image",
+      "features": [
+        "image-dir-parent"
+      ],
+      "source": ":imagesdir: assets/sub\n\nimage::../cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-absolute",
+      "category": "media-image",
+      "features": [
+        "image-absolute"
+      ],
+      "source": ":imagesdir: assets\n\nimage::/cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"/cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-remote",
+      "category": "media-image",
+      "features": [
+        "image-remote"
+      ],
+      "source": ":imagesdir: assets\n\nimage::https://example.org/cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"https://example.org/cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-space",
+      "category": "media-image",
+      "features": [
+        "image-space"
+      ],
+      "source": "image::big cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"big%20cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-align-float",
+      "category": "media-image",
+      "features": [
+        "image-align-float"
+      ],
+      "source": "image::cat.png[Cat,float=right,align=center]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "class=\"imageblock right text-center\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-link",
+      "category": "media-image",
+      "features": [
+        "image-link"
+      ],
+      "source": "image::cat.png[Cat,link=guide.html]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<a class=\"image\" href=\"guide.html\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-link-window",
+      "category": "media-image",
+      "features": [
+        "image-link-window"
+      ],
+      "source": "image::cat.png[Cat,link=guide.html,window=_blank]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "target=\"_blank\" rel=\"noopener\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-link-nofollow",
+      "category": "media-image",
+      "features": [
+        "image-link-nofollow"
+      ],
+      "source": "image::cat.png[Cat,link=guide.html,options=nofollow]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "rel=\"nofollow\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-svg-secure",
+      "category": "media-image",
+      "features": [
+        "image-svg-secure"
+      ],
+      "source": "image::cat.svg[Cat,options=interactive]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<img src=\"cat.svg\" alt=\"Cat\">"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-image-data-uri-secure",
+      "category": "media-image",
+      "features": [
+        "image-data-uri-secure"
+      ],
+      "source": ":data-uri:\n\nimage::cat.png[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"cat.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-default",
+      "category": "media-video",
+      "features": [
+        "video-default"
+      ],
+      "source": "video::clip.mp4[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<video src=\"clip.mp4\" controls>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-size",
+      "category": "media-video",
+      "features": [
+        "video-size"
+      ],
+      "source": "video::clip.mp4[,640,360]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"640\" height=\"360\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-poster",
+      "category": "media-video",
+      "features": [
+        "video-poster"
+      ],
+      "source": "video::clip.mp4[cover.png,640,360]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "poster=\"cover.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-named",
+      "category": "media-video",
+      "features": [
+        "video-named"
+      ],
+      "source": "video::clip.mp4[width=640,height=360,poster=cover.png]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"640\" height=\"360\" poster=\"cover.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-directory",
+      "category": "media-video",
+      "features": [
+        "video-directory"
+      ],
+      "source": ":imagesdir: assets\n\nvideo::clip.mp4[cover.png]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/clip.mp4\"",
+          "poster=\"assets/cover.png\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-start-end",
+      "category": "media-video",
+      "features": [
+        "video-start-end"
+      ],
+      "source": "video::clip.mp4[start=5,end=15]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"clip.mp4#t=5,15\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-end",
+      "category": "media-video",
+      "features": [
+        "video-end"
+      ],
+      "source": "video::clip.mp4[end=15]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"clip.mp4#t=,15\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-start",
+      "category": "media-video",
+      "features": [
+        "video-start"
+      ],
+      "source": "video::clip.mp4[start=5]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"clip.mp4#t=5\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-options",
+      "category": "media-video",
+      "features": [
+        "video-options"
+      ],
+      "source": "video::clip.mp4[options=\"autoplay,loop,muted,nocontrols\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "autoplay muted loop>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-preload",
+      "category": "media-video",
+      "features": [
+        "video-preload"
+      ],
+      "source": "video::clip.mp4[preload=none]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "controls preload=\"none\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-video-metadata",
+      "category": "media-video",
+      "features": [
+        "video-metadata"
+      ],
+      "source": ".Video *title*\n[#clip.red]\nvideo::clip.mp4[float=left,align=right]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "id=\"clip\" class=\"videoblock left text-right red\"",
+          "<div class=\"title\">Video <strong>title</strong></div>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-default",
+      "category": "media-youtube",
+      "features": [
+        "youtube-default"
+      ],
+      "source": "video::abc[youtube]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"https://www.youtube.com/embed/abc?rel=0\"",
+          "allowfullscreen"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-size",
+      "category": "media-youtube",
+      "features": [
+        "youtube-size"
+      ],
+      "source": "video::abc[youtube,640,360]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<iframe width=\"640\" height=\"360\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-time",
+      "category": "media-youtube",
+      "features": [
+        "youtube-time"
+      ],
+      "source": "video::abc[youtube,start=5,end=15]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "?rel=0&amp;start=5&amp;end=15"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-options",
+      "category": "media-youtube",
+      "features": [
+        "youtube-options"
+      ],
+      "source": "video::abc[youtube,options=\"autoplay,loop,muted,nocontrols,nofullscreen,modest,related\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "?rel=1&amp;autoplay=1&amp;loop=1&amp;mute=1&amp;controls=0&amp;playlist=abc&amp;fs=0&amp;modestbranding=1"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-theme-lang",
+      "category": "media-youtube",
+      "features": [
+        "youtube-theme-lang"
+      ],
+      "source": "video::abc[youtube,theme=dark,lang=fr]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&amp;theme=dark&amp;hl=fr"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-list",
+      "category": "media-youtube",
+      "features": [
+        "youtube-list"
+      ],
+      "source": "video::abc/list123[youtube]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "/embed/abc?rel=0&amp;list=list123"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-playlist",
+      "category": "media-youtube",
+      "features": [
+        "youtube-playlist"
+      ],
+      "source": "video::abc,def,ghi[youtube]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "/embed/abc?rel=0&amp;playlist=abc,def,ghi"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-list-attr",
+      "category": "media-youtube",
+      "features": [
+        "youtube-list-attr"
+      ],
+      "source": "video::abc[youtube,list=list123]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&amp;list=list123"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-playlist-attr",
+      "category": "media-youtube",
+      "features": [
+        "youtube-playlist-attr"
+      ],
+      "source": "video::abc[youtube,playlist=\"def,ghi\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "&amp;playlist=abc,def,ghi"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-scheme",
+      "category": "media-youtube",
+      "features": [
+        "youtube-scheme"
+      ],
+      "source": ":asset-uri-scheme: http\n\nvideo::abc[youtube]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"http://www.youtube.com/embed/abc"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-youtube-no-scheme",
+      "category": "media-youtube",
+      "features": [
+        "youtube-no-scheme"
+      ],
+      "source": ":asset-uri-scheme:\n\nvideo::abc[youtube]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"//www.youtube.com/embed/abc"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-default",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-default"
+      ],
+      "source": "video::123[vimeo]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"https://player.vimeo.com/video/123\"",
+          "allowfullscreen"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-hash",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-hash"
+      ],
+      "source": "video::123/xyz[vimeo]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "/video/123?h=xyz"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-hash-attr",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-hash-attr"
+      ],
+      "source": "video::123[vimeo,hash=xyz]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "/video/123?h=xyz"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-time",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-time"
+      ],
+      "source": "video::123[vimeo,start=30]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "/video/123#at=30"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-options",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-options"
+      ],
+      "source": "video::123[vimeo,options=\"autoplay,loop,muted,nofullscreen\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "?autoplay=1&amp;loop=1&amp;muted=1\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-vimeo-combined",
+      "category": "media-vimeo",
+      "features": [
+        "vimeo-combined"
+      ],
+      "source": "video::123/xyz[vimeo,width=640,height=360,start=20,options=\"autoplay,loop,muted\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "width=\"640\" height=\"360\"",
+          "?h=xyz&amp;autoplay=1&amp;loop=1&amp;muted=1#at=20"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-audio-default",
+      "category": "media-audio",
+      "features": [
+        "audio-default"
+      ],
+      "source": "audio::song.mp3[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<audio src=\"song.mp3\" controls>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-audio-directory",
+      "category": "media-audio",
+      "features": [
+        "audio-directory"
+      ],
+      "source": ":imagesdir: assets\n\naudio::song.mp3[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"assets/song.mp3\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-audio-time",
+      "category": "media-audio",
+      "features": [
+        "audio-time"
+      ],
+      "source": "audio::song.mp3[start=10,end=30]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "src=\"song.mp3#t=10,30\""
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-audio-options",
+      "category": "media-audio",
+      "features": [
+        "audio-options"
+      ],
+      "source": "audio::song.mp3[options=\"autoplay,loop,nocontrols\"]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "<audio src=\"song.mp3\" autoplay loop>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    },
+    {
+      "id": "media-full-audio-metadata",
+      "category": "media-audio",
+      "features": [
+        "audio-metadata"
+      ],
+      "source": ".Audio *title*\n[#song.red]\naudio::song.mp3[]",
+      "support": "full",
+      "expect": {
+        "html_contains": [
+          "id=\"song\" class=\"audioblock red\"",
+          "<div class=\"title\">Audio <strong>title</strong></div>"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/macros/"
+      ]
+    }
+  ]
+}
