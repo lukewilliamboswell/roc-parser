@@ -43,6 +43,7 @@ import parser.Markdown
 import parser.AsciiDoc
 import parser.HTTP
 import parser.RocSyntax
+import parser.JsonValue
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''
