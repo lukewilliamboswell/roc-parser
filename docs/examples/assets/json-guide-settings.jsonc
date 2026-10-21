@@ -1,0 +1,7 @@
+{
+  // Editor settings, read during compilation.
+  "editor.tabSize": 4,
+  "files.exclude": {
+    "**/.roc-parser-tmp": true,
+  },
+}

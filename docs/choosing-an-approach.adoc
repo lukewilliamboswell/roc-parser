@@ -52,6 +52,11 @@ Choose this when:
 * the mapping from the format to your type is the obvious one: object keys
   are field names, arrays are lists, and so on.
 
+The builtin `Json` is such a format, for JSON whose shape you know in
+advance. For dynamic JSON, whose keys are not Roc identifiers or whose arrays
+mix shapes, or that must keep member order and every digit of its numbers,
+read a document tree with roc-parser's `JsonValue` instead (see <<json>>).
+
 roc-parser's `CSV` and `Yaml` modules are formats for this mechanism.
 `CSV.parse` reads a file with a header row into a list of records, matching
 columns to fields by name, and `Yaml.decode` reads a document into a record.
@@ -72,11 +77,11 @@ the record, field, line and column, and `Yaml.decode` the line and column. And t
 
 == Read a document tree
 
-roc-parser's `Yaml`, `Xml` and `Markdown` modules read a whole document into a
-tree that mirrors the format, and `HTTP` reads a message into a record of its
-parts. You then walk the tree with pattern matching, or with the tree
-methods such as `get_path` and `as_i64` on a `Yaml` value and `attribute`
-and `children_named` on an `Xml.Node`:
+roc-parser's `Yaml`, `Xml`, `JsonValue` and `Markdown` modules read a whole
+document into a tree that mirrors the format, and `HTTP` reads a message into
+a record of its parts. You then walk the tree with pattern matching, or with
+the tree methods such as `get_path` and `as_i64` on a `Yaml` or `JsonValue`
+value and `attribute` and `children_named` on an `Xml.Node`:
 
 [source,roc]
 ----
@@ -89,8 +94,8 @@ Choose this when:
   files, or you are writing a tool that works on every document, such as a
   linter or a converter;
 * you need what a record type cannot hold: the order of mapping keys, the
-  mix of text and child elements in XML, or the block structure of a
-  Markdown document;
+  exact text of a JSON number, the mix of text and child elements in XML, or
+  the block structure of a Markdown document;
 * you want a precise error with a line and column from a parser that follows
   the format's specification, and you check the content yourself afterwards.
   The format modules drop comments, so a tool that must preserve them needs a
@@ -98,8 +103,8 @@ Choose this when:
 
 The cost is code: you write the walk, and a missing or mistyped key is
 something you check, not something the type system checks for you. The
-format chapters (<<yaml>>, <<xml>>, <<markdown>> and <<http>>) show helper
-functions that keep the walk short.
+format chapters (<<yaml>>, <<xml>>, <<json>>, <<markdown>> and <<http>>) show
+helper functions that keep the walk short.
 
 == Build a parser with combinators
 
@@ -156,9 +161,10 @@ The parser is on a hot path:: Each combinator adds a function call and an
 intermediate `Try`. That is cheap for configuration files and messages, but
 <<adding-a-format>> records that the CSV, XML, HTTP and Markdown modules
 moved their document-level parsing to byte scanners with an explicit stack,
-to stay linear and avoid deep recursion. Do the same when profiling shows the
-parser matters. <<performance>> compares the built-in parsers with Go, Rust
-and Python libraries.
+to stay linear and avoid deep recursion; the JSON module was written that way
+from the start. Do the same when profiling shows the parser matters.
+<<performance>> compares the built-in parsers with Go, Rust and Python
+libraries.
 
 The grammar is ambiguous or left-recursive:: Combinators take the first
 alternative that succeeds and cannot handle a rule that starts with itself,

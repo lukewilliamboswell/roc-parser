@@ -142,6 +142,10 @@ Limits that bound the work on hostile input:
   sequences (200 bytes) take 39 µs.
 * *XML* parses elements with an explicit stack, so deep nesting (5,000
   levels in the benchmarks) cannot overflow the call stack.
+* *JSON* also parses with an explicit stack, and rejects nesting deeper than
+  128 levels by default. Objects of more than 16 members find repeated keys
+  with a hash table, so a large object is not quadratic. `JsonValue.Options`
+  adds limits on items, string bytes and number length for untrusted input.
 * *CSV, HTTP and Markdown* scan bytes with explicit state rather than
   recursion. HTTP rejects ambiguous framing; see <<http>>.
 * *Markdown* finds the next non-space byte of a line by scanning, except
@@ -159,7 +163,8 @@ Limits that bound the work on hostile input:
   were similar to roc-parser.
 * *Text is shared with the input where it can be.* XML text and attribute
   values with nothing to unescape, YAML scalars and keys (quoted ones too,
-  when they hold no escapes), and HTTP field
+  when they hold no escapes), JSON strings and keys without escapes and JSON
+  number text, and HTTP field
   values become `Str` values that point into the input's memory rather than
   copies, so the input stays alive as long as any of them does. Values that
   need rewriting (escapes, entities, folded or chomped block scalars) are
@@ -204,6 +209,16 @@ ratios with these differences in mind:
   Roc and Rust, 12–20 MiB for Go and Python).
 * *Python's csv and ElementTree are C code*, and PyYAML's libyaml loader
   parses in C but builds Python objects.
+* *JSON.* `JsonValue` keeps member order and every number's text, and
+  rejects repeated keys. The comparators differ in what they keep and check.
+  Go's encoding/json decodes objects into unordered maps.
+  Python's `json.loads` turns numbers into `int` and `float`, losing their
+  text. serde_json, built with `preserve_order` and `arbitrary_precision`,
+  keeps both, but rewrites an exponent such as `1E5` as `1e+5`. All three
+  keep the last value of a repeated key without reporting it, while
+  `JsonValue` rejects repeated keys by default. serde_json also runs with `unbounded_depth`, because its
+  own limit stops at 127 nested arrays, one short of the 128-level
+  pathological document. <<benchmarks>> describes each program.
 
 [#performance-why]
 == Why roc-parser is slower where it is

@@ -96,6 +96,12 @@ no anchors, aliases or tags
 |https://www.w3.org/TR/xml/[XML 1.0 (Fifth Edition)] well-formedness, without
 document type declarations or namespaces
 
+|`JsonValue`
+|A JSON document of any shape as a lossless tree, and JSON written back out
+|https://www.rfc-editor.org/rfc/rfc8259[RFC 8259], with opt-in relaxations
+(comments, trailing commas, a byte order mark, `NaN` and `Infinity`) and
+opt-in checks (size limits, the top-level shape, I-JSON numbers)
+
 |`Markdown`
 |A Markdown document as a syntax tree
 |https://spec.commonmark.org/0.31.2/[CommonMark 0.31.2] with
@@ -152,9 +158,12 @@ when:
 * You need to parse a stream incrementally as it arrives, such as a very large
   log file or a network connection. Every parser here works on a complete
   input held in memory.
-* You want to render Markdown to HTML or serialize values back to text. The
-  modules read formats; they do not write them.
-* You need JSON, TOML, or another format this package does not include. You
+* You want to render Markdown to HTML, or serialize values back to text in
+  a format other than JSON. Only `JsonValue` writes its format back out.
+* You want to decode JSON straight into your own record type. Roc's builtin
+  `Json` does that; `JsonValue` is for JSON whose shape a record cannot
+  describe (see <<json>>).
+* You need TOML, JSON5, or another format this package does not include. You
   can write it with the combinators, but a dedicated package may already
   exist.
 

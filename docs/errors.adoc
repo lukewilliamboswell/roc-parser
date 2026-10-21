@@ -37,6 +37,15 @@ format has. Combinator runners report the furthest failure.
 |`InvalidXml({ line, column, message })`
 |Where the problem is and what it is. Columns count bytes.
 
+|`JsonValue.parse_str`, `JsonValue.parse_with`
+|`InvalidJson({ line, column, message })`
+|Where the problem is and what it is, including a limit or check that an
+option enabled. Columns count bytes.
+
+|`JsonValue.to_str`, `JsonValue.to_str_with`
+|`InvalidNumber(text)`, `DuplicateKey(key)`, `TooDeep`
+|Why a value built in code cannot be written as JSON.
+
 |`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
 |`InvalidCsv({ record, field, line, column, message })`
 |The record and field that failed, where they start in the text, and why:
@@ -61,11 +70,14 @@ with its byte offset.
 |===
 
 All of these are open tag unions, so `?` passes them through a function such
-as `main!` that returns other errors too, without `map_err`.
+as `main!` that returns other errors too, without `map_err`. The exception is
+Roc's builtin `Json`, whose `InvalidJson` carries a `Str`: a function that uses
+`?` on both it and `JsonValue` must map one of the two errors (see
+<<json-builtin>>).
 
-== YAML and XML: show the location
+== YAML, XML and JSON: show the location
 
-Both report one-based line and column numbers. Print them in the
+All three report one-based line and column numbers. Print them in the
 `file:line:column: message` form that editors and terminals recognise, so a
 user can jump straight to the problem:
 
@@ -74,18 +86,21 @@ user can jump straight to the problem:
 include::examples/errors-report.roc[tag=located,indent=0]
 ----
 
-For the inputs `"name: demo\nport: [8080\n"` and
-`"<feed>\n  <entry></feed>"` these print:
+For the inputs `"name: demo\nport: [8080\n"`,
+`"<feed>\n  <entry></feed>"` and `"{\n  \"port\": 8080,\n}"` these print:
 
 [source,text]
 ----
 config.yaml:2:7: unterminated flow collection
 feed.xml:2:10: end tag </feed> does not match start tag <entry>
+package.json:2:15: trailing comma is not allowed
 ----
 
 YAML input outside the supported subset, such as an anchor or a tag, is
 reported the same way, with a message that names the feature. Tell users
-which subset you accept so that the message makes sense to them.
+which subset you accept so that the message makes sense to them. JSON
+reports the limits and checks you enable with `JsonValue.parse_with`, such as
+the nesting limit or a repeated key, the same way too.
 
 == CSV: report the record and field
 

@@ -117,6 +117,12 @@ JsonValue := [
 	## Parse a complete document during compilation, reporting its source name
 	## and position. It accepts exactly what [JsonValue.parse_with] accepts with
 	## the same options.
+	##
+	## ```roc
+	## expect JsonValue.validate({ source: "{\"a\": [1,]}", name: "list.json" }) == Err(BadQuotedBytes("list.json:1:9: JSON: trailing comma is not allowed"))
+	##
+	## expect JsonValue.validate({ source: "{\"a\": [1,]}", options: { trailing_commas: True } }).map_ok(|doc| doc.get_path(["a", "0"])) == Ok(Ok(Number("1")))
+	## ```
 	validate : ValidationProps -> Try(JsonValue, [BadQuotedBytes(Str)])
 	validate = |props| {
 		JsonValue.parse_with(props.source, props.options)
@@ -124,6 +130,16 @@ JsonValue := [
 	}
 
 	## Use a strict JSON document as a quoted value.
+	##
+	## ```roc
+	## expect {
+	##     settings : JsonValue
+	##     settings = "{\"port\": 8080}"
+	##     settings.get("port") == Ok(Number("8080"))
+	## }
+	##
+	## expect JsonValue.from_quote("{\"a\": 1, \"a\": 1}") == Err(BadQuotedBytes("<literal>:1:10: JSON: duplicate key \"a\""))
+	## ```
 	from_quote : Str -> Try(JsonValue, [BadQuotedBytes(Str)])
 	from_quote = |source| JsonValue.validate({ source: source })
 
@@ -2127,6 +2143,14 @@ expect {
 	}
 }
 expect JsonValue.parse_with("[1, 2,] // done", { comments: True, trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
+expect JsonValue.validate({ source: "{\"a\": [1,]}", name: "list.json" }) == Err(BadQuotedBytes("list.json:1:9: JSON: trailing comma is not allowed"))
+expect JsonValue.validate({ source: "{\"a\": [1,]}", options: { trailing_commas: True } }).map_ok(|doc| doc.get_path(["a", "0"])) == Ok(Ok(Number("1")))
+expect {
+	settings : JsonValue
+	settings = "{\"port\": 8080}"
+	settings.get("port") == Ok(Number("8080"))
+}
+expect JsonValue.from_quote("{\"a\": 1, \"a\": 1}") == Err(BadQuotedBytes("<literal>:1:10: JSON: duplicate key \"a\""))
 expect JsonValue.parse_str("{\"a\": [true, null]}") == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
 expect JsonValue.parse_str("[1,]") == Err(InvalidJson({ line: 1, column: 3, message: "trailing comma is not allowed" }))
 expect JsonValue.parse_with("{\"a\": 1, \"a\": 2}", { duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))

@@ -17,7 +17,7 @@ documentation of every type and function, generated from the source.
 
 == The modules at a glance
 
-The package exposes ten modules: parser building blocks, checked constant
+The package exposes eleven modules: parser building blocks, checked constant
 helpers, and parsers for data formats and Roc source.
 
 [cols="1,3,3",options="header"]
@@ -48,6 +48,10 @@ helpers, and parsers for data formats and Roc source.
 |Read one HTTP/1.1 request or response message, including its body
 |`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.header`
 
+|{api}JsonValue/[`JsonValue`]
+|Read JSON of any shape as a lossless tree, and write it back out
+|`JsonValue.parse_str`, `JsonValue.parse_with`, `JsonValue.get_path`, `JsonValue.to_str`
+
 |{api}Markdown/[`Markdown`]
 |Turn CommonMark and GitHub Flavored Markdown into a syntax tree
 |`Markdown.parse_str`, `Markdown.parse_inlines`
@@ -77,12 +81,14 @@ Each format type module follows the same conventions:
 
 * `parse_str` (or, for CSV, `parse`) reads a whole document and returns
   `Ok(value)` or an error tag named after the format: `InvalidCsv`,
-  `InvalidHttp`, `InvalidXml` or `InvalidYaml`. The tag carries a record with
-  a `message` and the most precise location the format has. Markdown has no
-  syntax errors, so `Markdown.parse_str` returns the tree directly.
+  `InvalidHttp`, `InvalidJson`, `InvalidXml` or `InvalidYaml`. The tag
+  carries a record with a `message` and the most precise location the format
+  has. Markdown has no syntax errors, so `Markdown.parse_str` returns the tree
+  directly.
 * `parser` (and, for HTTP, `request` and `response`) is the same parser as a
   `Parser(Utf8.Bytes, ...)` value, for embedding in a larger parser. Its
-  failures are `ParseError({ message, offset })`.
+  failures are `ParseError({ message, offset })`. `JsonValue.parser_with`
+  takes the same options as `JsonValue.parse_with`.
 * `CSV.parse` and `Yaml.decode` decode straight into your own record type
   through the static dispatch method `parser_for`; the compiler infers the
   type from how you use the result.
@@ -190,6 +196,33 @@ ambiguous, which is what protects a proxy from request smuggling. It does not
 open connections, send messages, or know which request a response answers; see
 <<conformance,Conformance>> for what that means for HEAD and CONNECT.
 
+== JsonValue
+
+`JsonValue` reads RFC 8259 JSON into a tree that keeps what a record type
+would lose: member order, the exact text of every number, and keys that are
+not Roc identifiers. Use Roc's builtin `Json` instead to decode JSON
+straight into a record.
+
+* `JsonValue.parse_str` reads one strict document and returns a `JsonValue`
+  (`Null`, `Bool`, `Number`, `String`, `Array` or `Object`), or
+  `InvalidJson({ line, column, message })`. Repeated keys are rejected.
+* `JsonValue.parse_with` takes a `JsonValue.Options` record with defaulted
+  fields: limits (`max_depth`, 128 by default, `max_items`,
+  `max_string_bytes`, `max_number_digits`), relaxations (`comments`,
+  `trailing_commas`, `bom`, `non_finite`, `control_characters`,
+  `lone_surrogates`) and checks (`duplicates`, `top_level`,
+  `interoperable_numbers`).
+* The methods `get`, `at`, `get_path`, `keys`, `as_str`, `as_bool`, `as_list`
+  and `as_object` walk the tree; `as_i64`, `as_u64` and `as_dec` convert a
+  number's text.
+* `JsonValue.to_str` and `JsonValue.to_str_with` (`indent`, `sort_keys`)
+  write a value back out, and refuse values JSON cannot express.
+* `JsonValue.parser` and `JsonValue.parser_with` are the same parser for
+  embedding.
+
+There is no streaming interface, no JSON5 beyond the listed relaxations, and
+no type-directed decoding. See <<json>>.
+
 == Markdown
 
 `Markdown` turns CommonMark 0.31.2 text, with the GitHub Flavored Markdown
@@ -258,7 +291,9 @@ rather than misread. Nesting is limited to 100 levels.
 |Documentation, notes or a README |`Markdown`
 |A configuration file, or the frontmatter of a Markdown file |`Yaml`
 |An XML document without a document type declaration, such as SVG or a feed |`Xml`
-|JSON, TOML, or YAML that uses anchors or several documents |Another package: these modules do not support them
+|JSON whose shape you know, decoded into a record |Roc's builtin `Json`
+|JSON of any shape, JSON with comments, or JSON that must be written back unchanged |`JsonValue`
+|TOML, or YAML that uses anchors or several documents |Another package: these modules do not support them
 |===
 
 <<conformance,Conformance>> lists, for each format, the specification it

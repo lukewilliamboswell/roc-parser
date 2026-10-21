@@ -141,6 +141,7 @@ hand-built row parsers that match columns by position.
 
 * <<combinator-primer>> teaches the building blocks by writing a parser for a
   small settings format.
-* The format chapters show how to read CSV, YAML, XML, Markdown and HTTP.
+* The format chapters show how to read CSV, YAML, XML, JSON, Markdown and
+  HTTP, and how to write JSON back out.
 * <<custom-format>> shows how to build and test a parser for a format of your
   own.
