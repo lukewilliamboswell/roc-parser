@@ -126,7 +126,7 @@ JsonValue := [
 	validate : ValidationProps -> Try(JsonValue, [BadQuotedBytes(Str)])
 	validate = |props| {
 		JsonValue.parse_with(props.source, props.options)
-			.map_err(|InvalidJson(error)| Quotation.error({ name: props.name, format: "JSON", message: error.message, line: error.line, column: error.column }))
+			.map_err(|InvalidJsonValue(error)| Quotation.error({ name: props.name, format: "JSON", message: error.message, line: error.line, column: error.column }))
 	}
 
 	## Use a strict JSON document as a quoted value.
@@ -149,9 +149,9 @@ JsonValue := [
 	## ```roc
 	## expect JsonValue.parse_str("{\"a\": [true, null]}") == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
 	##
-	## expect JsonValue.parse_str("[1,]") == Err(InvalidJson({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+	## expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
 	## ```
-	parse_str : Str -> Try(JsonValue, [InvalidJson(Error)])
+	parse_str : Str -> Try(JsonValue, [InvalidJsonValue(Error)])
 	parse_str = |input| JsonValue.parse_with(input, {})
 
 	## Parse one complete document with the given [JsonValue.Options].
@@ -159,17 +159,17 @@ JsonValue := [
 	## ```roc
 	## expect JsonValue.parse_with("{\"a\": 1, \"a\": 2}", { duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
 	## ```
-	parse_with : Str, Options -> Try(JsonValue, [InvalidJson(Error)])
+	parse_with : Str, Options -> Try(JsonValue, [InvalidJsonValue(Error)])
 	parse_with = |input, options| {
 		match scan(input, input.to_utf8(), options) {
 			Ok({ value, pos }) =>
 				if pos == input.count_utf8_bytes() {
 					Ok(value)
 				} else {
-					Err(InvalidJson(locate(input, pos, "unexpected content after the JSON value")))
+					Err(InvalidJsonValue(locate(input, pos, "unexpected content after the JSON value")))
 				}
 
-			Err(JsonFail(failure)) => Err(InvalidJson(locate(input, failure.offset, failure.message)))
+			Err(JsonFail(failure)) => Err(InvalidJsonValue(locate(input, failure.offset, failure.message)))
 		}
 	}
 
@@ -1553,7 +1553,7 @@ error_of : Str, JsonValue.Options -> Try(JsonValue.Error, [Parsed])
 error_of = |input, options| {
 	match JsonValue.parse_with(input, options) {
 		Ok(_) => Err(Parsed)
-		Err(InvalidJson(error)) => Ok(error)
+		Err(InvalidJsonValue(error)) => Ok(error)
 	}
 }
 
@@ -1814,6 +1814,22 @@ expect parser_failure(['1', ' ', '/', '/', 0xFF], { comments: True }) == Ok({ me
 expect parser_failure(['1', '/', '*', 0xC0, '*', '/'], { comments: True }) == Ok({ message: "invalid UTF-8", offset: 3 })
 expect Parser.run(JsonValue.parser, ['"', 'a', '"', ' ', 0xFF]) == Ok({ value: String("a"), rest: [0xFF] })
 expect Parser.run(JsonValue.parser, ['[', '"', 0xC3, 0xA9, '\\', 't', '"', ']', 0xFF]) == Ok({ value: Array([String("é\t")]), rest: [0xFF] })
+
+# The builtin `Json` fails with `InvalidJson(Str)`. A tag of a different name
+# lets one function pass errors from both on with `?`.
+TypedAndDynamic : { port : U64, extra : JsonValue }
+
+read_both : Str, Str -> Try(TypedAndDynamic, [InvalidJson(Str), InvalidJsonValue(JsonValue.Error), MissingRequiredField(Str)])
+read_both = |typed, dynamic| {
+	settings : { port : U64 }
+	settings = Json.parse(typed)?
+	extra = JsonValue.parse_str(dynamic)?
+	Ok({ port: settings.port, extra })
+}
+
+expect read_both("{\"port\": 8080}", "{\"@context\": 1}") == Ok({ port: 8080, extra: Object([{ key: "@context", value: Number("1") }]) })
+expect read_both("{\"port\": 8080}", "[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+expect read_both("{\"port\": \"x\"}", "{}").is_err()
 
 # --- Limits.
 
@@ -2154,7 +2170,7 @@ expect {
 }
 expect JsonValue.from_quote("{\"a\": 1, \"a\": 1}") == Err(BadQuotedBytes("<literal>:1:10: JSON: duplicate key \"a\""))
 expect JsonValue.parse_str("{\"a\": [true, null]}") == Ok(Object([{ key: "a", value: Array([Bool(True), Null]) }]))
-expect JsonValue.parse_str("[1,]") == Err(InvalidJson({ line: 1, column: 3, message: "trailing comma is not allowed" }))
+expect JsonValue.parse_str("[1,]") == Err(InvalidJsonValue({ line: 1, column: 3, message: "trailing comma is not allowed" }))
 expect JsonValue.parse_with("{\"a\": 1, \"a\": 2}", { duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
 expect Utf8.parse_str_partial(JsonValue.parser, "[1] rest").map_ok(|{ rest, .. }| rest) == Ok("rest")
 expect Utf8.parse_str(JsonValue.parser, "[1 2]") == Err(ParseError({ message: "expected ',' or ']' after an array item", offset: 3 }))

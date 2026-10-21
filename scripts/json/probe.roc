@@ -171,7 +171,7 @@ run = |bytes, flags| {
 						}
 					accepted(value, tree, flags, agrees)
 				}
-				Err(InvalidJson(error)) => {
+				Err(InvalidJsonValue(error)) => {
 					location = "\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}"
 					"{\"status\":\"error\",${location},\"message\":${json_string(error.message)},\"parser_agrees\":${boolean(combinator.is_err())}}"
 				}

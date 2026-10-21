@@ -80,8 +80,8 @@ build parsers from parsers; `Utf8` provides the parsers that read text, with
 Each format type module follows the same conventions:
 
 * `parse_str` (or, for CSV, `parse`) reads a whole document and returns
-  `Ok(value)` or an error tag named after the format: `InvalidCsv`,
-  `InvalidHttp`, `InvalidJson`, `InvalidXml` or `InvalidYaml`. The tag
+  `Ok(value)` or an error tag named after the module: `InvalidCsv`,
+  `InvalidHttp`, `InvalidJsonValue`, `InvalidXml` or `InvalidYaml`. The tag
   carries a record with a `message` and the most precise location the format
   has. Markdown has no syntax errors, so `Markdown.parse_str` returns the tree
   directly.
@@ -205,7 +205,7 @@ straight into a record.
 
 * `JsonValue.parse_str` reads one strict document and returns a `JsonValue`
   (`Null`, `Bool`, `Number`, `String`, `Array` or `Object`), or
-  `InvalidJson({ line, column, message })`. Repeated keys are rejected.
+  `InvalidJsonValue({ line, column, message })`. Repeated keys are rejected.
 * `JsonValue.parse_with` takes a `JsonValue.Options` record with defaulted
   fields: limits (`max_depth`, 128 by default, `max_items`,
   `max_string_bytes`, `max_number_digits`), relaxations (`comments`,

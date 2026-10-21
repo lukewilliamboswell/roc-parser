@@ -27,7 +27,7 @@ import parser.Utf8
 ## an escape-heavy string, and unclosed nesting. Each must give exactly the
 ## expected value, or the expected error at the expected column.
 
-Parsed : Try(JsonValue, [InvalidJson(JsonValue.Error)])
+Parsed : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 
 default_depth : U64
 default_depth = 128
@@ -112,7 +112,7 @@ check_location : List(U8), Parsed -> {}
 check_location = |bytes, result| {
 	match result {
 		Ok(_) => {}
-		Err(InvalidJson(error)) => {
+		Err(InvalidJsonValue(error)) => {
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${show_result(result)}"
 			}
@@ -159,14 +159,14 @@ check_combinator = |bytes, result| {
 	consistent =
 		match (result, combinator) {
 			(Ok(value), Ok({ value: other, rest })) => rest.is_empty() and value == other
-			(Err(InvalidJson(error)), Ok({ value: other, rest })) => {
+			(Err(InvalidJsonValue(error)), Ok({ value: other, rest })) => {
 				consumed = bytes.len() - rest.len()
 				location = line_column(bytes, consumed)
 				same_place = location.line == error.line and location.column == error.column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
 				!rest.is_empty() and same_place and error.message == unexpected_content and JsonValue.parse_str(prefix) == Ok(other)
 			}
-			(Err(InvalidJson(error)), Err(ParseError({ message, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError({ message, offset }))) => {
 				location = line_column(bytes, offset)
 				location.line == error.line and location.column == error.column and message == error.message
 			}
@@ -185,7 +185,7 @@ check_leading_newline = |input, result| {
 	consistent =
 		match (result, shifted) {
 			(Ok(plain), Ok(with_newline)) => plain == with_newline
-			(Err(InvalidJson(plain)), Err(InvalidJson(with_newline))) =>
+			(Err(InvalidJsonValue(plain)), Err(InvalidJsonValue(with_newline))) =>
 				plain.line + 1 == with_newline.line and plain.column == with_newline.column and plain.message == with_newline.message
 			_ => False
 		}
@@ -215,7 +215,7 @@ check_wrapping = |input, value| {
 is_nesting_error : Parsed, U64 -> Bool
 is_nesting_error = |result, limit| {
 	match result {
-		Err(InvalidJson(error)) => Str.starts_with(error.message, "nesting exceeds the limit of ${limit.to_str()} level")
+		Err(InvalidJsonValue(error)) => Str.starts_with(error.message, "nesting exceeds the limit of ${limit.to_str()} level")
 		Ok(_) => False
 	}
 }
@@ -421,7 +421,7 @@ depth_boundary = |limit, arrays| {
 	}
 	column = limit * past.open_width + 1
 	match past_limit {
-		Err(InvalidJson(error)) if error.line == 1 and error.column == column and is_nesting_error(past_limit, limit) => {}
+		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and is_nesting_error(past_limit, limit) => {}
 		_ => crash "nesting of ${(limit + 1).to_str()} with max_depth ${limit.to_str()} must fail at 1:${column.to_str()}, but gave ${show_result(past_limit)}"
 	}
 }
@@ -458,7 +458,7 @@ items_boundary = |limit, choice| {
 	message = if (arrays) "array has more than ${limit.to_str()} item" else "object has more than ${limit.to_str()} member"
 	past_limit = JsonValue.parse_with(text_of(limit + 1), { max_items: limit })
 	match past_limit {
-		Err(InvalidJson(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, message) => {}
+		Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, message) => {}
 		_ => crash "${(limit + 1).to_str()} items with max_items ${limit.to_str()} must fail at 1:${column.to_str()} with \"${message}...\", but gave ${show_result(past_limit)}"
 	}
 }
@@ -484,7 +484,7 @@ duplicate_after_keys = |count, choice| {
 
 	expect_error = |result, message, mode| {
 		match result {
-			Err(InvalidJson(error)) if error.line == 1 and error.column == column and error.message == message => {}
+			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and error.message == message => {}
 			_ => crash "a repeated key with ${mode} must fail at 1:${column.to_str()} with ${Str.inspect(message)}, but gave ${show_result(result)}\n${Str.inspect(text)}"
 		}
 	}
@@ -553,13 +553,13 @@ unclosed = |count, arrays| {
 	if count <= default_depth {
 		column = count * width + 1
 		match result {
-			Err(InvalidJson(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, "expected a JSON value") => {}
+			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and Str.starts_with(error.message, "expected a JSON value") => {}
 			_ => crash "${count.to_str()} unclosed ${open} must fail at 1:${column.to_str()} with \"expected a JSON value\", but gave ${show_result(result)}"
 		}
 	} else {
 		column = default_depth * width + 1
 		match result {
-			Err(InvalidJson(error)) if error.line == 1 and error.column == column and is_nesting_error(result, default_depth) => {}
+			Err(InvalidJsonValue(error)) if error.line == 1 and error.column == column and is_nesting_error(result, default_depth) => {}
 			_ => crash "${count.to_str()} unclosed ${open} must fail at the depth limit 1:${column.to_str()}, but gave ${show_result(result)}"
 		}
 	}
@@ -571,7 +571,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJson(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

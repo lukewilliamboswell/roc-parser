@@ -49,16 +49,15 @@ lose part of it:
   of a number, and a definite answer for repeated keys.
 
 The module is called `JsonValue` because the builtin already has the name
-`Json`: `import parser.Json` would leave the alias unbound. Both report
-invalid input with an `InvalidJson` tag, but with different payloads: a
-`Str` from the builtin and a `JsonValue.Error` record from `JsonValue`. A
-function that uses `?` on both needs `map_err` on one of them, because one
-error type cannot hold both.
+`Json`: `import parser.Json` would leave the alias unbound. Its error tag is
+`InvalidJsonValue` for the same reason. The builtin reports invalid input as
+`InvalidJson` with a `Str`, and one tag cannot carry two payload types, so
+the different name lets one function use `?` on both modules.
 
 == Parse a document and walk it
 
 `JsonValue.parse_str` reads a whole document and returns a `JsonValue`, or
-`InvalidJson` with the position of the first problem. A `JsonValue` is one
+`InvalidJsonValue` with the position of the first problem. A `JsonValue` is one
 of:
 
 [source,roc]
@@ -136,7 +135,7 @@ include::examples/json-guide.expected[lines=4..5]
 [#json-errors]
 == Show where an error is
 
-`InvalidJson` carries a `JsonValue.Error` record: a one-based `line` and
+`InvalidJsonValue` carries a `JsonValue.Error` record: a one-based `line` and
 `column` and a message. Columns count bytes from the start of the line, and
 a line ends at LF, CR or CRLF. The position is the start of the problem: the
 first character of a bad number or literal, the comma before a closing
@@ -260,7 +259,7 @@ value. The conformance review reads the pinned schema this way (see
 whose fields all have defaults, so you pass only the fields you change.
 `parse_str(text)` is `parse_with(text, {})`: strict RFC 8259, no repeated
 keys, and at most 128 levels of nesting. A limit or check that fails is
-reported as an `InvalidJson` error at the offending value, like any other
+reported as an `InvalidJsonValue` error at the offending value, like any other
 error.
 
 [cols="1,1,3",options="header"]

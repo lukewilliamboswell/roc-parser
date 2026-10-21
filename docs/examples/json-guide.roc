@@ -48,7 +48,7 @@ licence = |component| {
 }
 
 ## One line per component of a CycloneDX document.
-components : Str -> Try(List(Str), [InvalidJson(JsonValue.Error), Missing, WrongType])
+components : Str -> Try(List(Str), [InvalidJsonValue(JsonValue.Error), Missing, WrongType])
 components = |text| {
 	bom = JsonValue.parse_str(text)?
 	found = bom.get("components")?
@@ -101,7 +101,7 @@ report : Str -> Str
 report = |text| {
 	match JsonValue.parse_str(text) {
 		Ok(_) => "valid"
-		Err(InvalidJson({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidJsonValue({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
 	}
 }
 
@@ -136,7 +136,7 @@ modes = |text| {
 		|(name, chosen)| {
 			match JsonValue.parse_with(text, chosen) {
 				Ok(value) => "${name}: ${JsonValue.to_str(value) ?? "?"}"
-				Err(InvalidJson({ line, column, message })) => "${name}: ${line.to_str()}:${column.to_str()}: ${message}"
+				Err(InvalidJsonValue({ line, column, message })) => "${name}: ${line.to_str()}:${column.to_str()}: ${message}"
 			}
 		},
 	)
@@ -156,7 +156,7 @@ tsconfig_text =
 	\\}
 
 ## JSON with comments, as in `tsconfig.json` and editor settings.
-read_jsonc : Str -> Try(JsonValue, [InvalidJson(JsonValue.Error)])
+read_jsonc : Str -> Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 read_jsonc = |text| JsonValue.parse_with(text, { comments: True, trailing_commas: True })
 
 # end::jsonc[]
@@ -164,7 +164,7 @@ read_jsonc = |text| JsonValue.parse_with(text, { comments: True, trailing_commas
 # tag::bom[]
 ## A configuration file that may start with a byte order mark, as files
 ## saved by some Windows editors do, and must hold an object.
-read_config : Str -> Try(JsonValue, [InvalidJson(JsonValue.Error)])
+read_config : Str -> Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 read_config = |text| JsonValue.parse_with(text, { bom: True, top_level: Object })
 
 # end::bom[]
@@ -271,11 +271,11 @@ print_refs! = |text| {
 	Ok({})
 }
 
-show! : Try(JsonValue, [InvalidJson(JsonValue.Error)]) => Try({}, _)
+show! : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)]) => Try({}, _)
 show! = |parsed| {
 	match parsed {
 		Ok(value) => Stdout.line!(JsonValue.to_str(value) ?? "not writable")?
-		Err(InvalidJson({ line, column, message })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${message}")?
+		Err(InvalidJsonValue({ line, column, message })) => Stdout.line!("${line.to_str()}:${column.to_str()}: ${message}")?
 	}
 	Ok({})
 }

@@ -34,7 +34,7 @@ import parser.Utf8
 ## - every error is located inside the document, and JsonValue.parser_with
 ##   agrees with JsonValue.parse_with under S.
 
-Parsed : Try(JsonValue, [InvalidJson(JsonValue.Error)])
+Parsed : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 
 Duplicates : [Reject, CollapseIdentical, KeepFirst, KeepLast]
 
@@ -201,7 +201,7 @@ test = |input| {
 				if chosen.duplicates == CollapseIdentical {
 					match (result, rejecting_result) {
 						(Ok(value), Ok(other)) if value != other => crash "CollapseIdentical changed a document without repeated keys\n${Str.inspect(text)}"
-						(Ok(_), Err(InvalidJson(error))) if !Str.starts_with(error.message, "duplicate key \"") => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${error.message}\n${Str.inspect(text)}\n${show_choice(chosen)}"
+						(Ok(_), Err(InvalidJsonValue(error))) if !Str.starts_with(error.message, "duplicate key \"") => crash "CollapseIdentical accepted a document that Reject refuses for another reason: ${error.message}\n${Str.inspect(text)}\n${show_choice(chosen)}"
 						_ => {}
 					}
 				}
@@ -261,7 +261,7 @@ check_location : Input, Choice, Parsed -> {}
 check_location = |input, choice, result| {
 	match result {
 		Ok(_) => {}
-		Err(InvalidJson(error)) => {
+		Err(InvalidJsonValue(error)) => {
 			context = "${show_result(result)}\n${show_choice(choice)}"
 			if error.line == 0 or error.column == 0 {
 				crash "JSON error locations must be one-based: ${context}"
@@ -311,14 +311,14 @@ check_combinator = |input, result| {
 	consistent =
 		match (result, combinator) {
 			(Ok(value), Ok({ value: other, rest })) => rest.is_empty() and value == other
-			(Err(InvalidJson(error)), Ok({ value: other, rest })) => {
+			(Err(InvalidJsonValue(error)), Ok({ value: other, rest })) => {
 				consumed = bytes.len() - rest.len()
 				location = line_column(bytes, consumed)
 				same_place = location.line == error.line and location.column == error.column
 				prefix = Str.from_utf8(bytes.sublist({ start: 0, len: consumed })) ?? ""
 				!rest.is_empty() and same_place and error.message == unexpected_content and JsonValue.parse_with(prefix, options) == Ok(other)
 			}
-			(Err(InvalidJson(error)), Err(ParseError({ message, offset }))) => {
+			(Err(InvalidJsonValue(error)), Err(ParseError({ message, offset }))) => {
 				location = line_column(bytes, offset)
 				location.line == error.line and location.column == error.column and message == error.message
 			}
@@ -335,7 +335,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJson(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

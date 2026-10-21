@@ -798,7 +798,7 @@ generate_duplicate = |start| {
 
 ## Checking
 
-Parsed : Try(JsonValue, [InvalidJson(JsonValue.Error)])
+Parsed : Try(JsonValue, [InvalidJsonValue(JsonValue.Error)])
 
 ## One-based line and byte column of a byte offset, counting CR LF, CR and
 ## LF as line ends, independent of the parser's own locator.
@@ -847,7 +847,7 @@ test = |input| {
 			matches = |found| if (exact) found == message else Str.starts_with(found, message)
 			location = line_column(input.text.to_utf8(), offset)
 			match actual {
-				Err(InvalidJson(error)) if error.line == location.line and error.column == location.column and matches(error.message) => {}
+				Err(InvalidJsonValue(error)) if error.line == location.line and error.column == location.column and matches(error.message) => {}
 				_ => crash "expected an error at ${location.line.to_str()}:${location.column.to_str()}\n${describe(input)}\n--- actual ---\n${show_result(actual)}"
 			}
 			match combinator {
@@ -893,7 +893,7 @@ check_one_past = |input, expected| {
 	limits = input.choice.limits
 	lowered = |name, changed, message|
 		match JsonValue.parse_with(input.text, options_of({ ..input.choice, limits: changed })) {
-			Err(InvalidJson(error)) if message.any(|start| Str.starts_with(error.message, start)) => {}
+			Err(InvalidJsonValue(error)) if message.any(|start| Str.starts_with(error.message, start)) => {}
 			other => crash "lowering ${name} by one must fail with ${Str.inspect(message)}: ${show_result(other)}\n${describe(input)}"
 		}
 	if limits.max_depth > 0 {
@@ -1105,7 +1105,7 @@ show_result : Parsed -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Str.inspect(value)
-		Err(InvalidJson(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidJsonValue(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
 	}
 }
 

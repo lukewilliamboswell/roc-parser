@@ -22,7 +22,7 @@ output is checked in as
 == Summary
 
 Every format type module reports invalid input with one tag named after the
-format, carrying a record with a `message` and the most precise location the
+module, carrying a record with a `message` and the most precise location the
 format has. Combinator runners report the furthest failure.
 
 [cols="1,2,2",options="header"]
@@ -38,7 +38,7 @@ format has. Combinator runners report the furthest failure.
 |Where the problem is and what it is. Columns count bytes.
 
 |`JsonValue.parse_str`, `JsonValue.parse_with`
-|`InvalidJson({ line, column, message })`
+|`InvalidJsonValue({ line, column, message })`
 |Where the problem is and what it is, including a limit or check that an
 option enabled. Columns count bytes.
 
@@ -70,10 +70,9 @@ with its byte offset.
 |===
 
 All of these are open tag unions, so `?` passes them through a function such
-as `main!` that returns other errors too, without `map_err`. The exception is
-Roc's builtin `Json`, whose `InvalidJson` carries a `Str`: a function that uses
-`?` on both it and `JsonValue` must map one of the two errors (see
-<<json-builtin>>).
+as `main!` that returns other errors too, without `map_err`. That includes
+Roc's builtin `Json`, whose `InvalidJson` carries a `Str`: `JsonValue` names
+its tag `InvalidJsonValue`, so the two never collide (see <<json-builtin>>).
 
 == YAML, XML and JSON: show the location
 

@@ -17,7 +17,7 @@ parse : Str -> Try(U64, U64)
 parse = |input| {
 	match JsonValue.parse_str(input) {
 		Ok(value) => Ok(consume(value))
-		Err(InvalidJson(error)) => Err(error.line + error.column)
+		Err(InvalidJsonValue(error)) => Err(error.line + error.column)
 	}
 }
 

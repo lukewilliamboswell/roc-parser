@@ -77,10 +77,10 @@ roc-parser, so applications need not add it themselves.
 
 Roc auto-imports a builtin module named `Json`, which decodes JSON into
 records. roc-parser's JSON module is therefore named `JsonValue`: an
-`import parser.Json` would leave the alias unbound. Both modules report
-invalid input as `InvalidJson`, with a `Str` from the builtin and a
-`JsonValue.Error` record from `JsonValue`, so one function cannot pass both
-errors on with `?` unless it maps one of them (see <<json-builtin>>).
+`import parser.Json` would leave the alias unbound. For the same reason its
+errors use the tag `InvalidJsonValue`: the builtin reports invalid input as
+`InvalidJson` with a `Str`, and keeping the tags apart lets one function pass
+errors from both on with `?` (see <<json-builtin>>).
 
 == Changes in 2.0.0 at a glance
 

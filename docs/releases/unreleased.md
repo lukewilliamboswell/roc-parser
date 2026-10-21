@@ -8,8 +8,8 @@ check can be disabled through defaulted props. The compiler pin moves to
 `nightly-2026-10-21-5349569`.
 
 The new `JsonValue` module adds API only. It is not called `Json` because Roc
-auto-imports a builtin `Json`; both report invalid input as `InvalidJson`, with
-different payloads, so a function that uses `?` on both must map one of them.
+auto-imports a builtin `Json`, and its error tag is `InvalidJsonValue` so that
+it does not collide with the builtin's `InvalidJson(Str)`.
 
 ## New features
 
@@ -27,7 +27,7 @@ records.
   convert a number.
 - **Strict by default.** `parse_str` accepts only RFC 8259 JSON, and also
   rejects repeated keys and nesting deeper than 128 levels. Errors are
-  `InvalidJson({ line, column, message })`.
+  `InvalidJsonValue({ line, column, message })`.
 - **Options.** `parse_with` takes a `JsonValue.Options` record with defaulted
   fields:
   - limits: `max_depth`, `max_items`, `max_string_bytes` and

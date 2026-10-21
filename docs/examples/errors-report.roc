@@ -34,7 +34,7 @@ json_message : Str, Str -> Str
 json_message = |file_name, source| {
 	match JsonValue.parse_str(source) {
 		Ok(_) => "${file_name}: ok"
-		Err(InvalidJson({ line, column, message })) =>
+		Err(InvalidJsonValue({ line, column, message })) =>
 			"${file_name}:${line.to_str()}:${column.to_str()}: ${message}"
 	}
 }

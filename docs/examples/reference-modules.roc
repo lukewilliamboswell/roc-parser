@@ -57,7 +57,7 @@ json_sorted : Str -> Str
 json_sorted = |text| {
 	match JsonValue.parse_str(text) {
 		Ok(value) => JsonValue.to_str_with(value, { sort_keys: True }) ?? "not writable"
-		Err(InvalidJson(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
+		Err(InvalidJsonValue(e)) => "${e.line.to_str()}:${e.column.to_str()}: ${e.message}"
 	}
 }
 
