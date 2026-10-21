@@ -5,14 +5,17 @@
 // Same protocol as the Roc drivers in bench/roc/: the document is read from
 // stdin before the clock starts, parsed <iterations> times, and one JSON line
 // is printed. encoding/xml is a token stream, so the element/text tree that
-// Xml.parse_str returns is built from its tokens.
+// Xml.parse_str returns is built from its tokens. encoding/json decodes into
+// interface{}, whose maps do not keep member order as JsonValue does.
 package main
 
 import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,6 +129,50 @@ func parseXML(s string) (uint64, error) {
 	return nodeWalk(root), nil
 }
 
+// jsonWalk uses the weights of bench/roc/json.roc and the Rust comparator, so
+// all three checksums agree on documents without duplicate keys.
+func jsonWalk(v interface{}) uint64 {
+	switch t := v.(type) {
+	case nil:
+		return 1
+	case bool:
+		return 2
+	case json.Number:
+		return 3 + uint64(len(t))
+	case string:
+		return 5 + uint64(len(t))
+	case []interface{}:
+		total := uint64(6)
+		for _, x := range t {
+			total += jsonWalk(x)
+		}
+		return total
+	case map[string]interface{}:
+		total := uint64(7)
+		for k, x := range t {
+			total += uint64(len(k)) + jsonWalk(x)
+		}
+		return total
+	}
+	return 0
+}
+
+// parseJSON decodes into interface{} with UseNumber, so numbers keep their
+// text as json.Number. Maps are unordered and a repeated key keeps its last
+// value. Content after the value is rejected, as the other parsers do.
+func parseJSON(s string) (uint64, error) {
+	d := json.NewDecoder(strings.NewReader(s))
+	d.UseNumber()
+	var v interface{}
+	if err := d.Decode(&v); err != nil {
+		return 0, err
+	}
+	if _, err := d.Token(); err != io.EOF {
+		return 0, errors.New("unexpected content after the JSON value")
+	}
+	return jsonWalk(v), nil
+}
+
 var markdown = goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList))
 
 func parseMarkdown(s string) (uint64, error) {
@@ -168,11 +215,12 @@ func parseHTTP(s string) (uint64, error) {
 
 func main() {
 	impls := map[string]parseFunc{
-		"encoding-csv": parseCSV,
-		"yaml.v3":      parseYAML,
-		"encoding-xml": parseXML,
-		"goldmark":     parseMarkdown,
-		"net-http":     parseHTTP,
+		"encoding-csv":  parseCSV,
+		"yaml.v3":       parseYAML,
+		"encoding-xml":  parseXML,
+		"encoding-json": parseJSON,
+		"goldmark":      parseMarkdown,
+		"net-http":      parseHTTP,
 	}
 	parse, ok := impls[os.Args[1]]
 	if !ok {

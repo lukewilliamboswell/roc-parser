@@ -141,6 +141,35 @@ fn roxmltree_parse(text: &str) -> Result<u64, ()> {
         .sum())
 }
 
+/// Weighted like bench/roc/json.roc and the Go comparator. The checksums
+/// differ only where serde_json rewrites an exponent (`1E5` becomes `1e+5`)
+/// or a repeated key keeps one member.
+fn json_walk(value: &serde_json::Value) -> u64 {
+    use serde_json::Value;
+    match value {
+        Value::Null => 1,
+        Value::Bool(_) => 2,
+        Value::Number(n) => 3 + n.as_str().len() as u64,
+        Value::String(s) => 5 + s.len() as u64,
+        Value::Array(items) => 6 + items.iter().map(json_walk).sum::<u64>(),
+        Value::Object(map) => 7 + map.iter().map(|(k, v)| k.len() as u64 + json_walk(v)).sum::<u64>(),
+    }
+}
+
+/// With `preserve_order` objects are an IndexMap in source order, and with
+/// `arbitrary_precision` a number keeps its digits: the same information
+/// JsonValue keeps. A repeated key keeps its last value instead of failing.
+/// This is `serde_json::from_str` without the recursion limit, which would
+/// reject 128 nested arrays; the corpus nests no deeper than that.
+fn serde_json_parse(text: &str) -> Result<u64, ()> {
+    use serde::Deserialize;
+    let mut de = serde_json::Deserializer::from_str(text);
+    de.disable_recursion_limit();
+    let value = serde_json::Value::deserialize(&mut de).map_err(|_| ())?;
+    de.end().map_err(|_| ())?;
+    Ok(json_walk(&value))
+}
+
 /// pulldown-cmark is a pull parser; owning every event matches the cost of
 /// keeping a tree without building one.
 fn pulldown_cmark_parse(text: &str) -> Result<u64, ()> {
@@ -219,6 +248,7 @@ fn implementation(name: &str) -> Parse {
         "serde_yaml" => serde_yaml_parse,
         "quick-xml" => quick_xml_parse,
         "roxmltree" => roxmltree_parse,
+        "serde_json" => serde_json_parse,
         "pulldown-cmark" => pulldown_cmark_parse,
         "comrak" => comrak_parse,
         "httparse" => httparse_parse,

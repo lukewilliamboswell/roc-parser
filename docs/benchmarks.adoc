@@ -100,22 +100,27 @@ Each format has five kinds of document:
 
 `sample`:: Small real-world-shaped files in
 link:{src}/bench/corpus/samples[`bench/corpus/samples/`]: a CSV order export,
-this repository's fuzz workflow (YAML), a design-tool-style SVG, this
-repository's README, and an HTTP browser request and JSON API response (kept
-in `HTTP_SAMPLES` so their CRLFs survive). They are frozen copies; do not
-update them.
+this repository's fuzz workflow (YAML), a design-tool-style SVG, a CycloneDX
+1.6 software bill of materials (JSON), this repository's README, and an HTTP
+browser request and JSON API response (kept in `HTTP_SAMPLES` so their CRLFs
+survive). They are frozen copies; do not update them.
 `small`, `medium`, `large`:: Generated documents of about 4 KiB, 64 KiB and
 1 MiB in the shape of typical data: CSV rows with quoted fields and embedded
 newlines, YAML service configuration with flow collections and block
-scalars, an XML catalogue with attributes and entities, a Markdown document
-with headings, lists, code, quotes and tables, and HTTP `POST` requests with
-a JSON body and chunked HTML responses.
+scalars, an XML catalogue with attributes and entities, a CycloneDX-style
+JSON bill of materials whose components carry licences, nested properties,
+integers beyond 64 bits, long decimals and escaped or non-ASCII strings, a
+Markdown document with headings, lists, code, quotes and tables, and HTTP
+`POST` requests with a JSON body and chunked HTML responses.
 `pathological`:: Inputs that stress one mechanism: very wide CSV rows and
 long runs of escaped quotes, YAML nesting at the 100-level limit and long
-flow sequences, deeply nested XML and thousands of attributes, unclosed
-Markdown emphasis and nested brackets, and HTTP messages with many headers
-or thousands of one-byte chunks. Several of these were super-linear before
-the fuzzing work described in <<performance-complexity>>.
+flow sequences, deeply nested XML and thousands of attributes, JSON arrays
+nested to the 128-level limit, a 200,000-number array, objects with 20,000
+keys or 20,000 empty-array members, strings full of escapes or surrogate
+pairs and a 100,000-digit number, unclosed Markdown emphasis and nested
+brackets, and HTTP messages with many headers or thousands of one-byte
+chunks. Several of these were super-linear before the fuzzing work described
+in <<performance-complexity>>.
 
 The corpus and a `manifest.json` with every document's size and hash are
 written to `.roc-parser-tmp/bench/<label>/corpus/`, so you can feed a
@@ -131,7 +136,8 @@ $ .roc-parser-tmp/bench/full/bin/roc-yaml 100 < .roc-parser-tmp/bench/full/corpu
 link:{src}/bench/roc[`bench/roc/`] holds one driver per format, each a few
 lines calling the format's public entry point: `CSV.parse_with` with
 `Parser.many(CSV.field(CSV.string))`, `Yaml.parse_str`, `Xml.parse_str`,
-`Markdown.parse_str`, and `HTTP.parse_request` or `HTTP.parse_response`. The timing loop is shared in
+`JsonValue.parse_str`, `Markdown.parse_str`, and `HTTP.parse_request` or
+`HTTP.parse_response`. The timing loop is shared in
 `bench/roc/Bench.roc`. The harness builds each driver with
 `roc build --opt=speed`; never benchmark `roc dev` or an unoptimised build,
 which is many times slower.
@@ -147,18 +153,20 @@ matching line in `alloc.roc`) changes.
 
 |Rust
 |`bench/compare/rust/`
-|csv, yaml-rust2, serde_yaml, quick-xml, roxmltree, pulldown-cmark, comrak and
-httparse, pinned exactly in `Cargo.toml` and `Cargo.lock`; built with
-`cargo build --release --locked`, thin LTO and one codegen unit.
+|csv, yaml-rust2, serde_yaml, quick-xml, roxmltree, serde_json,
+pulldown-cmark, comrak and httparse, pinned exactly in `Cargo.toml` and
+`Cargo.lock`; built with `cargo build --release --locked`, thin LTO and one
+codegen unit.
 
 |Go
 |`bench/compare/go/`
-|encoding/csv, gopkg.in/yaml.v3, encoding/xml, goldmark and net/http, pinned
-by `go.mod` and `go.sum`.
+|encoding/csv, gopkg.in/yaml.v3, encoding/xml, encoding/json, goldmark and
+net/http, pinned by `go.mod` and `go.sum`.
 
 |Python
 |`scripts/bench_python.py` and `bench/compare/python/requirements.txt`
-|csv, PyYAML (pure Python and libyaml), xml.etree, markdown-it-py and h11. The
+|csv, PyYAML (pure Python and libyaml), xml.etree, json, markdown-it-py and
+h11. The
 program is under `scripts/` because repository policy keeps every Python file
 there. The harness installs the pins into a virtual environment in
 `~/.cache/roc-parser/bench-venv` (outside the checkout, for the same reason);
@@ -172,6 +180,17 @@ Each program builds the same kind of in-memory structure as roc-parser:
 * *XML:* a tree of elements, attributes and text. roxmltree and
   ElementTree build one; for quick-xml and encoding/xml, which are streaming
   tokenizers, the program builds an owned tree from the events.
+* *JSON:* the library's generic value tree, walked once. serde_json is
+  built with `preserve_order` and `arbitrary_precision`, so like `JsonValue`
+  it keeps member order and every digit of a number (it does rewrite an
+  exponent such as `1E5` as `1e+5`). It is also built with `unbounded_depth`,
+  because its own limit stops one level short of the 128-level document.
+  encoding/json decodes into
+  `interface{}` with `UseNumber`, which keeps number text but puts members in
+  unordered maps. Python's `json.loads` converts numbers to `int` and `float`;
+  the program lifts CPython's 4,300-digit limit on integer conversion so the
+  100,000-digit number is measured. None of them rejects a repeated key: the
+  last value wins.
 * *Markdown:* comrak and goldmark build an AST. pulldown-cmark and
   markdown-it-py produce a flat event or token list, which is collected and,
   for pulldown-cmark, copied into owned events.
