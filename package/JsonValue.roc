@@ -1362,6 +1362,16 @@ many_keys = |count| {
 }
 
 # The names k0, k1, ... of the members of `many_keys(count)`.
+key_names : U64 -> List(Str)
+key_names = |count| {
+	var $out = []
+	var $index = 0
+	while $index < count {
+		$out = $out.append("k${$index.to_str()}")
+		$index = $index + 1
+	}
+	$out
+}
 
 # `depth` arrays nested around `inner`.
 nested : U64, Str -> Str
@@ -1486,6 +1496,198 @@ expect parser_failure(['1', ' ', '/', '/', 0xFF], { comments: True }) == Ok({ me
 expect parser_failure(['1', '/', '*', 0xC0, '*', '/'], { comments: True }) == Ok({ message: "invalid UTF-8", offset: 3 })
 expect Parser.run(JsonValue.parser, ['"', 'a', '"', ' ', 0xFF]) == Ok({ value: String("a"), rest: [0xFF] })
 expect Parser.run(JsonValue.parser, ['[', '"', 0xC3, 0xA9, '\\', 't', '"', ']', 0xFF]) == Ok({ value: Array([String("é\t")]), rest: [0xFF] })
+
+# --- Limits.
+
+# 128 levels of nesting are allowed by default, and the 129th bracket is not.
+expect JsonValue.parse_str(nested(128, "1")).is_ok()
+expect error_of(nested(129, "1"), {}) == Ok({ line: 1, column: 129, message: "nesting exceeds the limit of 128 levels" })
+expect error_of(nested(128, "{}"), {}) == Ok({ line: 1, column: 129, message: "nesting exceeds the limit of 128 levels" })
+expect error_of("{\"a\":{\"b\":[]}}", { max_depth: 2 }) == Ok({ line: 1, column: 11, message: "nesting exceeds the limit of 2 levels" })
+expect JsonValue.parse_with("{\"a\":{\"b\":1}}", { max_depth: 2 }).is_ok()
+
+# With no nesting allowed, only scalars are accepted.
+expect ["1", "\"s\"", "null"].all(|text| JsonValue.parse_with(text, { max_depth: 0 }).is_ok())
+expect error_of("[]", { max_depth: 0 }) == Ok({ line: 1, column: 1, message: "nesting exceeds the limit of 0 levels" })
+expect error_of(" {}", { max_depth: 0 }) == Ok({ line: 1, column: 2, message: "nesting exceeds the limit of 0 levels" })
+expect JsonValue.parse_with("[1]", { max_depth: 1 }).is_ok() and error_of("[[]]", { max_depth: 1 }) == Ok({ line: 1, column: 2, message: "nesting exceeds the limit of 1 levels" })
+
+# A raised limit is checked the same way, and deep nesting does not exhaust
+# the call stack.
+expect JsonValue.parse_with(nested(200, ""), { max_depth: 200 }).is_ok() and JsonValue.parse_with(nested(201, ""), { max_depth: 200 }).is_err()
+expect JsonValue.parse_with(nested(20000, "1"), { max_depth: 20000 }).map_ok(|value| JsonValue.get_path(value, ["0", "0", "0"]).is_ok()) == Ok(True)
+
+# `max_items` limits each array and object, at the first item past it.
+expect JsonValue.parse_with("[1,2]", { max_items: 2 }).is_ok() and JsonValue.parse_with("[[1,2],[3,4]]", { max_items: 2 }).is_ok()
+expect error_of("[1,2,3]", { max_items: 2 }) == Ok({ line: 1, column: 6, message: "array has more than 2 items" })
+expect error_of("{\"a\":1,\"b\":2,\"c\":3}", { max_items: 2 }) == Ok({ line: 1, column: 14, message: "object has more than 2 members" })
+expect JsonValue.parse_with("[[],{}]", { max_items: 2 }).is_ok() and JsonValue.parse_with("[]", { max_items: 0 }).is_ok() and JsonValue.parse_with("{}", { max_items: 0 }).is_ok()
+expect error_of("[1]", { max_items: 0 }) == Ok({ line: 1, column: 2, message: "array has more than 0 items" })
+expect error_of("{\"a\":1}", { max_items: 0 }) == Ok({ line: 1, column: 2, message: "object has more than 0 members" })
+expect JsonValue.parse_with("[1,2,]", { max_items: 2, trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
+expect parser_failure("[ 1]".to_utf8(), { max_items: 0 }) == Ok({ message: "array has more than 0 items", offset: 2 })
+
+# Members are counted as written, before repeated keys are removed.
+expect error_of("{\"a\":1,\"a\":1}", { max_items: 1, duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepFirst }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
+expect error_of("{\"a\":1,\"a\":2}", { max_items: 1, duplicates: KeepLast }) == Ok({ line: 1, column: 8, message: "object has more than 1 members" })
+expect JsonValue.parse_with("{\"a\":1,\"a\":2}", { max_items: 2, duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("2") }]))
+
+# `max_string_bytes` counts decoded UTF-8 bytes, keys included.
+expect ["\"abc\"", "\"\\u00e9a\"", "\"é\"", "{\"abc\":1}"].all(|text| JsonValue.parse_with(text, { max_string_bytes: 3 }).is_ok())
+expect error_of("\"abcd\"", { max_string_bytes: 3 }) == Ok({ line: 1, column: 1, message: "string exceeds the limit of 3 bytes" })
+expect error_of("[\"\\u00e9ab\"]", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, message: "string exceeds the limit of 3 bytes" })
+expect error_of("{\"abcd\":1}", { max_string_bytes: 3 }) == Ok({ line: 1, column: 2, message: "string exceeds the limit of 3 bytes" })
+expect message_of("\"éé\"", { max_string_bytes: 3 }) == "string exceeds the limit of 3 bytes"
+
+# `max_number_digits` counts every character of a number.
+expect ["123", "-12", "1.5", "0"].all(|text| JsonValue.parse_with(text, { max_number_digits: 3 }).is_ok())
+expect error_of("1234", { max_number_digits: 3 }) == Ok({ line: 1, column: 1, message: "number exceeds the limit of 3 characters" })
+expect error_of("[1,-123]", { max_number_digits: 3 }) == Ok({ line: 1, column: 4, message: "number exceeds the limit of 3 characters" })
+
+# --- Duplicate keys.
+
+# Keys are compared after unescaping, and the error points at the second key.
+expect error_of("{\"a\":1,\"a\":2}", {}) == Ok({ line: 1, column: 8, message: "duplicate key \"a\"" })
+expect error_of("{\"a\":1,\"\\u0061\":2}", {}) == Ok({ line: 1, column: 8, message: "duplicate key \"a\"" })
+expect message_of("{\"a\\\"b\":1,\"a\\\"b\":2}", {}) == "duplicate key \"a\\\"b\""
+expect JsonValue.parse_str("{\"a\":{\"a\":1},\"b\":{\"a\":2}}").is_ok()
+expect error_of("[{\"a\":1},\n{\"b\":[],\"b\":{}}]", {}) == Ok({ line: 2, column: 9, message: "duplicate key \"b\"" })
+
+# CollapseIdentical keeps one copy of an equal repeat and refuses a different one.
+expect JsonValue.parse_with("{\"a\":{\"x\":[1]},\"a\":{\"x\":[1]},\"a\":{\"x\":[1]}}", { duplicates: CollapseIdentical }) == Ok(Object([{ key: "a", value: Object([{ key: "x", value: Array([Number("1")]) }]) }]))
+expect error_of("{\"a\":1,\"a\":2}", { duplicates: CollapseIdentical }) == Ok({ line: 1, column: 8, message: "duplicate key \"a\" with a different value" })
+expect message_of("{\"a\":1,\"a\":1.0}", { duplicates: CollapseIdentical }) == "duplicate key \"a\" with a different value"
+
+# KeepFirst drops later members; KeepLast keeps the first position with the last value.
+expect JsonValue.parse_with("{\"a\":1,\"b\":2,\"a\":3}", { duplicates: KeepFirst }) == Ok(Object([{ key: "a", value: Number("1") }, { key: "b", value: Number("2") }]))
+expect JsonValue.parse_with("{\"a\":1,\"b\":2,\"a\":3,\"a\":4}", { duplicates: KeepLast }) == Ok(Object([{ key: "a", value: Number("4") }, { key: "b", value: Number("2") }]))
+
+# Objects with more than 16 members index their keys; both paths agree.
+expect {
+	members = "\"k0\":[],\"k1\":[],\"k2\":[],\"k3\":[],\"k4\":[],\"k5\":[],\"k6\":[],\"k7\":[],\"k8\":[],\"k9\":[],\"k10\":[],\"k11\":[],\"k12\":[],\"k13\":[],\"k14\":[],\"k15\":[]"
+	column = Str.count_utf8_bytes("{${members},") + 1
+	error_of("{${members},\"k3\":1}", {}) == Ok({ line: 1, column, message: "duplicate key \"k3\"" })
+		and error_of("{${members},\"k15\":1}", {}) == Ok({ line: 1, column, message: "duplicate key \"k15\"" })
+		and error_of("{${members},\"k16\":1,\"k3\":1}", {}) == Ok({ line: 1, column: column + 8, message: "duplicate key \"k3\"" })
+}
+expect {
+	members = Str.drop_last_bytes(Str.drop_first_bytes(many_keys(20), 1) ?? "", 1) ?? ""
+	column = Str.count_utf8_bytes("{${members},") + 1
+	text = "{${members},\"k3\":1}"
+	keys = key_names(20)
+	error_of(text, {}) == Ok({ line: 1, column, message: "duplicate key \"k3\"" })
+		and error_of(text, { duplicates: CollapseIdentical }) == Ok({ line: 1, column, message: "duplicate key \"k3\" with a different value" })
+		and JsonValue.parse_with("{${members},\"k3\":[]}", { duplicates: CollapseIdentical }).map_ok(JsonValue.keys) == Ok(keys)
+		and JsonValue.parse_with(text, { duplicates: KeepFirst }).map_ok(|value| (JsonValue.keys(value), JsonValue.get(value, "k3"))) == Ok((keys, Ok(Array([]))))
+		and JsonValue.parse_with(text, { duplicates: KeepLast }).map_ok(|value| (JsonValue.keys(value), JsonValue.get(value, "k3"))) == Ok((keys, Ok(Number("1"))))
+		and JsonValue.parse_str(many_keys(20)).map_ok(JsonValue.keys) == Ok(keys)
+}
+
+# --- Relaxations.
+
+# Comments may appear wherever whitespace may.
+expect JsonValue.parse_with("// c\n[1, /* x */ 2] // end", { comments: True }) == Ok(Array([Number("1"), Number("2")]))
+expect JsonValue.parse_with("{\"a\" /* c */ : /* d */ 1 /**/, \"b\"//\r:2}", { comments: True }) == Ok(Object([{ key: "a", value: Number("1") }, { key: "b", value: Number("2") }]))
+expect ["/**/1", "/* a * b **/1", "1 // no newline at the end", "1\r\n// one\r\n"].all(|text| JsonValue.parse_with(text, { comments: True }) == Ok(Number("1")))
+expect JsonValue.parse_with("[1] // end", { comments: True }) == Ok(Array([Number("1")])) and Utf8.parse_str(JsonValue.parser_with({ comments: True }), "[1] // end") == Ok(Array([Number("1")]))
+expect error_of("/* only */", { comments: True }) == Ok({ line: 1, column: 11, message: "expected a JSON value" })
+expect error_of("[1 / 2]", { comments: True }) == Ok({ line: 1, column: 4, message: "expected ',' or ']' after an array item" })
+
+# Without the option, a comment is refused at its slash.
+expect error_of("// c\n1", {}) == Ok({ line: 1, column: 1, message: "comments are not allowed" })
+expect error_of("[1 /* x */]", {}) == Ok({ line: 1, column: 4, message: "comments are not allowed" })
+expect error_of("1 /", {}) == Ok({ line: 1, column: 3, message: "comments are not allowed" })
+
+# An unterminated block comment is reported where it opens.
+expect error_of("[1 /* x", { comments: True }) == Ok({ line: 1, column: 4, message: "unterminated block comment" })
+expect error_of("/* */ /*/", { comments: True }) == Ok({ line: 1, column: 7, message: "unterminated block comment" })
+
+# Trailing commas.
+expect JsonValue.parse_with("[1,2,]", { trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
+expect JsonValue.parse_with("{\"a\":[1,],}", { trailing_commas: True }) == Ok(Object([{ key: "a", value: Array([Number("1")]) }]))
+expect error_of("[,]", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
+expect error_of("[1,,]", { trailing_commas: True }) == Ok({ line: 1, column: 4, message: "expected a JSON value" })
+expect error_of("{,}", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "expected a string key" })
+expect error_of("1,", { trailing_commas: True }) == Ok({ line: 1, column: 2, message: "unexpected content after the JSON value" })
+expect JsonValue.parse_with("[1, // one\n/* end */]", { comments: True, trailing_commas: True }) == Ok(Array([Number("1")]))
+
+# A byte order mark is skipped only at the start, when allowed.
+expect JsonValue.parse_with("\u(FEFF)[1]", { bom: True }) == Ok(Array([Number("1")]))
+expect error_of("\u(FEFF)[1]", {}) == Ok({ line: 1, column: 1, message: "byte order mark is not allowed" })
+expect error_of("[\u(FEFF)1]", { bom: True }) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
+expect error_of("\u(FEFF)", { bom: True }) == Ok({ line: 1, column: 4, message: "expected a JSON value" })
+expect JsonValue.parse_with("\u(FEFF){}", { bom: True, top_level: Object }) == Ok(Object([]))
+expect error_of("\u(FEFF)[]", { bom: True, top_level: Object }) == Ok({ line: 1, column: 4, message: "top-level value must be an object" })
+expect Utf8.parse_str(JsonValue.parser_with({ bom: True }), "\u(FEFF) [1]") == Ok(Array([Number("1")]))
+expect Utf8.parse_str(JsonValue.parser, "\u(FEFF)[1]") == Err(ParseError({ message: "byte order mark is not allowed", offset: 0 }))
+
+# NaN and Infinity, as number text.
+expect JsonValue.parse_with("[NaN, Infinity, -Infinity]", { non_finite: True }) == Ok(Array([Number("NaN"), Number("Infinity"), Number("-Infinity")]))
+expect error_of("NaN", {}) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
+expect error_of("[Infinity]", {}) == Ok({ line: 1, column: 2, message: "expected a JSON value" })
+expect error_of("-Infinity", {}) == Ok({ line: 1, column: 1, message: "expected a digit after '-'" })
+expect error_of("Nan", { non_finite: True }) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
+expect error_of("-NaN", { non_finite: True }) == Ok({ line: 1, column: 1, message: "expected a digit after '-'" })
+expect error_of("[-Inf]", { non_finite: True }) == Ok({ line: 1, column: 2, message: "expected a digit after '-'" })
+expect error_of("Infinityx", { non_finite: True }) == Ok({ line: 1, column: 9, message: "unexpected content after the JSON value" })
+expect JsonValue.parse_with("Infinity", { non_finite: True, max_number_digits: 8 }).is_ok() and message_of("-Infinity", { non_finite: True, max_number_digits: 8 }) == "number exceeds the limit of 8 characters"
+
+# Raw control characters inside strings and keys.
+expect JsonValue.parse_with("{\"a\tb\":\"\u(0)\n\u(1F)\"}", { control_characters: True }) == Ok(Object([{ key: "a\tb", value: String("\u(0)\n\u(1F)") }]))
+
+# Lone surrogates may become U+FFFD; pairs still combine.
+expect JsonValue.parse_with("[\"\\ud800\", \"\\ud800\\u0041\", \"\\udc00x\", \"\\udc00\\ud800\", \"\\ud83d\\ude00\"]", { lone_surrogates: Replace }) == Ok(Array([String("\u(FFFD)"), String("\u(FFFD)A"), String("\u(FFFD)x"), String("\u(FFFD)\u(FFFD)"), String("😀")]))
+
+# Strict input reads the same under every set of relaxations.
+expect {
+	documents = [
+		"{\"a\":[1,-2.5e3,true,null],\"b\":{\"c\":\"\\u00e9\\n\\ud83d\\ude00\"}}",
+		" [ ] ",
+		"0",
+		"\"x\"",
+		"[{\"a\":{}}, [[]], \"\"]",
+	]
+	relaxed : List(JsonValue.Options)
+	relaxed = [
+		{ comments: True },
+		{ trailing_commas: True },
+		{ bom: True },
+		{ non_finite: True },
+		{ control_characters: True },
+		{ lone_surrogates: Replace },
+		{ comments: True, trailing_commas: True, bom: True, non_finite: True, control_characters: True, lone_surrogates: Replace },
+	]
+	documents.all(|text| relaxed.all(|options| JsonValue.parse_with(text, options) == JsonValue.parse_str(text) and JsonValue.parse_str(text).is_ok()))
+}
+
+# --- Checks.
+
+# The top-level shape.
+expect JsonValue.parse_with("{}", { top_level: Object }).is_ok() and JsonValue.parse_with("[]", { top_level: ObjectOrArray }).is_ok() and JsonValue.parse_with("{}", { top_level: ObjectOrArray }).is_ok()
+expect error_of("[]", { top_level: Object }) == Ok({ line: 1, column: 1, message: "top-level value must be an object" })
+expect error_of(" null", { top_level: Object }) == Ok({ line: 1, column: 2, message: "top-level value must be an object" })
+expect error_of("\"s\"", { top_level: ObjectOrArray }) == Ok({ line: 1, column: 1, message: "top-level value must be an object or an array" })
+expect error_of("NaN", { top_level: ObjectOrArray, non_finite: True }) == Ok({ line: 1, column: 1, message: "top-level value must be an object or an array" })
+expect Utf8.parse_str(JsonValue.parser_with({ top_level: Object }), " [1]") == Err(ParseError({ message: "top-level value must be an object", offset: 1 }))
+expect Utf8.parse_str(JsonValue.parser_with({ top_level: ObjectOrArray }), "1") == Err(ParseError({ message: "top-level value must be an object or an array", offset: 0 }))
+expect Utf8.parse_str(JsonValue.parser_with({ top_level: Object, bom: True }), "\u(FEFF){}") == Ok(Object([]))
+expect error_of("@", { top_level: Object }) == Ok({ line: 1, column: 1, message: "expected a JSON value" })
+
+# I-JSON numbers: integers within ±(2^53−1), at most 17 significant digits,
+# and no overflow or underflow.
+expect
+	["9007199254740991", "-9007199254740991", "0", "-0", "0.1", "1.2345678901234567", "0.000123456789012345670000", "1e308", "5e-324", "0e-400", "1E2", "-0.0"]
+		.all(|text| JsonValue.parse_with(text, { interoperable_numbers: True }) == Ok(Number(text)))
+expect
+	["9007199254740992", "-9007199254740992", Str.repeat("9", 400), "1.23456789012345678", "1e400", "-1e400", "1e-400", "1.7976931348623159e308"]
+		.all(|text| message_of(text, { interoperable_numbers: True }).starts_with("number "))
+expect error_of("[9007199254740992]", { interoperable_numbers: True }) == Ok({ line: 1, column: 2, message: "number 9007199254740992 is not interoperable: it is an integer beyond 2^53-1 in magnitude" })
+expect message_of("1.23456789012345678", { interoperable_numbers: True }) == "number 1.23456789012345678 is not interoperable: it has more than 17 significant digits"
+expect message_of("1e400", { interoperable_numbers: True }) == "number 1e400 is not interoperable: it is too large for a double"
+expect message_of("1e-400", { interoperable_numbers: True }) == "number 1e-400 is not interoperable: it underflows to zero as a double"
+expect message_of("-Infinity", { interoperable_numbers: True, non_finite: True }) == "number -Infinity is not interoperable: it is not a finite number"
+expect JsonValue.parse_with("[NaN]", { non_finite: True }).is_ok() and message_of("[NaN]", { non_finite: True, interoperable_numbers: True }) == "number NaN is not interoperable: it is not a finite number"
 
 # --- Accessors.
 
