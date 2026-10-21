@@ -1,0 +1,610 @@
+// Defined by index.adoc; repeated so the chapter renders on its own, as it
+// does when browsed on GitHub.
+ifndef::src[]
+:repo: https://github.com/lukewilliamboswell/roc-parser
+:src: {repo}/blob/main
+:api: https://lukewilliamboswell.github.io/roc-parser/api/
+endif::[]
+
+[#json]
+= Reading JSON
+
+This chapter shows how to read a JSON document into a value whose shape you
+do not have to know in advance, walk it, report mistakes with a line and
+column, choose how strict to be, and write a value back out. It is for Roc
+programmers who have added `parser` to their app's dependencies and need to
+handle JSON that a record type cannot describe: software bills of materials,
+JSON Schema files, configuration with comments, or data that must pass
+through unchanged.
+
+By default the parser is strict: it accepts only the JSON of
+https://www.rfc-editor.org/rfc/rfc8259[RFC 8259], and also rejects repeated
+keys and nesting deeper than 128 levels. Options relax it for common
+variants, such as comments, trailing commas and a byte order mark, and add
+checks, such as size limits and I-JSON numbers. It reads complete documents
+held in memory; see <<json-unsupported,what is not supported>>.
+
+Every example on this page comes from
+link:{src}/docs/examples/json-guide.roc[`docs/examples/json-guide.roc`],
+which CI checks and runs, and imports `parser.JsonValue`.
+
+[#json-builtin]
+== The builtin `Json` or `JsonValue`
+
+Roc auto-imports a builtin module named `Json`. It decodes a document
+straight into a record, list or other type that you name in an annotation,
+in the way <<choosing-an-approach>> describes. Use it when you know the
+shape of the document and a Roc type can hold all of it.
+
+Use `JsonValue` when a record type cannot describe the document, or would
+lose part of it:
+
+* keys that are not Roc identifiers, such as JSON-LD's `@context` or
+  CycloneDX's `bom-ref`;
+* arrays whose items differ in shape, such as a licence that is either an
+  SPDX id or an SPDX expression;
+* documents of any shape, such as JSON Schema files, or a tool that works on
+  every document;
+* data that must pass through unchanged: the order of members, every digit
+  of a number, and a definite answer for repeated keys.
+
+The module is called `JsonValue` because the builtin already has the name
+`Json`: `import parser.Json` would leave the alias unbound. Both report
+invalid input with an `InvalidJson` tag, but with different payloads: a
+`Str` from the builtin and a `JsonValue.Error` record from `JsonValue`. A
+function that uses `?` on both needs `map_err` on one of them, because one
+error type cannot hold both.
+
+== Parse a document and walk it
+
+`JsonValue.parse_str` reads a whole document and returns a `JsonValue`, or
+`InvalidJson` with the position of the first problem. A `JsonValue` is one
+of:
+
+[source,roc]
+----
+JsonValue := [
+    Null,
+    Bool(Bool),
+    Number(Str),
+    String(Str),
+    Array(List(JsonValue)),
+    Object(List({ key : Str, value : JsonValue })),
+]
+----
+
+An `Object` keeps its members in source order. A `Number` holds the
+number's text exactly as written; <<json-numbers>> explains why and how to
+convert it. `JsonValue` has methods for the common lookups:
+
+* `get(key)` is the value of the first member named `key`, `at(index)` the
+  item at a zero-based index, and `get_path(path)` follows a list of keys and
+  indexes, with indexes written as decimal strings such as `"0"`. Each
+  returns `Err(Missing)` when there is nothing there.
+* `keys()` lists an object's keys in order, and is empty for anything else.
+* `as_str`, `as_bool`, `as_list` and `as_object` unwrap one variant or
+  return `Err(WrongType)`. `as_i64`, `as_u64` and `as_dec` convert a number.
+
+This CycloneDX bill of materials gives each component's licence either as an
+SPDX id or as an expression, and names its components with a `bom-ref` key
+that no Roc record field could have:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=document,indent=0]
+----
+
+These functions list the components with their licences, trying both shapes:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=walk,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=walk-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=1..3]
+----
+
+`get_path` uses each key as it is written, so a key that contains `/`, `.`
+or `~` needs no escaping. A segment applied to an array must be a decimal
+index without a sign or leading zeros, as in a JSON Pointer.
+
+For anything the methods do not cover, match on the variants. This function
+collects every string in a document with the keys and indexes that lead to
+it:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=match,indent=0]
+----
+
+Keeping only the lines that mention `bom-ref` prints:
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=4..5]
+----
+
+[#json-errors]
+== Show where an error is
+
+`InvalidJson` carries a `JsonValue.Error` record: a one-based `line` and
+`column` and a message. Columns count bytes from the start of the line, and
+a line ends at LF, CR or CRLF. The position is the start of the problem: the
+first character of a bad number or literal, the comma before a closing
+bracket, the slash of a comment, or the opening quote of a repeated key.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=errors,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=errors-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=6..12]
+----
+
+The second error is at column 11 although `tru` is the tenth character,
+because `é` is two bytes in UTF-8. JSON has no single-quoted strings and no
+comments, and a document holds exactly one value, so text after the first
+value is an error rather than a second document; <<json-compose>> shows how to
+read several values. The last input is a `\u` escape for half of a UTF-16
+surrogate pair, with no other half. RFC 8259 leaves such escapes to the
+implementation. A Roc `Str` cannot hold one, so `JsonValue` rejects it
+unless you ask for U+FFFD instead (see <<json-options>>).
+
+[#json-numbers]
+== Numbers keep their text
+
+JSON does not limit the size or precision of numbers, and parsers disagree
+about what `18446744073709551616` or `0.1000000000000000055511151231257827`
+means: many turn every number into a 64-bit float and lose digits.
+`JsonValue` does not decide for you. A `Number` holds the text from the
+input, so a number read and written back keeps every digit, its sign and
+the spelling of its exponent. Convert it when you need arithmetic:
+
+* `as_i64` and `as_u64` accept only JSON integers, without a fraction or an
+  exponent: `1.0` and `1e3` are `Err(WrongType)`, and an integer outside the
+  type's range is `Err(OutOfRange)`. `-0` is zero.
+* `as_dec` converts any JSON number, with or without a fraction or an
+  exponent, that fits a `Dec`. A number outside the `Dec` range, or one that
+  needs more than 18 decimal places, is `Err(OutOfRange)`.
+* For a floating-point value, pass the text to `F64.from_str`, which rounds
+  it to an `F64`.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=numbers,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=numbers-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=13..20]
+----
+
+Because values compare by their text, `1.50` and `1.5` are different
+`JsonValue` values, as the last line but one shows. Convert both with
+`as_dec` to compare them as numbers.
+
+[#json-duplicates]
+== Repeated keys
+
+RFC 8259 says that the names within an object should be unique, and leaves
+open what a repeated name means. Readers differ: most keep the last value,
+some keep the first, and some reject the document. Two programs can then
+read different data from the same file, so by default `JsonValue` rejects a
+repeated key. Keys are compared after their escapes are decoded, so
+`"extension"` and `"\u0065xtension"` are the same key.
+
+The `duplicates` option chooses what a repeated key means:
+
+`Reject`:: The default. Any repeated key is an error, reported at the
+repeated key.
+`CollapseIdentical`:: Keep one member when every copy has an equal value,
+and report an error when the values differ. Values are compared as
+`JsonValue` values: numbers by their text and objects member by member in
+order, so `1` and `1.0`, or the same members in another order, differ.
+`KeepFirst`:: Keep the first member and ignore later copies.
+`KeepLast`:: Keep the first member's position with the last copy's value, as
+JavaScript's `JSON.parse` and Python's `json.loads` do.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=duplicates,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=duplicates-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=21..28]
+----
+
+`CollapseIdentical` exists for documents that repeat a key by mistake
+without changing its meaning. The published
+https://spdx.org/schema/3.0.1/spdx-json-schema.json[SPDX 3.0.1 JSON schema]
+is one: it defines `extension` and `prop_Element_extension` twice in the
+same object, with equal values each time. Strict parsing rejects it;
+`CollapseIdentical` reads it and would still report a copy with a different
+value. The conformance review reads the pinned schema this way (see
+<<conformance-json>>).
+
+[#json-options]
+== Choose how strict to be
+
+`JsonValue.parse_with(text, options)` takes a `JsonValue.Options` record
+whose fields all have defaults, so you pass only the fields you change.
+`parse_str(text)` is `parse_with(text, {})`: strict RFC 8259, no repeated
+keys, and at most 128 levels of nesting. A limit or check that fails is
+reported as an `InvalidJson` error at the offending value, like any other
+error.
+
+[cols="1,1,3",options="header"]
+|===
+|Field |Default |Effect
+
+3+|*Limits*
+
+|`max_depth`
+|`128`
+|The most arrays and objects nested inside each other. A document that is
+a single number or string has depth 0.
+
+|`max_items`
+|no limit
+|The most items in one array or members in one object, counted as written,
+before repeated keys are handled.
+
+|`max_string_bytes`
+|no limit
+|The most UTF-8 bytes in one string or key, after its escapes are decoded.
+
+|`max_number_digits`
+|no limit
+|The most characters in one number, counting the sign, the decimal point and
+the exponent.
+
+3+|*Relaxations*
+
+|`comments`
+|`False`
+|Accept `//` line comments and `/* */` block comments wherever whitespace
+may appear. Comments are not kept.
+
+|`trailing_commas`
+|`False`
+|Accept a comma after the last item of an array or the last member of an
+object.
+
+|`bom`
+|`False`
+|Skip a byte order mark (U+FEFF) at the very start of the document.
+
+|`non_finite`
+|`False`
+|Accept `NaN`, `Infinity` and `-Infinity`, kept as `Number` text.
+
+|`control_characters`
+|`False`
+|Accept unescaped characters U+0000 to U+001F, such as a tab, inside strings
+and keys.
+
+|`lone_surrogates`
+|`Reject`
+|With `Replace`, a `\u` escape for half of a surrogate pair becomes U+FFFD
+instead of an error. A complete pair is always decoded.
+
+3+|*Checks*
+
+|`duplicates`
+|`Reject`
+|What a repeated key means; see <<json-duplicates>>.
+
+|`top_level`
+|`Any`
+|`ObjectOrArray` or `Object` requires the document to be that shape.
+
+|`interoperable_numbers`
+|`False`
+|Refuse numbers that an IEEE 754 double cannot hold, as I-JSON
+(https://www.rfc-editor.org/rfc/rfc7493[RFC 7493]) requires: integers beyond
+±(2^53^−1), more than 17 significant digits, and values that overflow or
+that underflow to zero.
+|===
+
+The parser keeps its nesting on an explicit stack, so a higher `max_depth`
+cannot overflow the call stack while parsing. Other operations do recurse
+over a value: comparing values with `==` or `CollapseIdentical`, hashing,
+and `Str.inspect`. The writer refuses more than 128 levels. Raise the limit
+only as far as your documents need.
+
+=== Read JSON with comments
+
+Configuration files such as `tsconfig.json` and editor settings use JSON
+with comments and trailing commas, often called JSONC:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=jsonc,indent=0]
+----
+
+Reading `tsconfig_text` with `read_jsonc`, and then strictly with
+`parse_str`, and writing the first result with `to_str`:
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=29..30]
+----
+
+`/*` inside a string, as in `"src/**/*.ts"`, is text, not a comment. An
+unterminated block comment is reported where it opens. These two options
+do not make the parser read JSON5; see <<json-unsupported>>.
+
+=== Read files with a byte order mark
+
+Some Windows editors start a UTF-8 file with a byte order mark. `parse_str`
+rejects it, at line 1, column 1. `bom: True` skips it, and only at the start
+of the document. This reader also requires the document to be an object, as
+a configuration file must be:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=bom,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=bom-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=31..33]
+----
+
+=== Read `NaN` and `Infinity`
+
+Python's `json.dumps` writes `NaN`, `Infinity` and `-Infinity` for floats
+that JSON cannot express, unless it is told not to. `non_finite: True` reads
+them as `Number` text. They are not numbers that `as_dec`, `as_i64` or
+`as_u64` can convert, and the writer refuses them, so what `to_str` writes is
+always strict JSON:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=non-finite,indent=0]
+----
+
+For `{"loss": NaN, "best": -Infinity}` this prints:
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=34..36]
+----
+
+=== Limit untrusted input
+
+A document from the network can be built to make a reader do too much work
+or hold too much memory. Set limits that suit your documents, require the
+top-level shape you expect, and keep repeated keys rejected:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=limits,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=limits-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=37..40]
+----
+
+`9007199254740993` is a valid JSON number, but a JavaScript program would
+read it as `9007199254740992`; `interoperable_numbers` refuses it so that
+every reader agrees. The options do not limit the size of the whole document:
+check `Str.count_utf8_bytes` before parsing if you need to.
+
+[#json-write]
+== Write JSON
+
+`JsonValue.to_str` writes a value as compact JSON, and
+`JsonValue.to_str_with` takes `JsonValue.WriteOptions`:
+
+* `indent` greater than zero puts each item and member on its own line,
+  indented by that many spaces per level, with a space after each `:`. Empty
+  arrays and objects are written `[]` and `{}`.
+* `sort_keys: True` writes the members of every object in the byte order of
+  their keys, which is Unicode code point order. Otherwise members keep their
+  order.
+
+Numbers are written as their text. In strings, only the quote, the backslash
+and control characters are escaped: `\b`, `\f`, `\n`, `\r` and `\t` for
+those characters and `\u00XX` (lowercase) for the rest. Other characters,
+including `/` and non-ASCII text, are written as they are. The output is
+byte for byte what Python's
+`json.dumps(value, ensure_ascii=False, sort_keys=..., indent=...)` writes, with
+the separators `(",", ":")` when compact and `(",", ": ")` when indented, for
+the same number text; the conformance review checks this.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=write,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=write-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=41..53]
+----
+
+A value built in your code can hold something that JSON cannot express, and
+the writer refuses it rather than write text that would read back as
+something else:
+
+`InvalidNumber(text)`:: A `Number` whose text is not a JSON number, such as
+`0x10`, `+1`, `1.` or text with spaces around it, including `NaN` and
+`Infinity`.
+`DuplicateKey(key)`:: A key repeated in one object.
+`TooDeep`:: More than 128 levels of nesting.
+
+So what the writer returns always reads back with `parse_str` as the value
+you wrote, or, with `sort_keys`, as its sorted copy. It does not keep the
+input's layout: comments, whitespace and the spelling of escapes are gone,
+so `"\u00e9"` is written `"é"`.
+
+[#json-compile-time]
+== Check JSON during compilation
+
+Annotate a string literal with the `JsonValue` type, and the compiler calls
+`JsonValue.from_quote` on it while compiling your program. The literal must
+be strict JSON; anything else is a compiler error, and the constant needs no
+parsing at run time:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=quoted,indent=0]
+----
+
+In a Roc string literal a backslash starts a Roc escape, in multi-line
+strings too, so write each backslash of a JSON escape twice: JSON's
+`\u00e9` is `\\u00e9`, and `\n` is `\\n`. A single `\u00e9` is a compiler
+error, because Roc's own escape is written `\u(E9)`; a single `\n` puts a
+real line break inside the JSON string, which strict JSON rejects.
+
+For a file, import its text as a `Str` and require a checked conversion in a
+top-level declaration, as <<compile-time-parsing>> describes:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=imported,indent=0]
+----
+
+`JsonValue.validate` takes `source`, a `name` used in errors (default
+`"<literal>"`), and `options`, the same `JsonValue.Options` that
+`parse_with` takes (default `{}`). JSON has no separate lint checks: its
+extra checks are these options. There is no `validate_as`; to decode JSON
+into a record, use the builtin `Json`.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=compile-time-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=54..57]
+----
+
+The last line shows the message a failed check gives, which the compiler
+reports with the name, line and column.
+
+[#json-compose]
+== Combine with other parsers
+
+`JsonValue.parser` is a `Parser(Utf8.Bytes, JsonValue)` for use with the
+combinators. It reads the whitespace before a value, one strict JSON value,
+and the whitespace after it, and leaves the rest of the input for the next
+parser. `JsonValue.parser_with(options)` takes the same options as
+`parse_with`. Failures are `ParseError({ message, offset })`, with the same
+message as `parse_str` and the byte offset of the problem.
+
+JSON Lines (newline-delimited JSON) logs hold one value per line, which
+`Parser.many` reads:
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=compose,indent=0]
+----
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=compose-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/json-guide.expected[lines=58..59]
+----
+
+Because each value takes the whitespace after it, this reader also accepts
+several values on one line; it does not check that each value has a line of
+its own.
+
+[#json-unsupported]
+== What is not supported
+
+These limits are by design:
+
+Streaming:: The parser reads a complete document held in memory and returns
+a tree; there is no event or token interface. Numbers, and strings without
+escapes, share the input's memory instead of being copied, so a value keeps
+the whole input alive while any part of it is in use.
+JSON5:: Only the relaxations listed in <<json-options>> are available.
+Single-quoted strings, unquoted keys, hexadecimal numbers, leading or
+trailing decimal points, a leading `+`, and line breaks escaped inside
+strings are always errors.
+Type-directed decoding:: There is no `JsonValue.decode` or `validate_as`.
+To decode JSON into your own record type, use the builtin `Json`.
+Other encodings:: The input is UTF-8. `JsonValue.parser`, which takes bytes,
+rejects a value that contains bytes that are not UTF-8. Convert UTF-16 and
+UTF-32 documents first.
+Queries and schemas:: `get_path` takes a list of keys and indexes, not a JSON
+Pointer string, and there is no JSONPath or JSON Schema validation.
+Preserved layout:: Comments, whitespace and the spelling of escapes are
+dropped, and the writer has no option to escape non-ASCII text.
+
+For the full module interface, see the
+link:{api}JsonValue[JsonValue API reference].
+
+[#json-performance]
+== Performance
+
+The parser scans the input bytes once, keeping its nesting on an explicit
+stack as the XML parser does, so deep nesting cannot overflow the call stack.
+Repeated keys are found by comparing keys in objects of up to 16 members and
+with a hash table in larger ones. The module's tests parse an object with
+20,000 members and an array of 100,000 numbers, and the fuzz targets run with
+a time limit per input, to catch quadratic behaviour. Number text, and
+strings without escapes, are slices of the input string rather than copies.
+The benchmark harness compares `JsonValue.parse_str` with serde_json, Go's
+`encoding/json` and Python's `json`; see <<benchmarks>> and
+<<performance-fairness>>.

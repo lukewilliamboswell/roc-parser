@@ -1,0 +1,59 @@
+roc-parser 2.1.0: UPL-1.0
+unicode 4.3.0: UPL-1.0 OR MIT
+Ok(["bomFormat", "specVersion", "components"])
+/components/0/bom-ref = pkg:roc/parser@2.1.0
+/components/1/bom-ref = pkg:roc/unicode@4.3.0
+3:11: leading zeros are not allowed in numbers
+1:11: invalid literal: expected true, false or null
+1:10: expected a JSON value
+1:6: trailing comma is not allowed
+1:1: comments are not allowed
+1:10: unexpected content after the JSON value
+1:2: unpaired surrogate in \u escape
+42: as_i64 Ok(42), as_u64 Ok(42), as_dec Ok(42.0)
+-0: as_i64 Ok(0), as_u64 Ok(0), as_dec Ok(0.0)
+1.50: as_i64 Err(WrongType), as_u64 Err(WrongType), as_dec Ok(1.5)
+1e3: as_i64 Err(WrongType), as_u64 Err(WrongType), as_dec Ok(1000.0)
+18446744073709551616: as_i64 Err(OutOfRange), as_u64 Err(OutOfRange), as_dec Ok(18446744073709551616.0)
+1e400: as_i64 Err(WrongType), as_u64 Err(WrongType), as_dec Err(OutOfRange)
+False
+Ok(1.5)
+Reject: 1:26: duplicate key "id"
+CollapseIdentical: 1:26: duplicate key "id" with a different value
+KeepFirst: {"id":1,"name":"web"}
+KeepLast: {"id":2,"name":"web"}
+Reject: 1:25: duplicate key "extension"
+CollapseIdentical: {"extension":{"a":1}}
+KeepFirst: {"extension":{"a":1}}
+KeepLast: {"extension":{"a":1}}
+{"compilerOptions":{"target":"ES2022","strict":true},"include":["src/**/*.ts"]}
+2:3: comments are not allowed
+{"port":8080}
+1:1: byte order mark is not allowed
+1:1: top-level value must be an object
+Number("NaN")
+Err(OutOfRange)
+Err(InvalidNumber("NaN"))
+{"ids":[1,2,3]}
+1:8: number 9007199254740993 is not interoperable: it is an integer beyond 2^53-1 in magnitude
+1:7: string exceeds the limit of 4096 bytes
+1:1: top-level value must be an object
+{"name":"roc-parser \"JSON\" café","version":"2.2.0","sizes":[1.50,2E3],"draft":false,"assets":{}}
+{
+  "assets": {},
+  "draft": false,
+  "name": "roc-parser \"JSON\" café",
+  "sizes": [
+    1.50,
+    2E3
+  ],
+  "version": "2.2.0"
+}
+Err(InvalidNumber("0x10"))
+Err(DuplicateKey("a"))
+Ok(Number("340282366920938463463374607431768211455"))
+Ok(String("café 😀"))
+Ok(Bool(True))
+Err(BadQuotedBytes("list.json:1:9: JSON: trailing comma is not allowed"))
+Ok([Object([{ key: "event", value: String("start") }]), Object([{ key: "event", value: String("stop") }])])
+Err(ParseError({ message: "expected a JSON value", offset: 29 }))
