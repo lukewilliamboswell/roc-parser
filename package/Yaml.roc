@@ -2,6 +2,7 @@ import YamlSource
 import YamlScalar
 import Parser
 import Utf8
+import Literal as Quotation
 
 ## A practical YAML configuration parser.
 ##
@@ -116,6 +117,61 @@ Yaml := [
 
 	## Hash a parsed YAML value, so trees can be `Dict` keys or `Set` members.
 	to_hash : _
+
+	## Checks for accepted YAML that is commonly mistaken for another value.
+	## Set a check to `False` to accept that spelling deliberately.
+	Lints := { legacy_booleans : Bool ?? True }
+
+	## Checked tree parsing. Omitted fields use the documented defaults.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", lints : Lints ?? {} }
+
+	## Checked type-directed decoding, with the same key conventions as [Yaml.decode].
+	DecodeValidationProps := {
+		source : Str,
+		name : Str ?? "<literal>",
+		lints : Lints ?? {},
+		keys : [SnakeCase, KebabCase, CamelCase] ?? SnakeCase,
+		unknown_keys : [Skip, Reject] ?? Skip,
+	}
+
+	## Read a quoted YAML tree during compilation, rejecting invalid input and
+	## unquoted legacy boolean values such as `yes` and `off`.
+	from_quote : Str -> Try(Yaml, [BadQuotedBytes(Str)])
+	from_quote = |source| validate({ source: source })
+
+	## Validate one complete document, reporting its source name and position.
+	## Unlike [Yaml.parse_str], this also rejects enabled lint checks. Legacy
+	## boolean checks inspect unquoted values, never mapping keys or quoted text.
+	validate : ValidationProps -> Try(Yaml, [BadQuotedBytes(Str)])
+	validate = |props| {
+		node = validation_tree(props.source, props.name, props.lints)?
+		resolve(node).map_err(|InvalidYaml(problem)| checked_error(props.name, problem))
+	}
+
+	## Validate and decode one document into the inferred Roc type. All existing
+	## decoder types, including U128 and strings such as `1.10`, are preserved.
+	## Use `unknown_keys: Reject` to reject fields the result type does not have.
+	validate_as : DecodeValidationProps -> Try(a, [BadQuotedBytes(Str)])
+		where [a.Parseable([InvalidYaml(Error), ..errs])]
+	validate_as = |props| {
+		node = validation_tree(props.source, props.name, props.lints)?
+		A : a
+		parse_value = A.parser_for(Yaml.Format.{ keys: props.keys, unknown_keys: props.unknown_keys })
+		match decode_node(parse_value, node) {
+			Ok(value) => Ok(value)
+			Err(InvalidYaml(problem)) => Err(checked_error(props.name, problem))
+			Err(other) => Err(Quotation.error({ name: props.name, format: "YAML", message: "decoding failed: ${Str.inspect(other)}" }))
+		}
+	}
+
+	## A typed YAML quotation. Access the decoded application value with `.value`.
+	Decoded(a) := { value : a }.{
+
+		## Decode quoted source with the defaults of [Yaml.validate_as].
+		from_quote : Str -> Try(Decoded(a), [BadQuotedBytes(Str)])
+			where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
+		from_quote = |source| Yaml.validate_as({ source: source }).map_ok(|value| Decoded.{ value })
+	}
 
 	## Parse one YAML configuration document from a string.
 	##
@@ -739,9 +795,50 @@ flatten = |node, events| {
 decode_with : (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), ..errs])), Str -> Try(a, [InvalidYaml(Yaml.Error), ..errs])
 decode_with = |parse_value, input| {
 	node = parse_tree(input.to_utf8())?
+	decode_node(parse_value, node)
+}
+
+decode_node : (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), ..errs])), Node -> Try(a, [InvalidYaml(Yaml.Error), ..errs])
+decode_node = |parse_value, node| {
 	events = flatten(node, [])
 	parsed = parse_value(Yaml.Cursor.{ events, pos: 0 })?
 	Ok(parsed.value)
+}
+
+checked_error : Str, Yaml.Error -> [BadQuotedBytes(Str)]
+checked_error = |name, problem| Quotation.error({ name, format: "YAML", message: problem.message, line: problem.line, column: problem.column })
+
+validation_tree : Str, Str, Yaml.Lints -> Try(Node, [BadQuotedBytes(Str)])
+validation_tree = |source, name, lints| {
+	node = parse_tree(source.to_utf8()).map_err(|InvalidYaml(problem)| checked_error(name, problem))?
+	if lints.legacy_booleans {
+		check_legacy_booleans(node, name)?
+	}
+	Ok(node)
+}
+
+check_legacy_booleans : Node, Str -> Try({}, [BadQuotedBytes(Str)])
+check_legacy_booleans = |node, name| {
+	match node.kind {
+		Plain(text) => {
+			lower = text.with_ascii_lowercased()
+			if lower == "yes" or lower == "no" or lower == "on" or lower == "off" {
+				return Err(checked_error(name, { line: node.line, column: node.column, message: "legacy_booleans: ${Str.inspect(text)} is text in YAML 1.2; use true/false for a boolean or quote the text" }))
+			}
+		}
+		Quoted(_) => {}
+		Seq(items) => {
+			for item in items {
+				check_legacy_booleans(item, name)?
+			}
+		}
+		Map(entries) => {
+			for entry in entries {
+				check_legacy_booleans(entry.value, name)?
+			}
+		}
+	}
+	Ok({})
 }
 
 advance_cursor : Yaml.Cursor, U64 -> Yaml.Cursor
@@ -3566,4 +3663,79 @@ expect {
 expect {
 	result = Yaml.tokenize_bytes([0xFF])
 	result.status == Recovered and result.tokens.all(|token| token.scalar == Text) and result.diagnostics.any(|diagnostic| diagnostic.code == InvalidUtf8)
+}
+
+# Quotations use semantic parsing, including multiline literals and typed decoding.
+expect {
+	document : Yaml
+	document =
+		\\enabled: true
+		\\items: [1, 2]
+	document.get("enabled") == Ok(Bool(True))
+}
+
+expect {
+	config : Yaml.Decoded({ version : Str, maximum : U128 })
+	config = "version: 1.10\nmaximum: 340282366920938463463374607431768211455\n"
+	config.value == { version: "1.10", maximum: 340282366920938463463374607431768211455 }
+}
+
+expect {
+	Yaml.validate({ source: "mode: ON", name: "config.yaml" }) == Err(BadQuotedBytes("config.yaml:1:7: YAML: legacy_booleans: \"ON\" is text in YAML 1.2; use true/false for a boolean or quote the text"))
+}
+
+expect Yaml.validate({ source: "" }) == Ok(Null)
+
+expect {
+	Yaml.validate({ source: "on: 'off'\nno: \"YES\"\n" }) == Yaml.parse_str("on: 'off'\nno: \"YES\"\n").map_err(|_| BadQuotedBytes("unexpected parse error"))
+}
+
+expect {
+	source = "nested:\n  - yes\n"
+	Yaml.validate({ source, lints: { legacy_booleans: False } }) == Yaml.parse_str(source).map_err(|_| BadQuotedBytes("unexpected parse error"))
+}
+
+expect {
+	match Yaml.validate({ source: "mode: yes\nbroken: [", name: "bad.yaml" }) {
+		Err(BadQuotedBytes(message)) => message.starts_with("bad.yaml:2:") and !message.contains("legacy_booleans")
+		Ok(_) => False
+	}
+}
+
+expect {
+	result : Try({ user_id : U64 }, [BadQuotedBytes(Str)])
+	result = Yaml.validate_as({ source: "userId: 18446744073709551615\nextra: ignored", keys: CamelCase })
+	result == Ok({ user_id: 18446744073709551615 })
+}
+
+expect {
+	result : Try({ user_id : U64 }, [BadQuotedBytes(Str)])
+	result = Yaml.validate_as({ source: "user-id: 7\nextra: ignored", name: "strict.yaml", keys: KebabCase, unknown_keys: Reject })
+	match result {
+		Err(BadQuotedBytes(message)) => message.starts_with("strict.yaml:2:") and message.contains("extra")
+		Ok(_) => False
+	}
+}
+
+expect {
+	result : Try({ required : Str }, [BadQuotedBytes(Str)])
+	result = Yaml.validate_as({ source: "{}", name: "missing.yaml" })
+	match result {
+		Err(BadQuotedBytes(message)) => message.starts_with("missing.yaml: YAML:") and message.contains("required")
+		Ok(_) => False
+	}
+}
+
+CheckedYamlFailure := [Never].{
+	parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : CheckedYamlFailure, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), CustomYamlFailure(Str)]))
+	parser_for = |_| |_| Err(CustomYamlFailure("custom detail"))
+}
+
+expect {
+	result : Try(CheckedYamlFailure, [BadQuotedBytes(Str)])
+	result = Yaml.validate_as({ source: "anything" })
+	match result {
+		Err(BadQuotedBytes(message)) => message.contains("CustomYamlFailure") and message.contains("custom detail")
+		Ok(_) => False
+	}
 }

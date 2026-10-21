@@ -1,5 +1,6 @@
 import Parser
 import Utf8
+import Literal as Quotation
 
 ## RFC 4180-style CSV parsing and typed record decoding.
 ##
@@ -36,7 +37,13 @@ import Utf8
 ##
 ## expect people == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
 ## ```
-CSV :: [].{
+CSV := { records : List(CSV.Record) }.{
+
+	## Compare CSV documents by their raw records.
+	is_eq : _
+
+	## Hash a CSV document by its raw records.
+	to_hash : _
 
 	## One CSV record: its fields as raw bytes, in column order.
 	##
@@ -53,6 +60,53 @@ CSV :: [].{
 	## known, as in [CSV.decode]. `message` is bounded in length and quotes
 	## field text lossily, so it is safe to show for any input.
 	Error : { record : U64, field : U64, line : U64, column : U64, message : Str }
+
+	## Whether the first record is a header, and how its names are matched.
+	## Raw validation keeps every record unchanged in all modes.
+	HeaderMode : [Absent, Exact, Normalized]
+
+	## Header checks. They only apply when a header mode is selected.
+	Lints := { duplicate_headers : Bool ?? True, empty_headers : Bool ?? True }
+
+	## Checked raw parsing; headers are absent unless explicitly selected.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", header : HeaderMode ?? Absent, lints : Lints ?? {} }
+
+	## Checked decoding; header names match exactly unless overridden.
+	DecodeValidationProps := { source : Str, name : Str ?? "<literal>", header : HeaderMode ?? Exact, lints : Lints ?? {} }
+
+	## Check quoted CSV during compilation. Access raw records with `.records`.
+	## The first record is data unless configured validation selects a header.
+	from_quote : Str -> Try(CSV, [BadQuotedBytes(Str)])
+	from_quote = |source| CSV.validate({ source: source }).map_ok(|records| CSV.{ records })
+
+	## A quotation of typed CSV rows. Access the rows with `.value`.
+	Decoded(row) := { value : List(row) }.{
+
+		## Decode quoted CSV using exact header names and enabled header checks.
+		from_quote : Str -> Try(Decoded(row), [BadQuotedBytes(Str)])
+			where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
+		from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| Decoded.{ value })
+	}
+
+	## Validate raw CSV records, rejecting selected header checks as well as
+	## malformed CSV. Header checks compare normalized names in `Normalized`
+	## mode; `Absent` does not interpret any record as column names.
+	validate : ValidationProps -> Try(List(Record), [BadQuotedBytes(Str)])
+	validate = |props| checked_records(props.source, props.name, props.header, props.lints)
+
+	## Validate and decode rows into the inferred Roc type. `Exact` and
+	## `Normalized` use a header; `Absent` decodes headerless tuples.
+	validate_as : DecodeValidationProps -> Try(List(row), [BadQuotedBytes(Str)])
+		where [row.Parseable([InvalidCsv(Error), ..errs])]
+	validate_as = |props| {
+		records = checked_records(props.source, props.name, props.header, props.lints)?
+		Row : row
+		match decode_records(props.source.to_utf8(), records, Row.parser_for(Format.Default), decoding_mode(props.header)) {
+			Ok(values) => Ok(values)
+			Err(InvalidCsv(problem)) => Err(checked_error(props.name, problem))
+			Err(other) => Err(Quotation.error({ name: props.name, format: "CSV", message: "decoding failed: ${Str.inspect(other)}" }))
+		}
+	}
 
 	## Parse CSV text into raw records without decoding them.
 	##
@@ -530,6 +584,11 @@ decode_table = |text, parse_row, mode| {
 			Ok(found) => found
 			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, bad)))
 		}
+	decode_records(bytes, records, parse_row, mode)
+}
+
+decode_records : List(U8), List(CSV.Record), (CSV.State -> Try({ value : row, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errs])), [HeaderExact, HeaderNormalized, Headerless] -> Try(List(row), [InvalidCsv(CSV.Error), ..errs])
+decode_records = |bytes, records, parse_row, mode| {
 	{ header, first } =
 		match mode {
 			Headerless => { header: [], first: 0 }
@@ -556,6 +615,43 @@ decode_table = |text, parse_row, mode| {
 		$index = $index + 1
 	}
 	Ok($values)
+}
+
+decoding_mode : CSV.HeaderMode -> [HeaderExact, HeaderNormalized, Headerless]
+decoding_mode = |header| match header {
+	Absent => Headerless
+	Exact => HeaderExact
+	Normalized => HeaderNormalized
+}
+
+checked_error : Str, CSV.Error -> [BadQuotedBytes(Str)]
+checked_error = |name, problem| Quotation.error({ name, format: "CSV", message: "record ${problem.record.to_str()}, field ${problem.field.to_str()}: ${problem.message}", line: problem.line, column: problem.column })
+
+checked_records : Str, Str, CSV.HeaderMode, CSV.Lints -> Try(List(CSV.Record), [BadQuotedBytes(Str)])
+checked_records = |source, name, header, lints| {
+	bytes = source.to_utf8()
+	records = scan_table(bytes).map_err(|bad| checked_error(name, syntax_error(bytes, bad)))?
+	if header != Absent {
+		names = (records.first() ?? []).map(|field| if (header == Normalized) normalize_name(field) else Str.from_utf8_lossy(field))
+		var $seen = Set.empty()
+		var $index = 0
+		for field in names {
+			message = if lints.empty_headers and field == "" {
+				"empty_headers: header name is empty"
+			} else if lints.duplicate_headers and $seen.contains(field) {
+				"duplicate_headers: repeated header ${Str.inspect(field)}"
+			} else {
+				""
+			}
+			if message != "" {
+				problem = locate(bytes, { record: 1, field: $index + 1, line: 0, column: 0, message })
+				return Err(checked_error(name, problem))
+			}
+			$seen = $seen.insert(field)
+			$index = $index + 1
+		}
+	}
+	Ok(records)
 }
 
 smaller : U64, U64 -> U64
@@ -1217,4 +1313,97 @@ expect {
 	pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
 	pairs = CSV.parse_headerless("Ada,36\nAlan,41\n")
 	pairs == Ok([("Ada", 36), ("Alan", 41)])
+}
+
+expect {
+	table : CSV
+	table =
+		\\name,age
+		\\Ada,36
+	table.records == [["name".to_utf8(), "age".to_utf8()], ["Ada".to_utf8(), "36".to_utf8()]]
+}
+
+expect {
+	people : CSV.Decoded({ name : Str, age : U64 })
+	people = "name,age\nAda,36\n"
+	people.value == [{ name: "Ada", age: 36 }]
+}
+
+# Raw CSV never guesses that a first record contains header names.
+expect CSV.validate({ source: "name,name,\n" }) == Ok([["name".to_utf8(), "name".to_utf8(), []]])
+
+expect CSV.validate({ source: "name,name\n", header: Exact, name: "names.csv" }) == Err(BadQuotedBytes("names.csv:1:6: CSV: record 1, field 2: duplicate_headers: repeated header \"name\""))
+expect CSV.validate({ source: "name,\n", header: Exact }) == Err(BadQuotedBytes("<literal>:1:6: CSV: record 1, field 2: empty_headers: header name is empty"))
+expect CSV.validate({ source: "", header: Exact }) == Ok([])
+
+expect {
+	source = "First-Name,FIRST_NAME\nAda,Alan\n"
+	exact = CSV.validate({ source, header: Exact }).is_ok()
+	normalized = match CSV.validate({ source, header: Normalized }) {
+		Err(BadQuotedBytes(message)) => message.contains("duplicate_headers") and message.contains("first_name")
+		Ok(_) => False
+	}
+	exact and normalized
+}
+
+expect {
+	source = "name,name,\nAda,Alan,\n"
+	CSV.validate({ source, header: Exact, lints: { duplicate_headers: False, empty_headers: False } }) == CSV.parse_records(source).map_err(|_| BadQuotedBytes("unexpected parse error"))
+}
+
+expect {
+	match CSV.validate({ source: "name,name\n\"unterminated", header: Exact, name: "bad.csv" }) {
+		Err(BadQuotedBytes(message)) => message.starts_with("bad.csv:2:1:") and message.contains("unterminated") and !message.contains("duplicate_headers")
+		Ok(_) => False
+	}
+}
+
+expect {
+	result : Try(List({ first_name : Str }), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: " First Name \nAda\n", header: Normalized })
+	result == Ok([{ first_name: "Ada" }])
+}
+
+expect {
+	result : Try(List({ name : Str }), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: "name,name\nAda,Alan", lints: { duplicate_headers: False } })
+	result == Ok([{ name: "Alan" }])
+}
+
+expect {
+	result : Try(List((Str, U64)), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: "Ada,36\nAlan,41", header: Absent })
+	result == Ok([("Ada", 36), ("Alan", 41)])
+}
+
+expect {
+	result : Try(List({ name : Str, age : U64 }), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: "name,age\nAda,nope", name: "people.csv" })
+	match result {
+		Err(BadQuotedBytes(message)) => message.starts_with("people.csv:2:5:") and message.contains("record 2, field 2")
+		Ok(_) => False
+	}
+}
+
+expect {
+	result : Try(List({ required : Str }), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: "other\nvalue", name: "missing.csv" })
+	match result {
+		Err(BadQuotedBytes(message)) => message.starts_with("missing.csv: CSV:") and message.contains("required")
+		Ok(_) => False
+	}
+}
+
+CheckedCsvFailure := [Never].{
+	parser_for : CSV.Format -> (CSV.State -> Try({ value : CheckedCsvFailure, rest : CSV.State }, [InvalidCsv(CSV.Error), CustomCsvFailure(Str)]))
+	parser_for = |_| |_| Err(CustomCsvFailure("custom detail"))
+}
+
+expect {
+	result : Try(List(CheckedCsvFailure), [BadQuotedBytes(Str)])
+	result = CSV.validate_as({ source: "header\nvalue" })
+	match result {
+		Err(BadQuotedBytes(message)) => message.contains("CustomCsvFailure") and message.contains("custom detail")
+		Ok(_) => False
+	}
 }
