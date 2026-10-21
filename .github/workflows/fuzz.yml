@@ -127,6 +127,10 @@ jobs:
             command: python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
           - format: xml
             command: python scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+          - format: json
+            command: python scripts/review_json.py check --baseline scripts/json/known-failures.json
+          - format: json-robustness
+            command: python scripts/review_json.py campaign --smoke
           - format: csv
             command: python scripts/review_csv.py
           - format: http
