@@ -1,15 +1,15 @@
 [
   {
     "name": "inline-formats",
-    "body": "yaml : Yaml\nyaml = \"name: app\"\nxml : Xml\nxml = \"<a/>\"\ncsv : CSV\ncsv = \"a,b\\n\"\nmarkdown : Markdown.Document\nmarkdown = \"# Hello\\n\"\nasciidoc : AsciiDoc\nasciidoc = \"= Hello\\n\\nworld\\n\"\nrequest : HTTP.RequestLiteral\nrequest = \"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n\"\nresponse : HTTP.ResponseLiteral\nresponse = \"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n\"\nroc : RocSyntax\nroc = \"answer = 42\\n\"\nvalue = yaml.get(\"name\") == Ok(Text(\"app\")) and xml.root.name() == Ok(\"a\") and csv.records.len() == 1 and markdown.blocks.len() == 1 and asciidoc.title == \"Hello\" and request.value.target == \"/\" and response.value.status_code == 200 and roc.consumed\n"
+    "body": "yaml : Yaml\nyaml = \"name: app\"\nxml : Xml\nxml = \"<a/>\"\ncsv : CSV\ncsv = \"a,b\\n\"\nmarkdown : Markdown.Document\nmarkdown = \"# Hello\\n\"\nasciidoc : AsciiDoc\nasciidoc = \"= Hello\\n\\nworld\\n\"\nrequest : HTTP.RequestLiteral\nrequest = \"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n\"\nresponse : HTTP.ResponseLiteral\nresponse = \"HTTP/1.1 200 OK\\r\\nContent-Length: 0\\r\\n\\r\\n\"\nroc : RocSyntax\nroc = \"answer = 42\\n\"\njson : JsonValue\njson = \"{\\\"name\\\":\\\"app\\\",\\\"sizes\\\":[1,2.50]}\"\nvalue = yaml.get(\"name\") == Ok(Text(\"app\")) and xml.root.name() == Ok(\"a\") and csv.records.len() == 1 and markdown.blocks.len() == 1 and asciidoc.title == \"Hello\" and request.value.target == \"/\" and response.value.status_code == 200 and roc.consumed and json.get(\"name\") == Ok(String(\"app\")) and json.get_path([\"sizes\", \"1\"]) == Ok(Number(\"2.50\"))\n"
   },
   {
     "name": "typed-and-multiline",
-    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\"\n"
+    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"😀\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
   },
   {
     "name": "imported-formats",
-    "body": "import \"settings.yaml\" as yaml_text : Str\nimport \"document.xml\" as xml_text : Str\nimport \"people.csv\" as csv_text : Str\nimport \"document.md\" as md_text : Str\nimport \"document.adoc\" as adoc_text : Str\nimport \"request.http\" as http_text : Str\nimport \"assets/source.roc\" as roc_text : Str\nconfig : { port : U16 }\nconfig = Literal.require(Yaml.validate_as({ source: yaml_text, name: \"settings.yaml\" }))\nxml = Literal.require(Xml.validate({ source: xml_text, name: \"document.xml\" }))\npeople : List({ name : Str, age : U8 })\npeople = Literal.require(CSV.validate_as({ source: csv_text, name: \"people.csv\" }))\nmarkdown = Literal.require(Markdown.validate({ source: md_text, name: \"document.md\" }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: adoc_text, name: \"document.adoc\" }))\nrequest = Literal.require(HTTP.validate_request({ source: http_text, name: \"request.http\" }))\nroc = Literal.require(RocSyntax.validate({ source: roc_text, name: \"assets/source.roc\" }))\nvalue = config.port == 8080 and xml.root.name() == Ok(\"a\") and people == [{ name: \"Ada\", age: 36 }] and markdown.len() == 1 and asciidoc.title == \"Hello\" and request.target == \"/\" and roc.consumed\n",
+    "body": "import \"settings.yaml\" as yaml_text : Str\nimport \"document.xml\" as xml_text : Str\nimport \"people.csv\" as csv_text : Str\nimport \"document.md\" as md_text : Str\nimport \"document.adoc\" as adoc_text : Str\nimport \"request.http\" as http_text : Str\nimport \"assets/source.roc\" as roc_text : Str\nimport \"document.json\" as json_text : Str\nconfig : { port : U16 }\nconfig = Literal.require(Yaml.validate_as({ source: yaml_text, name: \"settings.yaml\" }))\nxml = Literal.require(Xml.validate({ source: xml_text, name: \"document.xml\" }))\npeople : List({ name : Str, age : U8 })\npeople = Literal.require(CSV.validate_as({ source: csv_text, name: \"people.csv\" }))\nmarkdown = Literal.require(Markdown.validate({ source: md_text, name: \"document.md\" }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: adoc_text, name: \"document.adoc\" }))\nrequest = Literal.require(HTTP.validate_request({ source: http_text, name: \"request.http\" }))\nroc = Literal.require(RocSyntax.validate({ source: roc_text, name: \"assets/source.roc\" }))\njson = Literal.require(JsonValue.validate({ source: json_text, name: \"document.json\" }))\nvalue = config.port == 8080 and xml.root.name() == Ok(\"a\") and people == [{ name: \"Ada\", age: 36 }] and markdown.len() == 1 and asciidoc.title == \"Hello\" and request.target == \"/\" and roc.consumed and json.keys() == [\"name\"]\n",
     "assets": {
       "settings.yaml": "port: 8080\n",
       "document.xml": "<a/>",
@@ -17,12 +17,13 @@
       "document.md": "# Hello\n",
       "document.adoc": "= Hello\n\nworld\n",
       "request.http": "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n",
-      "assets/source.roc": "answer = 42\n"
+      "assets/source.roc": "answer = 42\n",
+      "document.json": "{\"name\": \"app\"}\n"
     }
   },
   {
     "name": "configured-checks",
-    "body": "yaml = Literal.require(Yaml.validate({ source: \"answer: yes\", lints: { legacy_booleans: False } }))\ncsv = Literal.require(CSV.validate({ source: \"a,a\\nx,y\\n\", header: Exact, lints: { duplicate_headers: False } }))\nempty_header = Literal.require(CSV.validate({ source: \",b\\nx,y\\n\", header: Exact, lints: { empty_headers: False } }))\nxml = Literal.require(Xml.validate({ source: \"<?xml version='1.0' encoding='ISO-8859-1'?><a/>\", lints: { non_utf8_declaration: False } }))\nmarkdown = Literal.require(Markdown.validate({ source: \"```\\nx\\n\", lints: { unclosed_fences: False } }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: \"include::missing.adoc[]\\n\", lints: { unexpanded_includes: False } }))\nrequest = Literal.require(HTTP.validate_request({ source: \"POST / HTTP/1.1\\r\\nHost: a\\r\\nContent-Length: 0\\r\\nContent-Length: 0\\r\\n\\r\\n\", lints: { repeated_content_length: False } }))\nroc = Literal.require(RocSyntax.validate({ source: \"answer = ...\\n\", lints: { placeholders: False } }))\nvalue = yaml.get(\"answer\") == Ok(Text(\"yes\")) and csv.len() == 2 and empty_header.len() == 2 and xml.root.name() == Ok(\"a\") and markdown.len() == 1 and !asciidoc.blocks.is_empty() and request.body.is_empty() and roc.consumed\n"
+    "body": "yaml = Literal.require(Yaml.validate({ source: \"answer: yes\", lints: { legacy_booleans: False } }))\ncsv = Literal.require(CSV.validate({ source: \"a,a\\nx,y\\n\", header: Exact, lints: { duplicate_headers: False } }))\nempty_header = Literal.require(CSV.validate({ source: \",b\\nx,y\\n\", header: Exact, lints: { empty_headers: False } }))\nxml = Literal.require(Xml.validate({ source: \"<?xml version='1.0' encoding='ISO-8859-1'?><a/>\", lints: { non_utf8_declaration: False } }))\nmarkdown = Literal.require(Markdown.validate({ source: \"```\\nx\\n\", lints: { unclosed_fences: False } }))\nasciidoc = Literal.require(AsciiDoc.validate({ source: \"include::missing.adoc[]\\n\", lints: { unexpanded_includes: False } }))\nrequest = Literal.require(HTTP.validate_request({ source: \"POST / HTTP/1.1\\r\\nHost: a\\r\\nContent-Length: 0\\r\\nContent-Length: 0\\r\\n\\r\\n\", lints: { repeated_content_length: False } }))\nroc = Literal.require(RocSyntax.validate({ source: \"answer = ...\\n\", lints: { placeholders: False } }))\nspdx = Literal.require(JsonValue.validate({ source: \"{\\\"extension\\\":{\\\"a\\\":1},\\\"extension\\\":{\\\"a\\\":1}}\", options: { duplicates: CollapseIdentical } }))\njsonc = Literal.require(JsonValue.validate({ source: \"{\\n  // settings\\n  \\\"a\\\": [1, 2,],\\n}\", options: { comments: True, trailing_commas: True } }))\nvalue = yaml.get(\"answer\") == Ok(Text(\"yes\")) and csv.len() == 2 and empty_header.len() == 2 and xml.root.name() == Ok(\"a\") and markdown.len() == 1 and !asciidoc.blocks.is_empty() and request.body.is_empty() and roc.consumed and spdx.keys() == [\"extension\"] and jsonc.get_path([\"a\", \"1\"]) == Ok(Number(\"2\"))\n"
   },
   {
     "name": "decoder-options",
@@ -102,6 +103,24 @@
     "errors": [
       "invalid string",
       "Roc"
+    ]
+  },
+  {
+    "name": "inline-json-syntax",
+    "body": "value : JsonValue\nvalue = \"[1,]\"\n",
+    "errors": [
+      "invalid string",
+      "JSON",
+      "trailing comma"
+    ]
+  },
+  {
+    "name": "inline-json-duplicate",
+    "body": "value : JsonValue\nvalue = \"{\\\"a\\\":1,\\\"\\\\u0061\\\":2}\"\n",
+    "errors": [
+      "invalid string",
+      "JSON",
+      "duplicate key"
     ]
   },
   {
@@ -223,6 +242,19 @@
     }
   },
   {
+    "name": "imported-json-failure",
+    "body": "import \"bad.json\" as text : Str\nvalue = Literal.require(JsonValue.validate({ source: text, name: \"bad.json\" }))\n",
+    "errors": [
+      "compile time crash",
+      "bad.json",
+      "JSON",
+      "leading zero"
+    ],
+    "assets": {
+      "bad.json": "{\"a\": 01}\n"
+    }
+  },
+  {
     "name": "csv-duplicate-headers",
     "body": "value = Literal.require(CSV.validate({ source: \"name,name\\na,b\\n\", header: Exact, name: \"headers.csv\" }))\n",
     "errors": [
@@ -259,6 +291,36 @@
       "compile time crash",
       "pipeline.http",
       "HTTP"
+    ]
+  },
+  {
+    "name": "json-collapse-conflict",
+    "body": "value = Literal.require(JsonValue.validate({ source: \"{\\\"a\\\":1,\\\"a\\\":2}\", name: \"lock.json\", options: { duplicates: CollapseIdentical } }))\n",
+    "errors": [
+      "compile time crash",
+      "lock.json:1:8",
+      "JSON",
+      "different value"
+    ]
+  },
+  {
+    "name": "json-depth-limit",
+    "body": "value = Literal.require(JsonValue.validate({ source: \"[[[]]]\", name: \"deep.json\", options: { max_depth: 2 } }))\n",
+    "errors": [
+      "compile time crash",
+      "deep.json:1:3",
+      "JSON",
+      "nesting"
+    ]
+  },
+  {
+    "name": "json-top-level",
+    "body": "value = Literal.require(JsonValue.validate({ source: \"42\", name: \"config.json\", options: { top_level: Object } }))\n",
+    "errors": [
+      "compile time crash",
+      "config.json:1:1",
+      "JSON",
+      "top-level"
     ]
   },
   {
