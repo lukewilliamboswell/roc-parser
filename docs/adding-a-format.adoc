@@ -9,11 +9,12 @@ endif::[]
 = Add a format module
 
 This how-to is for contributors who want to add a ready-made parser for a new
-text format, alongside `CSV`, `Xml`, `Yaml`, `Markdown` and `HTTP`. It assumes
-<<contributing>> and <<property-testing>>, and that you have opened an issue to
-agree that the format belongs in the package. When you finish, the new module
-has the same evidence behind it as the existing ones: tests, a review against a
-mature implementation, property tests in CI, and a chapter in this manual.
+text format, alongside `CSV`, `Xml`, `Yaml`, `JsonValue`, `Markdown` and
+`HTTP`. It assumes <<contributing>> and <<property-testing>>, and that you have
+opened an issue to agree that the format belongs in the package. When you
+finish, the new module has the same evidence behind it as the existing ones:
+tests, a review against a mature implementation, property tests in CI,
+benchmarks, and a chapter in this manual.
 
 The steps use a hypothetical format called `Toml` as the example. Follow them
 in order: each step relies on the one before.
@@ -38,8 +39,12 @@ the existing formats are listed in <<property-testing>>.
   the error type. This comment becomes the module's page in the API reference.
 . Give every exposed value a `##` doc comment with its purpose and, where it
   helps, a short `expect` example.
-. Expose the module in `package/main.roc`. `roc test package/main.roc`,
-  which `scripts/all_tests.py` runs, then runs its tests with the rest.
+. Expose the module in `package/main.roc` and name it in that file's doc
+  comment. `roc test package/main.roc`, which `scripts/all_tests.py` runs,
+  then runs its tests with the rest.
+. Check that the name does not clash with a builtin module that Roc imports
+  automatically. Roc has a builtin `Json`, so `import parser.Json` would
+  leave the alias unbound; that is why the JSON module is `JsonValue`.
 . Make it a type module and follow the conventions of the existing ones:
 ** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
    `Toml.Error` is a record with a `message` and the most precise location
@@ -58,7 +63,18 @@ the existing formats are listed in <<property-testing>>.
 Prefer a scanner over the input bytes for document-level parsing, with an
 explicit stack for nesting. The combinator style is convenient for small
 grammars, but every rewritten module (CSV, XML, HTTP, Markdown) moved to
-scanners to stay linear in the input size and to avoid deep recursion.
+scanners to stay linear in the input size and to avoid deep recursion, and
+`JsonValue` was written as one from the start.
+
+If the format has common variants, or callers need checks beyond the
+specification, give the module a `parse_with` that takes a nominal options
+record with defaulted fields, as `JsonValue.Options` does. Make the defaults
+the strict specification, and make each relaxation and each extra check a
+field that is off by default, so `parse_str(text)` is `parse_with(text, {})`
+and nobody gets a relaxation they did not ask for. Keep each option's code at
+one check site, test every field at and past its boundary, and pass the same
+record through the validation props, so that compile-time and run-time
+checks agree.
 
 Compile-time parsing is an enduring requirement for format modules. Make the
 document type nominal and implement `from_quote` by delegating to a checked
@@ -75,9 +91,11 @@ that is accepted, one that is rejected, and the boundary between them. Add a
 test for each limit you chose in step 1.
 
 Add compiler fixtures for valid and invalid quotations and imported text,
-including default checks and overrides. `scripts/check_literals.py` checks
-rejection by both `roc check` and `roc build`, and verifies the intended error
-message rather than accepting any compiler failure.
+including default checks and overrides, to `scripts/literals/cases.json`, and
+add `import parser.Toml` to the app header that `app_source` in
+`scripts/check_literals.py` writes. The script checks rejection by both
+`roc check` and `roc build`, and verifies the intended error message rather
+than accepting any compiler failure.
 
 Run the package tests:
 
@@ -98,7 +116,7 @@ prints one JSON line: the parsed value or an error. Use the public API only.
 `cases.json`:: Hand-written cases with a `name` and an `input`, one for each
 rule and each known edge case. Add the specification's own examples or test
 suite if there is one, pinned by URL and SHA-256 as `scripts/review_xml.py`
-does for the W3C suite.
+does for the W3C suite, or vendored as described below.
 `known-failures.json`:: The baseline. It starts empty; every entry added later
 needs a reason (see <<property-testing>>).
 
@@ -109,6 +127,17 @@ disagreement that is not in the baseline. Report baseline entries that now
 pass as stale. If the oracle is a third-party package, pin it, and all of its
 dependencies, in `scripts/toml/requirements.txt` so that
 `pip install --no-deps -r` installs exactly the reviewed versions.
+
+To vendor a third-party test suite instead of downloading it, convert it to
+one file, such as `scripts/toml/suite.json`, that records the upstream
+repository and revision in a `source` object, and commit the suite's licence
+beside it. `scripts/yaml/suite.json` with `YAML-TEST-SUITE-LICENSE`, and
+`scripts/json/suite.json` with `JSONTESTSUITE-LICENSE`, are the models. Check
+that the licence allows redistribution, and give the script a command that
+regenerates the file from a checkout, like `review_json.py vendor-suite`.
+Where the suite says an input is valid but your module rejects it by design,
+label the case a policy deviation with its reason, as `review_json.py` does
+for repeated keys, rather than hiding it.
 
 Run it, fix the parser until it passes, and add a unit test under
 `scripts/tests/` for any logic in the script that is not a direct call to the
@@ -130,6 +159,15 @@ value.
 Check the generator against the oracle on a corpus before you trust it: add a
 `corpus` mode to the review script, like `review_xml.py corpus`.
 
+Then add a robustness campaign to the review script: a `campaign` command,
+like `review_yaml.py campaign` and `review_json.py campaign`. It spends part
+of a time budget on libFuzzer runs of your targets and the rest on a seeded
+differential loop that generates and mutates documents, runs each through the
+probe and the oracle, and writes a report and a reproducer for every kind of
+disagreement under `.roc-parser-tmp/`. Give it `--smoke` for a short,
+iteration-bounded run in CI, `--seconds` and `--seed` for local runs, and a
+`replay` command for a saved reproducer.
+
 == 6. Register the targets
 
 . Add each target to `TARGETS` in `scripts/run_fuzz.py`, with its seed
@@ -138,12 +176,15 @@ Check the generator against the oracle on a corpus before you trust it: add a
 . Add reviewable seeds in `fuzz/seeds/toml.json` and syntax tokens in
   `fuzz/dictionaries/toml.dict` for the raw target.
 . Add each target to the `target` matrix of the `fuzz` job in
-  `.github/workflows/fuzz.yml`, and the review to the `conformance` matrix with
-  its `requirements` file and command.
+  `.github/workflows/fuzz.yml`, in the same order as in `TARGETS`, which
+  `TARGET_ORDER` in `scripts/run_fuzz.py` follows. Add the review to the
+  `conformance` matrix with its `requirements` file and command, and the
+  campaign's `--smoke` run as a second row, as the `json` and
+  `json-robustness` rows do.
 
 `scripts/tests/test_run_fuzz.py` fails if a `fuzz/*.roc` file is not
-registered, or if the workflow matrix and the registry disagree. Check that
-and run the new targets:
+registered, or if the workflow matrix lists the targets differently, or in a
+different order, from the registry. Check that and run the new targets:
 
 [source,bash]
 ----
@@ -151,7 +192,23 @@ python3 -m unittest discover -s scripts/tests -p "test_*.py"
 python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
 ----
 
-== 7. Document the module
+== 7. Add a benchmark
+
+Follow "Add a benchmark" in <<benchmarks>>: add `bench/roc/toml.roc`, which
+calls the public entry point through `Bench.run!`, a branch in
+`bench/roc/alloc.roc`, a deterministic generator and `pathological` entries in
+`scripts/bench.py`, a frozen sample, and at least one comparator per language,
+pinned exactly. `scripts/tests/test_bench.py` fails until the format has all
+of them. Check that the pathological documents scale linearly; the allocation
+counts from `--allocations` are a steadier signal than the timings:
+
+[source,bash]
+----
+python3 scripts/bench.py --quick --formats toml
+python3 -m unittest discover -s scripts/tests -p "test_bench.py"
+----
+
+== 8. Document the module
 
 . Add a chapter `docs/toml.adoc` that shows how to parse a document, how to
   handle errors, and what is and is not supported. Include it from the manual's
@@ -159,6 +216,10 @@ python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
 . Make every code example in the chapter a complete program that
   `scripts/check_doc_examples.py` compiles and runs, so it cannot drift from
   the API.
+. Add the module wherever the manual lists the formats: the format table in
+  `README.md`, the lists in `docs/index.adoc`, and `modules.adoc`,
+  `overview.adoc`, `errors.adoc`, `compile-time-parsing.adoc`,
+  `conformance.adoc`, `property-testing.adoc` and `performance.adoc`.
 . Add the module to the release notes for the next version in
   `docs/releases/`.
 
@@ -174,8 +235,19 @@ python3 scripts/build_manual.py
 == Checklist
 
 * [ ] Supported subset and oracle written down in the module doc comment
-* [ ] Module exposed in `package/main.roc` and listed in `scripts/all_tests.py`
+* [ ] Module exposed in `package/main.roc` and named in its doc comment, with
+  a name that no builtin module uses
+* [ ] Strict defaults, with relaxations and extra checks in a defaulted
+  options record
 * [ ] `expect` tests for accepted, rejected and boundary inputs
+* [ ] Compile-time fixtures in `scripts/literals/cases.json`, and the import
+  in `app_source` in `scripts/check_literals.py`
 * [ ] Probe, cases, review script and empty baseline under `scripts/`
-* [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and `fuzz.yml`
-* [ ] Chapter with tested examples, and a release notes entry
+* [ ] Any vendored test suite recorded with its revision and licence
+* [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and in
+  `fuzz.yml` in the same order
+* [ ] A robustness `campaign` in the review script, with its `--smoke` run in
+  the `conformance` matrix
+* [ ] A benchmark driver, generator, samples and comparators
+* [ ] Chapter with tested examples, the format added to every list of
+  formats, and a release notes entry
