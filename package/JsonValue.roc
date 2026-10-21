@@ -321,7 +321,21 @@ JsonValue := [
 	## expect JsonValue.parse_str("1e3").map_ok(|doc| doc.as_i64()) == Ok(Err(WrongType))
 	## ```
 	as_i64 : JsonValue -> Try(I64, [WrongType, OutOfRange])
-	as_i64 = |_value| crash "JsonValue.as_i64 is not implemented yet"
+	as_i64 = |value| {
+		match value {
+			Number(lexeme) =>
+				if is_integer_lexeme(lexeme.to_utf8()) {
+					match I64.from_str(lexeme) {
+						Ok(number) => Ok(number)
+						Err(_) => Err(OutOfRange)
+					}
+				} else {
+					Err(WrongType)
+				}
+
+			_ => Err(WrongType)
+		}
+	}
 
 	## Like [JsonValue.as_i64], for `U64`. A negative integer other than `-0`
 	## is `Err(OutOfRange)`.
@@ -332,7 +346,21 @@ JsonValue := [
 	## expect JsonValue.parse_str("-1").map_ok(|doc| doc.as_u64()) == Ok(Err(OutOfRange))
 	## ```
 	as_u64 : JsonValue -> Try(U64, [WrongType, OutOfRange])
-	as_u64 = |_value| crash "JsonValue.as_u64 is not implemented yet"
+	as_u64 = |value| {
+		match value {
+			Number(lexeme) =>
+				if is_integer_lexeme(lexeme.to_utf8()) {
+					match U64.from_str(lexeme) {
+						Ok(number) => Ok(number)
+						Err(_) => Err(OutOfRange)
+					}
+				} else {
+					Err(WrongType)
+				}
+
+			_ => Err(WrongType)
+		}
+	}
 
 	## The value of a `Number` as a `Dec`. A number outside the `Dec` range,
 	## with more than 18 decimal places, or `NaN` or `Infinity`, is
@@ -342,7 +370,25 @@ JsonValue := [
 	## expect JsonValue.parse_str("-1.25e+2").map_ok(|doc| doc.as_dec()) == Ok(Ok(-125.0))
 	## ```
 	as_dec : JsonValue -> Try(Dec, [WrongType, OutOfRange])
-	as_dec = |_value| crash "JsonValue.as_dec is not implemented yet"
+	as_dec = |value| {
+		match value {
+			Number(lexeme) => {
+				bytes = lexeme.to_utf8()
+				if is_number_lexeme(bytes) {
+					match Dec.from_str(lexeme) {
+						Ok(number) => Ok(number)
+						Err(_) => Err(OutOfRange)
+					}
+				} else if is_non_finite_lexeme(bytes) {
+					Err(OutOfRange)
+				} else {
+					Err(WrongType)
+				}
+			}
+
+			_ => Err(WrongType)
+		}
+	}
 
 	## How [JsonValue.to_str_with] writes a value. `sort_keys` writes object
 	## members in byte order of their keys, recursively. `indent` greater than
@@ -375,7 +421,10 @@ JsonValue := [
 	## expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n    1,\n    \"two\"\n]")
 	## ```
 	to_str_with : JsonValue, WriteOptions -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep])
-	to_str_with = |_value, _options| crash "JsonValue.to_str_with is not implemented yet"
+	to_str_with = |value, options| {
+		bytes = write_value(List.with_capacity(256), value, options.sort_keys, options.indent, 0)?
+		Ok(Str.from_utf8(bytes) ?? "")
+	}
 }
 
 # ------------------------------------------------------------------ reading
@@ -1155,6 +1204,15 @@ digits_end = |bytes, start| {
 	$pos
 }
 
+## Whether the whole of `bytes` is a JSON number.
+is_number_lexeme : List(U8) -> Bool
+is_number_lexeme = |bytes| {
+	match number_end(bytes, 0) {
+		Ok(end) => end == bytes.len()
+		Err(_) => False
+	}
+}
+
 ## Whether the whole of `bytes` is a JSON integer: `-?(0|[1-9][0-9]*)`.
 is_integer_lexeme : List(U8) -> Bool
 is_integer_lexeme = |bytes| {
@@ -1165,6 +1223,10 @@ is_integer_lexeme = |bytes| {
 		_ => False
 	}
 }
+
+## Whether `bytes` is `NaN`, `Infinity` or `-Infinity`.
+is_non_finite_lexeme : List(U8) -> Bool
+is_non_finite_lexeme = |bytes| non_finite_end(bytes, 0, True) == Ok(bytes.len())
 
 ## Why the number [start, end) cannot be held by an IEEE 754 double as
 ## I-JSON (RFC 7493 section 2.2) requires, if it cannot.
@@ -1269,6 +1331,102 @@ star_class = Utf8.ByteClass.from_bytes(['*'])
 
 # ------------------------------------------------------------------ writing
 
+WriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep]
+
+## The deepest nesting the writer accepts, the parser's default limit.
+max_write_depth : U64
+max_write_depth = 128
+
+## `buf` with `value` written after it. `depth` counts the arrays and objects
+## around `value`.
+write_value : List(U8), JsonValue, Bool, U64, U64 -> Try(List(U8), WriteError)
+write_value = |buf, value, sort_keys, indent, depth| {
+	match value {
+		Null => Ok(buf.append('n').append('u').append('l').append('l'))
+		Bool(flag) =>
+			if flag {
+				Ok(buf.append('t').append('r').append('u').append('e'))
+			} else {
+				Ok(buf.append('f').append('a').append('l').append('s').append('e'))
+			}
+
+		Number(lexeme) => {
+			bytes = lexeme.to_utf8()
+			if is_number_lexeme(bytes) {
+				Ok(buf.append_sublist(bytes, { start: 0, len: bytes.len() }))
+			} else {
+				Err(InvalidNumber(lexeme))
+			}
+		}
+
+		String(text) => Ok(write_string(buf, text))
+		Array(items) => {
+			if depth >= max_write_depth {
+				return Err(TooDeep)
+			}
+			if items.is_empty() {
+				return Ok(buf.append('[').append(']'))
+			}
+			var $out = buf.append('[')
+			var $later = False
+			for item in items {
+				if $later {
+					$out = $out.append(',')
+				}
+				$out = write_value(new_line($out, indent, depth + 1), item, sort_keys, indent, depth + 1)?
+				$later = True
+			}
+			Ok(new_line($out, indent, depth).append(']'))
+		}
+
+		Object(members) => {
+			if depth >= max_write_depth {
+				return Err(TooDeep)
+			}
+			if members.is_empty() {
+				return Ok(buf.append('{').append('}'))
+			}
+			check_unique_keys(members)?
+			ordered = if (sort_keys) members.sort_with(compare_keys) else members
+			var $out = buf.append('{')
+			var $later = False
+			for member in ordered {
+				if $later {
+					$out = $out.append(',')
+				}
+				$out = write_string(new_line($out, indent, depth + 1), member.key).append(':')
+				if indent > 0 {
+					$out = $out.append(' ')
+				}
+				$out = write_value($out, member.value, sort_keys, indent, depth + 1)?
+				$later = True
+			}
+			Ok(new_line($out, indent, depth).append('}'))
+		}
+	}
+}
+
+## `buf` with a line break and the indentation for `depth` levels, when
+## writing indented output.
+new_line : List(U8), U64, U64 -> List(U8)
+new_line = |buf, indent, depth| {
+	if indent == 0 {
+		buf
+	} else {
+		var $out = buf.append('\n')
+		var $level = 0
+		while $level < depth {
+			var $spaces = 0
+			while $spaces < indent {
+				$out = $out.append(' ')
+				$spaces = $spaces + 1
+			}
+			$level = $level + 1
+		}
+		$out
+	}
+}
+
 ## `buf` with `text` written after it as a JSON string. Only the quote, the
 ## backslash and control characters are escaped, as Python's
 ## `json.dumps(ensure_ascii=False)` does.
@@ -1312,6 +1470,60 @@ append_escape = |out, byte| {
 
 hex_lower : U8 -> U8
 hex_lower = |nibble| if (nibble < 10) '0' + nibble else 'a' + nibble - 10
+
+## `Err(DuplicateKey(key))` for the first key repeated among `members`.
+check_unique_keys : List(Member) -> Try({}, WriteError)
+check_unique_keys = |members| {
+	if members.len() <= small_object {
+		var $index = 1
+		while $index < members.len() {
+			match members.get($index) {
+				Ok(member) =>
+					if members.take_first($index).any(|earlier| earlier.key == member.key) {
+						return Err(DuplicateKey(member.key))
+					}
+
+				Err(_) => {}
+			}
+			$index = $index + 1
+		}
+	} else {
+		var $seen = Set.with_capacity(members.len())
+		for member in members {
+			if $seen.contains(member.key) {
+				return Err(DuplicateKey(member.key))
+			}
+			$seen = $seen.insert(member.key)
+		}
+	}
+	Ok({})
+}
+
+## Order members by the UTF-8 bytes of their keys, which is code point order.
+compare_keys : Member, Member -> [Before, Same, After]
+compare_keys = |left, right| {
+	a = left.key.to_utf8()
+	b = right.key.to_utf8()
+	var $index = 0
+	while $index < a.len() and $index < b.len() {
+		x = a.get($index) ?? 0
+		y = b.get($index) ?? 0
+		if x < y {
+			return Before
+		}
+		if x > y {
+			return After
+		}
+		$index = $index + 1
+	}
+	if a.len() < b.len() {
+		Before
+	} else if a.len() > b.len() {
+		After
+	} else {
+		Same
+	}
+}
 
 ## `text` written as a JSON string, for error messages.
 quote : Str -> Str
@@ -1378,6 +1590,95 @@ nested : U64, Str -> Str
 nested = |depth, inner| Str.concat(Str.repeat("[", depth), Str.concat(inner, Str.repeat("]", depth)))
 
 # `depth` arrays nested around `Null`, built as a value.
+nested_value : U64 -> JsonValue
+nested_value = |depth| {
+	var $value = Null
+	var $index = 0
+	while $index < depth {
+		$value = Array([$value])
+		$index = $index + 1
+	}
+	$value
+}
+
+# --- Ported from roc-blueprint's JsonData (62bedf4).
+
+# Unicode surrogate pairs and escaped controls survive exact JSON round trips.
+expect {
+	text = "a\n\t\"\\é😀"
+	JsonValue.to_str(String(text)).map_ok(JsonValue.parse_str) == Ok(Ok(String(text)))
+		and JsonValue.parse_str("\"\\ud83d\\ude00\"") == Ok(String("😀"))
+}
+
+# Malformed documents are refused.
+expect
+	[
+		"",
+		"{}{}",
+		"{\"a\":1,\"a\":2}",
+		"[1,]",
+		"01",
+		"1e",
+		"\"\\ud800\"",
+		"\"\\udc00\"",
+		"\"\\x00\"",
+		"{\"a\" 1}",
+		"true false",
+	]
+		.all(|text| JsonValue.parse_str(text).is_err())
+
+# Booleans, numbers, arrays and null remain typed data through a round trip.
+expect {
+	match JsonValue.parse_str("{\"a\":[true,false,null,-1.25e+2,0]}") {
+		Ok(value) => JsonValue.to_str(value).map_ok(JsonValue.parse_str) == Ok(Ok(value))
+		Err(_) => False
+	}
+}
+
+# Depth and collection bounds reject oversized structures.
+expect {
+	items = Str.join_with(List.repeat("null", 4097), ",")
+	JsonValue.parse_str(nested(130, "null")).is_err()
+		and JsonValue.parse_with("[${items}]", { max_items: 4096 }).is_err()
+}
+
+# Sorted output orders the members of every object.
+expect {
+	result = JsonValue.parse_str("{\"b\":[{\"z\":1,\"a\":2}],\"a\":{\"d\":\"x\",\"c\":true}}").map_ok(|value| JsonValue.to_str_with(value, { sort_keys: True }))
+	result == Ok(Ok("{\"a\":{\"c\":true,\"d\":\"x\"},\"b\":[{\"a\":2,\"z\":1}]}"))
+}
+
+# Constructed numbers cannot inject syntax.
+expect ["", "null", "01", "1,2", "1e", "NaN", "1}\n{\"injected\":true"].all(|text| JsonValue.to_str(Number(text)) == Err(InvalidNumber(text)))
+expect JsonValue.to_str(Object([{ key: "a", value: Null }, { key: "a", value: Bool(True) }])) == Err(DuplicateKey("a"))
+expect JsonValue.to_str(Number("340282366920938463463374607431768211455")) == Ok("340282366920938463463374607431768211455")
+expect JsonValue.parse_str("{\"a\":1,\"\\u0061\":2}").is_err()
+
+# Writing more than 128 levels of nesting is refused.
+expect JsonValue.to_str(nested_value(130)) == Err(TooDeep)
+
+# A string limit counts decoded bytes.
+expect {
+	text = Str.repeat("a", 65536)
+	JsonValue.parse_with("\"${text}\"", { max_string_bytes: 65536 }) == Ok(String(text))
+		and JsonValue.parse_with("\"${text}a\"", { max_string_bytes: 65536 }).is_err()
+}
+
+# Larger documents may hold more items when the limit allows.
+expect {
+	items = Str.join_with(List.repeat("0", 5000), ",")
+	JsonValue.parse_with("[${items}]", { max_items: 4096 }).is_err() and JsonValue.parse_str("[${items}]").is_ok()
+}
+
+# A key repeated with an equal value is one key only where the options say so,
+# and a conflicting one never is.
+expect JsonValue.parse_str("{\"a\":[1],\"a\":[1]}").is_err()
+expect JsonValue.parse_with("{\"a\":[1],\"b\":2,\"a\":[1]}", { duplicates: CollapseIdentical }) == Ok(Object([{ key: "a", value: Array([Number("1")]) }, { key: "b", value: Number("2") }]))
+expect JsonValue.parse_with("{\"a\":1,\"a\":2}", { duplicates: CollapseIdentical }).is_err()
+expect JsonValue.keys(Object([{ key: "x", value: Null }])) == ["x"]
+expect
+	[("0", Ok(0)), ("12", Ok(12)), ("3.00", Err(WrongType)), ("01", Err(WrongType)), ("1.5", Err(WrongType)), ("-1", Ok(-1)), ("1e3", Err(WrongType))]
+		.all(|(lexeme, expected)| JsonValue.as_i64(Number(lexeme)) == expected)
 
 # --- Grammar.
 
@@ -1718,6 +2019,101 @@ expect JsonValue.parse_str("[${Str.join_with(List.repeat("1", 100000), ",")}]").
 expect JsonValue.parse_with(nested(10000, "[]"), { max_depth: 10001 }).is_ok()
 expect JsonValue.parse_str("\"${Str.repeat("\\n", 50000)}\"").map_ok(|value| JsonValue.as_str(value).map_ok(Str.count_utf8_bytes)) == Ok(Ok(50000))
 
+# --- Number accessors.
+
+# Only JSON integers convert to I64 and U64; `-0` is zero.
+expect JsonValue.as_i64(Number("9223372036854775807")) == Ok(9223372036854775807) and JsonValue.as_i64(Number("-9223372036854775808")) == Ok(-9223372036854775808)
+expect JsonValue.as_i64(Number("9223372036854775808")) == Err(OutOfRange) and JsonValue.as_i64(Number("-9223372036854775809")) == Err(OutOfRange)
+expect JsonValue.as_i64(Number("-0")) == Ok(0) and JsonValue.as_u64(Number("-0")) == Ok(0)
+expect ["1.0", "1e3", "0x10", "+1", "1_0", "", " 1", "01", "-", "NaN", "Infinity"].all(|text| JsonValue.as_i64(Number(text)) == Err(WrongType) and JsonValue.as_u64(Number(text)) == Err(WrongType))
+expect JsonValue.as_i64(String("1")) == Err(WrongType) and JsonValue.as_u64(Null) == Err(WrongType)
+expect JsonValue.as_u64(Number("18446744073709551615")) == Ok(18446744073709551615) and JsonValue.as_u64(Number("18446744073709551616")) == Err(OutOfRange)
+expect JsonValue.as_u64(Number("-1")) == Err(OutOfRange) and JsonValue.as_u64(Number("0")) == Ok(0)
+
+# Any JSON number converts to Dec when it fits; NaN and Infinity never do.
+expect JsonValue.as_dec(Number("1e3")) == Ok(1000.0) and JsonValue.as_dec(Number("1E3")) == Ok(1000.0) and JsonValue.as_dec(Number("-1.25e+2")) == Ok(-125.0)
+expect JsonValue.as_dec(Number("0.1")) == Ok(0.1) and JsonValue.as_dec(Number("-0")) == Ok(0.0) and JsonValue.as_dec(Number("12")) == Ok(12.0)
+expect ["NaN", "Infinity", "-Infinity", "1e400", "0.0000000000000000001", "1000000000000000000000"].all(|text| JsonValue.as_dec(Number(text)) == Err(OutOfRange))
+expect ["0x10", "+1", "1_0", "", ".5", "1.", "nan"].all(|text| JsonValue.as_dec(Number(text)) == Err(WrongType))
+expect JsonValue.as_dec(String("1")) == Err(WrongType)
+
+# Huge lexemes are handled without overflow, by the accessors and the I-JSON check.
+expect {
+	digits = Str.repeat("7", 100000)
+	tiny = "0.${Str.repeat("0", 100000)}1"
+	JsonValue.as_i64(Number(digits)) == Err(OutOfRange)
+		and JsonValue.as_u64(Number("-${digits}")) == Err(OutOfRange)
+		and JsonValue.as_dec(Number(digits)) == Err(OutOfRange)
+		and JsonValue.as_dec(Number(tiny)) == Err(OutOfRange)
+		and JsonValue.as_dec(Number("1e999999999999999999999")) == Err(OutOfRange)
+		and message_of(digits, { interoperable_numbers: True }).ends_with("it is an integer beyond 2^53-1 in magnitude")
+		and message_of(tiny, { interoperable_numbers: True }).ends_with("it underflows to zero as a double")
+		and message_of("1e999999999999999999999", { interoperable_numbers: True }).ends_with("it is too large for a double")
+		and JsonValue.parse_str(digits) == Ok(Number(digits))
+}
+
+# --- Writing.
+
+expect JsonValue.to_str(Object([{ key: "a", value: Number("1") }, { key: "b", value: Array([Bool(True), Null]) }])) == Ok("{\"a\":1,\"b\":[true,null]}")
+expect JsonValue.to_str(Array([Bool(False), String(""), Object([]), Array([])])) == Ok("[false,\"\",{},[]]")
+
+# Indented output matches Python's `json.dumps(v, indent=2, ensure_ascii=False)`.
+expect {
+	value = Object([{ key: "a", value: Array([]) }, { key: "b", value: Object([{ key: "c", value: Array([Number("1"), Number("2")]) }]) }, { key: "d", value: Object([]) }])
+	JsonValue.to_str_with(value, { indent: 2 }) == Ok("{\n  \"a\": [],\n  \"b\": {\n    \"c\": [\n      1,\n      2\n    ]\n  },\n  \"d\": {}\n}")
+		and JsonValue.to_str_with(Number("1"), { indent: 2 }) == Ok("1")
+		and JsonValue.to_str_with(Array([Array([Null])]), { indent: 1 }) == Ok("[\n [\n  null\n ]\n]")
+}
+
+# Sorted keys follow UTF-8 byte order, which is code point order.
+expect {
+	value = Object([{ key: "B", value: Number("1") }, { key: "a", value: Number("2") }, { key: "aa", value: Number("3") }, { key: "b", value: Number("4") }, { key: "é", value: Number("5") }, { key: "ab", value: Number("6") }])
+	JsonValue.to_str_with(value, { sort_keys: True }) == Ok("{\"B\":1,\"a\":2,\"aa\":3,\"ab\":6,\"b\":4,\"é\":5}")
+}
+
+# Only the quote, the backslash and control characters are escaped.
+expect JsonValue.to_str(String("\"\\\u(8)\u(C)\n\r\t\u(1)\u(1F)\u(7F)é😀/")) == Ok("\"\\\"\\\\\\b\\f\\n\\r\\t\\u0001\\u001f\u(7F)é😀/\"")
+expect JsonValue.to_str(Object([{ key: "a\"\n", value: Null }])) == Ok("{\"a\\\"\\n\":null}")
+
+# Number text is written as it is when it is a JSON number, and refused otherwise.
+expect ["-0", "1E+2", "0.000", "-1.5e-7", "340282366920938463463374607431768211455"].all(|text| JsonValue.to_str(Number(text)) == Ok(text))
+expect ["Infinity", "-Infinity", "+1", "0x10", "1_0", " 1", "1 ", "-", ".5"].all(|text| JsonValue.to_str(Array([Number(text)])) == Err(InvalidNumber(text)))
+
+# A repeated key is refused in small and large objects, at any depth.
+expect JsonValue.to_str(Array([Object([{ key: "a", value: Null }, { key: "b", value: Null }, { key: "a", value: Null }])])) == Err(DuplicateKey("a"))
+expect {
+	members = key_names(20).map(|key| { key, value: Null })
+	JsonValue.to_str(Object(members.append({ key: "k3", value: Null }))) == Err(DuplicateKey("k3"))
+		and JsonValue.to_str_with(Object(members.append({ key: "k3", value: Null })), { sort_keys: True }) == Err(DuplicateKey("k3"))
+		and JsonValue.to_str(Object(members)).is_ok()
+}
+
+# 128 levels of nesting are written, and 129 are refused.
+expect JsonValue.to_str(nested_value(128)) == Ok(nested(128, "null")) and JsonValue.to_str(nested_value(129)) == Err(TooDeep)
+expect JsonValue.to_str(Object([{ key: "a", value: nested_value(128) }])) == Err(TooDeep)
+
+# Writing a long array and a large object is linear too.
+expect {
+	text = "[${Str.join_with(List.repeat("1", 100000), ",")}]"
+	JsonValue.parse_str(text).map_ok(JsonValue.to_str) == Ok(Ok(text))
+		and JsonValue.parse_str(many_keys(20000)).map_ok(|value| JsonValue.to_str_with(value, { sort_keys: True }).is_ok()) == Ok(True)
+}
+
+# What is written reads back as the same value, compact or indented.
+expect {
+	text = "{\"a\":[1,-0,1.5E+3,\"\\u0000\\u001f\\\"\\\\é😀\",true,false,null,{}],\"b\":{\"c\":[[],[{}]],\"\":\"\"}}"
+	match JsonValue.parse_str(text) {
+		Ok(value) => {
+			pretty = JsonValue.to_str_with(value, { indent: 3, sort_keys: True })
+			JsonValue.to_str(value).map_ok(JsonValue.parse_str) == Ok(Ok(value))
+				and JsonValue.to_str_with(value, { indent: 2 }).map_ok(JsonValue.parse_str) == Ok(Ok(value))
+				and pretty.map_ok(|out| JsonValue.parse_str(out).map_ok(|again| JsonValue.to_str_with(again, { indent: 3, sort_keys: True }))) == Ok(Ok(pretty))
+		}
+
+		Err(_) => False
+	}
+}
+
 # --- Doc examples: reading.
 
 expect {
@@ -1741,3 +2137,15 @@ expect JsonValue.parse_str("\"caf\\u00e9\"").map_ok(|doc| doc.as_str()) == Ok(Ok
 expect JsonValue.parse_str("false").map_ok(|doc| doc.as_bool()) == Ok(Ok(False))
 expect JsonValue.parse_str("[null]").map_ok(|doc| doc.as_list()) == Ok(Ok([Null]))
 expect JsonValue.parse_str("{\"a\": null}").map_ok(|doc| doc.as_object()) == Ok(Ok([{ key: "a", value: Null }]))
+
+# --- Doc examples: writing and numbers.
+
+expect JsonValue.parse_str("-42").map_ok(|doc| doc.as_i64()) == Ok(Ok(-42))
+expect JsonValue.parse_str("1e3").map_ok(|doc| doc.as_i64()) == Ok(Err(WrongType))
+expect JsonValue.parse_str("18446744073709551615").map_ok(|doc| doc.as_u64()) == Ok(Ok(18446744073709551615))
+expect JsonValue.parse_str("-1").map_ok(|doc| doc.as_u64()) == Ok(Err(OutOfRange))
+expect JsonValue.parse_str("-1.25e+2").map_ok(|doc| doc.as_dec()) == Ok(Ok(-125.0))
+expect JsonValue.to_str_with(Object([{ key: "b", value: Null }, { key: "a", value: Array([]) }]), { sort_keys: True, indent: 2 }) == Ok("{\n  \"a\": [],\n  \"b\": null\n}")
+expect JsonValue.to_str(Object([{ key: "a", value: Number("1") }, { key: "b", value: Array([Bool(True), Null]) }])) == Ok("{\"a\":1,\"b\":[true,null]}")
+expect JsonValue.to_str(Number("NaN")) == Err(InvalidNumber("NaN"))
+expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n    1,\n    \"two\"\n]")
