@@ -379,7 +379,8 @@ JsonValue := [
 	}
 
 	## The value of a `Number` as a `Dec`. A number outside the `Dec` range,
-	## with more than 18 decimal places, or `NaN` or `Infinity`, is
+	## one that needs more than 18 decimal places (trailing zeros don't count,
+	## so `1.50000000000000000000` is `1.5`), or `NaN` or `Infinity`, is
 	## `Err(OutOfRange)`; anything else is `Err(WrongType)`.
 	##
 	## ```roc
@@ -2055,6 +2056,7 @@ expect JsonValue.as_dec(Number("1e3")) == Ok(1000.0) and JsonValue.as_dec(Number
 expect JsonValue.as_dec(Number("0.1")) == Ok(0.1) and JsonValue.as_dec(Number("-0")) == Ok(0.0) and JsonValue.as_dec(Number("12")) == Ok(12.0)
 expect ["NaN", "Infinity", "-Infinity", "1e400", "0.0000000000000000001", "1000000000000000000000"].all(|text| JsonValue.as_dec(Number(text)) == Err(OutOfRange))
 expect ["0x10", "+1", "1_0", "", ".5", "1.", "nan"].all(|text| JsonValue.as_dec(Number(text)) == Err(WrongType))
+expect JsonValue.as_dec(Number("1.50000000000000000000")) == Ok(1.5) and JsonValue.as_dec(Number("0.000000000000000001")) == Ok(0.000000000000000001)
 expect JsonValue.as_dec(String("1")) == Err(WrongType)
 
 # Huge lexemes are handled without overflow, by the accessors and the I-JSON check.
