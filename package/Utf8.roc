@@ -1,4 +1,5 @@
 import Parser
+import Literal
 
 ## Parsers and helpers specialized to UTF-8 byte lists and Roc `Str` values.
 ##
@@ -9,6 +10,26 @@ Utf8 :: [].{
 
 	## UTF-8 input represented as a list of bytes.
 	Bytes : List(U8)
+
+	## Props for adapting a complete text parser to `from_quote`.
+	QuoteProps(a) := {
+		parser : Parser(Bytes, a),
+		source : Str,
+		name : Str ?? "<literal>",
+	}
+
+	## Parse all text and convert its furthest error into a quotation error.
+	## Use this inside a custom nominal type's `from_quote` method.
+	parse_quote : QuoteProps(a) -> Try(a, [BadQuotedBytes(Str)])
+	parse_quote = |props| {
+		match parse_str(props.parser, props.source) {
+			Ok(value) => Ok(value)
+			Err(ParseError(problem)) => {
+				position = Literal.position(props.source, problem.offset)
+				Err(Literal.error({ name: props.name, format: "parser", message: problem.message, line: position.line, column: position.column }))
+			}
+		}
+	}
 
 	## Parse a whole `Str` using a [Parser].
 	##

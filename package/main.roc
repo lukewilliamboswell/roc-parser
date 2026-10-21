@@ -13,6 +13,7 @@ package
 		AsciiDoc,
 		CSV,
 		HTTP,
+		Literal,
 		Markdown,
 		Parser,
 		RocSyntax,
