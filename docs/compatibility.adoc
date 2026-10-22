@@ -88,7 +88,7 @@ Version 2.0.0 changes the API of every module and reworks every format parser
 to follow its specification, checked against a reference implementation (see
 <<conformance,Conformance>>). Code written for 1.x does not compile without
 changes, and many inputs now parse differently. The
-{src}/docs/releases/2.0.0.md[2.0.0 release notes] start with an upgrade guide that
+{src}/docs/releases/2.0.0.adoc[2.0.0 release notes] start with an upgrade guide that
 maps each old name to its replacement. In summary:
 
 [cols="1,4",options="header"]
