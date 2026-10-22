@@ -228,10 +228,17 @@ A parser for a nested format refers to itself. Wrap the self-reference in
 include::examples/combinators-recursion.roc[tag=lazy,indent=0]
 ----
 
-Two parsers that refer to each other at the top level currently need a
-lower-level workaround because of a compiler limitation,
-https://github.com/roc-lang/roc/issues/10098[roc-lang/roc#10098]. Keep the
-recursion inside one parser where you can, as here.
+Two top-level parsers can refer to each other in the same way. One `lazy` in
+the cycle is enough: here `expr` uses `term` directly, and `term` reaches back
+to `expr` through `lazy`:
+
+[source,roc]
+----
+include::examples/combinators-recursion.roc[tag=mutual,indent=0]
+----
+
+Without any `lazy`, the compiler rejects the pair: only functions can be
+recursive, and each parser is a value.
 
 == Bytes, not characters
 
