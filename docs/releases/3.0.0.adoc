@@ -1,4 +1,11 @@
-= Unreleased
+= roc-parser 3.0.0
+
+3.0.0 is the first final release since 2.0.0. It adds `JsonValue`, a lossless
+JSON reader and writer; compile-time parsing for every format; `RocSyntax` for
+Roc source; `AsciiDoc` parsing and rendering with include selection that
+matches Asciidoctor exactly; and source-preserving YAML tokens. The 2.1.0
+release candidates previewed part of this work. 2.1.0 itself was never
+published.
 
 == Use this release
 
@@ -9,63 +16,69 @@ Add the package to your app's header:
 parser: "{package-url}",
 ----
 
+The release also carries the examples, pinned to this bundle, the manual as a
+PDF and as a static site with the API reference, and an SBOM.
+
 == Upgrade impact
 
-These changes will be released as 3.0.0. Include selection now follows
-Asciidoctor exactly, which changes rendered AsciiDoc output for the inputs
-listed below, and the manual counts any change in a public function's result
-as a major change.
-
-Existing runtime parsing functions keep their signatures and acceptance rules.
-The new checked conversions also reject enabled lint checks by default; each
-check can be disabled through defaulted props. It needs Roc
-`nightly-2026-10-21-5349569` or later.
-
-The new `JsonValue` module adds API only. It is not called `Json` because Roc
-auto-imports a builtin `Json`, and its error tag is `InvalidJsonValue` so that
-it does not collide with the builtin's `InvalidJson(Str)`.
-
-`AsciiDoc.select_include` adds API. `+include::+` expansion now selects exactly
-the lines Asciidoctor 2.0.23 selects, so rendered output changes for these
-inputs:
-
-* `+indent=+` removes leading tabs as well as spaces, so tab-indented code
+* *Requires a current Roc nightly:* `nightly-2026-10-21-5349569` or later.
+roc-parser now tracks the latest Roc nightly. The "Compilers" section below names the
+nightly this release was built and tested with.
+* *From 2.0.0:* existing runtime parsing functions keep their signatures and
+acceptance rules. The new checked conversions reject enabled lint checks by
+default, and each check can be disabled through defaulted props. The
+`unicode` dependency is now
+https://github.com/roc-lang/unicode/releases/tag/4.3.0[4.3.0].
+* *Why a major version:* `roc bump` cannot compare this release with 2.0.0,
+which no longer compiles on current Roc nightlies, or with the 2.1.0
+candidates (https://github.com/roc-lang/roc/issues/12506[roc#12506]), so the
+version cannot be checked mechanically. AsciiDoc rendering also changed
+since the release candidates, and the manual counts any change in a public
+function's result as a major change.
+* *JSON module name:* the module is `JsonValue`. It is not called `Json` because Roc
+auto-imports a builtin `Json`, and its error tag is `InvalidJsonValue` so
+that it does not collide with the builtin's `InvalidJson(Str)`.
+* *From the 2.1.0 release candidates:* `AsciiDoc.empty_item` and
+`AsciiDoc.without_internal_caches` are no longer public, and
+`+include::+` expansion now selects exactly the lines Asciidoctor 2.0.23
+selects, so rendered output changes for these inputs:
+** `+indent=+` removes leading tabs as well as spaces, so tab-indented code
 included with `+indent=0+` loses its outer tab. Each tab counts as one
 character. A line of only spaces in a file that isn't AsciiDoc counts toward
 the shared indent, and `+indent=N+` leaves empty lines empty.
-* A tag re-opened before its end nests, so it needs a second end.
-* The innermost open tag decides, so `+tags=x;!y+` selects `x` inside `y`.
-* With `+tags=*+`, an end that crosses another tag is ignored.
-* A tag marker must start a word, and its `+[]+` must end the line or come
+** A tag re-opened before its end nests, so it needs a second end.
+** The innermost open tag decides, so `+tags=x;!y+` selects `x` inside `y`.
+** With `+tags=*+`, an end that crosses another tag is ignored.
+** A tag marker must start a word, and its `+[]+` must end the line or come
 before a space. So `+"tag::x[]"+` in a string literal is no longer a marker.
-* An empty `+lines=+`, `+tag=+` or `+indent=+` counts as present. An empty
+** An empty `+lines=+`, `+tag=+` or `+indent=+` counts as present. An empty
 `+lines=+` or `+tag=+` selects the whole file and ignores the other
 selectors, and an empty `+indent=+` dedents.
-* `+tag=a;b+` names one tag, `+a;b+`. Use `+tags=a;b+` for two tags.
-* An empty file includes no lines, so it no longer splits a paragraph.
-* Lines from an included file that isn't AsciiDoc (any name not ending in
+** `+tag=a;b+` names one tag, `+a;b+`. Use `+tags=a;b+` for two tags.
+** An empty file includes no lines, so it no longer splits a paragraph.
+** Lines from an included file that isn't AsciiDoc (any name not ending in
 `.adoc`, `.asciidoc`, `.asc`, `.ad` or `.txt`) keep their trailing
 whitespace, as in Asciidoctor. Listings of program output keep spaces at line
 ends. In a paragraph, list item or admonition the spaces stay in the text, a
 line of only spaces no longer ends a paragraph, and a delimiter or block
 attribute line with trailing whitespace is ordinary text. Directives such as
 `+ifdef::+` and `+include::+` in such a file are no longer processed.
-* The document's own lines lose trailing whitespace before directives and
+** The document's own lines lose trailing whitespace before directives and
 delimiters are recognized, so a `+----+` delimiter or an `+ifdef::x[]+`
 directive followed by spaces now works.
-* `tabsize` is now honoured. In listing, source, literal and verse blocks and
+** `tabsize` is now honoured. In listing, source, literal and verse blocks and
 paragraphs, tabs expand to the next multiple of the block's `tabsize` or,
 without one, the document's, counting characters. Zero, negative or
 non-numeric values expand nothing. In a document that sets `tabsize`, include
 `+indent=+` expands tabs first; a `+tabsize=+` on the directive is ignored, as
 in Asciidoctor.
-* A verbatim block's `indent` follows Asciidoctor: only the block's own
+** A verbatim block's `indent` follows Asciidoctor: only the block's own
 attribute counts, `+indent=abc+` dedents and a negative width keeps
 indentation, empty lines stay empty, and passthrough, stem and table content is
 no longer re-indented. A `[source]`, `[listing]`, `[literal]` or `[verse]`
 paragraph whose first line is indented keeps its style. Indent widths and tab
 sizes above 1024 count as 1024.
-* A backtick followed by an apostrophe renders as a right single quote, as in
+** A backtick followed by an apostrophe renders as a right single quote, as in
 Asciidoctor, so a possessive written after inline code renders the same way
 Asciidoctor renders it. A backslash before the pair keeps both characters.
 
@@ -148,3 +161,45 @@ assets, and compiler rejection and cache-invalidation tests in CI.
 
 See https://github.com/lukewilliamboswell/roc-parser/blob/main/docs/compile-time-parsing.adoc[Parse and validate during compilation]
 and https://github.com/lukewilliamboswell/roc-parser/blob/main/docs/json.adoc[Reading JSON].
+
+=== `RocSyntax`
+
+`RocSyntax` parses Roc source into source-backed tokens, a tolerant indexed syntax tree and located diagnostics. It is meant for highlighters and source-analysis tools.
+
+* The tree represents expressions, patterns, type declarations, constraints and every header form.
+* Parsing has explicit nesting and token limits. It does not do binding or type analysis.
+* Malformed input gets partial structure, and its tokens can still be highlighted.
+* `tokenize_str`, `tokenize_bytes` and `highlight_category` serve lexical highlighting without building a tree.
+
+Legacy Rust compiler syntax is outside its scope. See the manual's "Parsing Roc source" chapter.
+
+On the development machine, every input in the reference performance comparison parses within 1.5 times the time of the compiler's own Zig parser. The syntax parsed matches compiler commit `0d4b0ab0`. That grammar is still changing, so expect follow-up releases as the language evolves.
+
+=== `AsciiDoc`
+
+`AsciiDoc` adds block parsing, preprocessing on virtual sources, and embedded HTML rendering. It is tested against a pinned Asciidoctor on authored fixtures, independently generated models and reproducible mutations. Compatibility with Asciidoctor is not complete; see the manual's AsciiDoc chapter for what is covered.
+
+=== YAML source highlighting
+
+`Yaml.tokenize_str` and `Yaml.tokenize_bytes` cover the original source with tokens, keeping its exact bytes. They include comments, whitespace and malformed snippets. They also report mapping-key roles, YAML 1.2 scalar categories and located diagnostics. `Yaml.highlight_category` maps tokens to theme categories that HTML and PDF renderers can share.
+
+Semantic YAML decoding is unchanged.
+
+== Documentation and tooling
+
+* New manual chapters for Roc syntax, AsciiDoc and YAML source highlighting, each with tested examples.
+* `scripts/check_roc_syntax.py` runs the Roc syntax feedback loop. It includes a persistent compiler reference worker, independent generated syntax, raw and structured fuzzing, an upstream snapshot corpus, and runtime, allocation and scaling checks.
+* AsciiDoc and YAML source fuzz targets run in the property quality workflow.
+* A new "Read and write JSON" chapter, and JSON conformance, fuzzing and
+benchmark coverage.
+* CI follows the roc-automation model: one `check` job runs every pull request
+check, releases are published through roc-automation's `publish-release`,
+and a daily job tests the latest release's examples against the latest Roc
+nightly.
+
+== Release candidates
+
+2.1.0-rc.1, rc.2 and rc.3 previewed `RocSyntax`, `AsciiDoc` and YAML source
+highlighting. Since rc.3 the package moved to the latest Roc nightly and
+unicode 4.3.0, gained `JsonValue`, compile-time parsing and include selection,
+and finished the Roc syntax performance work.
