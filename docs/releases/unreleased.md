@@ -11,8 +11,24 @@ The new `JsonValue` module adds API only. It is not called `Json` because Roc
 auto-imports a builtin `Json`, and its error tag is `InvalidJsonValue` so that
 it does not collide with the builtin's `InvalidJson(Str)`.
 
-`AsciiDoc.select_include` also adds API only: `include::` expansion selects
-the same lines as before.
+`AsciiDoc.select_include` adds API. `include::` expansion now selects exactly
+the lines Asciidoctor 2.0.23 selects, so rendered output changes for these
+inputs:
+
+- `indent=` removes leading tabs as well as spaces, so tab-indented
+  code included with `indent=0` loses its outer tab. Each tab counts as one
+  character. A line of only spaces in a file that isn't AsciiDoc counts
+  toward the shared indent, and `indent=N` leaves empty lines empty.
+- A tag re-opened before its end nests, so it needs a second end.
+- The innermost open tag decides, so `tags=x;!y` selects `x` inside `y`.
+- With `tags=*`, an end that crosses another tag is ignored.
+- A tag marker must start a word, and its `[]` must end the line or come
+  before a space. So `"tag::x[]"` in a string literal is no longer a marker.
+- An empty `lines=`, `tag=` or `indent=` counts as present. An empty `lines=`
+  or `tag=` selects the whole file and ignores the other selectors, and an
+  empty `indent=` dedents.
+- `tag=a;b` names one tag, `a;b`. Use `tags=a;b` for two tags.
+- An empty file includes no lines, so it no longer splits a paragraph.
 
 ## New features
 
@@ -67,11 +83,13 @@ themselves, such as roc-docs, no longer reimplement the rules. It reads
 `lines=`, `tag=`, `tags=` (with `*`, `**` and `!` negation) and `indent=`,
 and returns an `AsciiDoc.IncludeSelection` with the selected `text`, the
 one-based source `lines` and a list of `AsciiDoc.IncludeProblem`s. Selection
-stays as lenient as Asciidoctor's; the problems (`MissingTag`, `UnclosedTag`,
-`UnmatchedEnd`, `InvalidLines` and `EmptySelection`) report what Asciidoctor
-would only warn about, or would select differently, so a strict caller can
-reject them. `scripts/asciidoc/include-selection-fixtures.json` compares the
-selections with Asciidoctor 2.0.23. See "Reusing include selection" in
+is Asciidoctor's, as lenient as it is. `MissingTag`, `UnclosedTag` and
+`UnmatchedEnd` are exactly Asciidoctor's warnings, while `InvalidLines` and
+`EmptySelection` flag selections that Asciidoctor makes without a warning, so
+a strict caller can reject them. The source is read as a file that isn't
+AsciiDoc, as code listings are.
+`scripts/asciidoc/include-selection-fixtures.json` compares the selections
+and problems with Asciidoctor 2.0.23. See "Reusing include selection" in
 [Reading AsciiDoc](../asciidoc.adoc).
 
 ### Compile-time parsing

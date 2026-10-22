@@ -82,16 +82,27 @@ selection rules. It takes the included source and the directive's attribute
 list, such as `lines=1..4`, `tag=example,indent=0` or `tags=**;!hidden`. It
 returns the selected `text`, the source line number of each selected line,
 and a list of problems. `include::` expansion calls the same code, so the two
-always agree.
+agree.
 
-Selection is as lenient as Asciidoctor's. A missing tag selects nothing.
-`lines=4abc` selects line 4. A reversed range selects nothing, so
-`lines=4..2` on its own selects every line. `lines=` overrides `tag=` and
-`tags=`. The problems report what Asciidoctor would only warn about, or would
-select differently: `MissingTag`, `UnclosedTag`, `UnmatchedEnd`,
-`InvalidLines` and `EmptySelection`. A strict caller rejects any problem,
-and a lenient caller ignores them. The API reference for
+Selection is Asciidoctor 2.0.23's, as lenient as it is. A missing tag
+selects nothing. `lines=4abc` selects line 4. A reversed range selects
+nothing, so `lines=4..2` on its own selects every line. `lines=` overrides
+`tag=` and `tags=` whenever it is present, even with an empty value. Tags
+nest, and `indent=0` removes leading tabs as well as spaces, one character
+each.
+
+Three problems are Asciidoctor's own warnings: `MissingTag`, `UnclosedTag`
+and `UnmatchedEnd`. The other two, `InvalidLines` and `EmptySelection`, flag
+selections that Asciidoctor makes without a warning. A strict caller rejects
+any problem, and a lenient caller ignores them. The API reference for
 `AsciiDoc.IncludeProblem` defines each one.
+
+`select_include` reads its source as Asciidoctor reads an included file that
+isn't AsciiDoc, such as code for a listing. When `include::` expands an
+AsciiDoc file, it first removes trailing whitespace from each line, as
+Asciidoctor does, so a line of only spaces doesn't count toward `indent=`.
+Neither expands tabs. Asciidoctor does so only in a document that sets
+`tabsize`, which this package doesn't support.
 
 This example selects from a small Rust file:
 
