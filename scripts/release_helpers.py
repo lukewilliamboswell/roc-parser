@@ -525,22 +525,42 @@ def gh_json(path: str) -> dict | None:
     return json.loads(completed.stdout)
 
 
-def previous_bundle_url(repo: str) -> str | None:
-    """The bundle of the latest final release, which `roc bump` compares with."""
+def previous_release(repo: str) -> tuple[str, str] | None:
+    """The tag and bundle of the latest final release, which `roc bump` compares with."""
     release = gh_json(f"repos/{repo}/releases/latest")
     if release is None:
         return None
     bundles = [asset["browser_download_url"] for asset in release.get("assets", []) if asset["name"].endswith(".tar.zst")]
     if len(bundles) != 1:
         raise RuntimeError(f"release {release.get('tag_name')} has {len(bundles)} bundles, expected one")
-    return bundles[0]
+    return release["tag_name"], bundles[0]
 
 
-def check_bump(previous: str, expect: str | None) -> int:
+# What `roc bump` prints when it cannot compare at all, as opposed to finding
+# that the version understates the change.
+BASELINE_UNREADABLE = ("package does not compile", "cannot extract public api")
+
+
+def check_bump(previous: str, expect: str | None) -> tuple[int, str]:
+    """Run `roc bump`, echoing its output, and return its exit code and output."""
     roc = os.environ.get("ROC", "roc")
     command = [roc, "bump", "--old", previous, *(["--expect", expect] if expect else []), "package/main.roc"]
     print("+ " + " ".join(command), flush=True)
-    return subprocess.run(command, cwd=ROOT, check=False).returncode
+    completed = subprocess.run(command, cwd=ROOT, check=False, capture_output=True, text=True)
+    output = completed.stdout + completed.stderr
+    print(output, end="" if output.endswith("\n") or not output else "\n", flush=True)
+    return completed.returncode, output
+
+
+def baseline_unreadable(output: str) -> bool:
+    lower = output.casefold()
+    return any(marker in lower for marker in BASELINE_UNREADABLE)
+
+
+def is_major_bump(version: str, previous: str) -> bool:
+    """Whether `version` moves the major version past `previous`, so that no
+    API change can be understated (3.0.0-rc.1 counts, as it releases 3.x)."""
+    return semver_key(version)[0] > semver_key(previous)[0]
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -566,13 +586,21 @@ def cmd_validate(args: argparse.Namespace) -> int:
             if gh_json(path) is not None:
                 raise RuntimeError(f"the {what} {version} already exists; a release is never replaced")
 
-    previous = previous_bundle_url(args.repo)
+    previous = previous_release(args.repo)
     if previous is None:
         print("No earlier final release: there is nothing for roc bump to compare with.")
-    elif check_bump(previous, None if dry_run else version) != 0:
-        if not dry_run:
-            raise RuntimeError(f"roc bump refuses {version} against {previous}")
-        print(f"::warning::roc bump could not compare the package with {previous}; a release would stop here")
+    else:
+        previous_tag, previous_bundle = previous
+        code, output = check_bump(previous_bundle, None if dry_run else version)
+        if code != 0 and dry_run:
+            print(f"::warning::roc bump could not compare the package with {previous_tag}; a release would stop here")
+        elif code != 0 and baseline_unreadable(output) and is_major_bump(version, previous_tag):
+            # A major release cannot understate any change, so a baseline that
+            # no longer compiles, or whose API roc bump cannot read, does not
+            # stop it. Any smaller release still needs the comparison.
+            print(f"::warning::roc bump could not read {previous_tag}; {version} is a major release, so no change can be understated")
+        elif code != 0:
+            raise RuntimeError(f"roc bump refuses {version} against {previous_tag} ({previous_bundle})")
 
     prerelease = "true" if is_prerelease(version) else "false"
     print(f"version={version} prerelease={prerelease} notes={notes.relative_to(ROOT)}")

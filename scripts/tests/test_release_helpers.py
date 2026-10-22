@@ -313,7 +313,7 @@ class ValidateTests(unittest.TestCase):
             args = argparse.Namespace(event=event, release_version=version, default_branch="main", ref=ref,
                                       repo="owner/repo", github_output=output)
             with unittest.mock.patch.object(helpers, "gh_json", side_effect=gh_json), \
-                    unittest.mock.patch.object(helpers, "check_bump", return_value=0) as bump:
+                    unittest.mock.patch.object(helpers, "check_bump", return_value=(0, "")) as bump:
                 helpers.cmd_validate(args)
             self.bump = bump
             return dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
@@ -344,9 +344,41 @@ class ValidateTests(unittest.TestCase):
                                   default_branch="main", ref="refs/heads/main", repo="owner/repo", github_output=None)
         latest = {"tag_name": "2.0.0", "assets": [{"name": "abc.tar.zst", "browser_download_url": URL}]}
         with unittest.mock.patch.object(helpers, "gh_json", side_effect=lambda p: latest if p.endswith("latest") else None), \
-                unittest.mock.patch.object(helpers, "check_bump", return_value=1):
+                unittest.mock.patch.object(helpers, "check_bump", return_value=(1, "The new version 2.1.0 understates a MAJOR change.\n")):
             with self.assertRaisesRegex(RuntimeError, "roc bump refuses"):
                 helpers.cmd_validate(args)
+
+    def release_against_unreadable_baseline(self, version: str, output: str) -> None:
+        """Dispatch `version` when roc bump fails with `output` against 2.0.0."""
+        args = argparse.Namespace(event="workflow_dispatch", release_version=version, default_branch="main",
+                                  ref="refs/heads/main", repo="owner/repo", github_output=None)
+        latest = {"tag_name": "2.0.0", "assets": [{"name": "abc.tar.zst", "browser_download_url": URL}]}
+        notes = helpers.read_notes(helpers.latest_notes())
+        with unittest.mock.patch.object(helpers, "gh_json", side_effect=lambda p: latest if p.endswith("latest") else None), \
+                unittest.mock.patch.object(helpers, "notes_path", return_value=helpers.NOTES_DIR / f"{version}.adoc"), \
+                unittest.mock.patch.object(helpers, "read_notes", return_value=notes), \
+                unittest.mock.patch.object(helpers, "check_bump", return_value=(1, output)):
+            helpers.cmd_validate(args)
+
+    def test_a_major_release_survives_a_baseline_roc_bump_cannot_read(self) -> None:
+        for output in ("── ✗ package does not compile ──\n", "── ✗ cannot extract public api ──\n"):
+            with self.subTest(output=output):
+                self.release_against_unreadable_baseline("3.0.0", output)
+                self.release_against_unreadable_baseline("3.0.0-rc.1", output)
+
+    def test_a_smaller_release_still_needs_the_comparison(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "roc bump refuses"):
+            self.release_against_unreadable_baseline("2.2.0", "── ✗ cannot extract public api ──\n")
+        with self.assertRaisesRegex(RuntimeError, "roc bump refuses"):
+            self.release_against_unreadable_baseline("3.0.0", "The new version understates a MAJOR change.\n")
+
+    def test_major_bumps_and_unreadable_baselines_are_recognised(self) -> None:
+        self.assertTrue(helpers.is_major_bump("3.0.0", "2.0.0"))
+        self.assertTrue(helpers.is_major_bump("3.0.0-rc.1", "2.9.9"))
+        self.assertFalse(helpers.is_major_bump("2.1.0", "2.0.0"))
+        self.assertFalse(helpers.is_major_bump("2.0.0", "2.0.0"))
+        self.assertTrue(helpers.baseline_unreadable("roc bump failed.\n── ✗ Cannot Extract Public API ──"))
+        self.assertFalse(helpers.baseline_unreadable("2.0.0 -> 2.1.0 understates a MAJOR change"))
 
 
 if __name__ == "__main__":

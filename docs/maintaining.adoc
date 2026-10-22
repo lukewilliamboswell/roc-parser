@@ -139,7 +139,12 @@ roc bump --old https://github.com/lukewilliamboswell/roc-parser/releases/downloa
 The release workflow runs the same comparison with `--expect <version>` and
 stops when the version understates the change. `roc bump` needs both the
 latest release and the working tree to compile with the latest nightly; when it
-cannot compare them, the release stops too.
+cannot compare them, the release stops too. The one exception is a major
+release: no change can understate it, so it continues with a warning when
+`roc bump` cannot compile the latest release or read its API
+(https://github.com/roc-lang/roc/issues/12506[roc#12506]). 2.0.0 no longer
+compiles, so the next release is 3.0.0, which its changes to include
+selection require anyway.
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on

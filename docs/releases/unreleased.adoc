@@ -11,6 +11,11 @@ parser: "{package-url}",
 
 == Upgrade impact
 
+These changes will be released as 3.0.0. Include selection now follows
+Asciidoctor exactly, which changes rendered AsciiDoc output for the inputs
+listed below, and the manual counts any change in a public function's result
+as a major change.
+
 Existing runtime parsing functions keep their signatures and acceptance rules.
 The new checked conversions also reject enabled lint checks by default; each
 check can be disabled through defaulted props. It needs Roc
