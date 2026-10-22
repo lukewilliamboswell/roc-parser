@@ -74,6 +74,48 @@ This complete example prints:
 include::examples/asciidoc.expected[]
 ----
 
+== Reusing include selection
+
+A tool that expands some includes itself, for example to record where each
+listing came from, can call `select_include` instead of reimplementing the
+selection rules. It takes the included source and the directive's attribute
+list, such as `lines=1..4`, `tag=example,indent=0` or `tags=**;!hidden`. It
+returns the selected `text`, the source line number of each selected line,
+and a list of problems. `include::` expansion calls the same code, so the two
+always agree.
+
+Selection is as lenient as Asciidoctor's. A missing tag selects nothing.
+`lines=4abc` selects line 4. A reversed range selects nothing, so
+`lines=4..2` on its own selects every line. `lines=` overrides `tag=` and
+`tags=`. The problems report what Asciidoctor would only warn about, or would
+select differently: `MissingTag`, `UnclosedTag`, `UnmatchedEnd`,
+`InvalidLines` and `EmptySelection`. A strict caller rejects any problem,
+and a lenient caller ignores them. The API reference for
+`AsciiDoc.IncludeProblem` defines each one.
+
+This example selects from a small Rust file:
+
+[source,rust]
+----
+include::examples/assets/asciidoc-greet.rs[]
+----
+
+[source,roc]
+----
+include::examples/asciidoc-include-selection.roc[tag=example]
+----
+
+It prints:
+
+[source,text]
+----
+include::examples/asciidoc-include-selection.expected[]
+----
+
+The review fixtures in `scripts/asciidoc/include-selection-fixtures.json`
+compare these selections with Asciidoctor's, including the inputs behind each
+problem.
+
 == Oracle coverage and implementation coverage
 
 The development oracle pins Ruby Asciidoctor to version 2.0.23 and verifies the

@@ -11,6 +11,9 @@ The new `JsonValue` module adds API only. It is not called `Json` because Roc
 auto-imports a builtin `Json`, and its error tag is `InvalidJsonValue` so that
 it does not collide with the builtin's `InvalidJson(Str)`.
 
+`AsciiDoc.select_include` also adds API only: `include::` expansion selects
+the same lines as before.
+
 ## New features
 
 ### `JsonValue`
@@ -55,6 +58,21 @@ records.
   `review_json.py campaign` adds a differential robustness campaign.
   Benchmarks compare it with serde_json, Go's `encoding/json` and Python's
   `json`.
+
+### AsciiDoc include selection
+
+`AsciiDoc.select_include(source, attributes)` selects lines from an include
+source exactly as `include::` expansion does, so tools that expand includes
+themselves, such as roc-docs, no longer reimplement the rules. It reads
+`lines=`, `tag=`, `tags=` (with `*`, `**` and `!` negation) and `indent=`,
+and returns an `AsciiDoc.IncludeSelection` with the selected `text`, the
+one-based source `lines` and a list of `AsciiDoc.IncludeProblem`s. Selection
+stays as lenient as Asciidoctor's; the problems (`MissingTag`, `UnclosedTag`,
+`UnmatchedEnd`, `InvalidLines` and `EmptySelection`) report what Asciidoctor
+would only warn about, or would select differently, so a strict caller can
+reject them. `scripts/asciidoc/include-selection-fixtures.json` compares the
+selections with Asciidoctor 2.0.23. See "Reusing include selection" in
+[Reading AsciiDoc](../asciidoc.adoc).
 
 ### Compile-time parsing
 
