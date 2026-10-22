@@ -3059,3 +3059,10 @@ expect render_source(":tabsize: 4\n\n[listing,indent=0]\n----\n\t\tx\n\t  y\n---
 expect render_source("[listing,indent=2]\n----\nx\n\ny\n----").contains("<pre>  x\n\n  y</pre>")
 expect render_source("[listing,indent=abc]\n----\n  x\n    y\n----\n\n[listing,indent=-1]\n----\n  x\n    y\n----").contains("<pre>x\n  y</pre>\n</div>\n</div>\n<div class=\"listingblock\">\n<div class=\"content\">\n<pre>  x\n    y</pre>")
 expect render_source("[source,indent=0]\n  x\n    y").contains("<code>x\n  y</code>")
+
+# `` `' `` after a backtick that closed no monospace span is a right single
+# quote in every inline context, and stays as typed in a listing.
+expect {
+	html = render_source("* `a`'s item\n\n|===\n|`b`'s cell\n|===\n\n.`c`'s title\n`d`'s `e`\n\n----\n`f`'s\n----")
+	html.contains("<p>`a&#8217;s item</p>") and html.contains("<p class=\"tableblock\">`b&#8217;s cell</p>") and html.contains("<div class=\"title\">`c&#8217;s title</div>") and html.contains("<p><code>d&#8217;s `e</code></p>") and html.contains("<pre>`f`'s</pre>")
+}
