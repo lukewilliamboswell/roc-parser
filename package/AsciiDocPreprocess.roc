@@ -45,6 +45,37 @@ AsciiDocPreprocess :: [].{
 	## escaped references for the inline substitution pass.
 	substitute : Str, List(Attribute) -> Str
 	substitute = |source, attributes| expand(source, attributes, 0)
+
+	## Published as `AsciiDoc.IncludeProblem`, which documents each variant.
+	IncludeProblem : [MissingTag(Str), UnclosedTag(Str), UnmatchedEnd(Str), InvalidLines(Str), EmptySelection]
+
+	## Published as `AsciiDoc.IncludeSelection`.
+	IncludeSelection : { text : Str, lines : List(U64), problems : List(IncludeProblem) }
+
+	## Select an include's lines exactly as `include::` expansion does, since
+	## both call `include_lines`.
+	select_include : Str, Str -> IncludeSelection
+	select_include = |source, options| select_include_with(source, options, 0)
+
+	## `select_include` in a document whose `tabsize` is `tab_size`.
+	select_include_with : Str, Str, U64 -> IncludeSelection
+	select_include_with = |source, options, tab_size| {
+		selected = include_lines(source, options, OtherFile, if (tab_size > max_columns) max_columns else tab_size)
+		{ text: join(selected.lines.map(|line| line.text), "\n"), lines: selected.lines.map(|line| line.line), problems: selected.problems }
+	}
+
+	## A verbatim block's content as Asciidoctor's `build_block` adjusts it:
+	## with the block's own `indent` attribute, `adjust_indentation` with
+	## that width; without one, only tab expansion. `tabsize` is the block's
+	## `tabsize` attribute or, when the block has none, the document's.
+	verbatim_source : Str, Try(Str, [Missing]), Str -> Str
+	verbatim_source = |source, indent, tabsize| {
+		size = parse_tab_size(tabsize)
+		match indent {
+			Ok(width) => Str.join_with(adjust_indentation(source.split_on("\n"), reindent(width), size), "\n")
+			Err(_) => if (size > 0 and source.contains("\t")) Str.join_with(source.split_on("\n").map(|line| expand_tabs(line, size)), "\n") else source
+		}
+	}
 }
 
 source_namespace : Str, AsciiDocPreprocess.Options -> Str
@@ -73,26 +104,39 @@ Context : { definition_allowed : Bool, opaque : Str, header : Bool, lint_comment
 State : { lines : List(AsciiDocPreprocess.ScopedLine), attributes : AsciiDocSource.Store, context : Context, unexpanded_includes : List(AsciiDocPreprocess.Error) }
 
 process : Str, Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64 -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
-process = |source, path, attributes, options, stack, depth| process_lines(source_lines(source), path, attributes, options, stack, depth, { definition_allowed: True, opaque: "", lint_comment: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
+process = |source, path, attributes, options, stack, depth| process_lines(split_lines(source, AsciiDocFile), path, attributes, options, stack, depth, AsciiDocFile, { definition_allowed: True, opaque: "", lint_comment: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
 
 SourceLine : { text : Str, line : U64, offset : U64 }
 
+## The lines of an included file before selection, as Asciidoctor reads
+## them: only a CR that ends a line is removed.
 source_lines : Str -> List(SourceLine)
-source_lines = |source| {
+source_lines = |source| split_lines(source, OtherFile)
+
+## Asciidoctor removes trailing whitespace from each line of AsciiDoc source
+## as it reads it, before it recognizes any directive or block. It keeps
+## trailing whitespace in an included file that isn't AsciiDoc.
+split_lines : Str, IncludeFile -> List(SourceLine)
+split_lines = |source, file| {
 	var $number = 0
 	var $offset = 0
 	var $lines = []
 	for raw in source.split_on("\n") {
 		$number = $number + 1
 		bom = $number == 1 and raw.starts_with("﻿")
-		$lines = $lines.append({ text: remove_cr(if (bom) drop(raw, 3) else raw), line: $number, offset: $offset + (if (bom) 3 else 0) })
+		text = if (bom) drop(raw, 3) else raw
+		$lines = $lines.append({ text: if (file == AsciiDocFile) trim_line_end(text) else remove_cr(text), line: $number, offset: $offset + (if (bom) 3 else 0) })
 		$offset = $offset + raw.to_utf8().len() + 1
 	}
 	if (source.ends_with("\n")) $lines.drop_last(1) else $lines
 }
 
-process_lines : List(SourceLine), Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
-process_lines = |input_lines, path, attributes, options, stack, depth, context| {
+## Asciidoctor processes preprocessor directives only in AsciiDoc source. In
+## an included file that isn't AsciiDoc, `ifdef::`, `include::` and the
+## other directives, escaped or not, are ordinary text.
+process_lines : List(SourceLine), Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64, IncludeFile, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
+process_lines = |input_lines, path, attributes, options, stack, depth, file, context| {
+	directives = file == AsciiDocFile
 	var $attributes = attributes
 	var $snapshot_ready = False
 	var $snapshot_attrs = AsciiDocAttributes.flat([])
@@ -123,14 +167,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				$lint_comment = text
 			}
 		}
-		if text.starts_with("endif::") and complete_directive(text) {
+		if directives and text.starts_with("endif::") and complete_directive(text) {
 			closing = directive(drop(text, 7))
 			target = lower(closing.target)
 			opened = $conditions.last() ?? { enabled: False, target: "" }
 			if closing.body == "" and !$conditions.is_empty() and (target == "" or target == opened.target) {
 				$conditions = $conditions.drop_last(1)
 			}
-		} else if (text.starts_with("ifdef::") or text.starts_with("ifndef::")) and complete_directive(text) {
+		} else if directives and (text.starts_with("ifdef::") or text.starts_with("ifndef::")) and complete_directive(text) {
 			negative = text.starts_with("ifndef::")
 			body = drop(text, if (negative) 8 else 7)
 			parts = directive(body)
@@ -140,7 +184,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
 			} else if parts.target != "" and active and enabled {
 				if $opaque == "" and (!is_definition(parts.body) or $definition_allowed) {
-					nested = process_lines([{ text: parts.body, line: number, offset }], path, $attributes, options, stack, depth, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+					nested = process_lines([{ text: trim_line_end(parts.body), line: number, offset }], path, $attributes, options, stack, depth, AsciiDocFile, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
 					$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 					$attributes = nested.attributes
 					$snapshot_ready = False
@@ -156,10 +200,10 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
 						$snapshot_ready = True
 					}
-					$lines = $lines.append({ text: parts.body, attributes: $snapshot_attrs, path, line: number, offset })
+					$lines = $lines.append({ text: trim_line_end(parts.body), attributes: $snapshot_attrs, path, line: number, offset })
 				}
 			}
-		} else if text.starts_with("ifeval::") and complete_directive(text) {
+		} else if directives and text.starts_with("ifeval::") and complete_directive(text) {
 			parsed = directive(drop(text, 8))
 			expression = parsed.body
 			if parsed.target == "" and ["==", "!=", "<=", ">=", "<", ">"].any(|operator| expression.contains(operator)) {
@@ -177,7 +221,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			}
 		} else if active {
 			if $continuation != "" {
-				$continuation = Str.concat($continuation, trim(text))
+				$continuation = Str.concat($continuation, trim_start(text))
 				if continues($continuation) {
 					$continuation = Str.concat(strip_continuation($continuation), " ")
 				} else {
@@ -190,7 +234,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				} else {
 					$definition_text = text
 				}
-			} else if text.starts_with("include::") and complete_directive(text) {
+			} else if directives and text.starts_with("include::") and complete_directive(text) {
 				parsed = directive(expand_lookup(drop(text, 9), [], Stored($attributes), 0))
 				target = expand_lookup(parsed.target, [], Stored($attributes), 0)
 				resolved = resolve(path, target)
@@ -203,15 +247,15 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						if invalid_path(target) or resolved == "" or resolved == ".." or resolved.starts_with("../") {
 							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
 						}
-						selected = select_lines(entry.source, parsed.body)
-						prepared = adjust_lines(selected.map(|line| { text: line.text, line: line.line, offset: line.offset, path: resolved, attributes: AsciiDocAttributes.from_store($attributes) }), parsed.body)
+						included = include_file(resolved)
+						selected = include_lines(entry.source, parsed.body, included, parse_tab_size(AsciiDocSource.lookup($attributes, "tabsize") ?? ""))
 						previous_offset = AsciiDocSource.lookup($attributes, "leveloffset")
 						include_offset = option(parsed.body, "leveloffset")
 						base_offset = I64.from_str((previous_offset ?? "0").replace_each("+", "")) ?? 0
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
 						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
 						nested_attrs = if (include_offset == "") $attributes else AsciiDocSource.set_parsed($attributes, "leveloffset", effective_offset.to_str())
-						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+						nested = process_lines(selected.lines, resolved, nested_attrs, options, stack.append(resolved), depth + 1, included, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
 						$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
 							Ok(previous) => AsciiDocSource.set_parsed(nested.attributes, "leveloffset", previous)
@@ -244,7 +288,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 					}
 				}
 			} else {
-				emitted = if ((text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
+				emitted = if (directives and (text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
 				if !$snapshot_ready {
 					$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
 					$snapshot_ready = True
@@ -269,7 +313,10 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			parts = split_first(drop($definition_text, 1), ":")
 			unset = parts.before.starts_with("!") or parts.before.ends_with("!")
 			name = normalize_attribute_name(strip_suffix(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before, "!"))
-			value = if (unset) "" else AsciiDocInline.attribute_value_source(trim(parts.after), $attributes)
+			# Like Asciidoctor's attribute entry pattern, keep any trailing
+			# whitespace, which only a line from an included file that isn't
+			# AsciiDoc still has.
+			value = if (unset) "" else AsciiDocInline.attribute_value_source(trim_start(parts.after), $attributes)
 			$attributes = AsciiDocSource.define_parsed($attributes, name, value, unset)
 		}
 
@@ -830,6 +877,16 @@ trim = |source| {
 	if ($start == 0 and $end == bytes.len()) source else Str.from_utf8_lossy(bytes.sublist({ start: $start, len: $end - $start }))
 }
 
+trim_start : Str -> Str
+trim_start = |source| {
+	bytes = source.to_utf8()
+	var $start = 0
+	while bytes.get($start) == Ok(' ') or bytes.get($start) == Ok('\t') {
+		$start = $start + 1
+	}
+	if ($start == 0) source else Str.from_utf8_lossy(bytes.drop_first($start))
+}
+
 lower : Str -> Str
 lower = |source| {
 	bytes = source.to_utf8()
@@ -870,12 +927,19 @@ invalid_path : Str -> Bool
 invalid_path = |path| path.starts_with("/") or path.starts_with("\\") or path.contains(":") or path.contains("\\")
 
 option : Str, Str -> Str
-option = |options, name| {
-	var $value = ""
+option = |options, name| include_option(options, name) ?? ""
+
+## An include attribute's value, read as Asciidoctor reads an attribute list:
+## the last `name=value` wins, an unquoted `None` leaves the attribute unset,
+## and an empty value still sets it.
+include_option : Str, Str -> Try(Str, [Absent])
+include_option = |options, name| {
+	var $value = Err(Absent)
 	for piece in split_options(options) {
 		parsed = split_first(piece, "=")
-		if piece.contains("=") and trim(parsed.before) == name {
-			$value = option_value(trim(parsed.after))
+		value = trim(parsed.after)
+		if piece.contains("=") and trim(parsed.before) == name and value != "None" {
+			$value = Ok(option_value(value))
 		}
 	}
 	$value
@@ -897,43 +961,280 @@ option_value = |source| {
 	source
 }
 
-select_lines : Str, Str -> List(SourceLine)
-select_lines = |source, options| {
-	selector = option(options, "lines")
-	tag = option(options, "tag")
-	tags = if (tag == "") option(options, "tags") else tag
-	if tags == "" or selector != "" {
-		return if (selector == "") source_lines(source) else select_line_numbers(source_lines(source), selector)
+IncludeLines : { lines : List(SourceLine), problems : List(AsciiDocPreprocess.IncludeProblem) }
+
+## How Asciidoctor reads a source. In AsciiDoc, the document itself or an
+## included AsciiDoc file, it removes trailing whitespace from each line
+## (before `indent=`, for an include) and processes preprocessor
+## directives. In any other included file it does neither.
+IncludeFile : [AsciiDocFile, OtherFile]
+
+## Asciidoctor reads a file as AsciiDoc when its name ends in one of these.
+include_file : Str -> IncludeFile
+include_file = |path| if ([".adoc", ".asciidoc", ".asc", ".ad", ".txt"].any(|extension| path.ends_with(extension))) AsciiDocFile else OtherFile
+
+## Select and indent an include's lines. `include::` expansion and
+## `select_include` both call this, so the two can never disagree. Selection
+## stays as lenient as Asciidoctor's; problems only describe it. With
+## `indent=`, tabs expand first when `tab_size`, the document's `tabsize`,
+## is positive. Asciidoctor ignores a `tabsize=` in the include's own
+## attribute list.
+include_lines : Str, Str, IncludeFile, U64 -> IncludeLines
+include_lines = |source, options, file, tab_size| {
+	selected = select_lines(source, options)
+	read = match file {
+		AsciiDocFile => selected.lines.map(|line| { ..line, text: trim_line_end(line.text) })
+		OtherFile => selected.lines
 	}
+	lines = match include_option(options, "indent") {
+		Ok(width) => indent_lines(read, reindent(width), tab_size)
+		Err(Absent) => read
+	}
+	{ lines, problems: if (lines.is_empty()) add_problem(selected.problems, EmptySelection) else selected.problems }
+}
+
+## Asciidoctor uses the first of `lines=`, `tag=` and `tags=` that is
+## present, even with an empty value. An empty `lines=`, an empty `tag=` or
+## `tag=!`, and a `tags=` that names no tag select the whole file, in which
+## tag markers are ordinary text.
+select_lines : Str, Str -> IncludeLines
+select_lines = |source, options| {
+	## Asciidoctor finds no lines in an empty file. Reading a whole file, it
+	## removes a byte order mark before splitting, so one alone leaves none.
+	lines = if (source == "") [] else source_lines(source)
+	whole = if (source == "\u(FEFF)") [] else lines
+	match include_option(options, "lines") {
+		Ok(selector) => select_line_numbers(lines, selector, whole)
+		Err(Absent) => {
+			choices = match include_option(options, "tag") {
+				Ok(tag) => single_tag(tag)
+				Err(Absent) => tag_list(include_option(options, "tags") ?? "")
+			}
+			if (choices.is_empty()) { lines: whole, problems: [] } else select_tagged(lines, choices)
+		}
+	}
+}
+
+## Each problem is reported once, in the order it was found.
+add_problem : List(AsciiDocPreprocess.IncludeProblem), AsciiDocPreprocess.IncludeProblem -> List(AsciiDocPreprocess.IncludeProblem)
+add_problem = |problems, problem| if (problems.contains(problem)) problems else problems.append(problem)
+
+## A tag that `tag=` or `tags=` names, and whether its lines are selected.
+TagChoice : { name : Str, select : Bool }
+
+## `tag=` names a single tag, even one containing `,` or `;`.
+single_tag : Str -> List(TagChoice)
+single_tag = |tag| {
+	if tag == "" or tag == "!" {
+		[]
+	} else if tag.starts_with("!") {
+		[{ name: drop(tag, 1), select: False }]
+	} else {
+		[{ name: tag, select: True }]
+	}
+}
+
+## `tags=` separates tags as `lines=` separates entries. A tag named twice
+## keeps its first position and its last choice, as in a Ruby hash.
+tag_list : Str -> List(TagChoice)
+tag_list = |source| {
+	var $choices = []
+	for entry in selectors(source) {
+		if entry != "" and entry != "!" {
+			choice = if (entry.starts_with("!")) { name: drop(entry, 1), select: False } else { name: entry, select: True }
+			$choices = if ($choices.any(|known| known.name == choice.name)) $choices.map(|known| if (known.name == choice.name) choice else known) else $choices.append(choice)
+		}
+	}
+	$choices
+}
+
+## Whether lines outside every open tag are selected, and how a marker of a
+## tag the selector doesn't name is treated: Asciidoctor tracks every tag,
+## with `Tracked(select)`, when the selector uses `*` or `!*`, or uses `!**`
+## and negates the first other tag it names.
+TagPlan : { base : Bool, wildcard : [Tracked(Bool), Untracked] }
+
+tag_plan : List(TagChoice) -> TagPlan
+tag_plan = |choices| {
+	named = choices.keep_if(|choice| choice.name != "*" and choice.name != "**")
+	star = choices.find_first(|choice| choice.name == "*")
+	match choices.find_first(|choice| choice.name == "**") {
+		Ok(every) => {
+			wildcard = match star {
+				Ok(any) => Tracked(any.select)
+				Err(_) => if (!every.select and named.first().map_ok(|choice| choice.select) == Ok(False)) Tracked(True) else Untracked
+			}
+			{ base: every.select, wildcard }
+		}
+		Err(_) => match star {
+			Ok(any) => if (choices.first().map_ok(|choice| choice.name) == Ok("*")) { base: !any.select, wildcard: Tracked(any.select) } else { base: False, wildcard: Tracked(any.select) }
+			Err(_) => { base: !named.any(|choice| choice.select), wildcard: Untracked }
+		}
+	}
+}
+
+## Asciidoctor's tag selection. Open tags form a stack. A marker of a named
+## tag, or of any tag while every tag is tracked, pushes the tag with
+## whether its lines are selected; a tracked tag inside an unselected one is
+## unselected too. The end of the innermost open tag pops it. Any other end
+## of a named tag removes the innermost open copy of that tag, if there is
+## one, without changing what is selected. Other markers have no effect.
+## Lines outside markers are selected as the innermost open tag says, or as
+## `base` says when no tag is open.
+select_tagged : List(SourceLine), List(TagChoice) -> IncludeLines
+select_tagged = |lines, choices| {
+	plan = tag_plan(choices)
+	named = choices.keep_if(|choice| choice.name != "*" and choice.name != "**")
+	var $open = []
+	var $opened = []
 	var $output = []
-	var $active_tags = []
-	for entry in source_lines(source) {
-		line = entry.text
-		if line.contains("tag::") and line.contains("[]") {
-			name = split_first(split_first(line, "tag::").after, "[]").before
-			$active_tags = $active_tags.append(name)
-		} else if line.contains("end::") and line.contains("[]") {
-			name = split_first(split_first(line, "end::").after, "[]").before
-			$active_tags = $active_tags.keep_if(|active| active != name)
-		} else {
-			selected_line = True
-			selected_tag = select_tag(tags, $active_tags)
-			if selected_line and selected_tag {
-				$output = $output.append(entry)
+	var $problems = []
+	for entry in lines {
+		match tag_marker(entry.text) {
+			Close(name) => {
+				if $open.last().map_ok(|tag| tag.name) == Ok(name) {
+					$open = $open.drop_last(1)
+				} else if named.any(|choice| choice.name == name) {
+					$open = remove_innermost($open, name)
+					$problems = add_problem($problems, UnmatchedEnd(name))
+				}
+			}
+			Open(name) => {
+				match named.find_first(|choice| choice.name == name) {
+					Ok(choice) => {
+						if choice.select and !$opened.contains(name) {
+							$opened = $opened.append(name)
+						}
+						$open = $open.append(choice)
+					}
+					Err(_) => {
+						match plan.wildcard {
+							Tracked(select) => {
+								$open = $open.append({ name, select: select and ($open.last().map_ok(|tag| tag.select) ?? True) })
+							}
+							Untracked => {}
+						}
+					}
+				}
+			}
+			Text => {
+				if $open.last().map_ok(|tag| tag.select) ?? plan.base {
+					$output = $output.append(entry)
+				}
 			}
 		}
 	}
-	$output
+	for tag in $open {
+		$problems = add_problem($problems, UnclosedTag(tag.name))
+	}
+	for choice in named {
+		if choice.select and !$opened.contains(choice.name) {
+			$problems = add_problem($problems, MissingTag(choice.name))
+		}
+	}
+	{ lines: $output, problems: $problems }
+}
+
+## Remove the innermost open copy of `name`, if there is one.
+remove_innermost : List(TagChoice), Str -> List(TagChoice)
+remove_innermost = |open, name| {
+	var $index = open.len()
+	while $index > 0 {
+		$index = $index - 1
+		if open.get($index).map_ok(|tag| tag.name) == Ok(name) {
+			return open.take_first($index).concat(open.drop_first($index + 1))
+		}
+	}
+	open
+}
+
+TagMarker : [Open(Str), Close(Str), Text]
+
+## Asciidoctor's `TagDirectiveRx`, `\b(?:tag|(e)nd)::(\S+?)\[\](?=$|[ \r])`:
+## the first `tag::NAME[]` or `end::NAME[]` that starts a word, where NAME is
+## the shortest run of non-whitespace characters after which `[]` ends the
+## line or is followed by a space or CR. So `"tag::x[]"` in a string
+## literal, `tag::x[]` followed by a tab and `my_tag::x[]` are not markers.
+tag_marker : Str -> TagMarker
+tag_marker = |line| {
+	if !line.contains("::") or !line.contains("[]") {
+		return Text
+	}
+	bytes = line.to_utf8()
+	var $start = 0
+	while $start + 8 <= bytes.len() {
+		first = bytes.get($start) ?? 0
+		opens = first == 't' and bytes.sublist({ start: $start, len: 5 }) == "tag::".to_utf8()
+		closes = first == 'e' and bytes.sublist({ start: $start, len: 5 }) == "end::".to_utf8()
+		if (opens or closes) and !follows_word(bytes, $start) {
+			match marker_name(bytes, $start + 5) {
+				Ok(name) => return if (opens) Open(name) else Close(name)
+				Err(NoName) => {}
+			}
+		}
+		$start = $start + 1
+	}
+	Text
+}
+
+## Whether the character before `index` is a word character, so that a
+## marker there would not start a word. Ruby's `\b` counts letters, marks,
+## numbers and connector punctuation as word characters.
+follows_word : List(U8), U64 -> Bool
+follows_word = |bytes, index| {
+	if index == 0 {
+		return False
+	}
+	var $start = index - 1
+	while $start > 0 and (bytes.get($start) ?? 0) >= 128 and (bytes.get($start) ?? 0) < 192 {
+		$start = $start - 1
+	}
+	starts_word(Str.from_utf8_lossy(bytes.sublist({ start: $start, len: index - $start })))
+}
+
+## The name of a marker whose `::` ends just before `start`: the shortest run
+## of one or more non-whitespace bytes followed by `[]` and then the end of
+## the line, a space or a CR.
+marker_name : List(U8), U64 -> Try(Str, [NoName])
+marker_name = |bytes, start| {
+	var $end = start
+	while $end < bytes.len() and !ruby_space(bytes.get($end) ?? 0) {
+		$end = $end + 1
+		if bytes.get($end) == Ok('[') and bytes.get($end + 1) == Ok(']') and ($end + 2 == bytes.len() or bytes.get($end + 2) == Ok(' ') or bytes.get($end + 2) == Ok(13)) {
+			return Ok(Str.from_utf8_lossy(bytes.sublist({ start, len: $end - start })))
+		}
+	}
+	Err(NoName)
+}
+
+## Ruby's ASCII whitespace: space, tab, LF, vertical tab, form feed and CR.
+ruby_space : U8 -> Bool
+ruby_space = |byte| byte == ' ' or (byte >= 9 and byte <= 13)
+
+## Ruby's `rstrip`, which also removes NUL.
+trim_line_end : Str -> Str
+trim_line_end = |source| {
+	bytes = source.to_utf8()
+	var $end = bytes.len()
+	while $end > 0 and (ruby_space(bytes.get($end - 1) ?? 1) or bytes.get($end - 1) == Ok(0)) {
+		$end = $end - 1
+	}
+	if ($end == bytes.len()) source else slice(source, 0, $end)
 }
 
 ## The native reader sorts finite selected line numbers before an infinity
 ## marker. A nonpositive first number blocks the cursor; an open range starts
 ## selecting remaining lines only after every explicit finite number is read.
-select_line_numbers : List(SourceLine), Str -> List(SourceLine)
-select_line_numbers = |lines, selector| {
+## Every entry is still read after a block, so each invalid one is reported.
+## When no entry selects a range, as for an empty `lines=` or only reversed
+## ranges, Asciidoctor reads the `whole` file instead.
+select_line_numbers : List(SourceLine), Str, List(SourceLine) -> IncludeLines
+select_line_numbers = |lines, selector, whole| {
 	var $ranges = []
 	var $infinite = False
 	var $largest = 0
+	var $blocked = False
+	var $problems = []
 	cap = lines.len() + 1
 	for range in selectors(selector) {
 		pieces = split_first(range, "..")
@@ -942,23 +1243,51 @@ select_line_numbers = |lines, selector| {
 		open = range.contains("..") and (pieces.after == "" or last.negative)
 		if !range.contains("..") or open or integer_order(first, last) <= 0 {
 			if first.negative or first.digits == "0" {
-				return []
+				$blocked = True
+				$problems = add_problem($problems, InvalidLines(trim(range)))
+			} else {
+				start = bounded_selector_number(first, cap)
+				end = if (range.contains("..") and !open) bounded_selector_number(last, cap) else start
+				$ranges = $ranges.append({ start, end })
+				if end > $largest {
+					$largest = end
+				}
+				if open {
+					$infinite = True
+				}
+				if start > lines.len() or !clean_line_selector(range) {
+					$problems = add_problem($problems, InvalidLines(trim(range)))
+				}
 			}
-			start = bounded_selector_number(first, cap)
-			end = if (range.contains("..") and !open) bounded_selector_number(last, cap) else start
-			$ranges = $ranges.append({ start, end })
-			if end > $largest {
-				$largest = end
-			}
-			if open {
-				$infinite = True
-			}
+		} else {
+			$problems = add_problem($problems, InvalidLines(trim(range)))
 		}
 	}
-	if $ranges.is_empty() {
-		return lines
+	if $blocked {
+		return { lines: [], problems: $problems }
 	}
-	lines.keep_if(|line| ($infinite and line.line > $largest) or $ranges.any(|range| line.line >= range.start and line.line <= range.end))
+	if $ranges.is_empty() {
+		return { lines: whole, problems: $problems }
+	}
+	{ lines: lines.keep_if(|line| ($infinite and line.line > $largest) or $ranges.any(|range| line.line >= range.start and line.line <= range.end)), problems: $problems }
+}
+
+## Asciidoctor documents `N`, `N..M`, `N..` and `N..-1`. Any other entry is
+## read leniently, like Ruby's `to_i`, and reported.
+clean_line_selector : Str -> Bool
+clean_line_selector = |range| {
+	if !range.contains("..") {
+		return decimal_digits(trim(range))
+	}
+	pieces = split_first(range, "..")
+	end = trim(pieces.after)
+	decimal_digits(trim(pieces.before)) and (end == "" or end == "-1" or decimal_digits(end))
+}
+
+decimal_digits : Str -> Bool
+decimal_digits = |source| {
+	bytes = source.to_utf8()
+	!bytes.is_empty() and bytes.all(|byte| byte >= '0' and byte <= '9')
 }
 
 selector_integer : Str -> IntegerValue
@@ -975,39 +1304,123 @@ bounded_selector_number = |integer, cap| {
 	if (number > cap) cap else number
 }
 
-adjust_lines : List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 }), Str -> List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 })
-adjust_lines = |lines, options| {
-	indent_text = option(options, "indent")
-	indent = U64.from_str(indent_text) ?? 0
-	var $minimum = 18446744073709551615
-	if indent_text != "" {
-		for line in lines {
-			if trim(line.text) != "" {
-				count = leading_spaces(line.text)
-				if count < $minimum {
-					$minimum = count
+## `adjust_indentation` on an include's selected lines, keeping each line's
+## number and offset.
+indent_lines : List(SourceLine), Reindent, U64 -> List(SourceLine)
+indent_lines = |lines, width, tab_size| {
+	texts = adjust_indentation(lines.map(|line| line.text), width, tab_size)
+	var $result = []
+	var $index = 0
+	for line in lines {
+		$result = $result.append({ ..line, text: texts.get($index) ?? line.text })
+		$index = $index + 1
+	}
+	$result
+}
+
+## What `adjust_indentation` does with the block indent. `Keep` leaves the
+## leading whitespace, as a negative width does in Asciidoctor, and
+## `Reindent(width)` replaces it with `width` spaces.
+Reindent : [Keep, Reindent(U64)]
+
+## Asciidoctor bounds neither an indent width nor a tab size. This package
+## counts anything wider than 1024 columns as 1024.
+max_columns : U64
+max_columns = 1024
+
+## An `indent` value read like Ruby's `to_i`: empty or not a number is 0,
+## and a negative width keeps the indentation.
+reindent : Str -> Reindent
+reindent = |value| {
+	width = selector_integer(value)
+	if (width.negative) Keep else Reindent(bounded_columns(width))
+}
+
+## A `tabsize` value read like Ruby's `to_i`. Zero, a negative number, or
+## text that doesn't start with a number gives 0, which expands no tabs.
+parse_tab_size : Str -> U64
+parse_tab_size = |value| {
+	if value == "" {
+		return 0
+	}
+	size = selector_integer(value)
+	if (size.negative) 0 else bounded_columns(size)
+}
+
+bounded_columns : IntegerValue -> U64
+bounded_columns = |integer| {
+	number = U64.from_str(integer.digits) ?? max_columns
+	if (number > max_columns) max_columns else number
+}
+
+## Asciidoctor's `Parser.adjust_indentation!`. When `tab_size` is positive,
+## it first expands each tab to the next tab stop. Then, for
+## `Reindent(width)`, it finds the block indent: the fewest leading
+## whitespace characters on any nonempty line, counting a tab that is left
+## like a space, or none when some nonempty line has none. Each nonempty line
+## loses that many characters and gains `width` spaces, while empty lines
+## stay empty. A line of only spaces or tabs is not empty, so it counts and
+## gains the spaces too.
+adjust_indentation : List(Str), Reindent, U64 -> List(Str)
+adjust_indentation = |lines, width, tab_size| {
+	expanded = if (tab_size > 0 and lines.any(|line| line.contains("\t"))) lines.map(|line| expand_tabs(line, tab_size)) else lines
+	match width {
+		Keep => expanded
+		Reindent(columns) => {
+			var $block = 18446744073709551615
+			for line in expanded {
+				if line != "" {
+					count = leading_whitespace(line)
+					if count < $block {
+						$block = count
+					}
 				}
+			}
+			block = if ($block == 18446744073709551615) 0 else $block
+			if block == 0 and columns == 0 {
+				expanded
+			} else {
+				prefix = repeat(" ", columns)
+				expanded.map(|line| if (line == "") line else Str.concat(prefix, drop(line, block)))
 			}
 		}
 	}
-	lines.map(
-		|line| {
-			var $text = line.text
-			if indent_text != "" and $minimum != 18446744073709551615 {
-				count = leading_spaces($text)
-				remove = if (count < $minimum) count else $minimum
-				$text = Str.concat(repeat(" ", indent), drop($text, remove))
-			}
-			{ text: $text, attributes: line.attributes, path: line.path, line: line.line, offset: line.offset }
-		},
-	)
 }
 
-leading_spaces : Str -> U64
-leading_spaces = |source| {
+## Replace each tab with the spaces that reach the next multiple of
+## `tab_size` columns. As in Asciidoctor, every character (code point)
+## before the tab is one column, whatever its display width.
+expand_tabs : Str, U64 -> Str
+expand_tabs = |line, tab_size| {
+	if !line.contains("\t") {
+		return line
+	}
+	var $output = []
+	var $column = 0
+	for byte in line.to_utf8() {
+		if byte == '\t' {
+			var $spaces = tab_size - $column % tab_size
+			$column = $column + $spaces
+			while $spaces > 0 {
+				$output = $output.append(' ')
+				$spaces = $spaces - 1
+			}
+		} else {
+			$output = $output.append(byte)
+			if byte < 128 or byte >= 192 {
+				$column = $column + 1
+			}
+		}
+	}
+	Str.from_utf8_lossy($output)
+}
+
+## The leading characters Ruby's `lstrip` removes.
+leading_whitespace : Str -> U64
+leading_whitespace = |source| {
 	var $count = 0
 	bytes = source.to_utf8()
-	while bytes.get($count) == Ok(' ') {
+	while ruby_space(bytes.get($count) ?? 0) {
 		$count = $count + 1
 	}
 	$count
@@ -1094,10 +1507,9 @@ expect match AsciiDocPreprocess.run("include::dir/a.adoc[]", { includes: [{ path
 	Ok(result) => result.source == "nested" and (result.lines.first() ?? { text: "", attributes: [], path: "", line: 0, offset: 0 }).path == "dir/b.adoc"
 	_ => False
 }
-expect select_lines("one\ntwo\nthree\nfour\n", "lines=2..3").map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
-expect select_lines("one\ntwo\nthree\nfour\n", "lines=1;3..-1").map(|line| line.text) == ["one", "three", "four"]
-expect select_lines("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=x").map(|line| line.text) == ["inside"]
-expect select_lines("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=**;!x").map(|line| line.text) == ["before", "after"]
+# Offsets stay internal; they locate errors in included lines.
+expect include_lines("one\ntwo\nthree\nfour\n", "lines=2..3", OtherFile, 0).lines.map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
+expect include_lines("\u(FEFF)  one\r\n    two\r\n", "indent=0", OtherFile, 0).lines.map(|line| (line.text, line.line, line.offset)) == [("one", 1, 3), ("  two", 2, 10)]
 expect match AsciiDocPreprocess.run("include::a.adoc[leveloffset=+1]", { includes: [{ path: "a.adoc", source: "== Child" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "== Child" and result.lines.any(|line| line.attributes.contains({ name: "leveloffset", value: "1" }))
 	_ => False
@@ -1111,18 +1523,6 @@ expect AsciiDocPreprocess.substitute("{unknown}", []) == "{unknown}"
 expect match AsciiDocPreprocess.run("first\n\ninclude::missing.adoc[]", { includes: [], attributes: [], max_depth: 16, expand_includes: True }) {
 	Err(PreprocessError(error)) => error.line == 3 and error.offset == 7
 	_ => False
-}
-
-select_tag : Str, List(Str) -> Bool
-select_tag = |selector, active_tags| {
-	if selector == "" {
-		return True
-	}
-	entries = selectors(selector)
-	positives = entries.keep_if(|name| !name.starts_with("!"))
-	included = positives.is_empty() or positives.any(|name| if (name == "**") True else if (name == "*") !active_tags.is_empty() else active_tags.contains(name))
-	excluded = entries.any(|name| if (!name.starts_with("!")) False else if (name == "!**") True else if (name == "!*") !active_tags.is_empty() else active_tags.contains(drop(name, 1)))
-	included and !excluded
 }
 
 continues : Str -> Bool
@@ -1202,12 +1602,6 @@ expect match AsciiDocPreprocess.run("ifdef::backend-html5[html]\n{docyear}", Asc
 	_ => False
 }
 
-expect select_lines("// tag::x[]\ninside\n// end::x[]", "").map(|line| line.text) == ["// tag::x[]", "inside", "// end::x[]"]
-expect select_lines("// tag::x[]\ninside\n// end::x[]", "lines=1..2,tag=x").map(|line| line.text) == ["// tag::x[]", "inside"]
-expect select_lines("before\n// tag::x[]\nx\n// tag::y[]\nxy\n// end::y[]\n// end::x[]\nafter", "tags=x;!y").map(|line| line.text) == ["x"]
-expect select_lines("before\n// tag::x[]\nx\n// end::x[]\nafter", "tags=**").map(|line| line.text) == ["before", "x", "after"]
-expect select_lines("before\n// tag::x[]\nx\n// end::x[]\nafter", "tags=!*").map(|line| line.text) == ["before", "after"]
-
 expect match AsciiDocPreprocess.run("----\ninclude::part.adoc[]\n----\n\n{item}", { includes: [{ path: "part.adoc", source: ":item: hidden\n{item}" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "----\n:item: hidden\n{item}\n----\n\n{item}" and !result.attributes.any(|a| a.name == "item")
 	_ => False
@@ -1278,8 +1672,6 @@ selectors = |source| {
 	}
 	$parts
 }
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1..2,4\"").map(|line| line.text) == ["one", "two", "four"]
-expect select_lines("// tag::x[]\nx\n// end::x[]\n// tag::y[]\ny\n// end::y[]", "tags=\"x,y\"").map(|line| line.text) == ["x", "y"]
 
 expect match AsciiDocPreprocess.run(":imagesdinclude::missing.adoc[]\nir: assets\n\nimage::cat.png[]", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.source == ":imagesdinclude::missing.adoc[]\nir: assets\n\nimage::cat.png[]"
@@ -1379,7 +1771,6 @@ expect {
 	}
 }
 
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"\"1..2,4\"").map(|line| line.text) == ["one", "two", "three", "four"]
 expect match AsciiDocPreprocess.run("----\n\\ifdef::x[]\n\\include::pé----", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.source == "----\nifdef::x[]\n\\include::pé----"
 	_ => False
@@ -1405,12 +1796,6 @@ expect !evaluate("1 ==")
 
 expect evaluate("\" == \"")
 
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1..2,part.adoc[lines=\"1..2,4\"").is_empty()
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"2..,4\"").map(|line| line.text) == ["two", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=4..2").map(|line| line.text) == ["one", "two", "three", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1,4,\"").map(|line| line.text) == ["one", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=4abc").map(|line| line.text) == ["four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=999999999999999999999999999999999999999..999999999999999999999999999999999999998").len() == 4
 expect match AsciiDocPreprocess.run(":name: one\n\n{name}\n\n:name: two\n\n{name}\n\n:name: {name}-three\n\n{name}", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.lines.keep_if(|line| line.text == "{name}").map(|line| AsciiDocPreprocess.substitute(line.text, line.attributes)) == ["one", "two", "two-three"] and result.attributes.any(|attr| attr.name == "__revision:name" and attr.value == "3")
 	_ => False

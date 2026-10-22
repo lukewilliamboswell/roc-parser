@@ -7,7 +7,7 @@ on:
     - cron: "41 3 * * 1"
   workflow_dispatch:
 
-permissions: read-all
+permissions: {}
 
 jobs:
   scorecard:

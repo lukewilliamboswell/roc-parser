@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original inputs around a constrained monospace span followed by an apostrophe, reported by the repository-corpus review for \"`Yaml`'s `String`\"; predicates authored from the pinned gem's QUOTE_SUBS and REPLACEMENTS and checked against the live pinned oracle.",
+    "reference_family": "AsciiDoc replacements and constrained quotes",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "source_locations": "The constrained monospace pattern in QUOTE_SUBS forbids a closing backtick before a word character, a quote or a backtick; REPLACEMENTS then turns \\\\?`' into &#8217; (lib/asciidoctor.rb)."
+  },
+  "coverage": [
+    {
+      "category": "inline-apostrophe-replacements",
+      "required_cases": [
+        "inline-rsquo-monospace-possessive",
+        "inline-rsquo-line-boundaries",
+        "inline-rsquo-adjacent-monospace",
+        "inline-rsquo-bare-and-unconstrained",
+        "inline-rsquo-escaped",
+        "inline-rsquo-replacements-only",
+        "inline-rsquo-quotes-only",
+        "inline-rsquo-curly-quotes-and-possessives",
+        "inline-rsquo-passthroughs",
+        "inline-rsquo-block-contexts",
+        "inline-rsquo-verbatim"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "inline-rsquo-monospace-possessive",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "constrained-monospace",
+        "right-single-quote"
+      ],
+      "source": "Use `Yaml`'s `String` here.",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>Use <code>Yaml&#8217;s `String</code> here.</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/monospace/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-line-boundaries",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "constrained-monospace",
+        "right-single-quote"
+      ],
+      "source": "`a`'s thing `b`'s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>`a&#8217;s thing `b&#8217;s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-adjacent-monospace",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "constrained-monospace",
+        "right-single-quote"
+      ],
+      "source": "`a`'s`b`",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p><code>a&#8217;s`b</code></p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/text/monospace/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-bare-and-unconstrained",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "unconstrained-monospace",
+        "right-single-quote"
+      ],
+      "source": "x`'`'y `a` `' ``a```'s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>x&#8217;&#8217;y <code>a</code> &#8217; <code>a</code>&#8217;s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-escaped",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "escape-interactions",
+        "right-single-quote"
+      ],
+      "source": "a\\`'s \\`a`'s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>a`'s \\`a&#8217;s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-replacements-only",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "substitution-groups",
+        "right-single-quote"
+      ],
+      "source": "[subs=replacements]\n`a`'s \\`'",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>`a&#8217;s `'</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-quotes-only",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "substitution-groups",
+        "constrained-monospace"
+      ],
+      "source": "[subs=quotes]\n`a`'s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>`a`'s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-curly-quotes-and-possessives",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "curved-quotes",
+        "constrained-possessive"
+      ],
+      "source": "'`x`' \"`y`\" *a*'s _b_'s #c#'s '`z`''s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>&#8216;x&#8217; &#8220;y&#8221; <strong>a</strong>'s <em>b</em>'s <mark>c</mark>'s &#8216;z&#8217;'s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-passthroughs",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "passthrough-restoration",
+        "right-single-quote"
+      ],
+      "source": "+`a`'s+ pass:[`'] pass:r[`']",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>`a`'s `' &#8217;</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-block-contexts",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "list-items",
+        "table-cells",
+        "block-titles",
+        "right-single-quote"
+      ],
+      "source": "* `a`'s item\n\n|===\n|`b`'s cell\n|===\n\n.`c`'s title\n`d`'s `e`\n\nterm `f`'s:: `g`'s",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "table",
+          "paragraph",
+          "dlist",
+          "list_item",
+          "list_item"
+        ],
+        "html_contains": [
+          "<p>`a&#8217;s item</p>",
+          "<p class=\"tableblock\">`b&#8217;s cell</p>",
+          "<div class=\"title\">`c&#8217;s title</div>",
+          "<p><code>d&#8217;s `e</code></p>",
+          "<dt class=\"hdlist1\">term `f&#8217;s</dt>",
+          "<p>`g&#8217;s</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    },
+    {
+      "id": "inline-rsquo-verbatim",
+      "category": "inline-apostrophe-replacements",
+      "features": [
+        "verbatim-substitutions"
+      ],
+      "source": "----\n`a`'s\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>`a`'s</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/subs/replacements/"
+      ]
+    }
+  ]
+}

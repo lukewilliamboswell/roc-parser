@@ -35,6 +35,7 @@ bytes, including the header. Raw CSV does not assume its first row is a header.
 |`CSV` |`.records`, raw CSV records
 |`CSV.Decoded(row)` |`.value`, a list of decoded rows
 |`Xml` |The document's `.root` and `.declaration`
+|`JsonValue` |The JSON value itself
 |`Markdown.Document` |`.blocks`, a list of Markdown blocks
 |`AsciiDoc` |`.title` and `.blocks`
 |`HTTP.RequestLiteral`, `HTTP.ResponseLiteral` |`.value`, the request or response
@@ -44,7 +45,10 @@ bytes, including the header. Raw CSV does not assume its first row is a header.
 YAML's supported subset and XML's well-formedness rules apply to quotations too.
 XML quotations do not validate an XSD or process namespaces. Roc source quotations
 check supported syntax, not names or types. HTTP quotations contain exactly one
-complete message, with the CRLF line endings its grammar requires.
+complete message, with the CRLF line endings its grammar requires. JSON quotations
+are strict RFC 8259 and reject repeated keys. Roc processes backslash escapes in
+multi-line strings too, so write a JSON escape such as `\u00e9` with a doubled
+backslash, `\\u00e9`.
 
 == Adjacent files
 
@@ -81,9 +85,10 @@ This accepts the YAML string `yes` deliberately. Without the override, the
 legacy-boolean check suggests quoting it or using `true` or `false`.
 
 Each format has `validate`; YAML and CSV also have `validate_as` for type-directed
-decoding. HTTP uses `validate_request` and `validate_response`. These functions
-return the natural parsed value in `Try(_, [BadQuotedBytes(Str)])`, so they can
-also be called from a custom type's `from_quote` method.
+decoding. JSON has `validate` but no `validate_as`; decode JSON into records with
+Roc's builtin `Json`. HTTP uses `validate_request` and `validate_response`. These
+functions return the natural parsed value in `Try(_, [BadQuotedBytes(Str)])`, so
+they can also be called from a custom type's `from_quote` method.
 
 The initial extra checks are enabled by default. Set an individual Boolean to
 `False` to accept that construct. Invalid syntax, type mismatches, unsupported
@@ -100,6 +105,12 @@ features, and resource limits remain errors regardless of lint settings.
 |HTTP |`repeated_content_length` |Repeated identical Content-Length values
 |Roc source |`placeholders` |Placeholder `...` expressions
 |===
+
+JSON has no lint fields. Its props take `options`, the same
+`JsonValue.Options` record that `JsonValue.parse_with` takes, so JSONC, a byte
+order mark, a duplicate-key policy such as `CollapseIdentical`, size limits and
+I-JSON numbers are chosen the same way at compile time as at run time (see
+<<json-options>>).
 
 Markdown's ordinary parser accepts every string. Its fence check is an additional
 policy, not a claim that CommonMark requires closing fences. Checks use parsed

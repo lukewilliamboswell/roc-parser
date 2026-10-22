@@ -1,0 +1,32 @@
+name: Nightly compatibility
+
+# Does the latest final release, and its examples archive, still work with
+# the latest Roc nightly? roc-automation's shared workflow selects the pair,
+# runs the archive's spec.json unchanged and keeps one tracking issue.
+# See docs/maintaining.adoc.
+on:
+  schedule:
+    - cron: '17 13 * * *'
+  workflow_dispatch:
+    inputs:
+      nightly-tag:
+        type: string
+        default: ''
+      release-tag:
+        type: string
+        default: ''
+permissions: {}
+jobs:
+  compatibility:
+    permissions:
+      contents: read
+      issues: write
+    uses: lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8a6c914fa8400c9d1f5a3815ab06e06687d58148
+    with:
+      nightly-tag: ${{ inputs.nightly-tag || '' }}
+      release-tag: ${{ inputs.release-tag || '' }}
+      runners: '["ubuntu-24.04"]'
+      # The latest final release, 2.0.0, has no canonical examples archive
+      # (spec.json), so every run reports setup-failed until the next final
+      # release. Set this to true after that release is published.
+      report-issue: false

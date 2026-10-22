@@ -6,6 +6,7 @@ app [main!] {
 import cli.Stdout
 import parser.CSV
 import parser.HTTP
+import parser.JsonValue
 import parser.Parser
 import parser.Xml
 import parser.Yaml
@@ -25,6 +26,15 @@ xml_message = |file_name, source| {
 	match Xml.parse_str(source) {
 		Ok(_) => "${file_name}: ok"
 		Err(InvalidXml({ line, column, message })) =>
+			"${file_name}:${line.to_str()}:${column.to_str()}: ${message}"
+	}
+}
+
+json_message : Str, Str -> Str
+json_message = |file_name, source| {
+	match JsonValue.parse_str(source) {
+		Ok(_) => "${file_name}: ok"
+		Err(InvalidJsonValue({ line, column, message })) =>
 			"${file_name}:${line.to_str()}:${column.to_str()}: ${message}"
 	}
 }
@@ -65,6 +75,7 @@ http_message = |source| {
 main! = |_args| {
 	Stdout.line!(yaml_message("config.yaml", "name: demo\nport: [8080\n"))?
 	Stdout.line!(xml_message("feed.xml", "<feed>\n  <entry></feed>"))?
+	Stdout.line!(json_message("package.json", "{\n  \"port\": 8080,\n}"))?
 	Stdout.line!(csv_message("apples,3\npears,\"2\n"))?
 	Stdout.line!(csv_message("apples,3\npears,many\n"))?
 	Stdout.line!(csv_message("apples,3,red\n"))?

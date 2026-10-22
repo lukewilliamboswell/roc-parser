@@ -4,7 +4,8 @@ Each `*.roc` file here is a [roc-fuzz](https://github.com/lukewilliamboswell/roc
 property-test target for one of the package's parsers. `seeds/` holds reviewable
 starting inputs and `dictionaries/` holds format-specific syntax tokens.
 
-Run every target briefly with the compiler pinned in `.roc-version`:
+Run every target briefly with the latest Roc nightly, as every pull request
+does (`blueprint run fuzz-smoke`):
 
 ```sh
 python3 scripts/run_fuzz.py smoke all

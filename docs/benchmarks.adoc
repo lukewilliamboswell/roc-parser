@@ -16,13 +16,13 @@ and how to read a report.
 
 == Run the benchmarks
 
-You need the Roc nightly named in `.roc-version`. Go,
+You need a recent Roc nightly; the report records which one. Go,
 Rust (cargo) and Python 3 are optional: a missing toolchain is skipped and
 named in the report.
 
 [source,console]
 ----
-$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-20-7a8a800/roc
+$ export ROC=~/roc_nightly-macos_apple_silicon-2026-10-21-5349569/roc
 $ python3 scripts/bench.py --quick             # about two minutes
 $ python3 scripts/bench.py --allocations       # the full comparison
 ----
@@ -100,22 +100,27 @@ Each format has five kinds of document:
 
 `sample`:: Small real-world-shaped files in
 link:{src}/bench/corpus/samples[`bench/corpus/samples/`]: a CSV order export,
-this repository's fuzz workflow (YAML), a design-tool-style SVG, this
-repository's README, and an HTTP browser request and JSON API response (kept
-in `HTTP_SAMPLES` so their CRLFs survive). They are frozen copies; do not
-update them.
+this repository's fuzz workflow (YAML), a design-tool-style SVG, a CycloneDX
+1.6 software bill of materials (JSON), this repository's README, and an HTTP
+browser request and JSON API response (kept in `HTTP_SAMPLES` so their CRLFs
+survive). They are frozen copies; do not update them.
 `small`, `medium`, `large`:: Generated documents of about 4 KiB, 64 KiB and
 1 MiB in the shape of typical data: CSV rows with quoted fields and embedded
 newlines, YAML service configuration with flow collections and block
-scalars, an XML catalogue with attributes and entities, a Markdown document
-with headings, lists, code, quotes and tables, and HTTP `POST` requests with
-a JSON body and chunked HTML responses.
+scalars, an XML catalogue with attributes and entities, a CycloneDX-style
+JSON bill of materials whose components carry licences, nested properties,
+integers beyond 64 bits, long decimals and escaped or non-ASCII strings, a
+Markdown document with headings, lists, code, quotes and tables, and HTTP
+`POST` requests with a JSON body and chunked HTML responses.
 `pathological`:: Inputs that stress one mechanism: very wide CSV rows and
 long runs of escaped quotes, YAML nesting at the 100-level limit and long
-flow sequences, deeply nested XML and thousands of attributes, unclosed
-Markdown emphasis and nested brackets, and HTTP messages with many headers
-or thousands of one-byte chunks. Several of these were super-linear before
-the fuzzing work described in <<performance-complexity>>.
+flow sequences, deeply nested XML and thousands of attributes, JSON arrays
+nested to the 128-level limit, a 200,000-number array, objects with 20,000
+keys or 20,000 empty-array members, strings full of escapes or surrogate
+pairs and a 100,000-digit number, unclosed Markdown emphasis and nested
+brackets, and HTTP messages with many headers or thousands of one-byte
+chunks. Several of these were super-linear before the fuzzing work described
+in <<performance-complexity>>.
 
 The corpus and a `manifest.json` with every document's size and hash are
 written to `.roc-parser-tmp/bench/<label>/corpus/`, so you can feed a
@@ -131,7 +136,8 @@ $ .roc-parser-tmp/bench/full/bin/roc-yaml 100 < .roc-parser-tmp/bench/full/corpu
 link:{src}/bench/roc[`bench/roc/`] holds one driver per format, each a few
 lines calling the format's public entry point: `CSV.parse_with` with
 `Parser.many(CSV.field(CSV.string))`, `Yaml.parse_str`, `Xml.parse_str`,
-`Markdown.parse_str`, and `HTTP.parse_request` or `HTTP.parse_response`. The timing loop is shared in
+`JsonValue.parse_str`, `Markdown.parse_str`, and `HTTP.parse_request` or
+`HTTP.parse_response`. The timing loop is shared in
 `bench/roc/Bench.roc`. The harness builds each driver with
 `roc build --opt=speed`; never benchmark `roc dev` or an unoptimised build,
 which is many times slower.
@@ -147,18 +153,20 @@ matching line in `alloc.roc`) changes.
 
 |Rust
 |`bench/compare/rust/`
-|csv, yaml-rust2, serde_yaml, quick-xml, roxmltree, pulldown-cmark, comrak and
-httparse, pinned exactly in `Cargo.toml` and `Cargo.lock`; built with
-`cargo build --release --locked`, thin LTO and one codegen unit.
+|csv, yaml-rust2, serde_yaml, quick-xml, roxmltree, serde_json,
+pulldown-cmark, comrak and httparse, pinned exactly in `Cargo.toml` and
+`Cargo.lock`; built with `cargo build --release --locked`, thin LTO and one
+codegen unit.
 
 |Go
 |`bench/compare/go/`
-|encoding/csv, gopkg.in/yaml.v3, encoding/xml, goldmark and net/http, pinned
-by `go.mod` and `go.sum`.
+|encoding/csv, gopkg.in/yaml.v3, encoding/xml, encoding/json, goldmark and
+net/http, pinned by `go.mod` and `go.sum`.
 
 |Python
 |`scripts/bench_python.py` and `bench/compare/python/requirements.txt`
-|csv, PyYAML (pure Python and libyaml), xml.etree, markdown-it-py and h11. The
+|csv, PyYAML (pure Python and libyaml), xml.etree, json, markdown-it-py and
+h11. The
 program is under `scripts/` because repository policy keeps every Python file
 there. The harness installs the pins into a virtual environment in
 `~/.cache/roc-parser/bench-venv` (outside the checkout, for the same reason);
@@ -172,6 +180,17 @@ Each program builds the same kind of in-memory structure as roc-parser:
 * *XML:* a tree of elements, attributes and text. roxmltree and
   ElementTree build one; for quick-xml and encoding/xml, which are streaming
   tokenizers, the program builds an owned tree from the events.
+* *JSON:* the library's generic value tree, walked once. serde_json is
+  built with `preserve_order` and `arbitrary_precision`, so like `JsonValue`
+  it keeps member order and every digit of a number (it does rewrite an
+  exponent such as `1E5` as `1e+5`). It is also built with `unbounded_depth`,
+  because its own limit stops one level short of the 128-level document.
+  encoding/json decodes into
+  `interface{}` with `UseNumber`, which keeps number text but puts members in
+  unordered maps. Python's `json.loads` converts numbers to `int` and `float`;
+  the program lifts CPython's 4,300-digit limit on integer conversion so the
+  100,000-digit number is measured. None of them rejects a repeated key: the
+  last value wins.
 * *Markdown:* comrak and goldmark build an AST. pulldown-cmark and
   markdown-it-py produce a flat event or token list, which is collected and,
   for pulldown-cmark, copied into owned events.
@@ -235,79 +254,65 @@ In the per-document table, check these before trusting a number:
 == Continuous integration
 
 link:{src}/.github/workflows/bench.yml[`.github/workflows/bench.yml`] runs the
-full comparison with `--allocations`, through roc-blueprint
+full comparison with `--allocations`, through Blueprint
 (<<benchmarks-blueprint>>), on `ubuntu-latest` every Monday and on
-demand (*Actions → Benchmarks → Run workflow*), then publishes `report.md` as
-the job summary and uploads the reports as the `bench-<run id>` artifact for
-90 days. GitHub's shared runners vary by a few tens of percent between runs,
-so compare ratios within one run rather than absolute times across runs.
+demand (*Actions → Benchmarks → Run workflow*), with the latest Roc nightly. It
+publishes `report.md` as the job summary and uploads the reports as the
+`bench-<run id>` artifact for 90 days. GitHub's shared runners vary by a few
+tens of percent between runs, so compare ratios within one run rather than
+absolute times across runs.
 
-Pull requests that change `package/`, `bench/` or the harness run
-`--quick --langs roc --fail-on-error`. It fails only when a Roc driver does not
-build, crashes, or exceeds its 60-second batch limit, which catches a parser
-that has turned quadratic without gating on noisy timings.
+Every pull request runs `--quick --langs roc --fail-on-error` as the `bench`
+section of `blueprint run check` (see <<contributing>>). It fails only when a
+Roc driver does not build, crashes, or exceeds its 60-second batch limit, which
+catches a parser that has turned quadratic without gating on noisy timings.
 
 [#benchmarks-blueprint]
-== Reproducible environment with roc-blueprint
+== Reproducible environment with Blueprint
 
 link:{src}/Blueprint.roc[`Blueprint.roc`] at the repository root describes the
-benchmark environment for
-https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.3.0: Roc,
-Go, Rust, Python and Git from Nix, pinned by the committed `Blueprint.lock`.
-It declares `x86_64-linux` (CI) and `aarch64-darwin` (Apple silicon Macs), and
-needs only Nix with flakes enabled. Run the CLI straight from its flake, pinned
-to the commit of the 0.3.0 tag:
-
-[source,console]
-----
-$ nix run github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5 -- run bench-quick
-----
-
-or put `blueprint` on `PATH` with `nix shell github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5` and run:
+`bench` environment for
+https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.6.0: Go,
+Rust (cargo and rustc), Python and Git from Nix, at the nixpkgs revision the
+committed `Blueprint.lock` records, and Roc from your machine. It declares
+`x86_64-linux` (CI) and `aarch64-darwin` (Apple silicon Macs), and needs Nix
+with flakes enabled. Install the `blueprint` binary as <<contributing>>
+describes, put the latest Roc nightly on `PATH` as `roc`, and run:
 
 [source,console]
 ----
 $ blueprint run bench-quick              # small corpus
 $ blueprint run bench                    # full comparison, with --allocations
 $ blueprint run bench -- --only csv      # extra arguments go to scripts/bench.py
-$ blueprint run test                     # scripts/all_tests.py
-$ blueprint run fuzz-smoke               # scripts/run_fuzz.py smoke
-$ blueprint shell                        # every toolchain on PATH
+$ blueprint shell bench                  # every toolchain on PATH
 $ blueprint update                       # refresh Blueprint.lock
 ----
 
 The first run downloads the toolchains; later runs start in a few seconds.
-Generated files go to `.blueprint/`, which is not committed.
+Generated files go to `.blueprint/`, which is not committed. Leave `ROC` unset
+when you run `blueprint`: Blueprint reads `ROC` to choose the compiler that
+evaluates `Blueprint.roc` itself.
 
-*Pinning.* Roc is pinned to exactly the nightly in `.roc-version`: roc-overlay
-publishes every nightly as its own package, and `Blueprint.roc` names it as the
-tool `rocpkgs.<nightly tag>`. `scripts/update_roc_nightly.py` rewrites that tag
-along with `.roc-version`, and a test fails if the two disagree. After a nightly
-update, run `blueprint update` so that `Blueprint.lock` records a roc-overlay
-revision that has the new nightly; until then a blueprint run fails with a
-missing `rocpkgs` attribute instead of using another compiler. The roc-overlay
-lock currently uses the publisher's immutable metadata update commit
-`702616cd012fd57dc16d64ba4cf7b7021614a0ae`, which includes the October 15
-nightly. The overlay's default branch may lag published compiler releases;
-verify that an updated lock actually contains the requested nightly. The shell sets `ROC=roc`, so the scripts use the pinned
-compiler rather than the older one the blueprint CLI runs on.
+*Compiler.* Roc is not pinned. The tasks use `roc` from your `PATH`, which in CI
+is the latest nightly, so a benchmark run measures the compiler the package is
+tested with that day. The report names it.
 
 Go, Rust and Python follow the nixpkgs revision in `Blueprint.lock`. Library
 versions are pinned by `Cargo.lock`, `go.sum` and `requirements.txt` as above,
-so a blueprint run and a plain run measure the same library code. The Python
+so a Blueprint run and a plain run measure the same library code. The Python
 packages go into one virtual environment per interpreter, under
 `~/.cache/roc-parser/`.
 
-*Provenance.* The blueprint shell sets `ROC_PARSER_BLUEPRINT=1`. The report's
-`Environment` line, and `metadata.environment` in `results.json`, then record
-the SHA-256 of `Blueprint.lock` and the nixpkgs and roc-overlay revisions it
-pins; outside blueprint they say `outside blueprint`. Both record the path of
-each toolchain, so you can check that it came from `/nix/store`.
+*Provenance.* The `bench` and `bench-quick` tasks pass `--blueprint` to
+`scripts/bench.py`. The report's `Environment` line, and
+`metadata.environment` in `results.json`, then record the SHA-256 of
+`Blueprint.lock` and the nixpkgs revision it pins; a run without the flag says
+`outside blueprint`. Both record the path of each toolchain, so you can check
+that it came from `/nix/store`.
 
-*CI.* The benchmark workflow described above installs Nix with
-`cachix/install-nix-action`, caches the store with `magic-nix-cache-action`,
-and runs `blueprint run bench-quick` for pull requests and `blueprint run bench`
-weekly on `ubuntu-latest`, so CI and a Mac use the same pins.
+*CI.* The benchmark workflow installs Blueprint and Nix with roc-automation's
+`setup-blueprint` action and runs `blueprint run bench`, so CI and a Mac use the
+same pins.
 
 Without Nix, install the toolchains yourself and run `scripts/bench.py` as
 shown in <<benchmarks>>; the report records every version either way.

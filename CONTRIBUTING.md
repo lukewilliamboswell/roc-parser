@@ -7,24 +7,26 @@ format accepts.
 
 The manual describes the whole process:
 
-- [Contributing](docs/contributing.adoc): development setup with the Roc
-  nightly from `.roc-version`, running the tests, the repository policy,
-  building the documentation, and the pull request checklist.
+- [Contributing](docs/contributing.adoc): development setup with the latest
+  Roc nightly and roc-blueprint, running the checks CI runs, the repository
+  policy, building the documentation, and the pull request checklist.
 - [Property tests and conformance reviews](docs/property-testing.adoc): the
   fuzz targets, the reference implementations each format is compared with,
   and how to reproduce a failure and add a regression.
 - [Add a format module](docs/adding-a-format.adoc): the steps for a new parser.
-- [Compiler updates, releases and security reports](docs/maintaining.adoc):
+- [Compiler, releases, settings and security reports](docs/maintaining.adoc):
   for maintainers.
 
-The quickest full check before you open a pull request:
+Before you open a pull request, run what the `check` job of CI runs, with the
+latest Roc nightly on your `PATH` as `roc`:
 
 ```sh
-ROC=/path/to/roc python3 scripts/all_tests.py
-python3 -m unittest discover -s scripts/tests -p "test_*.py"
+blueprint run check
 ```
 
-Pull requests need passing CI and signed commits.
+`blueprint run check -- --list` names its sections, and
+`blueprint run check -- fuzz` runs one. Pull requests need passing CI and
+signed commits.
 
 ## License
 

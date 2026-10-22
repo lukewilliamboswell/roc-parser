@@ -66,10 +66,23 @@ input, including failures that an alternative or a repetition recovered
 from. The runners report it as `ParseError({ message, offset })`, so the
 error points at the bad element and not at the input left over after it.
 
+[[glossary-i-json]]I-JSON::
+The Internet JSON profile of https://www.rfc-editor.org/rfc/rfc7493[RFC 7493]:
+JSON restricted so that every reader gets the same data. Among other rules,
+numbers should fit an IEEE 754 double and keys must be unique.
+`JsonValue.parse_with` checks its number rule with `interoperable_numbers:
+True`, and rejects repeated keys by default. See <<json-options>>.
+
 [[glossary-input]]Input::
 The data a parser reads, given by the first type parameter of
 `Parser(input, a)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
 record decoding it is a `CSV.Record`, a list of fields.
+
+[[glossary-jsonc]]JSONC::
+JSON with comments: JSON that also allows `//` and `/* */` comments and, in
+most tools, trailing commas, as in `tsconfig.json` and editor settings.
+`JsonValue.parse_with` reads it with `comments: True` and
+`trailing_commas: True`. It is not JSON5. See <<json-options>>.
 
 [[glossary-known-failure]]Known failure::
 A conformance case where the library and the oracle disagree on purpose,
@@ -87,7 +100,7 @@ style. The compiler finds the method from the value's type, which is
 A nominal type declared with `::`, whose backing representation is hidden
 outside its module, so values can only be built and read through its
 methods. `Parser(input, a)` is one. A nominal type declared with `:=`, such
-as `Yaml` or `Markdown`, shows its tags, so you can match on them.
+as `Yaml`, `JsonValue` or `Markdown`, shows its tags, so you can match on them.
 
 [[glossary-oracle]]Oracle::
 A trusted reference implementation whose results a test compares with the
@@ -150,10 +163,10 @@ optional value is `Try(a, [Missing])`.
 
 [[glossary-type-module]]Type module::
 A module named after the one type it defines, with that type's methods in
-the `.{ }` block of its declaration. `Parser`, `Yaml`, `Xml` and `Markdown`
-are type modules. `Utf8`, `CSV` and `HTTP` define their type as `[]`, an
-empty tag union, because they group functions and nested types rather than
-values of their own.
+the `.{ }` block of its declaration. `Parser`, `Yaml`, `Xml`, `JsonValue` and
+`Markdown` are type modules. `Utf8`, `CSV` and `HTTP` define their type as
+`[]`, an empty tag union, because they group functions and nested types
+rather than values of their own.
 
 [[glossary-well-formed]]Well-formed (XML)::
 Following the syntax rules of XML 1.0: one root element, properly nested and

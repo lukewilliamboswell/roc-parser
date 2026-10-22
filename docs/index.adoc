@@ -4,7 +4,7 @@
 // The build stamps the package version it documents. A checkout that has not
 // been released yet says so rather than claiming a version it is not.
 :revnumber: {docs-version}
-:revremark: Parser combinators, with CSV, YAML, XML, Markdown and HTTP/1.1 parsers
+:revremark: Parser combinators, with CSV, YAML, XML, JSON, Markdown and HTTP/1.1 parsers
 :toc: left
 :toclevels: 3
 :sectnums:
@@ -22,8 +22,8 @@
 
 [.lead]
 Parse text and data in Roc. roc-parser gives you small parsers that combine
-into larger ones, and ready-made parsers for CSV, YAML, XML, Markdown and
-HTTP/1.1 built from the same pieces.
+into larger ones, and ready-made parsers for CSV, YAML, XML, JSON, Markdown
+and HTTP/1.1 built from the same pieces.
 
 ifdef::backend-html5[]
 {api}[Browse the API reference] ·
@@ -36,7 +36,7 @@ endif::[]
 New to roc-parser:: Read <<overview>>, then <<getting-started>>, then
 <<combinator-primer>>.
 Parsing a format roc-parser already supports:: Go to its guide: <<csv>>,
-<<yaml>>, <<xml>>, <<markdown>> or <<http>>.
+<<yaml>>, <<xml>>, <<json>>, <<markdown>> or <<http>>.
 Writing your own parser:: Read <<combinators>>, <<custom-format>> and
 <<errors>>.
 Looking something up:: <<modules>>, <<conformance>>, <<performance>>, <<compatibility>> and
@@ -62,6 +62,8 @@ include::csv.adoc[leveloffset=+1]
 include::yaml.adoc[leveloffset=+1]
 
 include::xml.adoc[leveloffset=+1]
+
+include::json.adoc[leveloffset=+1]
 
 include::markdown.adoc[leveloffset=+1]
 

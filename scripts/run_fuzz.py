@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from typing import Sequence
 
 
@@ -80,6 +82,10 @@ TARGETS = dict(
         target("xml-raw", "xml", "raw", "xml", timeout=10),
         target("xml-roundtrip", max_input_size=1024),
         target("xml-malformed", max_input_size=1024),
+        target("json-raw", "json", "raw", "json", timeout=10),
+        # The first two bytes choose the options, so its seeds carry them.
+        target("json-options", "json-options", "raw", "json", timeout=10),
+        target("json-roundtrip", max_input_size=1024, timeout=10),
         target("csv", "csv", "fuzz-str", "csv"),
         target("csv-raw", "csv", "raw", "csv", timeout=10),
         target("csv-roundtrip", timeout=10),
@@ -198,7 +204,12 @@ def build_identity(target_name: str, roc: str) -> dict:
             "flags": ["--no-cache", "--opt=speed", "--fuzz"], "roc_fuzz": ROC_FUZZ_RELEASE}
 
 
-def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]:
+PRINT_LOCK = threading.Lock()
+
+
+def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = False) -> tuple[int, Path]:
+    """Build one target. With `capture`, the compiler's output is printed in
+    one piece when it finishes, so that concurrent builds stay readable."""
     config = TARGETS[target_name]
     output = binary_path(target_name)
 
@@ -226,12 +237,20 @@ def build_target(target_name: str, roc: str, no_build: bool) -> tuple[int, Path]
 
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [roc, "build", "--no-cache", "--opt=speed", "--fuzz", str(config.source), f"--output={output}"]
-    print(f"+ {shlex.join(command)}", flush=True)
+    if not capture:
+        print(f"+ {shlex.join(command)}", flush=True)
     try:
-        completed = subprocess.run(command, cwd=ROOT, check=False)
+        completed = subprocess.run(
+            command, cwd=ROOT, check=False, text=True,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.STDOUT if capture else None,
+        )
     except OSError as problem:
         print(f"error: could not run Roc: {problem}", file=sys.stderr)
         return 2, output
+    if capture:
+        with PRINT_LOCK:
+            print(f"+ {shlex.join(command)}\n{completed.stdout.rstrip()}", flush=True)
     if completed.returncode == 0 and syntax_target:
         if identity != build_identity(target_name, roc):
             print("error: syntax fuzz sources changed while building; rebuild", file=sys.stderr)
@@ -298,11 +317,27 @@ def execute_target_command(
     return return_code
 
 
+def build_targets(target_names: Sequence[str], roc: str, jobs: int) -> dict[str, int]:
+    """Build several targets at once. Optimised fuzz builds are long and mostly
+    single-threaded, so a smoke run of every target is bounded by them."""
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        statuses = pool.map(lambda name: build_target(name, roc, False, capture=True)[0], target_names)
+        return dict(zip(target_names, statuses))
+
+
 def run_fuzz_mode(args: argparse.Namespace) -> int:
     target_names = resolve_targets(args.targets)
     overall_status = 0
 
+    prebuilt: dict[str, int] = {}
+    if not args.no_build and args.jobs > 1 and len(target_names) > 1:
+        prebuilt = build_targets(target_names, args.roc, args.jobs)
+
     for target_name in target_names:
+        if prebuilt.get(target_name, 0) != 0:
+            print(f"error: {target_name} did not build", file=sys.stderr)
+            overall_status = overall_status or prebuilt[target_name]
+            continue
         config = TARGETS[target_name]
         corpus = prepare_corpus(target_name)
         if config.dictionary is not None and not config.dictionary.is_file():
@@ -326,7 +361,7 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
         status = execute_target_command(
             target_name,
             args.roc,
-            args.no_build,
+            args.no_build or target_name in prebuilt,
             options,
         )
         if status != 0 and overall_status == 0:
@@ -396,6 +431,10 @@ def add_limits(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--timeout", type=positive_int, help="override the target's per-input timeout")
     parser.add_argument("--memory-limit", type=positive_int, default=2048)
+    parser.add_argument(
+        "--jobs", type=positive_int, default=min(4, os.cpu_count() or 1),
+        help="targets to build at once before running them in turn (default: up to 4)",
+    )
 
 
 def make_argument_parser() -> argparse.ArgumentParser:

@@ -16,7 +16,8 @@ checks CI runs, and know what a pull request needs before it can be merged.
 
 Related chapters: <<property-testing>> explains the fuzz targets and
 conformance reviews, <<adding-a-format>> walks through adding a new format
-module, and <<maintaining>> covers compiler updates and releases.
+module, and <<maintaining>> covers the compiler, releases and repository
+settings.
 
 == Report a problem or propose a change
 
@@ -33,34 +34,51 @@ process in {src}/SECURITY.md[the security policy] instead.
 
 Install:
 
-* the Roc nightly named in {src}/.roc-version[`.roc-version`], for example
-  `nightly-2026-10-20-7a8a800`;
+* the latest Roc nightly from
+  https://github.com/roc-lang/nightlies/releases[roc-lang/nightlies], on your
+  `PATH` as `roc`;
 * Python 3, for the test, review and release scripts;
+* the `blueprint` binary of
+  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.6.0[roc-blueprint 0.6.0],
+  which runs the same named tasks as CI;
 * Docker, to build this manual locally (see <<contributing-docs>>).
 
-The scripts find the compiler through the `ROC` environment variable and fall
-back to `roc` on `PATH`. Point `ROC` at the nightly you installed:
+roc-parser does not pin a compiler. CI tests every change with the latest
+nightly, which it resolves at the start of each run, so install a new nightly
+when one is published. Check the one you have:
 
 [source,bash]
 ----
-export ROC=/path/to/roc_nightly/roc
-$ROC version
+roc version
 ----
 
-Output:
+Output, with the date and commit of your nightly:
 
 [source,text]
 ----
-Roc compiler version nightly-2026-10-20-7a8a800
+Roc compiler version nightly-2026-10-21-5349569
 ----
 
-With Nix, `blueprint shell` provides this exact nightly together with Go, Rust
-and Python, on Linux and on Apple silicon Macs; see <<benchmarks-blueprint>>.
+Download `blueprint` for your system from the release and check it against the
+release's `blueprint.sha256` before you run it. For an Apple silicon Mac:
 
-`.roc-version` is the only compiler pin; `Blueprint.roc` mirrors it, and a test
-keeps the two in step. The package, its tests, its examples,
-its releases, the property tests, the conformance reviews and the benchmarks
-all use it, locally and in CI.
+[source,bash]
+----
+gh release download 0.6.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
+shasum -a 256 --check --ignore-missing blueprint.sha256
+chmod +x blueprint-aarch64-darwin
+mv blueprint-aarch64-darwin ~/.local/bin/blueprint
+----
+
+`Blueprint.roc` declares the tasks and what each needs. `blueprint` downloads
+the tools it pins in `Blueprint.lock`, such as Zig for the RocSyntax oracle, and
+expects the others, such as `roc`, `python3`, `ruby` and `docker`, on your
+`PATH`; `blueprint requirements` lists them. Only the benchmark environment
+needs Nix (<<benchmarks-blueprint>>).
+
+The scripts find the compiler through the `ROC` environment variable and fall
+back to `roc` on `PATH`. Leave `ROC` unset when you run `blueprint`, which reads
+it to choose the compiler that evaluates `Blueprint.roc` itself.
 
 == Repository map
 
@@ -73,8 +91,10 @@ all use it, locally and in CI.
 |`scripts/` |Test, review, fuzz, documentation and release automation, all in Python
 |`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
 |`scripts/tests/` |Unit tests for the scripts, including the repository policy
+|`tests/examples.json` |What each example prints, checked on every pull request and shipped with each release's examples
 |`docs/` |This manual, in AsciiDoc
-|`docs/releases/` |Release notes, one Markdown file per release
+|`docs/releases/` |Release notes, one AsciiDoc file per release
+|`Blueprint.roc`, `Blueprint.lock` |The development environments and the named tasks CI runs
 |===
 
 == Run the tests
@@ -84,7 +104,7 @@ all through the package:
 
 [source,bash]
 ----
-$ROC test package/main.roc
+roc test package/main.roc
 ----
 
 Output:
@@ -96,49 +116,70 @@ All (253) tests passed in 535.8 ms.
 
 The number grows as tests are added.
 
-Run the unit tests for the Python scripts. These include the repository policy
-described below:
+[#contributing-check]
+=== Run what CI runs
+
+`blueprint run check` runs everything a pull request must pass, the same way
+the `check` job of `ci.yml` does. It takes a quarter of an hour or more on a
+laptop; its scratch files and evidence go under `.roc-parser-tmp/`:
 
 [source,bash]
 ----
-python3 -m unittest discover -s scripts/tests -p "test_*.py"
+blueprint run check
 ----
 
-Run the same validation as the `Tests` workflow. `scripts/all_tests.py` checks
-and tests every module, generates the API documentation, builds a bundle,
-and then packages the examples archive exactly as a release does, pinned to
-that bundle served on localhost, and checks, runs and builds every app in it.
-Its scratch files go under `.roc-parser-tmp/`:
+It runs `scripts/check.py`, which works through these sections in order and
+stops at the first failure. Name sections to run only those, for example
+`blueprint run check -- fuzz conformance`, and list them with
+`blueprint run check -- --list`:
+
+[cols="1,4",options="header"]
+|===
+|Section |What it runs
+|`scripts` |The unit tests for the Python scripts, including the repository policy below
+|`package` |`scripts/all_tests.py`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
+|`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/examples.json`
+|`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
+|`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
+|`conformance` |The fast conformance checks of every format against its reference implementation (<<conformance>>)
+|`asciidoc` |AsciiDoc against the pinned Asciidoctor, and a smoke run of its performance harness
+|`roc-syntax` |RocSyntax against the compiler's own parser, built with Zig, including recovery, mutations and the performance protocol
+|`bench` |A smoke run of the roc-parser benchmark drivers (<<benchmarks>>)
+|===
+
+The longer runs are scheduled: `fuzz.yml` runs ten-minute campaigns of every
+fuzz target and every conformance review each night, and `bench.yml` runs the
+full benchmark comparison each week.
+
+When you change what an example prints, record the new output and review the
+diff:
 
 [source,bash]
 ----
-python3 scripts/all_tests.py
-----
-
-A quick property-test pass over every fuzz target takes a few minutes (see
-<<property-testing>>):
-
-[source,bash]
-----
-ROC=/path/to/quality_nightly/roc python3 scripts/run_fuzz.py smoke all
+python3 scripts/test_bundle_examples.py --checkout --update
 ----
 
 === Repository policy
 
-`scripts/tests/test_repository_policy.py` enforces three rules. A pull request
+`scripts/tests/test_repository_policy.py` enforces these rules. A pull request
 that breaks one fails CI:
 
 * Automation is Python under `scripts/`. No shell scripts (`*.sh`) are allowed
   anywhere, and no `*.py` file may live outside `scripts/`.
 * Every `uses:` in a workflow names an action by its full 40-character commit
   SHA, not a tag or branch. Local actions (`./...`) are exempt.
+* Every roc-automation action and workflow is used at the one reviewed
+  revision (<<maintaining-compiler>>), every workflow sets `permissions: {}` at
+  the top and grants each job what it needs, and nothing pins a Roc nightly.
 * Workflows do not use the `pull_request_target` or `workflow_run` triggers,
   and do not contain multi-line `run: |` or `run: >` blocks. Put the logic in a
-  script under `scripts/` and call it on one line.
+  script under `scripts/`, give it a task in `Blueprint.roc`, and call
+  `blueprint run <task>` on one line.
 
 `scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
-registered in `scripts/run_fuzz.py`, and the CI matrix in `fuzz.yml` to match
-that registry.
+registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
+match that registry; `scripts/tests/test_check.py` does the same for the
+conformance reviews in `scripts/check_conformance.py`.
 
 [#contributing-docs]
 == Build the documentation
@@ -152,7 +193,9 @@ python3 scripts/build_manual.py
 ----
 
 Add `--pdf` to also build the PDF, and `--docs-version V` to stamp a version
-other than the development one.
+other than the development one. `blueprint run docs` builds what a release
+publishes: the PDF, and the site with the manual and the API reference
+together, under `.docs-out/release/`.
 
 The API reference is generated from the doc comments in `package/` with
 `roc docs`. Build it, or check that it builds without writing anything:
@@ -171,18 +214,21 @@ build rather than silently leaving a stale example:
 python3 scripts/check_doc_examples.py
 ----
 
-The `Docs` workflow (`.github/workflows/docs.yml`) runs these on pull requests.
+The `docs` section of `blueprint run check` runs the examples and the API
+check. Every pull request also builds the manual, HTML and PDF, in the dry run
+of the `Release` workflow; download the `release-site` artifact of that run to
+preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/main/docs/documentation-guide.md[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/8a6c914fa8400c9d1f5a3815ab06e06687d58148/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.
 
 == Before you open a pull request
 
-* Format changed Roc files with `roc fmt path/to/file.roc`, using the compiler
-  pinned in `.roc-version`.
+* Format changed Roc files with `roc fmt path/to/file.roc`, using the latest
+  nightly.
 * Add or update `expect` tests for the accepted input, the rejected input and
   the boundary cases of the behaviour you changed.
 * When you change parser behaviour, run that format's conformance review and,
@@ -193,17 +239,19 @@ separately, and put any warning before the step it applies to.
   entry to make a check pass unless the input is genuinely outside what the
   module supports, and say why in the entry.
 * Update the doc comments, the manual and the release notes in
-  `docs/releases/` when a public API or the accepted syntax changes.
+  `docs/releases/unreleased.adoc` when a public API or the accepted syntax
+  changes.
 * Keep the change focused: no unrelated formatting or refactoring, and no
   generated files or local build output (`.roc-parser-tmp/`, `.roc-fuzz/`).
 * Sign your commits. The `main` branch requires verified signatures; see
   https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits[GitHub's guide to signing commits]
   to set up an SSH or GPG key.
 
-Pull requests need passing CI: `Tests`, `Property quality tests` (smoke runs of
-every target and every format's conformance review) and `Docs`. Human review is
-encouraged; answer review comments before asking for another review after a
-substantial change.
+Pull requests need passing CI: `check`, which runs `blueprint run check`, and
+`Build the release`, the dry run of the `Release` workflow, as well as `codeql`.
+A new Roc nightly can break `check` without any fault in your change; see
+<<maintaining-compiler>>. Human review is encouraged; answer review comments
+before asking for another review after a substantial change.
 
 == License
 

@@ -1,0 +1,60 @@
+name: CI
+
+# The working tree on the latest Roc nightly. `blueprint run check` holds
+# everything a pull request must pass (scripts/check.py lists it): the
+# package's checks and tests, the examples against tests/examples.json, a
+# release dry run against a loopback bundle, the manual's examples, the API
+# audit, and smoke runs of every fuzz target, conformance review, oracle and
+# benchmark. Long campaigns run in fuzz.yml and bench.yml. The `check` job is
+# the required status check.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
+        with:
+          cache: 'true'
+          cache-workload: check
+      - id: nightly
+        name: Resolve the latest Roc nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.nightly.outputs.tag }}
+      - run: blueprint run check
+      - name: Upload evidence and reproducers
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: check-evidence
+          path: |
+            .roc-parser-tmp/fuzz/runs/
+            .roc-parser-tmp/asciidoc/review/
+            .roc-parser-tmp/asciidoc/performance-smoke/
+            .roc-parser-tmp/roc-syntax-validation/*.json
+            .roc-parser-tmp/roc-syntax-validation/*.stdout
+            .roc-parser-tmp/roc-syntax-validation/*.stderr
+            .roc-parser-tmp/bench/quick/
+          if-no-files-found: ignore
+          retention-days: 14

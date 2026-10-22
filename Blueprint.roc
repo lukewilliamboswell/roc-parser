@@ -1,57 +1,80 @@
-# Reproducible benchmark environment for roc-parser (docs/benchmarks.adoc).
+# roc-parser's development environments and the tasks CI and contributors run.
 #
-# Needs the roc-blueprint 0.3.0 CLI and Nix with flakes. Works on x86_64 Linux
-# (CI) and aarch64 macOS. From the repository root:
+# Needs the roc-blueprint 0.6.0 `blueprint` binary, the release this file's
+# platform URL names (docs/contributing.adoc says how to install it), and the
+# latest Roc nightly on PATH as `roc`. From the repository root:
 #
-#     nix run github:lukewilliamboswell/roc-blueprint/0.3.0 -- run bench-quick
+#     blueprint run check           # everything a pull request must pass
+#     blueprint run check -- fuzz   # one section of it; `-- --list` names them
+#     blueprint run fuzz-smoke      # build every fuzz target and replay its seeds
+#     blueprint run docs            # the manual (HTML and PDF) and the API reference
+#     blueprint run bench-quick     # a short comparison with Go, Rust and Python (Nix)
+#     blueprint run bench           # the full comparison (Nix)
+#     blueprint tasks               # every task
 #
-# or enter `nix shell github:lukewilliamboswell/roc-blueprint/0.3.0` and run
+# The package compiler is never pinned here. Every task that builds or tests
+# the package expects `roc` of the machine, which in CI is the nightly that
+# roc-lang/setup-roc installs. The automation under scripts/ is Python, so no
+# environment has a `roc-stable` (docs/maintaining.adoc).
 #
-#     blueprint run bench-quick   # CI-sized smoke run
-#     blueprint run bench         # full comparison with Go, Rust and Python
-#     blueprint run test          # scripts/all_tests.py
-#     blueprint run fuzz-smoke    # scripts/run_fuzz.py smoke
-#     blueprint shell             # a shell with every toolchain on PATH
-#     blueprint update            # refresh Blueprint.lock (nixpkgs, roc-overlay)
-#
-# Go, Rust and Python come from the nixpkgs revision Blueprint.lock records.
-# Library versions are pinned separately, by bench/compare/rust/Cargo.lock,
-# bench/compare/go/go.sum and bench/compare/python/requirements.txt, so they
-# match runs made without blueprint.
-#
-# Roc is pinned to exactly the nightly in .roc-version: roc-overlay publishes
-# every nightly as `rocpkgs."<tag>"`. scripts/update_roc_nightly.py rewrites
-# the tag below together with .roc-version (a test checks they agree); then run
-# `blueprint update` so Blueprint.lock points at an overlay revision that has it.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.3.0/DdfMePZbeL5hodg7j4B6Jzpm9t555B9SPPAJNQ5WzCR9.tar.zst" }
+# Zig 0.17.0 builds the compiler's own parser as the RocSyntax oracle. It is
+# downloaded and checked against Blueprint.lock, so `check` needs no Nix. Only
+# the benchmark environment takes tools from Nix: Go, Rust and Python for the
+# comparison drivers, from the nixpkgs revision Blueprint.lock records. Their
+# libraries are pinned separately, by bench/compare/rust/Cargo.lock,
+# bench/compare/go/go.sum and bench/compare/python/requirements.txt.
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.6.0/BenWAmrQp3qFLJPgGerHFPzzAn7ouXDew69CCg2LTtQX.tar.zst" }
 
-bench_tools = [
-	"rocpkgs.nightly-2026-10-20-7a8a800",
-	"go",
-	"cargo",
-	"rustc",
-	"python3",
-	"git",
-]
+import pf.Config
+import pf.System
+
+zig : System -> Config.Download
+zig = |system| {
+	base = "https://ziglang.org/download/0.17.0"
+	match system {
+		"x86_64-linux" => Archive("${base}/zig-x86_64-linux-0.17.0.tar.xz", TarXz, "zig-x86_64-linux-0.17.0/zig")
+		"aarch64-darwin" => Archive("${base}/zig-aarch64-macos-0.17.0.tar.xz", TarXz, "zig-aarch64-macos-0.17.0/zig")
+		_ => Unavailable
+	}
+}
 
 config = [
-	Name("roc-parser-bench"),
+	Name("roc-parser"),
 	Systems(["x86_64-linux", "aarch64-darwin"]),
-	Overlay("github:roc-lang/roc-overlay"),
-	Shell("default", [Tools(bench_tools)]),
-	Raw(
-		"nix",
-		"shell:default",
-		Attrs([
-			# scripts/bench.py records that it ran here, and which Blueprint.lock.
-			("ROC_PARSER_BLUEPRINT", Str("1")),
-			# The blueprint CLI exports ROC for its own (older) compiler, and the
-			# scripts honour ROC; reset it to the pinned roc on PATH.
-			("ROC", Str("roc")),
-		]),
-	),
-	Task("bench", [Run(["python3", "scripts/bench.py", "--allocations"])]),
-	Task("bench-quick", [Run(["python3", "scripts/bench.py", "--quick"])]),
-	Task("test", [Run(["python3", "scripts/all_tests.py"])]),
-	Task("fuzz-smoke", [Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
+	Packages("nix", From(NixPackages("github:NixOS/nixpkgs/nixos-unstable"))),
+	# The package and its release artifacts, built with the machine's nightly.
+	Environment("package", [Expect(["roc", "python3", "git"])]),
+	# The reference implementations the checks compare with. The Python
+	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
+	# under .roc-parser-tmp/.
+	Environment("oracles", [Extend("package"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
+	# The manual builds in Docker (.github/docs.Dockerfile).
+	Environment("docs", [Extend("package"), Expect(["docker"])]),
+	Environment("release", [Extend("package"), Expect(["gh"])]),
+	Environment("python", [Expect(["python3"])]),
+	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
+	Shell("default", [Use("oracles")]),
+	Shell("bench", [Use("bench")]),
+	# Everything a pull request must pass; `blueprint run check -- --list`.
+	Task("check", [Use("oracles"), Run(["python3", "scripts/check.py"])]),
+	# Parts of check, and the longer runs of the scheduled workflows.
+	Task("test", [Use("package"), Run(["python3", "scripts/all_tests.py"])]),
+	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
+	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
+	Task("conformance", [Use("package"), Run(["python3", "scripts/check_conformance.py"])]),
+	Task("asciidoc", [Use("oracles"), Run(["python3", "scripts/check_asciidoc.py"])]),
+	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
+	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
+	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
+	# Release artifacts. `release-build` makes every file of a release and
+	# `release-test` tests those exact files; the others make one each.
+	Task("bundle", [Use("package"), Run(["python3", "scripts/bundle.py"])]),
+	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
+	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
+	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),
+	Task("release-validate", [Use("release"), Run(["python3", "scripts/release_helpers.py", "validate"])]),
+	Task("release-build", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "build"])]),
+	Task("release-test", [Use("package"), Run(["python3", "scripts/release_helpers.py", "test"])]),
+	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),
+	Task("combine-attestations", [Use("python"), Run(["python3", "scripts/release_security_assets.py", "combine-attestations"])]),
 ]

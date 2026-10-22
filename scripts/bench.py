@@ -35,8 +35,8 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "bench"
 DEFAULT_OUT = ROOT / ".roc-parser-tmp" / "bench"
-FORMATS = ("csv", "yaml", "xml", "markdown", "http")
-EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "markdown": "md", "http": "http"}
+FORMATS = ("csv", "yaml", "xml", "json", "markdown", "http")
+EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "json": "json", "markdown": "md", "http": "http"}
 SIZES = {"small": 4 * 1024, "medium": 64 * 1024, "large": 1024 * 1024}
 SCHEMA_VERSION = 1
 
@@ -123,6 +123,51 @@ def xml_doc(rng: random.Random, target: int) -> str:
     return fill(target, book, '<?xml version="1.0" encoding="UTF-8"?>\n<catalog>\n', "</catalog>\n")
 
 
+#: JSON string bodies, already escaped: every escape form, a surrogate pair and raw non-ASCII.
+JSON_STRINGS = (r'said \"hello\"', r'C:\\Program Files\\roc', r'tab\tseparated', r'line one\nline two',
+                r'caf\u00e9 cr\u00e8me br\u00fbl\u00e9e', r'emoji \ud83d\ude00 and \u2603', r'a\/b \r\f\b',
+                "naïve façade", "日本語のテキスト", "Ελληνικά")
+LICENSES = ("MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "MPL-2.0", "Zlib", "Unicode-3.0", "LGPL-2.1-or-later")
+ASCII_WORDS = tuple(w for w in WORDS if w.isascii())
+
+
+def json_number(rng: random.Random) -> str:
+    """Integers, negatives, integers beyond 64 bits, long decimals and exponents."""
+    kind = rng.randrange(5)
+    if kind == 0:
+        return str(rng.randint(0, 100000))
+    if kind == 1:
+        return str(-rng.randint(1, 5000))
+    if kind == 2:
+        return str(rng.getrandbits(96))
+    if kind == 3:
+        return f"{rng.randint(0, 999)}.{rng.getrandbits(64):020d}"
+    return f"{rng.randint(1, 9)}.{rng.randint(0, 999):03d}e{rng.choice(['', '-', '+'])}{rng.randint(1, 30)}"
+
+
+def json_doc(rng: random.Random, target: int) -> str:
+    """A CycloneDX-shaped SBOM: metadata, then one component per line."""
+    def component(i: int) -> str:
+        name = f"{rng.choice(ASCII_WORDS)}-{rng.choice(ASCII_WORDS)}"
+        version = f"{rng.randint(0, 9)}.{rng.randint(0, 30)}.{rng.randint(0, 99)}"
+        eco = rng.choice(["npm/%40example/", "pypi/", "cargo/", "golang/example.com/", "maven/org.example/"])
+        licenses = ",".join(f'{{"license":{{"id":"{rng.choice(LICENSES)}"}}}}' for _ in range(rng.randint(1, 2)))
+        flags = ",".join(f'"{rng.choice(["--release", "-O2", "lto", "strip"])}"' for _ in range(rng.randint(0, 3)))
+        return ((",\n" if i else "\n") +
+                f'{{"type":"library","name":"{name}","version":"{version}","purl":"pkg:{eco}{name}@{version}",'
+                f'"licenses":[{licenses}],"description":"{words(rng, 1, 4)} {rng.choice(JSON_STRINGS)}",'
+                f'"properties":[{{"name":"build","value":{{"reproducible":{rng.choice(["true", "false"])},'
+                f'"flags":[{flags}],"size":{json_number(rng)}}}}},{{"name":"score","value":{json_number(rng)}}}],'
+                f'"deprecated":{rng.choice(["null", "false"])}}}')
+    serial = f"{rng.getrandbits(128):032x}"
+    head = ('{"bomFormat":"CycloneDX","specVersion":"1.6",'
+            f'"serialNumber":"urn:uuid:{serial[:8]}-{serial[8:12]}-{serial[12:16]}-{serial[16:20]}-{serial[20:]}",'
+            '"version":1,"metadata":{"timestamp":"2026-10-01T09:00:00Z","tools":{"components":[{"type":"application",'
+            '"name":"bench-generator","version":"1.0.0"}]},"component":{"type":"application","name":"generated",'
+            '"version":"0.1.0"}},"components":[')
+    return fill(target, component, head, "\n]}\n")
+
+
 def markdown_doc(rng: random.Random, target: int) -> str:
     def section(i: int) -> str:
         w = rng.choice(WORDS)
@@ -193,7 +238,7 @@ def http_chunked(rng: random.Random, target: int, chunk: int = 8192) -> str:
 
 
 GENERATORS: dict[str, Callable[[random.Random, int], str]] = {
-    "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "markdown": markdown_doc,
+    "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "json": json_doc, "markdown": markdown_doc,
 }
 
 
@@ -221,6 +266,19 @@ def pathological() -> dict[str, dict[str, str]]:
             "many-attributes": "<a " + " ".join(f'k{i}="{i}"' for i in range(5000)) + "/>",
             "entity-heavy": "<a>" + "&amp;&lt;&#65;&#x42;" * 10000 + "</a>",
         },
+        "json": {
+            # Exactly JsonValue's default depth limit.
+            "deep-nesting-128": "[" * 128 + "0" + "]" * 128 + "\n",
+            "long-array": "[" + ",".join((str(i), f"-{i}.{i % 97}", f"{i}e-{i % 9}")[i % 3]
+                                         for i in range(200000)) + "]\n",
+            # Past 16 members the duplicate-key check uses a Dict.
+            "many-keys": "{" + ",".join(f'"key{i}":{i}' for i in range(20000)) + "}\n",
+            "escape-heavy": '"' + r'\né\"' * 30000 + '"\n',
+            "surrogate-pairs": '"' + r"\ud83d\ude00" * 20000 + '"\n',
+            "huge-number": "".join(str(i % 10) for i in range(1, 100001)) + "\n",
+            # An ARC copy of the member buffer per member would make this quadratic.
+            "many-empty-members": "{" + ",".join(f'"m{i}":[]' for i in range(20000)) + "}\n",
+        },
         "markdown": {
             "unclosed-emphasis": "*a " * 10000 + "\n",
             "nested-brackets": "[" * 5000 + "a" + "]" * 5000 + "\n",
@@ -241,6 +299,7 @@ def samples() -> dict[str, dict[str, bytes]]:
         "csv": {"sample-orders-export": (folder / "orders-export.csv").read_bytes()},
         "yaml": {"sample-github-actions": (folder / "github-actions.yaml").read_bytes()},
         "xml": {"sample-svg": (folder / "logo.svg").read_bytes()},
+        "json": {"sample-sbom-cyclonedx": (folder / "sbom-cyclonedx.json").read_bytes()},
         "markdown": {"sample-readme": (folder / "project-readme.md").read_bytes()},
         "http": {name: text.encode() for name, text in HTTP_SAMPLES.items()},
     }
@@ -292,6 +351,7 @@ COMPARATORS = {
         "csv": [("csv", "csv 1.3 StringRecords copied into Vec<Vec<String>>")],
         "yaml": [("yaml-rust2", "yaml-rust2 YamlLoader tree"), ("serde_yaml", "serde_yaml Value tree (unsafe-libyaml)")],
         "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree read-only DOM")],
+        "json": [("serde_json", "serde_json Value with preserve_order and arbitrary_precision: ordered, lossless")],
         "markdown": [("pulldown-cmark", "pulldown-cmark events made 'static and collected"), ("comrak", "comrak arena AST")],
         "http": [("httparse", "httparse head plus Content-Length/chunked body framing, copied")],
     },
@@ -299,6 +359,7 @@ COMPARATORS = {
         "csv": [("encoding-csv", "encoding/csv ReadAll")],
         "yaml": [("yaml.v3", "gopkg.in/yaml.v3 Unmarshal into interface{}")],
         "xml": [("encoding-xml", "encoding/xml tokens built into a tree")],
+        "json": [("encoding-json", "encoding/json Decoder.UseNumber into interface{}; maps are unordered")],
         "markdown": [("goldmark", "goldmark AST with GFM table/strikethrough/tasklist")],
         "http": [("net-http", "net/http ReadRequest/ReadResponse plus io.ReadAll body")],
     },
@@ -306,6 +367,7 @@ COMPARATORS = {
         "csv": [("csv", "stdlib csv.reader (C) into lists")],
         "yaml": [("pyyaml", "PyYAML SafeLoader, pure Python"), ("pyyaml-libyaml", "PyYAML CSafeLoader (libyaml)")],
         "xml": [("etree", "xml.etree.ElementTree.fromstring (expat)")],
+        "json": [("json", "stdlib json.loads (C scanner) into dicts and lists; numbers become int and float")],
         "markdown": [("markdown-it-py", "markdown-it-py token stream, commonmark + table")],
         "http": [("h11", "h11 connection state machine")],
     },
@@ -622,24 +684,28 @@ def machine() -> dict:
             "os": platform.platform(), "python": platform.python_version()}
 
 
-BLUEPRINT_ENV = "ROC_PARSER_BLUEPRINT"
+# A package source in a Blueprint 0.6 lock: its name, provider, ref and the
+# revision `blueprint update` resolved it to.
+LOCKED_SOURCE_RE = re.compile(
+    r'\(name "([^"]+)"\)\s*\(provider "[^"]+"\)\s*\(ref "([^"]+)"\)\s*\(rev "([0-9a-f]+)"\)')
 
 
-def environment(env: dict[str, str] | None = None, lock: Path = ROOT / "Blueprint.lock") -> dict:
-    """Where the toolchains came from: a blueprint shell (Blueprint.roc sets
-    ROC_PARSER_BLUEPRINT=1), the Blueprint.lock that pinned it, and tool paths."""
+def environment(env: dict[str, str] | None = None, lock: Path = ROOT / "Blueprint.lock",
+                blueprint: bool = False) -> dict:
+    """Where the toolchains came from: the Blueprint bench environment (its
+    tasks pass --blueprint), the Blueprint.lock that pinned it, and tool paths."""
     env = os.environ if env is None else env
-    info: dict = {"blueprint": env.get(BLUEPRINT_ENV) == "1",
+    info: dict = {"blueprint": blueprint,
                   "tools": {t: shutil.which(t, path=env.get("PATH")) for t in ("roc", "go", "cargo", "rustc", "python3")}}
     if info["blueprint"]:
         try:
             data = lock.read_bytes()
-            nodes = json.loads(data)["nodes"]
-            inputs = {name: nodes[node]["locked"] for name, node in nodes["root"]["inputs"].items()}
+            sources = LOCKED_SOURCE_RE.findall(data.decode("utf-8"))
+            if not sources:
+                raise ValueError("no locked package source")
             info["lock"] = {"path": lock.name, "sha256": hashlib.sha256(data).hexdigest(),
-                            "inputs": {name: f"{v.get('owner')}/{v.get('repo')}@{v.get('rev')}"
-                                       for name, v in inputs.items()}}
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+                            "inputs": {name: f"{ref}@{rev}" for name, ref, rev in sources}}
+        except (OSError, ValueError) as error:
             info["lock"] = {"path": lock.name, "error": str(error)}
     return info
 
@@ -692,6 +758,8 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--allocations", action="store_true", help="also count Roc allocations (builds bench/roc/alloc.roc)")
     ap.add_argument("--fail-on-error", action="store_true", help="exit 1 if any roc-parser measurement errored")
     ap.add_argument("--corpus-only", action="store_true", help="write the corpus and its manifest, then stop")
+    ap.add_argument("--blueprint", action="store_true",
+                    help="record that the toolchains are the Blueprint bench environment's, and its lock")
     args = ap.parse_args(argv)
     args.repetitions = args.repetitions or (3 if args.quick else 7)
     args.target_ms = args.target_ms or (20.0 if args.quick else 200.0)
@@ -735,7 +803,8 @@ def main(argv: list[str] | None = None) -> int:
     metadata = {
         "schema": SCHEMA_VERSION, "label": args.label, "quick": args.quick,
         "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "machine": machine(), "git": git_state(), "environment": environment(), "versions": builder.versions,
+        "machine": machine(), "git": git_state(), "environment": environment(blueprint=args.blueprint),
+        "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
         "implementations": [{"id": i.id, "format": i.format, "notes": i.notes} for i in impls],
         "corpus": manifest,

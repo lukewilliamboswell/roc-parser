@@ -47,7 +47,9 @@ rendering with the same oracle and checks geometric scaling.
 The numbers below were measured on 1 October 2026 at commit `7afc741`, with Roc
 `nightly-2026-09-29-7f11a82` on macOS (Apple silicon) and Python 3.14. They
 will change as the parsers and test sets change; rerun the commands in
-<<conformance-reproduce>> for current figures.
+<<conformance-reproduce>> for current figures. The JSON row was measured
+later, on 22 October 2026 at commit `3a012d6`, with Roc
+`nightly-2026-10-21-5349569` and Python 3.14.3.
 
 [cols="1,2,2,2",options="header"]
 |===
@@ -62,6 +64,14 @@ will change as the parsers and test sets change; rerun the commands in
 |RFC 9112 (messages) and RFC 9110 (fields)
 |h11 0.16.0; llhttp's behaviour where the library is stricter than h11
 |134 cases: 112 agree, 22 are listed deliberate divergences
+
+|JSON
+|RFC 8259
+|Python's `json` module (standard library), configured to model the parse
+options; JSONTestSuite (revision `1ef36fa`)
+|720 of 720 cases pass (397 hand-written, 318 from the suite, 5 real
+documents), no known failures; 2 suite cases are policy deviations, see
+<<conformance-json>>
 
 |Markdown, inline
 |CommonMark 0.31.2 and GFM
@@ -88,10 +98,11 @@ will change as the parsers and test sets change; rerun the commands in
 == Reproducing the results
 
 The review scripts need Python 3, the pinned oracles, and a Roc compiler. Set
-`ROC` to the compiler you want to test with; CI uses the nightly named in
-`.roc-version` (see
-<<compatibility,Compatibility>>). Install each oracle into its own virtual
-environment under `.roc-parser-tmp/`, which git ignores:
+`ROC` to the compiler you want to test with; CI uses the latest Roc nightly (see
+<<compatibility,Compatibility>>). `python3 scripts/check_conformance.py` installs
+every oracle into one environment and runs the reviews CI runs. To run them by
+hand, install each oracle into its own virtual environment under
+`.roc-parser-tmp/`, which git ignores:
 
 [source,sh]
 ----
@@ -104,13 +115,16 @@ python3 -m venv .roc-parser-tmp/venv-md
 .roc-parser-tmp/venv-md/bin/pip install --no-deps -r scripts/markdown/requirements.txt
 ----
 
-Then run one command per format. CSV and XML need only the standard library;
-the XML script downloads the W3C suite on first use and checks its SHA-256.
+Then run one command per format. CSV, XML and JSON need only the standard
+library. The XML script downloads the W3C suite on first use and checks its
+SHA-256; the JSON script downloads its five pinned documents the same way
+(`--no-documents` skips them).
 
 [source,sh]
 ----
 python3 scripts/review_csv.py
 python3 scripts/review_xml.py check --baseline scripts/xml/known-failures.json
+python3 scripts/review_json.py check --baseline scripts/json/known-failures.json
 .roc-parser-tmp/venv-http/bin/python scripts/review_http.py
 .roc-parser-tmp/venv-md/bin/python scripts/review_markdown.py check
 .roc-parser-tmp/venv-md/bin/python scripts/review_markdown_blocks.py check --baseline scripts/markdown/blocks/known-failures.json
@@ -124,8 +138,9 @@ Each script prints a summary, such as the following for HTTP:
 134 cases, 22 known divergences, 0 failures, 0 crashes, 0 stale (h11 0.16.0)
 ----
 
-The XML, YAML and Markdown block scripts also write a JSON report, with every
-case's expected and actual result, under `.roc-parser-tmp/`.
+The XML, YAML, JSON and Markdown block scripts also write a JSON report, with
+every case's expected and actual result, under `.roc-parser-tmp/`. The JSON
+script writes `.roc-parser-tmp/json-review/check.json`.
 
 == CSV
 
@@ -172,6 +187,65 @@ Limitations:
 * The parser cannot see the request a response answers, so responses to `HEAD`
   and 2xx responses to `CONNECT` must have their framing fields removed, or a
   status that implies no body, before parsing.
+
+[#conformance-json]
+== JSON
+
+The parser follows RFC 8259. By default it is strict and also rejects
+repeated keys; options add relaxations and checks (see <<json-options>>).
+
+`scripts/review_json.py` compares the probe with Python's standard `json`
+module, configured so that it models `JsonValue.Options`:
+
+* numbers stay as their text (`parse_int` and `parse_float` return it), so
+  values compare exactly;
+* `object_pairs_hook` keeps member order and applies the duplicate mode to
+  keys compared after unescaping;
+* `parse_constant` accepts `NaN` and `Infinity` only with `non_finite`, and
+  `strict` follows `control_characters`;
+* lone `\u` surrogates, which `json` decodes without complaint, are found
+  afterwards and rejected or replaced;
+* the byte order mark, comments, trailing commas, `top_level`, the size and
+  nesting limits and I-JSON numbers are checked by the script itself.
+
+Every accepted value is also written compact, with `indent: 2` and with
+`sort_keys: True`, and compared byte for byte with what `json.dumps` writes.
+Rejections are compared as verdicts, and an error's line and column must lie
+inside the input. Each case also checks that `JsonValue.parser_with` agrees
+with `JsonValue.parse_with`.
+
+The inputs are:
+
+* 397 hand-written cases in `scripts/json/cases.json`, covering each rule,
+  and each option at and past its boundary;
+* the 318 parsing cases of https://github.com/nst/JSONTestSuite[JSONTestSuite]
+  at revision `1ef36fa01286573e846ac449e8683f8833c5b26a`, vendored with its
+  MIT licence as `scripts/json/suite.json`: 95 that must be accepted, 188
+  that must be rejected, and 35 whose result the suite leaves to the
+  implementation;
+* five real documents, fetched by URL and pinned by SHA-256: the SPDX 3.0.1,
+  SPDX 2.3 and CycloneDX 1.7 JSON schemas, a Syft 1.54.1 SBOM and a Trivy
+  0.76.0 CycloneDX SBOM. The SPDX 3.0.1 schema repeats two keys with equal
+  values, so it is read with `duplicates: CollapseIdentical`.
+
+All 720 cases pass, with no known failures and no oracle disagreements.
+The 35 implementation-defined suite cases are recorded, never counted as
+failures. 10 are accepted: numbers too large or too small for a double,
+whose text is kept. 25 are rejected: 10 lone or malformed surrogate escapes,
+which a Roc `Str` cannot hold (`lone_surrogates: Replace` reads them as
+U+FFFD); 13 inputs that are not UTF-8, such as UTF-16, ISO-8859-1, overlong
+sequences and encoded surrogates; a byte order mark, which `bom: True`
+accepts; and 500 nested arrays, past the default 128-level limit.
+
+Two suite cases are policy deviations. `y_object_duplicated_key` and
+`y_object_duplicated_key_and_value` are valid RFC 8259 text, but strict
+parsing rejects a repeated key on purpose. The review checks them with
+`duplicates: KeepLast`, which is how Python reads them, and lists them under
+`policy_deviations` in its report.
+
+Limitations: the input must be UTF-8, the relaxations stop well short of
+JSON5, and there is no streaming interface. The {api}JsonValue/[JsonValue
+module documentation] lists every option.
 
 == Markdown
 

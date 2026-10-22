@@ -1,79 +1,101 @@
-{
-  "nodes": {
-    "nixpkgs": {
-      "locked": {
-        "lastModified": 1792502884,
-        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs-darwin": {
-      "locked": {
-        "lastModified": 1790772421,
-        "narHash": "sha256-754eQtr0m8xKtNnKYhX7ukI7XaA7oeiQpui1LiEuhyU=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "e49322d1ec25b45f7c587c5fd69ac826d1a57dbc",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixpkgs-26.05-darwin",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1791048980,
-        "narHash": "sha256-KgItSKML8Xvte0B7/uGnBDsYzSnnKHcOaiUbgWBXLXw=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "a7868a727837f3c09cee2ce0ca671c76b1589fed",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "overlay0": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_2",
-        "nixpkgs-darwin": "nixpkgs-darwin"
-      },
-      "locked": {
-        "lastModified": 1792533634,
-        "narHash": "sha256-UrPJi9uD7fygeN5BXMvs4jbK0gscySXCF4gz98avGYQ=",
-        "owner": "roc-lang",
-        "repo": "roc-overlay",
-        "rev": "90a0d439afc2c8442dd4c94fca9552058c531f38",
-        "type": "github"
-      },
-      "original": {
-        "owner": "roc-lang",
-        "repo": "roc-overlay",
-        "type": "github"
-      }
-    },
-    "root": {
-      "inputs": {
-        "nixpkgs": "nixpkgs",
-        "overlay0": "overlay0"
-      }
-    }
-  },
-  "root": "root",
-  "version": 7
-}
+(
+	(fetched ((
+		(name "zig")
+		(obtained Computed)
+		(sha256 "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026")
+		(size 57332648)
+		(system "x86_64-linux")
+		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"))) (
+		(name "zig")
+		(obtained Computed)
+		(sha256 "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a")
+		(size 53985220)
+		(system "aarch64-darwin")
+		(urls ("https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz")))))
+	(format (
+		(major 1)
+		(minor 1)))
+	(hints ((
+		(provider "nix")
+		(value (Attrs ((
+			(name "identity")
+			(value (Attrs ((
+				(name "inputs")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "ref")
+						(value (Str "github:NixOS/nixpkgs/nixos-unstable"))) (
+						(name "kind")
+						(value (Str "packages"))) (
+						(name "flake")
+						(value (Bool true))))))))))) (
+				(name "overlays")
+				(value (Attrs ((
+					(name "package")
+					(value (List ()))) (
+					(name "oracles")
+					(value (List ()))) (
+					(name "docs")
+					(value (List ()))) (
+					(name "release")
+					(value (List ()))) (
+					(name "python")
+					(value (List ()))) (
+					(name "bench")
+					(value (List ()))))))))))) (
+			(name "graph")
+			(value (Attrs ((
+				(name "root")
+				(value (Str "root"))) (
+				(name "version")
+				(value (Int 7))) (
+				(name "nodes")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1792502884))) (
+							(name "narHash")
+							(value (Str "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA="))) (
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "02c087f3fe673c9e317f206a627cb6b910336dbe"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "ref")
+							(value (Str "nixos-unstable"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "root")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "nix")
+							(value (Str "nix"))) (
+							(name "nixpkgs")
+							(value (List ((Str "nix")))))))))))))))))))))))))))
+	(intent (
+		(build_sources ())
+		(inputs ())
+		(overlays ())
+		(sources ((
+			(name "nix")
+			(provider (NixPackages "github:NixOS/nixpkgs/nixos-unstable")))))))
+	(sources ((
+		(digest "sha256:228362b0a7066d48dd778e6a0aacb018c098999e449e4c5ecef2c8234156c0d0")
+		(name "nix")
+		(provider "nix")
+		(ref "github:NixOS/nixpkgs/nixos-unstable")
+		(rev "02c087f3fe673c9e317f206a627cb6b910336dbe")))))

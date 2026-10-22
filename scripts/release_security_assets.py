@@ -1,19 +1,42 @@
 #!/usr/bin/env python3
+"""Release SBOM and attestation sidecars for the roc-parser bundle.
+
+    release_security_assets.py sbom --bundle dist/<hash>.tar.zst --release-version 2.1.0 --output-dir dist
+    release_security_assets.py verify --sbom dist/<hash>.tar.zst.spdx.json --bundle dist/<hash>.tar.zst \\
+        --release-version 2.1.0
+    release_security_assets.py combine-attestations --provenance-bundle P --sbom-bundle S --output O
+
+`sbom` writes an SPDX 2.3 document for the bundle's exact bytes. It describes
+the roc-parser package (the bundle's own modules) and, as runtime dependencies
+that Roc fetches by URL and that the bundle does not contain, every package
+`package/main.roc` names. `verify` checks a document against the bundle before
+it is published. `combine-attestations` joins the provenance and SBOM
+attestation bundles into one offline `.intoto.jsonl` file.
+"""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import quote
 
 
+ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "lukewilliamboswell/roc-parser"
 REPOSITORY_URL = f"https://github.com/{REPOSITORY}"
 BUNDLE_SUFFIX = ".tar.zst"
+PACKAGE_ID = "SPDXRef-Package-roc-parser"
+# A dependency in the package header: `name: "https://github.com/<owner>/<repo>/releases/download/<version>/<hash>.tar.zst"`.
+DEPENDENCY_RE = re.compile(
+    r'(?m)^\s*([a-z][a-z0-9_]*):\s*"(https://github\.com/([^/"]+)/([^/"]+)/releases/download/([^/"]+)/([^/"]+\.tar\.zst))"'
+)
+
+
 class ReleaseSecurityError(Exception):
     pass
 
@@ -63,35 +86,13 @@ def read_json(path: Path, description: str) -> Any:
         raise ReleaseSecurityError(f"{description} is not valid JSON: {path}: {exc}") from exc
 
 
-def validate_artifact_file(value: Any) -> str:
-    if not isinstance(value, str) or not value:
-        raise ReleaseSecurityError("release bundle entry has invalid artifact_file")
-    if "\n" in value or "\r" in value:
-        raise ReleaseSecurityError("release artifact filename contains a newline")
-    if Path(value).name != value or "/" in value or "\\" in value:
-        raise ReleaseSecurityError(f"release artifact filename must be a basename: {value!r}")
-    if "#" in value:
-        raise ReleaseSecurityError(f"release artifact filename must not contain '#': {value!r}")
-    if not value.endswith(BUNDLE_SUFFIX):
-        raise ReleaseSecurityError(
-            f"release artifact filename must end with {BUNDLE_SUFFIX}: {value!r}"
-        )
-    return value
-
-
-def load_single_bundle(bundle_dir: Path, release_list_file: Path) -> Path:
-    release_list = read_json(release_list_file, "release bundle list")
-    if not isinstance(release_list, list) or len(release_list) != 1:
-        raise ReleaseSecurityError("release bundle list must contain exactly one bundle")
-    entry = release_list[0]
-    if not isinstance(entry, dict):
-        raise ReleaseSecurityError("release bundle list entry must be an object")
-
-    artifact_file = validate_artifact_file(entry.get("artifact_file"))
-    bundle_path = (bundle_dir / artifact_file).resolve()
-    if not bundle_path.is_file():
-        raise ReleaseSecurityError(f"release bundle is missing: {bundle_path}")
-    return bundle_path
+def validate_bundle(path: Path) -> Path:
+    name = path.name
+    if not name.endswith(BUNDLE_SUFFIX) or "#" in name or any(c in name for c in "\r\n"):
+        raise ReleaseSecurityError(f"release bundle must be a <hash>{BUNDLE_SUFFIX} file: {name!r}")
+    if not path.is_file():
+        raise ReleaseSecurityError(f"release bundle is missing: {path}")
+    return path.resolve()
 
 
 def sha256_file(path: Path) -> str:
@@ -114,65 +115,93 @@ def creation_time() -> str:
     return created.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def spdx_document(bundle_path: Path, release_version: str) -> dict[str, Any]:
+def package_dependencies(header: str) -> list[dict[str, str]]:
+    """The released packages a package header names, by alias, in order."""
+    return [
+        {"alias": alias, "url": url, "owner": owner, "repo": repo, "version": version, "file": file}
+        for alias, url, owner, repo, version, file in DEPENDENCY_RE.findall(header)
+    ]
+
+
+def release_url(release_version: str, artifact_file: str) -> str:
+    return f"{REPOSITORY_URL}/releases/download/{quote(release_version, safe='.-')}/{quote(artifact_file, safe='.-')}"
+
+
+def spdx_document(
+    bundle_path: Path, release_version: str, dependencies: Sequence[dict[str, str]]
+) -> dict[str, Any]:
     validate_semver(release_version)
 
     artifact_file = bundle_path.name
-    checksum = sha256_file(bundle_path)
-    encoded_version = quote(release_version, safe=".-")
-    encoded_artifact = quote(artifact_file, safe=".-")
-    release_url = f"{REPOSITORY_URL}/releases/download/{encoded_version}/{encoded_artifact}"
     sbom_file = f"{artifact_file}.spdx.json"
-    namespace = (
-        f"{REPOSITORY_URL}/releases/download/{encoded_version}/"
-        f"{quote(sbom_file, safe='.-')}"
-    )
+    packages: list[dict[str, Any]] = [
+        {
+            "name": "roc-parser",
+            "SPDXID": PACKAGE_ID,
+            "versionInfo": release_version,
+            "packageFileName": artifact_file,
+            "downloadLocation": release_url(release_version, artifact_file),
+            "filesAnalyzed": False,
+            "checksums": [{"algorithm": "SHA256", "checksumValue": sha256_file(bundle_path)}],
+            "homepage": REPOSITORY_URL,
+            "licenseConcluded": "UPL-1.0",
+            "licenseDeclared": "UPL-1.0",
+            "copyrightText": "NOASSERTION",
+            "primaryPackagePurpose": "LIBRARY",
+            "comment": "The Roc modules of package/ in the release bundle. Dependencies are fetched by "
+                       "the Roc compiler from their own URLs and are not contained in the bundle.",
+            "externalRefs": [
+                {
+                    "referenceCategory": "PACKAGE-MANAGER",
+                    "referenceType": "purl",
+                    "referenceLocator": f"pkg:github/{REPOSITORY}@{release_version}",
+                }
+            ],
+        }
+    ]
+    relationships: list[dict[str, str]] = [
+        {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": PACKAGE_ID}
+    ]
+    for dependency in dependencies:
+        identifier = f"SPDXRef-Package-{dependency['owner']}-{dependency['repo']}".replace("_", "-")
+        packages.append({
+            "name": f"{dependency['owner']}/{dependency['repo']}",
+            "SPDXID": identifier,
+            "versionInfo": dependency["version"],
+            "packageFileName": dependency["file"],
+            "downloadLocation": dependency["url"],
+            "filesAnalyzed": False,
+            "homepage": f"https://github.com/{dependency['owner']}/{dependency['repo']}",
+            "licenseConcluded": "NOASSERTION",
+            "licenseDeclared": "NOASSERTION",
+            "copyrightText": "NOASSERTION",
+            "primaryPackagePurpose": "LIBRARY",
+            "comment": f"Imported by package/main.roc as `{dependency['alias']}`. Roc verifies the download "
+                       "against the content hash in its file name.",
+            "externalRefs": [
+                {
+                    "referenceCategory": "PACKAGE-MANAGER",
+                    "referenceType": "purl",
+                    "referenceLocator": f"pkg:github/{dependency['owner']}/{dependency['repo']}@{dependency['version']}",
+                }
+            ],
+        })
+        relationships.append(
+            {"spdxElementId": PACKAGE_ID, "relationshipType": "DEPENDS_ON", "relatedSpdxElement": identifier}
+        )
 
     return {
         "spdxVersion": "SPDX-2.3",
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
         "name": f"roc-parser-{release_version}",
-        "documentNamespace": namespace,
+        "documentNamespace": release_url(release_version, sbom_file),
         "creationInfo": {
             "created": creation_time(),
             "creators": ["Tool: roc-parser/scripts/release_security_assets.py"],
         },
-        "packages": [
-            {
-                "name": "roc-parser",
-                "SPDXID": "SPDXRef-Package-roc-parser",
-                "versionInfo": release_version,
-                "packageFileName": artifact_file,
-                "downloadLocation": release_url,
-                "filesAnalyzed": False,
-                "checksums": [
-                    {
-                        "algorithm": "SHA256",
-                        "checksumValue": checksum,
-                    }
-                ],
-                "homepage": REPOSITORY_URL,
-                "licenseConcluded": "UPL-1.0",
-                "licenseDeclared": "UPL-1.0",
-                "copyrightText": "NOASSERTION",
-                "primaryPackagePurpose": "LIBRARY",
-                "externalRefs": [
-                    {
-                        "referenceCategory": "PACKAGE-MANAGER",
-                        "referenceType": "purl",
-                        "referenceLocator": f"pkg:github/{REPOSITORY}@{release_version}",
-                    }
-                ],
-            }
-        ],
-        "relationships": [
-            {
-                "spdxElementId": "SPDXRef-DOCUMENT",
-                "relationshipType": "DESCRIBES",
-                "relatedSpdxElement": "SPDXRef-Package-roc-parser",
-            }
-        ],
+        "packages": packages,
+        "relationships": relationships,
     }
 
 
@@ -180,44 +209,62 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def append_github_outputs(path: Path, values: dict[str, Path]) -> None:
-    lines: list[str] = []
-    for name, value in values.items():
-        text = str(value)
-        if "\n" in text or "\r" in text:
-            raise ReleaseSecurityError(f"GitHub output {name} contains a newline")
-        lines.append(f"{name}={text}\n")
-    try:
-        with path.open("a", encoding="utf-8") as output:
-            output.writelines(lines)
-    except OSError as exc:
-        raise ReleaseSecurityError(f"could not write GitHub outputs to {path}: {exc}") from exc
-
-
 def generate_sbom(
-    *,
-    bundle_dir: Path,
-    release_list_file: Path,
-    release_version: str,
-    output_dir: Path,
-    github_output: Path,
-) -> tuple[Path, Path, Path]:
-    bundle_path = load_single_bundle(bundle_dir, release_list_file)
+    *, bundle: Path, release_version: str, output_dir: Path, header: Path = ROOT / "package" / "main.roc"
+) -> Path:
+    bundle_path = validate_bundle(bundle)
+    dependencies = package_dependencies(header.read_text(encoding="utf-8"))
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_dir = output_dir.resolve()
-    sbom_path = output_dir / f"{bundle_path.name}.spdx.json"
-    attestation_path = output_dir / f"{bundle_path.name}.intoto.jsonl"
+    sbom_path = output_dir.resolve() / f"{bundle_path.name}.spdx.json"
+    write_json(sbom_path, spdx_document(bundle_path, release_version, dependencies))
+    return sbom_path
 
-    write_json(sbom_path, spdx_document(bundle_path, release_version))
-    append_github_outputs(
-        github_output,
-        {
-            "bundle-path": bundle_path,
-            "sbom-path": sbom_path,
-            "attestation-path": attestation_path,
-        },
-    )
-    return bundle_path, sbom_path, attestation_path
+
+def verify_sbom(
+    *, sbom: Path, bundle: Path, release_version: str, header: Path = ROOT / "package" / "main.roc"
+) -> None:
+    """The document is SPDX 2.3, describes exactly this bundle's bytes under
+    this version, and names every dependency of the package header."""
+    bundle_path = validate_bundle(bundle)
+    document = read_json(sbom, "SBOM")
+    problems: list[str] = []
+    if not isinstance(document, dict):
+        raise ReleaseSecurityError("SBOM must be a JSON object")
+    if sbom.name != f"{bundle_path.name}.spdx.json":
+        problems.append(f"SBOM file name {sbom.name} does not name the bundle {bundle_path.name}")
+    if document.get("spdxVersion") != "SPDX-2.3" or document.get("SPDXID") != "SPDXRef-DOCUMENT":
+        problems.append("not an SPDX-2.3 document")
+    packages = document.get("packages") if isinstance(document.get("packages"), list) else []
+    identifiers = [package.get("SPDXID") for package in packages if isinstance(package, dict)]
+    if len(identifiers) != len(packages) or len(set(identifiers)) != len(identifiers):
+        problems.append("package identifiers are missing or repeated")
+    by_id = {package["SPDXID"]: package for package in packages if isinstance(package, dict) and "SPDXID" in package}
+    relationships = document.get("relationships") if isinstance(document.get("relationships"), list) else []
+    known = set(by_id) | {"SPDXRef-DOCUMENT"}
+    for relationship in relationships:
+        if not isinstance(relationship, dict) or {relationship.get("spdxElementId"), relationship.get("relatedSpdxElement")} - known:
+            problems.append(f"relationship refers to an unknown element: {relationship}")
+    described = [r.get("relatedSpdxElement") for r in relationships
+                 if isinstance(r, dict) and r.get("spdxElementId") == "SPDXRef-DOCUMENT" and r.get("relationshipType") == "DESCRIBES"]
+    if described != [PACKAGE_ID]:
+        problems.append(f"the document must describe exactly {PACKAGE_ID}, found {described}")
+    subject = by_id.get(PACKAGE_ID, {})
+    if subject.get("versionInfo") != release_version:
+        problems.append(f"subject version {subject.get('versionInfo')!r} is not {release_version!r}")
+    if subject.get("packageFileName") != bundle_path.name:
+        problems.append(f"subject file {subject.get('packageFileName')!r} is not {bundle_path.name!r}")
+    if subject.get("downloadLocation") != release_url(release_version, bundle_path.name):
+        problems.append(f"subject download location {subject.get('downloadLocation')!r} is not the release URL")
+    if subject.get("checksums") != [{"algorithm": "SHA256", "checksumValue": sha256_file(bundle_path)}]:
+        problems.append("subject SHA-256 does not match the bundle")
+    depends_on = {r.get("relatedSpdxElement") for r in relationships
+                  if isinstance(r, dict) and r.get("spdxElementId") == PACKAGE_ID and r.get("relationshipType") == "DEPENDS_ON"}
+    for dependency in package_dependencies(header.read_text(encoding="utf-8")):
+        matches = [identifier for identifier, package in by_id.items() if package.get("downloadLocation") == dependency["url"]]
+        if len(matches) != 1 or matches[0] not in depends_on:
+            problems.append(f"dependency {dependency['url']} is not recorded once as a DEPENDS_ON package")
+    if problems:
+        raise ReleaseSecurityError(f"{sbom}: " + "; ".join(problems))
 
 
 def sigstore_bundle(path: Path, description: str) -> dict[str, Any]:
@@ -242,17 +289,18 @@ def combine_attestations(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Create release SBOM and attestation sidecar assets."
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     sbom = subcommands.add_parser("sbom", help="Create an SPDX 2.3 SBOM for one bundle")
-    sbom.add_argument("--bundle-dir", type=Path, required=True)
-    sbom.add_argument("--release-list-file", type=Path, required=True)
+    sbom.add_argument("--bundle", type=Path, required=True)
     sbom.add_argument("--release-version", required=True)
     sbom.add_argument("--output-dir", type=Path, required=True)
-    sbom.add_argument("--github-output", type=Path, required=True)
+
+    verify = subcommands.add_parser("verify", help="Check an SBOM against the bundle it describes")
+    verify.add_argument("--sbom", type=Path, required=True)
+    verify.add_argument("--bundle", type=Path, required=True)
+    verify.add_argument("--release-version", required=True)
 
     combine = subcommands.add_parser(
         "combine-attestations", help="Combine provenance and SBOM Sigstore bundles"
@@ -268,19 +316,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "sbom":
-            generate_sbom(
-                bundle_dir=args.bundle_dir,
-                release_list_file=args.release_list_file,
-                release_version=args.release_version,
-                output_dir=args.output_dir,
-                github_output=args.github_output,
-            )
+            print(generate_sbom(bundle=args.bundle, release_version=args.release_version, output_dir=args.output_dir))
+        elif args.command == "verify":
+            verify_sbom(sbom=args.sbom, bundle=args.bundle, release_version=args.release_version)
+            print(f"{args.sbom} describes {args.bundle.name}")
         elif args.command == "combine-attestations":
-            combine_attestations(
+            print(combine_attestations(
                 provenance_bundle=args.provenance_bundle,
                 sbom_bundle=args.sbom_bundle,
                 output=args.output,
-            )
+            ))
         else:  # pragma: no cover - argparse enforces the subcommand choices.
             parser.error(f"unknown command: {args.command}")
     except (OSError, ReleaseSecurityError) as exc:

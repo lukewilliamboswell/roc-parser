@@ -899,6 +899,7 @@ kbd {
 
   #content pre.rouge .nf,
   #content pre.rouge .nb,
+  #content pre.rouge .nd,
   #content pre.rouge .bp { color: #7fc0da; }
 
   #content pre.rouge .nc,
