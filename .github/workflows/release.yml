@@ -34,6 +34,7 @@ jobs:
       nightly-tag: ${{ steps.nightly.outputs.tag }}
       version: ${{ steps.validate.outputs.version }}
       prerelease: ${{ steps.validate.outputs.prerelease }}
+      # The commit every job checks out (checkout's default) and the tag's target.
       sha: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,7 +69,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
         with:
@@ -101,7 +101,6 @@ jobs:
         run: test "$VALIDATED" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
       - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
@@ -139,7 +138,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
       - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
