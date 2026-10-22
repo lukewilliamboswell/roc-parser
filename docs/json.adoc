@@ -7,7 +7,7 @@ ifndef::src[]
 endif::[]
 
 [#json]
-= Reading JSON
+= Read and write JSON
 
 This chapter shows how to read a JSON document into a value whose shape you
 do not have to know in advance, walk it, report mistakes with a line and
