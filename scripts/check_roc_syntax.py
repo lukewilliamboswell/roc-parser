@@ -42,8 +42,7 @@ def source_identity(root: Path) -> str:
     digest = hashlib.sha256()
     paths = sorted({*root.joinpath("package").glob("*.roc"),
                     *root.joinpath("scripts/roc_syntax").rglob("*.roc"),
-                    root / "bench/roc/roc-syntax.roc", root / "bench/roc/roc-syntax-alloc.roc",
-                    root / ".roc-version"})
+                    root / "bench/roc/roc-syntax.roc", root / "bench/roc/roc-syntax-alloc.roc"})
     for path in paths:
         digest.update(path.relative_to(root).as_posix().encode() + b"\0")
         digest.update(path.read_bytes() + b"\0")
@@ -108,10 +107,10 @@ def main(argv: list[str] | None = None) -> int:
 
     save()
     try:
+        # The compiler floats: record which nightly this evidence is about.
         version = step("compiler-version", [roc, "version"]).stdout.strip()
-        expected = "Roc compiler version " + (ROOT / ".roc-version").read_text().strip()
-        if version != expected:
-            raise ValueError(f"Expected {expected}; found {version}. Set ROC to the pinned executable.")
+        if not version.startswith("Roc compiler version "):
+            raise ValueError(f"Unexpected compiler version {version!r}. Set ROC to a Roc nightly.")
         manifest["compiler"] = version
         step("package-check", [roc, "check", "package/main.roc"])
         step("package-tests", [roc, "test", "package/main.roc"])

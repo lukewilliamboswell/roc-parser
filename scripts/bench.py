@@ -684,24 +684,28 @@ def machine() -> dict:
             "os": platform.platform(), "python": platform.python_version()}
 
 
-BLUEPRINT_ENV = "ROC_PARSER_BLUEPRINT"
+# A package source in a Blueprint 0.6 lock: its name, provider, ref and the
+# revision `blueprint update` resolved it to.
+LOCKED_SOURCE_RE = re.compile(
+    r'\(name "([^"]+)"\)\s*\(provider "[^"]+"\)\s*\(ref "([^"]+)"\)\s*\(rev "([0-9a-f]+)"\)')
 
 
-def environment(env: dict[str, str] | None = None, lock: Path = ROOT / "Blueprint.lock") -> dict:
-    """Where the toolchains came from: a blueprint shell (Blueprint.roc sets
-    ROC_PARSER_BLUEPRINT=1), the Blueprint.lock that pinned it, and tool paths."""
+def environment(env: dict[str, str] | None = None, lock: Path = ROOT / "Blueprint.lock",
+                blueprint: bool = False) -> dict:
+    """Where the toolchains came from: the Blueprint bench environment (its
+    tasks pass --blueprint), the Blueprint.lock that pinned it, and tool paths."""
     env = os.environ if env is None else env
-    info: dict = {"blueprint": env.get(BLUEPRINT_ENV) == "1",
+    info: dict = {"blueprint": blueprint,
                   "tools": {t: shutil.which(t, path=env.get("PATH")) for t in ("roc", "go", "cargo", "rustc", "python3")}}
     if info["blueprint"]:
         try:
             data = lock.read_bytes()
-            nodes = json.loads(data)["nodes"]
-            inputs = {name: nodes[node]["locked"] for name, node in nodes["root"]["inputs"].items()}
+            sources = LOCKED_SOURCE_RE.findall(data.decode("utf-8"))
+            if not sources:
+                raise ValueError("no locked package source")
             info["lock"] = {"path": lock.name, "sha256": hashlib.sha256(data).hexdigest(),
-                            "inputs": {name: f"{v.get('owner')}/{v.get('repo')}@{v.get('rev')}"
-                                       for name, v in inputs.items()}}
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+                            "inputs": {name: f"{ref}@{rev}" for name, ref, rev in sources}}
+        except (OSError, ValueError) as error:
             info["lock"] = {"path": lock.name, "error": str(error)}
     return info
 
@@ -754,6 +758,8 @@ def parse_args(argv: list[str] | None = None):
     ap.add_argument("--allocations", action="store_true", help="also count Roc allocations (builds bench/roc/alloc.roc)")
     ap.add_argument("--fail-on-error", action="store_true", help="exit 1 if any roc-parser measurement errored")
     ap.add_argument("--corpus-only", action="store_true", help="write the corpus and its manifest, then stop")
+    ap.add_argument("--blueprint", action="store_true",
+                    help="record that the toolchains are the Blueprint bench environment's, and its lock")
     args = ap.parse_args(argv)
     args.repetitions = args.repetitions or (3 if args.quick else 7)
     args.target_ms = args.target_ms or (20.0 if args.quick else 200.0)
@@ -797,7 +803,8 @@ def main(argv: list[str] | None = None) -> int:
     metadata = {
         "schema": SCHEMA_VERSION, "label": args.label, "quick": args.quick,
         "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "machine": machine(), "git": git_state(), "environment": environment(), "versions": builder.versions,
+        "machine": machine(), "git": git_state(), "environment": environment(blueprint=args.blueprint),
+        "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
         "implementations": [{"id": i.id, "format": i.format, "notes": i.notes} for i in impls],
         "corpus": manifest,

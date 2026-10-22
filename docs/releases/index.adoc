@@ -8,21 +8,22 @@ endif::[]
 [#releases]
 = Release notes
 
-Each release has a notes file in `docs/releases/`, written in Markdown so the
-release workflow can publish it unchanged as the GitHub release description.
-The notes start with the upgrade impact: every change your code or data might
-notice.
+Each release has a notes file, `docs/releases/<version>.adoc`. The release
+workflow publishes it as the GitHub release description, with the released
+bundle's URL in place of `+{package-url}+` and the output of `roc version`
+under "Compilers". The notes start with the upgrade impact: every change your
+code or data might notice.
 
-* {src}/docs/releases/unreleased.md[Unreleased changes]: `JsonValue`, a lossless
+* {src}/docs/releases/unreleased.adoc[Unreleased changes]: `JsonValue`, a lossless
   JSON module with strict defaults, opt-in relaxations and checks, and a
   writer; compile-time quotations, checked imported constants, typed decoding,
   and configurable validation. Requires Roc `nightly-2026-10-21-5349569`.
 
-* {src}/docs/releases/2.1.0.md[roc-parser 2.1.0 release notes]: Roc source tokens and syntax trees for
+* {src}/docs/releases/2.1.0.adoc[roc-parser 2.1.0 release notes]: Roc source tokens and syntax trees for
   tooling, AsciiDoc parsing and HTML rendering, and source-preserving YAML
   highlighting. Requires Roc `nightly-2026-10-20-7a8a800`.
 
-* {src}/docs/releases/2.0.0.md[roc-parser 2.0.0 release notes]: a redesigned API with an upgrade guide, type-directed decoding
+* {src}/docs/releases/2.0.0.adoc[roc-parser 2.0.0 release notes]: a redesigned API with an upgrade guide, type-directed decoding
   of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
   HTTP, XML 1.0 well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and
   property tests and conformance reviews for every format.

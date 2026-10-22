@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+"""Small checks that roc-parser's workflows and release scripts share.
+
+    workflow_helpers.py validate-examples [--archive roc-parser-examples-<version>.zip]
+    workflow_helpers.py require-success success success ...
+"""
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import re
 import sys
 import zipfile
@@ -16,60 +19,11 @@ except ImportError:
     from _common import ROOT
 
 
-REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-
-
 def append_github_output(path: Path, name: str, value: str) -> None:
     if "\n" in name or "\n" in value or "\r" in name or "\r" in value:
         raise ValueError("GitHub output names and values must be single-line")
     with path.open("a", encoding="utf-8") as output:
         output.write(f"{name}={value}\n")
-
-
-def read_roc_version(path: Path = ROOT / ".roc-version") -> str:
-    version = path.read_text(encoding="utf-8").strip()
-    if not version or "\n" in version or "\r" in version:
-        raise ValueError(f"{path} must contain exactly one non-empty Roc version")
-    return version
-
-
-def validate_release_ref(ref_type: str, ref_name: str, default_branch: str) -> None:
-    if ref_type != "branch":
-        raise ValueError("Release workflow must be run from a branch")
-    if ref_name != default_branch:
-        raise ValueError(
-            "Release workflow must be run from the default branch "
-            f"{default_branch!r}, got {ref_name!r}"
-        )
-
-
-def resolve_bundle_url(metadata: Path, repository: str, version: str) -> str:
-    if not REPOSITORY_RE.fullmatch(repository):
-        raise ValueError(f"invalid GitHub repository: {repository!r}")
-    if not version or any(character in version for character in "\r\n/"):
-        raise ValueError(f"invalid release version: {version!r}")
-
-    try:
-        bundles = json.loads(metadata.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise ValueError(f"invalid release metadata JSON: {error}") from error
-    if not isinstance(bundles, list) or len(bundles) != 1:
-        count = len(bundles) if isinstance(bundles, list) else "non-list"
-        raise ValueError(f"expected exactly one release bundle, found {count}")
-
-    bundle = bundles[0]
-    if not isinstance(bundle, dict):
-        raise ValueError("release bundle entry must be an object")
-    artifact_file = bundle.get("artifact_file")
-    if (
-        not isinstance(artifact_file, str)
-        or not artifact_file
-        or Path(artifact_file).name != artifact_file
-        or any(character in artifact_file for character in "\r\n#?")
-    ):
-        raise ValueError("release bundle has an invalid artifact_file")
-
-    return f"https://github.com/{repository}/releases/download/{version}/{artifact_file}"
 
 
 EXAMPLE_DEPENDENCY_RE = re.compile(r'(?m)^\s*parser:\s*"([^"]+)"')
@@ -118,22 +72,8 @@ def require_success(results: Sequence[str]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Helpers used by roc-parser GitHub workflows.")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    roc_version = subparsers.add_parser("roc-version")
-    roc_version.add_argument("--github-output", type=Path, required=True)
-
-    release_ref = subparsers.add_parser("validate-release-ref")
-    release_ref.add_argument("--ref-type", required=True)
-    release_ref.add_argument("--ref-name", required=True)
-    release_ref.add_argument("--default-branch", required=True)
-
-    bundle_url = subparsers.add_parser("bundle-url")
-    bundle_url.add_argument("--metadata", type=Path, required=True)
-    bundle_url.add_argument("--repository", required=True)
-    bundle_url.add_argument("--version", required=True)
-    bundle_url.add_argument("--github-output", type=Path, required=True)
 
     validate = subparsers.add_parser("validate-examples")
     validate.add_argument("--examples-dir", type=Path, default=ROOT / "examples")
@@ -147,18 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        if args.command == "roc-version":
-            append_github_output(
-                args.github_output,
-                "nightly-tag",
-                read_roc_version(),
-            )
-        elif args.command == "validate-release-ref":
-            validate_release_ref(args.ref_type, args.ref_name, args.default_branch)
-        elif args.command == "bundle-url":
-            url = resolve_bundle_url(args.metadata, args.repository, args.version)
-            append_github_output(args.github_output, "bundle-url", url)
-        elif args.command == "validate-examples":
+        if args.command == "validate-examples":
             validate_examples(args.examples_dir, args.archive)
         elif args.command == "require-success":
             require_success(args.results)

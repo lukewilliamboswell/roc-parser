@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
+# The reviewed roc-automation revision (tools-0.2.0) every workflow uses.
+ROC_AUTOMATION = "8a6c914fa8400c9d1f5a3815ab06e06687d58148"
 
 
 def repository_files() -> list[Path]:
@@ -66,6 +68,27 @@ class RepositoryPolicyTests(unittest.TestCase):
                 if re.match(r"^\s*run:\s*[|>]", line):
                     failures.append(f"{workflow.name}:{line_number}: multiline shell block")
         self.assertEqual(failures, [])
+
+    def test_workflows_follow_the_roc_automation_model(self) -> None:
+        # Every job states its own permissions, every roc-automation action and
+        # workflow is the reviewed revision, and the compiler floats: nothing
+        # pins a nightly or reads a pin file. The retired names are spelled in
+        # parts, so that a search of the repository for them finds nothing.
+        pin_file = "." + "roc-version"
+        retired = (pin_file, "nightly" + "_validation", "roc-nightly" + ".json", "nightly-tag: nightly-")
+        failures: list[str] = []
+        for workflow in sorted(WORKFLOW_DIR.glob("*.y*ml")):
+            text = workflow.read_text(encoding="utf-8")
+            if not re.search(r"(?m)^permissions: \{\}$", text):
+                failures.append(f"{workflow.name}: top-level permissions must be {{}}")
+            for reference in re.findall(r"uses: (lukewilliamboswell/roc-automation/\S+)", text):
+                if not reference.endswith("@" + ROC_AUTOMATION):
+                    failures.append(f"{workflow.name}: {reference} is not at {ROC_AUTOMATION}")
+            for name in retired:
+                if name in text:
+                    failures.append(f"{workflow.name}: mentions {name}")
+        self.assertEqual(failures, [])
+        self.assertFalse((ROOT / pin_file).exists())
 
 
 if __name__ == "__main__":

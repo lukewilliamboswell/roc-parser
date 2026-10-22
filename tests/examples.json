@@ -1,0 +1,95 @@
+{
+  "apps": [
+    {
+      "path": "examples/compile-time-parsing.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "app on port 8080\nAda is 36\n2 CSV records\n42 from custom parser\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/csv-movies.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "2 movies were found:\n\nThe movie 'Airplane!' was released in 1980 and stars Robert Hays and Julie Hagerty\nThe movie 'Caddyshack' was released in 1980 and stars Chevy Chase, Rodney Dangerfield, Ted Knight, Michael O'Keefe and Bill Murray\n\nParse success!\n\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/letters.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "I counted 7 letter A's!\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/markdown.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "FRONTMATTER: \"title: Demo\n\"\nHEADING: One Title with **style**\nPARAGRAPH: Intro with **bold**, ~~old text~~, `code`, ![alt](/image.png), and [a link](https://example.com).\nPARAGRAPH: Read [Roc](https://roc-lang.org) and [https://example.com](https://example.com).\nTABLE: Name|Count | left,right | **Roc**|`1\nCODE: info: \"roc\", pre: \"# some code\nfoo = bar\n\"\nLIST unordered loose=false:\n- checked\nPARAGRAPH: One\nLIST unordered loose=false:\n- none\nPARAGRAPH: Nested\nLIST ordered:1 loose=false:\n- none\nPARAGRAPH: First\n- none\nPARAGRAPH: Second\nBLOCKQUOTE:\nPARAGRAPH: Quote with **strong** text\nHTML: \"<section>\nraw\n</section>\n\"\n\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/numbers.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "The largest sum is 11000\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/roc-syntax.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "parse: Complete, 8 syntax nodes\nCommentText 0..20: # Example Roc source\nName 21..27: answer\nSymbol 28..29: =\nNumericLiteral 30..31: 1\nSymbol 32..33: +\nNumericLiteral 34..35: 2\nSymbol 36..37: *\nNumericLiteral 38..39: 3\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/xml-svg.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "Successfully converted SVG into HTML DSL\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    }
+  ]
+}

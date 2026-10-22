@@ -148,7 +148,7 @@ also checked individually, with unresolved includes left as links.
 
 == Reproduce the checks
 
-Use the compiler pinned in `.roc-version`, plus Ruby and Python:
+Use the latest Roc nightly, plus Ruby and Python:
 
 [source,sh]
 ----

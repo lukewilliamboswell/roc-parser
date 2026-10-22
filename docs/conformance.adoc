@@ -98,10 +98,11 @@ documents), no known failures; 2 suite cases are policy deviations, see
 == Reproducing the results
 
 The review scripts need Python 3, the pinned oracles, and a Roc compiler. Set
-`ROC` to the compiler you want to test with; CI uses the nightly named in
-`.roc-version` (see
-<<compatibility,Compatibility>>). Install each oracle into its own virtual
-environment under `.roc-parser-tmp/`, which git ignores:
+`ROC` to the compiler you want to test with; CI uses the latest Roc nightly (see
+<<compatibility,Compatibility>>). `python3 scripts/check_conformance.py` installs
+every oracle into one environment and runs the reviews CI runs. To run them by
+hand, install each oracle into its own virtual environment under
+`.roc-parser-tmp/`, which git ignores:
 
 [source,sh]
 ----

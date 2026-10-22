@@ -6,7 +6,9 @@ The package itself has no Ruby dependency.
 
 == Setup and checks
 
-Set `ROC` to the compiler in `.roc-version`:
+Set `ROC` to the latest Roc nightly, which CI uses too. `python3
+scripts/check_asciidoc.py` (`blueprint run asciidoc`) runs the setup, the probe
+build, the review and the performance smoke run in turn; by hand:
 
 [source,sh]
 ----
