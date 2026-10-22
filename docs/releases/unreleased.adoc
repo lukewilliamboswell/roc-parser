@@ -43,6 +43,31 @@ before a space. So `+"tag::x[]"+` in a string literal is no longer a marker.
 selectors, and an empty `+indent=+` dedents.
 * `+tag=a;b+` names one tag, `+a;b+`. Use `+tags=a;b+` for two tags.
 * An empty file includes no lines, so it no longer splits a paragraph.
+* Lines from an included file that isn't AsciiDoc (any name not ending in
+`.adoc`, `.asciidoc`, `.asc`, `.ad` or `.txt`) keep their trailing
+whitespace, as in Asciidoctor. Listings of program output keep spaces at line
+ends. In a paragraph, list item or admonition the spaces stay in the text, a
+line of only spaces no longer ends a paragraph, and a delimiter or block
+attribute line with trailing whitespace is ordinary text. Directives such as
+`+ifdef::+` and `+include::+` in such a file are no longer processed.
+* The document's own lines lose trailing whitespace before directives and
+delimiters are recognized, so a `+----+` delimiter or an `+ifdef::x[]+`
+directive followed by spaces now works.
+* `tabsize` is now honoured. In listing, source, literal and verse blocks and
+paragraphs, tabs expand to the next multiple of the block's `tabsize` or,
+without one, the document's, counting characters. Zero, negative or
+non-numeric values expand nothing. In a document that sets `tabsize`, include
+`+indent=+` expands tabs first; a `+tabsize=+` on the directive is ignored, as
+in Asciidoctor.
+* A verbatim block's `indent` follows Asciidoctor: only the block's own
+attribute counts, `+indent=abc+` dedents and a negative width keeps
+indentation, empty lines stay empty, and passthrough, stem and table content is
+no longer re-indented. A `[source]`, `[listing]`, `[literal]` or `[verse]`
+paragraph whose first line is indented keeps its style. Indent widths and tab
+sizes above 1024 count as 1024.
+* A backtick followed by an apostrophe renders as a right single quote, as in
+Asciidoctor, so a possessive written after inline code renders the same way
+Asciidoctor renders it. A backslash before the pair keeps both characters.
 
 == New features
 
@@ -102,6 +127,8 @@ values. Selection is Asciidoctor's, as lenient as it is. `MissingTag`,
 `InvalidLines` and `EmptySelection` flag selections that Asciidoctor makes
 without a warning, so a strict caller can reject them. The source is read as
 a file that isn't AsciiDoc, as code listings are.
+`AsciiDoc.select_include_with(source, attributes, { tabsize })`, with
+`AsciiDoc.IncludeContext`, selects lines for a document that sets `tabsize`.
 `scripts/asciidoc/include-selection-fixtures.json` compares the selections and
 problems with Asciidoctor 2.0.23. See "Reusing include selection" in
 https://github.com/lukewilliamboswell/roc-parser/blob/main/docs/asciidoc.adoc[Reading AsciiDoc].
