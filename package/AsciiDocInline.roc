@@ -951,7 +951,7 @@ scan_view_context = |input, incoming_attrs, options, depth, protected| {
 				while $end < bytes.len() {
 					b = bytes.get($end) ?? 0
 					before = bytes.get($end - 1) ?? 0
-					if " \n=\\{[<&>+.'\"-(".to_utf8().contains(b) or (g.macros and word(b) and !word(before)) {
+					if " \n=\\{[<&>+.'\"-(`".to_utf8().contains(b) or (g.macros and word(b) and !word(before)) {
 						break
 					}
 					$end = $end + 1
@@ -1462,6 +1462,20 @@ expect AsciiDocInline.render("don't can't isn't", []) == "don&#8217;t can&#8217;
 
 # Oracle case 29
 expect AsciiDocInline.render("one -- two and a--b", []) == "one&#8201;&#8212;&#8201;two and a&#8212;&#8203;b"
+
+# A constrained monospace closer may not precede `'`, so the span in
+# `` `Yaml`'s `String` `` runs to the last backtick, and the right single
+# quote replacement `` `' `` then applies inside it, or wherever no span
+# took the backtick. A backslash keeps the two characters.
+expect AsciiDocInline.render("Use `Yaml`'s `String` here.", []) == "Use <code>Yaml&#8217;s `String</code> here."
+expect AsciiDocInline.render("`a`'s thing `b`'s", []) == "`a&#8217;s thing `b&#8217;s"
+expect AsciiDocInline.render("`a`'s`b`", []) == "<code>a&#8217;s`b</code>"
+expect AsciiDocInline.render("x`'`'y `a` `' ``a```'s", []) == "x&#8217;&#8217;y <code>a</code> &#8217; <code>a</code>&#8217;s"
+expect AsciiDocInline.render("a\\`'s \\`a`'s", []) == "a`'s \\`a&#8217;s"
+expect AsciiDocInline.render_with("`a`'s \\`'", [], { subs: "replacements" }) == "`a&#8217;s `'"
+expect AsciiDocInline.render_with("`a`'s", [], { subs: "quotes" }) == "`a`'s"
+expect AsciiDocInline.render("'`x`' \"`y`\" *a*'s _b_'s #c#'s '`z`''s", []) == "&#8216;x&#8217; &#8220;y&#8221; <strong>a</strong>'s <em>b</em>'s <mark>c</mark>'s &#8216;z&#8217;'s"
+expect AsciiDocInline.render("+`a`'s+ pass:[`'] pass:r[`']", []) == "`a`'s `' &#8217;"
 
 # Oracle case 30
 expect AsciiDocInline.render("\"`hello`\" and '`world`'", []) == "&#8220;hello&#8221; and &#8216;world&#8217;"
@@ -3177,7 +3191,7 @@ syntax_candidate = |bytes, pos, g, has_email, has_colon| {
 	b = bytes.get(pos) ?? 0
 	next = bytes.get(pos + 1) ?? 0
 	prev = if (pos == 0) 0 else bytes.get(pos - 1) ?? 0
-	if b == '\\' and (g.macros or g.attributes or g.quotes or (g.replacements and (next == '-' or next == '.'))) {
+	if b == '\\' and (g.macros or g.attributes or g.quotes or (g.replacements and (next == '-' or next == '.' or next == '`'))) {
 		return True
 	}
 	if g.special and (b == '&' or b == '<' or b == '>') {
@@ -3193,7 +3207,7 @@ syntax_candidate = |bytes, pos, g, has_email, has_colon| {
 		if (b == '&' and bytes.drop_first(pos).starts_with("&amp;".to_utf8())) or (b == '(' and (bytes.drop_first(pos).starts_with("(C)".to_utf8()) or bytes.drop_first(pos).starts_with("(R)".to_utf8()) or bytes.drop_first(pos).starts_with("(TM)".to_utf8()))) {
 			return True
 		}
-		if (b == '.' and next == '.' and (bytes.get(pos + 2) ?? 0) == '.') or (b == '-' and (next == '-' or next == '>')) or (b == '<' and (next == '-' or next == '=')) or (b == '=' and next == '>') or ((b == ' ' or b == '\n') and next == '-' and (bytes.get(pos + 2) ?? 0) == '-') or (b == '\'' and word(prev) and word(next)) {
+		if (b == '.' and next == '.' and (bytes.get(pos + 2) ?? 0) == '.') or (b == '-' and (next == '-' or next == '>')) or (b == '<' and (next == '-' or next == '=')) or (b == '=' and next == '>') or ((b == ' ' or b == '\n') and next == '-' and (bytes.get(pos + 2) ?? 0) == '-') or (b == '\'' and word(prev) and word(next)) or (b == '`' and next == '\'') {
 			return True
 		}
 	}
@@ -3448,6 +3462,15 @@ fixed_replacement = |bytes, pos, g| {
 	}
 	if b == '\\' and next == '-' and third == '-' and (bytes.get(pos + 3) ?? 0) != '-' {
 		return { used: 3, html: "--" }
+	}
+	# Asciidoctor's right single quote replacement, `\\?`'`. It runs after
+	# the quotes pass, so it sees a backtick that closed no monospace span,
+	# such as the one in `` `a`'s ``, whose closer may not precede `'`.
+	if b == '\\' and next == '`' and third == '\'' {
+		return { used: 3, html: "`'" }
+	}
+	if b == '`' and next == '\'' {
+		return { used: 2, html: "&#8217;" }
 	}
 	if b == '.' and next == '.' and third == '.' {
 		return { used: 3, html: "&#8230;&#8203;" }

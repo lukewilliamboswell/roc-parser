@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original verbatim blocks with tabs and indents, authored from the parser and reader source of the pinned gem and checked against the live pinned oracle.",
+    "reference_family": "AsciiDoc verbatim tab expansion and indentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "source_locations": "Parser.build_block (tabsize from the block or the document, indent from the block) and Parser.adjust_indentation! in lib/asciidoctor/parser.rb."
+  },
+  "coverage": [
+    {
+      "category": "verbatim-tabsize",
+      "required_cases": [
+        "verbatim-tabsize-document",
+        "verbatim-tabsize-header",
+        "verbatim-tabsize-block-overrides-document",
+        "verbatim-tabsize-disabled",
+        "verbatim-tabsize-integer-prefix",
+        "verbatim-tabsize-unset",
+        "verbatim-tabsize-columns",
+        "verbatim-tabsize-literal-verse-open",
+        "verbatim-tabsize-styled-paragraphs",
+        "verbatim-tabsize-kept",
+        "verbatim-tabsize-nested",
+        "verbatim-tabsize-indent",
+        "verbatim-indent-integer",
+        "verbatim-indent-block-only"
+      ],
+      "scope": "full"
+    }
+  ],
+  "cases": [
+    {
+      "id": "verbatim-tabsize-document",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n----\n\tx\na\tb\nabcd\te\n\t\tf\tg\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>    x\na   b\nabcd    e\n        f   g</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-header",
+      "category": "verbatim-tabsize",
+      "source": "= Title\n:tabsize: 3\n\n----\n\tx\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>   x</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-block-overrides-document",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n[source,ruby,tabsize=2]\n----\n\tx\na\tb\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<code class=\"language-ruby\" data-lang=\"ruby\">  x\na b</code>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-disabled",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n[listing,tabsize=0]\n----\n\tzero\n----\n\n[listing,tabsize=]\n----\n\tempty\n----\n\n[listing,tabsize=-2]\n----\n\tnegative\n----\n\n[listing,tabsize=abc]\n----\n\ttext\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "listing",
+          "listing",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>\tzero</pre>",
+          "<pre>\tempty</pre>",
+          "<pre>\tnegative</pre>",
+          "<pre>\ttext</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-integer-prefix",
+      "category": "verbatim-tabsize",
+      "source": "[listing,tabsize=4x]\n----\na\tb\n----\n\n[listing,tabsize=+3]\n----\na\tb\n----\n\n[listing,tabsize=1_0]\n----\na\tb\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "listing",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a   b</pre>",
+          "<pre>a  b</pre>",
+          "<pre>a         b</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-unset",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n:tabsize!:\n\n----\n\tx\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>\tx</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-columns",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n----\né\tx\n中文\ty\n😀\tz\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>é   x\n中文  y\n😀   z</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-literal-verse-open",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n....\n\tliteral\n....\n\n[verse]\n____\n\tverse\n____\n\n[source]\n--\n\topen\n--",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "literal",
+          "verse",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>    literal</pre>",
+          "<pre class=\"content\">    verse</pre>",
+          "<code>    open</code>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-styled-paragraphs",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n[source]\n\tsource\na\tb\n\n[literal]\n\tliteral\n\n[listing]\n\tlisting\n\n[verse]\n\tverse",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "literal",
+          "listing",
+          "verse"
+        ],
+        "html_contains": [
+          "<code>    source\na   b</code>",
+          "<pre>    literal</pre>",
+          "<pre>    listing</pre>",
+          "<pre class=\"content\">    verse</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-kept",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n  a\tb\n\n++++\n\tpass\n++++\n\nfoo\tbar",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "literal",
+          "pass",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<pre>a\tb</pre>",
+          "\tpass",
+          "<p>foo\tbar</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-nested",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n* item\n+\n----\n\tx\n----\n\n[NOTE]\n====\n----\n\ty\n----\n====",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "listing",
+          "admonition",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>    x</pre>",
+          "<pre>    y</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-tabsize-indent",
+      "category": "verbatim-tabsize",
+      "source": ":tabsize: 4\n\n[listing,indent=0]\n----\n\t\tx\n\t  y\n----\n\n[source,indent=1]\n\t\tx\n\t  y",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>  x\ny</pre>",
+          "<code>   x\n y</code>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-indent-integer",
+      "category": "verbatim-tabsize",
+      "source": "[listing,indent=abc]\n----\n  x\n    y\n----\n\n[listing,indent=-1]\n----\n  x\n    y\n----\n\n[listing,indent=1x]\n----\n  x\n    y\n----\n\n[listing,indent=2]\n----\nx\n\ny\n----",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "listing",
+          "listing",
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x\n  y</pre>",
+          "<pre>  x\n    y</pre>",
+          "<pre> x\n   y</pre>",
+          "<pre>  x\n\n  y</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    },
+    {
+      "id": "verbatim-indent-block-only",
+      "category": "verbatim-tabsize",
+      "source": ":indent: 2\n\n----\nx\n  y\n----\n\n[pass,indent=0]\n++++\n  pass\n++++",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "pass"
+        ],
+        "html_contains": [
+          "<pre>x\n  y</pre>",
+          "  pass"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/verbatim/listing-blocks/"
+      ]
+    }
+  ]
+}
