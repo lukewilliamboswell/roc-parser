@@ -1,0 +1,8 @@
+lines=3..4 selects lines [3, 4]:
+    let message = format!("Hello, {name}!");
+    println!("{message}");
+tag=body,indent=0 selects lines [3, 4]:
+let message = format!("Hello, {name}!");
+println!("{message}");
+tag=bdy is rejected: tag 'bdy' never opens; nothing is selected
+lines=4..3 is rejected: lines entry '4..3' is invalid

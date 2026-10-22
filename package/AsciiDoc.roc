@@ -90,6 +90,93 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	## Render an embedded HTML document with shared IDs and footnotes.
 	render : Document -> Str
 	render = |document| render_document(document)
+
+	## The lines an `include::` directive selects from its source, as returned
+	## by [AsciiDoc.select_include].
+	##
+	## - `text`: the selected lines after any `indent=`, joined with LF and with
+	##   no final LF. As in include expansion, a CR that ends a line and a
+	##   leading byte order mark are removed.
+	## - `lines`: the one-based source line number of each selected line, in
+	##   order. A final LF ends the last line rather than starting a new one,
+	##   and an empty source is a single empty line.
+	## - `problems`: each [AsciiDoc.IncludeProblem] found, once, in the order
+	##   found. An empty list means the selection is clean.
+	##
+	## ```roc
+	## expect AsciiDoc.select_include("one\ntwo\nthree\n", "lines=2..3") == { text: "two\nthree", lines: [2, 3], problems: [] }
+	## ```
+	IncludeSelection : { text : Str, lines : List(U64), problems : List(IncludeProblem) }
+
+	## Something in an include's selection that Asciidoctor would warn about,
+	## or would select differently. Selection itself stays as lenient as
+	## Asciidoctor's, so a strict caller rejects any problem and a lenient
+	## caller ignores them.
+	##
+	## Tag markers are lines containing `tag::NAME[]` or `end::NAME[]`. They are
+	## checked only when the attributes select by `tag=` or `tags=` without
+	## `lines=`, and only for the tags the selector names, positively or with
+	## `!`, or for every tag when it uses `*` or `!*`. These are the tags
+	## Asciidoctor tracks. Markers of other tags are still removed from the
+	## selection.
+	##
+	## - `MissingTag(name)`: `tag=` or `tags=` requests `name` positively (not
+	##   `*`, `**` or `!name`), but no `tag::name[]` marker opens it. Asciidoctor
+	##   warns that the tag is not found.
+	## - `UnclosedTag(name)`: a `tag::name[]` marker has no `end::name[]` before
+	##   the source ends, which Asciidoctor warns about, or before
+	##   `tag::name[]` appears again. Asciidoctor nests a re-opened tag
+	##   silently, but this selection treats both as one region that the first
+	##   `end::name[]` closes, so the two can select different lines.
+	## - `UnmatchedEnd(name)`: an `end::name[]` marker while `name` is not
+	##   open, or while a checked tag opened after `name` is still open, so the
+	##   two regions cross instead of nesting. The marker still closes `name`.
+	##   Asciidoctor warns of an unexpected or mismatched end tag when the
+	##   selector names `name`. For a tag only `*` or `!*` checks, it ignores
+	##   such an end silently, and warns later if that leaves the tag unclosed.
+	## - `InvalidLines(entry)`: an entry of `lines=`, without surrounding
+	##   spaces, that is not `N`, `N..M` with N ≤ M, `N..` or `N..-1`, where N
+	##   and M are plain decimal numbers and N is at least 1; or one whose first
+	##   line is past the end of the source. Asciidoctor reads these entries
+	##   without a warning: `4abc` selects line 4 and `+2` line 2, a reversed
+	##   range such as `4..2` selects nothing (so a list of only reversed ranges
+	##   selects every line), and a start of 0 or less selects nothing at all.
+	##   A range that only partly runs past the end is not a problem.
+	## - `EmptySelection`: no lines are selected.
+	##
+	## When `lines=` has a value, `tag=` and `tags=` are ignored, as in
+	## Asciidoctor, and report nothing.
+	##
+	## ```roc
+	## expect AsciiDoc.select_include("a\n// tag::x[]\nb\n", "tag=x").problems == [UnclosedTag("x")]
+	## ```
+	IncludeProblem : [MissingTag(Str), UnclosedTag(Str), UnmatchedEnd(Str), InvalidLines(Str), EmptySelection]
+
+	## Select the lines of `source` that an include directive with this
+	## attribute list selects, such as `lines=1..4,indent=0` or `tag=example`.
+	## `include::` expansion calls the same code, so a tool that expands
+	## includes itself selects exactly the lines this package would.
+	##
+	## The attributes it reads are `lines`, `tag`, `tags` and `indent`; others,
+	## such as `leveloffset`, are ignored. `lines=` takes precedence over `tag=`
+	## and `tags=`, and `tag=` over `tags=`; unlike in Asciidoctor, an empty
+	## value counts as absent. Attribute references such as `{range}` are not
+	## expanded.
+	##
+	## - `lines=`: entries separated by `,`, or by `;` when there is no comma,
+	##   each a line `N`, a range `N..M`, or an open range `N..` or `N..-1`.
+	## - `tag=` names one tag and `tags=` several, separated likewise. `!name`
+	##   excludes a tag, `*` selects the lines inside any tag and `**` every
+	##   line. Either way, the marker lines themselves are left out.
+	## - `indent=N`: removes the leading spaces that every nonblank selected
+	##   line shares, then indents every line by N spaces. `indent=0` dedents.
+	##   Unlike in Asciidoctor, leading tabs are kept.
+	##
+	## ```roc
+	## expect AsciiDoc.select_include("  a\n  // tag::x[]\n    b\n  // end::x[]\n", "tag=x,indent=0") == { text: "b", lines: [3], problems: [] }
+	## ```
+	select_include : Str, Str -> IncludeSelection
+	select_include = AsciiDocPreprocess.select_include
 }
 
 import Literal as Quotation
@@ -2632,3 +2719,110 @@ expect {
 expect AsciiDoc.validate({ source: "////\ninclude::missing.adoc[]\n////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
 expect AsciiDoc.validate({ source: "/////\ninclude::missing.adoc[]\n/////\n\nText" }).map_ok(|doc| doc.blocks) == Ok([Paragraph("Text")])
 expect AsciiDoc.validate({ source: "----\ninclude::missing.adoc[]\n----" }).is_err()
+
+# Include selection. The examples in the doc comments first.
+expect AsciiDoc.select_include("one\ntwo\nthree\n", "lines=2..3") == { text: "two\nthree", lines: [2, 3], problems: [] }
+expect AsciiDoc.select_include("a\n// tag::x[]\nb\n", "tag=x").problems == [UnclosedTag("x")]
+expect AsciiDoc.select_include("  a\n  // tag::x[]\n    b\n  // end::x[]\n", "tag=x,indent=0") == { text: "b", lines: [3], problems: [] }
+
+# Without selectors every line is selected, and markers are ordinary text.
+expect AsciiDoc.select_include("// tag::x[]\ninside\n// end::x[]", "") == { text: "// tag::x[]\ninside\n// end::x[]", lines: [1, 2, 3], problems: [] }
+expect AsciiDoc.select_include("one\r\ntwo\r\n", "leveloffset=+1") == { text: "one\ntwo", lines: [1, 2], problems: [] }
+expect AsciiDoc.select_include("", "") == { text: "", lines: [1], problems: [] }
+
+# `lines=` forms. Selection keeps source order and never repeats a line.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour\n", "lines=1;3..-1") == { text: "one\nthree\nfour", lines: [1, 3, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=3..") == { text: "three\nfour", lines: [3, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"1..2,4\"") == { text: "one\ntwo\nfour", lines: [1, 2, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=4;1") == { text: "one\nfour", lines: [1, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=1..3;2..4") == { text: "one\ntwo\nthree\nfour", lines: [1, 2, 3, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"1,4,\"") == { text: "one\nfour", lines: [1, 4], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\" 2 .. 3 \"") == { text: "two\nthree", lines: [2, 3], problems: [] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=2..9") == { text: "two\nthree\nfour", lines: [2, 3, 4], problems: [] }
+
+# An open range selects its start, then the lines after every finite entry.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"2..,4\"") == { text: "two\nfour", lines: [2, 4], problems: [] }
+
+# An unclosed quote leaves an empty value, which selects every line.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"\"1..2,4\"") == { text: "one\ntwo\nthree\nfour", lines: [1, 2, 3, 4], problems: [] }
+
+# Lenient `lines=` entries select what Asciidoctor selects, and are reported.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=4abc") == { text: "four", lines: [4], problems: [InvalidLines("4abc")] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"+2;1_0;3..-2\"") == { text: "two\nthree", lines: [2, 3], problems: [InvalidLines("+2"), InvalidLines("1_0"), InvalidLines("3..-2")] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=4..2") == { text: "one\ntwo\nthree\nfour", lines: [1, 2, 3, 4], problems: [InvalidLines("4..2")] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=999999999999999999999999999999999999999..999999999999999999999999999999999999998") == { text: "one\ntwo\nthree\nfour", lines: [1, 2, 3, 4], problems: [InvalidLines("999999999999999999999999999999999999999..999999999999999999999999999999999999998")] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"2;4..2\"") == { text: "two", lines: [2], problems: [InvalidLines("4..2")] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"2;9..12\"") == { text: "two", lines: [2], problems: [InvalidLines("9..12")] }
+
+# A start of 0 or less selects nothing at all.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"0,2\"") == { text: "", lines: [], problems: [InvalidLines("0"), EmptySelection] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"-1,2\"") == { text: "", lines: [], problems: [InvalidLines("-1"), EmptySelection] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"1,,4\"") == { text: "", lines: [], problems: [InvalidLines(""), EmptySelection] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=..2") == { text: "", lines: [], problems: [InvalidLines("..2"), EmptySelection] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=\"1..2,part.adoc[lines=\"1..2,4\"") == { text: "", lines: [], problems: [InvalidLines("part.adoc[lines="), EmptySelection] }
+
+# Entries past the end select nothing.
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=9") == { text: "", lines: [], problems: [InvalidLines("9"), EmptySelection] }
+expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=5..") == { text: "", lines: [], problems: [InvalidLines("5.."), EmptySelection] }
+
+# `lines=` takes precedence, and the ignored tags report nothing.
+expect AsciiDoc.select_include("// tag::x[]\ninside\n// end::x[]", "lines=1..2,tag=x") == { text: "// tag::x[]\ninside", lines: [1, 2], problems: [] }
+expect AsciiDoc.select_include("// tag::x[]\ninside", "tags=missing,lines=1..2") == { text: "// tag::x[]\ninside", lines: [1, 2], problems: [] }
+
+# An empty value counts as absent. Asciidoctor differs here: an empty
+# `lines=` still overrides the tags, and an empty `tag=` still overrides `tags=`.
+expect AsciiDoc.select_include("a\n// tag::x[]\nb\n// end::x[]", "lines=,tag=x") == { text: "b", lines: [3], problems: [] }
+expect AsciiDoc.select_include("a\n// tag::x[]\nb\n// end::x[]", "tag=,tags=x") == { text: "b", lines: [3], problems: [] }
+
+# `tag=` and `tags=`, with wildcards and negation.
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=x") == { text: "inside", lines: [3], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=!x") == { text: "before\nafter", lines: [1, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=**") == { text: "before\ninside\nafter", lines: [1, 3, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=**;!x") == { text: "before\nafter", lines: [1, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=*") == { text: "inside", lines: [3], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=!*") == { text: "before\nafter", lines: [1, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\nx\n// tag::y[]\nxy\n// end::y[]\n// end::x[]\nafter", "tags=x;!y") == { text: "x", lines: [3], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\nx\n// tag::y[]\nxy\n// end::y[]\n// end::x[]\nafter", "tags=x;y") == { text: "x\nxy", lines: [3, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\nx\n// tag::y[]\nxy\n// end::y[]\n// end::x[]\nafter", "tag=y") == { text: "xy", lines: [5], problems: [] }
+expect AsciiDoc.select_include("// tag::x[]\nx\n// end::x[]\n// tag::y[]\ny\n// end::y[]", "tags=\"x,y\"") == { text: "x\ny", lines: [2, 5], problems: [] }
+expect AsciiDoc.select_include("// tag::x[]\nx\n// end::x[]\n// tag::x[]\nagain\n// end::x[]", "tag=x") == { text: "x\nagain", lines: [2, 5], problems: [] }
+
+# `indent=N` and its combinations.
+expect AsciiDoc.select_include("    one\n      two\n\n    three", "indent=0") == { text: "one\n  two\n\nthree", lines: [1, 2, 3, 4], problems: [] }
+expect AsciiDoc.select_include("    one\n      two\n    three", "indent=2") == { text: "  one\n    two\n  three", lines: [1, 2, 3], problems: [] }
+expect AsciiDoc.select_include("one\n    two\n      three\nfour", "lines=2..3,indent=1") == { text: " two\n   three", lines: [2, 3], problems: [] }
+expect AsciiDoc.select_include("  // tag::a[]\n    alpha\n  // end::a[]\n  // tag::b[]\n      beta\n  // end::b[]", "tags=*,indent=0") == { text: "alpha\n  beta", lines: [2, 5], problems: [] }
+
+# Only spaces are removed. Asciidoctor would also remove the shared tab.
+expect AsciiDoc.select_include("\tone\n\t\ttwo", "indent=0") == { text: "\tone\n\t\ttwo", lines: [1, 2], problems: [] }
+
+# Each problem. Tags no selector names are not checked, as in Asciidoctor.
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=x;missing") == { text: "inside", lines: [3], problems: [MissingTag("missing")] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=**;!missing") == { text: "before\ninside\nafter", lines: [1, 3, 5], problems: [] }
+expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=missing") == { text: "", lines: [], problems: [MissingTag("missing"), EmptySelection] }
+expect AsciiDoc.select_include("// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [] }
+expect AsciiDoc.select_include("// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc", "tags=*") == { text: "a\nb\nc", lines: [2, 4, 6], problems: [UnmatchedEnd("x"), UnclosedTag("y")] }
+expect AsciiDoc.select_include("// tag::x[]\na\n// tag::x[]\nb\n// end::x[]", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [UnclosedTag("x")] }
+expect AsciiDoc.select_include("// tag::x[]\na\n// tag::x[]\nb\n// end::x[]\nc\n// end::x[]\nd", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [UnclosedTag("x"), UnmatchedEnd("x")] }
+expect AsciiDoc.select_include("a\n// end::x[]\nb", "tag=x") == { text: "", lines: [], problems: [UnmatchedEnd("x"), MissingTag("x"), EmptySelection] }
+expect AsciiDoc.select_include("// tag::y[]\na\n// tag::x[]\nb\n// end::y[]\nc\n// end::x[]\nd", "tags=x;y") == { text: "a\nb\nc", lines: [2, 4, 6], problems: [UnmatchedEnd("y")] }
+expect AsciiDoc.select_include("// tag::y[]\na\n// tag::x[]\nb\n// end::y[]\nc\n// end::x[]\nd", "tag=y") == { text: "a\nb", lines: [2, 4], problems: [] }
+expect AsciiDoc.select_include("a\n// tag::x[]\n// end::x[]\nb", "tag=x") == { text: "", lines: [], problems: [EmptySelection] }
+
+# `include::` expansion selects exactly what `select_include` returns.
+expect {
+	part = "  intro\n  // tag::a[]\n    alpha\n  // end::a[]\n  // tag::b[]\n      beta\n  // end::b[]\n  outro\n"
+	options = { ..AsciiDocPreprocess.defaults, expand_includes: True, includes: [{ path: "part.txt", source: part }] }
+	["", "lines=2..3", "lines=\"1;6..\"", "lines=4abc", "lines=9", "tag=a", "tags=a;b,indent=0", "tags=**;!a,indent=2", "tags=*", "tags=!*", "tag=missing", "lines=1..3,tag=a"].all(
+		|attributes| {
+			selection = AsciiDoc.select_include(part, attributes)
+			match AsciiDocPreprocess.run("----\ninclude::part.txt[${attributes}]\n----", options) {
+				Ok(result) => {
+					included = result.lines.keep_if(|line| line.path == "part.txt")
+					included.map(|line| line.line) == selection.lines and Str.join_with(included.map(|line| line.text), "\n") == selection.text
+				}
+				Err(_) => False
+			}
+		},
+	)
+}
