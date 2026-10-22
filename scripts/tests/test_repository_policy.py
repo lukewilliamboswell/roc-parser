@@ -88,6 +88,7 @@ class RepositoryPolicyTests(unittest.TestCase):
                 if name in text:
                     failures.append(f"{workflow.name}: mentions {name}")
         self.assertEqual(failures, [])
+        self.assertFalse((ROOT / pin_file).exists())
 
 
 if __name__ == "__main__":

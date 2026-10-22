@@ -15,7 +15,7 @@ class ValidationTests(unittest.TestCase):
     def test_source_digest_tracks_contents_and_names(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ["package/A.roc", "bench/roc/roc-syntax.roc", "bench/roc/roc-syntax-alloc.roc", ".roc-version"]:
+            for name in ["package/A.roc", "bench/roc/roc-syntax.roc", "bench/roc/roc-syntax-alloc.roc"]:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("initial")
@@ -26,21 +26,21 @@ class ValidationTests(unittest.TestCase):
             (root / "package/A.roc").rename(root / "package/B.roc")
             self.assertNotEqual(changed, check.source_identity(root))
 
-    def test_wrong_compiler_stops_and_preserves_evidence(self):
+    def test_a_program_that_is_not_roc_stops_and_preserves_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
-            response = subprocess.CompletedProcess(["roc", "version"], 0, "Roc compiler version wrong\n", "")
+            response = subprocess.CompletedProcess(["roc", "version"], 0, "something else 1.0\n", "")
             with patch.object(check.subprocess, "run", return_value=response) as run:
                 self.assertEqual(check.main(["--output", tmp]), 1)
             self.assertEqual(run.call_count, 1)
             record = json.loads((output / "validation.json").read_text())
             self.assertEqual(record["status"], "failed")
-            self.assertIn("pinned executable", record["error"])
+            self.assertIn("Set ROC to a Roc nightly", record["error"])
             self.assertEqual(record["steps"][0]["name"], "compiler-version")
 
     def test_command_failure_keeps_stdout_stderr_and_exit_status(self):
         with tempfile.TemporaryDirectory() as tmp:
-            version = "Roc compiler version " + (check.ROOT / ".roc-version").read_text().strip()
+            version = "Roc compiler version nightly-2026-10-21-5349569"
             replies = [subprocess.CompletedProcess([], 0, version, ""),
                        subprocess.CompletedProcess([], 2, "check output", "check error")]
             with patch.object(check.subprocess, "run", side_effect=replies):
@@ -59,7 +59,7 @@ class ValidationTests(unittest.TestCase):
             oracle.parent.mkdir(parents=True)
             oracle.write_bytes(b'fresh oracle')
             oracle.with_suffix('.json').write_text(json.dumps({'binary_sha256': hashlib.sha256(oracle.read_bytes()).hexdigest(), 'source_git': str(output / 'compiler.git')}))
-            version = 'Roc compiler version ' + (check.ROOT / '.roc-version').read_text().strip()
+            version = 'Roc compiler version nightly-2026-10-21-5349569'
             calls = []
             def command(args, **kwargs):
                 calls.append(args)
