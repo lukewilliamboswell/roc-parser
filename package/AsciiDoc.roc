@@ -95,8 +95,8 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	## by [AsciiDoc.select_include].
 	##
 	## - `text`: the selected lines after any `indent=`, joined with LF and with
-	##   no final LF. As in include expansion, a CR before each LF and a leading
-	##   byte order mark are removed.
+	##   no final LF. As in include expansion, a CR that ends a line and a
+	##   leading byte order mark are removed.
 	## - `lines`: the one-based source line number of each selected line, in
 	##   order. A final LF ends the last line rather than starting a new one,
 	##   and an empty source is a single empty line.
@@ -144,7 +144,7 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	##   A range that only partly runs past the end is not a problem.
 	## - `EmptySelection`: no lines are selected.
 	##
-	## When `lines=` is given, `tag=` and `tags=` are ignored, as in
+	## When `lines=` has a value, `tag=` and `tags=` are ignored, as in
 	## Asciidoctor, and report nothing.
 	##
 	## ```roc
@@ -159,8 +159,9 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	##
 	## The attributes it reads are `lines`, `tag`, `tags` and `indent`; others,
 	## such as `leveloffset`, are ignored. `lines=` takes precedence over `tag=`
-	## and `tags=`, and `tag=` over `tags=`. Attribute references such as
-	## `{range}` are not expanded.
+	## and `tags=`, and `tag=` over `tags=`; unlike in Asciidoctor, an empty
+	## value counts as absent. Attribute references such as `{range}` are not
+	## expanded.
 	##
 	## - `lines=`: entries separated by `,`, or by `;` when there is no comma,
 	##   each a line `N`, a range `N..M`, or an open range `N..` or `N..-1`.
@@ -169,6 +170,7 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	##   line. Either way, the marker lines themselves are left out.
 	## - `indent=N`: removes the leading spaces that every nonblank selected
 	##   line shares, then indents every line by N spaces. `indent=0` dedents.
+	##   Unlike in Asciidoctor, leading tabs are kept.
 	##
 	## ```roc
 	## expect AsciiDoc.select_include("  a\n  // tag::x[]\n    b\n  // end::x[]\n", "tag=x,indent=0") == { text: "b", lines: [3], problems: [] }
@@ -2767,6 +2769,11 @@ expect AsciiDoc.select_include("one\ntwo\nthree\nfour", "lines=5..") == { text: 
 expect AsciiDoc.select_include("// tag::x[]\ninside\n// end::x[]", "lines=1..2,tag=x") == { text: "// tag::x[]\ninside", lines: [1, 2], problems: [] }
 expect AsciiDoc.select_include("// tag::x[]\ninside", "tags=missing,lines=1..2") == { text: "// tag::x[]\ninside", lines: [1, 2], problems: [] }
 
+# An empty value counts as absent. Asciidoctor differs here: an empty
+# `lines=` still overrides the tags, and an empty `tag=` still overrides `tags=`.
+expect AsciiDoc.select_include("a\n// tag::x[]\nb\n// end::x[]", "lines=,tag=x") == { text: "b", lines: [3], problems: [] }
+expect AsciiDoc.select_include("a\n// tag::x[]\nb\n// end::x[]", "tag=,tags=x") == { text: "b", lines: [3], problems: [] }
+
 # `tag=` and `tags=`, with wildcards and negation.
 expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=x") == { text: "inside", lines: [3], problems: [] }
 expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=!x") == { text: "before\nafter", lines: [1, 5], problems: [] }
@@ -2785,6 +2792,9 @@ expect AsciiDoc.select_include("    one\n      two\n\n    three", "indent=0") ==
 expect AsciiDoc.select_include("    one\n      two\n    three", "indent=2") == { text: "  one\n    two\n  three", lines: [1, 2, 3], problems: [] }
 expect AsciiDoc.select_include("one\n    two\n      three\nfour", "lines=2..3,indent=1") == { text: " two\n   three", lines: [2, 3], problems: [] }
 expect AsciiDoc.select_include("  // tag::a[]\n    alpha\n  // end::a[]\n  // tag::b[]\n      beta\n  // end::b[]", "tags=*,indent=0") == { text: "alpha\n  beta", lines: [2, 5], problems: [] }
+
+# Only spaces are removed. Asciidoctor would also remove the shared tab.
+expect AsciiDoc.select_include("\tone\n\t\ttwo", "indent=0") == { text: "\tone\n\t\ttwo", lines: [1, 2], problems: [] }
 
 # Each problem. Tags no selector names are not checked, as in Asciidoctor.
 expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=x;missing") == { text: "inside", lines: [3], problems: [MissingTag("missing")] }
