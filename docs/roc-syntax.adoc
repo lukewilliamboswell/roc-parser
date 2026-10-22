@@ -80,10 +80,11 @@ should tolerate partial results.
 == Compatibility and validation
 
 The syntax reference is compiler commit
-`0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is pinned separately to
-`nightly-2026-10-21-5349569` in `.roc-version`. This identifies a changing language implementation,
-rather than a stable language specification. Updating the implementation compiler
-and updating the syntax reference are separate maintenance decisions.
+`0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is not
+pinned: CI builds and tests the package with the latest Roc nightly, and each validation
+run records the nightly it used. This identifies a changing language implementation,
+rather than a stable language specification. Updating the syntax reference is a
+separate maintenance decision.
 
 The differential corpus records individual syntax rules and their coverage.
 Raw fuzzing checks source preservation and structural invariants; structured
@@ -92,12 +93,12 @@ builds and measure scaling as documents grow.
 
 == Run the feedback loop
 
-Install the Roc nightly named in `.roc-version`, Zig 0.17.0 and Python 3.
-From the repository root, run:
+Install the latest Roc nightly, Zig 0.17.0 and Python 3, or let `blueprint run
+roc-syntax` provide Zig (<<contributing>>). From the repository root, run:
 
 [source,sh]
 ----
-ROC=/path/to/pinned/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
+ROC=/path/to/roc ZIG=/path/to/zig python3 scripts/check_roc_syntax.py
 ----
 
 The command checks the package, builds the pinned compiler oracle and optimized

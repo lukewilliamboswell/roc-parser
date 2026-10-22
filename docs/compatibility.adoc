@@ -17,22 +17,26 @@ in 2.0.0.
 == Roc compiler
 
 Roc has no stable release yet, and its compiler changes the language and
-standard library often. Each roc-parser release is therefore built and tested
-with one Roc nightly:
+standard library often. roc-parser follows the latest nightly rather than
+pinning one:
 
-* `.roc-version` at the repository root names the nightly for the package,
-  its tests, the examples, the property tests, the conformance reviews and the
-  benchmarks, for example `nightly-2026-10-21-5349569`.
-* An automated workflow proposes an update to a newer nightly when one is
-  published, and merges it only when the tests pass with it.
+* Every change to `main` is tested with the latest Roc nightly of the day: the
+  package, its tests, the examples, the property tests, the conformance
+  reviews and the benchmarks.
+* Each release is built and tested with the latest nightly of its release day,
+  and its notes name that compiler under "Compilers".
+* Every day, the latest release's published examples are checked, built and
+  run with the latest nightly, so a compiler change that breaks the release is
+  found and fixed with a patch release. This starts with the first release
+  after 2.0.0, which is the first to publish what its examples print.
 
-Use the nightly named by the release you depend on. A newer nightly often
-works, but a compiler change can break the build without any change to this
-package; the release notes say when a migration changed the package's API.
+Use the latest nightly with the latest release. If a newer nightly breaks a
+release you depend on, the nightly its notes name under "Compilers" is known to
+work; the release notes also say when a migration changed the package's API.
 
 [source,sh]
 ----
-cat .roc-version
+roc version
 ----
 
 == Version numbers
@@ -56,7 +60,7 @@ each release also publishes an SBOM and signed provenance.
 
 The package is plain Roc with no platform-specific code: it does no input or
 output, so it works with any Roc platform, on any system where that platform
-and the pinned compiler run. CI builds and tests it on Linux x86-64, and the
+and the Roc compiler run. CI builds and tests it on Linux x86-64, and the
 conformance results in <<conformance,Conformance>> were measured on macOS with
 Apple silicon.
 

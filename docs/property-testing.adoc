@@ -15,12 +15,12 @@ reviews against a mature reference implementation. The second half is a set of
 how-to sections: run the targets, reproduce and minimise a failure, turn it
 into a regression, and update a conformance baseline.
 
-It assumes the setup in <<contributing>>, including the Roc nightly pinned
-in `.roc-version`. Every command below uses that compiler:
+It assumes the setup in <<contributing>>, including the latest Roc nightly,
+which CI uses too. Every command below uses that compiler:
 
 [source,bash]
 ----
-export ROC=/path/to/quality_nightly/roc
+export ROC=/path/to/roc_nightly/roc
 ----
 
 == Why property tests
@@ -138,8 +138,9 @@ Its broader oracle fixtures, generated corpus and mutation exploration are
 described in <<asciidoc>>. Inline source agreement alone does not establish
 agreement on Asciidoctor substitutions or rendered HTML.
 
-Run every target for a short, iteration-bounded smoke test. This is what CI
-runs on a pull request:
+Run every target for a short, iteration-bounded smoke test. This is what the
+`fuzz` section of `blueprint run check` runs on a pull request; it builds up to
+four targets at once (`--jobs`) before running them in turn:
 
 [source,bash]
 ----
@@ -166,8 +167,9 @@ stat::slowest_unit_time_sec:    0
 stat::peak_rss_mb:              25
 ----
 
-Run a longer, time-bounded campaign on the target closest to your change. CI
-runs a 600-second campaign for every target each night:
+Run a longer, time-bounded campaign on the target closest to your change. The
+scheduled `fuzz.yml` workflow runs a 600-second campaign for every target each
+night, on the latest Roc nightly:
 
 [source,bash]
 ----
@@ -274,7 +276,10 @@ python3 -m venv .venv
 `scripts/http/`, `scripts/markdown/` and `scripts/yaml/` each have a
 `requirements.txt` with every dependency pinned, so `--no-deps` installs
 exactly the reviewed versions; CSV, XML and JSON use the Python standard
-library. Then run the same checks as the `Conformance` jobs in CI:
+library. Then run the same checks as the `Conformance` jobs of the scheduled
+`fuzz.yml` workflow. `python3 scripts/check_conformance.py` does all of this in
+one environment: with no arguments it runs the fast checks that every pull
+request runs, and `all` adds the robustness campaigns:
 
 [source,bash]
 ----

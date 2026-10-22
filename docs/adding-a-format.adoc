@@ -177,14 +177,17 @@ iteration-bounded run in CI, `--seconds` and `--seed` for local runs, and a
   `fuzz/dictionaries/toml.dict` for the raw target.
 . Add each target to the `target` matrix of the `fuzz` job in
   `.github/workflows/fuzz.yml`, in the same order as in `TARGETS`, which
-  `TARGET_ORDER` in `scripts/run_fuzz.py` follows. Add the review to the
-  `conformance` matrix with its `requirements` file and command, and the
-  campaign's `--smoke` run as a second row, as the `json` and
-  `json-robustness` rows do.
+  `TARGET_ORDER` in `scripts/run_fuzz.py` follows. Register the review in
+  `REVIEWS` in `scripts/check_conformance.py`, with its command and
+  `requirements` file, and the campaign's `--smoke` run as a second, scheduled
+  entry, as `json` and `json-robustness` do; then add both to the `review`
+  matrix of the `conformance` job in `fuzz.yml`, in the same order.
 
 `scripts/tests/test_run_fuzz.py` fails if a `fuzz/*.roc` file is not
 registered, or if the workflow matrix lists the targets differently, or in a
-different order, from the registry. Check that and run the new targets:
+different order, from the registry; `scripts/tests/test_check.py` does the same
+for the reviews. Every pull request runs the new targets and the fast review
+through `blueprint run check`. Check the registries and run the new targets:
 
 [source,bash]
 ----
@@ -246,8 +249,8 @@ python3 scripts/build_manual.py
 * [ ] Any vendored test suite recorded with its revision and licence
 * [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and in
   `fuzz.yml` in the same order
-* [ ] A robustness `campaign` in the review script, with its `--smoke` run in
-  the `conformance` matrix
+* [ ] A robustness `campaign` in the review script, with its `--smoke` run
+  registered in `check_conformance.py` and the `conformance` matrix
 * [ ] A benchmark driver, generator, samples and comparators
 * [ ] Chapter with tested examples, the format added to every list of
   formats, and a release notes entry

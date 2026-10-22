@@ -105,11 +105,11 @@ multiline literals, checked file imports, and validation props with defaults.
 
 ## Compatibility
 
-Roc is still changing, so roc-parser tracks recent nightly builds of the Roc
-compiler. The nightly the `main` branch is tested with is pinned in
-[`.roc-version`](.roc-version), and each release names the nightly it was
-built with. Releases follow semantic versioning; 2.0.0 is a breaking release,
-so check its release notes before upgrading.
+Roc is still changing, so roc-parser follows the latest nightly build of the
+Roc compiler: every change is tested with the nightly of the day, and each
+release names the nightly it was built with. Releases follow semantic
+versioning; 2.0.0 is a breaking release, so check its release notes before
+upgrading.
 
 ## Contributing and security
 

@@ -4,60 +4,120 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8a6c914fa8400c9d1f5a3815ab06e06687d58148
 
 [#maintaining]
-= Compiler updates, releases and security reports
+= Compiler, releases, settings and security reports
 
 This chapter is for maintainers with write access to the repository. It covers
-how the Roc compiler pin is kept current, how a release is cut and what it
-publishes, and how security reports are handled. It assumes <<contributing>>.
+which Roc compiler the repository uses, how a release is cut and what it
+publishes, the repository settings the workflows rely on, and how security
+reports are handled. It assumes <<contributing>>.
 
-== Roc nightly updates
+roc-parser follows the
+https://github.com/lukewilliamboswell/roc-automation[roc-automation] model for
+Roc packages, with the deviations listed in <<maintaining-deviations>>. The
+model's manual, at the revision this repository uses, explains the reasons
+behind each rule:
+{roc-automation}/docs/workflows.adoc[the three workflows],
+{roc-automation}/docs/optional-workflows.adoc[optional workflows] and
+{roc-automation}/docs/settings.adoc[repository settings].
 
-Roc has no stable release yet, so roc-parser pins one nightly build in
-`.roc-version` and moves it forward as the compiler changes. This is automated.
+[#maintaining-compiler]
+== Compiler and nightly
 
-The `Update Roc nightly` workflow
-({src}/.github/workflows/update-roc-nightly.yml[`update-roc-nightly.yml`])
-runs once a day at 13:16 UTC, about four hours after the upstream nightly
-build. It calls the shared controller in
-https://github.com/lukewilliamboswell/roc-automation[roc-automation], which:
+Roc has no stable release yet, and roc-parser does not pin a nightly. Every
+workflow resolves the latest release of
+https://github.com/roc-lang/nightlies[roc-lang/nightlies] once per run and
+passes that tag to `roc-lang/setup-roc`, so every job of a run uses the same
+compiler, and every run uses the newest one:
 
-. writes the newest nightly tag to `.roc-version` on the reserved branch
-  `automation/roc-nightly` and opens a pull request;
-. dispatches the validation workflows listed in
-  {src}/.github/roc-nightly.json[`.github/roc-nightly.json`] (`Tests`,
-  `Published example compatibility`, `Release`, `Property quality tests` and
-  `CodeQL`) on the candidate, with the `nightly_validation` input set, so that
-  the release path runs without publishing anything; and
-. merges the pull request automatically once every check passes and the
-  controller has rechecked the signed commit and branch protection.
+* `ci.yml` tests the working tree on the latest nightly. A pull request can
+  therefore fail because a new nightly arrived, with no fault in the change.
+  Compare with the latest run on `main` and the latest `nightly.yml` run before
+  treating such a failure as a regression in the pull request, and fix the
+  package for the new compiler in its own pull request.
+* `release.yml` builds and tests a release with the latest nightly, and the
+  release notes name it under "Compilers".
+* `fuzz.yml` and `bench.yml` run their campaigns on the latest nightly and
+  record its version with their results.
 
-A failed candidate stays open for investigation. Diagnose it: a new compiler
-error, a changed standard library function, or a real regression. Put the
-compatibility fix on a separate branch, not on `automation/roc-nightly`, which
-is reserved for the bot's pin-only commits.
+There is no compiler pin file and no automated update controller: the
+compiler moves by itself every day, and nothing else in the repository changes
+because of it. No Roc file in the repository carries a `roc` header field.
 
 [WARNING]
 ====
 Do not weaken a test, gate a fuzz target or re-record a conformance baseline to
-make a compiler candidate pass. A changed result after a compiler update is a
-bug in the compiler or in the package, and needs a fix or an upstream issue.
+make a new nightly pass. A changed result after a compiler update is a bug in
+the compiler or in the package, and needs a fix or an upstream issue.
 ====
 
-{src}/.github/ROC_NIGHTLY.md[`.github/ROC_NIGHTLY.md`] records the
-integration details: required checks, token permissions and the pinned
-controller commit.
+=== Nightly compatibility
 
-=== One compiler pin
+`nightly.yml` calls roc-automation's shared
+{roc-automation}/docs/nightly-compatibility.adoc[nightly compatibility]
+workflow every day at 13:17 UTC. It downloads the examples archive of the latest
+final release, checks, builds and runs every case of its `spec.json` on the
+latest nightly, and keeps one tracking issue: opened by the first failure,
+commented on by later ones, closed by the next pass. A failure means the
+published release needs a patch release that works with the new compiler.
 
-Every workflow, including the property tests, conformance reviews, docs and
-benchmarks, reads `.roc-version` through `scripts/workflow_helpers.py
-roc-version`. A nightly candidate is therefore checked by the fuzz targets and
-conformance reviews as well as the tests. Do not add a second pin to a
-workflow; if one part of the repository needs a newer compiler, move
-`.roc-version` forward for everything.
+Issue reporting is off for now (`report-issue: false`). The latest final
+release, 2.0.0, was published before releases carried a canonical examples
+archive, so every run reports `setup-failed` until the next final release.
+After that release is published, set `report-issue: true` in `nightly.yml`.
+A run can be dispatched by hand with a `nightly-tag` and a `release-tag` to
+reproduce a past combination; such a run never opens or closes the issue.
 
+=== The tools that do not move
+
+These change only through a pull request a maintainer reviews:
+
+* *roc-automation.* Every roc-automation action and reusable workflow is used at
+  the reviewed revision `8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+  (`tools-0.2.0`), and `scripts/tests/test_repository_policy.py` fails if a
+  workflow names another. Dependabot proposes new revisions; move every
+  reference together, and update the Actions allowlist in
+  <<maintaining-settings>> with them.
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.6.0, by its
+  platform URL, and `actions/setup-blueprint` installs the binary of that
+  release after checking its SHA-256. To upgrade, follow
+  {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
+* *Blueprint.lock.* `blueprint update` refreshes it: the nixpkgs revision that
+  supplies Go, Rust and Python to the benchmarks, and the digests of Zig 0.17.0,
+  which builds the RocSyntax oracle. The benchmark environment takes tools from
+  Nix, so the update needs Nix. Review the new digests and download hosts it
+  prints, and commit the lock alone.
+* *Oracles.* Each conformance oracle is pinned by its requirements file or
+  checksum under `scripts/`, and the RocSyntax oracle by the compiler commit in
+  `scripts/roc_syntax/build_oracle.py`.
+
+[#maintaining-deviations]
+== Declared deviations from the model
+
+roc-parser differs from the roc-automation model in these ways, on purpose:
+
+* *The automation is Python.* The model writes product-specific automation as
+  Roc scripts run by a fixed `roc-stable` compiler. roc-parser keeps its
+  automation in Python under `scripts/`, about 80 scripts, including every
+  conformance oracle, which compares the package with a reference
+  implementation that is itself a Python, Ruby or Zig program. The Blueprint
+  tasks run these scripts, so there is no `roc-stable` environment and no
+  script carries a `roc` header field. `scripts/tests/test_repository_policy.py`
+  keeps the automation in Python under `scripts/`, with no shell scripts.
+* *The manual is built with Asciidoctor.* `scripts/build_manual.py` renders the
+  manual as HTML and PDF in Docker (`.github/docs.Dockerfile`), rather than with
+  the model's shared `roc-docs` renderer. Moving to the shared renderer is
+  planned for a later change, once
+  https://github.com/lukewilliamboswell/roc-automation/issues/70[roc-automation#70]
+  is resolved. Until then the release notes are linked from the manual rather
+  than included in it.
+* *Unreleased notes have their own file.* Changes that no release has yet are
+  described in `docs/releases/unreleased.adoc`, which becomes
+  `docs/releases/<version>.adoc` in the pull request that prepares a release.
+
+[#maintaining-release]
 == Release a new version
 
 Releases follow semantic versioning: a release that changes the result of a
@@ -66,14 +126,30 @@ major release.
 
 === Before you start
 
-. Confirm that `main` is green: `Tests`, `Property quality tests` and `Docs`.
-. Write the release notes as `docs/releases/<version>.md`, for example
-  `docs/releases/2.0.0.md`, and link them from `docs/releases/index.adoc`. Put
-  the upgrade impact first: every change a user's code or data might notice.
-  Merge them through a normal pull request.
-. Optionally run the `Release` workflow from the Actions tab with
-  `nightly_validation` checked. It runs the whole release path, including the
-  documentation build, without publishing.
+. Confirm that `main` is green: `CI`, and the `Release` dry run of the last
+  pull request.
+. Choose the version with `roc bump`, which compares the public API with the
+  latest release and says how far the version must move:
++
+[source,sh]
+----
+roc bump --old https://github.com/lukewilliamboswell/roc-parser/releases/download/<latest>/<hash>.tar.zst package/main.roc
+----
++
+The release workflow runs the same comparison with `--expect <version>` and
+stops when the version understates the change. `roc bump` needs both the
+latest release and the working tree to compile with the latest nightly; when it
+cannot compare them, the release stops too.
+. Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
+  `docs/releases/unreleased.adoc`, and link them from
+  `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
+  the release with the placeholder `+{package-url}+`, which the workflow
+  replaces with the bundle's URL; notes that do not use it are refused. Use
+  headings, paragraphs, lists, `[source]` blocks, simple tables and links: the
+  notes become the GitHub release description as Markdown, and other markup is
+  refused.
+. Merge the notes through a normal pull request. Its `Release` dry run renders
+  the notes of the highest version under `docs/releases/`, which are these.
 
 === Run the release
 
@@ -86,29 +162,68 @@ start the workflow; a mistake needs a new release, not an edit.
 
 Run the `Release` workflow
 ({src}/.github/workflows/release.yml[`release.yml`]) from the Actions tab on
-`main`, with `release_version` set to the new version, for example `2.0.0`. It
-runs these jobs:
+`main`, with `version` set to the new version, for example `2.1.0`, or
+`2.1.0-rc.4` for a release candidate. Each job calls one Blueprint task, and a
+job that can write runs no repository code:
 
-Build release bundle:: Validates the version and that the run is on the
-default branch, runs the Python unit tests and `scripts/all_tests.py`, checks
-that the version increases on the previous release, and bundles the package
-with `scripts/bundle.py`. It also packages the examples archive from the
-bundle's metadata, as a dry run of the asset the release attaches.
-Test bundles:: Packages the examples archive pinned to the new bundle, served
-locally, and checks, runs and builds every app in it.
-Publish GitHub release:: Creates the tag and the GitHub release, with the
-release notes from `docs/releases/<version>.md`, the bundle, an SPDX SBOM
-(`scripts/release_security_assets.py sbom`), and build-provenance and SBOM
-attestations, combined into one offline attestation bundle. It also attaches
-`roc-parser-examples-<version>.zip`
-(`scripts/release_helpers.py package-examples`): the examples, with their
-`parser` dependency pinned to the release bundle's URL, and a README saying
-how to run them.
-Docs:: Builds the manual and the API reference for the version with
-`scripts/build_manual.py --docs-version <version>` and
-`scripts/build_docs.py`, packages them with
-`scripts/release_helpers.py package-docs`, assembles the GitHub Pages site with
-`scripts/release_helpers.py assemble-pages`, and deploys it.
+Validate the release:: Requires `main`, a version that has no tag or release,
+and its notes; runs `roc bump --expect` against the latest final release; and
+resolves the nightly that every later job uses (`blueprint run release-validate`).
+Check the release commit:: Runs `blueprint run check` on the release commit.
+Build the release:: Builds every file once (`blueprint run release-build`): the
+bundle, the examples archive pinned to the bundle's release URL, the
+documentation site and the PDF manual, the bundle's SPDX SBOM, and the
+rendered release notes.
+Test the exact release files:: Downloads those files, checks the SBOM against
+the bundle, and checks, builds and runs every case of the examples archive's
+`spec.json` against a loopback copy of the bundle, with an empty package cache
+(`blueprint run release-test`).
+Attest the release files:: Signs build provenance for every asset and an SBOM
+attestation for the bundle with `actions/attest`. It checks out nothing.
+Prepare the attestation asset:: Joins the two attestations into
+`<bundle>.intoto.jsonl` in a read-only job.
+Publish the release:: In the `release` environment, with `contents: write` and
+no checkout, hands the tested files and the rendered notes to roc-automation's
+`publish-release` action. It stages a draft at the tested commit, downloads
+every uploaded asset and compares it with the tested file, and only then
+publishes. A release candidate is published as a prerelease.
+Build and deploy the Pages site:: For a final release only, publishes the
+release's documentation site, built and tested above, to GitHub Pages.
+
+Every pull request runs `Validate the release`, `Build the release` and `Test
+the exact release files` as a dry run, with the version `0.0.1-dry-run`, and
+publishes nothing.
+
+=== What a release contains
+
+[cols="2,3",options="header"]
+|===
+| Asset | Contents
+
+| `<hash>.tar.zst`
+| The package bundle that users name in their `app` header.
+
+| `roc-parser-examples-<version>.zip`
+| The examples, with their `parser` dependency pinned to the bundle's URL and
+  nothing else changed, a README, and `spec.json`: what each example prints,
+  from `tests/examples.json`, in the form roc-automation's nightly
+  compatibility runner reads.
+
+| `roc-parser-docs-<version>.zip`
+| The documentation site for the version: the manual at the root, the `roc docs`
+  API reference under `api/`, and the PDF. GitHub Pages serves the same files
+  for the latest final release.
+
+| `roc-parser-<version>.pdf`
+| The manual as one PDF.
+
+| `<hash>.tar.zst.spdx.json`
+| An SPDX 2.3 SBOM bound to the bundle's SHA-256, naming the package's
+  dependencies, which Roc fetches by URL and the bundle does not contain.
+
+| `<hash>.tar.zst.intoto.jsonl`
+| The build-provenance and SBOM attestations, for offline verification.
+|===
 
 Nothing in the repository changes after a release. The examples in
 `examples/` always use the package source (`parser: "../package/main.roc"`);
@@ -116,16 +231,56 @@ only the archive attached to the release points them at its URL.
 
 === After the release
 
-. Check the release page: the notes, the `.tar.zst` bundle, the examples
-  archive, the SBOM and the attestation bundle.
+. Check the release page: the notes, with the bundle URL and the compilers, and
+  every asset above.
 . Verify the provenance of the bundle you downloaded:
 +
 [source,bash]
 ----
-gh attestation verify <bundle>.tar.zst --repo lukewilliamboswell/roc-parser
+gh attestation verify <hash>.tar.zst --repo lukewilliamboswell/roc-parser
 ----
-. Open the published manual and API reference and check that they show the new
-  version.
+. For a final release, open the published manual and API reference and check
+  that they show the new version, and dispatch `Nightly compatibility` to test
+  the new release on the latest nightly.
+
+If publication stops part way, follow
+{roc-automation}/docs/workflows.adoc#recover-an-interrupted-publication[Recover an interrupted publication].
+Never publish a draft by hand or replace an asset; changed bytes are a new
+version.
+
+[#maintaining-settings]
+== Repository settings
+
+The workflows rely on these settings, which a maintainer applies on GitHub;
+roc-automation's `check-settings` task, run from a checkout of roc-automation,
+reports which are in place:
+
+* *Required status checks.* The `CI` ruleset on `main` requires `check`, the
+  job of `ci.yml`, and `Build the release`, the build job of the `release.yml`
+  dry run, in place of `test-examples`, `published-examples`,
+  `property-quality` and `release-validation`, which no workflow produces any
+  more. `codeql` stays required.
+* *The `release` environment* is limited to `main` by name ("Selected branches
+  and tags", with `main` alone), rather than "Protected branches only".
+* *A tag ruleset* targets all tags and restricts updates and deletions, so that
+  a version tag can never move.
+* *"Allow GitHub Actions to create and approve pull requests"* is off. No
+  workflow opens a pull request.
+* *The `automation/roc-nightly` branch* is deleted. It belonged to the nightly
+  update controller this repository no longer has.
+* *The Actions allowlist* names each roc-automation action and workflow at its
+  reviewed revision, because an entry without `@<sha>` does not match a pinned
+  reference:
+** `lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+** `lukewilliamboswell/roc-automation/actions/publish-release@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+** `lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+** and the actions that workflow calls at their own revisions:
+   `lukewilliamboswell/roc-automation/actions/release-compatibility@1a08ce49ab69003977745e17fbf37baffa47c94a`,
+   `lukewilliamboswell/roc-automation/actions/nightly-report@7b1f87cded465a7bd280c1370b63d93bccfe4c3e`
+   and `lukewilliamboswell/roc-automation/actions/setup-blueprint@2c563fdc7e07e76f30477769bc706bbc49dac36f`.
+
+`cachix/install-nix-action`, which `setup-blueprint` and `publish-release` use,
+and `roc-lang/setup-roc` are already allowed.
 
 == Security reports
 

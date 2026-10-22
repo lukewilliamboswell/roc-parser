@@ -16,7 +16,7 @@ and how to read a report.
 
 == Run the benchmarks
 
-You need the Roc nightly named in `.roc-version`. Go,
+You need a recent Roc nightly; the report records which one. Go,
 Rust (cargo) and Python 3 are optional: a missing toolchain is skipped and
 named in the report.
 
@@ -254,79 +254,65 @@ In the per-document table, check these before trusting a number:
 == Continuous integration
 
 link:{src}/.github/workflows/bench.yml[`.github/workflows/bench.yml`] runs the
-full comparison with `--allocations`, through roc-blueprint
+full comparison with `--allocations`, through Blueprint
 (<<benchmarks-blueprint>>), on `ubuntu-latest` every Monday and on
-demand (*Actions → Benchmarks → Run workflow*), then publishes `report.md` as
-the job summary and uploads the reports as the `bench-<run id>` artifact for
-90 days. GitHub's shared runners vary by a few tens of percent between runs,
-so compare ratios within one run rather than absolute times across runs.
+demand (*Actions → Benchmarks → Run workflow*), with the latest Roc nightly. It
+publishes `report.md` as the job summary and uploads the reports as the
+`bench-<run id>` artifact for 90 days. GitHub's shared runners vary by a few
+tens of percent between runs, so compare ratios within one run rather than
+absolute times across runs.
 
-Pull requests that change `package/`, `bench/` or the harness run
-`--quick --langs roc --fail-on-error`. It fails only when a Roc driver does not
-build, crashes, or exceeds its 60-second batch limit, which catches a parser
-that has turned quadratic without gating on noisy timings.
+Every pull request runs `--quick --langs roc --fail-on-error` as the `bench`
+section of `blueprint run check` (see <<contributing>>). It fails only when a
+Roc driver does not build, crashes, or exceeds its 60-second batch limit, which
+catches a parser that has turned quadratic without gating on noisy timings.
 
 [#benchmarks-blueprint]
-== Reproducible environment with roc-blueprint
+== Reproducible environment with Blueprint
 
 link:{src}/Blueprint.roc[`Blueprint.roc`] at the repository root describes the
-benchmark environment for
-https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.3.0: Roc,
-Go, Rust, Python and Git from Nix, pinned by the committed `Blueprint.lock`.
-It declares `x86_64-linux` (CI) and `aarch64-darwin` (Apple silicon Macs), and
-needs only Nix with flakes enabled. Run the CLI straight from its flake, pinned
-to the commit of the 0.3.0 tag:
-
-[source,console]
-----
-$ nix run github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5 -- run bench-quick
-----
-
-or put `blueprint` on `PATH` with `nix shell github:lukewilliamboswell/roc-blueprint/db71ab518d04dc24c5fa1fe1a2423fffdc87aad5` and run:
+`bench` environment for
+https://github.com/lukewilliamboswell/roc-blueprint[roc-blueprint] 0.6.0: Go,
+Rust (cargo and rustc), Python and Git from Nix, at the nixpkgs revision the
+committed `Blueprint.lock` records, and Roc from your machine. It declares
+`x86_64-linux` (CI) and `aarch64-darwin` (Apple silicon Macs), and needs Nix
+with flakes enabled. Install the `blueprint` binary as <<contributing>>
+describes, put the latest Roc nightly on `PATH` as `roc`, and run:
 
 [source,console]
 ----
 $ blueprint run bench-quick              # small corpus
 $ blueprint run bench                    # full comparison, with --allocations
 $ blueprint run bench -- --only csv      # extra arguments go to scripts/bench.py
-$ blueprint run test                     # scripts/all_tests.py
-$ blueprint run fuzz-smoke               # scripts/run_fuzz.py smoke
-$ blueprint shell                        # every toolchain on PATH
+$ blueprint shell bench                  # every toolchain on PATH
 $ blueprint update                       # refresh Blueprint.lock
 ----
 
 The first run downloads the toolchains; later runs start in a few seconds.
-Generated files go to `.blueprint/`, which is not committed.
+Generated files go to `.blueprint/`, which is not committed. Leave `ROC` unset
+when you run `blueprint`: Blueprint reads `ROC` to choose the compiler that
+evaluates `Blueprint.roc` itself.
 
-*Pinning.* Roc is pinned to exactly the nightly in `.roc-version`: roc-overlay
-publishes every nightly as its own package, and `Blueprint.roc` names it as the
-tool `rocpkgs.<nightly tag>`. `scripts/update_roc_nightly.py` rewrites that tag
-along with `.roc-version`, and a test fails if the two disagree. After a nightly
-update, run `blueprint update` so that `Blueprint.lock` records a roc-overlay
-revision that has the new nightly; until then a blueprint run fails with a
-missing `rocpkgs` attribute instead of using another compiler. The roc-overlay
-lock currently uses the publisher's immutable metadata update commit
-`702616cd012fd57dc16d64ba4cf7b7021614a0ae`, which includes the October 15
-nightly. The overlay's default branch may lag published compiler releases;
-verify that an updated lock actually contains the requested nightly. The shell sets `ROC=roc`, so the scripts use the pinned
-compiler rather than the older one the blueprint CLI runs on.
+*Compiler.* Roc is not pinned. The tasks use `roc` from your `PATH`, which in CI
+is the latest nightly, so a benchmark run measures the compiler the package is
+tested with that day. The report names it.
 
 Go, Rust and Python follow the nixpkgs revision in `Blueprint.lock`. Library
 versions are pinned by `Cargo.lock`, `go.sum` and `requirements.txt` as above,
-so a blueprint run and a plain run measure the same library code. The Python
+so a Blueprint run and a plain run measure the same library code. The Python
 packages go into one virtual environment per interpreter, under
 `~/.cache/roc-parser/`.
 
-*Provenance.* The blueprint shell sets `ROC_PARSER_BLUEPRINT=1`. The report's
-`Environment` line, and `metadata.environment` in `results.json`, then record
-the SHA-256 of `Blueprint.lock` and the nixpkgs and roc-overlay revisions it
-pins; outside blueprint they say `outside blueprint`. Both record the path of
-each toolchain, so you can check that it came from `/nix/store`.
+*Provenance.* The `bench` and `bench-quick` tasks pass `--blueprint` to
+`scripts/bench.py`. The report's `Environment` line, and
+`metadata.environment` in `results.json`, then record the SHA-256 of
+`Blueprint.lock` and the nixpkgs revision it pins; a run without the flag says
+`outside blueprint`. Both record the path of each toolchain, so you can check
+that it came from `/nix/store`.
 
-*CI.* The benchmark workflow described above installs Nix with
-`cachix/install-nix-action`, caches the store with `magic-nix-cache-action`,
-and runs `blueprint run bench-quick` for pull requests and `blueprint run bench`
-weekly on `ubuntu-latest`, so CI and a Mac use the same pins.
+*CI.* The benchmark workflow installs Blueprint and Nix with roc-automation's
+`setup-blueprint` action and runs `blueprint run bench`, so CI and a Mac use the
+same pins.
 
 Without Nix, install the toolchains yourself and run `scripts/bench.py` as
 shown in <<benchmarks>>; the report records every version either way.
