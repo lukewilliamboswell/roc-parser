@@ -55,9 +55,26 @@ AsciiDocPreprocess :: [].{
 	## Select an include's lines exactly as `include::` expansion does, since
 	## both call `include_lines`.
 	select_include : Str, Str -> IncludeSelection
-	select_include = |source, options| {
-		selected = include_lines(source, options, OtherFile)
+	select_include = |source, options| select_include_with(source, options, 0)
+
+	## `select_include` in a document whose `tabsize` is `tab_size`.
+	select_include_with : Str, Str, U64 -> IncludeSelection
+	select_include_with = |source, options, tab_size| {
+		selected = include_lines(source, options, OtherFile, if (tab_size > max_columns) max_columns else tab_size)
 		{ text: join(selected.lines.map(|line| line.text), "\n"), lines: selected.lines.map(|line| line.line), problems: selected.problems }
+	}
+
+	## A verbatim block's content as Asciidoctor's `build_block` adjusts it:
+	## with the block's own `indent` attribute, `adjust_indentation` with
+	## that width; without one, only tab expansion. `tabsize` is the block's
+	## `tabsize` attribute or, when the block has none, the document's.
+	verbatim_source : Str, Try(Str, [Missing]), Str -> Str
+	verbatim_source = |source, indent, tabsize| {
+		size = parse_tab_size(tabsize)
+		match indent {
+			Ok(width) => Str.join_with(adjust_indentation(source.split_on("\n"), reindent(width), size), "\n")
+			Err(_) => if (size > 0 and source.contains("\t")) Str.join_with(source.split_on("\n").map(|line| expand_tabs(line, size)), "\n") else source
+		}
 	}
 }
 
@@ -231,7 +248,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, file, con
 							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
 						}
 						included = include_file(resolved)
-						selected = include_lines(entry.source, parsed.body, included)
+						selected = include_lines(entry.source, parsed.body, included, parse_tab_size(AsciiDocSource.lookup($attributes, "tabsize") ?? ""))
 						previous_offset = AsciiDocSource.lookup($attributes, "leveloffset")
 						include_offset = option(parsed.body, "leveloffset")
 						base_offset = I64.from_str((previous_offset ?? "0").replace_each("+", "")) ?? 0
@@ -958,16 +975,19 @@ include_file = |path| if ([".adoc", ".asciidoc", ".asc", ".ad", ".txt"].any(|ext
 
 ## Select and indent an include's lines. `include::` expansion and
 ## `select_include` both call this, so the two can never disagree. Selection
-## stays as lenient as Asciidoctor's; problems only describe it.
-include_lines : Str, Str, IncludeFile -> IncludeLines
-include_lines = |source, options, file| {
+## stays as lenient as Asciidoctor's; problems only describe it. With
+## `indent=`, tabs expand first when `tab_size`, the document's `tabsize`,
+## is positive. Asciidoctor ignores a `tabsize=` in the include's own
+## attribute list.
+include_lines : Str, Str, IncludeFile, U64 -> IncludeLines
+include_lines = |source, options, file, tab_size| {
 	selected = select_lines(source, options)
 	read = match file {
 		AsciiDocFile => selected.lines.map(|line| { ..line, text: trim_line_end(line.text) })
 		OtherFile => selected.lines
 	}
 	lines = match include_option(options, "indent") {
-		Ok(width) => indent_lines(read, selector_integer(width))
+		Ok(width) => indent_lines(read, reindent(width), tab_size)
 		Err(Absent) => read
 	}
 	{ lines, problems: if (lines.is_empty()) add_problem(selected.problems, EmptySelection) else selected.problems }
@@ -1284,30 +1304,115 @@ bounded_selector_number = |integer, cap| {
 	if (number > cap) cap else number
 }
 
-## Asciidoctor's `Parser.adjust_indentation!` in a document that doesn't set
-## `tabsize`, so tabs are never expanded. A negative width changes nothing.
-## Otherwise the block indent is the fewest leading whitespace characters on
-## any nonempty line, counting a tab like a space, or none when some
-## nonempty line has none. Each nonempty line loses that many characters
-## and gains `width` spaces, while empty lines stay empty. A line of only
-## spaces or tabs is not empty, so it counts and gains the spaces too.
-indent_lines : List(SourceLine), IntegerValue -> List(SourceLine)
-indent_lines = |lines, width| {
-	if width.negative {
-		return lines
-	}
-	var $block = 18446744073709551615
+## `adjust_indentation` on an include's selected lines, keeping each line's
+## number and offset.
+indent_lines : List(SourceLine), Reindent, U64 -> List(SourceLine)
+indent_lines = |lines, width, tab_size| {
+	texts = adjust_indentation(lines.map(|line| line.text), width, tab_size)
+	var $result = []
+	var $index = 0
 	for line in lines {
-		if line.text != "" {
-			count = leading_whitespace(line.text)
-			if count < $block {
-				$block = count
+		$result = $result.append({ ..line, text: texts.get($index) ?? line.text })
+		$index = $index + 1
+	}
+	$result
+}
+
+## What `adjust_indentation` does with the block indent. `Keep` leaves the
+## leading whitespace, as a negative width does in Asciidoctor, and
+## `Reindent(width)` replaces it with `width` spaces.
+Reindent : [Keep, Reindent(U64)]
+
+## Asciidoctor bounds neither an indent width nor a tab size. This package
+## counts anything wider than 1024 columns as 1024.
+max_columns : U64
+max_columns = 1024
+
+## An `indent` value read like Ruby's `to_i`: empty or not a number is 0,
+## and a negative width keeps the indentation.
+reindent : Str -> Reindent
+reindent = |value| {
+	width = selector_integer(value)
+	if (width.negative) Keep else Reindent(bounded_columns(width))
+}
+
+## A `tabsize` value read like Ruby's `to_i`. Zero, a negative number, or
+## text that doesn't start with a number gives 0, which expands no tabs.
+parse_tab_size : Str -> U64
+parse_tab_size = |value| {
+	if value == "" {
+		return 0
+	}
+	size = selector_integer(value)
+	if (size.negative) 0 else bounded_columns(size)
+}
+
+bounded_columns : IntegerValue -> U64
+bounded_columns = |integer| {
+	number = U64.from_str(integer.digits) ?? max_columns
+	if (number > max_columns) max_columns else number
+}
+
+## Asciidoctor's `Parser.adjust_indentation!`. When `tab_size` is positive,
+## it first expands each tab to the next tab stop. Then, for
+## `Reindent(width)`, it finds the block indent: the fewest leading
+## whitespace characters on any nonempty line, counting a tab that is left
+## like a space, or none when some nonempty line has none. Each nonempty line
+## loses that many characters and gains `width` spaces, while empty lines
+## stay empty. A line of only spaces or tabs is not empty, so it counts and
+## gains the spaces too.
+adjust_indentation : List(Str), Reindent, U64 -> List(Str)
+adjust_indentation = |lines, width, tab_size| {
+	expanded = if (tab_size > 0 and lines.any(|line| line.contains("\t"))) lines.map(|line| expand_tabs(line, tab_size)) else lines
+	match width {
+		Keep => expanded
+		Reindent(columns) => {
+			var $block = 18446744073709551615
+			for line in expanded {
+				if line != "" {
+					count = leading_whitespace(line)
+					if count < $block {
+						$block = count
+					}
+				}
+			}
+			block = if ($block == 18446744073709551615) 0 else $block
+			if block == 0 and columns == 0 {
+				expanded
+			} else {
+				prefix = repeat(" ", columns)
+				expanded.map(|line| if (line == "") line else Str.concat(prefix, drop(line, block)))
 			}
 		}
 	}
-	block = if ($block == 18446744073709551615) 0 else $block
-	prefix = repeat(" ", U64.from_str(width.digits) ?? 0)
-	lines.map(|line| if (line.text == "") line else { ..line, text: Str.concat(prefix, drop(line.text, block)) })
+}
+
+## Replace each tab with the spaces that reach the next multiple of
+## `tab_size` columns. As in Asciidoctor, every character (code point)
+## before the tab is one column, whatever its display width.
+expand_tabs : Str, U64 -> Str
+expand_tabs = |line, tab_size| {
+	if !line.contains("\t") {
+		return line
+	}
+	var $output = []
+	var $column = 0
+	for byte in line.to_utf8() {
+		if byte == '\t' {
+			var $spaces = tab_size - $column % tab_size
+			$column = $column + $spaces
+			while $spaces > 0 {
+				$output = $output.append(' ')
+				$spaces = $spaces - 1
+			}
+		} else {
+			$output = $output.append(byte)
+			if byte < 128 or byte >= 192 {
+				$column = $column + 1
+			}
+		}
+	}
+	Str.from_utf8_lossy($output)
 }
 
 ## The leading characters Ruby's `lstrip` removes.
@@ -1403,8 +1508,8 @@ expect match AsciiDocPreprocess.run("include::dir/a.adoc[]", { includes: [{ path
 	_ => False
 }
 # Offsets stay internal; they locate errors in included lines.
-expect include_lines("one\ntwo\nthree\nfour\n", "lines=2..3", OtherFile).lines.map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
-expect include_lines("\u(FEFF)  one\r\n    two\r\n", "indent=0", OtherFile).lines.map(|line| (line.text, line.line, line.offset)) == [("one", 1, 3), ("  two", 2, 10)]
+expect include_lines("one\ntwo\nthree\nfour\n", "lines=2..3", OtherFile, 0).lines.map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
+expect include_lines("\u(FEFF)  one\r\n    two\r\n", "indent=0", OtherFile, 0).lines.map(|line| (line.text, line.line, line.offset)) == [("one", 1, 3), ("  two", 2, 10)]
 expect match AsciiDocPreprocess.run("include::a.adoc[leveloffset=+1]", { includes: [{ path: "a.adoc", source: "== Child" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "== Child" and result.lines.any(|line| line.attributes.contains({ name: "leveloffset", value: "1" }))
 	_ => False

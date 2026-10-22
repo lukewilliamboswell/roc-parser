@@ -37,6 +37,14 @@ options = {
 }
 ----
 
+Listing, source, literal and verse blocks and paragraphs honour `tabsize` as
+Asciidoctor does. With the block's own `tabsize` attribute or, when it has
+none, the document's, each tab expands to the next multiple of that many
+columns, counting each character as one column. Zero, a negative number or
+text that isn't a number expands nothing. An indented literal paragraph and
+passthrough content keep their tabs. A block's `indent` applies after the
+expansion.
+
 Block forms include sections, paragraphs, lists and description lists, listing
 and literal blocks, compound blocks, admonitions, tables, media and block
 metadata. Rendering handles inline formatting, macros, substitutions, cross
@@ -105,8 +113,11 @@ any problem, and a lenient caller ignores them. The API reference for
 isn't AsciiDoc, such as code for a listing. When `include::` expands an
 AsciiDoc file, it first removes trailing whitespace from each line, as
 Asciidoctor does, so a line of only spaces doesn't count toward `indent=`.
-Neither expands tabs. Asciidoctor does so only in a document that sets
-`tabsize`, which this package doesn't support.
+
+In a document that sets `tabsize`, `indent=` first expands tabs. For such a
+document, call `select_include_with(source, attributes, { tabsize: 4 })`
+with the document's tab size. Asciidoctor ignores a `tabsize=` in the
+directive's own attribute list, and so do both functions.
 
 This example selects from a small Rust file:
 

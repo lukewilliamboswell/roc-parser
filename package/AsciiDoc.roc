@@ -192,15 +192,34 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	## toward `indent=`, and the selected lines keep it wherever they land in
 	## the document. When `include::` expansion includes an AsciiDoc file
 	## (`.adoc`, `.asciidoc`, `.asc`, `.ad` or `.txt`), it first removes
-	## trailing whitespace from each line, as Asciidoctor does. Tabs are never
-	## expanded. Asciidoctor expands them before `indent=` only in a document
-	## that sets `tabsize`, which this package does not support.
+	## trailing whitespace from each line, as Asciidoctor does. Tabs are not
+	## expanded, as in a document that doesn't set `tabsize`. For a document
+	## that does, use [AsciiDoc.select_include_with].
 	##
 	## ```roc
 	## expect AsciiDoc.select_include("\t// tag::x[]\n\tfn = |x|\n\n\t\tx\n\t// end::x[]\n", "tag=x,indent=0") == { text: "fn = |x|\n\n\tx", lines: [2, 3, 4], problems: [] }
 	## ```
 	select_include : Str, Str -> IncludeSelection
 	select_include = AsciiDocPreprocess.select_include
+
+	## The document an include directive is in, as far as selection depends
+	## on it. `tabsize` is the document's `tabsize` attribute where the
+	## directive appears, read as a number; 0, the default, expands no tabs.
+	## Asciidoctor reads it from the document only, never from the
+	## directive's own attribute list.
+	IncludeContext := { tabsize : U64 ?? 0 }
+
+	## [AsciiDoc.select_include] for a directive in a document described by
+	## `context`. With `tabsize` set, `indent=` first expands each tab to the
+	## next multiple of `tabsize` columns, counting each character before it
+	## as one column, as `include::` expansion does in such a document. A tab
+	## size above 1024 counts as 1024.
+	##
+	## ```roc
+	## expect AsciiDoc.select_include_with("\t\tx\n\t  y", "indent=0", { tabsize: 4 }).text == "  x\ny"
+	## ```
+	select_include_with : Str, Str, IncludeContext -> IncludeSelection
+	select_include_with = |source, attribute_list, context| AsciiDocPreprocess.select_include_with(source, attribute_list, context.tabsize)
 }
 
 import Literal as Quotation
@@ -568,6 +587,9 @@ parse_blocks_cached = |lines, parent, cache| {
 			$id = ""
 		}
 		else {
+			# A verbatim block reads `indent` and `tabsize` from its own
+			# attributes before the document's are merged in.
+			block_attrs = $attrs
 			# List.concat promises unique output, even when its left
 			# input is empty. Reuse the immutable snapshot directly.
 			$attrs = if ($attrs.is_empty()) line.attrs else $attrs.concat(line.attrs)
@@ -618,14 +640,15 @@ parse_blocks_cached = |lines, parent, cache| {
 					child = if (compound) parse_blocks_cached(body.lines, 99, $attribute_cache) else { blocks: [], rest: [], cache: $attribute_cache }
 					$attribute_cache = child.cache
 					children = child.blocks
+					content = if (verbatim_context(context)) verbatim_content(body.source, block_attrs, line.attrs, line_indexed.view) else body.source
 					if kind == "listing" and plain_attrs($attrs) and $title == "" and id == "" {
-						$blocks = $blocks.append(Listing(normalize_indent_cached(body.source, $attrs, indexed.view)))
+						$blocks = $blocks.append(Listing(content))
 					}
 					else if kind == "literal" and plain_attrs($attrs) and $title == "" and id == "" {
-						$blocks = $blocks.append(Literal(normalize_indent_cached(body.source, $attrs, indexed.view)))
+						$blocks = $blocks.append(Literal(content))
 					}
 					else {
-						$blocks = $blocks.append(rich(context, if (compound) "" else normalize_indent_cached(body.source, $attrs, indexed.view), $title, style, id, $attrs, children, 0))
+						$blocks = $blocks.append(rich(context, if (compound) "" else content, $title, style, id, $attrs, children, 0))
 					}
 				}
 			} else if (text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 39)) or text == "---" or text == "***" {
@@ -678,17 +701,19 @@ parse_blocks_cached = |lines, parent, cache| {
 				if $admonition != "" {
 					$blocks = $blocks.append(rich("admonition", if (source.starts_with("${$admonition}: ")) drop_text(source, $admonition.to_utf8().len() + 2).trim_start() else source, $title, $admonition, id, $attrs, [], 0))
 				}
+				# A verbatim style decides even when the first line is indented,
+				# and its lines are adjusted as a delimited block's are.
+				else if style == "verse" or style == "literal" {
+					$blocks = $blocks.append(rich(style, verbatim_content(source, block_attrs, line.attrs, line_indexed.view), $title, style, id, $attrs, [], 0))
+				}
+				else if style == "source" or style == "listing" {
+					$blocks = $blocks.append(rich("listing", verbatim_content(source, block_attrs, line.attrs, line_indexed.view), $title, style, id, $attrs, [], 0))
+				}
 				else if text.starts_with(" ") or text.starts_with("\t") {
 					$blocks = $blocks.append(Literal(dedent(source)))
 				}
-				else if ["quote", "verse", "sidebar", "example", "pass"].contains(style) {
+				else if ["quote", "sidebar", "example", "pass"].contains(style) {
 					$blocks = $blocks.append(rich(style, source, $title, style, id, $attrs, [], 0))
-				}
-				else if style == "literal" {
-					$blocks = $blocks.append(rich("literal", source, $title, style, id, $attrs, [], 0))
-				}
-				else if style == "source" or style == "listing" {
-					$blocks = $blocks.append(rich("listing", source, $title, style, id, $attrs, [], 0))
 				}
 				else if plain_attrs($attrs) and $title == "" and id == "" and !source.contains("{") {
 					$blocks = $blocks.append(Paragraph(source))
@@ -1080,29 +1105,20 @@ dedent = |source| {
 	Str.join_with(lines.map(|line| drop_text(line, if ($n == 999999) 0 else $n)), "\n")
 }
 
-normalize_indent : Str, AsciiDoc.Attributes -> Str
-normalize_indent = |source, attrs| normalize_indent_value(source, attribute(attrs, "indent"))
+# Asciidoctor's verbatim content model: listing (and source), literal and
+# verse. Passthrough, stem and table content is never adjusted.
+verbatim_context : Str -> Bool
+verbatim_context = |context| context == "listing" or context == "literal" or context == "verse"
 
-normalize_indent_cached : Str, AsciiDoc.Attributes, AsciiDocAttributes.View -> Str
-normalize_indent_cached = |source, attrs, view| normalize_indent_value(source, cached_attribute(attrs, view, "indent"))
-
-normalize_indent_value : Str, Str -> Str
-normalize_indent_value = |source, indent| {
-	match U64.from_str(indent) {
-		Ok(n) => Str.join_with(dedent(source).split_on("\n").map(|line| "${spaces(n)}${line}"), "\n")
-		Err(_) => source
+# A verbatim block reads `indent` only from its own attributes, and
+# `tabsize` from its own or, when it has none, the document's.
+verbatim_content : Str, AsciiDoc.Attributes, AsciiDoc.Attributes, AsciiDocAttributes.View -> Str
+verbatim_content = |source, block_attrs, document_attrs, document_view| {
+	tabsize = match lookup_attribute(block_attrs, "tabsize") {
+		Ok(value) => value
+		Err(_) => cached_attribute(document_attrs, document_view, "tabsize")
 	}
-}
-
-spaces : U64 -> Str
-spaces = |n| {
-	var $out = ""
-	var $i = 0.U64
-	while $i < n and $i < 1024 {
-		$out = "${$out} "
-		$i = $i + 1
-	}
-	$out
+	AsciiDocPreprocess.verbatim_source(source, lookup_attribute(block_attrs, "indent"), tabsize)
 }
 
 render_horizontal : AsciiDoc.Block -> Str
@@ -2860,7 +2876,7 @@ expect AsciiDoc.select_include("    one\n      two\n    three", "indent=2") == {
 expect AsciiDoc.select_include("one\n    two\n      three\nfour", "lines=2..3,indent=1") == { text: " two\n   three", lines: [2, 3], problems: [] }
 expect AsciiDoc.select_include("  // tag::a[]\n    alpha\n  // end::a[]\n  // tag::b[]\n      beta\n  // end::b[]", "tags=*,indent=0") == { text: "alpha\n  beta", lines: [2, 5], problems: [] }
 
-# Leading tabs count like spaces, one character each, and are never expanded.
+# Leading tabs count like spaces, one character each, without a `tabsize`.
 expect AsciiDoc.select_include("\tone\n\t\ttwo", "indent=0") == { text: "one\n\ttwo", lines: [1, 2], problems: [] }
 expect AsciiDoc.select_include("\tone\n    two", "indent=0") == { text: "one\n   two", lines: [1, 2], problems: [] }
 expect AsciiDoc.select_include("\t  one\n  \ttwo", "indent=0") == { text: "one\ntwo", lines: [1, 2], problems: [] }
@@ -2978,3 +2994,68 @@ expect render_included("include::part.rb[]", "part.rb", "ifdef::nope[]\nhidden\n
 # delimiter or attribute entry is recognized.
 expect AsciiDoc.parse_str("----  \n:kept: yes\n----") == Ok({ title: "", blocks: [Listing(":kept: yes")] })
 expect AsciiDoc.parse_str(":on:\nifdef::on[]  \nshown\nendif::[]  \nifdef::on[body  ]").map_ok(AsciiDoc.render) == Ok("<div class=\"paragraph\">\n<p>shown\nbody</p>\n</div>")
+
+# `tabsize`: in a document that sets it, `indent=` first expands each tab to
+# the next tab stop, counting every character as one column.
+expect AsciiDoc.select_include_with("\t\tx\n\t  y", "indent=0", { tabsize: 4 }) == { text: "  x\ny", lines: [1, 2], problems: [] }
+expect AsciiDoc.select_include_with("\té\tx\n中文\ty", "indent=0", { tabsize: 4 }).text == "    é   x\n中文  y"
+# A negative width expands tabs and keeps the indentation; without
+# `indent=`, tabs are left for the block to expand.
+expect AsciiDoc.select_include_with("\ta\tb", "indent=-1", { tabsize: 2 }).text == "  a b"
+expect AsciiDoc.select_include_with("\tx", "lines=1", { tabsize: 4 }).text == "\tx"
+# Asciidoctor ignores `tabsize=` in the directive's own attribute list.
+expect AsciiDoc.select_include("\t\tx\n\t  y", "indent=0,tabsize=4").text == "x\n y"
+expect AsciiDoc.select_include_with("\t\tx\n\t  y", "indent=0", {}) == AsciiDoc.select_include("\t\tx\n\t  y", "indent=0")
+
+# `include::` expansion reads the document's `tabsize` like Ruby's `to_i`,
+# and selects exactly what `select_include_with` returns for that size.
+expect {
+	part = "\t// tag::a[]\n\tfn = |x|\n\t\n\t\tx\ty\n\t// end::a[]\n  é\tz\n"
+	options = { ..AsciiDocPreprocess.defaults, expand_includes: True, includes: [{ path: "part.roc", source: part }] }
+	sizes = [{ value: "4", size: 4 }, { value: "2", size: 2 }, { value: "3x", size: 3 }, { value: "0", size: 0 }, { value: "-3", size: 0 }, { value: "abc", size: 0 }]
+	["tag=a,indent=0", "indent=2", "indent=-1", "indent=0,tabsize=8", ""].all(
+		|attributes| {
+			sizes.all(
+				|tabsize| {
+					selection = AsciiDoc.select_include_with(part, attributes, { tabsize: tabsize.size })
+					match AsciiDocPreprocess.run(":tabsize: ${tabsize.value}\n\n----\ninclude::part.roc[${attributes}]\n----", options) {
+						Ok(result) => {
+							included = result.lines.keep_if(|line| line.path == "part.roc")
+							included.map(|line| line.line) == selection.lines and Str.join_with(included.map(|line| line.text), "\n") == selection.text
+						}
+						Err(_) => False
+					}
+				},
+			)
+		},
+	)
+}
+expect render_included(":tabsize: 3x\n\n----\ninclude::part.roc[indent=0]\n----", "part.roc", "\t// tag::a[]\n\tfn = |x|\n\t\n\t\tx\ty\n\t// end::a[]\n  é\tz\n").contains("<pre> // tag::a[]\n fn = |x|\n \n    x  y\n // end::a[]\né   z</pre>")
+expect match AsciiDoc.parse_with("----\ninclude::part.rb[indent=0]\n----", { ..AsciiDoc.default_options, expand_includes: True, attributes: [{ name: "tabsize", value: "4" }], includes: [{ path: "part.rb", source: "\t\tx\n\t  y" }] }) {
+	Ok(document) => AsciiDoc.render(document).contains("<pre>  x\ny</pre>")
+	Err(_) => False
+}
+
+# Verbatim blocks expand tabs from their own `tabsize`, or the document's
+# when they have none. Zero, a negative number or text disables it.
+render_source : Str -> Str
+render_source = |source| AsciiDoc.parse_str(source).map_ok(AsciiDoc.render) ?? "error"
+
+expect render_source(":tabsize: 4\n\n----\n\tx\na\tb\nabcd\te\n\t\tf\tg\n----").contains("<pre>    x\na   b\nabcd    e\n        f   g</pre>")
+expect render_source(":tabsize: 4\n\n----\né\tx\n中文\ty\n----").contains("<pre>é   x\n中文  y</pre>")
+expect render_source(":tabsize: 4\n\n[listing,tabsize=2]\n----\n\tx\n----").contains("<pre>  x</pre>")
+expect ["0", "", "-2", "abc"].all(|value| render_source(":tabsize: 4\n\n[listing,tabsize=${value}]\n----\n\tx\n----").contains("<pre>\tx</pre>"))
+expect render_source("[listing,tabsize=1_0]\n----\na\tb\n----").contains("<pre>a         b</pre>")
+expect render_source(":tabsize: 4\n:tabsize!:\n\n----\n\tx\n----").contains("<pre>\tx</pre>")
+# Literal, verse and source blocks and paragraphs expand tabs. An indented
+# literal paragraph and passthrough content keep them.
+expect {
+	html = render_source(":tabsize: 4\n\n....\n\tx\n....\n\n[verse]\n____\n\tx\n____\n\n[source]\n\tx\n\n  a\tb\n\n++++\n\tz\n++++")
+	html.contains("<pre>    x</pre>") and html.contains("<pre class=\"content\">    x</pre>") and html.contains("<code>    x</code>") and html.contains("<pre>a\tb</pre>") and html.ends_with("\n\tz")
+}
+# A block's `indent` applies after tab expansion, reads its width like
+# Ruby's `to_i`, and leaves empty lines empty.
+expect render_source(":tabsize: 4\n\n[listing,indent=0]\n----\n\t\tx\n\t  y\n----").contains("<pre>  x\ny</pre>")
+expect render_source("[listing,indent=2]\n----\nx\n\ny\n----").contains("<pre>  x\n\n  y</pre>")
+expect render_source("[listing,indent=abc]\n----\n  x\n    y\n----\n\n[listing,indent=-1]\n----\n  x\n    y\n----").contains("<pre>x\n  y</pre>\n</div>\n</div>\n<div class=\"listingblock\">\n<div class=\"content\">\n<pre>  x\n    y</pre>")
+expect render_source("[source,indent=0]\n  x\n    y").contains("<code>x\n  y</code>")

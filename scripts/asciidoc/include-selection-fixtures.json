@@ -55,7 +55,11 @@
         "include-selection-other-block-whitespace",
         "include-selection-other-delimiter-whitespace",
         "include-selection-other-directives-text",
-        "include-selection-document-trailing-whitespace"
+        "include-selection-document-trailing-whitespace",
+        "include-selection-tabsize-indent",
+        "include-selection-tabsize-own-attribute",
+        "include-selection-tabsize-negative-indent",
+        "include-selection-tabsize-columns"
       ],
       "scope": "full"
     }
@@ -1155,6 +1159,102 @@
       },
       "references": [
         "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-tabsize-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": ":tabsize: 4\n\n----\ninclude::part.rb[indent=0]\n----",
+      "includes": {
+        "part.rb": "\t\tx\n\t  y\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>  x\ny</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-tabsize-own-attribute",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.rb[indent=0,tabsize=4]\n----",
+      "includes": {
+        "part.rb": "\t\tx\n\t  y\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x\n y</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-tabsize-negative-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": ":tabsize: 2\n\n++++\ninclude::part.rb[indent=-1]\ninclude::part.rb[]\n++++",
+      "includes": {
+        "part.rb": "\ta\tb\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "pass"
+        ],
+        "html_contains": [
+          "  a b\n\ta\tb"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-tabsize-columns",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": ":tabsize: 3x\n\n++++\ninclude::part.rb[indent=0]\n++++",
+      "includes": {
+        "part.rb": "\té\tx\n\t中文\ty\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "pass"
+        ],
+        "html_contains": [
+          "é  x\n中文 y"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
       ]
     }
   ]
