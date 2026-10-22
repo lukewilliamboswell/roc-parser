@@ -45,6 +45,20 @@ AsciiDocPreprocess :: [].{
 	## escaped references for the inline substitution pass.
 	substitute : Str, List(Attribute) -> Str
 	substitute = |source, attributes| expand(source, attributes, 0)
+
+	## Published as `AsciiDoc.IncludeProblem`, which documents each variant.
+	IncludeProblem : [MissingTag(Str), UnclosedTag(Str), UnmatchedEnd(Str), InvalidLines(Str), EmptySelection]
+
+	## Published as `AsciiDoc.IncludeSelection`.
+	IncludeSelection : { text : Str, lines : List(U64), problems : List(IncludeProblem) }
+
+	## Select an include's lines exactly as `include::` expansion does, since
+	## both call `include_lines`.
+	select_include : Str, Str -> IncludeSelection
+	select_include = |source, options| {
+		selected = include_lines(source, options)
+		{ text: join(selected.lines.map(|line| line.text), "\n"), lines: selected.lines.map(|line| line.line), problems: selected.problems }
+	}
 }
 
 source_namespace : Str, AsciiDocPreprocess.Options -> Str
@@ -203,15 +217,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						if invalid_path(target) or resolved == "" or resolved == ".." or resolved.starts_with("../") {
 							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
 						}
-						selected = select_lines(entry.source, parsed.body)
-						prepared = adjust_lines(selected.map(|line| { text: line.text, line: line.line, offset: line.offset, path: resolved, attributes: AsciiDocAttributes.from_store($attributes) }), parsed.body)
+						selected = include_lines(entry.source, parsed.body)
 						previous_offset = AsciiDocSource.lookup($attributes, "leveloffset")
 						include_offset = option(parsed.body, "leveloffset")
 						base_offset = I64.from_str((previous_offset ?? "0").replace_each("+", "")) ?? 0
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
 						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
 						nested_attrs = if (include_offset == "") $attributes else AsciiDocSource.set_parsed($attributes, "leveloffset", effective_offset.to_str())
-						nested = process_lines(prepared.map(|line| { text: line.text, line: line.line, offset: line.offset }), resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+						nested = process_lines(selected.lines, resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
 						$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
 							Ok(previous) => AsciiDocSource.set_parsed(nested.attributes, "leveloffset", previous)
@@ -897,43 +910,125 @@ option_value = |source| {
 	source
 }
 
-select_lines : Str, Str -> List(SourceLine)
+IncludeLines : { lines : List(SourceLine), problems : List(AsciiDocPreprocess.IncludeProblem) }
+
+## Select and indent an include's lines. `include::` expansion and
+## `select_include` both call this, so the two can never disagree. Selection
+## stays as lenient as Asciidoctor's; problems only describe it.
+include_lines : Str, Str -> IncludeLines
+include_lines = |source, options| {
+	selected = select_lines(source, options)
+	lines = indent_lines(selected.lines, options)
+	{ lines, problems: if (lines.is_empty()) add_problem(selected.problems, EmptySelection) else selected.problems }
+}
+
+## `lines=` takes precedence over the tag selectors, and a nonempty `tag=`
+## over `tags=`. Without either, every line is selected and tag markers are
+## ordinary text.
+select_lines : Str, Str -> IncludeLines
 select_lines = |source, options| {
 	selector = option(options, "lines")
 	tag = option(options, "tag")
 	tags = if (tag == "") option(options, "tags") else tag
-	if tags == "" or selector != "" {
-		return if (selector == "") source_lines(source) else select_line_numbers(source_lines(source), selector)
+	if selector != "" {
+		return select_line_numbers(source_lines(source), selector)
 	}
+	if tags == "" {
+		return { lines: source_lines(source), problems: [] }
+	}
+	select_tagged(source_lines(source), tags)
+}
+
+## Each problem is reported once, in the order it was found.
+add_problem : List(AsciiDocPreprocess.IncludeProblem), AsciiDocPreprocess.IncludeProblem -> List(AsciiDocPreprocess.IncludeProblem)
+add_problem = |problems, problem| if (problems.contains(problem)) problems else problems.append(problem)
+
+TagMarker : [Open(Str), Close(Str), Text]
+
+## A line containing `tag::` and `[]` opens the tag named between them;
+## otherwise a line containing `end::` and `[]` closes one.
+tag_marker : Str -> TagMarker
+tag_marker = |line| {
+	if line.contains("tag::") and line.contains("[]") {
+		Open(split_first(split_first(line, "tag::").after, "[]").before)
+	} else if line.contains("end::") and line.contains("[]") {
+		Close(split_first(split_first(line, "end::").after, "[]").before)
+	} else {
+		Text
+	}
+}
+
+## Select the lines outside tag markers whose active tags the selector
+## accepts. Asciidoctor tracks the markers of the tags a selector names, and
+## of every tag when it uses `*` or `!*`; those markers are checked here.
+## Markers of other tags still change the active tags, without problems.
+## Checked tags keep Asciidoctor's nesting order, but a re-opened tag stays
+## a single region that its first end closes, as selection treats it.
+select_tagged : List(SourceLine), Str -> IncludeLines
+select_tagged = |lines, selector| {
+	entries = selectors(selector)
+	positives = entries.keep_if(|name| !name.starts_with("!"))
+	wanted = positives.keep_if(|name| name != "*" and name != "**")
+	every_tag = entries.any(|name| name == "*" or name == "!*")
+	named = entries.map(|name| if (name.starts_with("!")) drop(name, 1) else name).keep_if(|name| name != "*" and name != "**")
 	var $output = []
 	var $active_tags = []
-	for entry in source_lines(source) {
-		line = entry.text
-		if line.contains("tag::") and line.contains("[]") {
-			name = split_first(split_first(line, "tag::").after, "[]").before
-			$active_tags = $active_tags.append(name)
-		} else if line.contains("end::") and line.contains("[]") {
-			name = split_first(split_first(line, "end::").after, "[]").before
-			$active_tags = $active_tags.keep_if(|active| active != name)
-		} else {
-			selected_line = True
-			selected_tag = select_tag(tags, $active_tags)
-			if selected_line and selected_tag {
-				$output = $output.append(entry)
+	var $open = []
+	var $found = []
+	var $problems = []
+	for entry in lines {
+		match tag_marker(entry.text) {
+			Open(name) => {
+				$active_tags = $active_tags.append(name)
+				if wanted.contains(name) and !$found.contains(name) {
+					$found = $found.append(name)
+				}
+				if every_tag or named.contains(name) {
+					if $open.contains(name) {
+						$problems = add_problem($problems, UnclosedTag(name))
+					} else {
+						$open = $open.append(name)
+					}
+				}
+			}
+			Close(name) => {
+				$active_tags = $active_tags.keep_if(|active| active != name)
+				if every_tag or named.contains(name) {
+					if $open.last() != Ok(name) {
+						$problems = add_problem($problems, UnmatchedEnd(name))
+					}
+					$open = $open.keep_if(|open| open != name)
+				}
+			}
+			Text => {
+				if select_tag(entries, positives, $active_tags) {
+					$output = $output.append(entry)
+				}
 			}
 		}
 	}
-	$output
+	for name in $open {
+		$problems = add_problem($problems, UnclosedTag(name))
+	}
+	for name in wanted {
+		if !$found.contains(name) {
+			$problems = add_problem($problems, MissingTag(name))
+		}
+	}
+	{ lines: $output, problems: $problems }
 }
 
 ## The native reader sorts finite selected line numbers before an infinity
 ## marker. A nonpositive first number blocks the cursor; an open range starts
 ## selecting remaining lines only after every explicit finite number is read.
-select_line_numbers : List(SourceLine), Str -> List(SourceLine)
+## Every entry is still read after a block, so each invalid one is reported.
+select_line_numbers : List(SourceLine), Str -> IncludeLines
 select_line_numbers = |lines, selector| {
 	var $ranges = []
 	var $infinite = False
 	var $largest = 0
+	var $blocked = False
+	var $problems = []
 	cap = lines.len() + 1
 	for range in selectors(selector) {
 		pieces = split_first(range, "..")
@@ -942,23 +1037,51 @@ select_line_numbers = |lines, selector| {
 		open = range.contains("..") and (pieces.after == "" or last.negative)
 		if !range.contains("..") or open or integer_order(first, last) <= 0 {
 			if first.negative or first.digits == "0" {
-				return []
+				$blocked = True
+				$problems = add_problem($problems, InvalidLines(trim(range)))
+			} else {
+				start = bounded_selector_number(first, cap)
+				end = if (range.contains("..") and !open) bounded_selector_number(last, cap) else start
+				$ranges = $ranges.append({ start, end })
+				if end > $largest {
+					$largest = end
+				}
+				if open {
+					$infinite = True
+				}
+				if start > lines.len() or !clean_line_selector(range) {
+					$problems = add_problem($problems, InvalidLines(trim(range)))
+				}
 			}
-			start = bounded_selector_number(first, cap)
-			end = if (range.contains("..") and !open) bounded_selector_number(last, cap) else start
-			$ranges = $ranges.append({ start, end })
-			if end > $largest {
-				$largest = end
-			}
-			if open {
-				$infinite = True
-			}
+		} else {
+			$problems = add_problem($problems, InvalidLines(trim(range)))
 		}
 	}
-	if $ranges.is_empty() {
-		return lines
+	if $blocked {
+		return { lines: [], problems: $problems }
 	}
-	lines.keep_if(|line| ($infinite and line.line > $largest) or $ranges.any(|range| line.line >= range.start and line.line <= range.end))
+	if $ranges.is_empty() {
+		return { lines, problems: $problems }
+	}
+	{ lines: lines.keep_if(|line| ($infinite and line.line > $largest) or $ranges.any(|range| line.line >= range.start and line.line <= range.end)), problems: $problems }
+}
+
+## Asciidoctor documents `N`, `N..M`, `N..` and `N..-1`. Any other entry is
+## read leniently, like Ruby's `to_i`, and reported.
+clean_line_selector : Str -> Bool
+clean_line_selector = |range| {
+	if !range.contains("..") {
+		return decimal_digits(trim(range))
+	}
+	pieces = split_first(range, "..")
+	end = trim(pieces.after)
+	decimal_digits(trim(pieces.before)) and (end == "" or end == "-1" or decimal_digits(end))
+}
+
+decimal_digits : Str -> Bool
+decimal_digits = |source| {
+	bytes = source.to_utf8()
+	!bytes.is_empty() and bytes.all(|byte| byte >= '0' and byte <= '9')
 }
 
 selector_integer : Str -> IntegerValue
@@ -975,30 +1098,31 @@ bounded_selector_number = |integer, cap| {
 	if (number > cap) cap else number
 }
 
-adjust_lines : List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 }), Str -> List({ text : Str, attributes : attrs, path : Str, line : U64, offset : U64 })
-adjust_lines = |lines, options| {
+## `indent=N` removes the shortest run of leading spaces among the nonblank
+## lines, then prefixes every line with N spaces.
+indent_lines : List(SourceLine), Str -> List(SourceLine)
+indent_lines = |lines, options| {
 	indent_text = option(options, "indent")
-	indent = U64.from_str(indent_text) ?? 0
+	if indent_text == "" {
+		return lines
+	}
 	var $minimum = 18446744073709551615
-	if indent_text != "" {
-		for line in lines {
-			if trim(line.text) != "" {
-				count = leading_spaces(line.text)
-				if count < $minimum {
-					$minimum = count
-				}
+	for line in lines {
+		if trim(line.text) != "" {
+			count = leading_spaces(line.text)
+			if count < $minimum {
+				$minimum = count
 			}
 		}
 	}
+	if $minimum == 18446744073709551615 {
+		return lines
+	}
+	prefix = repeat(" ", U64.from_str(indent_text) ?? 0)
 	lines.map(
 		|line| {
-			var $text = line.text
-			if indent_text != "" and $minimum != 18446744073709551615 {
-				count = leading_spaces($text)
-				remove = if (count < $minimum) count else $minimum
-				$text = Str.concat(repeat(" ", indent), drop($text, remove))
-			}
-			{ text: $text, attributes: line.attributes, path: line.path, line: line.line, offset: line.offset }
+			count = leading_spaces(line.text)
+			{ text: Str.concat(prefix, drop(line.text, if (count < $minimum) count else $minimum)), line: line.line, offset: line.offset }
 		},
 	)
 }
@@ -1094,10 +1218,9 @@ expect match AsciiDocPreprocess.run("include::dir/a.adoc[]", { includes: [{ path
 	Ok(result) => result.source == "nested" and (result.lines.first() ?? { text: "", attributes: [], path: "", line: 0, offset: 0 }).path == "dir/b.adoc"
 	_ => False
 }
-expect select_lines("one\ntwo\nthree\nfour\n", "lines=2..3").map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
-expect select_lines("one\ntwo\nthree\nfour\n", "lines=1;3..-1").map(|line| line.text) == ["one", "three", "four"]
-expect select_lines("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=x").map(|line| line.text) == ["inside"]
-expect select_lines("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tags=**;!x").map(|line| line.text) == ["before", "after"]
+# Offsets stay internal; they locate errors in included lines.
+expect include_lines("one\ntwo\nthree\nfour\n", "lines=2..3").lines.map(|line| (line.text, line.line, line.offset)) == [("two", 2, 4), ("three", 3, 8)]
+expect include_lines("\u(FEFF)  one\r\n    two\r\n", "indent=0").lines.map(|line| (line.text, line.line, line.offset)) == [("one", 1, 3), ("  two", 2, 10)]
 expect match AsciiDocPreprocess.run("include::a.adoc[leveloffset=+1]", { includes: [{ path: "a.adoc", source: "== Child" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "== Child" and result.lines.any(|line| line.attributes.contains({ name: "leveloffset", value: "1" }))
 	_ => False
@@ -1113,13 +1236,9 @@ expect match AsciiDocPreprocess.run("first\n\ninclude::missing.adoc[]", { includ
 	_ => False
 }
 
-select_tag : Str, List(Str) -> Bool
-select_tag = |selector, active_tags| {
-	if selector == "" {
-		return True
-	}
-	entries = selectors(selector)
-	positives = entries.keep_if(|name| !name.starts_with("!"))
+## Takes the selector's entries and those not negated with `!`.
+select_tag : List(Str), List(Str), List(Str) -> Bool
+select_tag = |entries, positives, active_tags| {
 	included = positives.is_empty() or positives.any(|name| if (name == "**") True else if (name == "*") !active_tags.is_empty() else active_tags.contains(name))
 	excluded = entries.any(|name| if (!name.starts_with("!")) False else if (name == "!**") True else if (name == "!*") !active_tags.is_empty() else active_tags.contains(drop(name, 1)))
 	included and !excluded
@@ -1202,12 +1321,6 @@ expect match AsciiDocPreprocess.run("ifdef::backend-html5[html]\n{docyear}", Asc
 	_ => False
 }
 
-expect select_lines("// tag::x[]\ninside\n// end::x[]", "").map(|line| line.text) == ["// tag::x[]", "inside", "// end::x[]"]
-expect select_lines("// tag::x[]\ninside\n// end::x[]", "lines=1..2,tag=x").map(|line| line.text) == ["// tag::x[]", "inside"]
-expect select_lines("before\n// tag::x[]\nx\n// tag::y[]\nxy\n// end::y[]\n// end::x[]\nafter", "tags=x;!y").map(|line| line.text) == ["x"]
-expect select_lines("before\n// tag::x[]\nx\n// end::x[]\nafter", "tags=**").map(|line| line.text) == ["before", "x", "after"]
-expect select_lines("before\n// tag::x[]\nx\n// end::x[]\nafter", "tags=!*").map(|line| line.text) == ["before", "after"]
-
 expect match AsciiDocPreprocess.run("----\ninclude::part.adoc[]\n----\n\n{item}", { includes: [{ path: "part.adoc", source: ":item: hidden\n{item}" }], attributes: [], max_depth: 16, expand_includes: True }) {
 	Ok(result) => result.source == "----\n:item: hidden\n{item}\n----\n\n{item}" and !result.attributes.any(|a| a.name == "item")
 	_ => False
@@ -1278,8 +1391,6 @@ selectors = |source| {
 	}
 	$parts
 }
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1..2,4\"").map(|line| line.text) == ["one", "two", "four"]
-expect select_lines("// tag::x[]\nx\n// end::x[]\n// tag::y[]\ny\n// end::y[]", "tags=\"x,y\"").map(|line| line.text) == ["x", "y"]
 
 expect match AsciiDocPreprocess.run(":imagesdinclude::missing.adoc[]\nir: assets\n\nimage::cat.png[]", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.source == ":imagesdinclude::missing.adoc[]\nir: assets\n\nimage::cat.png[]"
@@ -1379,7 +1490,6 @@ expect {
 	}
 }
 
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"\"1..2,4\"").map(|line| line.text) == ["one", "two", "three", "four"]
 expect match AsciiDocPreprocess.run("----\n\\ifdef::x[]\n\\include::pé----", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.source == "----\nifdef::x[]\n\\include::pé----"
 	_ => False
@@ -1405,12 +1515,6 @@ expect !evaluate("1 ==")
 
 expect evaluate("\" == \"")
 
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1..2,part.adoc[lines=\"1..2,4\"").is_empty()
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"2..,4\"").map(|line| line.text) == ["two", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=4..2").map(|line| line.text) == ["one", "two", "three", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=\"1,4,\"").map(|line| line.text) == ["one", "four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=4abc").map(|line| line.text) == ["four"]
-expect select_lines("one\ntwo\nthree\nfour", "lines=999999999999999999999999999999999999999..999999999999999999999999999999999999998").len() == 4
 expect match AsciiDocPreprocess.run(":name: one\n\n{name}\n\n:name: two\n\n{name}\n\n:name: {name}-three\n\n{name}", AsciiDocPreprocess.defaults) {
 	Ok(result) => result.lines.keep_if(|line| line.text == "{name}").map(|line| AsciiDocPreprocess.substitute(line.text, line.attributes)) == ["one", "two", "two-three"] and result.attributes.any(|attr| attr.name == "__revision:name" and attr.value == "3")
 	_ => False
