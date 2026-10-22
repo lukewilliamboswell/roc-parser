@@ -2792,6 +2792,7 @@ expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter"
 expect AsciiDoc.select_include("before\n// tag::x[]\ninside\n// end::x[]\nafter", "tag=missing") == { text: "", lines: [], problems: [MissingTag("missing"), EmptySelection] }
 expect AsciiDoc.select_include("// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [] }
 expect AsciiDoc.select_include("// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc", "tags=*") == { text: "a\nb\nc", lines: [2, 4, 6], problems: [UnmatchedEnd("x"), UnclosedTag("y")] }
+expect AsciiDoc.select_include("// tag::x[]\na\n// tag::x[]\nb\n// end::x[]", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [UnclosedTag("x")] }
 expect AsciiDoc.select_include("// tag::x[]\na\n// tag::x[]\nb\n// end::x[]\nc\n// end::x[]\nd", "tag=x") == { text: "a\nb", lines: [2, 4], problems: [UnclosedTag("x"), UnmatchedEnd("x")] }
 expect AsciiDoc.select_include("a\n// end::x[]\nb", "tag=x") == { text: "", lines: [], problems: [UnmatchedEnd("x"), MissingTag("x"), EmptySelection] }
 expect AsciiDoc.select_include("// tag::y[]\na\n// tag::x[]\nb\n// end::y[]\nc\n// end::x[]\nd", "tags=x;y") == { text: "a\nb\nc", lines: [2, 4, 6], problems: [UnmatchedEnd("y")] }
