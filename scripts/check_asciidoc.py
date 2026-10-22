@@ -39,7 +39,7 @@ def commands(roc: str, generated: int, mutations: int, seed: int, performance: b
          "--seed", str(seed), "--corpus", "docs"],
     ]
     if performance:
-        steps.append([sys.executable, "scripts/check_asciidoc_performance.py", "--smoke",
+        steps.append([sys.executable, "scripts/check_asciidoc_performance.py", "--smoke", "--roc", roc,
                       "--output", str(WORK / "performance-smoke")])
     return steps
 
