@@ -30,7 +30,24 @@
         "include-selection-out-of-range-lines",
         "include-selection-out-of-range-open-lines",
         "include-selection-missing-start-lines",
-        "include-selection-empty-region"
+        "include-selection-empty-region",
+        "include-selection-reopened-nested-tag",
+        "include-selection-nested-negation",
+        "include-selection-wildcard-ignored-end",
+        "include-selection-named-crossed-end",
+        "include-selection-empty-lines",
+        "include-selection-empty-tag",
+        "include-selection-empty-indent",
+        "include-selection-none-unsets",
+        "include-selection-single-tag-semicolon",
+        "include-selection-marker-pattern",
+        "include-selection-marker-tab-after",
+        "include-selection-tab-indent",
+        "include-selection-mixed-indent",
+        "include-selection-blank-indent",
+        "include-selection-whitespace-line-indent",
+        "include-selection-asciidoc-whitespace-line-indent",
+        "include-selection-empty-source"
       ],
       "scope": "full"
     }
@@ -335,7 +352,6 @@
       "id": "include-selection-wildcard-crossed-end",
       "category": "include-selection",
       "features": [
-        "UnmatchedEnd",
         "UnclosedTag"
       ],
       "source": "----\ninclude::part.adoc[tags=*]\n----",
@@ -507,6 +523,433 @@
       },
       "references": [
         "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-reopened-nested-tag",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tag=x]\n----",
+      "includes": {
+        "part.roc": "// tag::x[]\na\n// tag::x[]\nb\n// end::x[]\nc\n// end::x[]\nd"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a\nb\nc</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-nested-negation",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tags=x;!y]\n----",
+      "includes": {
+        "part.roc": "// tag::y[]\ny1\n// tag::x[]\nx1\n// end::x[]\ny2\n// end::y[]\nout"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>x1</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-wildcard-ignored-end",
+      "category": "include-selection",
+      "features": [
+        "UnclosedTag"
+      ],
+      "source": "----\ninclude::part.roc[tags=*]\n----",
+      "includes": {
+        "part.roc": "// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc\n// end::y[]\nd"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a\nb\nc\nd</pre>"
+        ],
+        "warning_severities": [
+          "WARN"
+        ],
+        "warnings_contains": [
+          "detected unclosed tag 'x'"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-named-crossed-end",
+      "category": "include-selection",
+      "features": [
+        "UnmatchedEnd"
+      ],
+      "source": "----\ninclude::part.roc[tags=x;*]\n----",
+      "includes": {
+        "part.roc": "// tag::x[]\na\n// tag::y[]\nb\n// end::x[]\nc\n// end::y[]\nd"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a\nb\nc</pre>"
+        ],
+        "warning_severities": [
+          "WARN"
+        ],
+        "warnings_contains": [
+          "mismatched end tag (expected 'y' but found 'x')"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-empty-lines",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[lines=,tag=x]\n----",
+      "includes": {
+        "part.roc": "a\n// tag::x[]\nb\n// end::x[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a\n// tag::x[]\nb\n// end::x[]</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "include-selection-empty-tag",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tag=,tags=x]\n----",
+      "includes": {
+        "part.roc": "a\n// tag::x[]\nb\n// end::x[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>a\n// tag::x[]\nb\n// end::x[]</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-empty-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[indent=]\n----",
+      "includes": {
+        "part.roc": "  one\n    two"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\n  two</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-none-unsets",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[lines=None,tag=x]\n----",
+      "includes": {
+        "part.roc": "a\n// tag::x[]\nb\n// end::x[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>b</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-single-tag-semicolon",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tag=a;b]\n----",
+      "includes": {
+        "part.roc": "// tag::a[]\nA\n// end::a[]\n// tag::b[]\nB\n// end::b[]\n// tag::a;b[]\nAB\n// end::a;b[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>AB</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-marker-pattern",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tag=x]\n----",
+      "includes": {
+        "part.roc": "a\nx = \"tag::x[]\"\n// my_tag::x[]\nb\n// tag::x[] trailing\nc\ns = \"end::x[]\"\n// end::x[]\nd"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>c\ns = \"end::x[]\"</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-marker-tab-after",
+      "category": "include-selection",
+      "features": [
+        "UnmatchedEnd",
+        "MissingTag",
+        "EmptySelection"
+      ],
+      "source": "----\ninclude::part.roc[tag=x]\n----",
+      "includes": {
+        "part.roc": "// tag::x[]\t\na\n// end::x[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre></pre>"
+        ],
+        "warning_severities": [
+          "WARN",
+          "WARN"
+        ],
+        "warnings_contains": [
+          "unexpected end tag 'x'",
+          "tag 'x' not found"
+        ]
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-tagged-regions/"
+      ]
+    },
+    {
+      "id": "include-selection-tab-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[tag=x,indent=0]\n----",
+      "includes": {
+        "part.roc": "\t// tag::x[]\n\tfn = |x|\n\n\t\tx\n\t// end::x[]"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>fn = |x|\n\n\tx</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-mixed-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[indent=0]\n----",
+      "includes": {
+        "part.roc": "\tone\n    two"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\n   two</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-blank-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[indent=2]\n----",
+      "includes": {
+        "part.roc": "  one\n\n    two"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>  one\n\n    two</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-whitespace-line-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.roc[indent=0]\n----",
+      "includes": {
+        "part.roc": "    one\n  \n    two"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>  one\n\n  two</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-asciidoc-whitespace-line-indent",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::part.adoc[indent=0]\n----",
+      "includes": {
+        "part.adoc": "    one\n  \n    two"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>one\n\ntwo</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-with-indent/"
+      ]
+    },
+    {
+      "id": "include-selection-empty-source",
+      "category": "include-selection",
+      "features": [
+        "EmptySelection"
+      ],
+      "source": "a\ninclude::empty.adoc[]\nb",
+      "includes": {
+        "empty.adoc": ""
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>a\nb</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
       ]
     }
   ]
