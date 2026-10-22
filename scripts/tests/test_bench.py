@@ -147,23 +147,26 @@ class Reports(unittest.TestCase):
         self.assertEqual(bench.describe_environment(env), "outside blueprint")
 
     def test_environment_inside_blueprint_records_lock(self):
-        lock = {"nodes": {"root": {"inputs": {"nixpkgs": "nixpkgs", "overlay0": "overlay0"}},
-                          "nixpkgs": {"locked": {"owner": "NixOS", "repo": "nixpkgs", "rev": "b4fd65b198c5aa"}},
-                          "overlay0": {"locked": {"owner": "roc-lang", "repo": "roc-overlay", "rev": "76befb4facc5"}}},
-                "root": "root", "version": 7}
+        # The `sources` section of a Blueprint 0.6 lock.
+        lock = ('(\n\t(sources ((\n\t\t(digest "sha256:2283")\n\t\t(name "nix")\n\t\t(provider "nix")\n'
+                '\t\t(ref "github:NixOS/nixpkgs/nixos-unstable")\n\t\t(rev "02c087f3fe673c9e")))))\n')
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "Blueprint.lock"
-            path.write_text(json.dumps(lock))
-            env = bench.environment({"ROC_PARSER_BLUEPRINT": "1", "PATH": ""}, path)
-            broken = bench.environment({"ROC_PARSER_BLUEPRINT": "1", "PATH": ""}, Path(tmp) / "missing.lock")
+            path.write_text(lock)
+            env = bench.environment({"PATH": ""}, path, blueprint=True)
+            broken = bench.environment({"PATH": ""}, Path(tmp) / "missing.lock", blueprint=True)
         self.assertTrue(env["blueprint"])
-        self.assertEqual(env["lock"]["inputs"]["overlay0"], "roc-lang/roc-overlay@76befb4facc5")
+        self.assertEqual(env["lock"]["inputs"]["nix"], "github:NixOS/nixpkgs/nixos-unstable@02c087f3fe673c9e")
         self.assertEqual(len(env["lock"]["sha256"]), 64)
         text = bench.describe_environment(env)
         self.assertIn("Blueprint.lock sha256", text)
-        self.assertIn("overlay0 76befb4facc5", text)
+        self.assertIn("nix 02c087f3fe67", text)
         self.assertIn("error", broken["lock"])
         self.assertIn("unreadable", bench.describe_environment(broken))
+
+    def test_environment_reads_the_repository_lock(self):
+        env = bench.environment({"PATH": ""}, blueprint=True)
+        self.assertIn("nix", env["lock"]["inputs"], env["lock"])
 
     def test_corpus_only_writes_manifest_with_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
