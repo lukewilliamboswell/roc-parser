@@ -87,26 +87,39 @@ Context : { definition_allowed : Bool, opaque : Str, header : Bool, lint_comment
 State : { lines : List(AsciiDocPreprocess.ScopedLine), attributes : AsciiDocSource.Store, context : Context, unexpanded_includes : List(AsciiDocPreprocess.Error) }
 
 process : Str, Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64 -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
-process = |source, path, attributes, options, stack, depth| process_lines(source_lines(source), path, attributes, options, stack, depth, { definition_allowed: True, opaque: "", lint_comment: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
+process = |source, path, attributes, options, stack, depth| process_lines(split_lines(source, AsciiDocFile), path, attributes, options, stack, depth, AsciiDocFile, { definition_allowed: True, opaque: "", lint_comment: "", header: source.starts_with("= ") or source.starts_with("﻿= ") })
 
 SourceLine : { text : Str, line : U64, offset : U64 }
 
+## The lines of an included file before selection, as Asciidoctor reads
+## them: only a CR that ends a line is removed.
 source_lines : Str -> List(SourceLine)
-source_lines = |source| {
+source_lines = |source| split_lines(source, OtherFile)
+
+## Asciidoctor removes trailing whitespace from each line of AsciiDoc source
+## as it reads it, before it recognizes any directive or block. It keeps
+## trailing whitespace in an included file that isn't AsciiDoc.
+split_lines : Str, IncludeFile -> List(SourceLine)
+split_lines = |source, file| {
 	var $number = 0
 	var $offset = 0
 	var $lines = []
 	for raw in source.split_on("\n") {
 		$number = $number + 1
 		bom = $number == 1 and raw.starts_with("﻿")
-		$lines = $lines.append({ text: remove_cr(if (bom) drop(raw, 3) else raw), line: $number, offset: $offset + (if (bom) 3 else 0) })
+		text = if (bom) drop(raw, 3) else raw
+		$lines = $lines.append({ text: if (file == AsciiDocFile) trim_line_end(text) else remove_cr(text), line: $number, offset: $offset + (if (bom) 3 else 0) })
 		$offset = $offset + raw.to_utf8().len() + 1
 	}
 	if (source.ends_with("\n")) $lines.drop_last(1) else $lines
 }
 
-process_lines : List(SourceLine), Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
-process_lines = |input_lines, path, attributes, options, stack, depth, context| {
+## Asciidoctor processes preprocessor directives only in AsciiDoc source. In
+## an included file that isn't AsciiDoc, `ifdef::`, `include::` and the
+## other directives, escaped or not, are ordinary text.
+process_lines : List(SourceLine), Str, AsciiDocSource.Store, AsciiDocPreprocess.Options, List(Str), U64, IncludeFile, Context -> Try(State, [PreprocessError(AsciiDocPreprocess.Error)])
+process_lines = |input_lines, path, attributes, options, stack, depth, file, context| {
+	directives = file == AsciiDocFile
 	var $attributes = attributes
 	var $snapshot_ready = False
 	var $snapshot_attrs = AsciiDocAttributes.flat([])
@@ -137,14 +150,14 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				$lint_comment = text
 			}
 		}
-		if text.starts_with("endif::") and complete_directive(text) {
+		if directives and text.starts_with("endif::") and complete_directive(text) {
 			closing = directive(drop(text, 7))
 			target = lower(closing.target)
 			opened = $conditions.last() ?? { enabled: False, target: "" }
 			if closing.body == "" and !$conditions.is_empty() and (target == "" or target == opened.target) {
 				$conditions = $conditions.drop_last(1)
 			}
-		} else if (text.starts_with("ifdef::") or text.starts_with("ifndef::")) and complete_directive(text) {
+		} else if directives and (text.starts_with("ifdef::") or text.starts_with("ifndef::")) and complete_directive(text) {
 			negative = text.starts_with("ifndef::")
 			body = drop(text, if (negative) 8 else 7)
 			parts = directive(body)
@@ -154,7 +167,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				$conditions = $conditions.append({ enabled: active and enabled, target: lower(parts.target) })
 			} else if parts.target != "" and active and enabled {
 				if $opaque == "" and (!is_definition(parts.body) or $definition_allowed) {
-					nested = process_lines([{ text: parts.body, line: number, offset }], path, $attributes, options, stack, depth, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+					nested = process_lines([{ text: trim_line_end(parts.body), line: number, offset }], path, $attributes, options, stack, depth, AsciiDocFile, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
 					$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 					$attributes = nested.attributes
 					$snapshot_ready = False
@@ -170,10 +183,10 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
 						$snapshot_ready = True
 					}
-					$lines = $lines.append({ text: parts.body, attributes: $snapshot_attrs, path, line: number, offset })
+					$lines = $lines.append({ text: trim_line_end(parts.body), attributes: $snapshot_attrs, path, line: number, offset })
 				}
 			}
-		} else if text.starts_with("ifeval::") and complete_directive(text) {
+		} else if directives and text.starts_with("ifeval::") and complete_directive(text) {
 			parsed = directive(drop(text, 8))
 			expression = parsed.body
 			if parsed.target == "" and ["==", "!=", "<=", ">=", "<", ">"].any(|operator| expression.contains(operator)) {
@@ -191,7 +204,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			}
 		} else if active {
 			if $continuation != "" {
-				$continuation = Str.concat($continuation, trim(text))
+				$continuation = Str.concat($continuation, trim_start(text))
 				if continues($continuation) {
 					$continuation = Str.concat(strip_continuation($continuation), " ")
 				} else {
@@ -204,7 +217,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 				} else {
 					$definition_text = text
 				}
-			} else if text.starts_with("include::") and complete_directive(text) {
+			} else if directives and text.starts_with("include::") and complete_directive(text) {
 				parsed = directive(expand_lookup(drop(text, 9), [], Stored($attributes), 0))
 				target = expand_lookup(parsed.target, [], Stored($attributes), 0)
 				resolved = resolve(path, target)
@@ -217,14 +230,15 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 						if invalid_path(target) or resolved == "" or resolved == ".." or resolved.starts_with("../") {
 							return Err(PreprocessError({ path, line: number, offset, message: "virtual includes prohibit absolute paths, URIs and escaping the root" }))
 						}
-						selected = include_lines(entry.source, parsed.body, include_file(resolved))
+						included = include_file(resolved)
+						selected = include_lines(entry.source, parsed.body, included)
 						previous_offset = AsciiDocSource.lookup($attributes, "leveloffset")
 						include_offset = option(parsed.body, "leveloffset")
 						base_offset = I64.from_str((previous_offset ?? "0").replace_each("+", "")) ?? 0
 						delta = I64.from_str(include_offset.replace_each("+", "")) ?? 0
 						effective_offset = if (include_offset.starts_with("+") or include_offset.starts_with("-")) base_offset + delta else delta
 						nested_attrs = if (include_offset == "") $attributes else AsciiDocSource.set_parsed($attributes, "leveloffset", effective_offset.to_str())
-						nested = process_lines(selected.lines, resolved, nested_attrs, options, stack.append(resolved), depth + 1, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
+						nested = process_lines(selected.lines, resolved, nested_attrs, options, stack.append(resolved), depth + 1, included, { definition_allowed: $definition_allowed, opaque: $opaque, header: $header, lint_comment: $lint_comment })?
 						$unexpanded_includes = $unexpanded_includes.concat(nested.unexpanded_includes)
 						$attributes = if (include_offset == "") nested.attributes else match previous_offset {
 							Ok(previous) => AsciiDocSource.set_parsed(nested.attributes, "leveloffset", previous)
@@ -257,7 +271,7 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 					}
 				}
 			} else {
-				emitted = if ((text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
+				emitted = if (directives and (text.starts_with("\\include::") or text.starts_with("\\ifdef::") or text.starts_with("\\ifndef::") or text.starts_with("\\endif::") or text.starts_with("\\ifeval::")) and complete_directive(drop(text, 1))) drop(text, 1) else text
 				if !$snapshot_ready {
 					$snapshot_attrs = AsciiDocAttributes.from_store($attributes)
 					$snapshot_ready = True
@@ -282,7 +296,10 @@ process_lines = |input_lines, path, attributes, options, stack, depth, context| 
 			parts = split_first(drop($definition_text, 1), ":")
 			unset = parts.before.starts_with("!") or parts.before.ends_with("!")
 			name = normalize_attribute_name(strip_suffix(if (parts.before.starts_with("!")) drop(parts.before, 1) else parts.before, "!"))
-			value = if (unset) "" else AsciiDocInline.attribute_value_source(trim(parts.after), $attributes)
+			# Like Asciidoctor's attribute entry pattern, keep any trailing
+			# whitespace, which only a line from an included file that isn't
+			# AsciiDoc still has.
+			value = if (unset) "" else AsciiDocInline.attribute_value_source(trim_start(parts.after), $attributes)
 			$attributes = AsciiDocSource.define_parsed($attributes, name, value, unset)
 		}
 
@@ -843,6 +860,16 @@ trim = |source| {
 	if ($start == 0 and $end == bytes.len()) source else Str.from_utf8_lossy(bytes.sublist({ start: $start, len: $end - $start }))
 }
 
+trim_start : Str -> Str
+trim_start = |source| {
+	bytes = source.to_utf8()
+	var $start = 0
+	while bytes.get($start) == Ok(' ') or bytes.get($start) == Ok('\t') {
+		$start = $start + 1
+	}
+	if ($start == 0) source else Str.from_utf8_lossy(bytes.drop_first($start))
+}
+
 lower : Str -> Str
 lower = |source| {
 	bytes = source.to_utf8()
@@ -919,9 +946,10 @@ option_value = |source| {
 
 IncludeLines : { lines : List(SourceLine), problems : List(AsciiDocPreprocess.IncludeProblem) }
 
-## How Asciidoctor reads an included file. It removes trailing whitespace
-## from each line of an AsciiDoc file before `indent=`, and keeps it in any
-## other file.
+## How Asciidoctor reads a source. In AsciiDoc, the document itself or an
+## included AsciiDoc file, it removes trailing whitespace from each line
+## (before `indent=`, for an include) and processes preprocessor
+## directives. In any other included file it does neither.
 IncludeFile : [AsciiDocFile, OtherFile]
 
 ## Asciidoctor reads a file as AsciiDoc when its name ends in one of these.

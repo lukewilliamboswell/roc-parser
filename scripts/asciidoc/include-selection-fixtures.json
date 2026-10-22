@@ -47,7 +47,15 @@
         "include-selection-blank-indent",
         "include-selection-whitespace-line-indent",
         "include-selection-asciidoc-whitespace-line-indent",
-        "include-selection-empty-source"
+        "include-selection-empty-source",
+        "include-selection-other-trailing-whitespace",
+        "include-selection-asciidoc-trailing-whitespace",
+        "include-selection-other-selected-trailing-whitespace",
+        "include-selection-other-paragraph-whitespace",
+        "include-selection-other-block-whitespace",
+        "include-selection-other-delimiter-whitespace",
+        "include-selection-other-directives-text",
+        "include-selection-document-trailing-whitespace"
       ],
       "scope": "full"
     }
@@ -950,6 +958,203 @@
       },
       "references": [
         "https://docs.asciidoctor.org/asciidoc/latest/directives/include-lines/"
+      ]
+    },
+    {
+      "id": "include-selection-other-trailing-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::out.expected[]\n----",
+      "includes": {
+        "out.expected": "name | note\nempty | \ntab\t\r\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>name | note\nempty | \ntab\t</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-asciidoc-trailing-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::out.adoc[]\n----",
+      "includes": {
+        "out.adoc": "name | note\nempty | \ntab\t\r\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>name | note\nempty |\ntab</pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-other-selected-trailing-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----\ninclude::out.expected[lines=2]\ninclude::code.rb[tag=x,indent=0]\n----",
+      "includes": {
+        "out.expected": "name | note\nempty | \n",
+        "code.rb": "  # tag::x[]\n  x = 1  \n  # end::x[]\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing"
+        ],
+        "html_contains": [
+          "<pre>empty | \nx = 1  </pre>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-other-paragraph-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "intro\ninclude::note.md[]\nend",
+      "includes": {
+        "note.md": "foo  \n   \nbar\t\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>intro\nfoo  \n   \nbar\t\nend</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-other-block-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "include::part.rb[]\n\nx{value}y",
+      "includes": {
+        "part.rb": "* item  \n\nNOTE: hi  \n\n:value: kept  \n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "ulist",
+          "list_item",
+          "admonition",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>item  </p>",
+          "<td class=\"content\">\nhi  \n</td>",
+          "<p>xkept  y</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-other-delimiter-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "include::part.rb[]",
+      "includes": {
+        "part.rb": "[source]  \n----  \ncode\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>[source]  \n----  \ncode</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-other-directives-text",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "include::part.rb[]",
+      "includes": {
+        "part.rb": "ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]\n"
+      },
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "paragraph"
+        ],
+        "html_contains": [
+          "<p>ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "include-selection-document-trailing-whitespace",
+      "category": "include-selection",
+      "features": [
+        "clean"
+      ],
+      "source": "----  \n:kept: yes\n----\n\n:on:\nifdef::on[]  \nshown\nendif::[]  ",
+      "support": "full",
+      "expect": {
+        "contexts": [
+          "listing",
+          "paragraph"
+        ],
+        "html_contains": [
+          "<pre>:kept: yes</pre>",
+          "<p>shown</p>"
+        ],
+        "warning_severities": []
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
       ]
     }
   ]

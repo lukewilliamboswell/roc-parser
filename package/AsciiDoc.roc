@@ -189,7 +189,8 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	##
 	## The source is read as Asciidoctor reads an included file that isn't
 	## AsciiDoc: trailing whitespace is kept, so a line of only spaces counts
-	## toward `indent=`. When `include::` expansion includes an AsciiDoc file
+	## toward `indent=`, and the selected lines keep it wherever they land in
+	## the document. When `include::` expansion includes an AsciiDoc file
 	## (`.adoc`, `.asciidoc`, `.asc`, `.ad` or `.txt`), it first removes
 	## trailing whitespace from each line, as Asciidoctor does. Tabs are never
 	## expanded. Asciidoctor expands them before `indent=` only in a document
@@ -233,7 +234,10 @@ parse_processed = |processed| {
 	structure = structural_lines(processed.lines)
 	validate_nesting(structure)?
 	validate_list_nesting(structure)?
-	source_lines = processed.lines.map(|line| { text: trim_end(line.text), attrs: line.attributes })
+	# The preprocessor already removed trailing whitespace from every line of
+	# AsciiDoc source. A line from an included file that isn't AsciiDoc keeps
+	# it, as in Asciidoctor, wherever the line lands.
+	source_lines = processed.lines.map(|line| { text: line.text, attrs: line.attributes })
 	var $lines = normalize_headings(source_lines)
 	var $header_ready = False
 	while !$header_ready and !$lines.is_empty() {
@@ -394,7 +398,7 @@ parse_metadata = |text| {
 list_marker : Str -> { kind : Str, level : U64, text : Str, term : Str }
 list_marker = |text| {
 	if text.starts_with(" ") or text.starts_with("\t") {
-		return list_marker(text.trim())
+		return list_marker(text.trim_start())
 	}
 	bytes = text.to_utf8()
 	var $n = 0
@@ -403,10 +407,10 @@ list_marker = |text| {
 		$n = $n + 1
 	}
 	if $n > 0 and (bytes.get($n) == Ok(' ') or bytes.get($n) == Ok(9)) {
-		return { kind: if (first == '*') "ulist" else "olist", level: $n, text: drop_text(text, $n + 1).trim(), term: "" }
+		return { kind: if (first == '*') "ulist" else "olist", level: $n, text: drop_text(text, $n + 1).trim_start(), term: "" }
 	}
 	if bytes.len() > 3 and ((first >= 65 and first <= 90) or (first >= 97 and first <= 122)) and bytes.get(1) == Ok(46) and bytes.get(2) == Ok(32) {
-		return { kind: "olist", level: 1, text: drop_text(text, 3).trim(), term: "" }
+		return { kind: "olist", level: 1, text: drop_text(text, 3).trim_start(), term: "" }
 	}
 	if text.starts_with("- ") {
 		return { kind: "ulist", level: 1, text: drop_text(text, 2), term: "" }
@@ -438,7 +442,7 @@ list_marker = |text| {
 				$count = $count + 1
 			}
 			if $count >= 2 and $count <= (if (first_colon == 59) 2 else 4) and ($colon + $count == bytes.len() or bytes.get($colon + $count) == Ok(32) or bytes.get($colon + $count) == Ok(9)) {
-				return { kind: "dlist", level: $count - 1, text: drop_text(text, $colon + $count).trim(), term: Str.from_utf8_lossy(bytes.take_first($colon)) }
+				return { kind: "dlist", level: $count - 1, text: drop_text(text, $colon + $count).trim_start(), term: Str.from_utf8_lossy(bytes.take_first($colon)) }
 			}
 		}
 		$colon = $colon + 1
@@ -672,7 +676,7 @@ parse_blocks_cached = |lines, parent, cache| {
 					$admonition = style
 				}
 				if $admonition != "" {
-					$blocks = $blocks.append(rich("admonition", if (source.starts_with("${$admonition}: ")) drop_text(source, $admonition.to_utf8().len() + 2).trim() else source, $title, $admonition, id, $attrs, [], 0))
+					$blocks = $blocks.append(rich("admonition", if (source.starts_with("${$admonition}: ")) drop_text(source, $admonition.to_utf8().len() + 2).trim_start() else source, $title, $admonition, id, $attrs, [], 0))
 				}
 				else if text.starts_with(" ") or text.starts_with("\t") {
 					$blocks = $blocks.append(Literal(dedent(source)))
@@ -740,7 +744,7 @@ parse_list = |lines, kind, level, ancestors| {
 					$children = $children.concat(continuation.blocks)
 					$rest = attached.rest
 				} else if kind == "dlist" and $body == "" and next.starts_with(" ") {
-					$body = next.trim()
+					$body = next.trim_start()
 					$rest = $rest.drop_first(1)
 				} else if next == "" {
 					while !$rest.is_empty() and ($rest.first() ?? empty_line).text == "" {
@@ -762,7 +766,7 @@ parse_list = |lines, kind, level, ancestors| {
 					$item_done = True
 				}
 				else {
-					$body = if ($body == "") next.trim() else "${$body}\n${next.trim()}"
+					$body = if ($body == "") next.trim_start() else "${$body}\n${next.trim_start()}"
 					$rest = $rest.drop_first(1)
 				}
 			}
@@ -1847,7 +1851,7 @@ validate_nesting : List(AsciiDocPreprocess.ScopedLine) -> Try({}, [InvalidAsciiD
 validate_nesting = |lines| {
 	var $stack = []
 	for line in lines {
-		text = trim_end(line.text)
+		text = line.text
 		top = $stack.last() ?? ""
 		kind = delimiter(text)
 		if top != "" and text == top {
@@ -1885,7 +1889,7 @@ validate_list_nesting = |lines| {
 	var $blank = False
 	var $continuation = False
 	for line in lines {
-		text = trim_end(line.text)
+		text = line.text
 		if $opaque != "" {
 			if text == $opaque {
 				$opaque = ""
@@ -1958,7 +1962,7 @@ structural_lines = |lines| {
 	var $paragraph = False
 	var $opaque = ""
 	for line in lines {
-		text = trim_end(line.text)
+		text = line.text
 		if $opaque != "" {
 			$result = $result.append(line)
 			if text == $opaque {
@@ -2945,3 +2949,32 @@ expect match AsciiDocPreprocess.run("a\ninclude::empty.adoc[]\nb", { ..AsciiDocP
 	Ok(result) => result.source == "a\nb"
 	Err(_) => False
 }
+
+# Trailing whitespace follows the source of each line, as in Asciidoctor:
+# AsciiDoc source loses it as it is read, while an included file that isn't
+# AsciiDoc keeps it wherever its lines land.
+render_included : Str, Str, Str -> Str
+render_included = |source, path, part| {
+	match AsciiDoc.parse_with(source, { ..AsciiDoc.default_options, expand_includes: True, includes: [{ path, source: part }] }) {
+		Ok(document) => AsciiDoc.render(document)
+		Err(_) => "error"
+	}
+}
+
+expect render_included("----\ninclude::out.expected[]\n----", "out.expected", "name | note\nempty | \ntab\t\r\n").contains("<pre>name | note\nempty | \ntab\t</pre>")
+expect render_included("----\ninclude::out.adoc[]\n----", "out.adoc", "name | note\nempty | \ntab\t\r\n").contains("<pre>name | note\nempty |\ntab</pre>")
+expect render_included("----\ninclude::code.rb[tag=x,indent=0]\n----", "code.rb", "  # tag::x[]\n  x = 1  \n  # end::x[]\n").contains("<pre>x = 1  </pre>")
+# A line of only spaces is not blank, so it does not end a paragraph.
+expect render_included("intro\ninclude::note.md[]\nend", "note.md", "foo  \n   \nbar\t\n") == "<div class=\"paragraph\">\n<p>intro\nfoo  \n   \nbar\t\nend</p>\n</div>"
+expect {
+	html = render_included("include::part.rb[]\n\nx{value}y", "part.rb", "* item  \n\nNOTE: hi  \n\n:value: kept  \n")
+	html.contains("<p>item  </p>") and html.contains("hi  \n</td>") and html.contains("<p>xkept  y</p>")
+}
+# A delimiter or block attribute line with trailing whitespace is text.
+expect render_included("include::part.rb[]", "part.rb", "[source]  \n----  \ncode\n") == "<div class=\"paragraph\">\n<p>[source]  \n----  \ncode</p>\n</div>"
+# Directives in an included file that isn't AsciiDoc are text.
+expect render_included("include::part.rb[]", "part.rb", "ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]\n") == "<div class=\"paragraph\">\n<p>ifdef::nope[]\nhidden\nendif::[]\ninclude::other.rb[]</p>\n</div>"
+# The document's own lines lose trailing whitespace before any directive,
+# delimiter or attribute entry is recognized.
+expect AsciiDoc.parse_str("----  \n:kept: yes\n----") == Ok({ title: "", blocks: [Listing(":kept: yes")] })
+expect AsciiDoc.parse_str(":on:\nifdef::on[]  \nshown\nendif::[]  \nifdef::on[body  ]").map_ok(AsciiDoc.render) == Ok("<div class=\"paragraph\">\n<p>shown\nbody</p>\n</div>")

@@ -9,8 +9,12 @@ endif::[]
 
 `AsciiDoc` parses an in-memory string into a document title and typed blocks,
 and renders embedded HTML. Paragraphs retain their inline source. Parsing
-normalizes line endings to LF and removes trailing ASCII whitespace from each
-line to match Asciidoctor's source representation.
+normalizes line endings to LF. Like Asciidoctor, it removes trailing ASCII
+whitespace from each line of AsciiDoc source: the document and any included
+`.adoc`, `.asciidoc`, `.asc`, `.ad` or `.txt` file. Lines from any other
+included file, such as code or program output, keep their trailing
+whitespace wherever they land, and directives in them, such as `ifdef::` or
+`include::`, are ordinary text.
 
 == Parsing and rendering
 
