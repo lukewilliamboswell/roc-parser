@@ -14,7 +14,7 @@ bundle's URL in place of `+{package-url}+` and the output of `roc version`
 under "Compilers". The notes start with the upgrade impact: every change your
 code or data might notice.
 
-* {src}/docs/releases/unreleased.md[Unreleased changes]: `JsonValue`, a lossless
+* {src}/docs/releases/unreleased.adoc[Unreleased changes]: `JsonValue`, a lossless
   JSON module with strict defaults, opt-in relaxations and checks, and a
   writer; compile-time quotations, checked imported constants, typed decoding,
   and configurable validation. Requires Roc `nightly-2026-10-21-5349569`.
