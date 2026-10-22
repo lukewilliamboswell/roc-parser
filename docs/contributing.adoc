@@ -240,7 +240,7 @@ separately, and put any warning before the step it applies to.
   module supports, and say why in the entry.
 * Update the doc comments, the manual and the release notes in
   `docs/releases/unreleased.adoc` when a public API or the accepted syntax
-  changes.
+  changes. Create that file if no change since the last release has.
 * Keep the change focused: no unrelated formatting or refactoring, and no
   generated files or local build output (`.roc-parser-tmp/`, `.roc-fuzz/`).
 * Sign your commits. The `main` branch requires verified signatures; see

@@ -63,10 +63,6 @@ latest nightly, and keeps one tracking issue: opened by the first failure,
 commented on by later ones, closed by the next pass. A failure means the
 published release needs a patch release that works with the new compiler.
 
-Issue reporting is off for now (`report-issue: false`). The latest final
-release, 2.0.0, was published before releases carried a canonical examples
-archive, so every run reports `setup-failed` until the next final release.
-After that release is published, set `report-issue: true` in `nightly.yml`.
 A run can be dispatched by hand with a `nightly-tag` and a `release-tag` to
 reproduce a past combination; such a run never opens or closes the issue.
 
@@ -100,9 +96,9 @@ roc-parser differs from the roc-automation model in these ways, on purpose:
 
 * *The automation is Python.* The model writes product-specific automation as
   Roc scripts run by a fixed `roc-stable` compiler. roc-parser keeps its
-  automation in Python under `scripts/`, about 80 scripts, including every
-  conformance oracle, which compares the package with a reference
-  implementation that is itself a Python, Ruby or Zig program. The Blueprint
+  automation in Python under `scripts/`, about 45 scripts and 35 test files.
+  They include every conformance oracle, which compares the package with a
+  reference implementation that is itself a Python, Ruby or Zig program. The Blueprint
   tasks run these scripts, so there is no `roc-stable` environment and no
   script carries a `roc` header field. `scripts/tests/test_repository_policy.py`
   keeps the automation in Python under `scripts/`, with no shell scripts.
@@ -114,8 +110,9 @@ roc-parser differs from the roc-automation model in these ways, on purpose:
   is resolved. Until then the release notes are linked from the manual rather
   than included in it.
 * *Unreleased notes have their own file.* Changes that no release has yet are
-  described in `docs/releases/unreleased.adoc`, which becomes
-  `docs/releases/<version>.adoc` in the pull request that prepares a release.
+  described in `docs/releases/unreleased.adoc`, which the first such change
+  creates and the pull request that prepares a release renames to
+  `docs/releases/<version>.adoc`.
 
 [#maintaining-release]
 == Release a new version
@@ -142,9 +139,8 @@ latest release and the working tree to compile with the latest nightly; when it
 cannot compare them, the release stops too. The one exception is a major
 release: no change can understate it, so it continues with a warning when
 `roc bump` cannot compile the latest release or read its API
-(https://github.com/roc-lang/roc/issues/12506[roc#12506]). 2.0.0 no longer
-compiles, so the next release is 3.0.0, which its changes to include
-selection require anyway.
+(https://github.com/roc-lang/roc/issues/12506[roc#12506]). 3.0.0 was released
+this way, because 2.0.0 no longer compiles.
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
