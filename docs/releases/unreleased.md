@@ -15,7 +15,7 @@ it does not collide with the builtin's `InvalidJson(Str)`.
 the lines Asciidoctor 2.0.23 selects, so rendered output changes for these
 inputs:
 
-- `indent=` removes shared leading tabs as well as spaces, so tab-indented
+- `indent=` removes leading tabs as well as spaces, so tab-indented
   code included with `indent=0` loses its outer tab. Each tab counts as one
   character. A line of only spaces in a file that isn't AsciiDoc counts
   toward the shared indent, and `indent=N` leaves empty lines empty.

@@ -179,10 +179,13 @@ AsciiDoc := { title : Str, blocks : List(AsciiDoc.Block) }.{
 	##   that starts a word and whose `[]` ends the line or is followed by a
 	##   space. NAME has no whitespace. So `"tag::x[]"` in a string literal and
 	##   `my_tag::x[]` are not markers.
-	## - `indent=N`: removes the leading spaces and tabs that every nonempty
-	##   selected line shares, counting a tab as one character, then indents
-	##   each nonempty line by N spaces. Empty lines stay empty. `indent=0` and
-	##   an empty `indent=` dedent, and a negative N changes nothing.
+	## - `indent=N`: finds the fewest leading whitespace characters on any
+	##   nonempty selected line, counting a tab like a space, and removes that
+	##   many from each nonempty line. It then indents each nonempty line by N
+	##   spaces, and leaves empty lines empty. So with `indent=0`, a line
+	##   indented by one tab and a line indented by two spaces each lose one
+	##   character. An empty `indent=` dedents like `indent=0`, and a negative
+	##   N changes nothing.
 	##
 	## The source is read as Asciidoctor reads an included file that isn't
 	## AsciiDoc: trailing whitespace is kept, so a line of only spaces counts
