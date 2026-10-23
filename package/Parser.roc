@@ -293,8 +293,8 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## Without `lazy`, you would ask the compiler to build an infinitely deep parser.
 	## (Resulting in a compiler error.)
 	##
-	## Mutually recursive top-level parser values currently require a lower-level
-	## workaround because of [roc-lang/roc#10098](https://github.com/roc-lang/roc/issues/10098).
+	## Top-level parsers that refer to each other need one `lazy` somewhere in
+	## the cycle, so that each value can be built before the other is used.
 	lazy : ({} -> Parser(input, a)) -> Parser(input, a)
 	lazy = |thunk| {
 		{ fun: |input| step(thunk({}), input) }

@@ -32,6 +32,24 @@ leaves = |t| {
 expect Utf8.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves) == Ok(3)
 # end::lazy[]
 
+# tag::mutual[]
+# A sum of two terms, where a term is a number or a bracketed sum: 1+(2+3)
+term : Parser(Utf8.Bytes, U64)
+term =
+	Utf8.digits
+		.alt(Parser.lazy(|_| expr).between(Utf8.codeunit('('), Utf8.codeunit(')')))
+
+expr : Parser(Utf8.Bytes, U64)
+expr =
+	Parser.const(|x| |y| x + y)
+		.keep(term)
+		.skip(Utf8.codeunit('+'))
+		.keep(term)
+
+expect Utf8.parse_str(expr, "1+(2+3)") == Ok(6)
+# end::mutual[]
+
 main! = |_args| {
-	Stdout.line!(Str.inspect(Utf8.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves)))
+	Stdout.line!(Str.inspect(Utf8.parse_str(tree, "[1,[2,3],[]]").map_ok(leaves)))?
+	Stdout.line!(Str.inspect(Utf8.parse_str(expr, "1+(2+3)")))
 }
