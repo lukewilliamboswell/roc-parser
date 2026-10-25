@@ -9,7 +9,9 @@
 The package is built and tested with `roc` ($ROC or `roc` on PATH), which in
 CI is the latest Roc nightly. Fuzz targets, probes and oracles are smoke-sized
 here; the scheduled fuzz.yml and bench.yml workflows run the long campaigns.
-Scratch files and evidence go under .roc-parser-tmp/.
+The examples against the working tree, the bundle and the archives are the
+shared release workflow's job (release.yml). Scratch files and evidence go
+under .roc-parser-tmp/.
 """
 
 from __future__ import annotations
@@ -44,13 +46,9 @@ SECTIONS = {
         ((PY, "-m", "unittest", "discover", "-s", "scripts/tests", "-p", "test_*.py"),),
     ),
     "package": Section(
-        "check, format and test the package, compile-time literals, roc docs, and a release dry run: "
-        "bundle, examples archive and its spec run against a loopback bundle",
+        "check, format and test the package, compile-time literals and roc docs; "
+        "the examples and the release rehearsal are the shared release workflow's job",
         ((PY, "scripts/all_tests.py"),),
-    ),
-    "examples": Section(
-        "the repository's examples against the working tree, compared with tests/examples.json",
-        ((PY, "scripts/test_bundle_examples.py", "--checkout"),),
     ),
     "docs": Section(
         "the manual's Roc examples and the API reference audit",

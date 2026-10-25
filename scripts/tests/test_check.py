@@ -26,7 +26,6 @@ class CheckTests(unittest.TestCase):
         for expected in (
             "-m unittest discover -s scripts/tests -p test_*.py",
             "scripts/all_tests.py",
-            "scripts/test_bundle_examples.py --checkout",
             "scripts/check_doc_examples.py",
             "scripts/build_docs.py --check",
             "scripts/run_fuzz.py smoke all",

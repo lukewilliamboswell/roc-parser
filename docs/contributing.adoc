@@ -91,7 +91,7 @@ it to choose the compiler that evaluates `Blueprint.roc` itself.
 |`scripts/` |Test, review, fuzz, documentation and release automation, all in Python
 |`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
 |`scripts/tests/` |Unit tests for the scripts, including the repository policy
-|`tests/examples.json` |What each example prints, checked on every pull request and shipped with each release's examples
+|`tests/spec.json` |What each example prints, checked on every pull request and shipped with each release's examples
 |`docs/` |This manual, in AsciiDoc
 |`docs/releases/` |Release notes, one AsciiDoc file per release
 |`Blueprint.roc`, `Blueprint.lock` |The development environments and the named tasks CI runs
@@ -137,8 +137,7 @@ stops at the first failure. Name sections to run only those, for example
 |===
 |Section |What it runs
 |`scripts` |The unit tests for the Python scripts, including the repository policy below
-|`package` |`scripts/all_tests.py`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
-|`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/examples.json`
+|`package` |`scripts/all_tests.py`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`
 |`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
 |`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
 |`conformance` |The fast conformance checks of every format against its reference implementation (<<conformance>>)
@@ -151,12 +150,19 @@ The longer runs are scheduled: `fuzz.yml` runs ten-minute campaigns of every
 fuzz target and every conformance review each night, and `bench.yml` runs the
 full benchmark comparison each week.
 
-When you change what an example prints, record the new output and review the
+The examples are not part of `check`: the `Release` workflow's dry run runs
+every example in `examples/` against the working tree and compares it with
+`tests/spec.json`, then bundles the package, builds the examples archive and
+runs the archived examples against that bundle. The utility it uses is
+roc-automation's `scripts/release_package.roc`, built with the `roc` on `PATH`;
+run it yourself to test the examples, or to record new output and review the
 diff:
 
 [source,bash]
 ----
-python3 scripts/test_bundle_examples.py --checkout --update
+roc build <roc-automation>/scripts/release_package.roc --output=release-package
+./release-package test-examples
+./release-package test-examples --update
 ----
 
 === Repository policy
@@ -215,12 +221,12 @@ python3 scripts/check_doc_examples.py
 ----
 
 The `docs` section of `blueprint run check` runs the examples and the API
-check. Every pull request also builds the manual, HTML and PDF, in the dry run
-of the `Release` workflow; download the `release-site` artifact of that run to
+check. Every pull request also builds the manual, HTML and PDF, in the
+`Documentation` workflow; download the `github-pages` artifact of that run to
 preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/8a6c914fa8400c9d1f5a3815ab06e06687d58148/docs/documentation.adoc[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/de2f58c1964c119ed12a80857b0a57448a9cb16d/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.

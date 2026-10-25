@@ -15,7 +15,9 @@
 # The package compiler is never pinned here. Every task that builds or tests
 # the package expects `roc` of the machine, which in CI is the nightly that
 # roc-lang/setup-roc installs. The automation under scripts/ is Python, so no
-# environment has a `roc-stable` (docs/maintaining.adoc).
+# environment has a `roc-stable` (docs/maintaining.adoc). Building, testing
+# and publishing a release is roc-automation's shared workflow, called by
+# .github/workflows/release.yml; it runs no task here.
 #
 # Zig 0.17.0 builds the compiler's own parser as the RocSyntax oracle. It is
 # downloaded and checked against Blueprint.lock, so `check` needs no Nix. Only
@@ -50,8 +52,6 @@ config = [
 	Environment("oracles", [Extend("package"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# The manual builds in Docker (.github/docs.Dockerfile).
 	Environment("docs", [Extend("package"), Expect(["docker"])]),
-	Environment("release", [Extend("package"), Expect(["gh"])]),
-	Environment("python", [Expect(["python3"])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
@@ -66,15 +66,7 @@ config = [
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
 	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
-	# Release artifacts. `release-build` makes every file of a release and
-	# `release-test` tests those exact files; the others make one each.
-	Task("bundle", [Use("package"), Run(["python3", "scripts/bundle.py"])]),
-	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
-	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
-	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),
-	Task("release-validate", [Use("release"), Run(["python3", "scripts/release_helpers.py", "validate"])]),
-	Task("release-build", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "build"])]),
-	Task("release-test", [Use("package"), Run(["python3", "scripts/release_helpers.py", "test"])]),
-	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),
-	Task("combine-attestations", [Use("python"), Run(["python3", "scripts/release_security_assets.py", "combine-attestations"])]),
+	# The documentation site and its release assets: the manual (HTML and PDF)
+	# and the API reference, laid out as GitHub Pages serves them.
+	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs"])]),
 ]
