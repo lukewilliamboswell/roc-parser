@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@93ca242217b1b7590554b9a12b9ac3bbfbf8bcbe
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
       - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
         with:
           version: nightly-new-compiler
@@ -136,7 +136,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@93ca242217b1b7590554b9a12b9ac3bbfbf8bcbe
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
       - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
         with:
           version: nightly-new-compiler
@@ -166,7 +166,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@93ca242217b1b7590554b9a12b9ac3bbfbf8bcbe
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
         with:
           cache: 'true'
           cache-workload: oracles
@@ -205,7 +205,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@93ca242217b1b7590554b9a12b9ac3bbfbf8bcbe
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
         with:
           cache: 'true'
           cache-workload: oracles
