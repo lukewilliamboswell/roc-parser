@@ -1,296 +1,37 @@
 name: Release
 
-# A maintainer dispatches a release from the default branch with its version.
-# Every pull request runs the same validation, build and tests as a dry run,
-# with the version 0.0.1-dry-run and the notes of the highest version under
-# docs/releases/, and publishes nothing. The jobs that run repository code
-# can only read; the jobs that can write run none. See docs/maintaining.adoc.
+# Every pull request builds and tests the release as a dry run, under the
+# version 0.0.1-dryrun, and publishes nothing. A maintainer dispatches the
+# workflow from main with a version to publish the same files. The shared
+# workflow owns the jobs: the examples against the working tree, the bundle,
+# the examples archive, the API reference archive and the rendered notes; the
+# archived examples against that exact bundle on a loopback address, in a job
+# with no copy of this repository; and the publisher, which checks out nothing.
+# `blueprint run check` stays in ci.yml: it takes about half an hour, longer
+# than the shared build job allows. See docs/maintaining.adoc.
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version without a v prefix, such as 2.1.0 or 2.1.0-rc.4
+        description: Release version without a v prefix, such as 3.1.0 or 3.1.0-rc.1; empty runs the dry run
         type: string
-        required: true
-  pull_request:
+        default: ''
+      nightly-tag:
+        description: Exact Roc nightly for a diagnostic run; empty resolves the latest
+        type: string
+        default: ''
 
 permissions: {}
 
-concurrency:
-  group: release-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  # Resolve the nightly once, and refuse a release that is not ready: off the
-  # default branch, already tagged, without docs/releases/<version>.adoc, or
-  # with a version that `roc bump --expect` says understates the API change.
-  validate:
-    name: Validate the release
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    outputs:
-      nightly-tag: ${{ steps.nightly.outputs.tag }}
-      version: ${{ steps.validate.outputs.version }}
-      prerelease: ${{ steps.validate.outputs.prerelease }}
-      # The commit every job checks out (checkout's default) and the tag's target.
-      sha: ${{ github.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-      - id: nightly
-        name: Resolve the latest Roc nightly
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
-      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.nightly.outputs.tag }}
-      - id: validate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: blueprint run release-validate -- --release-version "$VERSION" --default-branch "$DEFAULT_BRANCH" --github-output "$GITHUB_OUTPUT"
-
-  # The whole of check on the release commit. A pull request has run it in ci.yml.
-  check:
-    name: Check the release commit
-    needs: validate
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-        with:
-          cache: 'true'
-          cache-workload: check
-      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ needs.validate.outputs.nightly-tag }}
-      - run: blueprint run check
-
-  # Every file of the release, once: the bundle, the examples archive with the
-  # bundle's real release URL, the docs site and the PDF manual, the SBOM, and
-  # the rendered notes. This job's name is a required status check, so it
-  # also fails, rather than being skipped, when validation fails.
-  build:
-    name: Build the release
-    needs: validate
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    outputs:
-      bundle: ${{ steps.build.outputs.bundle }}
-    steps:
-      - name: Require a validated release
-        env:
-          VALIDATED: ${{ needs.validate.result }}
-        run: test "$VALIDATED" = success
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ needs.validate.outputs.nightly-tag }}
-      - id: build
-        env:
-          VERSION: ${{ needs.validate.outputs.version }}
-        run: blueprint run release-build -- --release-version "$VERSION" --output-dir .roc-parser-tmp/release --github-output "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-candidate
-          path: |
-            .roc-parser-tmp/release/dist/
-            .roc-parser-tmp/release/release-notes.md
-          if-no-files-found: error
-          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 7 }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-site
-          path: .roc-parser-tmp/release/site/
-          if-no-files-found: error
-          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 7 }}
-
-  # The exact files the build made, against a loopback copy of the bundle and
-  # an empty package cache. Nothing is rebuilt.
-  test:
-    name: Test the exact release files
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ needs.validate.outputs.nightly-tag }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-candidate
-          path: .roc-parser-tmp/candidate
-      - env:
-          VERSION: ${{ needs.validate.outputs.version }}
-        run: blueprint run release-test -- --release-version "$VERSION" --directory .roc-parser-tmp/candidate
-
-  # Signs inert bytes from this run: build provenance for every asset and an
-  # SBOM attestation for the bundle. No checkout and no repository code.
-  attest:
-    name: Attest the release files
-    needs: [validate, check, build, test]
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-candidate
-          path: candidate
-      - id: provenance
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: |
-            candidate/dist/*.tar.zst
-            candidate/dist/*.spdx.json
-            candidate/dist/*.zip
-            candidate/dist/*.pdf
-      - id: sbom
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: candidate/dist/${{ needs.build.outputs.bundle }}
-          sbom-path: candidate/dist/${{ needs.build.outputs.bundle }}.spdx.json
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: provenance-attestation
-          path: ${{ steps.provenance.outputs.bundle-path }}
-          if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: sbom-attestation
-          path: ${{ steps.sbom.outputs.bundle-path }}
-          if-no-files-found: error
-
-  # Joins the two Sigstore bundles into the offline `<bundle>.intoto.jsonl`
-  # asset, in a job that can only read.
-  evidence:
-    name: Prepare the attestation asset
-    needs: [build, attest]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: provenance-attestation
-          path: .roc-parser-tmp/attestations/provenance
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: sbom-attestation
-          path: .roc-parser-tmp/attestations/sbom
-      - env:
-          BUNDLE: ${{ needs.build.outputs.bundle }}
-        run: blueprint run combine-attestations -- --provenance-bundle .roc-parser-tmp/attestations/provenance/attestation.json --sbom-bundle .roc-parser-tmp/attestations/sbom/attestation.json --output ".roc-parser-tmp/attestations/$BUNDLE.intoto.jsonl"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-attestation
-          path: .roc-parser-tmp/attestations/*.intoto.jsonl
-          if-no-files-found: error
-
-  # The only job that can write the repository. It checks out nothing and runs
-  # no repository code: it hands the tested files to publish-release, which
-  # stages a draft at the tested commit, verifies every uploaded asset and
-  # publishes once.
-  publish:
-    name: Publish the release
-    needs: [validate, check, build, test, evidence]
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: release
+  Release:
     permissions:
       contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-candidate
-          path: candidate
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-attestation
-          path: attestation
-      - uses: lukewilliamboswell/roc-automation/actions/publish-release@8a6c914fa8400c9d1f5a3815ab06e06687d58148
-        with:
-          version: ${{ needs.validate.outputs.version }}
-          prerelease: ${{ needs.validate.outputs.prerelease }}
-          target: ${{ needs.validate.outputs.sha }}
-          notes-file: candidate/release-notes.md
-          assets: |
-            candidate/dist/*.tar.zst
-            candidate/dist/*.spdx.json
-            candidate/dist/*.zip
-            candidate/dist/*.pdf
-            attestation/*.intoto.jsonl
-
-  # A final release changes what "latest" means, so the site is replaced with
-  # this release's documentation, from the files the build made and the test
-  # job tested. A release candidate leaves the site alone.
-  pages:
-    name: Build the Pages site
-    needs: [validate, build, publish]
-    if: github.event_name == 'workflow_dispatch' && needs.validate.outputs.prerelease == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-site
-          path: site
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: site
-
-  deploy-pages:
-    name: Deploy the Pages site
-    needs: pages
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      attestations: write
+    uses: lukewilliamboswell/roc-automation/.github/workflows/release-package.yml@d6e4d03852e47216b270160ae67dea68d98e8daf
+    with:
+      version: ${{ inputs.version || '' }}
+      nightly-tag: ${{ inputs.nightly-tag || '' }}
+      check-task: ''

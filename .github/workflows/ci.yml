@@ -2,11 +2,11 @@ name: CI
 
 # The working tree on the latest Roc nightly. `blueprint run check` holds
 # everything a pull request must pass (scripts/check.py lists it): the
-# package's checks and tests, the examples against tests/examples.json, a
-# release dry run against a loopback bundle, the manual's examples, the API
-# audit, and smoke runs of every fuzz target, conformance review, oracle and
-# benchmark. Long campaigns run in fuzz.yml and bench.yml. The `check` job is
-# the required status check.
+# package's checks and tests, the manual's examples, the API audit, and smoke
+# runs of every fuzz target, conformance review, oracle and benchmark. The
+# examples and the release dry run are the shared release workflow's job, in
+# release.yml. Long campaigns run in fuzz.yml and bench.yml. The `check` job
+# is a required status check.
 on:
   pull_request:
   push:
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
         with:
           cache: 'true'
           cache-workload: check

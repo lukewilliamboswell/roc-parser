@@ -1,0 +1,70 @@
+name: Documentation
+
+# Builds the manual with Asciidoctor and the API reference with roc docs, as
+# `blueprint run docs` does. A pull request builds the site so a broken manual
+# fails review; a final release deploys it, because the site shows the
+# documentation of the latest release only. See docs/maintaining.adoc.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build the manual and API reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@d6e4d03852e47216b270160ae67dea68d98e8daf
+        with:
+          cache: 'true'
+          cache-workload: docs
+      - id: nightly
+        name: Resolve the latest Roc nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.nightly.outputs.tag }}
+      - name: Build the site for the release, or for review
+        env:
+          DOCS_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '0.0.1-dryrun' }}
+        run: blueprint run docs -- --release-version "$DOCS_VERSION" --site .docs-out/release/site
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: .docs-out/release/site
+
+  deploy:
+    name: Deploy the site
+    needs: build
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-import platform
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -15,9 +13,6 @@ except ImportError:
     from _common import ROOT, report_failure, resolve_command, run_command
 
 
-BUNDLE_PATH_RE = re.compile(r"^Created:\s+(.+\.tar\.zst)\s*$", re.MULTILINE)
-
-
 def run_checked(command: Sequence[str], *, env: dict[str, str]) -> int:
     completed = run_command(command, env=env)
     if completed.returncode != 0:
@@ -25,25 +20,15 @@ def run_checked(command: Sequence[str], *, env: dict[str, str]) -> int:
     return 0
 
 
-def extract_bundle_path(output: str) -> Path:
-    match = BUNDLE_PATH_RE.search(output)
-    if match is None:
-        raise ValueError("could not extract bundle path from roc bundle output")
-    # `roc bundle` runs in package/ and newer compilers print a path relative to it.
-    return ROOT / "package" / match.group(1)
-
-
 def main() -> int:
     roc = resolve_command(os.environ.get("ROC", "roc"))
     tmp_base = Path(os.environ.get("ROC_PARSER_TMPDIR", ROOT / ".roc-parser-tmp")).resolve()
     tmp_dir = tmp_base / "roc-parser-ci"
     docs_dir = tmp_dir / "docs"
-    bundle_dir = tmp_dir / "bundle"
 
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     docs_dir.mkdir(parents=True)
-    bundle_dir.mkdir(parents=True)
 
     env = os.environ.copy()
     env["ROC"] = roc
@@ -85,44 +70,7 @@ def main() -> int:
     if status:
         return status
 
-    if platform.system().upper().startswith(("WINDOWS", "MINGW", "MSYS", "CYGWIN")):
-        print("\nSkipping package bundling on Windows.", flush=True)
-        return 0
-
-    print("\nBundling package...", flush=True)
-    bundle_command = [
-        sys.executable,
-        "scripts/bundle.py",
-        "--output-dir",
-        str(bundle_dir),
-    ]
-    bundled = run_command(bundle_command, env=env, capture_output=True)
-    if bundled.stdout:
-        print(
-            bundled.stdout,
-            end="" if bundled.stdout.endswith("\n") else "\n",
-            flush=True,
-        )
-    if bundled.returncode != 0:
-        return report_failure(bundled, bundle_command)
-
-    try:
-        bundle_path = extract_bundle_path(bundled.stdout or "")
-    except ValueError as error:
-        print(f"Error: {error}", file=sys.stderr)
-        return 1
-
-    print("\nTesting the packaged examples archive against the localhost bundle...", flush=True)
-    return run_checked(
-        [
-            sys.executable,
-            "scripts/test_bundle_examples.py",
-            "--bundle-path",
-            str(bundle_path),
-        ],
-        env=env,
-    )
-
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
