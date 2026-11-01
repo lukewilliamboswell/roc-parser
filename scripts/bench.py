@@ -32,6 +32,11 @@ import time
 from pathlib import Path
 from typing import Callable
 
+try:
+    from ._common import measured_allocations
+except ImportError:
+    from _common import measured_allocations
+
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "bench"
 DEFAULT_OUT = ROOT / ".roc-parser-tmp" / "bench"
@@ -580,13 +585,11 @@ def count_allocations(binary: Path, doc: Doc, scratch: Path, timeout: float) -> 
     path = scratch / f"alloc-{doc.format}-{doc.name}.in"
     path.write_bytes(doc.format.encode() + b"\n" + doc.data)
     try:
-        result = subprocess.run([str(binary), "replay", str(path)], capture_output=True, text=True, timeout=timeout)
+        return {"allocation_calls": measured_allocations(binary, path, timeout=timeout)}
     except subprocess.TimeoutExpired:
         return {"allocation_error": "timed out"}
-    match = re.search(r"ALLOCATION_DIAGNOSTIC allocations=(\d+) result=(\w+)", result.stdout + result.stderr)
-    if result.returncode != 77 or not match:
-        return {"allocation_error": f"unexpected diagnostic exit {result.returncode}"}
-    return {"allocation_calls": int(match[1])}
+    except (RuntimeError, ValueError, LookupError) as error:
+        return {"allocation_error": str(error)}
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -188,7 +188,10 @@ items : List(List(U8)), U8 -> List(U8)
 items = |vals, marker| vals.fold([], |acc, v| acc.concat(v).append(marker))
 
 build : Expr -> Parser(List(U8), List(U8))
-build = |expr| {
+build = |expr| build_step(expr, build)
+
+build_step : Expr, (Expr -> Parser(List(U8), List(U8))) -> Parser(List(U8), List(U8))
+build_step = |expr, again| {
 	match expr {
 		Lit(lit) => Utf8.utf8(lit)
 		Text(text) => Utf8.string(text).map(|s| s.to_utf8())
@@ -203,20 +206,20 @@ build = |expr| {
 		Fail => Parser.fail("model fail")
 		ChompWhile(t) => Parser.chomp_while(|b| b < t)
 		ChompUntil(c) => Parser.chomp_until(c)
-		Seq(a, b) => Parser.map2(build(a), build(b), |x, y| x.concat(y))
-		Apply(a, b) => Parser.const(|x| |y| x.concat(y).append('+')).keep(build(a)).keep(build(b))
-		Skip(a, b) => build(a).skip(build(b))
-		Map3(a, b, c) => Parser.map3(build(a), build(b), build(c), |x, y, z| x.append('|').concat(y).append('|').concat(z))
-		Alt(a, b) => Parser.alt(build(a), build(b))
+		Seq(a, b) => Parser.map2(again(a), again(b), |x, y| x.concat(y))
+		Apply(a, b) => Parser.const(|x| |y| x.concat(y).append('+')).keep(again(a)).keep(again(b))
+		Skip(a, b) => again(a).skip(again(b))
+		Map3(a, b, c) => Parser.map3(again(a), again(b), again(c), |x, y, z| x.append('|').concat(y).append('|').concat(z))
+		Alt(a, b) => Parser.alt(again(a), again(b))
 		OneOf(es) => Parser.one_of(es.map(build))
 		StrOneOf(es) => Parser.one_of(es.map(build))
-		Many(a) => Parser.many(build(a)).map(|vs| items(vs, ';'))
-		OneOrMore(a) => Parser.one_or_more(build(a)).map(|vs| items(vs, ';'))
-		SepBy(a, s) => Parser.sep_by(build(a), build(s)).map(|vs| items(vs, ','))
-		SepBy1(a, s) => Parser.sep_by_one_or_more(build(a), build(s)).map(|vs| items(vs, ','))
-		Between(a, o, c) => Parser.between(build(a), build(o), build(c))
+		Many(a) => Parser.many(again(a)).map(|vs| items(vs, ';'))
+		OneOrMore(a) => Parser.one_or_more(again(a)).map(|vs| items(vs, ';'))
+		SepBy(a, s) => Parser.sep_by(again(a), again(s)).map(|vs| items(vs, ','))
+		SepBy1(a, s) => Parser.sep_by_one_or_more(again(a), again(s)).map(|vs| items(vs, ','))
+		Between(a, o, c) => Parser.between(again(a), again(o), again(c))
 		Maybe(a) =>
-			Parser.maybe(build(a)).map(
+			Parser.maybe(again(a)).map(
 				|r| {
 					match r {
 						Ok(v) => v.prepend('J')
@@ -224,10 +227,10 @@ build = |expr| {
 					}
 				},
 			)
-		Rev(a) => build(a).map(|v| v.drop_first(1))
-		EvenOnly(a) => build(a).map(even_only).flatten()
-		Lazy(a) => Parser.lazy(|_| build(a))
-		Ignore(a) => Parser.ignore(build(a)).map(|_| [])
+		Rev(a) => again(a).map(|v| v.drop_first(1))
+		EvenOnly(a) => again(a).map(even_only).flatten()
+		Lazy(a) => Parser.lazy(|_| again(a))
+		Ignore(a) => Parser.ignore(again(a)).map(|_| [])
 	}
 }
 
@@ -283,10 +286,13 @@ first_success = |es, input| {
 }
 
 model : Expr, List(U8) -> Outcome
-model = |expr, input| {
+model = |expr, input| model_step(expr, input, model)
+
+model_step : Expr, List(U8), (Expr, List(U8) -> Outcome) -> Outcome
+model_step = |expr, input, again| {
 	match expr {
 		Lit(lit) => if (input.starts_with(lit)) ok(lit, input.drop_first(lit.len())) else Err(Fail)
-		Text(text) => model(Lit(text.to_utf8()), input)
+		Text(text) => again(Lit(text.to_utf8()), input)
 		Cu(c) =>
 			match input {
 				[b, .. as rest] if b == c => ok([b], rest)
@@ -337,47 +343,47 @@ model = |expr, input| {
 				Ok(i) => ok(input.sublist({ start: 0, len: i }), input.drop_first(i))
 				Err(_) => Err(Fail)
 			}
-		Seq(a, b) => then(model(a, input), |x, r1| then(model(b, r1), |y, r2| ok(x.concat(y), r2)))
-		Apply(a, b) => then(model(a, input), |x, r1| then(model(b, r1), |y, r2| ok(x.concat(y).append('+'), r2)))
-		Skip(a, b) => then(model(a, input), |x, r1| then(model(b, r1), |_, r2| ok(x, r2)))
+		Seq(a, b) => then(again(a, input), |x, r1| then(again(b, r1), |y, r2| ok(x.concat(y), r2)))
+		Apply(a, b) => then(again(a, input), |x, r1| then(again(b, r1), |y, r2| ok(x.concat(y).append('+'), r2)))
+		Skip(a, b) => then(again(a, input), |x, r1| then(again(b, r1), |_, r2| ok(x, r2)))
 		Map3(a, b, c) =>
-			then(model(a, input), |x, r1| then(model(b, r1), |y, r2| then(model(c, r2), |z, r3| ok(x.append('|').concat(y).append('|').concat(z), r3))))
+			then(again(a, input), |x, r1| then(again(b, r1), |y, r2| then(again(c, r2), |z, r3| ok(x.append('|').concat(y).append('|').concat(z), r3))))
 		Alt(a, b) => first_success([a, b], input)
 		OneOf(es) => first_success(es, input)
 		StrOneOf(es) => first_success(es, input)
 		Many(a) => {
-			r = repeat(|i| model(a, i), input)
+			r = repeat(|i| again(a, i), input)
 			ok(items(r.vals, ';'), r.rest)
 		}
 		OneOrMore(a) => then(
-			model(a, input),
+			again(a, input),
 			|x, r1| {
-				r = repeat(|i| model(a, i), r1)
+				r = repeat(|i| again(a, i), r1)
 				ok(items(r.vals.prepend(x), ';'), r.rest)
 			},
 		)
 		SepBy(a, s) =>
-			match model(SepBy1(a, s), input) {
+			match again(SepBy1(a, s), input) {
 				Ok(r) => Ok(r)
 				Err(_) => ok([], input)
 			}
 		SepBy1(a, s) => then(
-			model(a, input),
+			again(a, input),
 			|x, r1| {
-				r = repeat(|i| then(model(s, i), |_, ri| model(a, ri)), r1)
+				r = repeat(|i| then(again(s, i), |_, ri| again(a, ri)), r1)
 				ok(items(r.vals.prepend(x), ','), r.rest)
 			},
 		)
-		Between(a, o, c) => then(model(o, input), |_, r1| then(model(a, r1), |x, r2| then(model(c, r2), |_, r3| ok(x, r3))))
+		Between(a, o, c) => then(again(o, input), |_, r1| then(again(a, r1), |x, r2| then(again(c, r2), |_, r3| ok(x, r3))))
 		Maybe(a) =>
-			match model(a, input) {
+			match again(a, input) {
 				Ok(r) => ok(r.val.prepend('J'), r.rest)
 				Err(_) => ok(['N'], input)
 			}
-		Rev(a) => then(model(a, input), |x, r1| ok(x.drop_first(1), r1))
-		EvenOnly(a) => then(model(a, input), |x, r1| if (x.len() % 2 == 0) ok(x, r1) else Err(Fail))
-		Lazy(a) => model(a, input)
-		Ignore(a) => then(model(a, input), |_, r1| ok([], r1))
+		Rev(a) => then(again(a, input), |x, r1| ok(x.drop_first(1), r1))
+		EvenOnly(a) => then(again(a, input), |x, r1| if (x.len() % 2 == 0) ok(x, r1) else Err(Fail))
+		Lazy(a) => again(a, input)
+		Ignore(a) => then(again(a, input), |_, r1| ok([], r1))
 	}
 }
 
@@ -444,7 +450,13 @@ test = |case| {
 }
 
 show_expr : Expr -> Str
-show_expr = |expr| {
+show_expr = |expr| show_expr_step(expr, show_expr)
+
+## The recursion goes through `again` because from nightly-2026-10-29-a0a9fc2 the
+## compiler takes exponential time specializing a function that calls itself from
+## six or more variants of a recursive union.
+show_expr_step : Expr, (Expr -> Str) -> Str
+show_expr_step = |expr, again| {
 	match expr {
 		Lit(l) => "Lit(${Str.inspect(l)})"
 		Text(t) => "Text(${Str.inspect(t)})"
@@ -459,29 +471,33 @@ show_expr = |expr| {
 		Fail => "Fail"
 		ChompWhile(t) => "ChompWhile(<${t.to_str()})"
 		ChompUntil(c) => "ChompUntil(${c.to_str()})"
-		Seq(a, b) => "Seq(${show_expr(a)}, ${show_expr(b)})"
-		Apply(a, b) => "Apply(${show_expr(a)}, ${show_expr(b)})"
-		Skip(a, b) => "Skip(${show_expr(a)}, ${show_expr(b)})"
-		Map3(a, b, c) => "Map3(${show_expr(a)}, ${show_expr(b)}, ${show_expr(c)})"
-		Alt(a, b) => "Alt(${show_expr(a)}, ${show_expr(b)})"
+		Seq(a, b) => "Seq(${again(a)}, ${again(b)})"
+		Apply(a, b) => "Apply(${again(a)}, ${again(b)})"
+		Skip(a, b) => "Skip(${again(a)}, ${again(b)})"
+		Map3(a, b, c) => "Map3(${again(a)}, ${again(b)}, ${again(c)})"
+		Alt(a, b) => "Alt(${again(a)}, ${again(b)})"
 		OneOf(es) => "OneOf([${Str.join_with(es.map(show_expr), ", ")}])"
 		StrOneOf(es) => "StrOneOf([${Str.join_with(es.map(show_expr), ", ")}])"
-		Many(a) => "Many(${show_expr(a)})"
-		OneOrMore(a) => "OneOrMore(${show_expr(a)})"
-		SepBy(a, b) => "SepBy(${show_expr(a)}, ${show_expr(b)})"
-		SepBy1(a, b) => "SepBy1(${show_expr(a)}, ${show_expr(b)})"
-		Between(a, b, c) => "Between(${show_expr(a)}, ${show_expr(b)}, ${show_expr(c)})"
-		Maybe(a) => "Maybe(${show_expr(a)})"
-		Rev(a) => "Rev(${show_expr(a)})"
-		EvenOnly(a) => "EvenOnly(${show_expr(a)})"
-		Lazy(a) => "Lazy(${show_expr(a)})"
-		Ignore(a) => "Ignore(${show_expr(a)})"
+		Many(a) => "Many(${again(a)})"
+		OneOrMore(a) => "OneOrMore(${again(a)})"
+		SepBy(a, b) => "SepBy(${again(a)}, ${again(b)})"
+		SepBy1(a, b) => "SepBy1(${again(a)}, ${again(b)})"
+		Between(a, b, c) => "Between(${again(a)}, ${again(b)}, ${again(c)})"
+		Maybe(a) => "Maybe(${again(a)})"
+		Rev(a) => "Rev(${again(a)})"
+		EvenOnly(a) => "EvenOnly(${again(a)})"
+		Lazy(a) => "Lazy(${again(a)})"
+		Ignore(a) => "Ignore(${again(a)})"
 	}
 }
 
 target = Fuzz.target_with({
+	examples: [],
 	name: "parser-combinators",
-	generator: Fuzz.map(Fuzz.raw_bytes, generate),
-	test,
-	show: |case| "${show_expr(case.expr)} on ${Str.inspect(case.input)}",
+	generator: Fuzz.raw_bytes,
+	test: |bytes| test(generate(bytes)),
+	show: |bytes| {
+		case = generate(bytes)
+		"${show_expr(case.expr)} on ${Str.inspect(case.input)}"
+	},
 })

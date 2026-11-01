@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -52,4 +52,4 @@ test = |bytes| {
 	}
 }
 
-target = Fuzz.target_with({ name: "asciidoc-raw", generator: Fuzz.raw_bytes, test, show: |bytes| Str.inspect(Str.from_utf8(bytes)) })
+target = Fuzz.target_with({ name: "asciidoc-raw", examples: [], generator: Fuzz.raw_bytes, test, show: |bytes| Str.inspect(Str.from_utf8(bytes)) })

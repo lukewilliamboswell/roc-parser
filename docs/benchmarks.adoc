@@ -79,8 +79,7 @@ For each document and implementation, `scripts/bench.py`:
 . with `--allocations`, replays the document once through
   link:{src}/bench/roc/alloc.roc[`bench/roc/alloc.roc`], a diagnostic built
   with `roc build --fuzz`, and records how many times the Roc parser called
-  `roc_alloc` or `roc_realloc`. The program crashes on purpose to report the
-  count, so its exit code 77 is expected.
+  `roc_alloc` for it, using the target's `measure` command.
 
 Peak RSS is the whole process, so it includes the language runtime: about
 1.5 MiB for Roc and Rust, 12–20 MiB for Go and Python, before any document is

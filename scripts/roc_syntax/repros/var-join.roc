@@ -1,4 +1,4 @@
-app [target] { fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst" }
+app [target] { fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst" }
 import fuzz.Fuzz
 
 ## Mode 0 reassigns a function-level `var` from a destructured call result inside
@@ -8,11 +8,11 @@ import fuzz.Fuzz
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	mode = bytes.get(0) ?? 0
-	measured = Fuzz.measure_allocs!(|{}| run(mode, 4096))
-	crash "VARJOIN mode=${mode.to_str()} allocations=${measured.allocations.to_str()} len=${measured.value.len().to_str()} sum=${measured.value.fold(0, |a, x| a + x).to_str()}"
+	measured = Fuzz.measure!("parse", || run(mode, 4096))
+	crash "VARJOIN mode=${mode.to_str()} allocations=${measured.stats.allocs.to_str()} len=${measured.value.len().to_str()} sum=${measured.value.fold(0, |a, x| a + x).to_str()}"
 }
 
-target = Fuzz.target_with!({ name: "var-join", generator: Fuzz.raw_bytes, test!, show: Str.inspect })
+target = Fuzz.target_with!({ name: "var-join", examples: [], generator: Fuzz.raw_bytes, test!, show: Str.inspect })
 
 R : { out : List(U64), last : U64 }
 

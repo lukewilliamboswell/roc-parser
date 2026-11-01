@@ -486,7 +486,7 @@ def fuzz_run(binary: Path, seconds: float, seed: int, output_dir: Path, target: 
             raw = bytes([value, 0, 1, 2, 3])
             (corpus / hashlib.sha256(raw).hexdigest()).write_bytes(raw)
     limit = "--runs=2000" if smoke else "--time=" + str(max(1, int(seconds)))
-    command = [str(binary), "ci", str(work / "evidence"), str(corpus), limit, "--seed=" + str(seed), "--max-input-size=4096", "--timeout=2", "--memory-limit=512", "--print-final-stats"]
+    command = [str(binary), "explore", str(corpus), "--report-dir=" + str(work / "evidence"), limit, "--seed=" + str(seed), "--max-input-size=4096", "--timeout=2", "--memory-limit=512", "--print-final-stats"]
     if target == "yaml-raw":
         command.append("--dictionary=" + str(ROOT / "fuzz" / "dictionaries" / "yaml.dict"))
     start = time.monotonic()

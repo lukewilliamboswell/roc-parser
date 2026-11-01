@@ -22,10 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FUZZ_ROOT = ROOT / "fuzz"
 WORK_ROOT = ROOT / ".roc-parser-tmp" / "fuzz"
 ROC_FUZZ_RELEASE = {
-    "version": "0.4.3",
-    "commit": "1abb6f0f76fc3ed6016cdf5da4e16e8ed1cfdfc4",
-    "bundle": "41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
-    "sha256": "d9bae1e93e6e94f3fafb4040861402dbab90af247023461d8e5451db4a3ae0f2",
+    "version": "0.5.0",
+    "commit": "d8228759b21fef688ecda2fac5d584a12f314e35",
+    "bundle": "9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
+    "sha256": "aed4032105af1cc910604949f43636b7bff6aec4a82184631213153b8e2dd23f",
 }
 
 # How reviewed JSON seeds become corpus entries:
@@ -261,6 +261,21 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
     return completed.returncode, output
 
 
+def print_failure_report(cwd: Path) -> None:
+    """Show the failure itself; roc-fuzz keeps it in a report directory."""
+    reports = sorted((cwd / ".roc-fuzz" / "reports").glob("*/report.json"), key=lambda path: path.stat().st_mtime)
+    if not reports:
+        return
+    report = reports[-1].parent
+    log = report / "run.log"
+    if log.is_file():
+        print(log.read_text(encoding="utf-8", errors="replace")[-4000:], file=sys.stderr)
+    print(f"fuzz report: {report}", file=sys.stderr)
+    original = report / "original-input.bin"
+    if original.is_file():
+        print(f"fuzz input: {original}", file=sys.stderr)
+
+
 def write_metadata(
     target_name: str,
     roc: str,
@@ -314,8 +329,8 @@ def execute_target_command(
 
     write_metadata(target_name, roc, command, "complete", return_code)
     if return_code != 0:
+        print_failure_report(cwd)
         print(f"fuzz failure metadata: {metadata_path}", file=sys.stderr)
-        print(f"fuzz artifacts: {cwd / '.roc-fuzz'}", file=sys.stderr)
     return return_code
 
 
@@ -346,12 +361,11 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
             raise ValueError(f"missing fuzz dictionary: {config.dictionary}")
 
         options = [
-            "run",
+            "explore",
             str(corpus),
             f"--max-input-size={args.max_input_size or config.max_input_size}",
             f"--timeout={args.timeout or config.timeout}",
             f"--memory-limit={args.memory_limit}",
-            "--print-final-stats",
         ]
         if config.dictionary is not None:
             options.append(f"--dictionary={config.dictionary}")
