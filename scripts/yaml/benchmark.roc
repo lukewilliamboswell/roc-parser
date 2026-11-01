@@ -1,11 +1,11 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.26.0/GddgvsGjiNXrHFW6au5i5dUDbTs8FinQdrgE2Gqmw53t.tar.zst",
 	parser: "../../package/main.roc",
 }
+import cli.Monotonic
 import cli.OsStr
 import cli.Stdin
 import cli.Stdout
-import cli.Utc
 import parser.Yaml
 
 main! : List(OsStr) => Try({}, _)
@@ -16,7 +16,7 @@ main! = |args| {
 	}
 	input = Str.from_utf8(Stdin.read_to_end!()?) ?? ""
 	repetitions = List.repeat({}, iterations)
-	start = Utc.now!()
+	start = Monotonic.now!()
 	var $checksum = 0.U64
 	var $successes = 0.U64
 	for _ in repetitions {
@@ -30,7 +30,7 @@ main! = |args| {
 			}
 		}
 	}
-	elapsed = Utc.delta_as_nanos(Utc.now!(), start)
+	elapsed = start.elapsed!().to_nanos()
 	Stdout.line!("{\"iterations\":${iterations.to_str()},\"elapsed_ns\":${elapsed.to_str()},\"successes\":${$successes.to_str()},\"checksum\":${$checksum.to_str()}}")?
 	Ok({})
 }

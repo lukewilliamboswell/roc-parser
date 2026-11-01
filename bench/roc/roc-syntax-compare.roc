@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.26.0/GddgvsGjiNXrHFW6au5i5dUDbTs8FinQdrgE2Gqmw53t.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -19,11 +19,11 @@ main! = |_| {
 	var $running = True
 	while $running {
 		match Stdin.line!() {
-			Err(EndOfFile) => {
+			Err(EndOfInput) => {
 				$running = False
 			}
-			Err(StdinErr(err)) => {
-				return Err(StdinErr(err))
+			Err(problem) => {
+				return Err(problem)
 			}
 			Ok(line) => {
 				request : Try(Request, _)
@@ -57,7 +57,7 @@ main! = |_| {
 								}
 								$i = $i + 1
 							}
-							elapsed = Monotonic.now!() - start
+							elapsed = start.elapsed!().to_nanos()
 							Stdout.line!(Json.to_str({ version: 1.U64, id: item.id, iterations: $i, warmup: $warm, elapsed_ns: elapsed, successes: $successes, consumed: $consumed, checksum: $checksum }))?
 						}
 					}
