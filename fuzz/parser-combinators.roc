@@ -453,8 +453,8 @@ show_expr : Expr -> Str
 show_expr = |expr| show_expr_step(expr, show_expr)
 
 ## The recursion goes through `again` because from nightly-2026-10-29-a0a9fc2 the
-## compiler takes exponential time specializing a function that calls itself from
-## six or more variants of a recursive union.
+## compiler hangs on a function that calls itself from six or more variants of a
+## recursive union: https://github.com/roc-lang/roc/issues/12763
 show_expr_step : Expr, (Expr -> Str) -> Str
 show_expr_step = |expr, again| {
 	match expr {

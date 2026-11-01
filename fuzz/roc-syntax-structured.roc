@@ -161,8 +161,8 @@ render : Expr -> Str
 render = |expr| render_step(expr, render)
 
 ## The recursion goes through `again` because from nightly-2026-10-29-a0a9fc2 the
-## compiler takes exponential time specializing a function that calls itself from
-## six or more variants of a recursive union.
+## compiler hangs on a function that calls itself from six or more variants of a
+## recursive union: https://github.com/roc-lang/roc/issues/12763
 render_step : Expr, (Expr -> Str) -> Str
 render_step = |expr, again| match expr {
 	BlockExpr(statements, last) => "{\n${Str.join_with(statements.map(render_statement), "\n")}\n${again(last)}\n}"
