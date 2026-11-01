@@ -140,5 +140,16 @@
   "{ ..person, age: 31, acti ve: True }\n",
   "U64.to_str(su->(240, 0))",
   "Str.drop_prefix->(\"helo world\", \"hello \")",
-  "|{ name, age, ..a } as person| { greeting: \"Hello ${name}\", full_recordwhere son, is_adult: age >= 18 }\n"
+  "|{ name, age, ..a } as person| { greeting: \"Hello ${name}\", full_recordwhere son, is_adult: age >= 18 }\n",
+  "f : (U8 -> Bool) -> U64\nf = |_| 0\n",
+  "f : (A, B => C) -> D\n",
+  "f : ( # note\n  U8 -> Bool\n)\n",
+  "f : List((a -> b))\n",
+  "f : (() -> U8) -> { g : (U8 -> Bool) }\n",
+  "f : [Some((a -> b)), None]\n",
+  "Box(a) := (a -> a)\n",
+  "{e:)=",
+  "Foo.{e:)=\n",
+  "f : {a : )\n",
+  "z:[(,\ne=\n"
 ]

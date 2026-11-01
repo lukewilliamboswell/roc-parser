@@ -61,6 +61,17 @@ The additive/multiplicative printer preserves precedence and association without
 blanket binary-expression parentheses. Every expression/block case additionally
 checks composition into an ungrouped addition/multiplication expression.
 
+`fuzz/roc-syntax-span-model.roc` is a separate model for spans. As it writes a
+file it records each node's kind and byte range, then requires the parsed tree to
+hold exactly those nodes, children first. It models annotations and definitions
+over types, patterns and expressions, and places spaces, newlines and comments
+between delimiters and their contents, where a span taken from the wrong token
+differs from the right one. It omits headers, imports, statements other than
+annotations and definitions, and blocks.
+`scripts/review_roc_syntax.py --fuzz-show BINARY --corpus DIR` reviews the source
+it shows for each corpus input against the compiler, including every span, which
+catches the model's own mistakes.
+
 Pure Roc file generation currently has a fixed five-member file skeleton and
 fixed imported names, exposes, dependency path and type-parameter names. It omits
 package/platform headers, constraints and associated blocks; the Python model

@@ -158,7 +158,15 @@ def main(argv: list[str] | None = None) -> int:
                                 "--output", str(output / "recovery.json")])
         if not args.skip_fuzz:
             step("fuzz", [sys.executable, "scripts/run_fuzz.py", "smoke", "roc-syntax-raw",
-                          "roc-syntax-structured", "--runs", str(args.fuzz_runs)])
+                          "roc-syntax-structured", "roc-syntax-spans", "roc-syntax-span-model",
+                          "--runs", str(args.fuzz_runs)])
+            # The span model states what the compiler should report, so its
+            # own mistakes have to be caught against the compiler.
+            step("span-model-differential", [sys.executable, "scripts/review_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
+                                             "--oracle-command", shlex.quote(str(oracle)), "--fixtures", "scripts/roc_syntax/type-fixtures.json",
+                                             "--fuzz-show", ".roc-parser-tmp/fuzz/bin/roc-syntax-span-model",
+                                             "--corpus", ".roc-parser-tmp/fuzz/corpus/roc-syntax-span-model",
+                                             "--output", str(output / "span-model")])
         mutations = [sys.executable, "scripts/mutate_roc_syntax.py", "--probe-command", shlex.quote(str(probe)),
                      "--oracle-command", shlex.quote(str(oracle)), "--runs", str(args.mutation_runs),
                      "--seed", str(args.seed), "--output", str(output / "mutations")]

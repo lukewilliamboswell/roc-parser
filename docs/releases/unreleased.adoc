@@ -1,0 +1,21 @@
+= Unreleased
+
+== Upgrade impact
+
+* *`RocSyntax` spans change in two places.* A tool that stored or compared byte
+  ranges may see different values; the tree's nodes and their order are the same
+  for accepted source.
+** A function type written inside parentheses now begins at its first argument,
+   not at the opening parenthesis. In `f : (U8 -> Bool) -> U64` the inner
+   `TypeFunction` is now `5..15` instead of `4..15`, which is what the compiler
+   reports. The `TypeParenthesized` around it still covers both parentheses.
+** In rejected source, a node that recovery stops at no longer claims a closing
+   delimiter or other token it did not consume. This keeps every child inside its
+   parent and stops neighbouring statements overlapping, in cases such as
+   `{e:)=` and `module{`.
+
+== Fixed
+
+* `RocSyntax` reported a parenthesized function type's span with its opening
+  parenthesis but not its closing one
+  (https://github.com/lukewilliamboswell/roc-parser/issues/101[#101]).

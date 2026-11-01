@@ -100,6 +100,8 @@ TARGETS = dict(
         target("byte-scan", max_input_size=256, timeout=10),
         target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
         target("roc-syntax-structured", max_input_size=256),
+        target("roc-syntax-spans", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
+        target("roc-syntax-span-model", max_input_size=512),
     ]
 )
 
