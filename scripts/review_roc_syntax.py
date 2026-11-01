@@ -432,6 +432,84 @@ def syntax_shape(response, source):
         raise WorkerError('syntax projection exceeds Python recursion limit') from error
 
 
+# Each compiler AST kind and the candidate node kinds that may represent it.
+# A kind missing here is reported rather than skipped, so that a new AST kind
+# cannot silently escape the span comparison.
+NODE_KINDS = {
+    'alternatives': {'AlternativePattern'}, 'apply': {'Call', 'TypeApply'},
+    'arrow_call': {'ArrowCall', 'MethodArrowCall'}, 'as': {'AliasPattern'}, 'bin_op': {'Binary'},
+    'block': {'Block'}, 'break': {'Break'}, 'crash': {'Crash'}, 'dbg': {'Debug'}, 'decl': {'Declaration'},
+    'ellipsis': {'Ellipsis'}, 'expect': {'Expect'}, 'exposed_item': {'ExposedItem', 'ExposedWildcard'},
+    'expr': {'ExpressionStatement'}, 'field_access': {'FieldAccess', 'OptionalFieldAccess'},
+    'file_import': {'FileImport'}, 'fn': {'TypeFunction'}, 'for': {'For', 'ForStream'},
+    'for_expr': {'For', 'ForStream'}, 'frac': {'NumberLiteral'}, 'header': {'Header'},
+    'ident': {'Identifier', 'IdentifierPattern', 'FieldAccess'}, 'if_then_else': {'If'}, 'if_without_else': {'If'},
+    'import': {'Import'}, 'int': {'NumberLiteral'}, 'lambda': {'Lambda'}, 'list': {'ListLiteral', 'ListPattern'},
+    'list_rest': {'RestPattern'}, 'match': {'Match'}, 'match_branch': {'MatchBranch'}, 'method_call': {'Call'},
+    'multiline_string': {'MultilineStringLiteral'}, 'nominal_apply': {'NominalApply'},
+    'nominal_record': {'NominalRecord'}, 'parens': {'TypeParenthesized'},
+    'pattern_field': {'PatternField', 'RestPattern'},
+    'record': {'Record', 'RecordPattern', 'RecordUpdate', 'TypeRecord'}, 'record_builder': {'RecordBuilder'},
+    'record_field': {'RecordField', 'UnsetField'}, 'return': {'Return'},
+    'single_quote': {'CharacterLiteral', 'TypedLiteral'}, 'string': {'StringLiteral', 'PatternStringLiteral'},
+    'string_part': {'StringSegment'}, 'suffix_single_question': {'Suffix'},
+    'tag': {'Identifier', 'FieldAccess', 'TagPattern', 'NominalPattern'}, 'tag_union': {'TypeTagUnion'},
+    'tuple': {'Parenthesized', 'Tuple', 'TuplePattern', 'TypeTuple'}, 'tuple_access': {'FieldAccess'},
+    'ty': {'TypeName'}, 'ty_var': {'TypeVariable'}, 'type_anno': {'TypeAnnotation'},
+    'type_decl': {'TypeDeclaration'}, 'type_field': {'TypeField'}, 'type_header': {'TypeHeader'},
+    'typed_frac': {'TypedLiteral'}, 'typed_int': {'TypedLiteral'}, 'typed_multiline_string': {'TypedLiteral'},
+    'typed_string': {'TypedLiteral'}, 'unary_op': {'Unary'}, 'underscore': {'TypeWildcard', 'WildcardPattern'},
+    'underscore_type_var': {'TypeVariable'}, 'var': {'VariableDeclaration'}, 'var_ident': {'MutablePattern'},
+    'where_item': {'WhereAlias', 'WhereMethod'}, 'while': {'While'},
+}
+
+ARROW_TOKENS = {'OpArrow', 'OpFatArrow'}
+
+
+def compiler_span_start(span, token_at, next_token_start):
+    """Move a compiler region's start past syntax it borrows from its context.
+
+    The compiler keeps a leading dot in one token with the name after it, and
+    starts a call in an arrow's right operand at the arrow. Neither is part of
+    the name or the call, so the candidate's span starts after them.
+    """
+    token = token_at.get(span['start'])
+    if token is None:
+        return span['start']
+    if token['kind'] == 'NoSpaceDotUpperIdent' or token['kind'] == 'DotUpperIdent':
+        return span['start'] + 1
+    if span['kind'] == 'apply' and token['kind'] in ARROW_TOKENS:
+        return next_token_start[span['start']]
+    return span['start']
+
+
+def span_differences(actual, expected):
+    """Match every compiler node with a distinct candidate node of the same span.
+
+    The shape comparison proves the trees agree, and validate_spans only proves
+    that a child lies inside its parent, so neither notices a node with the
+    right place in the tree and the wrong source range.
+    """
+    tokens = expected['tokens']
+    token_at = {token['start']: token for token in tokens}
+    next_token_start = {left['start']: right['start'] for left, right in zip(tokens, tokens[1:])}
+    available = Counter((node['kind'], node['start'], node['end']) for node in actual['nodes'])
+    differences = []
+    for span in expected['node_spans']:
+        kinds = NODE_KINDS.get(span['kind'])
+        if kinds is None:
+            differences.append({'field': 'spans', 'unmapped_kind': span['kind']})
+            continue
+        start = compiler_span_start(span, token_at, next_token_start)
+        match = next((kind for kind in sorted(kinds) if available[kind, start, span['end']] > 0), None)
+        if match is None:
+            found = [node for node in actual['nodes'] if node['kind'] in kinds and start <= node['end'] and node['start'] <= span['end']]
+            differences.append({'field': 'spans', 'expected': {**span, 'start': start}, 'overlapping': found[:4]})
+        else:
+            available[match, start, span['end']] -= 1
+    return differences
+
+
 def has_unknown_shape(value):
     if isinstance(value, list):
         return (bool(value) and value[0] == 'unsupported') or any(has_unknown_shape(child) for child in value)
@@ -513,6 +591,8 @@ def compare(case, actual, expected):
             differences.append({'field': 'projection_gap', 'actual': left, 'expected': right})
         elif left != right:
             differences.append({'field': field, 'actual': left, 'expected': right})
+    if actual.get('ok') and expected.get('ok'):
+        differences += span_differences(actual, expected)
     if 'model_shape' in case:
         for label, response in [('actual', actual), ('expected', expected)]:
             shape = syntax_shape(response, case['source'])
@@ -590,6 +670,16 @@ def generated_cases(count, seed, **budgets):
     return module.generated_cases(count, seed, **budgets)
 
 
+def shown_cases(binary, corpus):
+    """Source a structured fuzz target writes for each of its corpus inputs."""
+    cases = []
+    for path in sorted(corpus.iterdir()):
+        shown = subprocess.run([str(binary), 'show', str(path)], capture_output=True, text=True, check=True, timeout=30)
+        cases.append({'id': f'fuzz-show/{path.name}', 'mode': 'file', 'source': shown.stdout.removesuffix('\n'),
+                      'rule': 'fuzz-show', 'coverage': 'supported'})
+    return cases
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--probe-command', required=True, help='persistent probe command, shell quoting accepted without shell execution')
@@ -602,10 +692,16 @@ def main(argv=None):
     parser.add_argument('--type-depth', type=int, default=4)
     parser.add_argument('--statements', type=int, default=4, help='generated block statements before the final expression')
     parser.add_argument('--replay', type=Path, help='replay a retained mismatch artifact')
+    parser.add_argument('--fuzz-show', type=Path, help="structured fuzz target; review the source it shows for each --corpus input")
+    parser.add_argument('--corpus', type=Path, help='corpus directory for --fuzz-show')
     parser.add_argument('--output', type=Path, default=ROOT / '.roc-parser-tmp' / 'roc-syntax-review')
     parser.add_argument('--timeout', type=float, default=5)
     args = parser.parse_args(argv)
+    if bool(args.fuzz_show) != bool(args.corpus):
+        parser.error('--fuzz-show and --corpus go together')
     metadata, cases = load_cases(args.fixtures)
+    if args.fuzz_show:
+        cases += shown_cases(args.fuzz_show, args.corpus)
     if args.replay:
         saved = json.loads(args.replay.read_text())
         cases = [{**saved['request'], 'coverage': saved.get('coverage', 'replay'), 'rule': saved.get('rule')}]

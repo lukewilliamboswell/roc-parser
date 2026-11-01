@@ -17,7 +17,8 @@ files. Only oracle-accepted seeds enter the mutation pool. The deterministic
 campaign inserts, deletes, and replaces short fragments, including delimiters,
 keywords, comments, Unicode, and control characters. Edits respect Unicode scalar
 boundaries; the transport therefore tests valid UTF-8. The separate raw byte fuzzer
-continues to cover malformed UTF-8.
+continues to cover malformed UTF-8. An accepted mutation must also agree with the
+compiler on tokens, tree shape and the byte span of every AST node.
 
 Add `--corpus path/to/raw-fuzz-corpus` to compare unchanged harvested raw inputs in
 file mode, **including oracle-rejected inputs**. These comparisons precede the

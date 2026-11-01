@@ -1450,6 +1450,28 @@ expect {
 }
 
 expect {
+	# A parenthesized function's span holds neither parenthesis, and comments and
+	# newlines after the opening one stay outside it.
+	spans = |source, kind| {
+		p = RocSyntax.parse_str(source)
+		p.nodes.keep_if(|n| n.kind == kind).map(|n| (n.start, n.end))
+	}
+	functions = |source| spans(source, TypeFunction)
+	functions("f : (U8 -> Bool) -> U64") == [(5, 15), (4, 23)]
+		and spans("f : (U8 -> Bool) -> U64", TypeParenthesized) == [(4, 16)]
+		and functions("f : (A, B => C)") == [(5, 14)]
+		and functions("f : ( # note\n  U8 -> Bool\n)") == [(15, 25)]
+		and functions("f : (-> U8)") == [(5, 10)]
+}
+
+expect {
+	# Without arguments the parentheses begin the function, as they do outside
+	# another pair.
+	p = RocSyntax.parse_str("f : (() -> U8)")
+	p.nodes.keep_if(|n| n.kind == TypeFunction).map(|n| (n.start, n.end)) == [(5, 13)]
+}
+
+expect {
 	# Error recovery keeps all type children within their parent source spans.
 	["Pair(a, b+ : (", "a.Sort := where [a.foo : a]", "f : U8 where [a.method -> b]", "f : {a: U8 + 1}", "f : [A, ..r, B]"].all(
 		|source| {
@@ -3064,6 +3086,9 @@ type_parenthesized : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.D
 type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 	opening = tok(ctx, initial)
 	var $s = sig(ctx, initial + 1)
+	# A function written inside the parentheses begins after the opening one,
+	# which belongs to the TypeParenthesized wrapping it.
+	inner_start = tok(ctx, $s).start
 	var $ids = []
 	var $comma = False
 	var $done = False
@@ -3074,7 +3099,7 @@ type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 		if is_text(ctx, $s, Arrow) or is_text(ctx, $s, FatArrow) {
 			{ pos: ret_state, nodes: $n, children: $c, diags: $d, node: ret_node } = type_expression(ctx, $s + 1, $n, $c, $d, TypeArgument, depth + 1)
 			ret_end = nend($n, ret_node)
-			{ nodes: $n, children: $c, node: fn_node } = emit($n, $c, TypeFunction, opening.start, ret_end, $ids.append(ret_node))
+			{ nodes: $n, children: $c, node: fn_node } = emit($n, $c, TypeFunction, inner_start, ret_end, $ids.append(ret_node))
 			$s = sig(ctx, ret_state)
 			$ids = [fn_node]
 			$comma = False

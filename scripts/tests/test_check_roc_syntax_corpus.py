@@ -13,7 +13,7 @@ spec.loader.exec_module(gate)
 class CorpusGateTests(unittest.TestCase):
     def response(self, ok=True, **changes):
         return {'ok': ok, 'consumed': True, 'status': 'Complete' if ok else 'Recovered',
-                'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}], **changes}
+                'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}], 'nodes': [], 'node_spans': [], **changes}
 
     def test_missing_grammar_is_failure_even_when_explicitly_unsupported(self):
         for status in ['Recovered', 'Unsupported', 'Limited']:

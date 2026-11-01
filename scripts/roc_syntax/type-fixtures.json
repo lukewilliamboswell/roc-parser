@@ -959,6 +959,104 @@
       "source": "Foo := [A].{x = 1\nx}",
       "rule": "types/declaration",
       "coverage": "recovery"
+    },
+    {
+      "id": "types/annotation/b1fc7ae2622d",
+      "mode": "file",
+      "source": "f : (U8 -> Bool) -> U64\nf = |_| 0\n",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/233baa481754",
+      "mode": "file",
+      "source": "f : (A, B -> C) -> D",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/f181b9a30451",
+      "mode": "file",
+      "source": "f : (A => B) => C",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/dc425b07eb11",
+      "mode": "file",
+      "source": "f : (\n  U8 -> Bool\n) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/89feb2704da7",
+      "mode": "file",
+      "source": "f : ( # leading\n  U8 -> Bool # trailing\n) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/89bf297c4ae6",
+      "mode": "file",
+      "source": "f : (((U8 -> Bool))) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/aa6f861ff343",
+      "mode": "file",
+      "source": "f : ((U8 -> Bool) -> (U16 -> U32)) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/267c4b4eab6f",
+      "mode": "file",
+      "source": "f : (() -> U8) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/d6ca4a07a07c",
+      "mode": "file",
+      "source": "f : (-> U8) -> U64",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/eeb85d1b5701",
+      "mode": "file",
+      "source": "f : List((U8 -> Bool))",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/4692f491ec99",
+      "mode": "file",
+      "source": "f : { g : (U8 -> Bool), h : (() -> U8) }",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/5ce096ef9d4a",
+      "mode": "file",
+      "source": "f : ((U8 -> Bool), U16)",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/22f6852cf674",
+      "mode": "file",
+      "source": "f : [Tag((U8 -> Bool))]",
+      "rule": "types/annotation",
+      "coverage": "supported"
+    },
+    {
+      "id": "types/annotation/4b0e8a828dc1",
+      "mode": "file",
+      "source": "Box(a) := (a -> a)",
+      "rule": "types/annotation",
+      "coverage": "supported"
     }
   ]
 }

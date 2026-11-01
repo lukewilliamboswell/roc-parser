@@ -8,6 +8,14 @@ extern "c" fn write(c_int, [*]const u8, usize) isize;
 const Allocator = std.mem.Allocator;
 const Request = struct { version: u32 = 1, id: []const u8, mode: []const u8, source: []const u8, benchmark_iterations: ?u32 = null, benchmark_warmup: u32 = 10 };
 const Token = struct { kind: []const u8, start: u32, end: u32 };
+// The compiler AST has no generic child iterator, and the projections below
+// already walk every node. Requests are handled one at a time, so that walk
+// records into this request-scoped list instead of threading it through them.
+var node_spans: std.ArrayList(Token) = .empty;
+fn recordSpan(gpa: Allocator, tokens: *const parse.tokenize.TokenizedBuffer, kind: []const u8, region: parse.AST.TokenizedRegion) Allocator.Error!void {
+    if (region.end <= region.start) return;
+    try node_spans.append(gpa, .{ .kind = kind, .start = tokens.resolve(region.start).start.offset, .end = tokens.resolve(region.end - 1).end.offset });
+}
 const Diagnostic = struct { stage: []const u8, kind: []const u8, start: u32, end: u32 };
 // Zig 0.17 Stringify's ReleaseSafe grammar stack is fixed at 256 levels.
 // A legal normalized AST can exceed that JSON depth (one syntax node emits
@@ -87,6 +95,7 @@ const Response = struct {
     tokens: []const Token,
     diagnostics: []const Diagnostic,
     facts: []const Fact,
+    node_spans: []const Token,
 };
 fn span(region: base.Region, kind: []const u8) Token {
     return .{ .kind = kind, .start = region.start.offset, .end = region.end.offset };
@@ -140,6 +149,7 @@ fn stringShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
         const part = store.getExpr(part_idx);
         if (part == .string_part) {
             const text = tokenText(tokens, source, part.string_part.token);
+            if (text.len > 0) try recordSpan(gpa, tokens, "string_part", part.to_tokenized_region());
             if (text.len > 0) try parts.append(try array(gpa, &.{ string("text"), string(text) }));
         } else {
             interpolated = true;
@@ -158,6 +168,7 @@ fn beforeSuffix(store: *const parse.NodeStore, region: parse.AST.TokenizedRegion
 fn typeShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TypeAnno.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("type_depth_limit") });
     const ty = store.getTypeAnno(idx);
+    try recordSpan(gpa, tokens, @tagName(ty), ty.to_tokenized_region());
     return switch (ty) {
         .ty => |value| array(gpa, &.{ string("t_named"), try qualifiedShape(gpa, store, tokens, source, value.qualifiers, value.token) }),
         .ty_var => |value| array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.tok)) }),
@@ -179,6 +190,7 @@ fn typeShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse
             var fields = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.annoRecordFieldSlice(value.fields)) |field_idx| {
                 const field = store.getAnnoRecordField(field_idx) catch return array(gpa, &.{string("malformed_type_field")});
+                try recordSpan(gpa, tokens, "type_field", field.region);
                 try fields.append(try array(gpa, &.{ string("t_field"), string(tokenText(tokens, source, field.name)), .{ .bool = field.optional_mark != null }, try typeShape(gpa, store, tokens, source, field.ty, depth + 1), if (field.default_value) |expr| try shape(gpa, store, tokens, source, expr, depth + 1) else .null }));
             }
             const ext: std.json.Value = switch (value.ext) {
@@ -201,6 +213,7 @@ fn whereShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pars
     var out = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.whereClauseSlice(.{ .span = store.getCollection(idx).span })) |item_idx| {
         const item = store.getWhereClause(item_idx);
+        try recordSpan(gpa, tokens, "where_item", item.to_tokenized_region());
         const projected = switch (item) {
             .mod_method => |value| try array(gpa, &.{ string("where_method"), try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.var_tok)) }), string(fieldName(tokenText(tokens, source, value.name_tok))), try typeShape(gpa, store, tokens, source, value.anno, depth + 1) }),
             .mod_alias => |value| try array(gpa, &.{ string("where_alias"), try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, value.var_tok)) }), try typeShape(gpa, store, tokens, source, value.alias, depth + 1) }),
@@ -214,6 +227,7 @@ fn whereShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pars
 fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Statement.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("statement_depth_limit") });
     const stmt = store.getStatement(idx);
+    try recordSpan(gpa, tokens, @tagName(stmt), stmt.to_tokenized_region());
     return switch (stmt) {
         .decl => |value| array(gpa, &.{ string("decl"), try patternShape(gpa, store, tokens, source, value.pattern, depth + 1), try shape(gpa, store, tokens, source, value.body, depth + 1) }),
         .@"var" => |value| array(gpa, &.{ string("var"), string(tokenText(tokens, source, value.name)), if (value.body) |body| try shape(gpa, store, tokens, source, body, depth + 1) else .null }),
@@ -236,6 +250,7 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
         .type_anno => |value| array(gpa, &.{ string("annotation"), string(tokenText(tokens, source, value.name)), try typeShape(gpa, store, tokens, source, value.anno, depth + 1), try whereShape(gpa, store, tokens, source, value.where, depth + 1), .{ .bool = value.is_var } }),
         .type_decl => |value| blk: {
             const header = store.getTypeHeader(value.header) catch return array(gpa, &.{string("malformed_type_header")});
+            try recordSpan(gpa, tokens, "type_header", header.region);
             const projected_header = try array(gpa, &.{ string("type_header"), string(fieldName(tokenText(tokens, source, header.name))), try typeListShape(gpa, store, tokens, source, header.args, depth + 1) });
             var associated: std.json.Value = .null;
             if (value.associated) |block| {
@@ -249,7 +264,9 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
     };
 }
 fn exposedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.ExposedItem.Idx) Allocator.Error!std.json.Value {
-    return switch (store.getExposedItem(idx)) {
+    const item_node = store.getExposedItem(idx);
+    try recordSpan(gpa, tokens, "exposed_item", item_node.to_tokenized_region());
+    return switch (item_node) {
         .lower_ident => |item| array(gpa, &.{ string("exposed"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident), if (item.as) |alias| string(tokenText(tokens, source, alias)) else .null }),
         .upper_ident => |item| array(gpa, &.{ string("exposed"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident), if (item.as) |alias| string(tokenText(tokens, source, alias)) else .null }),
         .upper_ident_star => |item| array(gpa, &.{ string("exposed_wildcard"), try qualifiedShape(gpa, store, tokens, source, item.qualifiers, item.ident) }),
@@ -259,6 +276,7 @@ fn exposedShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pa
 fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Pattern.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("pattern_depth_limit") });
     const pattern = store.getPattern(idx);
+    try recordSpan(gpa, tokens, @tagName(pattern), pattern.to_tokenized_region());
     return switch (pattern) {
         .ident => |p| array(gpa, &.{ string("p_identifier"), string(tokenText(tokens, source, p.ident_tok)) }),
         .var_ident => |p| array(gpa, &.{ string("p_mutable"), string(tokenText(tokens, source, p.ident_tok)) }),
@@ -318,6 +336,7 @@ fn patternShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const pa
             var fields = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.patternRecordFieldSlice(p.fields)) |field_idx| {
                 const field = store.getPatternRecordField(field_idx);
+                try recordSpan(gpa, tokens, "pattern_field", field.region);
                 const name: std.json.Value = if (field.name) |name| string(tokenText(tokens, source, name)) else .null;
                 if (field.rest) {
                     try fields.append(try array(gpa, &.{ string("p_rest"), name }));
@@ -335,6 +354,7 @@ fn recordFieldsShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *con
     var out = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.recordFieldSlice(fields)) |field_idx| {
         const field = store.getRecordField(field_idx);
+        try recordSpan(gpa, tokens, "record_field", field.region);
         const name = tokenText(tokens, source, field.name);
         const value = switch (field.value) {
             .supplied => |expr| try shape(gpa, store, tokens, source, expr, depth + 1),
@@ -349,6 +369,7 @@ fn recordFieldsShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *con
 fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Expr.Idx, depth: usize) Allocator.Error!std.json.Value {
     if (depth > 256) return array(gpa, &.{ string("unsupported"), string("depth_limit") });
     const expr = store.getExpr(idx);
+    try recordSpan(gpa, tokens, @tagName(expr), expr.to_tokenized_region());
     return switch (expr) {
         .int => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
         .frac => |value| array(gpa, &.{ string("number"), string(tokenText(tokens, source, value.token)) }),
@@ -379,6 +400,7 @@ fn shape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tok
             var branches = std.array_list.Managed(std.json.Value).init(gpa);
             for (store.matchBranchSlice(value.branches)) |idx_branch| {
                 const branch = store.getBranch(idx_branch);
+                try recordSpan(gpa, tokens, "match_branch", branch.region);
                 try branches.append(try array(gpa, &.{ string("branch"), try patternShape(gpa, store, tokens, source, branch.pattern, depth + 1), if (branch.guard) |guard| try shape(gpa, store, tokens, source, guard, depth + 1) else .null, try shape(gpa, store, tokens, source, branch.body, depth + 1) }));
             }
             break :blk array(gpa, &.{ string("match"), try shape(gpa, store, tokens, source, value.expr, depth + 1), .{ .array = branches } });
@@ -557,6 +579,7 @@ fn platformHeaderShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *c
 
 fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.Header.Idx) Allocator.Error!std.json.Value {
     const header = store.getHeader(idx);
+    try recordSpan(gpa, tokens, "header", header.to_tokenized_region());
     const collection = switch (header) {
         .module => |value| value.exposes,
         .hosted => |value| value.exposes,
@@ -621,6 +644,7 @@ fn handle(gpa: Allocator, req: Request) !Response {
         try diagnostics.append(gpa, .{ .stage = "parse", .kind = "UnconsumedInput", .start = region.start.offset, .end = @intCast(req.source.len) });
     }
     var facts: std.ArrayList(Fact) = .empty;
+    node_spans = .empty;
     if (diagnostics.items.len == 0) {
         if (expression) |idx| {
             const expr = parser.store.getExpr(idx);
@@ -650,7 +674,7 @@ fn handle(gpa: Allocator, req: Request) !Response {
             }
         }
     }
-    return .{ .id = req.id, .ok = consumed and diagnostics.items.len == 0, .consumed = consumed, .tokens = tokens.items, .diagnostics = diagnostics.items, .facts = facts.items };
+    return .{ .id = req.id, .ok = consumed and diagnostics.items.len == 0, .consumed = consumed, .tokens = tokens.items, .diagnostics = diagnostics.items, .facts = facts.items, .node_spans = node_spans.items };
 }
 const BenchmarkResponse = struct {
     version: u32 = 1,

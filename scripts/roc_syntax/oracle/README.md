@@ -58,6 +58,10 @@ Response fields:
   Includes explicit `UnconsumedInput` and `TooManyTokenizationErrors` markers.
 - `facts`: valid-file statements, a valid expression, header, or statement root, with
   `kind`, byte `start`/`end`, `node_kind`, and a structural `shape` projection.
+- `node_spans`: for valid input, the compiler AST `kind` and half-open byte
+  `start`/`end` of each node the projection visits, children after their parent.
+  It covers expressions, patterns, statements, types, record and pattern fields,
+  match branches, where clauses, type headers, file headers and exposed items.
 
 Shape projection is intentionally limited, with unsupported syntax explicit:
 

@@ -92,7 +92,7 @@ def compare(request, actual, expected):
             differences.append({'field': 'projection_gap', 'candidate': left, 'oracle': right})
         elif left != right:
             differences.append({'field': field, 'candidate': left, 'oracle': right})
-    return differences
+    return differences + review.span_differences(actual, expected)
 
 
 class Campaign:

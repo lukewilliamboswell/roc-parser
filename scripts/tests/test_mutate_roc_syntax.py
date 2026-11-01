@@ -29,7 +29,7 @@ class MutationTests(unittest.TestCase):
 
     def response(self, ok=True, shape=None):
         return {'ok': ok, 'consumed': ok, 'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}],
-                'shape': ['number', '1'] if shape is None else shape}
+                'nodes': [], 'node_spans': [], 'shape': ['number', '1'] if shape is None else shape}
 
     def test_acceptance_tree_and_unknown_are_real_failures(self):
         request = {'source': ''}
@@ -47,7 +47,7 @@ class MutationTests(unittest.TestCase):
     def test_crash_is_retained_and_persistent_worker_recovers(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'worker.py'
-            path.write_text('import json,sys,os\nfor line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(9)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":[],"pid":os.getpid()}),flush=True)\n')
+            path.write_text('import json,sys,os\nfor line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(9)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"nodes":[],"node_spans":[],"shape":[],"pid":os.getpid()}),flush=True)\n')
             command = [sys.executable, '-u', str(path)]
             campaign = mutation.Campaign(command, command, .5)
             try:
