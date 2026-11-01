@@ -14,6 +14,17 @@
    parent and stops neighbouring statements overlapping, in cases such as
    `{e:)=` and `module{`.
 
+* *Requires a current Roc nightly and basic-cli 0.26.0.* The examples, probes and
+  benchmarks use basic-cli 0.26.0, because 0.25.0 no longer compiles cleanly on
+  current nightlies.
+* *A top-level parser that refers to itself must be a function.* Current
+  compilers reject `tree = ... Parser.lazy(|_| tree) ...` as a circular value.
+  Write `tree = |{}| ...` and call `Parser.lazy(|_| tree({}))`. Parsers that refer
+  to each other through one `lazy` are unaffected.
+* *`RocSyntax` accepts more source, matching the compiler.* Invalid UTF-8 inside a
+  comment is no longer an error, and `parse_header_str` accepts a source holding
+  only whitespace and comments as the implicit header of a type module.
+
 == Fixed
 
 * `RocSyntax` reported a parenthesized function type's span with its opening

@@ -508,9 +508,12 @@ comment_end = |source, at| {
 	$result
 }
 
-utf8_diagnostics_inline : List(U8) -> List(RocSyntax.Diagnostic)
-utf8_diagnostics_inline = |source| {
+## Comments may hold any bytes, but a bidirectional control is rejected even there.
+## `comments` lists them in source order.
+utf8_diagnostics_inline : List(U8), List(RocSyntax.Token) -> List(RocSyntax.Diagnostic)
+utf8_diagnostics_inline = |source, comments| {
 	var $out = []
+	var $comment = 0
 	var $i = 0
 	len = source.len()
 	while $i < len {
@@ -547,7 +550,13 @@ utf8_diagnostics_inline = |source| {
 					}
 					$i = at + width
 				} else {
-					$out = push_diagnostic($out, InvalidUtf8, at, at + 1)
+					while (comments.get($comment) ?? { kind: Comment, start: len, end: len + 1 }).end <= at {
+						$comment = $comment + 1
+					}
+					in_comment = (comments.get($comment) ?? { kind: Comment, start: len, end: len + 1 }).start <= at
+					if !in_comment {
+						$out = push_diagnostic($out, InvalidUtf8, at, at + 1)
+					}
 					$i = at + 1
 				}
 			}
@@ -583,7 +592,7 @@ lex = |source| {
 	index = stage1_starts(source)
 	starts = index.starts
 	var $tokens = List.with_capacity(index.count + 2)
-	var $diagnostics = utf8_diagnostics_inline(source)
+	var $diagnostics = []
 	var $i = if (bom) 3 else 0
 	var $contexts = []
 	if bom {
@@ -820,7 +829,13 @@ lex = |source| {
 	if !$contexts.is_empty() {
 		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, len, len)
 	}
-	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics: $diagnostics, unsupported: False }
+	# Only the tokens tell where comments are, so a first pass that finds invalid
+	# bytes is repeated knowing them. Keeping these apart from the lexer's own
+	# diagnostics stops bytes in a comment from crowding those out.
+	scanned = utf8_diagnostics_inline(source, [])
+	encoding = if (scanned.any(|d| d.code == InvalidUtf8)) utf8_diagnostics_inline(source, $tokens.keep_if(|t| t.kind == Comment)) else scanned
+	diagnostics = if (encoding.is_empty()) $diagnostics else encoding.concat($diagnostics).take_first(256)
+	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics, unsupported: False }
 }
 
 ## SWAR keyword test: compare the identifier's first 8 bytes as one U64 (simdjson-style atom check).
@@ -1469,6 +1484,27 @@ expect {
 	# another pair.
 	p = RocSyntax.parse_str("f : (() -> U8)")
 	p.nodes.keep_if(|n| n.kind == TypeFunction).map(|n| (n.start, n.end)) == [(5, 13)]
+}
+
+expect {
+	# A comment may hold any bytes, as the compiler's trivia scan doesn't validate them.
+	comment = |bytes| RocSyntax.parse_bytes(['#', ' '].concat(bytes).concat(['\n', 'x', ' ', '=', ' ', '1'])).status
+	comment([0xFF]) == Complete and comment([0xC3]) == Complete and comment(List.repeat(0xFF, 300)) == Complete
+}
+
+expect {
+	# Bytes in a comment hide nothing outside it, even past the diagnostic limit,
+	# and a bidirectional control is still rejected there.
+	noisy = ['#'].concat(List.repeat(0xFF, 300)).concat(['\n'])
+	invalid = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', 0xFF]))
+	unclosed = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', '"']))
+	invalid.status == Recovered and invalid.diagnostics.any(|d| d.code == InvalidUtf8)
+		and unclosed.status == Recovered and RocSyntax.parse_str("# \u(202E)\n").status != Complete
+}
+
+expect {
+	# Trivia alone is a header: the implicit one for a type module.
+	["", " \n", "# comment\n", "#_ comment\n"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
 }
 
 expect {
@@ -2253,7 +2289,7 @@ parse_source = |source, mode| {
 		n = nget(n3, $index)
 		if n.kind == Header {
 			$header_count = $header_count + 1
-			$bad_header = $bad_header or n.start != first_start
+			$bad_header = $bad_header or (n.start != first_start and !header_missing)
 		}
 		$index = $index + 1
 	}

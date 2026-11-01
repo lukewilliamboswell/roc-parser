@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded, replayable oracle differential mutation campaign (valid UTF-8 transport)."""
+"""Bounded, replayable oracle differential mutation campaign."""
 import argparse
 from collections import Counter
 import hashlib
@@ -69,7 +69,7 @@ def mutate(seed_case, campaign_seed, index, max_bytes, max_edits=3):
 
 
 def compare(request, actual, expected):
-    source = request['source']
+    source = bytes.fromhex(request['source']) if request.get('mode') == 'file-hex' else request['source']
     differences = []
     for side, response in [('candidate', actual), ('oracle', expected)]:
         try:
@@ -145,7 +145,7 @@ def main(argv=None):
     parser.add_argument('--probe-command', required=True)
     parser.add_argument('--oracle-command', required=True)
     parser.add_argument('--fixtures', type=Path, action='append', help='repeat for curated fixtures and imported corpus')
-    parser.add_argument('--corpus', type=Path, help='raw-fuzz corpus directory: compare unchanged UTF-8 entries, including rejected inputs')
+    parser.add_argument('--corpus', type=Path, help='raw-fuzz corpus directory: compare unchanged entries, including rejected inputs and invalid UTF-8')
     parser.add_argument('--max-corpus-files', type=positive, default=10000)
     parser.add_argument('--runs', type=positive, default=1000)
     parser.add_argument('--seed', type=int, default=1)
@@ -182,6 +182,8 @@ def main(argv=None):
             for path in args.fixtures or [review.DATA / 'fixtures.json']:
                 _, inputs = review.load_cases(path)
                 for case in inputs:
+                    if case['mode'] == 'file-hex':
+                        continue  # Edits are made to text, not its hexadecimal spelling.
                     if len(case['source'].encode()) > args.max_source_bytes:
                         counts['oversize_seeds'] += 1
                         continue
@@ -220,11 +222,14 @@ def main(argv=None):
                         continue
                     try:
                         source = path.read_bytes().decode('utf-8', errors='strict')
+                        mode = 'file'
                     except UnicodeDecodeError:
-                        counts['corpus_invalid_utf8_excluded'] += 1
-                        continue
-                    original = {'id': str(path.relative_to(args.corpus)), 'mode': 'file', 'source': source, 'fixture': str(path.resolve())}
-                    corpus_cases.append({'request': {'id': f'corpus/{index}', 'mode': 'file', 'source': source},
+                        # JSON can't carry these bytes, so they travel as hex.
+                        source = path.read_bytes().hex()
+                        mode = 'file-hex'
+                        counts['corpus_invalid_utf8'] += 1
+                    original = {'id': str(path.relative_to(args.corpus)), 'mode': mode, 'source': source, 'fixture': str(path.resolve())}
+                    corpus_cases.append({'request': {'id': f'corpus/{index}', 'mode': mode, 'source': source},
                                          'mutation': {'kind': 'unchanged_corpus', 'seed': args.seed, 'index': index, 'original': original,
                                                       'original_sha256': digest(source), 'source_sha256': digest(source), 'edits': []}})
                 counts['corpus_compared'] = len(corpus_cases)

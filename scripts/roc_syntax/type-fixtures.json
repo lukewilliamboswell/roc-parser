@@ -1,7 +1,7 @@
 {
   "version": 1,
   "syntax": "current-zig",
-  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "reference_commit": "f7bef6b38f23797eb34b291ced98af71ea37dd3b",
   "coverage": [
     "types/annotation",
     "types/declaration",
