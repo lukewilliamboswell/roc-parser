@@ -86,10 +86,14 @@ type_full = |bytes, out, depth, commas| {
 
 type_atom : List(U8), Out, U64 -> Out
 type_atom = |bytes, out, depth| {
-	(choice, after) = pick(bytes, out, if (depth == 0) 3 else 9)
+	(choice, after) = pick(bytes, out, if (depth == 0) 3 else 11)
 	start = after.text.len()
 	inner = smaller(depth)
-	if choice == 0 {
+	if choice == 9 {
+		token(after, "_", TypeWildcard)
+	} else if choice == 10 {
+		token(after, "_ignored", TypeVariable)
+	} else if choice == 0 {
 		token(after, "U8", TypeName)
 	} else if choice == 1 {
 		token(after, "a", TypeVariable)
@@ -166,14 +170,60 @@ pattern_atom = |bytes, out, depth| {
 	}
 }
 
+## What a match branch can test that a binding can't.
+branch_pattern : List(U8), Out, U64 -> Out
+branch_pattern = |bytes, out, depth| {
+	(choice, after) = pick(bytes, out, 12)
+	start = after.text.len()
+	if choice == 0 {
+		token(after, "1", NumberLiteral)
+	} else if choice == 1 {
+		token(after, "1.5", NumberLiteral)
+	} else if choice == 2 {
+		typed(after, start, |o| token(o, "1", NumberLiteral), "U8")
+	} else if choice == 3 {
+		text_literal(after, "s")
+	} else if choice == 4 {
+		token(after, "'c'", CharacterLiteral)
+	} else if choice == 5 {
+		left = mark(token(after, "None", Identifier), TagPattern, start)
+		right_start = left.text.len() + 3
+		mark(mark(token(put(left, " | "), "Other", Identifier), TagPattern, right_start), AlternativePattern, start)
+	} else if choice == 6 {
+		opened = put(token(after, "Box", Identifier), ".(")
+		mark(put(pattern(bytes, opened, depth), ")"), NominalPattern, start)
+	} else if choice == 7 {
+		record_start = start + 4
+		field_start = record_start + 2
+		named = token(put(token(after, "Box", Identifier), ".{ "), "pun", Identifier)
+		mark(mark(put(mark(named, PatternField, field_start), " }"), RecordPattern, record_start), NominalPattern, start)
+	} else if choice == 8 {
+		first = put(pattern(bytes, put(after, "["), depth), ", ")
+		rest_start = first.text.len()
+		rest = mark(token(put(first, ".. as "), "others", Identifier), RestPattern, rest_start)
+		mark(put(rest, "]"), ListPattern, start)
+	} else if choice == 9 {
+		first = token(put(after, "\""), "a", StringSegment)
+		hole_start = first.text.len()
+		hole = mark(put(token(put(first, "\${"), "b", IdentifierPattern), "}"), CapturePattern, hole_start)
+		mark(put(token(hole, "c", StringSegment), "\""), PatternStringLiteral, start)
+	} else if choice == 10 {
+		mark(token(put(after, "var "), "\$count", Identifier), MutablePattern, start)
+	} else {
+		pattern(bytes, after, depth)
+	}
+}
+
 ## An expression that can stand beside a binary operator or a call's closing
 ## delimiter without grouping.
 expr_atom : List(U8), Out, U64 -> Out
 expr_atom = |bytes, out, depth| {
-	(choice, after) = pick(bytes, out, if (depth == 0) 3 else 14)
+	(choice, after) = pick(bytes, out, if (depth == 0) 3 else 26)
 	start = after.text.len()
 	inner = smaller(depth)
-	if choice == 0 {
+	if choice >= 14 {
+		expr_more(bytes, after, inner, choice - 14)
+	} else if choice == 0 {
 		token(after, "7", NumberLiteral)
 	} else if choice == 1 {
 		token(after, "value", Identifier)
@@ -229,16 +279,83 @@ expr_atom = |bytes, out, depth| {
 	}
 }
 
+## A literal with a type suffix, whose literal `write` has just been noted.
+typed : Out, U64, (Out -> Out), Str -> Out
+typed = |out, start, write, suffix| mark(token(put(write(out), "."), suffix, Identifier), TypedLiteral, start)
+
+## The rest of the atoms: literal spellings, postfix forms and record variants.
+expr_more : List(U8), Out, U64, U64 -> Out
+expr_more = |bytes, out, depth, choice| {
+	start = out.text.len()
+	if choice == 0 {
+		typed(out, start, |o| token(o, "7", NumberLiteral), "U8")
+	} else if choice == 1 {
+		token(out, "1.5", NumberLiteral)
+	} else if choice == 2 {
+		typed(out, start, |o| token(o, "2.5", NumberLiteral), "Dec")
+	} else if choice == 3 {
+		token(out, "'c'", CharacterLiteral)
+	} else if choice == 4 {
+		typed(out, start, |o| token(o, "'c'", CharacterLiteral), "U8")
+	} else if choice == 5 {
+		typed(out, start, |o| text_literal(o, "s"), "Foo")
+	} else if choice == 6 {
+		named = put(token(out, "value", Identifier), ".?")
+		mark(token(named, "field", Identifier), OptionalFieldAccess, start)
+	} else if choice == 7 {
+		named = put(token(out, "value", Identifier), ".")
+		method = mark(token(named, "method", Identifier), FieldAccess, start)
+		mark(put(expr_atom(bytes, put(method, "("), depth), ")"), Call, start)
+	} else if choice == 8 {
+		mark(token(put(token(out, "value", Identifier), "."), "0", Identifier), FieldAccess, start)
+	} else if choice == 9 {
+		written = record_field(bytes, put(token(out, "Box", Identifier), ".{ "), depth)
+		record_start = start + 4
+		mark(mark(put(written, " }"), Record, record_start), NominalRecord, start)
+	} else if choice == 10 {
+		# The record's mapper comes first among its children but last in the source.
+		field_start = out.spans.len()
+		written = put(record_field(bytes, put(out, "{ "), depth), " }.")
+		mapper_start = written.text.len()
+		mapper = { kind: Identifier, start: mapper_start, end: mapper_start + 3 }
+		fields = written.spans.drop_first(field_start)
+		reordered = written.spans.take_first(field_start).append(mapper).concat(fields)
+		mark({ ..put(written, "Box"), spans: reordered }, RecordBuilder, start)
+	} else {
+		written = record_field(bytes, put(token(put(out, "{ .."), "value", Identifier), ", "), depth)
+		mark(put(written, " }"), RecordUpdate, start)
+	}
+}
+
+record_field : List(U8), Out, U64 -> Out
+record_field = |bytes, out, depth| {
+	start = out.text.len()
+	named = put(token(out, "field", Identifier), ": ")
+	mark(expr_atom(bytes, named, depth), RecordField, start)
+}
+
 ## Everything `expr_atom` writes, plus forms that have to be grouped elsewhere.
 expr_full : List(U8), Out, U64 -> Out
 expr_full = |bytes, out, depth| {
-	(choice, after) = pick(bytes, out, if (depth == 0) 1 else 7)
+	(choice, after) = pick(bytes, out, if (depth == 0) 1 else 13)
 	start = after.text.len()
 	inner = smaller(depth)
 	if choice == 0 or choice == 1 {
 		expr_atom(bytes, after, depth)
 	} else if choice == 5 and after.trivia {
 		block(bytes, after, inner)
+	} else if choice == 6 {
+		mark(expr_atom(bytes, put(after, "dbg "), inner), Debug, start)
+	} else if choice == 7 {
+		mark(text_literal(put(after, "crash "), "message"), Crash, start)
+	} else if choice == 8 {
+		mark(expr_atom(bytes, put(after, "return "), inner), Return, start)
+	} else if choice == 9 {
+		mark(token(put(token(after, "value", Identifier), " |> "), "call", Identifier), ArrowCall, start)
+	} else if choice == 11 {
+		token(after, "...", Ellipsis)
+	} else if choice == 12 and after.trivia {
+		for_loop(bytes, after, inner)
 	} else if choice == 2 {
 		left = put(expr_atom(bytes, after, inner), " + ")
 		mark(expr_atom(bytes, left, inner), Binary, start)
@@ -254,8 +371,10 @@ expr_full = |bytes, out, depth| {
 	} else if after.trivia {
 		matched = put(token(put(after, "match "), "value", Identifier), " {\n\t")
 		branch_start = matched.text.len()
-		bound = put(pattern(bytes, matched, inner), " => ")
-		branch = mark(expr_atom(bytes, bound, inner), MatchBranch, branch_start)
+		(guarded, chosen) = pick(bytes, branch_pattern(bytes, matched, inner), 2)
+		bound = if (guarded == 0) chosen else put(token(put(chosen, " if "), "value", Identifier), "")
+		arrowed = put(bound, " => ")
+		branch = mark(expr_atom(bytes, arrowed, inner), MatchBranch, branch_start)
 		mark(put(branch, "\n}"), Match, start)
 	} else {
 		expr_atom(bytes, after, inner)
@@ -265,9 +384,12 @@ expr_full = |bytes, out, depth| {
 ## One statement of a block and the line break after it.
 block_statement : List(U8), Out, U64 -> Out
 block_statement = |bytes, out, depth| {
-	(choice, after) = pick(bytes, out, 5)
+	(choice, after) = pick(bytes, out, 6)
 	start = after.text.len()
-	finished = if choice == 0 {
+	finished = if choice == 5 {
+		tested = put(token(put(after, "if "), "value", Identifier), " ")
+		mark(mark(token(tested, "7", NumberLiteral), If, start), ExpressionStatement, start)
+	} else if choice == 0 {
 		named = put(token(after, "local", IdentifierPattern), " = ")
 		mark(expr_atom(bytes, named, depth), Declaration, start)
 	} else if choice == 1 {
@@ -281,14 +403,20 @@ block_statement = |bytes, out, depth| {
 		broken = token(put(tested, "{ "), "break", Break)
 		mark(mark(put(broken, " }"), Block, body_start), While, start)
 	} else {
-		bound = put(pattern(bytes, put(after, "for "), depth), " in ")
-		listed = put(token(bound, "value", Identifier), " ")
-		body_start = listed.text.len()
-		last_start = body_start + 2
-		ended = mark(token(put(listed, "{ "), "value", Identifier), ExpressionStatement, last_start)
-		mark(mark(put(ended, " }"), Block, body_start), For, start)
+		for_loop(bytes, after, depth)
 	}
 	put(finished, "\n\t")
+}
+
+for_loop : List(U8), Out, U64 -> Out
+for_loop = |bytes, out, depth| {
+	start = out.text.len()
+	bound = put(pattern(bytes, put(out, "for "), depth), " in ")
+	listed = put(token(bound, "value", Identifier), " ")
+	body_start = listed.text.len()
+	last_start = body_start + 2
+	ended = mark(token(put(listed, "{ "), "value", Identifier), ExpressionStatement, last_start)
+	mark(mark(put(ended, " }"), Block, body_start), For, start)
 }
 
 block : List(U8), Out, U64 -> Out
@@ -400,6 +528,13 @@ file_header = |bytes, out, depth| {
 	}
 }
 
+file_imported : Out -> Out
+file_imported = |out| {
+	start = out.text.len()
+	named = put(token(put(text_literal(put(out, "import "), "d.txt"), " as "), "data", Identifier), " : ")
+	put(mark(token(named, "Str", Identifier), FileImport, start), "\n")
+}
+
 imported : Out -> Out
 imported = |out| {
 	start = out.text.len()
@@ -462,7 +597,18 @@ definition = |bytes, out, depth, constrained| {
 	definition_start = annotated.text.len() + 1
 	marked = mark(annotated, TypeAnnotation, start)
 	named = put(token(put(marked, "\n"), "name", IdentifierPattern), " = ")
-	put(mark(expr_full(bytes, named, depth), Declaration, definition_start), "\n")
+	(multiline, chosen) = pick(bytes, named, 8)
+	literal_start = chosen.text.len()
+	literal = |o| mark(token(put(o, "\"\"\""), "text", StringSegment), MultilineStringLiteral, literal_start)
+	value = if multiline == 0 {
+		# Only a line break ends a multiline string, so it can't nest here.
+		literal(chosen)
+	} else if multiline == 1 {
+		mark(token(put(literal(chosen), "\n."), "Str", Identifier), TypedLiteral, literal_start)
+	} else {
+		expr_full(bytes, chosen, depth)
+	}
+	put(mark(value, Declaration, definition_start), "\n")
 }
 
 generate : List(U8) -> Case
@@ -470,8 +616,8 @@ generate = |bytes| {
 	depth = U8.to_u64((bytes.get(0) ?? 0) % 5)
 	count = U8.to_u64((bytes.get(1) ?? 0) % 3) + 1
 	headed = file_header(bytes, { text: [], spans: [], next: 2, trivia: True }, depth)
-	(with_import, counted) = pick(bytes, headed, 2)
-	var $out = if (with_import == 0) counted else imported(counted)
+	(with_import, counted) = pick(bytes, headed, 3)
+	var $out = if (with_import == 0) counted else if (with_import == 1) imported(counted) else file_imported(counted)
 	for _ in 0..<count {
 		$out = statement(bytes, $out, depth)
 	}
@@ -525,7 +671,7 @@ target = Fuzz.target_with({ name: "roc-syntax-span-model", examples: [], generat
 expect {
 	# These bytes choose a parenthesized function after a comment, which begins
 	# at its first argument.
-	case = generate([1, 0, 0, 0, 2, 0, 4, 3, 1])
+	case = generate([1, 0, 0, 0, 2, 0, 4, 3, 1, 0, 0, 0, 0, 0, 1])
 	functions = case.spans.keep_if(|span| span.kind == TypeFunction).map(|span| (span.start, span.end))
 	case.source == "name : ( # note\nU8 -> U8)\nname = 7\n" and functions == [(16, 24)]
 }
