@@ -3148,6 +3148,48 @@
       "source": "So:me(x) = vmatch ",
       "rule": "recovery",
       "coverage": "recovery"
+    },
+    {
+      "id": "recovery-pattern-stops-at-closer",
+      "mode": "file",
+      "source": "{e:)=",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-nominal-pattern-stops-at-closer",
+      "mode": "file",
+      "source": "Foo.{e:)=\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-type-stops-at-closer",
+      "mode": "file",
+      "source": "f : {a : )\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-header-without-exposes",
+      "mode": "file",
+      "source": "module{",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-platform-without-requires",
+      "mode": "file",
+      "source": "platform =0\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-unclosed-type-before-definition",
+      "mode": "file",
+      "source": "z:[(,\ne=\n",
+      "rule": "recovery",
+      "coverage": "recovery"
     }
   ]
 }

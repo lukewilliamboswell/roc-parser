@@ -1472,6 +1472,30 @@ expect {
 }
 
 expect {
+	# Recovery leaves a closing delimiter for its opener, so a pattern or type
+	# that stops at one ends before it and its parent still covers it.
+	["{e:)=", "{e:]=", "Foo.{e:)=", "{e:) = 1\nf = 2", "f : (a, ]", "f : {a : )", "f : [)", "z:[(,\ne="].all(
+		|source| {
+			p = RocSyntax.parse_str(source)
+			p.status != Complete and p.nodes.all(
+				|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
+					|id| match p.nodes.get(id) {
+						Ok(child) => n.start <= child.start and child.end <= n.end
+						Err(_) => False
+					},
+				),
+			)
+		},
+	)
+}
+
+expect {
+	# An unclosed type ends at what it parsed, not at the next declaration.
+	p = RocSyntax.parse_str("z:[(a\ne=")
+	p.nodes.keep_if(|n| n.kind == TypeParenthesized).map(|n| (n.start, n.end)) == [(3, 5)]
+}
+
+expect {
 	# Error recovery keeps all type children within their parent source spans.
 	["Pair(a, b+ : (", "a.Sort := where [a.foo : a]", "f : U8 where [a.method -> b]", "f : {a: U8 + 1}", "f : [A, ..r, B]"].all(
 		|source| {
@@ -2569,7 +2593,7 @@ exposed_collection = |ctx, initial, nodes, children, diags| {
 	var $d = if (opened) diags else diag(diags, UnexpectedToken, opening.start, opening.end)
 	var $s = if (opened) look + 1 else look
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opened) opening.end else opening.start
 	var $done = !opened
 	while !$done {
 		item_state = sig(ctx, $s)
@@ -3034,7 +3058,7 @@ type_atom = |ctx, initial, nodes, children, diags, depth| {
 		type_fields(ctx, s, nodes, children, diags, True, depth + 1)
 	} else {
 		advance = t.kind != EndOfFile and t.kind != CloseRound and t.kind != CloseSquare and t.kind != CloseCurly and !is_text(ctx, s, Comma)
-		finish(s + if (advance) 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (advance) 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, if (advance) t.end else t.start, [])
 	}
 }
 
@@ -3130,7 +3154,7 @@ type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 	closed = closing.kind == CloseRound
 	s1 = if (closed) $s + 1 else $s
 	d1 = if (closed) $d else diag($d, UnclosedDelimiter, closing.start, closing.end)
-	end = U64.max(if (closed) closing.end else closing.start, nend(n1, ids.last() ?? n1.len()))
+	end = U64.max(if (closed) closing.end else opening.end, nend(n1, ids.last() ?? n1.len()))
 	arrow = sig(ctx, s1)
 	if ids.is_empty() and (is_text(ctx, arrow, Arrow) or is_text(ctx, arrow, FatArrow)) {
 		{ pos: ret_state, nodes: n2, children: c2, diags: d2, node: ret_node } = type_expression(ctx, arrow + 1, n1, c1, d1, TypeArgument, depth + 1)
@@ -3263,7 +3287,7 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 	var $s = if (opening.kind == OpenSquare) look + 1 else look
 	var $ids = []
 	var $done = opening.kind != OpenSquare or depth >= 128
-	var $end = opening.end
+	var $end = if (opening.kind == OpenSquare) opening.end else opening.start
 	var $n = nodes
 	var $c = children
 	var $d = d2
@@ -3667,7 +3691,9 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 	} else if t.kind == Number or t.kind == SingleQuote {
 		primary(ctx, s, nodes, children, diags, depth, False)
 	} else {
-		finish(s + if (t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		# A closing delimiter stays for its opener, so the error doesn't claim it.
+		stops = t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly
+		finish(s + if (stops) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, if (stops) t.start else t.end, [])
 	}
 }
 
@@ -4337,7 +4363,7 @@ platform_requires = |ctx, initial, nodes, children, diags, depth| {
 	reopened = tok(ctx, after_empty).kind == OpenCurly
 	var $s = if (!empty) s0 else if (reopened) after_empty + 1 else after_empty
 	var $ids = []
-	var $end = if (empty) tok(ctx, initial_look).end else opening.end
+	var $end = if (empty) tok(ctx, initial_look).end else if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128 or (empty and !reopened)
 	var $n = nodes
 	var $c = children
@@ -4434,7 +4460,7 @@ platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
 	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
@@ -4514,7 +4540,7 @@ platform_targets = |ctx, initial, nodes, children, diags, depth| {
 	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
@@ -4636,7 +4662,7 @@ platform_target_list = |ctx, initial, nodes, children, diags, files, depth| {
 	d1 = if (opening.kind != OpenSquare) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenSquare) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenSquare) opening.end else opening.start
 	var $done = opening.kind != OpenSquare or depth >= 128
 	var $n = nodes
 	var $c = children
