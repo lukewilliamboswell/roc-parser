@@ -11,55 +11,31 @@ import cli.Path
 import cli.Stderr
 import cli.Stdout
 import src/Inventory
-import src/ReleasePlan
 import "release/dependencies.json" as dependency_json : Str
 
-## Bind the shared inventory generator to this package's actual source bundle.
-## Verification independently recomputes the expected graph from the bundle,
-## working-tree source, reviewed supplier metadata, Spec and Lock.
-main! = |args| {
-	result = match args.map(OsStr.display) {
-		[mode, .. as rest] if mode == "generate" or mode == "verify" => inventory!(mode, rest)
-		_ => Err("usage: release_sbom.roc -- generate|verify --bundle FILE --release-version VERSION [--output-dir DIR | --sbom FILE] [--repo owner/name]")
-	}
-	match result {
+## Account for the package source and reviewed Unicode inputs in the release.
+## The shared workflow validates this composition and binds the SBOM sidecars.
+main! = |_args| {
+	match composition!() {
 		Ok({}) => Ok({})
 		Err(reason) => {
-			Stderr.line!("SBOM: ${reason}")?
+			Stderr.line!("SBOM composition: ${reason}")?
 			Err(Exit(1))
 		}
 	}
 }
 
-inventory! = |mode, args| {
-	options = ReleasePlan.options_for(args, ["--bundle", "--release-version", "--output-dir", "--sbom", "--repo"])?
-	version = ReleasePlan.option(options, "--release-version", "")
-	if !ReleasePlan.valid_version(version) {
-		return Err("invalid release version")
-	}
-	repository = ReleasePlan.option(
-		options,
-		"--repo",
-		match Env.var_str!("GITHUB_REPOSITORY") {
-			Ok(value) if value != "" => value
-			_ => "lukewilliamboswell/roc-parser"
-		},
-	)
-	if !ReleasePlan.repository(repository) {
-		return Err("repository must be owner/name")
-	}
-	given = ReleasePlan.option(options, "--bundle", "")
-	if given == "" {
-		return Err("--bundle is required")
-	}
-	bundle = Path.absolute!(Path.utf8(given)).map_err(|_| "cannot resolve bundle")?
-	name = Path.filename(bundle).map_ok(Path.display).map_err(|_| "bundle has no filename")?
-	if !Inventory.valid_bundle_name(name) {
-		return Err("bundle must have a safe .tar.zst filename")
-	}
+composition! = || {
+	version = Env.var_str!("RELEASE_VERSION").map_err(|_| "RELEASE_VERSION is required")?
+	bundle_url = Env.var_str!("BUNDLE_URL").map_err(|_| "BUNDLE_URL is required")?
+	filename = Env.var_str!("BUNDLE_PATH").map_err(|_| "BUNDLE_PATH is required")?
+	bundle_path = Path.join(Path.utf8("dist"), filename)
+	bundle = Path.absolute!(bundle_path).map_err(|_| "cannot resolve bundle")?
+	output = Path.utf8(Env.var_str!("SBOM_COMPOSITION").map_err(|_| "SBOM_COMPOSITION is required")?)
+	repository = "lukewilliamboswell/roc-parser"
 	base = Path.utf8(".roc-parser-tmp/release-sbom")
 	Path.create_all!(base).map_err(|_| "cannot create inventory workspace")?
-	work = Env.create_temp_dir_in!(base, "${mode}-").map_err(|_| "cannot create fresh inventory workspace")?
+	work = Env.create_temp_dir_in!(base, "composition-").map_err(|_| "cannot create fresh inventory workspace")?
 	dependencies = capture!(["roc", "deps", "package/main.roc"])?
 	if !Inventory.known_dependencies(dependencies) {
 		return Err("package dependency closure changed; review scripts/release/dependencies.json before releasing")
@@ -81,7 +57,6 @@ inventory! = |mode, args| {
 	if listed.members.is_empty() {
 		return Err("empty package bundle")
 	}
-	spec_source = capture!(["blueprint", "spec"])?
 	supplier : Try({ components : List(Component), relationships : List(Edge), inputs : List({ input : Str, component : Str, reason : Str }) }, _)
 	supplier = Json.parse(dependency_json)
 	reviewed = supplier.map_err(|_| "invalid reviewed dependency inventory")?
@@ -111,7 +86,7 @@ inventory! = |mode, args| {
 		license: "UPL-1.0",
 		license_url: "",
 		identity: "urn:roc-parser:source:${listed.sha256}",
-		download: "https://github.com/${repository}/releases/download/${version}/${name}",
+		download: bundle_url,
 		sha256: "",
 		modified: "Source modules of the delivered bundle; tooling and separately fetched dependencies are not contained in it.",
 		target: "source",
@@ -132,51 +107,12 @@ inventory! = |mode, args| {
 		imported_documents: empty,
 		unavailable_sboms: empty,
 	}
-	composition_path = Path.join(work, "composition.json")
-	Path.write_utf8!(composition_path, Json.to_str(composition)).map_err(|_| "cannot write reviewed composition")?
-	spec_path = Path.join(work, "Spec")
-	Path.write_utf8!(spec_path, spec_source).map_err(|_| "cannot write evaluated Spec")?
-	inventory_path = Path.join(work, "inventory.json")
-	run!(["blueprint-sbom", "inspect", Path.display(spec_path), "Blueprint.lock", Path.display(composition_path), "source", Path.display(inventory_path), "--members", Path.display(listing)])?
-	parent_text = Path.display(bundle).split_last("/").map_ok(|parts| if (parts.before == "") "/" else parts.before).map_err(|_| "bundle has no parent")?
-	parent = Path.utf8(parent_text)
-	sbom = if mode == "generate" {
-		output = Path.utf8(ReleasePlan.option(options, "--output-dir", Path.display(parent)))
-		Path.create_all!(output).map_err(|_| "cannot create SBOM output directory")?
-		Path.join(output, "${name}.spdx.json")
-	} else {
-		given_sbom = ReleasePlan.option(options, "--sbom", "")
-		if given_sbom == "" {
-			return Err("--sbom is required for verification")
-		}
-		path = Path.utf8(given_sbom)
-		if Path.filename(path).map_ok(Path.display) != Ok("${name}.spdx.json") {
-			return Err("SBOM filename does not identify its bundle")
-		}
-		path
-	}
-	if mode == "generate" {
-		created = capture_with_utc!(["git", "show", "-s", "--date=format-local:%Y-%m-%dT%H:%M:%SZ", "--format=%cd", "HEAD"])?
-		context = { namespace: "https://github.com/${repository}/sbom/${version}/${listed.sha256}/revision-1", revision: "1", created: created.trim(), author: "Organization: roc-parser contributors", generator: "Tool: blueprint-sbom-0.11.0" }
-		subject = { filename: name, version, target: "source", sha256: listed.sha256, url: "https://github.com/${repository}/releases/download/${version}/${name}" }
-		context_path = Path.join(work, "context.json")
-		subject_path = Path.join(work, "subject.json")
-		Path.write_utf8!(context_path, Json.to_str(context)).map_err(|_| "cannot write inventory context")?
-		Path.write_utf8!(subject_path, Json.to_str(subject)).map_err(|_| "cannot write inventory subject")?
-		if Path.exists!(sbom).map_err(|_| "cannot inspect old sidecar")? {
-			Path.delete!(sbom).map_err(|_| "cannot replace old local sidecar")?
-		}
-		run!(["blueprint-sbom", "bind", Path.display(inventory_path), Path.display(subject_path), Path.display(context_path), Path.display(bundle), Path.display(sbom), "--spdx-2.3"])?
-	}
-	run!(["blueprint-sbom", "check", "--artifacts", Path.display(parent), "--inventory", Path.display(inventory_path), Path.display(sbom)])?
-	# The generic inventory has no release version. Check the subject identity
-	# against this request as well as the shared graph/digest/schema checks.
-	run!(["jq", "-e", "--arg", "version", version, "--arg", "url", "https://github.com/${repository}/releases/download/${version}/${name}", "--arg", "subject", "SPDXRef-Subject", ".packages[] | select(.SPDXID == $subject) | .versionInfo == $version and .downloadLocation == $url", Path.display(sbom)])
+	Path.write_utf8!(output, Json.to_str(composition)).map_err(|_| "cannot write reviewed composition")
 }
 
-capture_with_utc! = |command| match command {
+capture! = |command| match command {
 	[program, .. as args] => {
-		ran = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).env("TZ", "UTC").env("NO_COLOR", "1").stdout(Capture).stderr(Capture).timeout_ms(120_000).output_limit(10_000_000).run!().map_err(|_| "${program} did not complete")?
+		ran = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).env("NO_COLOR", "1").stdout(Capture).stderr(Capture).timeout_ms(120_000).output_limit(10_000_000).run!().map_err(|_| "${program} did not complete")?
 		if ran.status != Exited(0) {
 			return Err("${program} failed: ${Str.from_utf8_lossy(ran.stderr_bytes)}")
 		}
@@ -184,8 +120,6 @@ capture_with_utc! = |command| match command {
 	}
 	[] => Err("empty command")
 }
-
-capture! = |command| capture_with_utc!(command)
 
 run! = |command| {
 	Stdout.line!("+ ${Str.join_with(command, " ")}").map_err(|_| "cannot print command")?

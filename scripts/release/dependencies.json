@@ -646,11 +646,6 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
-      "input": "task:combine-attestations",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
       "input": "task:conformance",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
@@ -681,27 +676,7 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
-      "input": "task:release-build",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
       "input": "task:release-package",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
-      "input": "task:release-sbom",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
-      "input": "task:release-test",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
-      "input": "task:release-validate",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
@@ -747,6 +722,16 @@
     },
     {
       "input": "task:api-docs",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:sbom-composition",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:docs-path",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     }

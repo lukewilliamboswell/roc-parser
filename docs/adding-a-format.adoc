@@ -232,7 +232,7 @@ Build and check the documentation:
 
 [source,bash]
 ----
-scripts/build_api_docs.roc -- --check
+blueprint run api-docs
 blueprint run doc-examples
 blueprint run docs
 ----

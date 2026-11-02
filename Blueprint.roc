@@ -1,6 +1,6 @@
 # roc-parser's development environments and the tasks CI and contributors run.
 #
-# Needs the roc-blueprint 0.8.0 `blueprint` binary, the release this file's
+# Needs the roc-blueprint 0.11.0 `blueprint` binary, the release this file's
 # platform URL names (docs/contributing.adoc says how to install it), and the
 # latest Roc nightly on PATH as `roc`. From the repository root:
 #
@@ -23,7 +23,7 @@
 # comparison drivers, from the nixpkgs revision Blueprint.lock records. Their
 # libraries are pinned separately, by bench/compare/rust/Cargo.lock,
 # bench/compare/go/go.sum and bench/compare/python/requirements.txt.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.8.0/FbJymjYdCxx9vqMcau7r4tQfeAbnVGqqJoYrLGqPCqKu.tar.zst" }
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/EuSPs8vc71qJNFg29YzegvVRL1bR9pKqUYDHFiSCPTQ1.tar.zst" }
 
 import pf.Config
 import pf.System
@@ -48,16 +48,15 @@ config = [
 		Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
 		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
 	]),
-	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
-	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl", "jq"])]),
+	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
+	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
-	Environment("docs", [Extend("release"), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/roc-docs-{system}"))])]),
-	Environment("json", [Extend("tooling"), Expect(["jq"])]),
+	Environment("docs", [Extend("release"), Expect(["which"]), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/roc-docs-{system}"))])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
@@ -67,23 +66,19 @@ config = [
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
-	Task("api-docs", [Use("package"), Run(["scripts/build_api_docs.roc", "--"])]),
 	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc", "--"])]),
 	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc", "--"])]),
 	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc", "--"])]),
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
 	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
-	# Release artifacts. `release-build` makes every file of a release and
-	# `release-test` tests those exact files; the others make one each.
-	Task("release-sbom", [Use("release"), Run(["scripts/release_sbom.roc", "--"])]),
+	# Shared packaging and documentation; the release workflow owns publishing.
+	Task("sbom-composition", [Use("release"), Run(["scripts/sbom_composition.roc"])]),
+	Task("docs-path", [Use("docs"), Run(["which", "roc-docs"])]),
+	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--api-entrypoint", "package/main.roc", "--roc-command", "roc", "--pdf-filename", "roc-parser.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-parser/"])]),
+	Task("api-docs", [Use("package"), Run(["roc", "docs", "package/main.roc", "--output=.docs-out/api"])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),
 	Task("bundle", [Use("package"), Run(["scripts/bundle.roc", "--"])]),
 	Task("examples", [Use("package"), Run(["release-package", "test-examples"])]),
 	Task("test-examples-archive", [Use("package"), Run(["release-package", "test-archive"])]),
-	Task("docs", [Use("docs"), Run(["scripts/package_docs.roc", "--"])]),
-	Task("release-validate", [Use("release"), Run(["scripts/validate_release.roc", "--"])]),
-	Task("release-build", [Use("docs"), Run(["scripts/release_assets.roc", "--", "build"])]),
-	Task("release-test", [Use("release"), Run(["scripts/release_assets.roc", "--", "test"])]),
-	Task("combine-attestations", [Use("json"), Run(["scripts/combine_attestations.roc", "--"])]),
 ]

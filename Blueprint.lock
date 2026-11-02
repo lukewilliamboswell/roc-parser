@@ -22,16 +22,16 @@
 		(sha256 "bf91e6744923145847657cae174c0324ca00794b1b1fcbec768ef6d5086834f5")
 		(size 3119760)
 		(system "x86_64-linux")
-		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-x86_64-linux"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.9.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/release-package-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.9.1")) (
 		(name "release-package")
 		(obtained Both)
 		(served ("release-assets.githubusercontent.com"))
 		(sha256 "6ab66358112636b82cd116d136182176e3c7e6a2e1ee848d00ea80ceb65d10f3")
 		(size 1878960)
 		(system "aarch64-darwin")
-		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-aarch64-darwin"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.9.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/release-package-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.9.1")) (
 		(name "blueprint-sbom")
 		(obtained Published)
 		(served ())

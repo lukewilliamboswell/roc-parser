@@ -11,7 +11,6 @@ import cli.Path
 import cli.Stderr
 import cli.Stdout
 import src/HarnessPlan
-import src/ReleasePlan
 
 ## Compose oracle installation, the package compiler probe, review and smoke run.
 main! = |args| match check!(args.map(OsStr.display)) {
@@ -23,10 +22,10 @@ main! = |args| match check!(args.map(OsStr.display)) {
 }
 
 check! = |args| {
-	options = ReleasePlan.options_for(args.keep_if(|arg| arg != "--skip-performance"), ["--generated", "--mutations", "--seed"])?
-	generated = ReleasePlan.option(options, "--generated", "200")
-	mutations = ReleasePlan.option(options, "--mutations", "200")
-	seed = ReleasePlan.option(options, "--seed", "1")
+	options = options_for(args.keep_if(|arg| arg != "--skip-performance"), ["--generated", "--mutations", "--seed"])?
+	generated = option(options, "--generated", "200")
+	mutations = option(options, "--mutations", "200")
+	seed = option(options, "--seed", "1")
 	for value in [generated, mutations, seed] {
 		if value == "" or !value.to_utf8().all(|byte| byte >= '0' and byte <= '9') {
 			return Err("counts and seed must be non-negative integers")
@@ -43,3 +42,18 @@ check! = |args| {
 	}
 	Ok({})
 }
+
+# Options for this harness only; reject unknown or incomplete requests.
+options_for : List(Str), List(Str) -> Try(List({ name : Str, value : Str }), Str)
+options_for = |args, names| match args {
+	[] => Ok([])
+	[name, .. as rest] => match name.split_first("=") {
+		Ok({ before, after }) if names.contains(before) => options_for(rest, names).map_ok(|more| [{ name: before, value: after }].concat(more))
+		_ => match rest {
+			[value, .. as more] if names.contains(name) => options_for(more, names).map_ok(|entries| [{ name, value }].concat(entries))
+			_ => Err("unknown option or missing value: ${name}")
+		}
+	}
+}
+
+option = |entries, name, fallback| entries.keep_if(|entry| entry.name == name).last().map_ok(|entry| entry.value) ?? fallback

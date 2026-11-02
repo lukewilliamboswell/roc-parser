@@ -41,7 +41,7 @@ Install:
   `PATH` as `roc`;
 * Python 3, for the independent parser test and reference harnesses;
 * the `blueprint` binary of
-  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.8.0[roc-blueprint 0.8.0],
+  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.11.0[roc-blueprint 0.11.0],
   which runs the same named tasks as CI;
 * `openssl` and `jq`, for the source inventory and attestation checks.
 
@@ -66,7 +66,7 @@ release's `blueprint.sha256` before you run it. For an Apple silicon Mac:
 
 [source,bash]
 ----
-gh release download 0.8.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
+gh release download 0.11.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
 shasum -a 256 --check --ignore-missing blueprint.sha256
 chmod +x blueprint-aarch64-darwin
 mv blueprint-aarch64-darwin ~/.local/bin/blueprint

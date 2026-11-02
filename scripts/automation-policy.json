@@ -6,8 +6,6 @@
       "contract": "Independent regression tests, fixture audits and oracle build contracts; they do not publish artifacts.",
       "paths": [
         "scripts/roc_syntax/oracle/test_build.py",
-        "scripts/tests/test_api_docs_audit.py",
-        "scripts/tests/test_api_docs_driver.py",
         "scripts/tests/test_asciidoc_complete.py",
         "scripts/tests/test_asciidoc_models.py",
         "scripts/tests/test_asciidoc_mutations.py",
@@ -16,7 +14,6 @@
         "scripts/tests/test_asciidoc_performance_cached.py",
         "scripts/tests/test_asciidoc_performance_protocol.py",
         "scripts/tests/test_asciidoc_verbatim_fixtures.py",
-        "scripts/tests/test_attestation_driver.py",
         "scripts/tests/test_bench.py",
         "scripts/tests/test_bench_roc_syntax.py",
         "scripts/tests/test_bench_yaml.py",
@@ -27,15 +24,11 @@
         "scripts/tests/test_check_roc_syntax_corpus.py",
         "scripts/tests/test_compare_roc_syntax_performance.py",
         "scripts/tests/test_doc_examples_driver.py",
-        "scripts/tests/test_docs_packaging_driver.py",
         "scripts/tests/test_examples_contract.py",
         "scripts/tests/test_harness_drivers.py",
         "scripts/tests/test_import_roc_syntax_snapshots.py",
-        "scripts/tests/test_manual_content_audit.py",
         "scripts/tests/test_mutate_roc_syntax.py",
         "scripts/tests/test_package_driver.py",
-        "scripts/tests/test_release_pipeline.py",
-        "scripts/tests/test_release_validator.py",
         "scripts/tests/test_repository_policy.py",
         "scripts/tests/test_review_json.py",
         "scripts/tests/test_review_roc_syntax.py",
@@ -55,14 +48,6 @@
         "scripts/asciidoc/setup_oracle.py",
         "scripts/roc_syntax/build_oracle.py",
         "scripts/setup_oracles.py"
-      ]
-    },
-    {
-      "runtime": "Python 3, standard library",
-      "contract": "Read generated HTML independently to validate API documentation, public anchors, links and source listing bytes.",
-      "paths": [
-        "scripts/check_api_docs.py",
-        "scripts/check_manual_content.py"
       ]
     },
     {
@@ -130,6 +115,7 @@
     "scripts/asciidoc/probe.roc",
     "scripts/csv/probe.roc",
     "scripts/http/probe.roc",
+    "scripts/json/bounded.roc",
     "scripts/json/probe.roc",
     "scripts/markdown/blocks/probe.roc",
     "scripts/markdown/probe.roc",

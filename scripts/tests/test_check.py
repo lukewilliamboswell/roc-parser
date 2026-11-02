@@ -27,7 +27,6 @@ class CheckTests(unittest.TestCase):
         self.assertIn('["scripts/test_package.roc"]', source)
         self.assertIn('["release-package", "test-examples"]', source)
         self.assertIn('["scripts/check_doc_examples.roc"]', source)
-        self.assertIn('["scripts/build_api_docs.roc", "--", "--check"]', source)
         self.assertIn('["scripts/check_conformance.roc", "--"]', source)
         self.assertIn('["scripts/check_asciidoc.roc", "--"]', source)
         for expected in (
