@@ -363,7 +363,7 @@ def package_docs(version: str, output_dir: Path, repo: str, roc: str = "roc", si
         try:
             api_root = Path(scratch) / "api"
             subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "build_docs.py"), "--roc", roc,
+                [str(ROOT / "scripts" / "build_api_docs.roc"), "--", "--roc", roc,
                  "--docs-root", str(api_root), "--version", version],
                 check=True, cwd=ROOT,
             )

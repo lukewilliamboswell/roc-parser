@@ -2,7 +2,7 @@
 """Build the roc-parser manual (HTML and PDF) with Asciidoctor isolated in Docker.
 
 The manual is the AsciiDoc book under `docs/`. It is separate from the
-generated API reference, which `scripts/build_docs.py` builds from the
+generated API reference, which `scripts/build_api_docs.roc` builds from the
 package's module documentation into `.docs-api/<version>/`.
 
     scripts/build_manual.py                       # HTML into .docs-out/site

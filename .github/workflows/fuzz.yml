@@ -123,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every review registered in scripts/check_conformance.py.
+        # Every review registered in scripts/src/HarnessPlan.roc.
         review:
           - yaml
           - yaml-robustness

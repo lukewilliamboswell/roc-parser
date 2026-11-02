@@ -510,13 +510,9 @@ class DataTests(unittest.TestCase):
         self.assertEqual(spdx3["options"], {"duplicates": "CollapseIdentical"})
 
     def test_workflow_runs_the_review(self):
-        from scripts import check_conformance as conformance
-        for name, command, fast in (("json", "scripts/review_json.py check --baseline scripts/json/known-failures.json", True),
-                                    ("json-robustness", "scripts/review_json.py campaign --smoke", False)):
-            entry = conformance.REVIEWS[name]
-            self.assertEqual(" ".join(entry.command), command)
-            self.assertEqual(entry.requirements, ())
-            self.assertEqual(entry.fast, fast)
+        plan = (review.ROOT / "scripts/src/HarnessPlan.roc").read_text()
+        self.assertIn('{ name: "json", args: ["scripts/review_json.py", "check", "--baseline", "scripts/json/known-failures.json"], fast: True }', plan)
+        self.assertIn('{ name: "json-robustness", args: ["scripts/review_json.py", "campaign", "--smoke"], fast: False }', plan)
         workflow = (review.ROOT / ".github" / "workflows" / "fuzz.yml").read_text()
         self.assertIn("          - json\n", workflow)
         self.assertIn("          - json-robustness\n", workflow)

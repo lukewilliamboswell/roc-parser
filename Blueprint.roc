@@ -48,7 +48,7 @@ config = [
 		Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
 		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
 	]),
-	Environment("package", [Extend("tooling"), Expect(["roc", "python3", "git", "rm", "mkdir"])]),
+	Environment("package", [Extend("tooling"), Expect(["roc", "python3", "git", "rm", "mkdir", "cp"])]),
 	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl", "jq"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
@@ -67,9 +67,10 @@ config = [
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
+	Task("api-docs", [Use("package"), Run(["scripts/build_api_docs.roc", "--"])]),
 	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc", "--"])]),
-	Task("conformance", [Use("package"), Run(["python3", "scripts/check_conformance.py"])]),
-	Task("asciidoc", [Use("oracles"), Run(["python3", "scripts/check_asciidoc.py"])]),
+	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc", "--"])]),
+	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc", "--"])]),
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
 	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),

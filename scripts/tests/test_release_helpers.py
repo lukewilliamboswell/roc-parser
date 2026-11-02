@@ -94,8 +94,8 @@ class PackageDocsTests(unittest.TestCase):
             output_dir = Path(temporary) / "out"
 
             def fake_run(command: list[str], **_: object) -> None:
-                script = Path(command[1]).name
-                if script == "build_docs.py":
+                script = Path(command[0] if command[0].endswith(".roc") else command[1]).name
+                if script == "build_api_docs.roc":
                     version_root = Path(command[command.index("--docs-root") + 1]) / command[command.index("--version") + 1]
                     version_root.mkdir(parents=True)
                     (version_root / "index.html").write_text("api", encoding="utf-8")
