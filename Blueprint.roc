@@ -79,7 +79,7 @@ config = [
 	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
 	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
 	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),
-	Task("release-validate", [Use("release"), Run(["python3", "scripts/release_helpers.py", "validate"])]),
+	Task("release-validate", [Use("release"), Run(["scripts/validate_release.roc", "--"])]),
 	Task("release-build", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "build"])]),
 	Task("release-test", [Use("package"), Run(["python3", "scripts/release_helpers.py", "test"])]),
 	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build, test and describe a roc-parser release (.github/workflows/release.yml).
 
-    release_helpers.py validate --event workflow_dispatch --release-version 2.1.0 --default-branch main
+    blueprint run release-validate -- --event workflow_dispatch --release-version 2.1.0 --default-branch main
     release_helpers.py build --release-version 2.1.0 --output-dir .release/candidate
     release_helpers.py test --release-version 2.1.0 --directory .release/candidate
     release_helpers.py make-release-notes --release-version 2.1.0 --bundle <hash>.tar.zst --output notes.md
@@ -9,8 +9,8 @@
     release_helpers.py package-docs --release-version 2.1.0 --output-dir dist
     release_helpers.py assemble-pages --manual .docs-out/site --api .docs-api/2.1.0 --output .pages
 
-A pull request runs `validate`, `build` and `test` as a dry run, with the
-version 0.0.1-dry-run and the notes of the highest version under
+A pull request runs the Roc validator, then `build` and `test` as a dry run, with the
+version 0.0.1-dryrun and the notes of the highest version under
 docs/releases/. The workflow's publish job hands the tested files to
 roc-automation's publish-release action; nothing here writes to GitHub.
 """
@@ -36,7 +36,7 @@ import release_security_assets  # noqa: E402  (needs the sys.path entry above)
 from workflow_helpers import append_github_output, validate_examples  # noqa: E402
 
 DEFAULT_REPO = "lukewilliamboswell/roc-parser"
-DRY_RUN_VERSION = "0.0.1-dry-run"
+DRY_RUN_VERSION = "0.0.1-dryrun"
 NOTES_DIR = ROOT / "docs" / "releases"
 EXAMPLES_SPEC = ROOT / "tests" / "spec.json"
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$")
@@ -45,15 +45,6 @@ SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subcommands = parser.add_subparsers(dest="command", required=True)
-
-    validate = subcommands.add_parser("validate", help="check that a release may start, or choose the dry run's version")
-    validate.add_argument("--event", default=os.environ.get("GITHUB_EVENT_NAME", ""))
-    validate.add_argument("--release-version", default="")
-    validate.add_argument("--default-branch", default="main")
-    validate.add_argument("--ref", default=os.environ.get("GITHUB_REF", ""))
-    validate.add_argument("--repo", default="")
-    validate.add_argument("--github-output", type=Path)
-    validate.set_defaults(func=cmd_validate)
 
     build = subcommands.add_parser("build", help="build every asset of a release, its SBOM and its notes")
     build.add_argument("--release-version", required=True)
@@ -513,102 +504,6 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------- validate, build and test
-
-
-def gh_json(path: str) -> dict | None:
-    """One GitHub API read through `gh`; None when the resource does not exist."""
-    completed = subprocess.run(["gh", "api", path], capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        if "HTTP 404" in completed.stderr:
-            return None
-        raise RuntimeError(f"gh api {path} failed: {completed.stderr.strip()}")
-    return json.loads(completed.stdout)
-
-
-def previous_release(repo: str) -> tuple[str, str] | None:
-    """The tag and bundle of the latest final release, which `roc bump` compares with."""
-    release = gh_json(f"repos/{repo}/releases/latest")
-    if release is None:
-        return None
-    bundles = [asset["browser_download_url"] for asset in release.get("assets", []) if asset["name"].endswith(".tar.zst")]
-    if len(bundles) != 1:
-        raise RuntimeError(f"release {release.get('tag_name')} has {len(bundles)} bundles, expected one")
-    return release["tag_name"], bundles[0]
-
-
-# What `roc bump` prints when it cannot compare at all, as opposed to finding
-# that the version understates the change.
-BASELINE_UNREADABLE = ("package does not compile", "cannot extract public api")
-
-
-def check_bump(previous: str, expect: str | None) -> tuple[int, str]:
-    """Run `roc bump`, echoing its output, and return its exit code and output."""
-    roc = os.environ.get("ROC", "roc")
-    command = [roc, "bump", "--old", previous, *(["--expect", expect] if expect else []), "package/main.roc"]
-    print("+ " + " ".join(command), flush=True)
-    completed = subprocess.run(command, cwd=ROOT, check=False, capture_output=True, text=True)
-    output = completed.stdout + completed.stderr
-    print(output, end="" if output.endswith("\n") or not output else "\n", flush=True)
-    return completed.returncode, output
-
-
-def baseline_unreadable(output: str) -> bool:
-    lower = output.casefold()
-    return any(marker in lower for marker in BASELINE_UNREADABLE)
-
-
-def is_major_bump(version: str, previous: str) -> bool:
-    """Whether `version` moves the major version past `previous`, so that no
-    API change can be understated (3.0.0-rc.1 counts, as it releases 3.x)."""
-    return semver_key(version)[0] > semver_key(previous)[0]
-
-
-def cmd_validate(args: argparse.Namespace) -> int:
-    """A dispatch releases `--release-version` from the default branch, once,
-    with its notes written and a version that `roc bump` agrees with. Any other
-    event is a dry run, which names the notes of the highest version."""
-    dry_run = args.event != "workflow_dispatch"
-    if dry_run:
-        version, notes = DRY_RUN_VERSION, latest_notes()
-    else:
-        version = args.release_version.strip()
-        semver_key(version)
-        if args.ref != f"refs/heads/{args.default_branch}":
-            raise RuntimeError(f"release from refs/heads/{args.default_branch} only, not {args.ref!r}")
-        notes = notes_path(version)
-    source = read_notes(notes)
-    if PLACEHOLDER not in source:
-        raise RuntimeError(f"{notes.relative_to(ROOT)} never uses {PLACEHOLDER}")
-    notes_markdown(source)
-    if not dry_run:
-        for path, what in ((f"repos/{args.repo}/git/ref/tags/{version}", "tag"),
-                           (f"repos/{args.repo}/releases/tags/{version}", "release")):
-            if gh_json(path) is not None:
-                raise RuntimeError(f"the {what} {version} already exists; a release is never replaced")
-
-    previous = previous_release(args.repo)
-    if previous is None:
-        print("No earlier final release: there is nothing for roc bump to compare with.")
-    else:
-        previous_tag, previous_bundle = previous
-        code, output = check_bump(previous_bundle, None if dry_run else version)
-        if code != 0 and dry_run:
-            print(f"::warning::roc bump could not compare the package with {previous_tag}; a release would stop here")
-        elif code != 0 and baseline_unreadable(output) and is_major_bump(version, previous_tag):
-            # A major release cannot understate any change, so a baseline that
-            # no longer compiles, or whose API roc bump cannot read, does not
-            # stop it. Any smaller release still needs the comparison.
-            print(f"::warning::roc bump could not read {previous_tag}; {version} is a major release, so no change can be understated")
-        elif code != 0:
-            raise RuntimeError(f"roc bump refuses {version} against {previous_tag} ({previous_bundle})")
-
-    prerelease = "true" if is_prerelease(version) else "false"
-    print(f"version={version} prerelease={prerelease} notes={notes.relative_to(ROOT)}")
-    if args.github_output:
-        append_github_output(args.github_output, "version", version)
-        append_github_output(args.github_output, "prerelease", prerelease)
-        append_github_output(args.github_output, "notes", str(notes.relative_to(ROOT)))
-    return 0
 
 
 def bundle_into(directory: Path) -> Path:

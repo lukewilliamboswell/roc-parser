@@ -186,7 +186,7 @@ Build and deploy the Pages site:: For a final release only, publishes the
 release's documentation site, built and tested above, to GitHub Pages.
 
 Every pull request runs `Validate the release`, `Build the release` and `Test
-the exact release files` as a dry run, with the version `0.0.1-dry-run`, and
+the exact release files` as a dry run, with the version `0.0.1-dryrun`, and
 publishes nothing.
 
 === What a release contains

@@ -52,9 +52,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout helper
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: Require successful analyses
-        run: python3 scripts/workflow_helpers.py require-success "${{ needs.analyze.result }}"
+        env:
+          ANALYSES: ${{ needs.analyze.result }}
+        run: test "$ANALYSES" = success

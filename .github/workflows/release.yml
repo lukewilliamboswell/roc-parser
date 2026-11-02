@@ -2,7 +2,7 @@ name: Release
 
 # A maintainer dispatches a release from the default branch with its version.
 # Every pull request runs the same validation, build and tests as a dry run,
-# with the version 0.0.1-dry-run and the notes of the highest version under
+# with the version 0.0.1-dryrun and the notes of the highest version under
 # docs/releases/, and publishes nothing. The jobs that run repository code
 # can only read; the jobs that can write run none. See docs/maintaining.adoc.
 on:

@@ -43,7 +43,7 @@ except ImportError:
 
 
 SPEC = ROOT / "tests" / "spec.json"
-DRY_RUN_VERSION = "0.0.1-dry-run"
+DRY_RUN_VERSION = "0.0.1-dryrun"
 CASE_FIELDS = {"name": str, "args": list, "stdin": str, "stdout": str, "stderr": str, "exit_code": int}
 CASE_TIMEOUT_SECONDS = 60
 
