@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
-:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8a6c914fa8400c9d1f5a3815ab06e06687d58148
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
 
 [#maintaining]
 = Compiler, releases, settings and security reports
@@ -71,7 +71,7 @@ reproduce a past combination; such a run never opens or closes the issue.
 These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
-  the reviewed revision `8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+  the reviewed revision `8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
   (`tools-0.2.0`), and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
@@ -272,9 +272,9 @@ reports which are in place:
 * *The Actions allowlist* names each roc-automation action and workflow at its
   reviewed revision, because an entry without `@<sha>` does not match a pinned
   reference:
-** `lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-** `lukewilliamboswell/roc-automation/actions/publish-release@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-** `lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
+** `lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
+** `lukewilliamboswell/roc-automation/actions/publish-release@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
+** `lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
 ** and the actions that workflow calls at their own revisions:
    `lukewilliamboswell/roc-automation/actions/release-compatibility@1a08ce49ab69003977745e17fbf37baffa47c94a`,
    `lukewilliamboswell/roc-automation/actions/nightly-report@7b1f87cded465a7bd280c1370b63d93bccfe4c3e`
