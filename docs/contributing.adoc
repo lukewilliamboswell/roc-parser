@@ -39,7 +39,7 @@ Install:
   `PATH` as `roc`;
 * Python 3, for the test, review and release scripts;
 * the `blueprint` binary of
-  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.6.0[roc-blueprint 0.6.0],
+  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.8.0[roc-blueprint 0.8.0],
   which runs the same named tasks as CI;
 * Docker, to build this manual locally (see <<contributing-docs>>).
 
@@ -64,7 +64,7 @@ release's `blueprint.sha256` before you run it. For an Apple silicon Mac:
 
 [source,bash]
 ----
-gh release download 0.6.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
+gh release download 0.8.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
 shasum -a 256 --check --ignore-missing blueprint.sha256
 chmod +x blueprint-aarch64-darwin
 mv blueprint-aarch64-darwin ~/.local/bin/blueprint
@@ -88,10 +88,10 @@ it to choose the compiler that evaluates `Blueprint.roc` itself.
 |`package/` |The library: `Parser`, `Utf8`, and one module per format
 |`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
-|`scripts/` |Test, review, fuzz, documentation and release automation, all in Python
+|`scripts/` |Roc check and package orchestration, plus Python oracle harnesses and release/documentation tooling awaiting migration
 |`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
 |`scripts/tests/` |Unit tests for the scripts, including the repository policy
-|`tests/examples.json` |What each example prints, checked on every pull request and shipped with each release's examples
+|`tests/spec.json` |What each example prints, checked on every pull request and shipped with each release's examples
 |`docs/` |This manual, in AsciiDoc
 |`docs/releases/` |Release notes, one AsciiDoc file per release
 |`Blueprint.roc`, `Blueprint.lock` |The development environments and the named tasks CI runs
@@ -128,7 +128,7 @@ laptop; its scratch files and evidence go under `.roc-parser-tmp/`:
 blueprint run check
 ----
 
-It runs `scripts/check.py`, which works through these sections in order and
+It runs `scripts/check_all.roc`, which works through these sections in order and
 stops at the first failure. Name sections to run only those, for example
 `blueprint run check -- fuzz conformance`, and list them with
 `blueprint run check -- --list`:
@@ -136,9 +136,9 @@ stops at the first failure. Name sections to run only those, for example
 [cols="1,4",options="header"]
 |===
 |Section |What it runs
-|`scripts` |The unit tests for the Python scripts, including the repository policy below
-|`package` |`scripts/all_tests.py`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
-|`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/examples.json`
+|`scripts` |The fixed tooling compiler version, Roc orchestration tests, checks and formatting, and the independent Python harness tests including repository policy
+|`package` |`scripts/test_package.roc`: `roc check`, `roc fmt --check` and `roc test` on the package, the compile-time literal checks and `roc docs`; then a release dry run, which bundles the package, builds the examples archive with the bundle's release URL, and checks, builds and runs every case of its `spec.json` against that bundle served on a loopback address
+|`examples` |Every example in `examples/` against the working tree, compared with the output recorded in `tests/spec.json`
 |`docs` |The manual's Roc examples and the API reference audit (<<contributing-docs>>)
 |`fuzz` |Builds every fuzz target and runs 2,000 inputs from its seeds (<<property-testing>>)
 |`conformance` |The fast conformance checks of every format against its reference implementation (<<conformance>>)
@@ -164,13 +164,16 @@ python3 scripts/test_bundle_examples.py --checkout --update
 `scripts/tests/test_repository_policy.py` enforces these rules. A pull request
 that breaks one fails CI:
 
-* Automation is Python under `scripts/`. No shell scripts (`*.sh`) are allowed
-  anywhere, and no `*.py` file may live outside `scripts/`.
+* Roc orchestration entry points under `scripts/` use executable `roc-stable`
+  shebangs, immutable platform URLs, Blueprint tasks and the compiler tag
+  declared in Blueprint. Only tooling is pinned; probes and package applications
+  use the current nightly. Independent Python harnesses live under `scripts/`.
+  No shell scripts (`*.sh`) are allowed.
 * Every `uses:` in a workflow names an action by its full 40-character commit
   SHA, not a tag or branch. Local actions (`./...`) are exempt.
 * Every roc-automation action and workflow is used at the one reviewed
   revision (<<maintaining-compiler>>), every workflow sets `permissions: {}` at
-  the top and grants each job what it needs, and nothing pins a Roc nightly.
+  the top and grants each job what it needs, and nothing pins the package compiler.
 * Workflows do not use the `pull_request_target` or `workflow_run` triggers,
   and do not contain multi-line `run: |` or `run: >` blocks. Put the logic in a
   script under `scripts/`, give it a task in `Blueprint.roc`, and call

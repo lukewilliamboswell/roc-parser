@@ -76,7 +76,7 @@ These change only through a pull request a maintainer reviews:
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
-* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.6.0, by its
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.8.0, by its
   platform URL, and `actions/setup-blueprint` installs the binary of that
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
@@ -92,9 +92,14 @@ These change only through a pull request a maintainer reviews:
 [#maintaining-deviations]
 == Repository tooling
 
-Repository automation lives in Python under `scripts/`. Blueprint tasks run the
-package checks and independent Python, Ruby and Zig oracles; no `roc-stable`
-compiler is needed. `scripts/tests/test_repository_policy.py` checks the source
+The check driver is an executable Roc script under `scripts/`, run with the
+fixed `roc-stable` compiler fetched by Blueprint. The package and independent
+Python, Ruby and Zig oracle harnesses use the separate `roc` on PATH.
+Other product orchestration and documentation tooling are being migrated.
+`blueprint run release-package -- build 0.0.1-dryrun` runs the released shared
+Roc utility from tools-0.9.0; `blueprint run release-package -- test-archive`
+tests its exact archive against the bundle. Both use `tests/spec.json`, also
+used by the existing example harness. These commands publish nothing. `scripts/tests/test_repository_policy.py` checks the source
 layout and workflow pins.
 
 The manual builds as HTML and PDF with Asciidoctor in the pinned
@@ -196,7 +201,7 @@ publishes nothing.
 | `roc-parser-examples-<version>.zip`
 | The examples, with their `parser` dependency pinned to the bundle's URL and
   nothing else changed, a README, and `spec.json`: what each example prints,
-  from `tests/examples.json`, in the form roc-automation's nightly
+  from `tests/spec.json`, in the form roc-automation's nightly
   compatibility runner reads.
 
 | `roc-parser-docs-<version>.zip`

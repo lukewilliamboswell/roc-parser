@@ -1,7 +1,7 @@
 name: CI
 
 # The working tree on the latest Roc nightly. `blueprint run check` holds
-# everything a pull request must pass (scripts/check.py lists it): the
+# everything a pull request must pass (scripts/check_all.roc lists it): the
 # package's checks and tests, the examples against tests/examples.json, a
 # release dry run against a loopback bundle, the manual's examples, the API
 # audit, and smoke runs of every fuzz target, conformance review, oracle and

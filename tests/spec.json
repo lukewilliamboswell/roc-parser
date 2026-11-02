@@ -91,5 +91,8 @@
         }
       ]
     }
-  ]
+  ],
+  "schema_version": 1,
+  "release": "working-tree",
+  "dependencies": []
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the examples and compare what they print with tests/examples.json.
+"""Run the examples and compare what they print with tests/spec.json.
 
     test_bundle_examples.py --checkout            # the repository's examples, on the working tree
     test_bundle_examples.py --checkout --update   # rewrite the expected output
@@ -42,7 +42,7 @@ except ImportError:
     import workflow_helpers
 
 
-SPEC = ROOT / "tests" / "examples.json"
+SPEC = ROOT / "tests" / "spec.json"
 DRY_RUN_VERSION = "0.0.1-dry-run"
 CASE_FIELDS = {"name": str, "args": list, "stdin": str, "stdout": str, "stderr": str, "exit_code": int}
 CASE_TIMEOUT_SECONDS = 60
@@ -96,7 +96,7 @@ def validate_apps(apps: Any, where: str) -> list[dict]:
 
 
 def load_spec(path: Path | None = None, examples_dir: Path = ROOT / "examples") -> list[dict]:
-    """tests/examples.json, which must list every app in examples/."""
+    """tests/spec.json, which must list every app in examples/."""
     path = path or SPEC
     spec = json.loads(path.read_text(encoding="utf-8"))
     apps = validate_apps(spec.get("apps") if isinstance(spec, dict) else None, str(path))
@@ -167,7 +167,9 @@ def test_checkout(update: bool, tmp_dir: Path) -> int:
     print("Testing the checkout's examples against the checkout's package")
     actual, problems = run_apps(apps, ROOT, tmp_dir / "build", roc, ["--no-cache"])
     if update:
-        SPEC.write_text(json.dumps({"apps": actual}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        spec = json.loads(SPEC.read_text(encoding="utf-8"))
+        spec.update(schema_version=1, release="working-tree", dependencies=[], apps=actual)
+        SPEC.write_text(json.dumps(spec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"Wrote {SPEC.relative_to(ROOT)}")
         return 0
     if problems:
@@ -235,7 +237,7 @@ def check_archive(archive: Path, version: str, bundle_url: str, examples_dir: Pa
         raise ValueError(f"{archive.name}: spec.json has unexpected fields {sorted(set(spec))}")
     apps = validate_apps(spec["apps"], f"{archive.name}/spec.json")
     if [app["path"] for app in apps] != [app["path"] for app in load_spec(examples_dir=examples_dir)]:
-        raise ValueError(f"{archive.name}: spec.json lists other apps than tests/examples.json")
+        raise ValueError(f"{archive.name}: spec.json lists other apps than tests/spec.json")
     return apps
 
 
@@ -286,7 +288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkout", action="store_true",
                         help="test the repository's examples against the working tree (../package/main.roc)")
-    parser.add_argument("--update", action="store_true", help="with --checkout, rewrite tests/examples.json")
+    parser.add_argument("--update", action="store_true", help="with --checkout, rewrite tests/spec.json")
     parser.add_argument("--bundle-path", type=Path, help="use an existing bundle instead of creating one")
     parser.add_argument("--archive", type=Path, help="test an existing examples archive instead of creating one")
     parser.add_argument("--version", default=DRY_RUN_VERSION, help=f"release version the archive names (default: {DRY_RUN_VERSION})")

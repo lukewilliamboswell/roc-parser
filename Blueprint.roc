@@ -1,6 +1,6 @@
 # roc-parser's development environments and the tasks CI and contributors run.
 #
-# Needs the roc-blueprint 0.6.0 `blueprint` binary, the release this file's
+# Needs the roc-blueprint 0.8.0 `blueprint` binary, the release this file's
 # platform URL names (docs/contributing.adoc says how to install it), and the
 # latest Roc nightly on PATH as `roc`. From the repository root:
 #
@@ -14,8 +14,8 @@
 #
 # The package compiler is never pinned here. Every task that builds or tests
 # the package expects `roc` of the machine, which in CI is the nightly that
-# roc-lang/setup-roc installs. The automation under scripts/ is Python, so no
-# environment has a `roc-stable` (docs/maintaining.adoc).
+# roc-lang/setup-roc installs. Roc orchestration uses the separate fixed
+# `roc-stable` compiler; Python remains for independent parser harnesses.
 #
 # Zig 0.17.0 builds the compiler's own parser as the RocSyntax oracle. It is
 # downloaded and checked against Blueprint.lock, so `check` needs no Nix. Only
@@ -23,10 +23,11 @@
 # comparison drivers, from the nixpkgs revision Blueprint.lock records. Their
 # libraries are pinned separately, by bench/compare/rust/Cargo.lock,
 # bench/compare/go/go.sum and bench/compare/python/requirements.txt.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.6.0/BenWAmrQp3qFLJPgGerHFPzzAn7ouXDew69CCg2LTtQX.tar.zst" }
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.8.0/FbJymjYdCxx9vqMcau7r4tQfeAbnVGqqJoYrLGqPCqKu.tar.zst" }
 
 import pf.Config
 import pf.System
+import pf.Recipes
 
 zig : System -> Config.Download
 zig = |system| {
@@ -43,22 +44,26 @@ config = [
 	Systems(["x86_64-linux", "aarch64-darwin"]),
 	Packages("nix", From(NixPackages("github:NixOS/nixpkgs/nixos-unstable"))),
 	# The package and its release artifacts, built with the machine's nightly.
-	Environment("package", [Expect(["roc", "python3", "git"])]),
+	Environment("tooling", [
+		Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
+		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
+	]),
+	Environment("package", [Extend("tooling"), Expect(["roc", "python3", "git", "rm", "mkdir"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("package"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# The manual builds in Docker (.github/docs.Dockerfile).
 	Environment("docs", [Extend("package"), Expect(["docker"])]),
-	Environment("release", [Extend("package"), Expect(["gh"])]),
+	Environment("release", [Extend("package"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["gh", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
 	Environment("python", [Expect(["python3"])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
 	# Everything a pull request must pass; `blueprint run check -- --list`.
-	Task("check", [Use("oracles"), Run(["python3", "scripts/check.py"])]),
+	Task("check", [Use("oracles"), Run(["scripts/check_all.roc", "--"])]),
 	# Parts of check, and the longer runs of the scheduled workflows.
-	Task("test", [Use("package"), Run(["python3", "scripts/all_tests.py"])]),
+	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
 	Task("conformance", [Use("package"), Run(["python3", "scripts/check_conformance.py"])]),
@@ -68,6 +73,7 @@ config = [
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
 	# Release artifacts. `release-build` makes every file of a release and
 	# `release-test` tests those exact files; the others make one each.
+	Task("release-package", [Use("release"), Run(["release-package"])]),
 	Task("bundle", [Use("package"), Run(["python3", "scripts/bundle.py"])]),
 	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
 	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),

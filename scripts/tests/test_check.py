@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 
-from scripts import check, check_asciidoc, check_conformance
+from scripts import check_asciidoc, check_conformance
 
-WORKFLOWS = check.ROOT / ".github" / "workflows"
+ROOT = Path(__file__).resolve().parents[2]
+
+WORKFLOWS = ROOT / ".github" / "workflows"
 
 
 def matrix(workflow: str, key: str) -> list[str]:
@@ -15,17 +19,15 @@ def matrix(workflow: str, key: str) -> list[str]:
 
 
 class CheckTests(unittest.TestCase):
-    def test_sections_run_in_their_listed_order(self) -> None:
-        self.assertEqual(check.select([]), list(check.SECTIONS))
-        self.assertEqual(check.select(["fuzz", "scripts", "fuzz"]), ["fuzz", "scripts"])
-        with self.assertRaisesRegex(ValueError, "unknown section"):
-            check.select(["nonsense"])
-
     def test_check_covers_what_pull_requests_ran_before_ci_yml(self) -> None:
-        commands = {" ".join(command[1:]) for section in check.SECTIONS.values() for command in section.commands}
+        # Independent coverage guard: every pre-migration check must remain in
+        # the Roc plan. Behavior and selection tests live beside that plan.
+        source = (ROOT / "scripts/src/CheckPlan.roc").read_text()
+        commands = {" ".join(re.findall(r'"([^"\n]+)"', command)[1:])
+                    for command in re.findall(r'\["(?:python3|roc-stable)"[^\[\]]*\]', source)}
+        self.assertIn('["scripts/test_package.roc"]', source)
         for expected in (
             "-m unittest discover -s scripts/tests -p test_*.py",
-            "scripts/all_tests.py",
             "scripts/test_bundle_examples.py --checkout",
             "scripts/check_doc_examples.py",
             "scripts/build_docs.py --check",

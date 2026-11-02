@@ -25,7 +25,7 @@ def repository_files() -> list[Path]:
 
 
 class RepositoryPolicyTests(unittest.TestCase):
-    def test_repo_owned_automation_is_python_under_scripts(self) -> None:
+    def test_repo_owned_automation_lives_under_scripts(self) -> None:
         paths = repository_files()
         shell_scripts = sorted(path for path in paths if path.suffix == ".sh")
         self.assertEqual(shell_scripts, [], "repository-owned Bash scripts are not allowed")
@@ -40,6 +40,28 @@ class RepositoryPolicyTests(unittest.TestCase):
             [],
             "repository automation must live under scripts/",
         )
+
+    def test_roc_tooling_uses_its_own_fixed_compiler(self) -> None:
+        blueprint = (ROOT / "Blueprint.roc").read_text()
+        stable = re.findall(r'Fetch\("roc-stable", Recipes.roc_nightly\("([^"\n]+)"\)\)', blueprint)
+        self.assertEqual(len(stable), 1)
+        tasks = re.findall(r'Task\("[^"\n]+",[^\n]*', blueprint)
+        for path in repository_files():
+            if path.suffix != ".roc" or not path.is_file():
+                continue
+            text = path.read_text()
+            pin = re.findall(r'(?m)^\s*roc:\s*"([^"\n]+)"', text)
+            # The oracle probes are built by the floating package compiler.
+            # Only executable orchestration entry points carry the tooling pin.
+            if path.parent == ROOT / "scripts":
+                if not re.search(r'(?m)^app ', text):
+                    continue
+                self.assertEqual(pin, stable, str(path))
+                self.assertTrue(text.startswith("#!/usr/bin/env roc-stable\n"), str(path))
+                self.assertTrue(path.stat().st_mode & 0o111, str(path))
+                self.assertTrue(any(str(path.relative_to(ROOT)) in task for task in tasks), str(path))
+            else:
+                self.assertEqual(pin, [], str(path))
 
     def test_workflow_actions_are_pinned_to_full_commit_shas(self) -> None:
         failures: list[str] = []

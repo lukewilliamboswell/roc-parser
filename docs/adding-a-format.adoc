@@ -40,7 +40,7 @@ the existing formats are listed in <<property-testing>>.
 . Give every exposed value a `##` doc comment with its purpose and, where it
   helps, a short `expect` example.
 . Expose the module in `package/main.roc` and name it in that file's doc
-  comment. `roc test package/main.roc`, which `scripts/all_tests.py` runs,
+  comment. `roc test package/main.roc`, which `scripts/test_package.roc` runs,
   then runs its tests with the rest.
 . Check that the name does not clash with a builtin module that Roc imports
   automatically. Roc has a builtin `Json`, so `import parser.Json` would

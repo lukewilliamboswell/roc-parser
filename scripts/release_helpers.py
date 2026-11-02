@@ -38,7 +38,7 @@ from workflow_helpers import append_github_output, validate_examples  # noqa: E4
 DEFAULT_REPO = "lukewilliamboswell/roc-parser"
 DRY_RUN_VERSION = "0.0.1-dry-run"
 NOTES_DIR = ROOT / "docs" / "releases"
-EXAMPLES_SPEC = ROOT / "tests" / "examples.json"
+EXAMPLES_SPEC = ROOT / "tests" / "spec.json"
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$")
 
 
@@ -455,7 +455,7 @@ def rewrite_package_dependency(source: str, url: str, name: str = "example") -> 
 
 def examples_spec(version: str, bundle_url: str, spec_path: Path = EXAMPLES_SPEC) -> dict:
     """The archive's spec.json (schema 1 of roc-automation's shared nightly
-    compatibility runner), from the expected output in tests/examples.json."""
+    compatibility runner), from the expected output in tests/spec.json."""
     apps = json.loads(spec_path.read_text(encoding="utf-8"))["apps"]
     return {"schema_version": 1, "release": version, "dependencies": [bundle_url], "apps": apps}
 
