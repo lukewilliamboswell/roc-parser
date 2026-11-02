@@ -25,6 +25,14 @@
   comment is no longer an error, and `parse_header_str` accepts a source holding
   only whitespace and comments as the implicit header of a type module.
 
+== Added
+
+* `JsonValue.parse_bounded` and `JsonValue.to_str_bounded` accept explicit UTF-8
+  byte budgets for downstream tools processing large JSON inventories. They
+  preserve existing parsing options and writer validation; the writer accounts
+  for escaping and indentation before allocating its output. Existing APIs and
+  defaults are unchanged.
+
 == Fixed
 
 * `RocSyntax` reported a parenthesized function type's span with its opening

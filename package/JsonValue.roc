@@ -10,7 +10,7 @@ import Literal as Quotation
 ## untouched. To decode JSON straight into your own record type, use the
 ## builtin `Json` instead.
 ##
-## A [JsonValue] is one of:
+## A `JsonValue` is one of:
 ##
 ## - `Null`, `Bool` and `String`;
 ## - `Number`, holding the exact number text from the input, so integers of any
@@ -171,6 +171,24 @@ JsonValue := [
 
 			Err(JsonFail(failure)) => Err(InvalidJsonValue(locate(input, failure.offset, failure.message)))
 		}
+	}
+
+	## Parse a complete document within an inclusive UTF-8 byte budget.
+	## The budget includes whitespace and a byte order mark, when permitted;
+	## all depth, collection, string, number and duplicate rules in `options`
+	## still apply. The input is rejected before constructing a JSON value
+	## when its byte length exceeds `max_bytes`.
+	##
+	## ```roc
+	## expect JsonValue.parse_bounded("null", {}, 4) == Ok(Null)
+	## expect JsonValue.parse_bounded("null ", {}, 4).is_err()
+	## ```
+	parse_bounded : Str, Options, U64 -> Try(JsonValue, [InvalidJsonValue(Error)])
+	parse_bounded = |input, options, max_bytes| {
+		if input.count_utf8_bytes() > max_bytes {
+			return Err(InvalidJsonValue(locate(input, max_bytes, "document exceeds the limit of ${max_bytes.to_str()} bytes")))
+		}
+		JsonValue.parse_with(input, options)
 	}
 
 	## A [Parser] that reads one strict JSON value and the whitespace around
@@ -442,6 +460,25 @@ JsonValue := [
 		bytes = write_value(List.with_capacity(256), value, options.sort_keys, options.indent, 0)?
 		Ok(Str.from_utf8(bytes) ?? "")
 	}
+
+	## Write JSON within an inclusive UTF-8 byte budget. Count escaped keys
+	## and strings, punctuation, indentation and line breaks before allocating
+	## output. `TooLarge(max_bytes)` reports an exceeded budget. Existing
+	## invalid-number, duplicate-key and 128-level checks still apply.
+	##
+	## The returned text has no final newline. Reserve bytes in the budget
+	## when a file or protocol appends framing after the JSON value.
+	##
+	## ```roc
+	## expect JsonValue.to_str_bounded(String("é"), {}, 4) == Ok("\"é\"")
+	## expect JsonValue.to_str_bounded(String("é"), {}, 3) == Err(TooLarge(3))
+	## ```
+	to_str_bounded : JsonValue, WriteOptions, U64 -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)])
+	to_str_bounded = |value, options, max_bytes| {
+		_ = measure_value(value, options.indent, 0, 0, max_bytes)?
+		JsonValue.to_str_with(value, options)
+	}
+
 }
 
 # ------------------------------------------------------------------ reading
@@ -1350,6 +1387,100 @@ star_class = Utf8.ByteClass.from_bytes(['*'])
 
 WriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep]
 
+BoundedWriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]
+
+# Keep all arithmetic within the caller's limit, including U64.highest.
+measure_add : U64, U64, U64 -> Try(U64, [TooLarge(U64)])
+measure_add = |used, count, limit| {
+	if used > limit or count > limit - used {
+		return Err(TooLarge(limit))
+	}
+	Ok(used + count)
+}
+
+measure_line : U64, U64, U64, U64 -> Try(U64, [TooLarge(U64)])
+measure_line = |used, indent, depth, limit| {
+	if indent == 0 {
+		return Ok(used)
+	}
+	next = measure_add(used, 1, limit)?
+	if depth > 0 and indent > (limit - next) // depth {
+		return Err(TooLarge(limit))
+	}
+	measure_add(next, indent * depth, limit)
+}
+
+measure_string : Str, U64, U64 -> Try(U64, [TooLarge(U64)])
+measure_string = |text, used, limit| {
+	start = measure_add(used, 2, limit)?
+	_ = measure_add(start, text.count_utf8_bytes(), limit)?
+	var $used = start
+	for byte in text.to_utf8() {
+		count = if (byte == '"' or byte == '\\' or [8, 9, 10, 12, 13].contains(byte)) 2 else if (byte < 32) 6 else 1
+		$used = measure_add($used, count, limit)?
+	}
+	Ok($used)
+}
+
+# Measure exactly the same representation as write_value. Key sorting changes
+# order, not length. No serialized buffer is allocated during this traversal.
+measure_value : JsonValue, U64, U64, U64, U64 -> Try(U64, BoundedWriteError)
+measure_value = |value, indent, depth, used, limit| {
+	match value {
+		Null => measure_add(used, 4, limit)
+		Bool(flag) => measure_add(used, if (flag) 4 else 5, limit)
+		String(text) => measure_string(text, used, limit)
+		Number(text) => {
+			next = measure_add(used, text.count_utf8_bytes(), limit)?
+			if !is_number_lexeme(text.to_utf8()) {
+				return Err(InvalidNumber(text))
+			}
+			Ok(next)
+		}
+		Array(items) => {
+			if depth >= max_write_depth {
+				return Err(TooDeep)
+			}
+			if items.is_empty() {
+				return measure_add(used, 2, limit)
+			}
+			var $used = measure_add(used, 1, limit)?
+			var $later = False
+			for item in items {
+				if $later {
+					$used = measure_add($used, 1, limit)?
+				}
+				$used = measure_line($used, indent, depth + 1, limit)?
+				$used = measure_value(item, indent, depth + 1, $used, limit)?
+				$later = True
+			}
+			measure_add(measure_line($used, indent, depth, limit)?, 1, limit)
+		}
+		Object(members) => {
+			if depth >= max_write_depth {
+				return Err(TooDeep)
+			}
+			if members.is_empty() {
+				return measure_add(used, 2, limit)
+			}
+			var $used = measure_add(used, 1, limit)?
+			check_unique_keys(members)?
+			var $later = False
+			for member in members {
+				if $later {
+					$used = measure_add($used, 1, limit)?
+				}
+				$used = measure_line($used, indent, depth + 1, limit)?
+				$used = measure_string(member.key, $used, limit)?
+				$used = measure_add($used, if (indent == 0) 1 else 2, limit)?
+				$used = measure_value(member.value, indent, depth + 1, $used, limit)?
+				$later = True
+			}
+			measure_add(measure_line($used, indent, depth, limit)?, 1, limit)
+		}
+	}
+}
+
 ## The deepest nesting the writer accepts, the parser's default limit.
 max_write_depth : U64
 max_write_depth = 128
@@ -2195,3 +2326,66 @@ expect JsonValue.to_str_with(Object([{ key: "b", value: Null }, { key: "a", valu
 expect JsonValue.to_str(Object([{ key: "a", value: Number("1") }, { key: "b", value: Array([Bool(True), Null]) }])) == Ok("{\"a\":1,\"b\":[true,null]}")
 expect JsonValue.to_str(Number("NaN")) == Err(InvalidNumber("NaN"))
 expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n    1,\n    \"two\"\n]")
+
+# Bounded documents retain strict grammar, caller rules and exact number text.
+expect JsonValue.parse_bounded("null", {}, 4) == Ok(Null)
+expect JsonValue.parse_bounded("null ", {}, 4) == Err(InvalidJsonValue({ line: 1, column: 5, message: "document exceeds the limit of 4 bytes" }))
+expect JsonValue.parse_bounded("\"é\"", {}, 4) == Ok(String("é"))
+expect JsonValue.parse_bounded("\"é\"", {}, 3).is_err()
+expect JsonValue.parse_bounded("\u(FEFF)null", { bom: True }, 7) == Ok(Null)
+expect JsonValue.parse_bounded("\u(FEFF)null", { bom: True }, 6).is_err()
+expect JsonValue.parse_bounded("{\"x\":0,\"x\":0}", { duplicates: CollapseIdentical }, 13) == Ok(Object([{ key: "x", value: Number("0") }]))
+expect JsonValue.parse_bounded("{\"x\":0,\"x\":1}", { duplicates: CollapseIdentical }, 100).is_err()
+expect JsonValue.parse_bounded("[0,0]", { max_items: 1 }, 100).is_err()
+expect JsonValue.parse_bounded("[[0]]", { max_depth: 1 }, 100).is_err()
+expect JsonValue.parse_bounded("\"é\"", { max_string_bytes: 1 }, 100).is_err()
+expect JsonValue.parse_bounded("22", { max_number_digits: 1 }, 100).is_err()
+expect JsonValue.parse_bounded("null true", {}, 100).is_err()
+expect JsonValue.parse_bounded("null", {}, 0).is_err()
+expect JsonValue.parse_bounded("", {}, 0).is_err()
+expect JsonValue.parse_bounded("9007199254740993123456789", {}, 25) == Ok(Number("9007199254740993123456789"))
+
+# Exact output size includes escaping and formatting, with no final newline.
+expect JsonValue.to_str_bounded(String("\n"), {}, 4) == Ok("\"\\n\"")
+expect JsonValue.to_str_bounded(String("\n"), {}, 3) == Err(TooLarge(3))
+expect JsonValue.to_str_bounded(String("\u(01)"), {}, 8) == Ok("\"\\u0001\"")
+expect JsonValue.to_str_bounded(String("\u(01)"), {}, 7) == Err(TooLarge(7))
+expect JsonValue.to_str_bounded(Object([{ key: "\u(01)", value: Null }]), {}, 15) == Ok("{\"\\u0001\":null}")
+expect JsonValue.to_str_bounded(Object([{ key: "\u(01)", value: Null }]), {}, 14) == Err(TooLarge(14))
+expect JsonValue.to_str_bounded(Array([]), { indent: U64.highest }, 2) == Ok("[]")
+expect JsonValue.to_str_bounded(Null, { indent: U64.highest }, 4) == Ok("null")
+expect JsonValue.to_str_bounded(Array([Null]), { indent: U64.highest }, U64.highest) == Err(TooLarge(U64.highest))
+expect JsonValue.to_str_bounded(Object([{ key: "x", value: Null }]), { indent: U64.highest }, U64.highest) == Err(TooLarge(U64.highest))
+expect JsonValue.to_str_bounded(Null, {}, 0) == Err(TooLarge(0))
+expect JsonValue.to_str_bounded(Number("NaN"), {}, 100) == Err(InvalidNumber("NaN"))
+expect JsonValue.to_str_bounded(Object([{ key: "a", value: Null }, { key: "a", value: Null }]), {}, 100) == Err(DuplicateKey("a"))
+expect measure_add(U64.highest, 0, U64.highest) == Ok(U64.highest)
+expect measure_add(U64.highest, 1, U64.highest) == Err(TooLarge(U64.highest))
+expect measure_line(0, U64.highest, 0, U64.highest) == Ok(1)
+expect {
+	var $tree = Null
+	for _ in List.repeat({}, 128) {
+		$tree = Array([$tree])
+	}
+	exact = JsonValue.to_str_bounded($tree, {}, 260)
+	exact.map_ok(|text| text.count_utf8_bytes()) == Ok(260)
+		and JsonValue.to_str_bounded(Array([$tree]), {}, 1000) == Err(TooDeep)
+}
+expect {
+	values = [Null, Bool(False), Bool(True), Number("-0.001e+123"), String("café\n\t\\\"\u(00)"), Array([]), Object([]), Array([Null, Bool(True)]), Object([{ key: "é\n", value: Array([Number("9007199254740993123456789")]) }])]
+	formats : List(JsonValue.WriteOptions)
+	formats = [{}, { indent: 1 }, { indent: 3, sort_keys: True }]
+	values.all(
+		|value| {
+			formats.all(
+				|options| {
+					match JsonValue.to_str_with(value, options) {
+						Ok(text) => JsonValue.to_str_bounded(value, options, text.count_utf8_bytes()) == Ok(text)
+							and JsonValue.to_str_bounded(value, options, text.count_utf8_bytes() - 1).is_err()
+						Err(_) => False
+					}
+				},
+			)
+		},
+	)
+}
