@@ -214,7 +214,7 @@ build rather than silently leaving a stale example:
 
 [source,bash]
 ----
-python3 scripts/check_doc_examples.py
+blueprint run doc-examples
 ----
 
 The `docs` section of `blueprint run check` runs the examples and the API

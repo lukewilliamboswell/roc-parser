@@ -57,6 +57,13 @@ class RepositoryPolicyTests(unittest.TestCase):
                 if not re.search(r'(?m)^app ', text):
                     continue
                 self.assertEqual(pin, stable, str(path))
+                header = text.split("}", 1)[0]
+                dependencies = re.findall(r'\b(\w+):\s*(?:platform\s*)?"([^"\n]+)"', header)
+                for field, dependency in dependencies:
+                    if field == "roc":
+                        continue
+                    self.assertRegex(dependency, r'^https://[^/]+/[^/]+/[^/]+/releases/download/[^/]+/[A-Za-z0-9_-]{43,44}\.tar\.zst$')
+                    self.assertIn('"' + dependency + '"', blueprint)
                 self.assertTrue(text.startswith("#!/usr/bin/env roc-stable\n"), str(path))
                 self.assertTrue(path.stat().st_mode & 0o111, str(path))
                 self.assertTrue(any(str(path.relative_to(ROOT)) in task for task in tasks), str(path))

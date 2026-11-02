@@ -34,10 +34,11 @@ class CheckDriverTests(unittest.TestCase):
         stub.write_text(f"#!{sys.executable}\n" + '''import os, sys
 with open(os.environ["CHECK_TEST_LOG"], "a") as log:
     log.write(" ".join(sys.argv[1:]) + "\\n")
-sys.exit(7 if "scripts/check_doc_examples.py" in sys.argv else 0)
+sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
 ''')
         stub.chmod(0o755)
-        for program in ("roc", "python3"):
+        for program in ("roc", "python3", "scripts/check_doc_examples.roc"):
+            (self.directory / program).parent.mkdir(exist_ok=True)
             (self.directory / program).symlink_to(stub)
         self.env = {**os.environ, "PATH": str(self.directory), "CHECK_TEST_LOG": str(self.log)}
 
@@ -53,13 +54,13 @@ sys.exit(7 if "scripts/check_doc_examples.py" in sys.argv else 0)
     def test_failure_stops_the_section_and_following_sections(self) -> None:
         result = self.run_driver("docs", "conformance")
         self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertEqual(self.log.read_text().splitlines(), ["version", "scripts/check_doc_examples.py"])
+        self.assertEqual(self.log.read_text().splitlines(), ["version", ""])
 
     def test_keep_going_reports_failure_and_runs_next_section_once(self) -> None:
         result = self.run_driver("--keep-going", "docs", "conformance", "conformance")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), [
-            "version", "scripts/check_doc_examples.py", "scripts/check_conformance.py"])
+            "version", "", "scripts/check_conformance.py"])
 
     def test_list_requires_no_package_compiler(self) -> None:
         result = self.run_driver("--list")

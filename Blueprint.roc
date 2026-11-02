@@ -66,6 +66,7 @@ config = [
 	Task("test", [Use("package"), Run(["scripts/test_package.roc"])]),
 	Task("fuzz-smoke", [Use("package"), Run(["python3", "scripts/run_fuzz.py", "smoke"])]),
 	Task("fuzz", [Use("package"), Run(["python3", "scripts/run_fuzz.py"])]),
+	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc", "--"])]),
 	Task("conformance", [Use("package"), Run(["python3", "scripts/check_conformance.py"])]),
 	Task("asciidoc", [Use("oracles"), Run(["python3", "scripts/check_asciidoc.py"])]),
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
@@ -74,7 +75,7 @@ config = [
 	# Release artifacts. `release-build` makes every file of a release and
 	# `release-test` tests those exact files; the others make one each.
 	Task("release-package", [Use("release"), Run(["release-package"])]),
-	Task("bundle", [Use("package"), Run(["python3", "scripts/bundle.py"])]),
+	Task("bundle", [Use("package"), Run(["scripts/bundle.roc", "--"])]),
 	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
 	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
 	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),

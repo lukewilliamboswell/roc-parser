@@ -217,7 +217,7 @@ python3 -m unittest discover -s scripts/tests -p "test_bench.py"
   handle errors, and what is and is not supported. Include it from the manual's
   index with `leveloffset=+1`, like the other format chapters.
 . Make every code example in the chapter a complete program that
-  `scripts/check_doc_examples.py` compiles and runs, so it cannot drift from
+  `scripts/check_doc_examples.roc` compiles and runs, so it cannot drift from
   the API.
 . Add the module wherever the manual lists the formats: the format table in
   `README.md`, the lists in `docs/index.adoc`, and `modules.adoc`,
@@ -231,7 +231,7 @@ Build and check the documentation:
 [source,bash]
 ----
 python3 scripts/build_docs.py --check
-python3 scripts/check_doc_examples.py
+blueprint run doc-examples
 python3 scripts/build_manual.py
 ----
 

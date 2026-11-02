@@ -614,7 +614,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 def bundle_into(directory: Path) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     before = set(directory.glob("*.tar.zst"))
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "bundle.py"), "--output-dir", str(directory)],
+    subprocess.run([str(ROOT / "scripts" / "bundle.roc"), "--", "--output-dir", str(directory)],
                    check=True, cwd=ROOT)
     created = sorted(set(directory.glob("*.tar.zst")) - before) or sorted(directory.glob("*.tar.zst"))
     if len(created) != 1:

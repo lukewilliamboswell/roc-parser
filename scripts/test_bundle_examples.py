@@ -184,7 +184,7 @@ def test_checkout(update: bool, tmp_dir: Path) -> int:
 
 
 def bundle_package(bundle_dir: Path) -> Path:
-    completed = run([sys.executable, "scripts/bundle.py", "--output-dir", str(bundle_dir)])
+    completed = run(["scripts/bundle.roc", "--", "--output-dir", str(bundle_dir)])
     match = re.search(r"^Created:\s+(.+\.tar\.zst)\s*$", completed.stdout, re.MULTILINE)
     if match is None:
         raise SystemExit("Could not find bundle path in roc bundle output")
