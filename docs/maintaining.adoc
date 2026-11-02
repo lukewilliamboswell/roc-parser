@@ -240,9 +240,10 @@ The workflows rely on these settings, which a maintainer applies on GitHub;
 roc-automation's `check-settings` task, run from a checkout of roc-automation,
 reports which are in place:
 
-* *Required status checks.* The `CI` ruleset on `main` requires `check`, the
-  job of `ci.yml`, and `Build the release`, the build job of the `release.yml`
-  dry run. `codeql` is also required.
+* *Required status checks.* The `CI` ruleset on `main` requires `check` and
+  `codeql`, plus `Release / Build and test the source`,
+  `Release / Test the release candidate` and `Build the documentation site`
+  from the release dry run.
 * *The `release` environment* is limited to `main` by name ("Selected branches
   and tags", with `main` alone), rather than "Protected branches only".
 * *A tag ruleset* targets all tags and restricts updates and deletions, so that
