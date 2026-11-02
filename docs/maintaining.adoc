@@ -90,29 +90,19 @@ These change only through a pull request a maintainer reviews:
   `scripts/roc_syntax/build_oracle.py`.
 
 [#maintaining-deviations]
-== Declared deviations from the model
+== Repository tooling
 
-roc-parser differs from the roc-automation model in these ways, on purpose:
+Repository automation lives in Python under `scripts/`. Blueprint tasks run the
+package checks and independent Python, Ruby and Zig oracles; no `roc-stable`
+compiler is needed. `scripts/tests/test_repository_policy.py` checks the source
+layout and workflow pins.
 
-* *The automation is Python.* The model writes product-specific automation as
-  Roc scripts run by a fixed `roc-stable` compiler. roc-parser keeps its
-  automation in Python under `scripts/`, about 45 scripts and 35 test files.
-  They include every conformance oracle, which compares the package with a
-  reference implementation that is itself a Python, Ruby or Zig program. The Blueprint
-  tasks run these scripts, so there is no `roc-stable` environment and no
-  script carries a `roc` header field. `scripts/tests/test_repository_policy.py`
-  keeps the automation in Python under `scripts/`, with no shell scripts.
-* *The manual is built with Asciidoctor.* `scripts/build_manual.py` renders the
-  manual as HTML and PDF in Docker (`.github/docs.Dockerfile`), rather than with
-  the model's shared `roc-docs` renderer. Moving to the shared renderer is
-  planned for a later change, once
-  https://github.com/lukewilliamboswell/roc-automation/issues/70[roc-automation#70]
-  is resolved. Until then the release notes are linked from the manual rather
-  than included in it.
-* *Unreleased notes have their own file.* Changes that no release has yet are
-  described in `docs/releases/unreleased.adoc`, which the first such change
-  creates and the pull request that prepares a release renames to
-  `docs/releases/<version>.adoc`.
+The manual builds as HTML and PDF with Asciidoctor in the pinned
+`.github/docs.Dockerfile` image. Use the documentation commands in
+<<contributing>> to reproduce the build.
+
+Write upcoming release changes in `docs/releases/unreleased.adoc`; rename that
+file to the chosen version when preparing its release record.
 
 [#maintaining-release]
 == Release a new version
@@ -139,8 +129,7 @@ latest release and the working tree to compile with the latest nightly; when it
 cannot compare them, the release stops too. The one exception is a major
 release: no change can understate it, so it continues with a warning when
 `roc bump` cannot compile the latest release or read its API
-(https://github.com/roc-lang/roc/issues/12506[roc#12506]). 3.0.0 was released
-this way, because 2.0.0 no longer compiles.
+(https://github.com/roc-lang/roc/issues/12506[roc#12506]).
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
@@ -258,30 +247,18 @@ reports which are in place:
 
 * *Required status checks.* The `CI` ruleset on `main` requires `check`, the
   job of `ci.yml`, and `Build the release`, the build job of the `release.yml`
-  dry run, in place of `test-examples`, `published-examples`,
-  `property-quality` and `release-validation`, which no workflow produces any
-  more. `codeql` stays required.
+  dry run. `codeql` is also required.
 * *The `release` environment* is limited to `main` by name ("Selected branches
   and tags", with `main` alone), rather than "Protected branches only".
 * *A tag ruleset* targets all tags and restricts updates and deletions, so that
   a version tag can never move.
 * *"Allow GitHub Actions to create and approve pull requests"* is off. No
   workflow opens a pull request.
-* *The `automation/roc-nightly` branch* is deleted. It belonged to the nightly
-  update controller this repository no longer has.
-* *The Actions allowlist* names each roc-automation action and workflow at its
-  reviewed revision, because an entry without `@<sha>` does not match a pinned
-  reference:
-** `lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-** `lukewilliamboswell/roc-automation/actions/publish-release@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-** `lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-** and the actions that workflow calls at their own revisions:
-   `lukewilliamboswell/roc-automation/actions/release-compatibility@1a08ce49ab69003977745e17fbf37baffa47c94a`,
-   `lukewilliamboswell/roc-automation/actions/nightly-report@7b1f87cded465a7bd280c1370b63d93bccfe4c3e`
-   and `lukewilliamboswell/roc-automation/actions/setup-blueprint@2c563fdc7e07e76f30477769bc706bbc49dac36f`.
+* *The Actions allowlist* permits each exact full-SHA action and reusable
+  workflow reference in `.github/workflows/`, including the nested actions of
+  the pinned shared workflows. Review those immutable sources when updating
+  the allowlist; a bare action name does not match a pinned reference.
 
-`cachix/install-nix-action`, which `setup-blueprint` and `publish-release` use,
-and `roc-lang/setup-roc` are already allowed.
 
 == Security reports
 

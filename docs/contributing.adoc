@@ -257,3 +257,9 @@ before asking for another review after a substantial change.
 
 By contributing, you agree that your contribution is licensed under the
 {src}/LICENSE[Universal Permissive License v1.0].
+
+== Write documentation
+
+Write for a current user or contributor task. Remove superseded explanations
+and keep release changes with their release. Follow the
+https://lukewilliamboswell.github.io/roc-automation/documentation.html#write-project-documentation[shared documentation guidance].
