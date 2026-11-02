@@ -27,7 +27,7 @@ test! = || {
 	work = Path.join(root, ".roc-parser-tmp/roc-parser-ci")
 	# Only remove the dedicated output directory, never a caller-supplied path.
 	run!(["rm", "-rf", Path.display(work)], root)?
-	run!(["mkdir", "-p", Path.display(Path.join(work, "docs")), Path.display(Path.join(work, "bundle"))], root)?
+	run!(["mkdir", "-p", Path.display(work)], root)?
 	for command in [
 		["roc", "version"],
 		["roc", "check", "package/main.roc"],

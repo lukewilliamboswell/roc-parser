@@ -581,6 +581,16 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
+      "input": "program:roc-docs:aarch64-darwin",
+      "component": "",
+      "reason": "The documentation renderer produces separate HTML and PDF artifacts. It is not contained in this source-only package bundle; every bundle member is checked against package source by SHA-256."
+    },
+    {
+      "input": "program:roc-docs:x86_64-linux",
+      "component": "",
+      "reason": "The documentation renderer produces separate HTML and PDF artifacts. It is not contained in this source-only package bundle; every bundle member is checked against package source by SHA-256."
+    },
+    {
       "input": "program:roc-stable:aarch64-darwin",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."

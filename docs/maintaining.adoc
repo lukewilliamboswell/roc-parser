@@ -104,10 +104,12 @@ its API site and the bundle's SBOM. These local commands publish nothing.
 Independent Python, Ruby and Zig oracle harnesses compare parser behavior.
 `scripts/automation-policy.json` lists every runtime exception and each probe
 or compiler fixture that must use the floating nightly. The policy check rejects
-unlisted files, stale exceptions, tooling pin drift and workflow pin drift. The shared working-tree and archive checks both use `tests/spec.json`.
+unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
+The shared working-tree and archive checks both use `tests/spec.json`.
 
-The manual builds as HTML and PDF with the shared native `roc-docs` utility. Use the documentation commands in
-<<contributing>> to reproduce the build.
+The manual builds as HTML and PDF with `roc-docs` from tools-0.9.1. Blueprint
+fetches the native binary and checks its digest against `Blueprint.lock`. Use
+the documentation commands in <<contributing>> to reproduce the build.
 
 Write upcoming release changes in `docs/releases/unreleased.adoc`; rename that
 file to the chosen version when preparing its release record.
