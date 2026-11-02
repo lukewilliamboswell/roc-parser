@@ -16,6 +16,22 @@
 		(system "aarch64-darwin")
 		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-macos_apple_silicon-2026-10-09-258ab27.tar.gz"))
 		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "blueprint-sbom")
+		(obtained Published)
+		(served ())
+		(sha256 "98d8587924b7a5d2eca348dfd957095c640e61975d00a62879bdf3e1f5d18f31")
+		(size 7686112)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.11.0")) (
+		(name "blueprint-sbom")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "772d4cdb6e99b71ccdbf8be97cb3b78cf85f70783fada4e68f2e1c6d2886bf84")
+		(size 6038592)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.11.0")) (
 		(name "zig")
 		(obtained Computed)
 		(served ("ziglang.org"))

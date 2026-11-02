@@ -50,11 +50,13 @@ class ReleasePipelineTests(unittest.TestCase):
         stub.write_text(f"#!{sys.executable}\n" + '''import json, os, sys
 with open(os.environ["PIPELINE_TEST_LOG"], "a") as log:
     log.write(json.dumps({"program": os.path.basename(sys.argv[0]), "args": sys.argv[1:], "output": os.environ.get("RP_OUTPUT"), "compiler": os.environ.get("RP_COMPILER")}) + "\\n")
-sys.exit(int(os.environ.get("PIPELINE_TEST_VERIFY_STATUS", "0")) if os.path.basename(sys.argv[0]) == "python3" else 0)
+sys.exit(int(os.environ.get("PIPELINE_TEST_VERIFY_STATUS", "0")) if os.path.basename(sys.argv[0]) == "release_sbom.roc" else 0)
 ''')
         stub.chmod(0o755)
         for name in ("python3", "release-package"):
             (programs / name).symlink_to(stub)
+        (self.root / "scripts").mkdir()
+        (self.root / "scripts/release_sbom.roc").symlink_to(stub)
         self.log = self.root / "commands"
         self.env = {**os.environ, "PATH": str(programs) + os.pathsep + os.environ["PATH"],
                     "PIPELINE_TEST_LOG": str(self.log)}
@@ -69,6 +71,7 @@ sys.exit(int(os.environ.get("PIPELINE_TEST_VERIFY_STATUS", "0")) if os.path.base
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(calls[0]["args"][1], "verify")
+        self.assertEqual(calls[0]["args"][-2:], ["--repo", "owner/repo"])
         self.assertEqual(calls[-1], {"program": "release-package", "args": ["test-archive"],
                                      "output": str(self.dist), "compiler": "roc"})
 
@@ -109,3 +112,17 @@ sys.exit(int(os.environ.get("PIPELINE_TEST_VERIFY_STATUS", "0")) if os.path.base
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(self.notes.is_file())
         self.assertFalse(self.log.exists())
+
+    def test_build_refuses_source_directories_before_cleanup(self) -> None:
+        package = self.root / "package"
+        package.mkdir()
+        source = package / "main.roc"
+        source.write_text("package []\n")
+        for directory in ("package", ".git", ".roc-parser-tmp", ".roc-parser-tmp/../package"):
+            with self.subTest(directory=directory):
+                result = subprocess.run([str(self.binary), "build", "--release-version", VERSION,
+                                         "--output-dir", directory], cwd=self.root, env=self.env,
+                                        capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(source.read_text(), "package []\n")
+                self.assertFalse(self.log.exists())

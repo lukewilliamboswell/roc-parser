@@ -50,10 +50,10 @@ settings! = |args, directory_flag| {
 build! = |args| {
 	settings = settings!(args, "--output-dir")?
 	root = Path.absolute!(".").map_err(|_| "cannot resolve workspace")?
-	# The manual's container sees only this workspace. Reject broad cleanup paths.
+	# Builds replace their output. Confine cleanup to a child of our scratch directory.
 	directory_name = Path.display(settings.directory)
-	if !directory_name.starts_with("${Path.display(root)}/") or directory_name.split_on("/").contains("..") {
-		return Err("release output must be a directory inside the workspace")
+	if !directory_name.starts_with("${Path.display(root)}/.roc-parser-tmp/") or directory_name.split_on("/").contains("..") {
+		return Err("release output must be a child directory of .roc-parser-tmp")
 	}
 	if Path.exists!(settings.directory).map_err(|_| "cannot inspect release output")? {
 		Path.delete_all!(settings.directory).map_err(|_| "cannot clear release output")?
@@ -74,7 +74,7 @@ build! = |args| {
 	Path.delete!(notes).map_err(|_| "cannot remove duplicate notes")?
 	run!(["python3", "scripts/release_helpers.py", "package-docs", "--release-version", settings.version, "--output-dir", Path.display(dist), "--site", Path.display(Path.join(settings.directory, "site")), "--repo", settings.repository])?
 	bundle = bundle!(dist)?
-	run!(["python3", "scripts/release_security_assets.py", "sbom", "--bundle", Path.display(bundle), "--release-version", settings.version, "--output-dir", Path.display(dist)])?
+	run!(["scripts/release_sbom.roc", "--", "generate", "--bundle", Path.display(bundle), "--release-version", settings.version, "--output-dir", Path.display(dist), "--repo", settings.repository])?
 	verify_sbom!(settings, bundle)?
 	_ = files!(settings)?
 	if settings.output != "" {
@@ -133,7 +133,7 @@ files! = |settings| {
 	Ok({ bundle, bundle_name, docs: Path.join(dist, "roc-parser-docs-${settings.version}.zip"), notes: Path.join(settings.directory, "release-notes.md") })
 }
 
-verify_sbom! = |settings, bundle| run!(["python3", "scripts/release_security_assets.py", "verify", "--sbom", "${Path.display(bundle)}.spdx.json", "--bundle", Path.display(bundle), "--release-version", settings.version])
+verify_sbom! = |settings, bundle| run!(["scripts/release_sbom.roc", "--", "verify", "--sbom", "${Path.display(bundle)}.spdx.json", "--bundle", Path.display(bundle), "--release-version", settings.version, "--repo", settings.repository])
 
 utility! = |args, settings, dist| Cmd.new("release-package").args(args.map(OsStr.from_str)).env("RP_REPOSITORY", OsStr.from_str(settings.repository)).env("RP_OUTPUT", OsStr.from_str(Path.display(dist))).env("RP_COMPILER", "roc").env("RP_AUTOMATION", "lukewilliamboswell/roc-automation@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81").env("GITHUB_OUTPUT", "").exec_cmd!().map_err(|_| "release-package failed: ${Str.join_with(args, " ")}")
 

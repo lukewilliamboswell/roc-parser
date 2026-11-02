@@ -49,14 +49,15 @@ config = [
 		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
 	]),
 	Environment("package", [Extend("tooling"), Expect(["roc", "python3", "git", "rm", "mkdir"])]),
+	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl", "jq"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
-	Environment("oracles", [Extend("package"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
+	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# The manual builds in Docker (.github/docs.Dockerfile).
-	Environment("release", [Extend("package"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["gh", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
+	Environment("release", [Extend("inventory"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["gh", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
 	Environment("docs", [Extend("release"), Expect(["docker"])]),
-	Environment("python", [Expect(["python3"])]),
+	Environment("json", [Extend("tooling"), Expect(["jq"])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
@@ -74,6 +75,7 @@ config = [
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
 	# Release artifacts. `release-build` makes every file of a release and
 	# `release-test` tests those exact files; the others make one each.
+	Task("release-sbom", [Use("release"), Run(["scripts/release_sbom.roc", "--"])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),
 	Task("bundle", [Use("package"), Run(["scripts/bundle.roc", "--"])]),
 	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
@@ -83,5 +85,5 @@ config = [
 	Task("release-build", [Use("docs"), Run(["scripts/release_assets.roc", "--", "build"])]),
 	Task("release-test", [Use("release"), Run(["scripts/release_assets.roc", "--", "test"])]),
 	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),
-	Task("combine-attestations", [Use("python"), Run(["python3", "scripts/release_security_assets.py", "combine-attestations"])]),
+	Task("combine-attestations", [Use("json"), Run(["scripts/combine_attestations.roc", "--"])]),
 ]

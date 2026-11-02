@@ -1,0 +1,744 @@
+{
+  "evidence": {
+    "supplier_manifest": "https://github.com/roc-lang/unicode/blob/4.3.0/vendor/unicode/manifest.json",
+    "supplier_license": "https://github.com/roc-lang/unicode/blob/4.3.0/LICENSE",
+    "data_license": "https://github.com/roc-lang/unicode/blob/4.3.0/vendor/unicode/LICENSE-UNICODE"
+  },
+  "components": [
+    {
+      "id": "unicode",
+      "name": "roc-lang/unicode",
+      "producer": "Organization: Roc contributors",
+      "version": "4.3.0",
+      "identity": "pkg:github/roc-lang/unicode@4.3.0",
+      "download": "https://github.com/roc-lang/unicode/releases/download/4.3.0/7HGaK8HUHMs5judroSmUoS4TjPGZ1kAjPTyPDSCWiSKM.tar.zst",
+      "sha256": "d33a566c0c5b6bfb2c294500580b27d3a29e9015c013ce59e3c7828727160b81",
+      "license": "UPL-1.0 AND Unicode-3.0",
+      "license_url": "",
+      "modified": "",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-arabic-shaping",
+      "name": "ArabicShaping.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/ArabicShaping.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/ArabicShaping.txt",
+      "sha256": "39afa01e680e27d0fd10b67a9b27be13fbaa3d0efecfb5be45991de9a0d267d0",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-bidi-brackets",
+      "name": "BidiBrackets.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/BidiBrackets.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/BidiBrackets.txt",
+      "sha256": "dadbaf38a0d0246e5b805bf8725cb81b7c621f93d030595635f5ba2c2f179428",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-bidi-mirroring",
+      "name": "BidiMirroring.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/BidiMirroring.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/BidiMirroring.txt",
+      "sha256": "a2f16fb873ab4fcdf3221cb1a8a85a134ddd6ed03603181823ff5206af3741ce",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-case-folding",
+      "name": "CaseFolding.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+      "sha256": "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-derived-bidi-class",
+      "name": "DerivedBidiClass.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedBidiClass.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedBidiClass.txt",
+      "sha256": "4867b4b7f0731ed1bfcd34cc6251211ff1542541fce0734b6fbda139ee80b3a4",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-derived-combining-class",
+      "name": "DerivedCombiningClass.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedCombiningClass.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedCombiningClass.txt",
+      "sha256": "191463abfbd202703c6fd6776a92a23ac44ec65e0476a7f95aa91ca492cef29b",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-derived-core-properties",
+      "name": "DerivedCoreProperties.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/DerivedCoreProperties.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/DerivedCoreProperties.txt",
+      "sha256": "24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-derived-general-category",
+      "name": "DerivedGeneralCategory.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt",
+      "sha256": "d62e5bab70ca74f099343f71224fa051cb1fdd61a1ab45c0488c44cfc0b6102e",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-derived-joining-type",
+      "name": "DerivedJoiningType.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedJoiningType.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedJoiningType.txt",
+      "sha256": "f39ebe974825d6736aee15582250307aa532b2cfab3caf3f86bd23fddc9c5c4d",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-east-asian-width",
+      "name": "EastAsianWidth.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/EastAsianWidth.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/EastAsianWidth.txt",
+      "sha256": "ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-emoji-data",
+      "name": "emoji-data.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt",
+      "sha256": "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-emoji-variation-sequences",
+      "name": "emoji-variation-sequences.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-variation-sequences.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-variation-sequences.txt",
+      "sha256": "bb3d09ef03f206012c7532dd52dc0a21c9efddba0135ea4cf0d9201b8b9bba7e",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-grapheme-break-property",
+      "name": "GraphemeBreakProperty.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
+      "sha256": "d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-indic-positional-category",
+      "name": "IndicPositionalCategory.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/IndicPositionalCategory.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/IndicPositionalCategory.txt",
+      "sha256": "68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-indic-syllabic-category",
+      "name": "IndicSyllabicCategory.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/IndicSyllabicCategory.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/IndicSyllabicCategory.txt",
+      "sha256": "3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-line-break",
+      "name": "LineBreak.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/LineBreak.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/LineBreak.txt",
+      "sha256": "e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-prop-list",
+      "name": "PropList.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/PropList.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/PropList.txt",
+      "sha256": "130dcddcaadaf071008bdfce1e7743e04fdfbc910886f017d9f9ac931d8c64dd",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-property-aliases",
+      "name": "PropertyAliases.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/PropertyAliases.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/PropertyAliases.txt",
+      "sha256": "4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-property-value-aliases",
+      "name": "PropertyValueAliases.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/PropertyValueAliases.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/PropertyValueAliases.txt",
+      "sha256": "64e9a5f76f7a1e8b5a47d6a1f9a26522a251208f5276bdfa1559dac7cf2e827a",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-script-extensions",
+      "name": "ScriptExtensions.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/ScriptExtensions.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/ScriptExtensions.txt",
+      "sha256": "ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-scripts",
+      "name": "Scripts.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/Scripts.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/Scripts.txt",
+      "sha256": "9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-special-casing",
+      "name": "SpecialCasing.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/SpecialCasing.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/SpecialCasing.txt",
+      "sha256": "efc25faf19de21b92c1194c111c932e03d2a5eaf18194e33f1156e96de4c9588",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-unicode-data",
+      "name": "UnicodeData.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+      "sha256": "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-vertical-orientation",
+      "name": "VerticalOrientation.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/VerticalOrientation.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/VerticalOrientation.txt",
+      "sha256": "dcef09c3fb24d356b042569c328ec341efc5b53447700d799f2fb4834c3cd3cd",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    },
+    {
+      "id": "unicode-data-word-break-property",
+      "name": "WordBreakProperty.txt",
+      "producer": "Organization: Unicode, Inc.",
+      "version": "17.0.0",
+      "identity": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/WordBreakProperty.txt",
+      "download": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/WordBreakProperty.txt",
+      "sha256": "72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852",
+      "license": "Unicode-3.0",
+      "license_url": "",
+      "modified": "Input to generated Roc Unicode tables; this original data file is not shipped in the roc-parser source bundle.",
+      "target": "source",
+      "origin": "reviewed"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "roc-parser",
+      "to": "unicode",
+      "relation": "dependsOn",
+      "scope": "",
+      "basis": "package/main.roc imports this immutable Unicode package; the package compiler fetches it separately from this source bundle."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-arabic-shaping",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-bidi-brackets",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-bidi-mirroring",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-case-folding",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-derived-bidi-class",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-derived-combining-class",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-derived-core-properties",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-derived-general-category",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-derived-joining-type",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-east-asian-width",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-emoji-data",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-emoji-variation-sequences",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-grapheme-break-property",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-indic-positional-category",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-indic-syllabic-category",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-line-break",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-prop-list",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-property-aliases",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-property-value-aliases",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-script-extensions",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-scripts",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-special-casing",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-unicode-data",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-vertical-orientation",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    },
+    {
+      "from": "unicode",
+      "to": "unicode-data-word-break-property",
+      "relation": "dependsOn",
+      "scope": "build",
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.0 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+    }
+  ],
+  "inputs": [
+    {
+      "input": "build-source:roc-CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:blueprint-sbom:aarch64-darwin",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:blueprint-sbom:x86_64-linux",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:release-package:aarch64-darwin",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:release-package:x86_64-linux",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:roc-stable:aarch64-darwin",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:roc-stable:x86_64-linux",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:zig:aarch64-darwin",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "program:zig:x86_64-linux",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "roc-package:CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "source:nix",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:asciidoc",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:bench",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:bench-quick",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:bundle",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:check",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:combine-attestations",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:conformance",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:doc-examples",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:docs",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:examples-archive",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:fuzz",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:fuzz-smoke",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-build",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-notes",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-package",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-sbom",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-test",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:release-validate",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:roc-syntax",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:test",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:test-examples-archive",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#cargo",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#git",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#go",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#python3",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "tool:nix#rustc",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    }
+  ]
+}

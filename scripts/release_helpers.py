@@ -32,7 +32,6 @@ from typing import Sequence
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import release_security_assets  # noqa: E402  (needs the sys.path entry above)
 from workflow_helpers import append_github_output, validate_examples  # noqa: E402
 
 DEFAULT_REPO = "lukewilliamboswell/roc-parser"
@@ -84,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         args.repo = args.repo or os.environ.get("GITHUB_REPOSITORY", DEFAULT_REPO)
     try:
         return args.func(args)
-    except (RuntimeError, ValueError, release_security_assets.ReleaseSecurityError) as err:
+    except (RuntimeError, ValueError) as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
 
