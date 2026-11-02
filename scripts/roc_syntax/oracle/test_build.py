@@ -98,6 +98,14 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(shape, ['string', '"escaped\\n\\\"text"'])
         self.assertEqual(responses[1]['facts'][0]['shape'], ['number', '42'])
 
+    def test_node_spans_report_every_node_with_its_own_range(self):
+        request = {'id': 'spans', 'mode': 'file', 'source': 'f : (U8 -> Bool) -> U64\n'}
+        result = subprocess.run([os.environ['ORACLE_BINARY']], input=json.dumps(request) + '\n',
+                                text=True, capture_output=True, check=True, timeout=30)
+        spans = [(span['kind'], span['start'], span['end']) for span in json.loads(result.stdout)['node_spans']]
+        self.assertEqual(spans, [('type_anno', 0, 23), ('fn', 4, 23), ('parens', 4, 16), ('fn', 5, 15),
+                                 ('ty', 5, 7), ('ty', 11, 15), ('ty', 20, 23)])
+
     def test_parse_only_benchmark_and_worker_reuse(self):
         sources = [('expr', '[1, 2 + 3]'), ('file', 'answer = 42'), ('header', 'module []'),
                    ('statement', 'expect True'), ('repl', 'answer = 42'), ('expr', '[)')]

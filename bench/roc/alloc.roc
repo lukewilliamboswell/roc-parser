@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -16,15 +16,14 @@ import parser.Yaml
 
 ## Allocation counter for scripts/bench.py --allocations; never a fuzz target.
 ## The input's first line names the format and the rest is the document. The
-## target parses once inside Fuzz.measure_allocs! and then crashes on purpose
-## to report the count, so exit code 77 is the expected result.
+## target parses once inside Fuzz.measure!, and `measure` reports the count.
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	{ before, after } = bytes.split_first('\n') ?? { before: [], after: [] }
 	format = Str.from_utf8(before) ?? ""
 	input = Str.from_utf8(after) ?? ""
-	measured = Fuzz.measure_allocs!(|{}| parse(format, input))
-	crash "ALLOCATION_DIAGNOSTIC allocations=${measured.allocations.to_str()} result=${measured.value}"
+	_measured = Fuzz.measure!("parse", || parse(format, input))
+	Fuzz.keep
 }
 
 parse : Str, Str -> Str
@@ -48,6 +47,7 @@ parse = |format, input| {
 }
 
 target = Fuzz.target_with!({
+	examples: [],
 	name: "bench-alloc-diagnostic",
 	generator: Fuzz.raw_bytes,
 	test!,

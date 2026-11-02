@@ -155,16 +155,12 @@ check while you work:
 python3 scripts/run_fuzz.py smoke csv --runs 200
 ----
 
-The last lines of the output are libFuzzer's statistics:
+The last lines of the output are the target's summary and its report:
 
 [source,text]
 ----
-Done 200 runs in 0 second(s)
-stat::number_of_executed_units: 200
-stat::average_exec_per_sec:     0
-stat::new_units_added:          39
-stat::slowest_unit_time_sec:    0
-stat::peak_rss_mb:              25
+csv: passed; baseline not_checked; examples 0; exploration passed (attempted 200, accepted 200, rejected 0)
+Report: .roc-fuzz/reports/934809-521896414/report.json
 ----
 
 Run a longer, time-bounded campaign on the target closest to your change. The
@@ -187,7 +183,8 @@ The runner keeps everything under `.roc-parser-tmp/fuzz/`:
 
 == Reproduce and minimise a failure
 
-A failing run prints the path of its metadata and of the saved input. In CI,
+A failing run prints the crash message and the paths of its report and of the
+saved input, `original-input.bin`. In CI,
 the `fuzz-failure-<target>` artifact holds the binary, the corpus and the run
 directory. Use the same target name for every step.
 
@@ -226,7 +223,7 @@ Output (the last line):
 "a"
 ----
 
-Replaying a saved input creates a `.roc-fuzz/` directory, which Git ignores.
+Each command writes a report under a `.roc-fuzz/` directory, which Git ignores.
 
 == Add a regression
 

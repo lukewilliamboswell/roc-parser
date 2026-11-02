@@ -80,6 +80,8 @@ jobs:
           - byte-scan
           - roc-syntax-raw
           - roc-syntax-structured
+          - roc-syntax-spans
+          - roc-syntax-span-model
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

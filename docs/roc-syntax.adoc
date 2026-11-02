@@ -80,16 +80,24 @@ should tolerate partial results.
 == Compatibility and validation
 
 The syntax reference is compiler commit
-`0d4b0ab02f9239448d034db17b4e63051a7c57ae` from upstream main. The implementation compiler is not
+`f7bef6b38f23797eb34b291ced98af71ea37dd3b` from upstream main. The implementation compiler is not
 pinned: CI builds and tests the package with the latest Roc nightly, and each validation
 run records the nightly it used. This identifies a changing language implementation,
 rather than a stable language specification. Updating the syntax reference is a
 separate maintenance decision.
 
-The differential corpus records individual syntax rules and their coverage.
+The differential corpus records individual syntax rules and their coverage. For
+accepted input every compiler AST node must have a candidate node of the
+corresponding kind with the same byte span, apart from the leading `.` the
+compiler keeps in a name's token and the arrow it keeps in front of a call.
 Raw fuzzing checks source preservation and structural invariants; structured
-generation checks independently constructed syntax. Performance runs use optimized
-builds and measure scaling as documents grow.
+generation checks independently constructed syntax. `roc-syntax-spans` holds any
+source to span invariants that need no reference: in a complete parse a node
+covers whole tokens and both halves of each delimiter pair, and in any parse
+children keep to their own bytes. `roc-syntax-span-model` writes files while
+noting each node's exact span, including around comments and newlines inside
+delimiters, and the validation run reviews its corpus against the compiler.
+Performance runs use optimized builds and measure scaling as documents grow.
 
 == Run the feedback loop
 
@@ -169,9 +177,9 @@ every possible incomplete program.
 
 The oracle mutation lane edits accepted seeds from all four fixture sets and the
 complete upstream corpus. Every mutation must agree on acceptance; accepted
-mutations must also agree on tokens and normalized trees. The lane additionally
+mutations must also agree on tokens, normalized trees and node spans. The lane additionally
 compares unchanged UTF-8 inputs harvested from the raw fuzz corpus when present.
-Invalid UTF-8 bytes remain in the raw robustness lane, and exclusions are counted
+Inputs that are not valid UTF-8 are compared too, and exclusions are counted
 explicitly. Mutation provenance records exact byte edits, seeds and original
 source so each failure can be replayed without the original corpus. See
 {src}/scripts/roc_syntax/MUTATIONS.md[mutation campaign commands and limits].

@@ -49,7 +49,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_crash_case_saved_and_later_cases_continue(self):
         with tempfile.TemporaryDirectory() as tmp:
-            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(7)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":[]}),flush=True)\n')
+            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(7)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"nodes":[],"node_spans":[],"shape":[]}),flush=True)\n')
             cases = [{'id':'bad','mode':'expr','source':'crash'}, {'id':'good','mode':'expr','source':''}]
             records = review.run_cases(cases, command, command, Path(tmp)/'failures')
             self.assertFalse(records[0]['pass'])
@@ -58,7 +58,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_mismatch_retained_and_request_replayable(self):
         with tempfile.TemporaryDirectory() as tmp:
-            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line); print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":["wrong"]}),flush=True)\n')
+            command = self.worker(tmp, 'for line in sys.stdin:\n r=json.loads(line); print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"nodes":[],"node_spans":[],"shape":["wrong"]}),flush=True)\n')
             case = {'id':'deliberate/mismatch','source':'','mode':'expr','model_shape':[['number','1']]}
             result = review.run_cases([case], command, command, Path(tmp)/'failures')
             self.assertFalse(result[0]['pass'])
@@ -66,6 +66,61 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(saved['request']['source'], '')
             self.assertEqual(saved['model_shape'], case['model_shape'])
             self.assertTrue(any(d['field']=='actual_model_shape' for d in saved['differences']))
+
+class SpanTests(unittest.TestCase):
+    def responses(self, nodes, node_spans, tokens=()):
+        return ({'nodes': [{'kind': kind, 'start': start, 'end': end} for kind, start, end in nodes]},
+                {'tokens': [{'kind': kind, 'start': start, 'end': end} for kind, start, end in tokens],
+                 'node_spans': [{'kind': kind, 'start': start, 'end': end} for kind, start, end in node_spans]})
+
+    def test_wrong_span_with_the_right_tree_is_a_difference(self):
+        # f : (U8 -> Bool) -> U64: the function lies inside its parent either way.
+        actual, expected = self.responses([('TypeFunction', 4, 15)], [('fn', 5, 15)])
+        self.assertEqual([d['field'] for d in review.span_differences(actual, expected)], ['spans'])
+
+    def test_same_span_of_another_kind_is_a_difference(self):
+        actual, expected = self.responses([('Tuple', 4, 15)], [('fn', 4, 15)])
+        self.assertEqual(len(review.span_differences(actual, expected)), 1)
+
+    def test_each_candidate_node_answers_one_compiler_node(self):
+        actual, expected = self.responses([('NumberLiteral', 0, 1)], [('int', 0, 1), ('int', 0, 1)])
+        self.assertEqual(len(review.span_differences(actual, expected)), 1)
+
+    def test_unknown_compiler_kind_is_reported_not_skipped(self):
+        actual, expected = self.responses([], [('new_kind', 0, 1)])
+        self.assertEqual(review.span_differences(actual, expected), [{'field': 'spans', 'unmapped_kind': 'new_kind'}])
+
+    def test_leading_dot_of_a_compiler_token_is_not_part_of_the_name(self):
+        actual, expected = self.responses([('TypeName', 3, 6)], [('ty', 2, 6)], [('NoSpaceDotUpperIdent', 2, 6)])
+        self.assertEqual(review.span_differences(actual, expected), [])
+
+    def test_only_a_call_starts_at_the_arrow_before_it(self):
+        tokens = [('OpArrow', 2, 4), ('LowerIdent', 5, 6)]
+        actual, expected = self.responses([('Call', 5, 9)], [('apply', 2, 9)], tokens)
+        self.assertEqual(review.span_differences(actual, expected), [])
+        actual, expected = self.responses([('Binary', 5, 9)], [('bin_op', 2, 9)], tokens)
+        self.assertEqual(len(review.span_differences(actual, expected)), 1)
+
+    def test_compare_requires_the_oracle_to_report_spans(self):
+        response = {'ok': True, 'consumed': True, 'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}], 'nodes': [], 'shape': []}
+        with self.assertRaises(KeyError):
+            review.compare({'source': ''}, response, response)
+
+    def test_rejected_inputs_have_no_spans_to_compare(self):
+        actual = {'ok': False, 'consumed': True, 'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}], 'nodes': [], 'shape': []}
+        self.assertEqual(review.compare({'source': '', 'coverage': 'exploratory'}, actual, actual), [])
+
+class ShownCaseTests(unittest.TestCase):
+    def test_source_shown_by_a_fuzz_target_keeps_its_final_newline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / 'target'
+            binary.write_text(f'#!{sys.executable}\nimport sys\nprint(open(sys.argv[2]).read())\n')
+            binary.chmod(0o755)
+            corpus = Path(tmp) / 'corpus'
+            corpus.mkdir()
+            (corpus / 'unit').write_text('x = 1\n')
+            self.assertEqual(review.shown_cases(binary, corpus), [
+                {'id': 'fuzz-show/unit', 'mode': 'file', 'source': 'x = 1\n', 'rule': 'fuzz-show', 'coverage': 'supported'}])
 
 class ProjectionTests(unittest.TestCase):
     def test_compact_header_keyword_is_lexical(self):
@@ -217,7 +272,7 @@ class ProjectionTests(unittest.TestCase):
                                  review.normalize_tokens(candidate, 'x .01'))
 
     def test_precedence_disagreement_detected(self):
-        first = {'ok':True,'consumed':True,'tokens':[], 'shape':['binary','+',1,['binary','*',2,3]]}
+        first = {'ok':True,'consumed':True,'tokens':[],'nodes':[],'node_spans':[],'shape':['binary','+',1,['binary','*',2,3]]}
         second = {**first,'shape':['binary','*',['binary','+',1,2],3]}
         self.assertTrue(any(d['field']=='shape' for d in review.compare({'source':'1+2*3'},first,second)))
 
@@ -262,7 +317,7 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(review.compare(case,actual,expected)[0]['field'],'unsupported_status')
 
     def test_matching_unknown_shapes_are_projection_gap_not_agreement(self):
-        response = {'ok':True,'consumed':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}], 'shape':['unsupported','future_syntax']}
+        response = {'ok':True,'consumed':True,'tokens':[{'kind':'EndOfFile','start':0,'end':0}],'nodes':[],'node_spans':[], 'shape':['unsupported','future_syntax']}
         differences = review.compare({'source':'','coverage':'supported'},response,response)
         self.assertEqual([d['field'] for d in differences],['projection_gap'])
 

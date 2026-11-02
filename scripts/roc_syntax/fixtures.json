@@ -1,7 +1,7 @@
 {
   "version": 1,
   "syntax": "current-zig",
-  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "reference_commit": "f7bef6b38f23797eb34b291ced98af71ea37dd3b",
   "coverage": [
     "integers",
     "identifiers",
@@ -3148,6 +3148,97 @@
       "source": "So:me(x) = vmatch ",
       "rule": "recovery",
       "coverage": "recovery"
+    },
+    {
+      "id": "recovery-pattern-stops-at-closer",
+      "mode": "file",
+      "source": "{e:)=",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-nominal-pattern-stops-at-closer",
+      "mode": "file",
+      "source": "Foo.{e:)=\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-type-stops-at-closer",
+      "mode": "file",
+      "source": "f : {a : )\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-header-without-exposes",
+      "mode": "file",
+      "source": "module{",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-platform-without-requires",
+      "mode": "file",
+      "source": "platform =0\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-unclosed-type-before-definition",
+      "mode": "file",
+      "source": "z:[(,\ne=\n",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "comment-invalid-utf8",
+      "mode": "file-hex",
+      "source": "2320ff0a78203d20310a",
+      "rule": "comments",
+      "coverage": "supported"
+    },
+    {
+      "id": "comment-truncated-utf8",
+      "mode": "file-hex",
+      "source": "78203d2031202320c30a",
+      "rule": "comments",
+      "coverage": "supported"
+    },
+    {
+      "id": "recovery-invalid-utf8-after-comment",
+      "mode": "file-hex",
+      "source": "2320ff0a78203d20ff0a",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-invalid-utf8-in-string",
+      "mode": "file-hex",
+      "source": "78203d2022ff220a",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "recovery-bidi-after-invalid-comment-byte",
+      "mode": "file-hex",
+      "source": "2320ffe280ae0a",
+      "rule": "recovery",
+      "coverage": "recovery"
+    },
+    {
+      "id": "header-trivia-only",
+      "mode": "header",
+      "source": "  \n",
+      "rule": "headers",
+      "coverage": "supported"
+    },
+    {
+      "id": "header-comment-only",
+      "mode": "header",
+      "source": "# comment\n",
+      "rule": "headers",
+      "coverage": "supported"
     }
   ]
 }

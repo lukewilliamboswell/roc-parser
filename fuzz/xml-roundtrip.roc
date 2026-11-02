@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -86,8 +86,12 @@ show_result = |result| {
 }
 
 target = Fuzz.target_with({
+	examples: [],
 	name: "xml-roundtrip",
-	generator: Fuzz.map(Fuzz.raw_bytes, generate),
-	test,
-	show: |input| XmlGen.show(input.xml),
+	generator: Fuzz.raw_bytes,
+	test: |bytes| test(generate(bytes)),
+	show: |bytes| {
+		input = generate(bytes)
+		XmlGen.show(input.xml)
+	},
 })

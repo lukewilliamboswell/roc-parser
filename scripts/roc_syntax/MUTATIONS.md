@@ -16,13 +16,14 @@ Repeat `--fixtures` for additional pinned fixture or imported upstream corpus JS
 files. Only oracle-accepted seeds enter the mutation pool. The deterministic
 campaign inserts, deletes, and replaces short fragments, including delimiters,
 keywords, comments, Unicode, and control characters. Edits respect Unicode scalar
-boundaries; the transport therefore tests valid UTF-8. The separate raw byte fuzzer
-continues to cover malformed UTF-8.
+boundaries, so fresh mutations are valid UTF-8; raw corpus entries that aren't
+travel as hexadecimal and are compared like any other. An accepted mutation must also agree with the
+compiler on tokens, tree shape and the byte span of every AST node.
 
 Add `--corpus path/to/raw-fuzz-corpus` to compare unchanged harvested raw inputs in
 file mode, **including oracle-rejected inputs**. These comparisons precede the
-fresh mutations. Invalid UTF-8, oversized sources, and entries above
-`--max-corpus-files` are counted as exclusions, never as oracle comparisons.
+fresh mutations. Oversized sources and entries above `--max-corpus-files` are
+counted as exclusions, never as oracle comparisons.
 Sources are limited by `--max-source-bytes` (default 16384); a mutation uses at most
 `--max-edits` (default 3). Each worker request has `--timeout` seconds (default 5).
 A worker crash or timeout fails that case and the next case starts a new worker.

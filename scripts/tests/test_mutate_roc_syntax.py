@@ -29,7 +29,7 @@ class MutationTests(unittest.TestCase):
 
     def response(self, ok=True, shape=None):
         return {'ok': ok, 'consumed': ok, 'tokens': [{'kind': 'EndOfFile', 'start': 0, 'end': 0}],
-                'shape': ['number', '1'] if shape is None else shape}
+                'nodes': [], 'node_spans': [], 'shape': ['number', '1'] if shape is None else shape}
 
     def test_acceptance_tree_and_unknown_are_real_failures(self):
         request = {'source': ''}
@@ -47,7 +47,7 @@ class MutationTests(unittest.TestCase):
     def test_crash_is_retained_and_persistent_worker_recovers(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'worker.py'
-            path.write_text('import json,sys,os\nfor line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(9)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"shape":[],"pid":os.getpid()}),flush=True)\n')
+            path.write_text('import json,sys,os\nfor line in sys.stdin:\n r=json.loads(line)\n if r["source"]=="crash": sys.exit(9)\n print(json.dumps({"version":1,"id":r["id"],"ok":True,"consumed":True,"tokens":[{"kind":"EndOfFile","start":0,"end":0}],"nodes":[],"node_spans":[],"shape":[],"pid":os.getpid()}),flush=True)\n')
             command = [sys.executable, '-u', str(path)]
             campaign = mutation.Campaign(command, command, .5)
             try:
@@ -83,8 +83,8 @@ class MutationTests(unittest.TestCase):
             report = json.loads((root / 'out/report.json').read_text())
             self.assertEqual(report['counts']['accepted_seeds'], 1)
             self.assertEqual(report['counts']['rejected_seeds'], 1)
-            self.assertEqual(report['counts']['corpus_invalid_utf8_excluded'], 1)
-            self.assertEqual(report['counts']['total'], 4)
+            self.assertEqual(report['counts']['corpus_invalid_utf8'], 1)
+            self.assertEqual(report['counts']['total'], 5)
             self.assertEqual(report['counts']['passed'], 1)  # rejected raw corpus differs in recovery shape
             failure = next((root / 'out/failures').glob('*.json'))
             replay = args[:4] + ['--replay', str(failure), '--output', str(root / 'replay')]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -55,3 +56,15 @@ def report_failure(
         file=sys.stderr,
     )
     return completed.returncode
+
+
+def measured_allocations(binary: Path | str, input_path: Path | str, *, timeout: float, cwd: Path | str | None = None) -> int:
+    """Count one input's allocations in the `parse` region of a roc-fuzz target.
+
+    `TARGET measure` prints that input's named observations as a JSON list.
+    """
+    result = subprocess.run([str(binary), "measure", str(input_path)], capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    if result.returncode:
+        raise RuntimeError(f"allocation measurement exited {result.returncode}: {result.stdout[:500]}{result.stderr[:500]}")
+    observations = json.loads(result.stdout.splitlines()[0])
+    return next(item["stats"]["allocs"] for item in observations if item["name"] == "parse")

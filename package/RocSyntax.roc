@@ -508,9 +508,12 @@ comment_end = |source, at| {
 	$result
 }
 
-utf8_diagnostics_inline : List(U8) -> List(RocSyntax.Diagnostic)
-utf8_diagnostics_inline = |source| {
+## Comments may hold any bytes, but a bidirectional control is rejected even there.
+## `comments` lists them in source order.
+utf8_diagnostics_inline : List(U8), List(RocSyntax.Token) -> List(RocSyntax.Diagnostic)
+utf8_diagnostics_inline = |source, comments| {
 	var $out = []
+	var $comment = 0
 	var $i = 0
 	len = source.len()
 	while $i < len {
@@ -547,7 +550,13 @@ utf8_diagnostics_inline = |source| {
 					}
 					$i = at + width
 				} else {
-					$out = push_diagnostic($out, InvalidUtf8, at, at + 1)
+					while (comments.get($comment) ?? { kind: Comment, start: len, end: len + 1 }).end <= at {
+						$comment = $comment + 1
+					}
+					in_comment = (comments.get($comment) ?? { kind: Comment, start: len, end: len + 1 }).start <= at
+					if !in_comment {
+						$out = push_diagnostic($out, InvalidUtf8, at, at + 1)
+					}
 					$i = at + 1
 				}
 			}
@@ -583,7 +592,7 @@ lex = |source| {
 	index = stage1_starts(source)
 	starts = index.starts
 	var $tokens = List.with_capacity(index.count + 2)
-	var $diagnostics = utf8_diagnostics_inline(source)
+	var $diagnostics = []
 	var $i = if (bom) 3 else 0
 	var $contexts = []
 	if bom {
@@ -820,7 +829,13 @@ lex = |source| {
 	if !$contexts.is_empty() {
 		$diagnostics = push_diagnostic($diagnostics, UnclosedDelimiter, len, len)
 	}
-	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics: $diagnostics, unsupported: False }
+	# Only the tokens tell where comments are, so a first pass that finds invalid
+	# bytes is repeated knowing them. Keeping these apart from the lexer's own
+	# diagnostics stops bytes in a comment from crowding those out.
+	scanned = utf8_diagnostics_inline(source, [])
+	encoding = if (scanned.any(|d| d.code == InvalidUtf8)) utf8_diagnostics_inline(source, $tokens.keep_if(|t| t.kind == Comment)) else scanned
+	diagnostics = if (encoding.is_empty()) $diagnostics else encoding.concat($diagnostics).take_first(256)
+	{ tokens: $tokens.append({ kind: EndOfFile, start: len, end: len }), diagnostics, unsupported: False }
 }
 
 ## SWAR keyword test: compare the identifier's first 8 bytes as one U64 (simdjson-style atom check).
@@ -1447,6 +1462,73 @@ expect {
 expect {
 	p = RocSyntax.parse_str("Box(a) := { value ?: List(a), ..ext }.{ make : a -> Box(a)\n make = |x| x }")
 	p.status == Complete and [TypeDeclaration, TypeHeader, TypeVariable, TypeRecord, TypeField, TypeApply, TypeExtension, AssociatedBlock, TypeAnnotation, TypeFunction].all(|kind| p.nodes.any(|n| n.kind == kind))
+}
+
+expect {
+	# A parenthesized function's span holds neither parenthesis, and comments and
+	# newlines after the opening one stay outside it.
+	spans = |source, kind| {
+		p = RocSyntax.parse_str(source)
+		p.nodes.keep_if(|n| n.kind == kind).map(|n| (n.start, n.end))
+	}
+	functions = |source| spans(source, TypeFunction)
+	functions("f : (U8 -> Bool) -> U64") == [(5, 15), (4, 23)]
+		and spans("f : (U8 -> Bool) -> U64", TypeParenthesized) == [(4, 16)]
+		and functions("f : (A, B => C)") == [(5, 14)]
+		and functions("f : ( # note\n  U8 -> Bool\n)") == [(15, 25)]
+		and functions("f : (-> U8)") == [(5, 10)]
+}
+
+expect {
+	# Without arguments the parentheses begin the function, as they do outside
+	# another pair.
+	p = RocSyntax.parse_str("f : (() -> U8)")
+	p.nodes.keep_if(|n| n.kind == TypeFunction).map(|n| (n.start, n.end)) == [(5, 13)]
+}
+
+expect {
+	# A comment may hold any bytes, as the compiler's trivia scan doesn't validate them.
+	comment = |bytes| RocSyntax.parse_bytes(['#', ' '].concat(bytes).concat(['\n', 'x', ' ', '=', ' ', '1'])).status
+	comment([0xFF]) == Complete and comment([0xC3]) == Complete and comment(List.repeat(0xFF, 300)) == Complete
+}
+
+expect {
+	# Bytes in a comment hide nothing outside it, even past the diagnostic limit,
+	# and a bidirectional control is still rejected there.
+	noisy = ['#'].concat(List.repeat(0xFF, 300)).concat(['\n'])
+	invalid = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', 0xFF]))
+	unclosed = RocSyntax.parse_bytes(noisy.concat(['x', ' ', '=', ' ', '"']))
+	invalid.status == Recovered and invalid.diagnostics.any(|d| d.code == InvalidUtf8)
+		and unclosed.status == Recovered and RocSyntax.parse_str("# \u(202E)\n").status != Complete
+}
+
+expect {
+	# Trivia alone is a header: the implicit one for a type module.
+	["", " \n", "# comment\n", "#_ comment\n"].all(|source| RocSyntax.parse_header_str(source).status == Complete)
+}
+
+expect {
+	# Recovery leaves a closing delimiter for its opener, so a pattern or type
+	# that stops at one ends before it and its parent still covers it.
+	["{e:)=", "{e:]=", "Foo.{e:)=", "{e:) = 1\nf = 2", "f : (a, ]", "f : {a : )", "f : [)", "z:[(,\ne="].all(
+		|source| {
+			p = RocSyntax.parse_str(source)
+			p.status != Complete and p.nodes.all(
+				|n| p.children.sublist({ start: n.children_start, len: n.children_len }).all(
+					|id| match p.nodes.get(id) {
+						Ok(child) => n.start <= child.start and child.end <= n.end
+						Err(_) => False
+					},
+				),
+			)
+		},
+	)
+}
+
+expect {
+	# An unclosed type ends at what it parsed, not at the next declaration.
+	p = RocSyntax.parse_str("z:[(a\ne=")
+	p.nodes.keep_if(|n| n.kind == TypeParenthesized).map(|n| (n.start, n.end)) == [(3, 5)]
 }
 
 expect {
@@ -2207,7 +2289,7 @@ parse_source = |source, mode| {
 		n = nget(n3, $index)
 		if n.kind == Header {
 			$header_count = $header_count + 1
-			$bad_header = $bad_header or n.start != first_start
+			$bad_header = $bad_header or (n.start != first_start and !header_missing)
 		}
 		$index = $index + 1
 	}
@@ -2547,7 +2629,7 @@ exposed_collection = |ctx, initial, nodes, children, diags| {
 	var $d = if (opened) diags else diag(diags, UnexpectedToken, opening.start, opening.end)
 	var $s = if (opened) look + 1 else look
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opened) opening.end else opening.start
 	var $done = !opened
 	while !$done {
 		item_state = sig(ctx, $s)
@@ -3012,7 +3094,7 @@ type_atom = |ctx, initial, nodes, children, diags, depth| {
 		type_fields(ctx, s, nodes, children, diags, True, depth + 1)
 	} else {
 		advance = t.kind != EndOfFile and t.kind != CloseRound and t.kind != CloseSquare and t.kind != CloseCurly and !is_text(ctx, s, Comma)
-		finish(s + if (advance) 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		finish(s + if (advance) 1 else 0, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, if (advance) t.end else t.start, [])
 	}
 }
 
@@ -3064,6 +3146,9 @@ type_parenthesized : Ctx, U64, List(RocSyntax.Node), List(U64), List(RocSyntax.D
 type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 	opening = tok(ctx, initial)
 	var $s = sig(ctx, initial + 1)
+	# A function written inside the parentheses begins after the opening one,
+	# which belongs to the TypeParenthesized wrapping it.
+	inner_start = tok(ctx, $s).start
 	var $ids = []
 	var $comma = False
 	var $done = False
@@ -3074,7 +3159,7 @@ type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 		if is_text(ctx, $s, Arrow) or is_text(ctx, $s, FatArrow) {
 			{ pos: ret_state, nodes: $n, children: $c, diags: $d, node: ret_node } = type_expression(ctx, $s + 1, $n, $c, $d, TypeArgument, depth + 1)
 			ret_end = nend($n, ret_node)
-			{ nodes: $n, children: $c, node: fn_node } = emit($n, $c, TypeFunction, opening.start, ret_end, $ids.append(ret_node))
+			{ nodes: $n, children: $c, node: fn_node } = emit($n, $c, TypeFunction, inner_start, ret_end, $ids.append(ret_node))
 			$s = sig(ctx, ret_state)
 			$ids = [fn_node]
 			$comma = False
@@ -3105,7 +3190,7 @@ type_parenthesized = |ctx, initial, nodes, children, diags, depth| {
 	closed = closing.kind == CloseRound
 	s1 = if (closed) $s + 1 else $s
 	d1 = if (closed) $d else diag($d, UnclosedDelimiter, closing.start, closing.end)
-	end = U64.max(if (closed) closing.end else closing.start, nend(n1, ids.last() ?? n1.len()))
+	end = U64.max(if (closed) closing.end else opening.end, nend(n1, ids.last() ?? n1.len()))
 	arrow = sig(ctx, s1)
 	if ids.is_empty() and (is_text(ctx, arrow, Arrow) or is_text(ctx, arrow, FatArrow)) {
 		{ pos: ret_state, nodes: n2, children: c2, diags: d2, node: ret_node } = type_expression(ctx, arrow + 1, n1, c1, d1, TypeArgument, depth + 1)
@@ -3238,7 +3323,7 @@ parse_where_clause = |ctx, initial, nodes, children, diags, depth| {
 	var $s = if (opening.kind == OpenSquare) look + 1 else look
 	var $ids = []
 	var $done = opening.kind != OpenSquare or depth >= 128
-	var $end = opening.end
+	var $end = if (opening.kind == OpenSquare) opening.end else opening.start
 	var $n = nodes
 	var $c = children
 	var $d = d2
@@ -3642,7 +3727,9 @@ pattern_primary = |ctx, s, nodes, children, diags, alternatives, depth| {
 	} else if t.kind == Number or t.kind == SingleQuote {
 		primary(ctx, s, nodes, children, diags, depth, False)
 	} else {
-		finish(s + if (t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, t.end, [])
+		# A closing delimiter stays for its opener, so the error doesn't claim it.
+		stops = t.kind == EndOfFile or t.kind == CloseRound or t.kind == CloseSquare or t.kind == CloseCurly
+		finish(s + if (stops) 0 else 1, nodes, children, diag(diags, UnexpectedToken, t.start, t.end), ErrorNode, t.start, if (stops) t.start else t.end, [])
 	}
 }
 
@@ -4312,7 +4399,7 @@ platform_requires = |ctx, initial, nodes, children, diags, depth| {
 	reopened = tok(ctx, after_empty).kind == OpenCurly
 	var $s = if (!empty) s0 else if (reopened) after_empty + 1 else after_empty
 	var $ids = []
-	var $end = if (empty) tok(ctx, initial_look).end else opening.end
+	var $end = if (empty) tok(ctx, initial_look).end else if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128 or (empty and !reopened)
 	var $n = nodes
 	var $c = children
@@ -4409,7 +4496,7 @@ platform_symbol_map = |ctx, initial, nodes, children, diags, kind, depth| {
 	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
@@ -4489,7 +4576,7 @@ platform_targets = |ctx, initial, nodes, children, diags, depth| {
 	d1 = if (opening.kind != OpenCurly) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenCurly) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenCurly) opening.end else opening.start
 	var $done = opening.kind != OpenCurly or depth >= 128
 	var $n = nodes
 	var $c = children
@@ -4611,7 +4698,7 @@ platform_target_list = |ctx, initial, nodes, children, diags, files, depth| {
 	d1 = if (opening.kind != OpenSquare) diag(diags, UnexpectedToken, opening.start, opening.end) else diags
 	var $s = if (opening.kind == OpenSquare) initial + 1 else initial
 	var $ids = []
-	var $end = opening.end
+	var $end = if (opening.kind == OpenSquare) opening.end else opening.start
 	var $done = opening.kind != OpenSquare or depth >= 128
 	var $n = nodes
 	var $c = children

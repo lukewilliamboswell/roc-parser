@@ -1,5 +1,5 @@
 app [target] {
-	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.4.3/41NK5FShyGC9Z8HNpUdUeXMWwLmLNfFxsfmLvdPL4Fxb.tar.zst",
+	fuzz: platform "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/0.5.0/9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
 	parser: "../package/main.roc",
 }
 
@@ -142,44 +142,53 @@ build_pattern = |bytes, pos, depth| {
 }
 
 render_pattern : Pat -> Str
-render_pattern = |pattern| match pattern {
+render_pattern = |pattern| render_pattern_step(pattern, render_pattern)
+
+render_pattern_step : Pat, (Pat -> Str) -> Str
+render_pattern_step = |pattern, again| match pattern {
 	Bind(name) => name
 	Wild => "_"
 	Mutable(name) => "var ${name}"
-	Tagged(inner) => "Some(${render_pattern(inner)})"
-	Nominal(inner) => "Box.(${render_pattern(inner)})"
-	PatPair(a, b) => "(${render_pattern(a)}, ${render_pattern(b)})"
-	PatList(inner) => "[${render_pattern(inner)}, .. as rest]"
-	PatRecord(inner) => "{ value: ${render_pattern(inner)}, other }"
-	Alias(inner) => "${render_pattern(inner)} as whole"
+	Tagged(inner) => "Some(${again(inner)})"
+	Nominal(inner) => "Box.(${again(inner)})"
+	PatPair(a, b) => "(${again(a)}, ${again(b)})"
+	PatList(inner) => "[${again(inner)}, .. as rest]"
+	PatRecord(inner) => "{ value: ${again(inner)}, other }"
+	Alias(inner) => "${again(inner)} as whole"
 }
 
 render : Expr -> Str
-render = |expr| match expr {
-	BlockExpr(statements, last) => "{\n${Str.join_with(statements.map(render_statement), "\n")}\n${render(last)}\n}"
+render = |expr| render_step(expr, render)
+
+## The recursion goes through `again` because from nightly-2026-10-29-a0a9fc2 the
+## compiler hangs on a function that calls itself from six or more variants of a
+## recursive union: https://github.com/roc-lang/roc/issues/12763
+render_step : Expr, (Expr -> Str) -> Str
+render_step = |expr, again| match expr {
+	BlockExpr(statements, last) => "{\n${Str.join_with(statements.map(render_statement), "\n")}\n${again(last)}\n}"
 	Number(text) | Name(text) | Text(text) => text
 	TypedNumber(text) => "${text}.U64"
-	Interpolated(value) => "\"prefix \${${render(value)}} suffix\""
+	Interpolated(value) => "\"prefix \${${again(value)}} suffix\""
 	Add(a, b) => "${render_operand(a, 10, False)} + ${render_operand(b, 10, True)}"
 	Mul(a, b) => "${render_operand(a, 20, False)} * ${render_operand(b, 20, True)}"
-	Call(arg) => "f(${render(arg)})"
-	Sequence(a, b) => "[${render(a)}, ${render(b)}]"
-	Pair(a, b) => "(${render(a)}, ${render(b)})"
-	Function(pattern, body) => "(|${render_pattern(pattern)}| ${render(body)})"
-	Conditional(a, b) => "(if True (${render(a)}) else (${render(b)}))"
-	Fields(a, b) => "{ first: ${render(a)}, second: ${render(b)} }"
-	UpdateRecord(base, value) => "{ ..(${render(base)}), first: ${render(value)} }"
-	BuildRecord(value) => "{ first: ${render(value)} }.Box"
-	NominalFields(value) => "Box.{ first: ${render(value)} }"
-	ApplyNominal(value) => "Box.(${render(value)})"
-	UnsetFields(value) => "{ first: _, second: ${render(value)} }"
-	Access(base) => "(${render(base)}).value"
-	OptionalAccess(base) => "(${render(base)}).?value"
-	DebugExpr(value) => "(dbg (${render(value)}))"
-	CrashExpr(value) => "(crash (${render(value)}))"
-	ReturnExpr(value) => "(return (${render(value)}))"
-	Guarded(pattern, guard, body) => "(match subject { ${render_pattern(pattern)} if (${render(guard)}) => (${render(body)}) })"
-	Alternatives(body) => "(match subject { Some(x) | None => (${render(body)}) })"
+	Call(arg) => "f(${again(arg)})"
+	Sequence(a, b) => "[${again(a)}, ${again(b)}]"
+	Pair(a, b) => "(${again(a)}, ${again(b)})"
+	Function(pattern, body) => "(|${render_pattern(pattern)}| ${again(body)})"
+	Conditional(a, b) => "(if True (${again(a)}) else (${again(b)}))"
+	Fields(a, b) => "{ first: ${again(a)}, second: ${again(b)} }"
+	UpdateRecord(base, value) => "{ ..(${again(base)}), first: ${again(value)} }"
+	BuildRecord(value) => "{ first: ${again(value)} }.Box"
+	NominalFields(value) => "Box.{ first: ${again(value)} }"
+	ApplyNominal(value) => "Box.(${again(value)})"
+	UnsetFields(value) => "{ first: _, second: ${again(value)} }"
+	Access(base) => "(${again(base)}).value"
+	OptionalAccess(base) => "(${again(base)}).?value"
+	DebugExpr(value) => "(dbg (${again(value)}))"
+	CrashExpr(value) => "(crash (${again(value)}))"
+	ReturnExpr(value) => "(return (${again(value)}))"
+	Guarded(pattern, guard, body) => "(match subject { ${render_pattern(pattern)} if (${again(guard)}) => (${again(body)}) })"
+	Alternatives(body) => "(match subject { Some(x) | None => (${again(body)}) })"
 }
 
 render_operand : Expr, U64, Bool -> Str
@@ -313,72 +322,75 @@ lexeme : RocSyntax.Parsed, RocSyntax.Node -> Str
 lexeme = |parsed, node| Str.from_utf8_lossy(parsed.source.drop_first(node.start).take_first(node.end - node.start))
 
 matches : RocSyntax.Parsed, U64, Expr -> Bool
-matches = |parsed, id, expr| {
+matches = |parsed, id, expr| matches_step(parsed, id, expr, matches)
+
+matches_step : RocSyntax.Parsed, U64, Expr, (RocSyntax.Parsed, U64, Expr -> Bool) -> Bool
+matches_step = |parsed, id, expr, again| {
 	match parsed.nodes.get(id) {
 		Err(_) => False
 		Ok(node) => {
 			if node.kind == File or node.kind == Parenthesized or node.kind == ExpressionStatement {
-				return node.children_len == 1 and matches(parsed, child(parsed, node, 0), expr)
+				return node.children_len == 1 and again(parsed, child(parsed, node, 0), expr)
 			}
 			match expr {
 				BlockExpr(statements, last) => {
-					node.kind == Block and node.children_len == statements.len() + 1 and matches_statements(parsed, node, statements) and matches(parsed, child(parsed, node, statements.len()), last)
+					node.kind == Block and node.children_len == statements.len() + 1 and matches_statements(parsed, node, statements) and again(parsed, child(parsed, node, statements.len()), last)
 				}
 				Number(text) => node.kind == NumberLiteral and lexeme(parsed, node) == text
 				Name(text) => node.kind == Identifier and lexeme(parsed, node) == text
 				Text(text) => node.kind == StringLiteral and lexeme(parsed, node) == text
-				TypedNumber(text) => node.kind == TypedLiteral and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Number(text)) and matches(parsed, child(parsed, node, 1), Name("U64"))
+				TypedNumber(text) => node.kind == TypedLiteral and node.children_len == 2 and again(parsed, child(parsed, node, 0), Number(text)) and again(parsed, child(parsed, node, 1), Name("U64"))
 				Interpolated(value) => {
 					first = parsed.nodes.get(child(parsed, node, 0)) ?? node
 					interpolation = parsed.nodes.get(child(parsed, node, 1)) ?? node
 					last = parsed.nodes.get(child(parsed, node, 2)) ?? node
-					node.kind == StringLiteral and node.children_len == 3 and first.kind == StringSegment and lexeme(parsed, first) == "prefix " and interpolation.kind == Interpolation and interpolation.children_len == 1 and matches(parsed, child(parsed, interpolation, 0), value) and last.kind == StringSegment and lexeme(parsed, last) == " suffix"
+					node.kind == StringLiteral and node.children_len == 3 and first.kind == StringSegment and lexeme(parsed, first) == "prefix " and interpolation.kind == Interpolation and interpolation.children_len == 1 and again(parsed, child(parsed, interpolation, 0), value) and last.kind == StringSegment and lexeme(parsed, last) == " suffix"
 				}
 				Sequence(a, b) | Pair(a, b) => {
 					kind = match expr {
 						Sequence(_, _) => ListLiteral
 						_ => Tuple
 					}
-					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), a) and matches(parsed, child(parsed, node, 1), b)
+					node.kind == kind and node.children_len == 2 and again(parsed, child(parsed, node, 0), a) and again(parsed, child(parsed, node, 1), b)
 				}
-				Function(pattern, body) => node.kind == Lambda and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), pattern) and matches(parsed, child(parsed, node, 1), body)
+				Function(pattern, body) => node.kind == Lambda and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), pattern) and again(parsed, child(parsed, node, 1), body)
 				DebugExpr(value) | CrashExpr(value) | ReturnExpr(value) => {
 					kind = match expr {
 						DebugExpr(_) => Debug
 						CrashExpr(_) => Crash
 						_ => Return
 					}
-					node.kind == kind and node.children_len == 1 and matches(parsed, child(parsed, node, 0), value)
+					node.kind == kind and node.children_len == 1 and again(parsed, child(parsed, node, 0), value)
 				}
 				Guarded(pattern, guard, body) => {
 					branch = parsed.nodes.get(child(parsed, node, 1)) ?? node
-					node.kind == Match and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 3 and matches_pattern(parsed, child(parsed, branch, 0), pattern) and matches(parsed, child(parsed, branch, 1), guard) and matches(parsed, child(parsed, branch, 2), body)
+					node.kind == Match and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 3 and matches_pattern(parsed, child(parsed, branch, 0), pattern) and again(parsed, child(parsed, branch, 1), guard) and again(parsed, child(parsed, branch, 2), body)
 				}
 				Alternatives(body) => {
 					branch = parsed.nodes.get(child(parsed, node, 1)) ?? node
 					pattern = parsed.nodes.get(child(parsed, branch, 0)) ?? node
 					second = parsed.nodes.get(child(parsed, pattern, 1)) ?? node
-					node.kind == Match and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 2 and pattern.kind == AlternativePattern and pattern.children_len == 2 and matches_pattern(parsed, child(parsed, pattern, 0), Tagged(Bind("x"))) and second.kind == TagPattern and second.children_len == 1 and matches(parsed, child(parsed, second, 0), Name("None")) and matches(parsed, child(parsed, branch, 1), body)
+					node.kind == Match and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("subject")) and branch.kind == MatchBranch and branch.children_len == 2 and pattern.kind == AlternativePattern and pattern.children_len == 2 and matches_pattern(parsed, child(parsed, pattern, 0), Tagged(Bind("x"))) and second.kind == TagPattern and second.children_len == 1 and again(parsed, child(parsed, second, 0), Name("None")) and again(parsed, child(parsed, branch, 1), body)
 				}
-				Conditional(a, b) => node.kind == If and node.children_len == 3 and matches(parsed, child(parsed, node, 0), Name("True")) and matches(parsed, child(parsed, node, 1), a) and matches(parsed, child(parsed, node, 2), b)
+				Conditional(a, b) => node.kind == If and node.children_len == 3 and again(parsed, child(parsed, node, 0), Name("True")) and again(parsed, child(parsed, node, 1), a) and again(parsed, child(parsed, node, 2), b)
 				Fields(a, b) => node.kind == Record and node.children_len == 2 and matches_field(parsed, child(parsed, node, 0), "first", a) and matches_field(parsed, child(parsed, node, 1), "second", b)
-				UpdateRecord(base, value) => node.kind == RecordUpdate and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches_field(parsed, child(parsed, node, 1), "first", value)
-				BuildRecord(value) => node.kind == RecordBuilder and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and matches_field(parsed, child(parsed, node, 1), "first", value)
+				UpdateRecord(base, value) => node.kind == RecordUpdate and node.children_len == 2 and again(parsed, child(parsed, node, 0), base) and matches_field(parsed, child(parsed, node, 1), "first", value)
+				BuildRecord(value) => node.kind == RecordBuilder and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("Box")) and matches_field(parsed, child(parsed, node, 1), "first", value)
 				NominalFields(value) => {
 					backing = parsed.nodes.get(child(parsed, node, 1)) ?? node
-					node.kind == NominalRecord and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and backing.kind == Record and backing.children_len == 1 and matches_field(parsed, child(parsed, backing, 0), "first", value)
+					node.kind == NominalRecord and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("Box")) and backing.kind == Record and backing.children_len == 1 and matches_field(parsed, child(parsed, backing, 0), "first", value)
 				}
-				ApplyNominal(value) => node.kind == NominalApply and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("Box")) and matches(parsed, child(parsed, node, 1), value)
+				ApplyNominal(value) => node.kind == NominalApply and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("Box")) and again(parsed, child(parsed, node, 1), value)
 				UnsetFields(value) => {
 					unset = parsed.nodes.get(child(parsed, node, 0)) ?? node
-					node.kind == Record and node.children_len == 2 and unset.kind == UnsetField and unset.children_len == 1 and matches(parsed, child(parsed, unset, 0), Name("first")) and matches_field(parsed, child(parsed, node, 1), "second", value)
+					node.kind == Record and node.children_len == 2 and unset.kind == UnsetField and unset.children_len == 1 and again(parsed, child(parsed, unset, 0), Name("first")) and matches_field(parsed, child(parsed, node, 1), "second", value)
 				}
 				Access(base) | OptionalAccess(base) => {
 					kind = match expr {
 						Access(_) => FieldAccess
 						_ => OptionalFieldAccess
 					}
-					node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), base) and matches(parsed, child(parsed, node, 1), Name("value"))
+					node.kind == kind and node.children_len == 2 and again(parsed, child(parsed, node, 0), base) and again(parsed, child(parsed, node, 1), Name("value"))
 				}
 				Add(a, b) | Mul(a, b) => {
 					left_id = child(parsed, node, 0)
@@ -390,16 +402,19 @@ matches = |parsed, id, expr| {
 					left = parsed.nodes.get(left_id) ?? node
 					right = parsed.nodes.get(right_id) ?? node
 					gap = Str.from_utf8_lossy(parsed.source.drop_first(left.end).take_first(right.start - left.end))
-					node.kind == Binary and node.children_len == 2 and Str.trim(gap) == operator and matches(parsed, left_id, a) and matches(parsed, right_id, b)
+					node.kind == Binary and node.children_len == 2 and Str.trim(gap) == operator and again(parsed, left_id, a) and again(parsed, right_id, b)
 				}
-				Call(arg) => node.kind == Call and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name("f")) and matches(parsed, child(parsed, node, 1), arg)
+				Call(arg) => node.kind == Call and node.children_len == 2 and again(parsed, child(parsed, node, 0), Name("f")) and again(parsed, child(parsed, node, 1), arg)
 			}
 		}
 	}
 }
 
 matches_pattern : RocSyntax.Parsed, U64, Pat -> Bool
-matches_pattern = |parsed, id, pattern| {
+matches_pattern = |parsed, id, pattern| matches_pattern_step(parsed, id, pattern, matches_pattern)
+
+matches_pattern_step : RocSyntax.Parsed, U64, Pat, (RocSyntax.Parsed, U64, Pat -> Bool) -> Bool
+matches_pattern_step = |parsed, id, pattern, again| {
 	match parsed.nodes.get(id) {
 		Err(_) => False
 		Ok(node) => match pattern {
@@ -415,19 +430,19 @@ matches_pattern = |parsed, id, pattern| {
 					Tagged(_) => "Some"
 					_ => "Box"
 				}
-				node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name(name)) and matches_pattern(parsed, child(parsed, node, 1), inner)
+				node.kind == kind and node.children_len == 2 and matches(parsed, child(parsed, node, 0), Name(name)) and again(parsed, child(parsed, node, 1), inner)
 			}
-			PatPair(a, b) => node.kind == TuplePattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), a) and matches_pattern(parsed, child(parsed, node, 1), b)
+			PatPair(a, b) => node.kind == TuplePattern and node.children_len == 2 and again(parsed, child(parsed, node, 0), a) and again(parsed, child(parsed, node, 1), b)
 			PatList(inner) => {
 				rest = parsed.nodes.get(child(parsed, node, 1)) ?? node
-				node.kind == ListPattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), inner) and rest.kind == RestPattern and rest.children_len == 1 and matches(parsed, child(parsed, rest, 0), Name("rest"))
+				node.kind == ListPattern and node.children_len == 2 and again(parsed, child(parsed, node, 0), inner) and rest.kind == RestPattern and rest.children_len == 1 and matches(parsed, child(parsed, rest, 0), Name("rest"))
 			}
 			PatRecord(inner) => {
 				field = parsed.nodes.get(child(parsed, node, 0)) ?? node
 				pun = parsed.nodes.get(child(parsed, node, 1)) ?? node
-				node.kind == RecordPattern and node.children_len == 2 and field.kind == PatternField and field.children_len == 2 and matches(parsed, child(parsed, field, 0), Name("value")) and matches_pattern(parsed, child(parsed, field, 1), inner) and pun.kind == PatternField and pun.children_len == 1 and matches(parsed, child(parsed, pun, 0), Name("other"))
+				node.kind == RecordPattern and node.children_len == 2 and field.kind == PatternField and field.children_len == 2 and matches(parsed, child(parsed, field, 0), Name("value")) and again(parsed, child(parsed, field, 1), inner) and pun.kind == PatternField and pun.children_len == 1 and matches(parsed, child(parsed, pun, 0), Name("other"))
 			}
-			Alias(inner) => node.kind == AliasPattern and node.children_len == 2 and matches_pattern(parsed, child(parsed, node, 0), inner) and matches(parsed, child(parsed, node, 1), Name("whole"))
+			Alias(inner) => node.kind == AliasPattern and node.children_len == 2 and again(parsed, child(parsed, node, 0), inner) and matches(parsed, child(parsed, node, 1), Name("whole"))
 		}
 	}
 }
@@ -556,7 +571,7 @@ test = |input| {
 	Fuzz.keep
 }
 
-target = Fuzz.target_with({ name: "roc-syntax-structured", generator: Fuzz.map(Fuzz.raw_bytes, generate), test, show: |input| input.source })
+target = Fuzz.target_with({ name: "roc-syntax-structured", examples: [], generator: Fuzz.raw_bytes, test: |bytes| test(generate(bytes)), show: |bytes| generate(bytes).source })
 
 expect render(Add(Number("1"), Mul(Number("2"), Number("3")))) == "1 + 2 * 3"
 expect render(Mul(Add(Number("1"), Number("2")), Number("3"))) == "(1 + 2) * 3"
