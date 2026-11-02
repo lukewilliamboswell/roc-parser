@@ -19,7 +19,6 @@ TOOLS = ("roc-stable", "roc", "blueprint", "blueprint-sbom", "openssl")
 class SourceInventoryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        (ROOT / "dist").mkdir(exist_ok=True)
         scratch = ROOT / ".roc-parser-tmp"
         scratch.mkdir(exist_ok=True)
         cls.build = tempfile.TemporaryDirectory(prefix="inventory-tests-", dir=scratch)
@@ -38,7 +37,7 @@ class SourceInventoryTests(unittest.TestCase):
         spec = cls.directory / "Spec"
         spec.write_bytes(subprocess.check_output(["blueprint", "spec"], cwd=ROOT))
         cls.run_tool([str(cls.binary)], env={**os.environ, "RELEASE_VERSION": VERSION,
-                     "BUNDLE_PATH": os.path.relpath(cls.bundle, ROOT / "dist"), "BUNDLE_URL": "https://github.com/lukewilliamboswell/roc-parser/releases/download/" + VERSION + "/" + cls.bundle.name,
+                     "BUNDLE_PATH": str(cls.bundle.relative_to(ROOT)), "BUNDLE_URL": "https://github.com/lukewilliamboswell/roc-parser/releases/download/" + VERSION + "/" + cls.bundle.name,
                      "SBOM_COMPOSITION": str(composition)})
         cls.run_tool(["blueprint-sbom", "members", str(cls.bundle), str(listing)])
         cls.run_tool(["blueprint-sbom", "inspect", str(spec), "Blueprint.lock", str(composition),
