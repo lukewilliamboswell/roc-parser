@@ -8,6 +8,8 @@ endif::[]
 
 [#modules]
 = Modules
+:idprefix: _
+:idseparator: _
 
 This chapter is a map of the package for readers who know some Roc and want
 to find the right module and entry point for an input format. It says what each

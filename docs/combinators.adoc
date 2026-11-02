@@ -8,6 +8,8 @@ endif::[]
 
 [#combinators]
 = Combinators by task
+:idprefix: _
+:idseparator: _
 
 This chapter is for readers who have finished <<combinator-primer>> and are
 writing a parser of their own. It groups the combinators in the `Parser` and
@@ -17,7 +19,7 @@ and why parsers read bytes rather than characters. The {api}[API reference]
 has the exact signature of every function.
 
 The examples come from
-`{src}/docs/examples/combinators-behaviour.roc[combinators-behaviour.roc]`;
+{src}/docs/examples/combinators-behaviour.roc[combinators-behaviour.roc];
 every `expect` in them passes.
 
 == Running a parser
@@ -80,13 +82,15 @@ bytes.
 
 == Sequencing and transforming
 
+Start a sequence with a value such as `Parser.const(|a| |b| ...)`.
+
 [cols="2,3",options="header"]
 |===
 |Combinator |Does
 
 |`Parser.const(v)`
-|Reads nothing and produces `v`. Start a sequence with
-`Parser.const(|a| |b| ...)`.
+|Reads nothing and produces `v`, which can be a function that receives the
+results of subsequent `keep` calls.
 
 |`p.keep(q)`
 |Runs `q` after `p` and passes its result to the function `p` produced.

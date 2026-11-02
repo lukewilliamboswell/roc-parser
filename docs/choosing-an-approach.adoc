@@ -9,6 +9,8 @@ endif::[]
 
 [#choosing-an-approach]
 = Choosing how to read your input
+:idprefix: _
+:idseparator: _
 
 Roc gives you four ways to turn text into values, and roc-parser provides two
 of them. This chapter helps you pick one before you write any code. In short:
@@ -24,7 +26,7 @@ of them. This chapter helps you pick one before you write any code. In short:
   input is too large or too hot for any of these.
 
 The examples come from
-`{src}/docs/examples/choosing-approaches.roc[choosing-approaches.roc]`;
+{src}/docs/examples/choosing-approaches.roc[choosing-approaches.roc];
 every `expect` in it passes.
 
 == Decode into your own type

@@ -8,6 +8,8 @@ endif::[]
 
 [#getting-started]
 = Getting started
+:idprefix: _
+:idseparator: _
 
 In this chapter you add roc-parser to a Roc app and use it to read three lines
 of CSV into typed records. At the end the app prints one line per record. You
@@ -51,9 +53,7 @@ the hash in the URL.
 
 . Open the {repo}/releases[roc-parser releases page] and choose the newest
   release.
-. Under *Assets*, find the file ending in `.tar.zst`. Copy its link: it has
-  the form
-  `+https://github.com/lukewilliamboswell/roc-parser/releases/download/<version>/<hash>.tar.zst+`.
+. Under *Assets*, find the file ending in `.tar.zst` and copy its link.
 . Put that link in your app's header under a short name. This manual uses
   `parser`.
 

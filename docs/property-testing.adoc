@@ -7,6 +7,8 @@ endif::[]
 
 [#property-testing]
 = Property tests and conformance reviews
+:idprefix: _
+:idseparator: _
 
 This chapter is for contributors who change a parser and need to know whether
 the change is correct. The first half explains how roc-parser checks its
@@ -274,7 +276,7 @@ python3 -m venv .venv
 `requirements.txt` with every dependency pinned, so `--no-deps` installs
 exactly the reviewed versions; CSV, XML and JSON use the Python standard
 library. Then run the same checks as the `Conformance` jobs of the scheduled
-`fuzz.yml` workflow. `python3 scripts/check_conformance.py` does all of this in
+`fuzz.yml` workflow. `scripts/check_conformance.roc --` does all of this in
 one environment: with no arguments it runs the fast checks that every pull
 request runs, and `all` adds the robustness campaigns:
 

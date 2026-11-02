@@ -1,5 +1,7 @@
 [#performance]
 = Performance
+:idprefix: _
+:idseparator: _
 
 Use this chapter to assess memory, bound untrusted input and choose what to
 measure. Throughput depends on the compiler, document shape and result your

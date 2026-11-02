@@ -8,6 +8,8 @@ endif::[]
 
 [#json]
 = Read and write JSON
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to read a JSON document into a value whose shape you
 do not have to know in advance, walk it, report mistakes with a line and
@@ -262,11 +264,10 @@ keys, and at most 128 levels of nesting. A limit or check that fails is
 reported as an `InvalidJsonValue` error at the offending value, like any other
 error.
 
+.Limits
 [cols="1,1,3",options="header"]
 |===
 |Field |Default |Effect
-
-3+|*Limits*
 
 |`max_depth`
 |`128`
@@ -287,7 +288,12 @@ before repeated keys are handled.
 |The most characters in one number, counting the sign, the decimal point and
 the exponent.
 
-3+|*Relaxations*
+|===
+
+.Relaxations
+[cols="1,1,3",options="header"]
+|===
+|Field |Default |Effect
 
 |`comments`
 |`False`
@@ -317,7 +323,12 @@ and keys.
 |With `Replace`, a `\u` escape for half of a surrogate pair becomes U+FFFD
 instead of an error. A complete pair is always decoded.
 
-3+|*Checks*
+|===
+
+.Checks
+[cols="1,1,3",options="header"]
+|===
+|Field |Default |Effect
 
 |`duplicates`
 |`Reject`
@@ -330,8 +341,8 @@ instead of an error. A complete pair is always decoded.
 |`interoperable_numbers`
 |`False`
 |Refuse numbers that an IEEE 754 double cannot hold, as I-JSON
-(https://www.rfc-editor.org/rfc/rfc7493[RFC 7493]) requires: integers beyond
-±(2^53^−1), more than 17 significant digits, and values that overflow or
+(https://www.rfc-editor.org/rfc/rfc7493[RFC 7493]) requires: integers whose magnitude exceeds
+`2^53 - 1`, more than 17 significant digits, and values that overflow or
 that underflow to zero.
 |===
 

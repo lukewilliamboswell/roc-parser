@@ -8,6 +8,8 @@ endif::[]
 
 [#csv]
 = Read CSV data
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to turn comma-separated text into Roc values: as
 records chosen by the type you ask for, as tuples when the file has no
@@ -56,7 +58,7 @@ when two columns share a name the last one wins.
 
 A cell decodes according to its field's type:
 
-[cols="1,3"]
+[cols="1,3",options="header"]
 |===
 |Type |Accepted cell text
 
@@ -196,7 +198,7 @@ and so does a row with fewer.
 Every function stops at the first problem and returns `InvalidCsv(error)`.
 The `CSV.Error` record says where the problem is:
 
-[cols="1,3"]
+[cols="1,3",options="header"]
 |===
 |Field |Meaning
 

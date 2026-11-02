@@ -6,6 +6,8 @@ endif::[]
 
 [#roc-syntax]
 = Parsing Roc source
+:idprefix: _
+:idseparator: _
 
 This chapter is for authors of highlighters and source analysis tools. `RocSyntax`
 parses Roc source and returns source tokens, a syntax tree and diagnostics.

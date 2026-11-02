@@ -8,6 +8,8 @@ endif::[]
 
 [#overview]
 = What roc-parser is
+:idprefix: _
+:idseparator: _
 
 roc-parser turns text into typed https://www.roc-lang.org/[Roc] values. You
 give it a string, such as the contents of a CSV file, a YAML configuration, or

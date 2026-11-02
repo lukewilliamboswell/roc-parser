@@ -1,5 +1,5 @@
 entry 2: Fish & Chips
-entry 1: <Hello> 😀
+entry 1: <Hello> \u(1F600)
 Element({ attributes: [{ name: "class", value: "a b" }], children: [Text("x < y AB
 <raw>z"), Element({ attributes: [], children: [], name: "br" })], name: "p" })
 3:1: end tag </a> does not match start tag <b>

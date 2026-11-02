@@ -7,6 +7,8 @@ endif::[]
 
 [#http]
 = HTTP messages
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to parse raw HTTP/1.x bytes into Roc records: a request
 or response line, its header fields, and its body. It is a set of how-to guides

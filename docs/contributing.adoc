@@ -8,6 +8,8 @@ endif::[]
 
 [#contributing]
 = Contributing to roc-parser
+:idprefix: _
+:idseparator: _
 
 This chapter is for people who want to change roc-parser: fix a bug, improve a
 format parser, or improve this manual. It assumes you can read Roc and use Git
@@ -182,7 +184,7 @@ that breaks one fails CI:
 `scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
 registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
 match that registry; `scripts/tests/test_check.py` does the same for the
-conformance reviews in `scripts/check_conformance.py`.
+conformance reviews in `scripts/src/HarnessPlan.roc`.
 
 [#contributing-docs]
 == Build the documentation
@@ -205,8 +207,8 @@ The API reference is generated from the doc comments in `package/` with
 
 [source,bash]
 ----
-python3 scripts/build_docs.py
-python3 scripts/build_docs.py --check
+scripts/build_api_docs.roc --
+scripts/build_api_docs.roc -- --check
 ----
 
 Code examples in the manual are compiled and run, so a changed API breaks the

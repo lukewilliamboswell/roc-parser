@@ -345,7 +345,8 @@ main! = |_args| {
 
 	# tag::compile-time-run[]
 	Stdout.line!(Str.inspect(lock.get("checksum")))?
-	Stdout.line!(Str.inspect(lock.get("greeting")))?
+	# Display the non-BMP scalar as an escape while keeping its decoded value.
+	Stdout.line!(Str.inspect(lock.get("greeting")).replace_each("\u(1F600)", "\\u(1F600)"))?
 	Stdout.line!(Str.inspect(settings.get_path(["files.exclude", "**/.roc-parser-tmp"])))?
 	Stdout.line!(Str.inspect(JsonValue.validate({ source: "{\"a\": [1,]}", name: "list.json" })))?
 	# end::compile-time-run[]
@@ -357,3 +358,5 @@ main! = |_args| {
 
 	Ok({})
 }
+
+expect lock.get("greeting") == Ok(String("café \u(1F600)"))

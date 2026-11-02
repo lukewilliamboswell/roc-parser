@@ -8,6 +8,8 @@ endif::[]
 
 [#maintaining]
 = Compiler, releases, settings and security reports
+:idprefix: _
+:idseparator: _
 
 This chapter is for maintainers with write access to the repository. It covers
 which Roc compiler the repository uses, how a release is cut and what it
@@ -117,6 +119,7 @@ Releases follow semantic versioning: a release that changes the result of a
 public function on any input, or removes or changes a public signature, is a
 major release.
 
+[#_before_you_start_2]
 === Before you start
 
 . Confirm that `main` is green: `CI`, and the `Release` dry run of the last

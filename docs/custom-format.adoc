@@ -8,6 +8,8 @@ endif::[]
 
 [#custom-format]
 = Parse a format of your own
+:idprefix: _
+:idseparator: _
 
 This guide shows how to turn a line-based text format into typed Roc values,
 with tests for each part and error messages that name the line at fault. It
@@ -22,7 +24,7 @@ The running example is an application log with one entry per line:
 ----
 
 The finished program is
-`{src}/docs/examples/custom-format-log.roc[custom-format-log.roc]`.
+{src}/docs/examples/custom-format-log.roc[custom-format-log.roc].
 
 == 1. Write down the result types
 

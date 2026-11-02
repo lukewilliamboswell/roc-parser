@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Renders the built manual in headless Chromium and checks what a reader sees.
-// scripts/build_manual.py runs this inside the documentation container, where
-// Puppeteer ships with Mermaid's CLI; it is not meant to be run on its own.
+// Optional acceptance audit of the native shared renderer. Requires Puppeteer
+// and Chromium on the audit host; documentation generation is browser-free.
 //
 //   node scripts/check_manual_render.cjs .docs-out/site/index.html
 //
 // Checks, in the light and the dark scheme:
-//   - no Rouge token inside a code block paints its own background (the
+//   - no Source token inside a code block paints its own background (the
 //     dark-mode "white boxes" bug);
 //   - every visible run of text meets WCAG AA contrast against the ground it
 //     sits on (4.5:1, or 3:1 for large text);
@@ -114,13 +114,13 @@ function inspectScheme() {
     return result;
   }
 
-  // Rouge tokens take the block's ground.
+  // Source tokens take the block's ground.
   const painted = new Set();
-  for (const token of document.querySelectorAll("pre.rouge span:not(.hll)")) {
+  for (const token of document.querySelectorAll("pre code span")) {
     const bg = parse(getComputedStyle(token).backgroundColor);
     if (bg && bg.a > 0) painted.add(`.${token.className} (${getComputedStyle(token).backgroundColor})`);
   }
-  for (const token of painted) problems.push(`Rouge token ${token} has its own background inside a code block`);
+  for (const token of painted) problems.push(`Source token ${token} has its own background inside a code block`);
 
   // Contrast of every visible text run.
   const low = new Map();
@@ -174,7 +174,7 @@ function inspectNarrow(width, height) {
   if (top > height) {
     problems.push(`the manual's text starts ${Math.round(top)}px down, below the first ${height}px screen`);
   }
-  const toggle = document.getElementById("toc-toggle");
+  const toggle = document.getElementById("toc-toggle") || document.querySelector(".toc summary");
   if (!toggle || !toggle.getClientRects().length) problems.push("the contents bar is missing");
   return problems;
 }
