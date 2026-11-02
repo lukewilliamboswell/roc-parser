@@ -449,7 +449,17 @@ render_table_state = |table, attrs, state, render_inline, render_blocks| {
 			} else {
 				var $paragraph_index = 0.U64
 				text = current.text.trim()
-				for paragraph in (if (text == "") [] else text.split_on("\n\n")) {
+				for paragraph in (
+					if (text == "") [] else text.split_on("\n\n").map(
+						|part| {
+							var $paragraph = part
+							while $paragraph.starts_with("\n") {
+								$paragraph = $paragraph.drop_prefix("\n")
+							}
+							$paragraph
+						},
+					).keep_if(|part| part != "")
+				) {
 					if $paragraph_index > 0 {
 						$html = Str.concat($html, "\n")
 					}
@@ -610,4 +620,19 @@ expect {
 	raw = AsciiDocTable.render_state("|A", base.concat(overrides), 0.U64, inline, blocks)
 	shared = AsciiDocTable.render_view_state("|A", view, 0.U64, inline, blocks)
 	raw == shared and shared.html.contains("id=\"local\"") and shared.html.contains("<caption class=\"title\"></caption>")
+}
+
+expect {
+	html = AsciiDocTable.render("|first\n\n\nsecond", [])
+	html.contains("<p class=\"tableblock\">first</p>\n<p class=\"tableblock\">second</p>")
+}
+
+expect {
+	html = AsciiDocTable.render("|first\n\n\n\n\nsecond", [])
+	html.contains("<p class=\"tableblock\">first</p>\n<p class=\"tableblock\">second</p>")
+}
+
+expect {
+	html = AsciiDocTable.render("|first\n\n  second", [])
+	html.contains("<p class=\"tableblock\">  second</p>")
 }

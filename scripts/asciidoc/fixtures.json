@@ -207,7 +207,8 @@
         "table-escaped-pipe",
         "table-csv",
         "table-asciidoc-cell",
-        "table-colspan"
+        "table-colspan",
+        "table-paragraph-blank-line-runs"
       ],
       "scope": "future"
     },
@@ -3166,6 +3167,32 @@
       },
       "references": [
         "https://docs.asciidoctor.org/asciidoc/latest/directives/include/"
+      ]
+    },
+    {
+      "id": "table-paragraph-blank-line-runs",
+      "category": "tables",
+      "support": "future",
+      "source": "|===\n|first\n\n\nsecond\n\n\n\n\n  third\n|===\n",
+      "expect": {
+        "contexts": [
+          "table"
+        ],
+        "html_contains": [
+          "<p class=\"tableblock\">first</p>\n<p class=\"tableblock\">second</p>\n<p class=\"tableblock\">  third</p>"
+        ],
+        "html_excludes": [
+          "<p class=\"tableblock\">\n",
+          "<p class=\"tableblock\"></p>"
+        ]
+      },
+      "features": [
+        "table-paragraphs",
+        "blank-line-runs",
+        "preserved-indentation"
+      ],
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/tables/format-cell-content/"
       ]
     }
   ]
