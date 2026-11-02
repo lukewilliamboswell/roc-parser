@@ -56,7 +56,7 @@ config = [
 	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
-	Environment("docs", [Extend("release"), Expect(["which"]), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/roc-docs-{system}"))])]),
+	Environment("docs", [Extend("release"), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.1/roc-docs-{system}"))])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
 	Shell("bench", [Use("bench")]),
@@ -74,7 +74,7 @@ config = [
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),
 	# Shared packaging and documentation; the release workflow owns publishing.
 	Task("sbom-composition", [Use("release"), Run(["scripts/sbom_composition.roc"])]),
-	Task("docs-path", [Use("docs"), Run(["which", "roc-docs"])]),
+	Task("docs-path", [Use("docs"), Run(["scripts/docs_path.roc"])]),
 	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--api-entrypoint", "package/main.roc", "--roc-command", "roc", "--pdf-filename", "roc-parser.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-parser/"])]),
 	Task("api-docs", [Use("package"), Run(["roc", "docs", "package/main.roc", "--output=.docs-out/api"])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),

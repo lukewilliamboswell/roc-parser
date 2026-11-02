@@ -42,7 +42,9 @@ jobs:
         with:
           version: nightly
           nightly-tag: ${{ needs.release.outputs.nightly }}
-      - run: blueprint run docs
+      - env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: blueprint run docs -- --docs-version "$VERSION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: documentation-site
