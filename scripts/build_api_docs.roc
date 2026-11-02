@@ -28,7 +28,7 @@ build! = |args| {
 	root = Path.utf8(ReleasePlan.option(options, "--docs-root", ".docs-api"))
 	version = ReleasePlan.option(options, "--version", "")
 	checking = args.contains("--check")
-	if !checking and !ReleasePlan.valid_version(version) {
+	if !checking and version != "unreleased" and !ReleasePlan.valid_version(version) {
 		return Err("--version must be a release version unless --check is given")
 	}
 	Path.create_all!(".roc-parser-tmp/api-docs").map_err(|_| "cannot create API workspace")?
@@ -52,7 +52,7 @@ build! = |args| {
 		text = Path.read_utf8!(page).map_err(|_| "cannot read API page")?
 		renamed = ApiDocs.name_site(text, old_name, "roc-parser")
 		module_name = Path.display(page).split_on("/").drop_last(1).last() ?? ""
-		normalized = if page == index renamed else ApiDocs.strip_module_type(renamed, module_name)
+		normalized = if page == index renamed else ApiDocs.normalize_module(renamed, module_name)
 		Path.write_utf8!(page, normalized).map_err(|_| "cannot normalize API page")?
 	}
 	Cmd.new("python3").args(["scripts/check_api_docs.py", Path.display(generated)].map(OsStr.from_str)).exec_cmd!().map_err(|_| "API documentation audit failed")?

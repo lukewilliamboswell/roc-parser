@@ -97,6 +97,9 @@ class AuditTests(unittest.TestCase):
 
     def test_broken_relative_links_are_reported(self) -> None:
         self.assertEqual(build_docs.check_cross_links(self.root), ["Csv: broken link ../Missing/"])
+        page = self.root / "Csv/index.html"
+        page.write_text(page.read_text() + '<a href="#missing">broken fragment</a>')
+        self.assertIn("Csv: broken fragment #missing", build_docs.check_cross_links(self.root))
 
     def test_prose_that_renders_wrongly_is_reported(self) -> None:
         page = self.root / "Csv" / "index.html"

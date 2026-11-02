@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -25,6 +26,28 @@ def repository_files() -> list[Path]:
 
 
 class RepositoryPolicyTests(unittest.TestCase):
+    def test_runtime_exceptions_are_explicit_and_current(self) -> None:
+        policy = json.loads((ROOT / "scripts/automation-policy.json").read_text())
+        self.assertEqual(policy["schema_version"], 1)
+        declared = []
+        for group in policy["runtime_exceptions"]:
+            self.assertTrue(group["runtime"])
+            self.assertTrue(group["contract"])
+            self.assertTrue(group["paths"])
+            self.assertEqual(group["paths"], sorted(group["paths"]))
+            declared.extend(group["paths"])
+        actual = sorted(str(path.relative_to(ROOT)) for path in repository_files()
+                        if path.is_file() and path.suffix in (".py", ".rb", ".cjs", ".js", ".mjs", ".zig"))
+        self.assertEqual(sorted(declared), actual, "review and declare each independent harness or platform adapter")
+        self.assertEqual(len(declared), len(set(declared)))
+
+        nightly = sorted(str(path.relative_to(ROOT)) for path in repository_files()
+                         if path.is_file() and path.suffix == ".roc" and path.parent != ROOT / "scripts"
+                         and "scripts" in path.relative_to(ROOT).parts
+                         and re.search(r"(?m)^app ", path.read_text()))
+        self.assertEqual(policy["nightly_compiler_apps"], nightly,
+                         "list each probe or compiler fixture that requires the nightly")
+
     def test_repo_owned_automation_lives_under_scripts(self) -> None:
         paths = repository_files()
         shell_scripts = sorted(path for path in paths if path.suffix == ".sh")

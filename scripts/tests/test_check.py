@@ -25,13 +25,13 @@ class CheckTests(unittest.TestCase):
         commands = {" ".join(re.findall(r'"([^"\n]+)"', command)[1:])
                     for command in re.findall(r'\["(?:python3|roc-stable)"[^\[\]]*\]', source)}
         self.assertIn('["scripts/test_package.roc"]', source)
+        self.assertIn('["release-package", "test-examples"]', source)
         self.assertIn('["scripts/check_doc_examples.roc"]', source)
         self.assertIn('["scripts/build_api_docs.roc", "--", "--check"]', source)
         self.assertIn('["scripts/check_conformance.roc", "--"]', source)
         self.assertIn('["scripts/check_asciidoc.roc", "--"]', source)
         for expected in (
             "-m unittest discover -s scripts/tests -p test_*.py",
-            "scripts/test_bundle_examples.py --checkout",
             "scripts/run_fuzz.py smoke all",
             "scripts/check_roc_syntax.py --skip-fuzz --reference-performance smoke",
         ):

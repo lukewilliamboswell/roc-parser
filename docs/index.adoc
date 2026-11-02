@@ -12,7 +12,6 @@
 :sectnums:
 :sectanchors:
 :!icons:
-:source-highlighter: rouge
 :imagesdir: images
 // Links into the repository. The manual is published away from the source
 // tree, so a relative link to an example or script would not resolve.

@@ -26,33 +26,26 @@ class PackageDriverTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.build.cleanup()
 
-    def test_absolute_and_relative_bundle_paths_reach_archive_test(self) -> None:
-        for printed in ("/tmp/bundle with spaces.tar.zst", "../dist/hash.tar.zst"):
-            with self.subTest(printed=printed), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary).resolve()
-                (root / "package").mkdir()
-                for name in ("main.roc", "Yaml.roc", "CSV.roc"):
-                    (root / "package" / name).touch()
-                binaries = root / "bin"
-                binaries.mkdir()
-                stub = binaries / "stub"
-                stub.write_text(f"#!{sys.executable}\n" + '''import json, os, sys
-with open(os.environ["PACKAGE_TEST_LOG"], "a") as log:
-    log.write(json.dumps(sys.argv[1:]) + "\\n")
-if sys.argv[1:2] == ["bundle"]:
-    print("Created: " + os.environ["PACKAGE_TEST_BUNDLE"])
-''')
-                stub.chmod(0o755)
-                for program in ("roc", "python3"):
-                    (binaries / program).symlink_to(stub)
-                log = root / "commands"
-                env = {**os.environ, "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
-                       "PACKAGE_TEST_LOG": str(log), "PACKAGE_TEST_BUNDLE": printed}
-                result = subprocess.run([str(self.binary)], cwd=root, env=env, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                commands = [json.loads(line) for line in log.read_text().splitlines()]
-                self.assertIn(["test", "package/main.roc"], commands)
-                bundle = next(command for command in commands if command[0] == "bundle")
-                self.assertEqual(bundle[:4], ["bundle", "main.roc", "CSV.roc", "Yaml.roc"])
-                expected = Path(printed) if printed.startswith("/") else root / "package" / printed
-                self.assertEqual(commands[-1], ["scripts/test_bundle_examples.py", "--bundle-path", str(expected)])
+    def test_checks_package_with_nightly_then_builds_and_tests_shared_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            binaries = root / "bin"
+            binaries.mkdir()
+            stub = binaries / "stub"
+            stub.write_text(f"#!{sys.executable}\n" + 'import json, os, sys\nwith open(os.environ["PACKAGE_TEST_LOG"], "a") as log:\n    log.write(json.dumps({"program": os.path.basename(sys.argv[0]), "args": sys.argv[1:], "compiler": os.environ.get("RP_COMPILER"), "output": os.environ.get("RP_OUTPUT")}) + "\\n")\nsys.exit(7 if os.environ.get("PACKAGE_TEST_FAIL", "unmatched") in sys.argv else 0)\n')
+            stub.chmod(0o755)
+            for program in ("roc", "python3", "release-package"):
+                (binaries / program).symlink_to(stub)
+            log = root / "commands"
+            env = {**os.environ, "PATH": str(binaries) + os.pathsep + os.environ["PATH"], "PACKAGE_TEST_LOG": str(log)}
+            result = subprocess.run([str(self.binary)], cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertIn(["test", "package/main.roc"], [call["args"] for call in calls])
+            self.assertEqual([call["program"] for call in calls[-2:]], ["release-package", "release-package"])
+            self.assertEqual([call["args"] for call in calls[-2:]], [["build", "0.0.1-dryrun"], ["test-archive"]])
+            self.assertTrue(all(call["compiler"] == "roc" and call["output"] == str(root / ".roc-parser-tmp/roc-parser-ci/dist") for call in calls[-2:]))
+            log.unlink()
+            result = subprocess.run([str(self.binary)], cwd=root, env={**env, "PACKAGE_TEST_FAIL": "build"}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn('"test-archive"', log.read_text())

@@ -74,7 +74,7 @@ These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
   the reviewed revision `8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-  (`tools-0.2.0`), and `scripts/tests/test_repository_policy.py` fails if a
+  (`tools-0.9.0`), and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
@@ -101,12 +101,12 @@ compiler fetched by Blueprint. Package commands use the separate `roc` on
 bundle, examples archive, API archive and notes, and tests archived examples
 against the exact bundle. `release_assets.roc` composes it with this manual,
 its API site and the bundle's SBOM. These local commands publish nothing.
-Independent Python, Ruby and Zig oracle harnesses compare parser behavior;
-`scripts/tests/test_repository_policy.py` checks source layout and workflow
-pins. Both example runners use `tests/spec.json`.
+Independent Python, Ruby and Zig oracle harnesses compare parser behavior.
+`scripts/automation-policy.json` lists every runtime exception and each probe
+or compiler fixture that must use the floating nightly. The policy check rejects
+unlisted files, stale exceptions, tooling pin drift and workflow pin drift. The shared working-tree and archive checks both use `tests/spec.json`.
 
-The manual builds as HTML and PDF with Asciidoctor in the pinned
-`.github/docs.Dockerfile` image. Use the documentation commands in
+The manual builds as HTML and PDF with the shared native `roc-docs` utility. Use the documentation commands in
 <<contributing>> to reproduce the build.
 
 Write upcoming release changes in `docs/releases/unreleased.adoc`; rename that

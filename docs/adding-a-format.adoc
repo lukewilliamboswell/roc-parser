@@ -234,7 +234,7 @@ Build and check the documentation:
 ----
 scripts/build_api_docs.roc -- --check
 blueprint run doc-examples
-python3 scripts/build_manual.py
+blueprint run docs
 ----
 
 == Checklist

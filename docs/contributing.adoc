@@ -39,11 +39,11 @@ Install:
 * the latest Roc nightly from
   https://github.com/roc-lang/nightlies/releases[roc-lang/nightlies], on your
   `PATH` as `roc`;
-* Python 3, for the test, review and release scripts;
+* Python 3, for the independent parser test and reference harnesses;
 * the `blueprint` binary of
   https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.8.0[roc-blueprint 0.8.0],
   which runs the same named tasks as CI;
-* Docker, to build this manual locally (see <<contributing-docs>>).
+* `openssl` and `jq`, for the source inventory and attestation checks.
 
 roc-parser does not pin a compiler. CI tests every change with the latest
 nightly, which it resolves at the start of each run, so install a new nightly
@@ -158,7 +158,7 @@ diff:
 
 [source,bash]
 ----
-python3 scripts/test_bundle_examples.py --checkout --update
+blueprint run examples -- --update
 ----
 
 === Repository policy
@@ -189,26 +189,27 @@ conformance reviews in `scripts/src/HarnessPlan.roc`.
 [#contributing-docs]
 == Build the documentation
 
-The manual is AsciiDoc under `docs/`, rendered by Asciidoctor in Docker, so
-you need Docker running but no Ruby toolchain. Build the HTML manual:
+The manual is AsciiDoc under `docs/`. The `docs` task uses the shared native
+`roc-docs` renderer to build the HTML manual and searchable PDF, generates the
+API reference, and packages the combined site:
 
 [source,bash]
 ----
-python3 scripts/build_manual.py
+blueprint run docs
 ----
 
-Add `--pdf` to also build the PDF, and `--docs-version V` to stamp a version
-other than the development one. `blueprint run docs` builds what a release
-publishes: the PDF, and the site with the manual and the API reference
-together, under `.docs-out/release/`.
+The site and release archives are under `.docs-out/release/`. To stamp a
+release version, pass `-- --release-version V`. The renderer and its fonts,
+source highlighting and diagram support are downloaded through Blueprint
+and checked against `Blueprint.lock`.
 
 The API reference is generated from the doc comments in `package/` with
 `roc docs`. Build it, or check that it builds without writing anything:
 
 [source,bash]
 ----
-scripts/build_api_docs.roc --
-scripts/build_api_docs.roc -- --check
+blueprint run api-docs -- --version unreleased
+blueprint run api-docs -- --check
 ----
 
 Code examples in the manual are compiled and run, so a changed API breaks the

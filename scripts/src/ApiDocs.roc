@@ -77,6 +77,9 @@ ApiDocs := [].{
 
 	## Remove only the module nominal's compiler-generated representation.
 	## Entries further down the page can legitimately use these same types.
+	normalize_module : Str, Str -> Str
+	normalize_module = |page, name| strip_module_type(page, name).replace_each("<h1 class=\"module-name\">${escape(name)}</h1>", "<h1 class=\"module-name\" id=\"${escape(name)}\">${escape(name)}</h1>")
+
 	strip_module_type : Str, Str -> Str
 	strip_module_type = |page, name| {
 		match page.split_first("<h1 class=\"module-name\">${name}</h1>") {
@@ -125,3 +128,5 @@ expect {
 	page = "<h1 class=\"module-name\">CSV</h1><article><pre class=\"entry-type-def\"><code class=\"entry-type-def-code\">:= []</code></pre></article>"
 	ApiDocs.strip_module_type(page, "CSV") == page
 }
+
+expect ApiDocs.normalize_module("<h1 class=\"module-name\">Yaml</h1>", "Yaml") == "<h1 class=\"module-name\" id=\"Yaml\">Yaml</h1>"

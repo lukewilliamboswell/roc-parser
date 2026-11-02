@@ -72,7 +72,7 @@ build! = |args| {
 	body = Path.read_utf8!(body_path).map_err(|_| "cannot read generated notes")?
 	Path.write_utf8!(body_path, "${body}\n## Repository tooling compiler\n\n```\n${Str.from_utf8_lossy(tooling.stdout_bytes).trim()}\n```\n").map_err(|_| "cannot record tooling compiler")?
 	Path.delete!(notes).map_err(|_| "cannot remove duplicate notes")?
-	run!(["python3", "scripts/release_helpers.py", "package-docs", "--release-version", settings.version, "--output-dir", Path.display(dist), "--site", Path.display(Path.join(settings.directory, "site")), "--repo", settings.repository])?
+	run!(["scripts/package_docs.roc", "--", "--release-version", settings.version, "--output-dir", Path.display(dist), "--site", Path.display(Path.join(settings.directory, "site")), "--repo", settings.repository])?
 	bundle = bundle!(dist)?
 	run!(["scripts/release_sbom.roc", "--", "generate", "--bundle", Path.display(bundle), "--release-version", settings.version, "--output-dir", Path.display(dist), "--repo", settings.repository])?
 	verify_sbom!(settings, bundle)?

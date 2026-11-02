@@ -656,7 +656,7 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
-      "input": "task:examples-archive",
+      "input": "task:examples",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
@@ -672,11 +672,6 @@
     },
     {
       "input": "task:release-build",
-      "component": "",
-      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
-    },
-    {
-      "input": "task:release-notes",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },

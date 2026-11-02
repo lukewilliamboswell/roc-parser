@@ -6,6 +6,7 @@ import html
 from pathlib import Path
 import re
 import sys
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ENTRY = ROOT / "package/main.roc"
@@ -86,16 +87,22 @@ def check_entries_documented(version_root: Path) -> list[str]:
 
 
 def check_cross_links(version_root: Path) -> list[str]:
-    """Every relative API documentation link resolves."""
+    """Every relative API documentation path and fragment resolves."""
     problems: list[str] = []
-    for page in module_pages(version_root):
+    for page in [version_root / "index.html", *module_pages(version_root)]:
+        if not page.is_file():
+            continue
         for raw in re.findall(r'<a href="([^"]+)"', page.read_text(encoding="utf-8")):
-            href = html.unescape(raw).split("#", 1)[0].split("?", 1)[0]
-            if not href or href.startswith(("http:", "https:", "mailto:", "//", "/")):
+            href = urlsplit(html.unescape(raw))
+            if href.scheme or href.netloc or href.path.startswith("/"):
                 continue
-            target = (page.parent / href).resolve()
-            if not target.is_file() and not (target / "index.html").is_file():
+            target = (page.parent / unquote(href.path)).resolve() if href.path else page
+            if target.is_dir():
+                target /= "index.html"
+            if not target.is_file():
                 problems.append(f"{page.parent.name}: broken link {raw}")
+            elif href.fragment and unquote(href.fragment) not in re.findall(r'\bid="([^"\n]+)"', target.read_text(encoding="utf-8")):
+                problems.append(f"{page.parent.name}: broken fragment {raw}")
     return problems
 
 

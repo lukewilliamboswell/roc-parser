@@ -9,7 +9,6 @@ import cli.OsStr
 import cli.Path
 import cli.Stderr
 import cli.Stdout
-import src/BundlePlan
 
 ## Package validation and release dry run with the floating nightly.
 main! = |_args| {
@@ -35,21 +34,13 @@ test! = || {
 		["roc", "fmt", "--check", "package"],
 		["roc", "test", "package/main.roc"],
 		["python3", "scripts/check_literals.py"],
-		["roc", "docs", "package/main.roc", "--output=${Path.display(Path.join(work, "docs"))}"],
 	] {
 		run!(command, root)?
 	}
-	names = Path.list!("package").map_err(|_| "cannot list package modules")?.map(|path| Path.filename(path).map_ok(Path.display) ?? "")
-	args = ["bundle"].concat(BundlePlan.module_names(names)).concat(["--output-dir", Path.display(Path.join(work, "bundle"))])
-	ran = Cmd.new("roc").args(args.map(OsStr.from_str)).cwd(Path.join(root, "package")).stdout(Capture).stderr(Inherit).timeout_ms(600_000).run!().map_err(|_| "roc bundle did not complete")?
-	Stdout.write_bytes!(ran.stdout_bytes).map_err(|_| "cannot print bundle output")?
-	if ran.status != Exited(0) {
-		return Err("roc bundle failed")
+	for args in [["build", "0.0.1-dryrun"], ["test-archive"]] {
+		Cmd.new("release-package").args(args.map(OsStr.from_str)).env("RP_COMPILER", "roc").env("RP_OUTPUT", OsStr.from_str(Path.display(Path.join(work, "dist")))).env("RP_DIRECTORY", OsStr.from_str(Path.display(Path.join(work, "logs")))).env("GITHUB_OUTPUT", "").exec_cmd!().map_err(|_| "shared release dry run failed: ${Str.join_with(args, " ")}")?
 	}
-	output = Str.from_utf8(ran.stdout_bytes).map_err(|_| "bundle output is not UTF-8")?
-	printed_path = BundlePlan.bundle_path(output)?
-	bundle = if printed_path.starts_with("/") Path.utf8(printed_path) else Path.join(Path.join(root, "package"), printed_path)
-	run!(["python3", "scripts/test_bundle_examples.py", "--bundle-path", Path.display(bundle)], root)
+	Ok({})
 }
 
 run! = |command, cwd| {

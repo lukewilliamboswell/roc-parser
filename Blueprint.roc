@@ -48,15 +48,15 @@ config = [
 		Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
 		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
 	]),
-	Environment("package", [Extend("tooling"), Expect(["roc", "python3", "git", "rm", "mkdir", "cp"])]),
+	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
 	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl", "jq"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
-	# The manual builds in Docker (.github/docs.Dockerfile).
-	Environment("release", [Extend("inventory"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["gh", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
-	Environment("docs", [Extend("release"), Expect(["docker"])]),
+	# Shared release utilities run without a local build compiler.
+	Environment("release", [Extend("inventory"), Expect(["gh"])]),
+	Environment("docs", [Extend("release"), Expect(["roc-docs"])]),
 	Environment("json", [Extend("tooling"), Expect(["jq"])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
@@ -79,12 +79,11 @@ config = [
 	Task("release-sbom", [Use("release"), Run(["scripts/release_sbom.roc", "--"])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),
 	Task("bundle", [Use("package"), Run(["scripts/bundle.roc", "--"])]),
-	Task("examples-archive", [Use("package"), Run(["python3", "scripts/release_helpers.py", "package-examples"])]),
-	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
-	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),
+	Task("examples", [Use("package"), Run(["release-package", "test-examples"])]),
+	Task("test-examples-archive", [Use("package"), Run(["release-package", "test-archive"])]),
+	Task("docs", [Use("docs"), Run(["scripts/package_docs.roc", "--"])]),
 	Task("release-validate", [Use("release"), Run(["scripts/validate_release.roc", "--"])]),
 	Task("release-build", [Use("docs"), Run(["scripts/release_assets.roc", "--", "build"])]),
 	Task("release-test", [Use("release"), Run(["scripts/release_assets.roc", "--", "test"])]),
-	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),
 	Task("combine-attestations", [Use("json"), Run(["scripts/combine_attestations.roc", "--"])]),
 ]
