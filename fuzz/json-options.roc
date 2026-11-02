@@ -166,10 +166,10 @@ test = |input| {
 			parse = |choice| JsonValue.parse_with(text, options_of(choice))
 			result = parse(chosen)
 			size = text.count_utf8_bytes()
-			if JsonValue.parse_bounded(text, options_of(chosen), size) != result {
+			if JsonValue.parse_with(text, { ..options_of(chosen), max_bytes: size }) != result {
 				crash "an exact document byte budget changed parsing"
 			}
-			if size > 0 and JsonValue.parse_bounded(text, options_of(chosen), size - 1).is_ok() {
+			if size > 0 and JsonValue.parse_with(text, { ..options_of(chosen), max_bytes: size - 1 }).is_ok() {
 				crash "parsing exceeded the document byte budget"
 			}
 			match result {
@@ -179,10 +179,10 @@ test = |input| {
 					match JsonValue.to_str_with(value, options) {
 						Ok(written) => {
 							length = written.count_utf8_bytes()
-							if JsonValue.to_str_bounded(value, options, length) != Ok(written) {
+							if JsonValue.to_str_with(value, { ..options, max_bytes: length }) != Ok(written) {
 								crash "an exact output byte budget changed serialization"
 							}
-							if length > 0 and JsonValue.to_str_bounded(value, options, length - 1) != Err(TooLarge(length - 1)) {
+							if length > 0 and JsonValue.to_str_with(value, { ..options, max_bytes: length - 1 }) != Err(TooLarge(length - 1)) {
 								crash "serialization exceeded the output byte budget"
 							}
 						}

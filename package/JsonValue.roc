@@ -62,6 +62,8 @@ JsonValue := [
 	##
 	## Limits:
 	##
+	## - `max_bytes`: bytes in the supplied input, including whitespace and any
+	##   BOM, checked before constructing a value; unlimited by default;
 	## - `max_depth`: the most arrays and objects that may be nested;
 	## - `max_items`: the most items in one array or members in one object;
 	## - `max_string_bytes`: the most UTF-8 bytes in one decoded string or key;
@@ -96,6 +98,7 @@ JsonValue := [
 	## expect JsonValue.parse_with("[1, 2,] // done", { comments: True, trailing_commas: True }) == Ok(Array([Number("1"), Number("2")]))
 	## ```
 	Options := {
+		max_bytes : U64 ?? U64.highest,
 		max_depth : U64 ?? 128,
 		max_items : U64 ?? U64.highest,
 		max_string_bytes : U64 ?? U64.highest,
@@ -173,24 +176,6 @@ JsonValue := [
 		}
 	}
 
-	## Parse a complete document within an inclusive UTF-8 byte budget.
-	## The budget includes whitespace and a byte order mark, when permitted;
-	## all depth, collection, string, number and duplicate rules in `options`
-	## still apply. The input is rejected before constructing a JSON value
-	## when its byte length exceeds `max_bytes`.
-	##
-	## ```roc
-	## expect JsonValue.parse_bounded("null", {}, 4) == Ok(Null)
-	## expect JsonValue.parse_bounded("null ", {}, 4).is_err()
-	## ```
-	parse_bounded : Str, Options, U64 -> Try(JsonValue, [InvalidJsonValue(Error)])
-	parse_bounded = |input, options, max_bytes| {
-		if input.count_utf8_bytes() > max_bytes {
-			return Err(InvalidJsonValue(locate(input, max_bytes, "document exceeds the limit of ${max_bytes.to_str()} bytes")))
-		}
-		JsonValue.parse_with(input, options)
-	}
-
 	## A [Parser] that reads one strict JSON value and the whitespace around
 	## it, and leaves the rest of the input for the next parser. A failure is
 	## `ParseError({ message, offset })` with the byte offset of the problem.
@@ -204,6 +189,7 @@ JsonValue := [
 	parser = JsonValue.parser_with({})
 
 	## Like [JsonValue.parser], with the given [JsonValue.Options].
+	## `max_bytes` bounds the supplied buffer, including any unconsumed suffix.
 	##
 	## ```roc
 	## expect Utf8.parse_str(JsonValue.parser_with({ comments: True }), "1 // one") == Ok(Number("1"))
@@ -428,12 +414,13 @@ JsonValue := [
 	## How [JsonValue.to_str_with] writes a value. `sort_keys` writes object
 	## members in byte order of their keys, recursively. `indent` greater than
 	## zero writes each item and member on its own line, indented by that many
-	## spaces per level.
+	## spaces per level. `max_bytes` bounds the serialized UTF-8 bytes, including
+	## escapes and indentation, and defaults to unlimited.
 	##
 	## ```roc
 	## expect JsonValue.to_str_with(Object([{ key: "b", value: Null }, { key: "a", value: Array([]) }]), { sort_keys: True, indent: 2 }) == Ok("{\n  \"a\": [],\n  \"b\": null\n}")
 	## ```
-	WriteOptions := { sort_keys : Bool ?? False, indent : U64 ?? 0 }
+	WriteOptions := { sort_keys : Bool ?? False, indent : U64 ?? 0, max_bytes : U64 ?? U64.highest }
 
 	## Write a value as compact JSON, keeping member order.
 	##
@@ -447,36 +434,23 @@ JsonValue := [
 	##
 	## expect JsonValue.to_str(Number("NaN")) == Err(InvalidNumber("NaN"))
 	## ```
-	to_str : JsonValue -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep])
+	to_str : JsonValue -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)])
 	to_str = |value| JsonValue.to_str_with(value, {})
 
 	## Write a value with the given [JsonValue.WriteOptions].
+	## `max_bytes` limits UTF-8 output bytes, including escapes and indentation,
+	## checked before allocating output. It defaults to unlimited. Exceeding
+	## the budget is `TooLarge(max_bytes)`. No final newline is added; reserve
+	## space in the budget when the calling protocol appends one.
 	##
 	## ```roc
 	## expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n    1,\n    \"two\"\n]")
 	## ```
-	to_str_with : JsonValue, WriteOptions -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep])
+	to_str_with : JsonValue, WriteOptions -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)])
 	to_str_with = |value, options| {
+		_ = measure_value(value, options.indent, 0, 0, options.max_bytes)?
 		bytes = write_value(List.with_capacity(256), value, options.sort_keys, options.indent, 0)?
 		Ok(Str.from_utf8(bytes) ?? "")
-	}
-
-	## Write JSON within an inclusive UTF-8 byte budget. Count escaped keys
-	## and strings, punctuation, indentation and line breaks before allocating
-	## output. `TooLarge(max_bytes)` reports an exceeded budget. Existing
-	## invalid-number, duplicate-key and 128-level checks still apply.
-	##
-	## The returned text has no final newline. Reserve bytes in the budget
-	## when a file or protocol appends framing after the JSON value.
-	##
-	## ```roc
-	## expect JsonValue.to_str_bounded(String("é"), {}, 4) == Ok("\"é\"")
-	## expect JsonValue.to_str_bounded(String("é"), {}, 3) == Err(TooLarge(3))
-	## ```
-	to_str_bounded : JsonValue, WriteOptions, U64 -> Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)])
-	to_str_bounded = |value, options, max_bytes| {
-		_ = measure_value(value, options.indent, 0, 0, max_bytes)?
-		JsonValue.to_str_with(value, options)
 	}
 
 }
@@ -523,6 +497,9 @@ Member : { key : Str, value : JsonValue }
 # copied out once, when it closes.
 scan : Str, List(U8), JsonValue.Options -> Try({ value : JsonValue, pos : U64 }, [JsonFail(Failure)])
 scan = |src, bytes, options| {
+	if bytes.len() > options.max_bytes {
+		return fail(options.max_bytes, "document exceeds the limit of ${options.max_bytes.to_str()} bytes")
+	}
 	check = src.is_empty()
 	comments = options.comments
 	max_depth = options.max_depth
@@ -1385,9 +1362,7 @@ star_class = Utf8.ByteClass.from_bytes(['*'])
 
 # ------------------------------------------------------------------ writing
 
-WriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep]
-
-BoundedWriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]
+WriteError : [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]
 
 # Keep all arithmetic within the caller's limit, including U64.highest.
 measure_add : U64, U64, U64 -> Try(U64, [TooLarge(U64)])
@@ -1424,7 +1399,7 @@ measure_string = |text, used, limit| {
 
 # Measure exactly the same representation as write_value. Key sorting changes
 # order, not length. No serialized buffer is allocated during this traversal.
-measure_value : JsonValue, U64, U64, U64, U64 -> Try(U64, BoundedWriteError)
+measure_value : JsonValue, U64, U64, U64, U64 -> Try(U64, WriteError)
 measure_value = |value, indent, depth, used, limit| {
 	match value {
 		Null => measure_add(used, 4, limit)
@@ -2328,37 +2303,37 @@ expect JsonValue.to_str(Number("NaN")) == Err(InvalidNumber("NaN"))
 expect JsonValue.to_str_with(Array([Number("1"), String("two")]), { indent: 4 }) == Ok("[\n    1,\n    \"two\"\n]")
 
 # Bounded documents retain strict grammar, caller rules and exact number text.
-expect JsonValue.parse_bounded("null", {}, 4) == Ok(Null)
-expect JsonValue.parse_bounded("null ", {}, 4) == Err(InvalidJsonValue({ line: 1, column: 5, message: "document exceeds the limit of 4 bytes" }))
-expect JsonValue.parse_bounded("\"é\"", {}, 4) == Ok(String("é"))
-expect JsonValue.parse_bounded("\"é\"", {}, 3).is_err()
-expect JsonValue.parse_bounded("\u(FEFF)null", { bom: True }, 7) == Ok(Null)
-expect JsonValue.parse_bounded("\u(FEFF)null", { bom: True }, 6).is_err()
-expect JsonValue.parse_bounded("{\"x\":0,\"x\":0}", { duplicates: CollapseIdentical }, 13) == Ok(Object([{ key: "x", value: Number("0") }]))
-expect JsonValue.parse_bounded("{\"x\":0,\"x\":1}", { duplicates: CollapseIdentical }, 100).is_err()
-expect JsonValue.parse_bounded("[0,0]", { max_items: 1 }, 100).is_err()
-expect JsonValue.parse_bounded("[[0]]", { max_depth: 1 }, 100).is_err()
-expect JsonValue.parse_bounded("\"é\"", { max_string_bytes: 1 }, 100).is_err()
-expect JsonValue.parse_bounded("22", { max_number_digits: 1 }, 100).is_err()
-expect JsonValue.parse_bounded("null true", {}, 100).is_err()
-expect JsonValue.parse_bounded("null", {}, 0).is_err()
-expect JsonValue.parse_bounded("", {}, 0).is_err()
-expect JsonValue.parse_bounded("9007199254740993123456789", {}, 25) == Ok(Number("9007199254740993123456789"))
+expect JsonValue.parse_with("null", { max_bytes: 4 }) == Ok(Null)
+expect JsonValue.parse_with("null ", { max_bytes: 4 }) == Err(InvalidJsonValue({ line: 1, column: 5, message: "document exceeds the limit of 4 bytes" }))
+expect JsonValue.parse_with("\"é\"", { max_bytes: 4 }) == Ok(String("é"))
+expect JsonValue.parse_with("\"é\"", { max_bytes: 3 }).is_err()
+expect JsonValue.parse_with("\u(FEFF)null", { bom: True, max_bytes: 7 }) == Ok(Null)
+expect JsonValue.parse_with("\u(FEFF)null", { bom: True, max_bytes: 6 }).is_err()
+expect JsonValue.parse_with("{\"x\":0,\"x\":0}", { duplicates: CollapseIdentical, max_bytes: 13 }) == Ok(Object([{ key: "x", value: Number("0") }]))
+expect JsonValue.parse_with("{\"x\":0,\"x\":1}", { duplicates: CollapseIdentical, max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("[0,0]", { max_items: 1, max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("[[0]]", { max_depth: 1, max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("\"é\"", { max_string_bytes: 1, max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("22", { max_number_digits: 1, max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("null true", { max_bytes: 100 }).is_err()
+expect JsonValue.parse_with("null", { max_bytes: 0 }).is_err()
+expect JsonValue.parse_with("", { max_bytes: 0 }).is_err()
+expect JsonValue.parse_with("9007199254740993123456789", { max_bytes: 25 }) == Ok(Number("9007199254740993123456789"))
 
 # Exact output size includes escaping and formatting, with no final newline.
-expect JsonValue.to_str_bounded(String("\n"), {}, 4) == Ok("\"\\n\"")
-expect JsonValue.to_str_bounded(String("\n"), {}, 3) == Err(TooLarge(3))
-expect JsonValue.to_str_bounded(String("\u(01)"), {}, 8) == Ok("\"\\u0001\"")
-expect JsonValue.to_str_bounded(String("\u(01)"), {}, 7) == Err(TooLarge(7))
-expect JsonValue.to_str_bounded(Object([{ key: "\u(01)", value: Null }]), {}, 15) == Ok("{\"\\u0001\":null}")
-expect JsonValue.to_str_bounded(Object([{ key: "\u(01)", value: Null }]), {}, 14) == Err(TooLarge(14))
-expect JsonValue.to_str_bounded(Array([]), { indent: U64.highest }, 2) == Ok("[]")
-expect JsonValue.to_str_bounded(Null, { indent: U64.highest }, 4) == Ok("null")
-expect JsonValue.to_str_bounded(Array([Null]), { indent: U64.highest }, U64.highest) == Err(TooLarge(U64.highest))
-expect JsonValue.to_str_bounded(Object([{ key: "x", value: Null }]), { indent: U64.highest }, U64.highest) == Err(TooLarge(U64.highest))
-expect JsonValue.to_str_bounded(Null, {}, 0) == Err(TooLarge(0))
-expect JsonValue.to_str_bounded(Number("NaN"), {}, 100) == Err(InvalidNumber("NaN"))
-expect JsonValue.to_str_bounded(Object([{ key: "a", value: Null }, { key: "a", value: Null }]), {}, 100) == Err(DuplicateKey("a"))
+expect JsonValue.to_str_with(String("\n"), { max_bytes: 4 }) == Ok("\"\\n\"")
+expect JsonValue.to_str_with(String("\n"), { max_bytes: 3 }) == Err(TooLarge(3))
+expect JsonValue.to_str_with(String("\u(01)"), { max_bytes: 8 }) == Ok("\"\\u0001\"")
+expect JsonValue.to_str_with(String("\u(01)"), { max_bytes: 7 }) == Err(TooLarge(7))
+expect JsonValue.to_str_with(Object([{ key: "\u(01)", value: Null }]), { max_bytes: 15 }) == Ok("{\"\\u0001\":null}")
+expect JsonValue.to_str_with(Object([{ key: "\u(01)", value: Null }]), { max_bytes: 14 }) == Err(TooLarge(14))
+expect JsonValue.to_str_with(Array([]), { indent: U64.highest, max_bytes: 2 }) == Ok("[]")
+expect JsonValue.to_str_with(Null, { indent: U64.highest, max_bytes: 4 }) == Ok("null")
+expect JsonValue.to_str_with(Array([Null]), { indent: U64.highest, max_bytes: U64.highest }) == Err(TooLarge(U64.highest))
+expect JsonValue.to_str_with(Object([{ key: "x", value: Null }]), { indent: U64.highest, max_bytes: U64.highest }) == Err(TooLarge(U64.highest))
+expect JsonValue.to_str_with(Null, { max_bytes: 0 }) == Err(TooLarge(0))
+expect JsonValue.to_str_with(Number("NaN"), { max_bytes: 100 }) == Err(InvalidNumber("NaN"))
+expect JsonValue.to_str_with(Object([{ key: "a", value: Null }, { key: "a", value: Null }]), { max_bytes: 100 }) == Err(DuplicateKey("a"))
 expect measure_add(U64.highest, 0, U64.highest) == Ok(U64.highest)
 expect measure_add(U64.highest, 1, U64.highest) == Err(TooLarge(U64.highest))
 expect measure_line(0, U64.highest, 0, U64.highest) == Ok(1)
@@ -2367,9 +2342,9 @@ expect {
 	for _ in List.repeat({}, 128) {
 		$tree = Array([$tree])
 	}
-	exact = JsonValue.to_str_bounded($tree, {}, 260)
+	exact = JsonValue.to_str_with($tree, { max_bytes: 260 })
 	exact.map_ok(|text| text.count_utf8_bytes()) == Ok(260)
-		and JsonValue.to_str_bounded(Array([$tree]), {}, 1000) == Err(TooDeep)
+		and JsonValue.to_str_with(Array([$tree]), { max_bytes: 1000 }) == Err(TooDeep)
 }
 expect {
 	values = [Null, Bool(False), Bool(True), Number("-0.001e+123"), String("café\n\t\\\"\u(00)"), Array([]), Object([]), Array([Null, Bool(True)]), Object([{ key: "é\n", value: Array([Number("9007199254740993123456789")]) }])]
@@ -2380,8 +2355,8 @@ expect {
 			formats.all(
 				|options| {
 					match JsonValue.to_str_with(value, options) {
-						Ok(text) => JsonValue.to_str_bounded(value, options, text.count_utf8_bytes()) == Ok(text)
-							and JsonValue.to_str_bounded(value, options, text.count_utf8_bytes() - 1).is_err()
+						Ok(text) => JsonValue.to_str_with(value, { ..options, max_bytes: text.count_utf8_bytes() }) == Ok(text)
+							and JsonValue.to_str_with(value, { ..options, max_bytes: text.count_utf8_bytes() - 1 }).is_err()
 						Err(_) => False
 					}
 				},
@@ -2389,3 +2364,11 @@ expect {
 		},
 	)
 }
+
+# The same input byte limit applies to combinators and compile-time validation.
+expect Utf8.parse_str(JsonValue.parser_with({ max_bytes: 4 }), "null") == Ok(Null)
+expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 4 }), "null next") == Err(ParseError({ message: "document exceeds the limit of 4 bytes", offset: 4 }))
+expect Utf8.parse_str_partial(JsonValue.parser_with({ max_bytes: 9 }), "null next").map_ok(|{ rest, .. }| rest) == Ok("next")
+expect JsonValue.validate({ source: "null", options: { max_bytes: 4 } }) == Ok(Null)
+expect JsonValue.validate({ source: "null ", options: { max_bytes: 4 } }) == Err(BadQuotedBytes("<literal>:1:5: JSON: document exceeds the limit of 4 bytes"))
+expect JsonValue.to_str_with(Array([Null]), { indent: U64.highest }) == Err(TooLarge(U64.highest))

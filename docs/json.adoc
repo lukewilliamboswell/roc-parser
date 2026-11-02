@@ -264,16 +264,16 @@ keys, and at most 128 levels of nesting. A limit or check that fails is
 reported as an `InvalidJsonValue` error at the offending value, like any other
 error.
 
-For a whole-document byte budget, use
-`JsonValue.parse_bounded(text, options, max_bytes)`. It checks the supplied
-UTF-8 bytes, including surrounding whitespace and any BOM, before parsing.
-The other limits and relaxations in `options` still apply. Existing parsing
-functions have no whole-document byte limit.
-
 .Limits
 [cols="1,1,3",options="header"]
 |===
 |Field |Default |Effect
+
+|`max_bytes`
+|no limit
+|The most bytes in the supplied input, including surrounding whitespace and
+any BOM. Checked before constructing a value. The parser combinator applies
+this limit to its entire supplied buffer, including any unconsumed suffix.
 
 |`max_depth`
 |`128`
@@ -465,12 +465,16 @@ check `Str.count_utf8_bytes` before parsing if you need to.
   their keys, which is Unicode code point order. Otherwise members keep their
   order.
 
-`JsonValue.to_str_bounded(value, options, max_bytes)` checks the exact output
-size before serialization, including escaped strings, keys and indentation.
-It returns `TooLarge(max_bytes)` when the output would exceed the budget;
-the other writer errors still apply. Existing writer functions keep their
-current behavior. The writer adds no final newline: reserve one byte from
-your budget if the calling protocol appends one.
+Set `max_bytes` in `WriteOptions` to bound the exact UTF-8 output size,
+including escaped strings, keys and indentation. It defaults to no limit.
+The writer checks the size before allocating its output and returns
+`TooLarge(max_bytes)` if the budget would be exceeded. It adds no final
+newline: reserve one byte from your budget if the calling protocol appends one.
+
+[source,roc]
+----
+include::examples/json-guide.roc[tag=byte-limits,indent=0]
+----
 
 For example, a downstream SBOM tool can use a 16 MiB budget for both parsing
 and writing while keeping its own depth and component limits. Number text
@@ -511,6 +515,7 @@ something else:
 `Infinity`.
 `DuplicateKey(key)`:: A key repeated in one object.
 `TooDeep`:: More than 128 levels of nesting.
+`TooLarge(max_bytes)`:: The serialized output would exceed the byte budget.
 
 So what the writer returns always reads back with `parse_str` as the value
 you wrote, or, with `sort_keys`, as its sorted copy. It does not keep the

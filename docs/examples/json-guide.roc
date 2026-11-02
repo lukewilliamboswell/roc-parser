@@ -360,3 +360,9 @@ main! = |_args| {
 }
 
 expect lock.get("greeting") == Ok(String("café \u(1F600)"))
+
+# tag::byte-limits[]
+expect JsonValue.parse_with("null", { max_bytes: 4 }) == Ok(Null)
+expect JsonValue.to_str_with(String("é"), { max_bytes: 4 }) == Ok("\"é\"")
+expect JsonValue.to_str_with(String("é"), { max_bytes: 3 }) == Err(TooLarge(3))
+# end::byte-limits[]

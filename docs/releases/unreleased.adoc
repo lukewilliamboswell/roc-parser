@@ -2,6 +2,10 @@
 
 == Upgrade impact
 
+* *JSON writers can return `TooLarge(max_bytes)`.* Update exhaustive error
+  handlers for `JsonValue.to_str` and `JsonValue.to_str_with` to handle this
+  variant. Parsing and writing have no byte limit unless `max_bytes` is set.
+
 * *`RocSyntax` spans change in two places.* A tool that stored or compared byte
   ranges may see different values; the tree's nodes and their order are the same
   for accepted source.
@@ -27,11 +31,10 @@
 
 == Added
 
-* `JsonValue.parse_bounded` and `JsonValue.to_str_bounded` accept explicit UTF-8
-  byte budgets for downstream tools processing large JSON inventories. They
-  preserve existing parsing options and writer validation; the writer accounts
-  for escaping and indentation before allocating its output. Existing APIs and
-  defaults are unchanged.
+* `max_bytes` in `JsonValue.Options` and `JsonValue.WriteOptions` bounds input
+  and output UTF-8 bytes, with an unlimited default. Input limits apply to
+  runtime parsing, parser combinators and compile-time validation. The writer
+  counts escaping and indentation before allocating output.
 
 == Fixed
 
