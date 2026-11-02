@@ -83,8 +83,8 @@ class MutationTests(unittest.TestCase):
             report = json.loads((root / 'out/report.json').read_text())
             self.assertEqual(report['counts']['accepted_seeds'], 1)
             self.assertEqual(report['counts']['rejected_seeds'], 1)
-            self.assertEqual(report['counts']['corpus_invalid_utf8_excluded'], 1)
-            self.assertEqual(report['counts']['total'], 4)
+            self.assertEqual(report['counts']['corpus_invalid_utf8'], 1)
+            self.assertEqual(report['counts']['total'], 5)
             self.assertEqual(report['counts']['passed'], 1)  # rejected raw corpus differs in recovery shape
             failure = next((root / 'out/failures').glob('*.json'))
             replay = args[:4] + ['--replay', str(failure), '--output', str(root / 'replay')]

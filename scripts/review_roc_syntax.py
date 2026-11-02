@@ -16,7 +16,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'scripts' / 'roc_syntax'
 PROTOCOL_VERSION = 1
-REFERENCE_COMMIT = '0d4b0ab02f9239448d034db17b4e63051a7c57ae'
+REFERENCE_COMMIT = 'f7bef6b38f23797eb34b291ced98af71ea37dd3b'
 
 class WorkerError(RuntimeError):
     pass
@@ -98,10 +98,15 @@ class Worker:
         self.close()
 
 
+def source_bytes(source):
+    """A source is text, or bytes when it isn't valid UTF-8."""
+    return source if isinstance(source, bytes) else source.encode()
+
+
 def normalize_tokens(response, source):
     """Compare lossless token boundaries and lexical classes, excluding trivia."""
     out = []
-    raw = source.encode()
+    raw = source_bytes(source)
     for token in response['tokens']:
         kind = token['kind']
         if kind in {'Whitespace', 'Comment', 'Newline', 'EndOfFile'}:
@@ -151,7 +156,7 @@ def syntax_shape(response, source):
     """Parent/child structure is compared, so swapping precedence changes output."""
     if 'shape' in response:
         return response['shape']
-    raw = source.encode()
+    raw = source_bytes(source)
     import bisect
     operators = [t for t in response.get('tokens', []) if t['kind'] == 'Operator']
     operator_starts = [t['start'] for t in operators]
@@ -188,7 +193,7 @@ def syntax_shape(response, source):
         if kind == 'TypeName':
             lo = bisect.bisect_left(name_starts, node['start'])
             hi = bisect.bisect_left(name_starts, node['end'])
-            names = [raw[token['start']:token['end']].decode() for token in name_tokens[lo:hi]]
+            names = [raw[token['start']:token['end']].decode(errors='replace') for token in name_tokens[lo:hi]]
             if not names:
                 return ['malformed_type_name', text]
             qualified = ['identifier', names[0]]
@@ -228,7 +233,7 @@ def syntax_shape(response, source):
             return ['t_field', branch[0][1], optional, branch[1], branch[2] if length > 2 else None]
         if kind == 'TypeHeader':
             name_node = nodes[children[start]]
-            name = raw[name_node['start']:name_node['end']].decode()
+            name = raw[name_node['start']:name_node['end']].decode(errors='replace')
             return ['type_header', name, branch[1:]]
         if kind == 'WhereMethod':
             return ['where_method', branch[0], branch[1][1], branch[2]]
@@ -265,7 +270,7 @@ def syntax_shape(response, source):
             return ['while', *branch]
         if kind == 'Header':
             first_token = source_tokens[bisect.bisect_left(token_starts, node['start'])] if text.strip() else None
-            keyword = raw[first_token['start']:first_token['end']].decode() if first_token else 'type_module'
+            keyword = raw[first_token['start']:first_token['end']].decode(errors='replace') if first_token else 'type_module'
             if keyword in {'app', 'package'} and (not branch or branch[-1][0] != 'dependencies'):
                 branch.append(['dependencies', []])
             return ['header', keyword, branch]
@@ -316,22 +321,22 @@ def syntax_shape(response, source):
             return ['exposed_wildcard', branch[0]]
         if kind == 'FileImport':
             type_node = nodes[children[start+2]]
-            type_name = ''.join(raw[type_node['start']:type_node['end']].decode().split())
+            type_name = ''.join(raw[type_node['start']:type_node['end']].decode(errors='replace').split())
             return ['file_import', branch[0][1][1:-1], branch[1][1], type_name]
         if kind == 'ExpressionStatement':
             return branch[0]
         if kind == 'Binary':
             ids = children[start:start+length]
             left, right = nodes[ids[0]], nodes[ids[1]]
-            gap = raw[left['end']:right['start']].decode()
+            gap = raw[left['end']:right['start']].decode(errors='replace')
             # Comments between operands are trivia; the operator is lexical.
             lo = bisect.bisect_left(operator_starts, left['end'])
             hi = bisect.bisect_left(operator_starts, right['start'])
-            operator = ''.join(raw[t['start']:t['end']].decode() for t in operators[lo:hi])
+            operator = ''.join(raw[t['start']:t['end']].decode(errors='replace') for t in operators[lo:hi])
             return ['binary', operator, *branch]
         if kind == 'Unary':
             first = nodes[children[start]]
-            operator = raw[node['start']:first['start']].decode().strip()
+            operator = raw[node['start']:first['start']].decode(errors='replace').strip()
             return ['unary', operator, *branch]
         if kind in {'StringLiteral', 'MultilineStringLiteral'}:
             interpolated = any(nodes[index]['kind'] == 'Interpolation' for index in children[start:start+length])
@@ -389,7 +394,7 @@ def syntax_shape(response, source):
         if kind == 'RecordField':
             ids = children[start:start+length]
             name_node = nodes[ids[0]]
-            name = raw[name_node['start']:name_node['end']].decode()
+            name = raw[name_node['start']:name_node['end']].decode(errors='replace')
             return [name, branch[-1] if len(branch) > 1 else ['identifier', name]]
         if kind == 'Record':
             return ['record', branch]
@@ -406,7 +411,7 @@ def syntax_shape(response, source):
         if kind == 'Block':
             return ['block', branch]
         if kind in {'FieldAccess', 'OptionalFieldAccess'}:
-            return ['optional_field' if kind == 'OptionalFieldAccess' else 'field', branch[0], raw[nodes[children[start+1]]['start']:nodes[children[start+1]]['end']].decode()]
+            return ['optional_field' if kind == 'OptionalFieldAccess' else 'field', branch[0], raw[nodes[children[start+1]]['start']:nodes[children[start+1]]['end']].decode(errors='replace')]
         if kind in {'Debug', 'Crash', 'Return'}:
             return [{'Debug': 'dbg', 'Crash': 'crash', 'Return': 'return'}[kind], *branch]
         if kind in {'Break', 'Ellipsis'}:
@@ -423,7 +428,7 @@ def syntax_shape(response, source):
             left, right = [nodes[index] for index in children[start:start+length]]
             lo = bisect.bisect_left(operator_starts, left['end'])
             hi = bisect.bisect_left(operator_starts, right['start'])
-            operator = ''.join(raw[token['start']:token['end']].decode() for token in operators[lo:hi])
+            operator = ''.join(raw[token['start']:token['end']].decode(errors='replace') for token in operators[lo:hi])
             return ['arrow', operator, *branch, 'method_call' if kind == 'MethodArrowCall' else 'ordinary']
         return ['unsupported', kind]
     try:
@@ -436,7 +441,11 @@ def syntax_shape(response, source):
 # A kind missing here is reported rather than skipped, so that a new AST kind
 # cannot silently escape the span comparison.
 NODE_KINDS = {
-    'alternatives': {'AlternativePattern'}, 'apply': {'Call', 'TypeApply'},
+    'alternatives': {'AlternativePattern'}, 'apply': {'Call', 'TypeApply'}, 'associated': {'AssociatedBlock'},
+    'dependency': {'DependencyField'}, 'for_clause_alias': {'RequiredType'}, 'packages': {'Dependencies'},
+    'requires_entry': {'RequiredValue'}, 'symbol_map_entry': {'SymbolMapping'}, 'target_config': {'TargetConfig'},
+    'target_config_entry': {'TargetField'}, 'target_entry': {'TargetEntry'}, 'targets_section': {'PlatformTargets'},
+    'where_clause': {'WhereClause'},
     'arrow_call': {'ArrowCall', 'MethodArrowCall'}, 'as': {'AliasPattern'}, 'bin_op': {'Binary'},
     'block': {'Block'}, 'break': {'Break'}, 'crash': {'Crash'}, 'dbg': {'Debug'}, 'decl': {'Declaration'},
     'ellipsis': {'Ellipsis'}, 'expect': {'Expect'}, 'exposed_item': {'ExposedItem', 'ExposedWildcard'},
@@ -463,22 +472,24 @@ NODE_KINDS = {
     'where_item': {'WhereAlias', 'WhereMethod'}, 'while': {'While'},
 }
 
-ARROW_TOKENS = {'OpArrow', 'OpFatArrow'}
+# Compiler kinds whose region starts at a token that belongs to their context.
+CONTEXT_TOKENS = {'apply': {'OpArrow', 'OpFatArrow'}, 'targets_section': {'OpColon'}}
 
 
 def compiler_span_start(span, token_at, next_token_start):
     """Move a compiler region's start past syntax it borrows from its context.
 
-    The compiler keeps a leading dot in one token with the name after it, and
-    starts a call in an arrow's right operand at the arrow. Neither is part of
-    the name or the call, so the candidate's span starts after them.
+    The compiler keeps a leading dot in one token with the name after it,
+    starts a call in an arrow's right operand at the arrow, and starts a targets
+    section at the colon after `targets`. None of these is part of the node, so
+    the candidate's span starts after them.
     """
     token = token_at.get(span['start'])
     if token is None:
         return span['start']
     if token['kind'] == 'NoSpaceDotUpperIdent' or token['kind'] == 'DotUpperIdent':
         return span['start'] + 1
-    if span['kind'] == 'apply' and token['kind'] in ARROW_TOKENS:
+    if token['kind'] in CONTEXT_TOKENS.get(span['kind'], ()):
         return next_token_start[span['start']]
     return span['start']
 
@@ -517,7 +528,7 @@ def has_unknown_shape(value):
 
 
 def validate_spans(response, source, lossless=False):
-    size = len(source.encode())
+    size = len(source_bytes(source))
     cursor = 0
     for token in response.get('tokens', []):
         start, end = token['start'], token['end']
@@ -555,9 +566,10 @@ def validate_spans(response, source, lossless=False):
 
 def compare(case, actual, expected):
     differences = []
+    source = bytes.fromhex(case['source']) if case.get('mode') == 'file-hex' else case['source']
     for label, response in [('actual', actual), ('expected', expected)]:
         try:
-            validate_spans(response, case['source'], lossless=label == 'actual')
+            validate_spans(response, source, lossless=label == 'actual')
         except WorkerError as error:
             differences.append({'field': label + '_invariants', 'error': str(error)})
     contract = case.get('coverage', 'supported')
@@ -586,7 +598,7 @@ def compare(case, actual, expected):
     if contract == 'supported' and (not actual.get('ok') or not expected.get('ok')):
         differences.append({'field': 'supported_acceptance', 'actual': actual.get('ok'), 'expected': expected.get('ok')})
     for field, projector in [('tokens', normalize_tokens), ('shape', syntax_shape)]:
-        left, right = projector(actual, case['source']), projector(expected, case['source'])
+        left, right = projector(actual, source), projector(expected, source)
         if field == 'shape' and (has_unknown_shape(left) or has_unknown_shape(right)):
             differences.append({'field': 'projection_gap', 'actual': left, 'expected': right})
         elif left != right:
@@ -595,7 +607,7 @@ def compare(case, actual, expected):
         differences += span_differences(actual, expected)
     if 'model_shape' in case:
         for label, response in [('actual', actual), ('expected', expected)]:
-            shape = syntax_shape(response, case['source'])
+            shape = syntax_shape(response, source)
             if shape != case['model_shape']:
                 differences.append({'field': label + '_model_shape', 'actual': shape, 'expected': case['model_shape']})
     return differences
@@ -614,7 +626,7 @@ def load_cases(path):
     for case in cases:
         if case['coverage'] not in {'supported', 'recovery', 'unsupported', 'exploratory'}:
             raise ValueError('unknown coverage classification')
-        if case['mode'] not in {'file', 'expr', 'header', 'statement', 'repl'}:
+        if case['mode'] not in {'file', 'file-hex', 'expr', 'header', 'statement', 'repl'}:
             raise ValueError('unknown parse mode')
     return document, cases
 

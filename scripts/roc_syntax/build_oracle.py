@@ -18,7 +18,7 @@ import sys
 import tarfile
 import tempfile
 
-ROC_REVISION = "0d4b0ab02f9239448d034db17b4e63051a7c57ae"
+ROC_REVISION = "f7bef6b38f23797eb34b291ced98af71ea37dd3b"
 ZIG_VERSION = "0.17.0"
 REPOSITORY = "https://github.com/roc-lang/roc.git"
 ROOT = Path(__file__).resolve().parents[2]

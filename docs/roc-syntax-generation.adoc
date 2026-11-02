@@ -30,8 +30,8 @@ This generator does not claim every grammar production or valid composition.
 It intentionally generates parser inputs without name resolution or type
 checking. It currently omits platform headers, targets, where-alias constraints,
 associated nested types, most literal/pattern extensions, arrows/pipes, optional
-calls and malformed inputs; dedicated fixtures, corpus and mutation lanes cover
-those areas separately. Adding one sample does not establish production coverage.
+calls and malformed inputs. `roc-syntax-span-model` below generates all of these
+except malformed inputs, which the raw targets, corpus and mutation lanes cover. Adding one sample does not establish production coverage.
 
 For native model contracts, set `ROC_SYNTAX_ORACLE` to the pinned native worker
 and run `python3 -m unittest discover -s scripts/tests -p test_roc_syntax_model_cases.py`.
@@ -63,11 +63,14 @@ checks composition into an ungrouped addition/multiplication expression.
 
 `fuzz/roc-syntax-span-model.roc` is a separate model for spans. As it writes a
 file it records each node's kind and byte range, then requires the parsed tree to
-hold exactly those nodes, children first. It models annotations and definitions
-over types, patterns and expressions, and places spaces, newlines and comments
-between delimiters and their contents, where a span taken from the wrong token
-differs from the right one. It omits headers, imports, statements other than
-annotations and definitions, and blocks.
+hold exactly those nodes, children first. It models module, app and platform
+headers, including requirements, symbol maps and targets; imports of modules and
+files; annotations with method and alias constraints; type declarations with
+associated blocks; definitions; and blocks of statements, over types, patterns,
+including those only a match branch allows, and expressions. It reaches every
+compiler node kind the span comparison maps, and generates only valid source. It
+places spaces, newlines and comments between delimiters and their contents, where
+a span taken from the wrong token differs from the right one.
 `scripts/review_roc_syntax.py --fuzz-show BINARY --corpus DIR` reviews the source
 it shows for each corpus input against the compiler, including every span, which
 catches the model's own mistakes.

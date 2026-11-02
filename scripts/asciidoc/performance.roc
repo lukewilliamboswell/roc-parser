@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.26.0/GddgvsGjiNXrHFW6au5i5dUDbTs8FinQdrgE2Gqmw53t.tar.zst",
 	parser: "../../package/main.roc",
 }
 import cli.OsStr
@@ -90,11 +90,11 @@ main! = |_| {
 	var $running = True
 	while $running {
 		match Stdin.line!() {
-			Err(EndOfFile) => {
+			Err(EndOfInput) => {
 				$running = False
 			}
-			Err(StdinErr(error)) => {
-				return Err(StdinErr(error))
+			Err(problem) => {
+				return Err(problem)
 			}
 			Ok(line) => {
 				request : Try(Request, _)
@@ -123,7 +123,7 @@ main! = |_| {
 								}
 								$i = $i + 1
 							}
-							elapsed_ns = Monotonic.now!() - start
+							elapsed_ns = start.elapsed!().to_nanos()
 							if item.iterations > 0 {
 								# Every warmup and measured operation above built its own AST.
 								# Compact timing replies do not build a redundant output AST.

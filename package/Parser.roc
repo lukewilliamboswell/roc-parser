@@ -293,8 +293,10 @@ Parser(input, a) :: { fun : input -> Step(input, a) }.{
 	## Without `lazy`, you would ask the compiler to build an infinitely deep parser.
 	## (Resulting in a compiler error.)
 	##
-	## Top-level parsers that refer to each other need one `lazy` somewhere in
-	## the cycle, so that each value can be built before the other is used.
+	## A top-level parser that refers to itself has to be a function, called
+	## inside `lazy`: `tree = |{}| ...` with `Parser.lazy(|_| tree({}))`. Top-level
+	## parsers that refer to each other need one `lazy` somewhere in the cycle,
+	## so that each value can be built before the other is used.
 	lazy : ({} -> Parser(input, a)) -> Parser(input, a)
 	lazy = |thunk| {
 		{ fun: |input| step(thunk({}), input) }

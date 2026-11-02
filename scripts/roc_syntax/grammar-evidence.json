@@ -1,9 +1,9 @@
 {
-  "reference_commit": "0d4b0ab02f9239448d034db17b4e63051a7c57ae",
+  "reference_commit": "f7bef6b38f23797eb34b291ced98af71ea37dd3b",
   "authority": {
-    "AST.zig": "e86f6878be0f41d7360cacfdb66e066b41f44f2f1ab55f618256b7b1e8aafb63",
-    "Parser.zig": "f4f482e81805bd69994739e8acc14edf353b36a331b9c9272f1961cc3c33cf64",
-    "NodeStore.zig": "78e43607b92343d7b8780a383e9c1633a9af07783ee39c843da7e1237e22fe2a"
+    "AST.zig": "590e254be2c81746253b8d561291ccc45623eda971cffbcdfab43a73ac195bfa",
+    "Parser.zig": "c1618ea442065d91ef8fe17514a76635aef25784c5c399963dd4d320d8273032",
+    "NodeStore.zig": "660255954b29b7bf87078bad14a6bc4f37c7c5906229886a61ba02002bd5efb1"
   },
   "variants": [
     {
@@ -13,7 +13,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1760
+          "line": 1776
         }
       ],
       "fixtures": [
@@ -43,7 +43,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1483
+          "line": 1499
         }
       ],
       "fixtures": [
@@ -73,7 +73,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1526
+          "line": 1542
         }
       ],
       "fixtures": [
@@ -103,7 +103,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2356
+          "line": 2372
         }
       ],
       "fixtures": [
@@ -133,7 +133,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1497
+          "line": 1513
         }
       ],
       "fixtures": [
@@ -163,7 +163,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1355
+          "line": 1371
         }
       ],
       "fixtures": [
@@ -200,7 +200,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -217,7 +217,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 609
+          "line": 625
         }
       ],
       "fixtures": [
@@ -251,11 +251,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4714
+          "line": 4788
         },
         {
           "file": "Parser.zig",
-          "line": 6390
+          "line": 6462
         }
       ],
       "fixtures": [
@@ -289,7 +289,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4699
+          "line": 4773
         }
       ],
       "fixtures": [
@@ -319,7 +319,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4777
+          "line": 4851
         }
       ],
       "fixtures": [
@@ -349,7 +349,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4786
+          "line": 4860
         }
       ],
       "fixtures": [
@@ -379,7 +379,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4724
+          "line": 4798
         }
       ],
       "fixtures": [
@@ -413,7 +413,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4745
+          "line": 4819
         }
       ],
       "fixtures": [
@@ -443,7 +443,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4767
+          "line": 4841
         }
       ],
       "fixtures": [
@@ -473,7 +473,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4795
+          "line": 4869
         }
       ],
       "fixtures": [
@@ -503,7 +503,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6465
+          "line": 6537
         }
       ],
       "fixtures": [
@@ -533,7 +533,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1321
+          "line": 1337
         }
       ],
       "fixtures": [
@@ -567,7 +567,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1203
+          "line": 1219
         }
       ],
       "fixtures": [
@@ -597,15 +597,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 748
+          "line": 764
         },
         {
           "file": "Parser.zig",
-          "line": 6121
+          "line": 6193
         },
         {
           "file": "Parser.zig",
-          "line": 6553
+          "line": 6625
         }
       ],
       "fixtures": [
@@ -635,11 +635,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5569
+          "line": 5641
         },
         {
           "file": "Parser.zig",
-          "line": 6046
+          "line": 6118
         }
       ],
       "fixtures": [
@@ -669,7 +669,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -686,7 +686,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3610
+          "line": 3679
         }
       ],
       "fixtures": [
@@ -716,7 +716,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3641
+          "line": 3710
         }
       ],
       "fixtures": [
@@ -746,11 +746,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3596
+          "line": 3665
         },
         {
           "file": "Parser.zig",
-          "line": 3603
+          "line": 3672
         }
       ],
       "fixtures": [
@@ -780,11 +780,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3627
+          "line": 3696
         },
         {
           "file": "Parser.zig",
-          "line": 3634
+          "line": 3703
         }
       ],
       "fixtures": [
@@ -814,7 +814,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3665
+          "line": 3734
         }
       ],
       "fixtures": [
@@ -844,7 +844,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4940
+          "line": 5012
         }
       ],
       "fixtures": [
@@ -861,11 +861,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4965
+          "line": 5037
         },
         {
           "file": "Parser.zig",
-          "line": 5001
+          "line": 5073
         }
       ],
       "fixtures": [
@@ -899,11 +899,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4995
+          "line": 5067
         },
         {
           "file": "Parser.zig",
-          "line": 5027
+          "line": 5099
         }
       ],
       "fixtures": [
@@ -937,7 +937,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4958
+          "line": 5030
         }
       ],
       "fixtures": [
@@ -967,7 +967,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5021
+          "line": 5093
         }
       ],
       "fixtures": [
@@ -997,7 +997,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4850
+          "line": 4921
         }
       ],
       "fixtures": [
@@ -1027,7 +1027,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4856
+          "line": 4927
         }
       ],
       "fixtures": [
@@ -1057,11 +1057,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7407
+          "line": 7477
         },
         {
           "file": "Parser.zig",
-          "line": 7448
+          "line": 7518
         }
       ],
       "fixtures": [
@@ -1091,23 +1091,23 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3691
+          "line": 3760
         },
         {
           "file": "Parser.zig",
-          "line": 3965
+          "line": 4034
         },
         {
           "file": "Parser.zig",
-          "line": 4184
+          "line": 4258
         },
         {
           "file": "Parser.zig",
-          "line": 4286
+          "line": 4360
         },
         {
           "file": "Parser.zig",
-          "line": 7433
+          "line": 7503
         }
       ],
       "fixtures": [
@@ -1137,7 +1137,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4687
+          "line": 4761
         }
       ],
       "fixtures": [
@@ -1171,11 +1171,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4862
+          "line": 4934
         },
         {
           "file": "Parser.zig",
-          "line": 4902
+          "line": 4974
         }
       ],
       "fixtures": [
@@ -1212,15 +1212,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4082
+          "line": 4151
         },
         {
           "file": "NodeStore.zig",
-          "line": 1428
+          "line": 1414
         },
         {
           "file": "NodeStore.zig",
-          "line": 1460
+          "line": 1446
         }
       ],
       "fixtures": [
@@ -1254,7 +1254,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4879
+          "line": 4951
         }
       ],
       "fixtures": [
@@ -1284,7 +1284,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4054
+          "line": 4123
         }
       ],
       "fixtures": [
@@ -1314,15 +1314,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4388
+          "line": 4462
         },
         {
           "file": "Parser.zig",
-          "line": 4401
+          "line": 4475
         },
         {
           "file": "Parser.zig",
-          "line": 4830
+          "line": 4901
         }
       ],
       "fixtures": [
@@ -1352,7 +1352,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4347
+          "line": 4421
         }
       ],
       "fixtures": [
@@ -1382,7 +1382,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4245
+          "line": 4319
         }
       ],
       "fixtures": [
@@ -1412,7 +1412,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4359
+          "line": 4433
         }
       ],
       "fixtures": [
@@ -1442,7 +1442,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4556
+          "line": 4630
         }
       ],
       "fixtures": [
@@ -1472,7 +1472,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4545
+          "line": 4619
         }
       ],
       "fixtures": [
@@ -1502,7 +1502,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5142
+          "line": 5214
         }
       ],
       "fixtures": [
@@ -1536,31 +1536,31 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1587
+          "line": 1603
         },
         {
           "file": "Parser.zig",
-          "line": 3678
+          "line": 3747
         },
         {
           "file": "Parser.zig",
-          "line": 3697
+          "line": 3766
         },
         {
           "file": "Parser.zig",
-          "line": 3958
+          "line": 4027
         },
         {
           "file": "Parser.zig",
-          "line": 4166
+          "line": 4240
         },
         {
           "file": "Parser.zig",
-          "line": 4190
+          "line": 4264
         },
         {
           "file": "Parser.zig",
-          "line": 4292
+          "line": 4366
         }
       ],
       "fixtures": [
@@ -1590,7 +1590,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4630
+          "line": 4704
         }
       ],
       "fixtures": [
@@ -1620,7 +1620,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4640
+          "line": 4714
         }
       ],
       "fixtures": [
@@ -1650,7 +1650,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7439
+          "line": 7509
         }
       ],
       "fixtures": [
@@ -1680,7 +1680,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7414
+          "line": 7484
         }
       ],
       "fixtures": [
@@ -1710,7 +1710,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4891
+          "line": 4963
         }
       ],
       "fixtures": [
@@ -1740,7 +1740,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3877
+          "line": 3946
         }
       ],
       "fixtures": [
@@ -1770,7 +1770,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 3937
+          "line": 4006
         }
       ],
       "fixtures": [
@@ -1800,7 +1800,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4650
+          "line": 4724
         }
       ],
       "fixtures": [
@@ -1830,7 +1830,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5190
+          "line": 5262
         }
       ],
       "fixtures": [
@@ -1860,7 +1860,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 4673
+          "line": 4747
         }
       ],
       "fixtures": [
@@ -1890,7 +1890,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -1907,11 +1907,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6202
+          "line": 6274
         },
         {
           "file": "Parser.zig",
-          "line": 6736
+          "line": 6808
         }
       ],
       "fixtures": [
@@ -1941,7 +1941,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6805
+          "line": 6877
         }
       ],
       "fixtures": [
@@ -1975,15 +1975,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6725
+          "line": 6797
         },
         {
           "file": "Parser.zig",
-          "line": 6973
+          "line": 7045
         },
         {
           "file": "Parser.zig",
-          "line": 7055
+          "line": 7127
         }
       ],
       "fixtures": [
@@ -2013,7 +2013,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6661
+          "line": 6733
         }
       ],
       "fixtures": [
@@ -2043,7 +2043,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6616
+          "line": 6688
         }
       ],
       "fixtures": [
@@ -2073,11 +2073,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6647
+          "line": 6719
         },
         {
           "file": "Parser.zig",
-          "line": 6654
+          "line": 6726
         }
       ],
       "fixtures": [
@@ -2107,11 +2107,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6602
+          "line": 6674
         },
         {
           "file": "Parser.zig",
-          "line": 6609
+          "line": 6681
         }
       ],
       "fixtures": [
@@ -2141,7 +2141,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1940
+          "line": 1956
         }
       ],
       "fixtures": [
@@ -2171,7 +2171,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6632
+          "line": 6704
         }
       ],
       "fixtures": [
@@ -2201,7 +2201,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7225
+          "line": 7297
         }
       ],
       "fixtures": [
@@ -2231,7 +2231,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7128
+          "line": 7200
         }
       ],
       "fixtures": [
@@ -2261,11 +2261,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6789
+          "line": 6861
         },
         {
           "file": "Parser.zig",
-          "line": 7098
+          "line": 7170
         }
       ],
       "fixtures": [
@@ -2295,7 +2295,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 7259
+          "line": 7331
         }
       ],
       "fixtures": [
@@ -2325,11 +2325,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6237
+          "line": 6309
         },
         {
           "file": "Parser.zig",
-          "line": 6745
+          "line": 6817
         }
       ],
       "fixtures": [
@@ -2359,11 +2359,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 6576
+          "line": 6648
         },
         {
           "file": "Parser.zig",
-          "line": 6956
+          "line": 7028
         }
       ],
       "fixtures": [
@@ -2393,7 +2393,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2427
+          "line": 2443
         }
       ],
       "fixtures": [
@@ -2423,7 +2423,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -2440,7 +2440,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5627
+          "line": 5699
         }
       ],
       "fixtures": [
@@ -2470,11 +2470,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5211
+          "line": 5283
         },
         {
           "file": "Parser.zig",
-          "line": 6179
+          "line": 6251
         }
       ],
       "fixtures": [
@@ -2504,7 +2504,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5241
+          "line": 5313
         }
       ],
       "fixtures": [
@@ -2534,7 +2534,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5286
+          "line": 5358
         }
       ],
       "fixtures": [
@@ -2564,11 +2564,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5216
+          "line": 5288
         },
         {
           "file": "Parser.zig",
-          "line": 5948
+          "line": 6020
         }
       ],
       "fixtures": [
@@ -2598,7 +2598,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5870
+          "line": 5942
         }
       ],
       "fixtures": [
@@ -2628,7 +2628,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5684
+          "line": 5756
         }
       ],
       "fixtures": [
@@ -2658,7 +2658,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5812
+          "line": 5884
         }
       ],
       "fixtures": [
@@ -2688,15 +2688,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5386
+          "line": 5458
         },
         {
           "file": "Parser.zig",
-          "line": 5402
+          "line": 5474
         },
         {
           "file": "Parser.zig",
-          "line": 5525
+          "line": 5597
         }
       ],
       "fixtures": [
@@ -2726,11 +2726,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5393
+          "line": 5465
         },
         {
           "file": "Parser.zig",
-          "line": 5679
+          "line": 5751
         }
       ],
       "fixtures": [
@@ -2760,7 +2760,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -2777,7 +2777,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5546
+          "line": 5618
         }
       ],
       "fixtures": [
@@ -2807,11 +2807,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 5536
+          "line": 5608
         },
         {
           "file": "Parser.zig",
-          "line": 5969
+          "line": 6041
         }
       ],
       "fixtures": [
@@ -2841,7 +2841,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -2858,11 +2858,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1002
+          "line": 1018
         },
         {
           "file": "Parser.zig",
-          "line": 1038
+          "line": 1054
         }
       ],
       "fixtures": [
@@ -2892,7 +2892,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1045
+          "line": 1061
         }
       ],
       "fixtures": [
@@ -2922,7 +2922,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1031
+          "line": 1047
         }
       ],
       "fixtures": [
@@ -2952,7 +2952,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -2969,7 +2969,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1977
+          "line": 1993
         }
       ],
       "fixtures": [
@@ -2999,7 +2999,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 1980
+          "line": 1996
         }
       ],
       "fixtures": [
@@ -3029,7 +3029,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 877
+          "line": 893
         }
       ],
       "fixtures": [
@@ -3046,7 +3046,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2034
+          "line": 2050
         }
       ],
       "fixtures": [
@@ -3076,7 +3076,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2053
+          "line": 2069
         }
       ],
       "fixtures": [
@@ -3106,7 +3106,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2056
+          "line": 2072
         }
       ],
       "fixtures": [
@@ -3136,11 +3136,11 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2059
+          "line": 2075
         },
         {
           "file": "Parser.zig",
-          "line": 2096
+          "line": 2112
         }
       ],
       "fixtures": [
@@ -3170,7 +3170,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2084
+          "line": 2100
         }
       ],
       "fixtures": [
@@ -3200,7 +3200,7 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2110
+          "line": 2126
         }
       ],
       "fixtures": [
@@ -3230,15 +3230,15 @@
       "constructors": [
         {
           "file": "Parser.zig",
-          "line": 2047
+          "line": 2063
         },
         {
           "file": "Parser.zig",
-          "line": 2067
+          "line": 2083
         },
         {
           "file": "Parser.zig",
-          "line": 2077
+          "line": 2093
         }
       ],
       "fixtures": [

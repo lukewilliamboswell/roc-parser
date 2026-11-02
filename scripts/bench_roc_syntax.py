@@ -12,6 +12,11 @@ import subprocess
 import tempfile
 import time
 
+try:
+    from ._common import measured_allocations
+except ImportError:
+    from _common import measured_allocations
+
 ROOT = Path(__file__).resolve().parents[1]
 
 def source_identity(root=ROOT):
@@ -109,12 +114,7 @@ def baseline_failures(records, baseline, max_regression, max_allocation_regressi
 def allocations(binary, data):
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / 'input'; path.write_bytes(b'roc-syntax\n' + data)
-        result = subprocess.run([str(binary), 'replay', str(path)], cwd=tmp, capture_output=True, timeout=30)
-    import re
-    found = re.search(rb'ALLOCATION_DIAGNOSTIC allocations=(\d+)', result.stderr)
-    if result.returncode != 77 or not found:
-        raise RuntimeError(f'allocation diagnostic missing: {result.stderr[:500]!r}')
-    return int(found[1])
+        return measured_allocations(binary, path, timeout=30, cwd=tmp)
 
 def machine_identity():
     model = None

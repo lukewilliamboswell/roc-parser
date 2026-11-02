@@ -9,10 +9,14 @@ import hashlib
 import json
 import os
 import platform
-import re
 import statistics
 import subprocess
 from pathlib import Path
+
+try:
+    from ._common import measured_allocations
+except ImportError:
+    from _common import measured_allocations
 
 ROOT = Path(__file__).resolve().parents[1]
 ROC = Path(os.environ.get('ROC', 'roc'))
@@ -108,16 +112,8 @@ def main():
                 record = {'name': name, 'size': size, 'bytes': len(data), 'error': str(error)}
             if args.allocations:
                 try:
-                    diagnostic = subprocess.run([str(alloc_binary), 'replay', str(fixture)], capture_output=True, text=True, timeout=args.timeout)
-                    log = diagnostic.stdout + diagnostic.stderr
-                    (out / f'alloc-{name}-{size}.log').write_text(log)
-                    match = re.search(r'ALLOCATION_DIAGNOSTIC allocations=(\d+) result=(\w+)', log)
-                    if diagnostic.returncode != 77 or not match:
-                        record['allocation_error'] = f'Unexpected diagnostic result: exit {diagnostic.returncode}'
-                    else:
-                        record['allocation_calls'] = int(match[1])
-                        record['allocation_result'] = match[2]
-                except subprocess.TimeoutExpired as error:
+                    record['allocation_calls'] = measured_allocations(alloc_binary, fixture, timeout=args.timeout)
+                except (subprocess.TimeoutExpired, RuntimeError, ValueError, LookupError) as error:
                     record['allocation_error'] = str(error)
             records.append(record)
             print(json.dumps(record), flush=True)

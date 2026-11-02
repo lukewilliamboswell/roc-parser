@@ -1,5 +1,5 @@
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.26.0/GddgvsGjiNXrHFW6au5i5dUDbTs8FinQdrgE2Gqmw53t.tar.zst",
 	parser: "../../package/main.roc",
 }
 
@@ -16,11 +16,11 @@ main! = |_| {
 	var $running = True
 	while $running {
 		match Stdin.line!() {
-			Err(EndOfFile) => {
+			Err(EndOfInput) => {
 				$running = False
 			}
-			Err(StdinErr(err)) => {
-				return Err(StdinErr(err))
+			Err(problem) => {
+				return Err(problem)
 			}
 			Ok(line) => {
 				request : Try(Request, _)
@@ -35,13 +35,32 @@ main! = |_| {
 	Ok({})
 }
 
+## The bytes of a file that isn't valid UTF-8, which JSON can't carry.
+hex_bytes : Str -> List(U8)
+hex_bytes = |text| {
+	digits = text.to_utf8()
+	var $bytes = []
+	var $index = 0
+	while $index + 1 < digits.len() {
+		high = hex_digit(digits.get($index) ?? 0)
+		low = hex_digit(digits.get($index + 1) ?? 0)
+		$bytes = $bytes.append(high * 16 + low)
+		$index = $index + 2
+	}
+	$bytes
+}
+
+hex_digit : U8 -> U8
+hex_digit = |digit| if (digit >= 'a') digit - 'a' + 10 else digit - '0'
+
 respond : Request -> Str
 respond = |request| {
-	if request.mode != "file" and request.mode != "expr" and request.mode != "statement" and request.mode != "header" and request.mode != "repl" {
+	if request.mode != "file" and request.mode != "file-hex" and request.mode != "expr" and request.mode != "statement" and request.mode != "header" and request.mode != "repl" {
 		return Json.to_str({ version: 1.U64, id: request.id, error: "unsupported_mode" })
 	}
 	parsed = match request.mode {
 		"expr" => RocSyntax.parse_expr_str(request.source)
+		"file-hex" => RocSyntax.parse_bytes(hex_bytes(request.source))
 		"statement" => RocSyntax.parse_statement_str(request.source)
 		"header" => RocSyntax.parse_header_str(request.source)
 		"repl" => {

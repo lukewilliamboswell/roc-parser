@@ -1,7 +1,7 @@
 # Compiler reference worker
 
 This worker imports only Roc's tokenization/parser modules, pinned to compiler
-commit `0d4b0ab02f9239448d034db17b4e63051a7c57ae`, using Zig `0.17.0`.
+commit `f7bef6b38f23797eb34b291ced98af71ea37dd3b`, using Zig `0.17.0`.
 It does not invoke the compiler CLI or link compiler backends/LLVM libraries.
 
 Build from the repository root:
@@ -38,9 +38,10 @@ use stderr and a nonzero exit status, which the supervisor must handle.
 {"version":1,"id":"case-1","mode":"expr","source":"1 + 2 * 3"}
 ```
 
-`version` defaults to 1. `id` is a string; `mode` is `file`, `expr`, `header`, `statement`, or `repl`; `source` is
-a JSON string decoded as UTF-8. Unknown fields are ignored. Arbitrary invalid UTF-8
-source transport is not implemented in this version. There is a 16 MiB request-line
+`version` defaults to 1. `id` is a string; `mode` is `file`, `expr`, `header`, `statement`, `repl`, or `file-hex`; `source` is
+a JSON string decoded as UTF-8. Unknown fields are ignored. In `file-hex` mode `source`
+is the file's bytes in hexadecimal, for input that isn't valid UTF-8, and the file is
+parsed as in `file` mode. There is a 16 MiB request-line
 limit. Invalid JSON, unsupported modes/versions, and compiler crashes terminate
 the worker, so the supervisor must retain the current case and restart it.
 
@@ -61,7 +62,8 @@ Response fields:
 - `node_spans`: for valid input, the compiler AST `kind` and half-open byte
   `start`/`end` of each node the projection visits, children after their parent.
   It covers expressions, patterns, statements, types, record and pattern fields,
-  match branches, where clauses, type headers, file headers and exposed items.
+  match branches, where clauses, associated blocks, type headers, file headers,
+  exposed items, dependencies, platform requirements and symbol maps, and targets.
 
 Shape projection is intentionally limited, with unsupported syntax explicit:
 

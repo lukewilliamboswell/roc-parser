@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 
-REFERENCE_COMMIT = "0d4b0ab02f9239448d034db17b4e63051a7c57ae"
+REFERENCE_COMMIT = "f7bef6b38f23797eb34b291ced98af71ea37dd3b"
 ROOT = Path(__file__).resolve().parents[1]
 # These snapshot types all invoke the file parser in the pinned snapshot tool.
 FILE_TYPES = {"file", "snippet", "mono", "package", "platform", "app", "reporting"}

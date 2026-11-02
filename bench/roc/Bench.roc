@@ -1,7 +1,7 @@
+import cli.Monotonic
 import cli.OsStr
 import cli.Stdin
 import cli.Stdout
-import cli.Utc
 
 ## The timing loop shared by every format driver. It reads one document from
 ## stdin, parses it `iterations` times (the last argument), and prints one JSON
@@ -20,7 +20,7 @@ Bench :: {}.{
 		}
 		input = Str.from_utf8(Stdin.read_to_end!()?) ?? ""
 		repetitions = List.repeat({}, iterations)
-		start = Utc.now!()
+		start = Monotonic.now!()
 		var $checksum = 0.U64
 		var $successes = 0.U64
 		for _ in repetitions {
@@ -34,7 +34,7 @@ Bench :: {}.{
 				}
 			}
 		}
-		elapsed = Utc.delta_as_nanos(Utc.now!(), start)
+		elapsed = start.elapsed!().to_nanos()
 		Stdout.line!("{\"iterations\":${iterations.to_str()},\"elapsed_ns\":${elapsed.to_str()},\"successes\":${$successes.to_str()},\"checksum\":${$checksum.to_str()}}")?
 		Ok({})
 	}

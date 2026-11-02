@@ -210,6 +210,7 @@ fn typeListShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const p
 }
 fn whereShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, collection: ?parse.AST.Collection.Idx, depth: usize) Allocator.Error!std.json.Value {
     const idx = collection orelse return .null;
+    try recordSpan(gpa, tokens, "where_clause", store.getCollection(idx).region);
     var out = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.whereClauseSlice(.{ .span = store.getCollection(idx).span })) |item_idx| {
         const item = store.getWhereClause(item_idx);
@@ -254,6 +255,7 @@ fn statementShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
             const projected_header = try array(gpa, &.{ string("type_header"), string(fieldName(tokenText(tokens, source, header.name))), try typeListShape(gpa, store, tokens, source, header.args, depth + 1) });
             var associated: std.json.Value = .null;
             if (value.associated) |block| {
+                try recordSpan(gpa, tokens, "associated", block.region);
                 var statements = std.array_list.Managed(std.json.Value).init(gpa);
                 for (store.statementSlice(block.statements)) |stmt_idx| try statements.append(try statementShape(gpa, store, tokens, source, stmt_idx, depth + 1));
                 associated = try array(gpa, &.{ string("associated"), .{ .array = statements } });
@@ -486,9 +488,11 @@ fn quotedTokenText(tokens: *const parse.tokenize.TokenizedBuffer, source: []cons
     return source[start..tokens.resolve(@min(end, tokens.tokens.len - 1)).end.offset];
 }
 fn dependenciesShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, collection: parse.AST.Collection.Idx, platform: ?parse.AST.RecordField.Idx) Allocator.Error!std.json.Value {
+    try recordSpan(gpa, tokens, "packages", store.getCollection(collection).region);
     var fields = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.recordFieldSlice(.{ .span = store.getCollection(collection).span })) |field_idx| {
         const field = store.getRecordField(field_idx);
+        try recordSpan(gpa, tokens, "dependency", field.region);
         var value: std.json.Value = switch (field.value) {
             .supplied => |expr| try shape(gpa, store, tokens, source, expr, 0),
             .punned, .unset => .null,
@@ -502,6 +506,7 @@ fn symbolMapShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const 
     var out = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.symbolMapEntrySlice(items)) |idx| {
         const item = store.getSymbolMapEntry(idx);
+        try recordSpan(gpa, tokens, "symbol_map_entry", item.region);
         const start = tokens.resolve(item.module orelse item.func).start.offset;
         const target = source[start..tokens.resolve(item.func).end.offset];
         try out.append(try array(gpa, &.{ string("symbol_mapping"), string(quotedTokenText(tokens, source, item.symbol)), string(target) }));
@@ -537,13 +542,17 @@ fn targetValueShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *cons
 }
 fn targetsShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const parse.tokenize.TokenizedBuffer, source: []const u8, idx: parse.AST.TargetsSection.Idx) Allocator.Error!std.json.Value {
     const section = store.getTargetsSection(idx);
+    try recordSpan(gpa, tokens, "targets_section", section.region);
     var entries = std.array_list.Managed(std.json.Value).init(gpa);
     if (section.inputs_dir) |token| try entries.append(try array(gpa, &.{ string("target_inputs_directory"), try array(gpa, &.{ string("string"), string(quotedTokenText(tokens, source, token)) }) }));
     for (store.targetEntrySlice(section.entries)) |entry_idx| {
         const entry = store.getTargetEntry(entry_idx);
+        try recordSpan(gpa, tokens, "target_entry", entry.region);
+        try recordSpan(gpa, tokens, "target_config", store.getTargetConfig(entry.config).region);
         var fields = std.array_list.Managed(std.json.Value).init(gpa);
         for (store.targetConfigEntrySlice(store.getTargetConfig(entry.config).entries)) |field_idx| {
             const field = store.getTargetConfigEntry(field_idx);
+            try recordSpan(gpa, tokens, "target_config_entry", field.region);
             const value = store.getTargetConfigValue(field.value);
             const punned = value == .ident and value.ident == field.name;
             try fields.append(try array(gpa, &.{ string("target_field"), string(tokenText(tokens, source, field.name)), if (punned) .null else try targetValueShape(gpa, store, tokens, source, field.value, 0) }));
@@ -559,9 +568,11 @@ fn platformHeaderShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *c
     var requires = std.array_list.Managed(std.json.Value).init(gpa);
     for (store.requiresEntrySlice(value.requires_entries)) |entry_idx| {
         const entry = store.getRequiresEntry(entry_idx);
+        try recordSpan(gpa, tokens, "requires_entry", entry.region);
         var aliases = std.array_list.Managed(std.json.Value).init(gpa);
         for (store.forClauseTypeAliasSlice(entry.type_aliases)) |alias_idx| {
             const alias = store.getForClauseTypeAlias(alias_idx);
+            try recordSpan(gpa, tokens, "for_clause_alias", alias.region);
             const alias_name = try array(gpa, &.{ string("t_named"), try array(gpa, &.{ string("identifier"), string(tokenText(tokens, source, alias.alias_name)) }) });
             const rigid = try array(gpa, &.{ string("t_var"), string(tokenText(tokens, source, alias.rigid_name)) });
             try aliases.append(try array(gpa, &.{ string("required_type"), alias_name, rigid }));
@@ -599,8 +610,14 @@ fn headerShape(gpa: Allocator, store: *const parse.NodeStore, tokens: *const par
     }
     return array(gpa, &.{ string("header"), string(@tagName(header)), .{ .array = exposed } });
 }
-fn handle(gpa: Allocator, req: Request) !Response {
-    if (req.version != 1) return error.UnsupportedVersion;
+fn handle(gpa: Allocator, request: Request) !Response {
+    if (request.version != 1) return error.UnsupportedVersion;
+    var req = request;
+    if (std.mem.eql(u8, req.mode, "file-hex")) {
+        const bytes = try gpa.alloc(u8, req.source.len / 2);
+        req.source = try std.fmt.hexToBytes(bytes, req.source);
+        req.mode = "file";
+    }
     const mode = if (std.mem.eql(u8, req.mode, "repl")) try replParseMode(gpa, req.source) else req.mode;
     const is_file = std.mem.eql(u8, mode, "file");
     const is_header = std.mem.eql(u8, mode, "header");

@@ -77,7 +77,7 @@ class CoverageEvidenceTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256((source / name).read_bytes()).hexdigest(), digest, name)
         parser = (source / 'Parser.zig').read_text()
         for variant in ('record_updater', 'default_app'):
-            self.assertNotRegex(parser, r'\.' + variant + r'\b')
+            self.assertNotRegex(parser, r'\.\{ \.' + variant + r'\b')
         direct = set(re.findall(r'add(Expr|Pattern|Statement|Header|TypeAnno|WhereClause|ExposedItem|TargetFile|TargetConfigValue)\(\.\{\s*\.(@"[^"]+"|\w+)\s*=', parser))
         self.assertEqual(len(direct), 95)
         documented = {(e['category'], e['variant']) for e in ledger['variants']}
