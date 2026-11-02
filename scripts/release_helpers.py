@@ -2,8 +2,8 @@
 """Build, test and describe a roc-parser release (.github/workflows/release.yml).
 
     blueprint run release-validate -- --event workflow_dispatch --release-version 2.1.0 --default-branch main
-    release_helpers.py build --release-version 2.1.0 --output-dir .release/candidate
-    release_helpers.py test --release-version 2.1.0 --directory .release/candidate
+    blueprint run release-build -- --release-version 2.1.0 --output-dir .release/candidate
+    blueprint run release-test -- --release-version 2.1.0 --directory .release/candidate
     release_helpers.py make-release-notes --release-version 2.1.0 --bundle <hash>.tar.zst --output notes.md
     release_helpers.py package-examples --release-version 2.1.0 --bundle-url URL --output-dir dist
     release_helpers.py package-docs --release-version 2.1.0 --output-dir dist
@@ -45,21 +45,6 @@ SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subcommands = parser.add_subparsers(dest="command", required=True)
-
-    build = subcommands.add_parser("build", help="build every asset of a release, its SBOM and its notes")
-    build.add_argument("--release-version", required=True)
-    build.add_argument("--output-dir", type=Path, required=True)
-    build.add_argument("--notes", type=Path, help="the release notes (default: docs/releases/<version>.adoc, "
-                                                  "or the highest version's for the dry run)")
-    build.add_argument("--repo", default="")
-    build.add_argument("--github-output", type=Path)
-    build.set_defaults(func=cmd_build)
-
-    test = subcommands.add_parser("test", help="test the exact files `build` made")
-    test.add_argument("--release-version", required=True)
-    test.add_argument("--directory", type=Path, required=True)
-    test.add_argument("--repo", default="")
-    test.set_defaults(func=cmd_test)
 
     notes = subcommands.add_parser("make-release-notes", help="render docs/releases/<version>.adoc as the release body")
     notes.add_argument("--release-version", required=True)
@@ -504,85 +489,6 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------- validate, build and test
-
-
-def bundle_into(directory: Path) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    before = set(directory.glob("*.tar.zst"))
-    subprocess.run([str(ROOT / "scripts" / "bundle.roc"), "--", "--output-dir", str(directory)],
-                   check=True, cwd=ROOT)
-    created = sorted(set(directory.glob("*.tar.zst")) - before) or sorted(directory.glob("*.tar.zst"))
-    if len(created) != 1:
-        raise RuntimeError(f"expected one bundle in {directory}, found {[path.name for path in created]}")
-    return created[0]
-
-
-def release_files(directory: Path, version: str) -> dict[str, Path]:
-    """The files `build` makes, by role, checking that each is there once."""
-    dist = directory / "dist"
-    bundles = sorted(dist.glob("*.tar.zst"))
-    if len(bundles) != 1:
-        raise RuntimeError(f"expected one bundle in {dist}, found {[path.name for path in bundles]}")
-    files = {
-        "bundle": bundles[0],
-        "sbom": dist / f"{bundles[0].name}.spdx.json",
-        "examples": dist / asset_name("examples-zip", version),
-        "docs": dist / asset_name("docs-zip", version),
-        "pdf": dist / asset_name("pdf", version),
-        "notes": directory / "release-notes.md",
-    }
-    missing = [str(path) for path in files.values() if not path.is_file() or path.stat().st_size == 0]
-    if missing:
-        raise RuntimeError(f"release files are missing or empty: {', '.join(missing)}")
-    unexpected = sorted({path.name for path in dist.iterdir()} - {files[key].name for key in files if key != "notes"})
-    if unexpected:
-        raise RuntimeError(f"unexpected files in {dist}: {', '.join(unexpected)}")
-    return files
-
-
-def cmd_build(args: argparse.Namespace) -> int:
-    """Build every asset into <output-dir>/dist, the site into <output-dir>/site
-    and the rendered notes as <output-dir>/release-notes.md."""
-    version = args.release_version
-    semver_key(version)
-    notes = args.notes or (latest_notes() if version == DRY_RUN_VERSION else notes_path(version))
-    output = args.output_dir.resolve()
-    if output.exists():
-        shutil.rmtree(output)
-    dist = output / "dist"
-    bundle = bundle_into(dist)
-    url = release_asset_url(args.repo, version, bundle.name)
-    package_examples(ROOT / "examples", url, version, dist / asset_name("examples-zip", version), args.repo)
-    package_docs(version, dist, args.repo, os.environ.get("ROC", "roc"), site=output / "site")
-    sbom = release_security_assets.generate_sbom(bundle=bundle, release_version=version, output_dir=dist)
-    release_security_assets.verify_sbom(sbom=sbom, bundle=bundle, release_version=version)
-    write_release_notes(version, bundle.name, notes, output / "release-notes.md", args.repo)
-    release_files(output, version)
-    for path in sorted(dist.iterdir()):
-        print(f"{path.stat().st_size:>10}  {path.name}")
-    if args.github_output:
-        append_github_output(args.github_output, "bundle", bundle.name)
-    return 0
-
-
-def cmd_test(args: argparse.Namespace) -> int:
-    """Test the exact files of a release build: the SBOM describes the bundle,
-    the notes are rendered, and the examples archive runs against the bundle."""
-    import test_bundle_examples  # noqa: PLC0415  (imports this module)
-
-    version = args.release_version
-    files = release_files(args.directory.resolve(), version)
-    release_security_assets.verify_sbom(sbom=files["sbom"], bundle=files["bundle"], release_version=version)
-    body = files["notes"].read_text(encoding="utf-8")
-    if PLACEHOLDER in body or release_asset_url(args.repo, version, files["bundle"].name) not in body:
-        raise RuntimeError("the rendered release notes do not name the bundle's release URL")
-    with zipfile.ZipFile(files["docs"]) as docs:
-        prefix = files["docs"].name.removesuffix(".zip")
-        for required in ("index.html", "api/index.html", "404.html"):
-            if f"{prefix}/{required}" not in docs.namelist():
-                raise RuntimeError(f"{files['docs'].name} has no {required}")
-    return test_bundle_examples.main(["--bundle-path", str(files["bundle"]), "--archive", str(files["examples"]),
-                                      "--version", version, "--repo", args.repo])
 
 
 if __name__ == "__main__":

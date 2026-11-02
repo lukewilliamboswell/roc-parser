@@ -54,8 +54,8 @@ config = [
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("package"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
 	# The manual builds in Docker (.github/docs.Dockerfile).
-	Environment("docs", [Extend("package"), Expect(["docker"])]),
 	Environment("release", [Extend("package"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}"))]), Expect(["gh", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
+	Environment("docs", [Extend("release"), Expect(["docker"])]),
 	Environment("python", [Expect(["python3"])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python3", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
@@ -80,8 +80,8 @@ config = [
 	Task("test-examples-archive", [Use("package"), Run(["python3", "scripts/test_bundle_examples.py"])]),
 	Task("docs", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "package-docs", "--site", ".docs-out/release/site"])]),
 	Task("release-validate", [Use("release"), Run(["scripts/validate_release.roc", "--"])]),
-	Task("release-build", [Use("docs"), Run(["python3", "scripts/release_helpers.py", "build"])]),
-	Task("release-test", [Use("package"), Run(["python3", "scripts/release_helpers.py", "test"])]),
+	Task("release-build", [Use("docs"), Run(["scripts/release_assets.roc", "--", "build"])]),
+	Task("release-test", [Use("release"), Run(["scripts/release_assets.roc", "--", "test"])]),
 	Task("release-notes", [Use("package"), Run(["python3", "scripts/release_helpers.py", "make-release-notes"])]),
 	Task("combine-attestations", [Use("python"), Run(["python3", "scripts/release_security_assets.py", "combine-attestations"])]),
 ]

@@ -88,7 +88,7 @@ it to choose the compiler that evaluates `Blueprint.roc` itself.
 |`package/` |The library: `Parser`, `Utf8`, and one module per format
 |`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
-|`scripts/` |Roc check and package orchestration, plus Python oracle harnesses and release/documentation tooling awaiting migration
+|`scripts/` |Roc orchestration, independent Python oracle harnesses, and documentation and release-inventory helpers
 |`scripts/<format>/` |Conformance probe, cases and known-failures baseline for each format
 |`scripts/tests/` |Unit tests for the scripts, including the repository policy
 |`tests/spec.json` |What each example prints, checked on every pull request and shipped with each release's examples

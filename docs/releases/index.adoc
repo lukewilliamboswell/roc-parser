@@ -1,5 +1,5 @@
 [#releases]
-= Release notes
+= Published releases
 
 Use the https://github.com/lukewilliamboswell/roc-parser/releases[published release records] for package URLs, compiler requirements and upgrade instructions.
 Choose a final release for normal use; preview releases may change their APIs.

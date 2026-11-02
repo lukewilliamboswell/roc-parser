@@ -4,7 +4,10 @@ ReleasePlan := [].{
 	Request : { version : Str, dry_run : Bool, prerelease : Bool }
 
 	options : List(Str) -> Try(Options, Str)
-	options = |args| parse_options(args, [])
+	options = |args| options_for(args, allowed)
+
+	options_for : List(Str), List(Str) -> Try(Options, Str)
+	options_for = |args, names| parse_options(args, [], names)
 
 	option : Options, Str, Str -> Str
 	option = |entries, name, fallback| entries.keep_if(|entry| entry.name == name).last().map_ok(|entry| entry.value) ?? fallback
@@ -61,12 +64,12 @@ ReleasePlan := [].{
 
 allowed = ["--release-version", "--default-branch", "--github-output", "--event", "--ref", "--repo"]
 
-parse_options = |args, found| match args {
+parse_options = |args, found, names| match args {
 	[] => Ok(found)
 	[name, .. as rest] => match name.split_first("=") {
-		Ok({ before, after }) if allowed.contains(before) => parse_options(rest, found.append({ name: before, value: after }))
+		Ok({ before, after }) if names.contains(before) => parse_options(rest, found.append({ name: before, value: after }), names)
 		_ => match rest {
-			[value, .. as more] if allowed.contains(name) => parse_options(more, found.append({ name, value }))
+			[value, .. as more] if names.contains(name) => parse_options(more, found.append({ name, value }), names)
 			_ => Err("unknown option or missing value: ${name}")
 		}
 	}

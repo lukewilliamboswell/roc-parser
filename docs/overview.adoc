@@ -130,11 +130,9 @@ another, one of several alternatives, repeated, or with the result
 transformed. Each format module also exposes its parser as a `Parser` value,
 so your own parsers and the library's can be mixed.
 
+.Small parsers combine into larger ones
 [mermaid]
 ....
----
-title: Small parsers combine into larger ones
----
 flowchart LR
     Pieces["Utf8 parsers:<br/>codeunit, digits, string"] --> Combine["Parser combinators:<br/>keep, skip, one_of, many, map"]
     Combine --> Yours["Your parser<br/>for your format"]

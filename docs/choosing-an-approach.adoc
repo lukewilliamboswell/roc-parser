@@ -238,11 +238,9 @@ read. <<background>> explains these limits.
 
 The same choice as a sequence of questions:
 
+.Choosing how to read your input
 [mermaid]
 ....
----
-title: Choosing how to read your input
----
 flowchart TD
     Start([Text to read]) --> Simple{"One separator,<br/>no quoting or nesting?"}
     Simple -- yes --> Str["Use Str functions"]

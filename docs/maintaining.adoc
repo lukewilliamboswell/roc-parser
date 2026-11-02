@@ -92,15 +92,16 @@ These change only through a pull request a maintainer reviews:
 [#maintaining-deviations]
 == Repository tooling
 
-The check driver is an executable Roc script under `scripts/`, run with the
-fixed `roc-stable` compiler fetched by Blueprint. The package and independent
-Python, Ruby and Zig oracle harnesses use the separate `roc` on PATH.
-Other product orchestration and documentation tooling are being migrated.
-`blueprint run release-package -- build 0.0.1-dryrun` runs the released shared
-Roc utility from tools-0.9.0; `blueprint run release-package -- test-archive`
-tests its exact archive against the bundle. Both use `tests/spec.json`, also
-used by the existing example harness. These commands publish nothing. `scripts/tests/test_repository_policy.py` checks the source
-layout and workflow pins.
+The check, package, bundle, documentation-example and release drivers are
+executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
+compiler fetched by Blueprint. Package commands use the separate `roc` on
+`PATH`. The released `release-package` utility from tools-0.9.0 builds the
+bundle, examples archive, API archive and notes, and tests archived examples
+against the exact bundle. `release_assets.roc` composes it with this manual,
+its API site and the bundle's SBOM. These local commands publish nothing.
+Independent Python, Ruby and Zig oracle harnesses compare parser behavior;
+`scripts/tests/test_repository_policy.py` checks source layout and workflow
+pins. Both example runners use `tests/spec.json`.
 
 The manual builds as HTML and PDF with Asciidoctor in the pinned
 `.github/docs.Dockerfile` image. Use the documentation commands in
