@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@09f32e0e2d55365625fe01d6e02640680751f374
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@2f2a1294ad903dc71029ed2f6bc133a8837958f2
         with:
           install-nix: 'true'
       - id: nightly

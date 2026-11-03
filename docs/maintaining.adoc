@@ -74,7 +74,7 @@ These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
   the reviewed revision `8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-  (`tools-0.9.1`), and `scripts/tests/test_repository_policy.py` fails if a
+  (`tools-0.10.0`), and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
@@ -97,7 +97,7 @@ These change only through a pull request a maintainer reviews:
 The check, package, bundle, documentation-example and release drivers are
 executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
 compiler fetched by Blueprint. Package commands use the separate `roc` on
-`PATH`. The released `release-package` utility from tools-0.9.1 builds the
+`PATH`. The released `release-package` utility from tools-0.10.0 builds the
 bundle, examples archive, API archive and notes, and tests archived examples
 against the exact bundle. The shared release workflow composes it with the
 manual and the bundle's SBOM. These local commands publish nothing.
@@ -107,7 +107,7 @@ or compiler fixture that must use the floating nightly. The policy check rejects
 unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
 The shared working-tree and archive checks both use `tests/spec.json`.
 
-The manual builds as HTML and PDF with `roc-docs` from tools-0.9.1. Blueprint
+The manual builds as HTML and PDF with `roc-docs` from tools-0.10.0. Blueprint
 fetches the native binary and checks its digest against `Blueprint.lock`. Use
 the documentation commands in <<contributing>> to reproduce the build.
 
@@ -134,10 +134,12 @@ major release.
 roc bump --old https://github.com/lukewilliamboswell/roc-parser/releases/download/<latest>/<hash>.tar.zst package/main.roc
 ----
 +
-The release workflow runs the same comparison with `--expect <version>` and
-stops when the version understates the change. `roc bump` needs both the
-latest release and the working tree to compile with the latest nightly; when it
-cannot compare them, the release stops too.
+The shared release gate accepts a requested major greater than the latest
+final major before API extraction: every possible API change fits that bump.
+For a same-major release, it runs `roc bump --expect <version>` and stops if
+the comparison fails or understates the change. Compilation, the full package
+checks and exact release-candidate tests remain required for every release.
+The build allows 75 minutes so the full checks complete before assembly.
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
@@ -247,11 +249,10 @@ reports which are in place:
   a version tag can never move.
 * *"Allow GitHub Actions to create and approve pull requests"* is off. No
   workflow opens a pull request.
-* *The Actions allowlist* permits each exact full-SHA action and reusable
-  workflow reference in `.github/workflows/`, including the nested actions of
-  the pinned shared workflows. Review those immutable sources when updating
-  the allowlist; a bare action name does not match a pinned reference.
-
+* *Actions permissions* allow this owner's actions and reusable workflows,
+  GitHub-authored actions and the configured external exceptions. GitHub requires
+  action SHA pins; the repository policy also checks full SHA pins for reusable
+  workflows. Review the immutable shared sources when updating those pins.
 
 == Security reports
 
