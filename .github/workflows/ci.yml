@@ -1,10 +1,9 @@
 name: CI
 
 # The working tree on the latest Roc nightly. `blueprint run check` holds
-# everything a pull request must pass (scripts/check.py lists it): the
+# everything a pull request must pass (scripts/check_all.roc lists it): the
 # package's checks and tests, the examples against tests/examples.json, a
-# release dry run against a loopback bundle, the manual's examples, the API
-# audit, and smoke runs of every fuzz target, conformance review, oracle and
+# release dry run against a loopback bundle, the manual's examples, and smoke runs of every fuzz target, conformance review, oracle and
 # benchmark. Long campaigns run in fuzz.yml and bench.yml. The `check` job is
 # the required status check.
 on:
@@ -29,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@2f2a1294ad903dc71029ed2f6bc133a8837958f2
         with:
           cache: 'true'
           cache-workload: check
@@ -38,9 +37,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
-      - uses: roc-lang/setup-roc@f5a74bf90aa694b43ab4a7cbfdb19273bc6aa697
+      - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
         with:
-          version: nightly-new-compiler
+          version: nightly
           nightly-tag: ${{ steps.nightly.outputs.tag }}
       - run: blueprint run check
       - name: Upload evidence and reproducers

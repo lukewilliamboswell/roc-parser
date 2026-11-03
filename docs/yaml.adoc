@@ -8,6 +8,8 @@ endif::[]
 
 [#yaml]
 = Read YAML configuration and frontmatter
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to read a YAML configuration file or the frontmatter
 at the top of a Markdown post into a Roc value, pull settings out of it, and
@@ -177,7 +179,7 @@ include::examples/yaml-guide.expected[lines=2..3]
 In a `Yaml` tree, an unquoted value is resolved with the YAML 1.2 core
 schema. Anything that matches none of these forms is `Text`:
 
-[cols="1,2"]
+[cols="1,2",options="header"]
 |===
 |Written as |Becomes
 
@@ -301,7 +303,7 @@ reproduces the input byte for byte, including malformed bytes.
 
 The scanner distinguishes these token kinds:
 
-[cols="1,3"]
+[cols="1,3",options="header"]
 |===
 |Source |Kinds
 

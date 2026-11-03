@@ -1,20 +1,88 @@
 (
 	(fetched ((
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "dcb99abdf17d062246c05e394357ad682b883a6bcff7b2e581e20564ea88ffc4")
+		(size 70463871)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-linux_x86_64-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-stable")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "aa6339579730fcea4753940bec21f5d8cf8be8e25659ec001abccbc3463a60b2")
+		(size 67646302)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-macos_apple_silicon-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "release-package")
+		(obtained Published)
+		(served ())
+		(sha256 "09bb760e2ce499affe8210a3940387773569f6583f40fd7898d15b5df56f472d")
+		(size 3127224)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.0/release-package-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.10.0")) (
+		(name "release-package")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "c14b69b4cb9f23d5a9521749321084ac44dd992af7ac44d1648b1add9dfb2eaa")
+		(size 1879584)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.0/release-package-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.10.0")) (
+		(name "blueprint-sbom")
+		(obtained Published)
+		(served ())
+		(sha256 "98d8587924b7a5d2eca348dfd957095c640e61975d00a62879bdf3e1f5d18f31")
+		(size 7686112)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.11.0")) (
+		(name "blueprint-sbom")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "772d4cdb6e99b71ccdbf8be97cb3b78cf85f70783fada4e68f2e1c6d2886bf84")
+		(size 6038592)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/blueprint-sbom-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.11.0")) (
 		(name "zig")
 		(obtained Computed)
+		(served ("ziglang.org"))
 		(sha256 "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026")
 		(size 57332648)
 		(system "x86_64-linux")
-		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"))) (
+		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"))
+		(witness "")) (
 		(name "zig")
 		(obtained Computed)
+		(served ("ziglang.org"))
 		(sha256 "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a")
 		(size 53985220)
 		(system "aarch64-darwin")
-		(urls ("https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz")))))
+		(urls ("https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz"))
+		(witness "")) (
+		(name "roc-docs")
+		(obtained Published)
+		(served ())
+		(sha256 "fde6e142f1eef4cdfefb5f7f21df8ac4492bb8c35f113cbd1f2580de05e25b92")
+		(size 35424464)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.0/roc-docs-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.10.0")) (
+		(name "roc-docs")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "84943941fe8571bce0426471ffc0cce4fb7bcdf8f35f399ae18c46c7130c600b")
+		(size 30391792)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.0/roc-docs-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.10.0"))))
 	(format (
-		(major 1)
-		(minor 1)))
+		(major 2)
+		(minor 0)))
 	(hints ((
 		(provider "nix")
 		(value (Attrs ((
@@ -31,19 +99,7 @@
 						(name "flake")
 						(value (Bool true))))))))))) (
 				(name "overlays")
-				(value (Attrs ((
-					(name "package")
-					(value (List ()))) (
-					(name "oracles")
-					(value (List ()))) (
-					(name "docs")
-					(value (List ()))) (
-					(name "release")
-					(value (List ()))) (
-					(name "python")
-					(value (List ()))) (
-					(name "bench")
-					(value (List ()))))))))))) (
+				(value (Attrs ()))))))) (
 			(name "graph")
 			(value (Attrs ((
 				(name "root")
@@ -57,15 +113,15 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1792502884))) (
+							(value (Int 1793341285))) (
 							(name "narHash")
-							(value (Str "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA="))) (
+							(value (Str "sha256-Y1CiZ4SoBUjLQyQM/pY+rS2dXD3CHLPstF0lmOc73D4="))) (
 							(name "owner")
 							(value (Str "NixOS"))) (
 							(name "repo")
 							(value (Str "nixpkgs"))) (
 							(name "rev")
-							(value (Str "02c087f3fe673c9e317f206a627cb6b910336dbe"))) (
+							(value (Str "1c89083e451e891152365b799595cf7790a43325"))) (
 							(name "type")
 							(value (Str "github"))))))) (
 						(name "original")
@@ -90,12 +146,16 @@
 		(build_sources ())
 		(inputs ())
 		(overlays ())
+		(resolvers ())
 		(sources ((
 			(name "nix")
-			(provider (NixPackages "github:NixOS/nixpkgs/nixos-unstable")))))))
+			(provider (
+				(name "nix")
+				(ref "github:NixOS/nixpkgs/nixos-unstable")
+				(version 1))))))))
 	(sources ((
-		(digest "sha256:228362b0a7066d48dd778e6a0aacb018c098999e449e4c5ecef2c8234156c0d0")
+		(digest "sha256:6350a26784a80548cb43240cfe963ead2d9d5c3dc21cb3ecb45d2598e73bdc3e")
 		(name "nix")
 		(provider "nix")
 		(ref "github:NixOS/nixpkgs/nixos-unstable")
-		(rev "02c087f3fe673c9e317f206a627cb6b910336dbe")))))
+		(rev "1c89083e451e891152365b799595cf7790a43325")))))

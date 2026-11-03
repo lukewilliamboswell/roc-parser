@@ -58,52 +58,12 @@ interpolation fixtures rather than as a standalone expression.
 |Platform combinations and all invalid ordering/duplicate contexts are not exhaustively enumerated by one fixture per variant.
 |===
 
-The independent production audit generated 2,635 branch-composition cases
-against `0d4b0ab`, the previous reference, including both valid and invalid inputs. Its retained
-regressions are in `grammar-fixtures.json`. Subsequent mutation campaigns found
-additional dispatch and span-context defects, so this ledger intentionally does
-not equate that campaign, enum coverage, or a green snapshot corpus with grammar
-completeness. Durable reports contain the actual source identity and outcomes.
 The parser bounds nesting at 128, syntax construction at 1,048,576 tokens,
 and diagnostics at 256. The oracle JSONL request and host response limits are
 16 MiB protocol bounds, not a parser source-size guarantee. Resource-limited
 inputs cannot count as accepted grammar coverage.
 
 == Variant evidence
-
-== Executed variant witnesses
-
-An independent audit ran all four differential fixture suites and all 2,191
-upstream inputs: 3,052 inputs in total, including 2,599 oracle-accepted and 453
-oracle-rejected sources. There were zero token, normalized structure, acceptance,
-or source-invariant differences against the candidate used for that audit.
-These counts include the 18 explicit inventory fixtures added after the first
-trace audit; later edits must establish their own results.
-
-A scratch build of the same oracle logged the exact union tag whenever its
-existing structural projection read an expression, statement, pattern, type,
-header, where clause, exposed item, target file, or configuration value. It
-used the immutable compiler sources unchanged. This directly witnessed 95
-valid variant discriminators on accepted, structurally matching inputs.
-`Expr.string_part` is the remaining constructed valid discriminator: the
-`stringShape` function reads it directly while emitting text segments rather
-than invoking the general expression projector. Its constructor is
-`Parser.zig:5012`; string and interpolation fixtures exercise that branch.
-
-Thus all 96 parser-constructed valid discriminators have a concrete executable
-witness. Nine `malformed` discriminators belong to rejection/recovery paths;
-their fixture references establish rejection and source invariants, not equality
-of recovered compiler and candidate tree topology. Two unconstructed compiler
-representations complete the 107-entry inventory. The per-variant references
-below and machine-readable source receipts make this finite accounting
-reviewable. They do not establish that every branch leading to a discriminator,
-its flags, or all nested/contextual combinations have been exhausted.
-
-The projection switches for all nine unions are exhaustive in Zig. Accepted
-unknown/depth-limited projections still fail the structural gate, even when both
-workers emit the same unknown marker. Runtime enumeration and source receipts
-complement these compile-time checks; they do not replace independent expected
-models or oracle differential mutations.
 
 == Open production review
 

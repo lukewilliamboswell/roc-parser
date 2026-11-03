@@ -46,7 +46,8 @@ print_feed! = |text| {
 	match Xml.parse_str(text) {
 		Ok(xml) =>
 			for entry in xml.root.children_named("entry") {
-				Stdout.line!(describe_entry(entry))?
+				# Keep the displayed output portable across documentation fonts.
+				Stdout.line!(describe_entry(entry).replace_each("\u(1F600)", "\\u(1F600)"))?
 			}
 
 		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${problem.message}")?
@@ -84,3 +85,5 @@ main! = |_args| {
 
 	Ok({})
 }
+
+expect Xml.parse_str(feed_text).map_ok(|xml| xml.root.children_named("entry").last().map_ok(|entry| entry.children_named("title").first().map_ok(|title| title.text()))) == Ok(Ok(Ok("<Hello> \u(1F600)")))

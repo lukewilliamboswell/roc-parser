@@ -6,6 +6,8 @@ endif::[]
 
 [#asciidoc]
 = Reading AsciiDoc
+:idprefix: _
+:idseparator: _
 
 `AsciiDoc` parses an in-memory string into a document title and typed blocks,
 and renders embedded HTML. Paragraphs retain their inline source. Parsing

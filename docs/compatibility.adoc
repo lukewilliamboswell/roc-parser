@@ -8,6 +8,8 @@ endif::[]
 
 [#compatibility]
 = Compatibility
+:idprefix: _
+:idseparator: _
 
 This chapter is for readers choosing a release, upgrading, or matching a Roc
 compiler to the package. It states which compiler each release is built

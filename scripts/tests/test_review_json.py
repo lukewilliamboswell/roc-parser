@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import random
+import shutil
 import re
 import subprocess
 import sys
@@ -510,13 +511,9 @@ class DataTests(unittest.TestCase):
         self.assertEqual(spdx3["options"], {"duplicates": "CollapseIdentical"})
 
     def test_workflow_runs_the_review(self):
-        from scripts import check_conformance as conformance
-        for name, command, fast in (("json", "scripts/review_json.py check --baseline scripts/json/known-failures.json", True),
-                                    ("json-robustness", "scripts/review_json.py campaign --smoke", False)):
-            entry = conformance.REVIEWS[name]
-            self.assertEqual(" ".join(entry.command), command)
-            self.assertEqual(entry.requirements, ())
-            self.assertEqual(entry.fast, fast)
+        plan = (review.ROOT / "scripts/src/HarnessPlan.roc").read_text()
+        self.assertIn('{ name: "json", args: ["scripts/review_json.py", "check", "--baseline", "scripts/json/known-failures.json"], fast: True }', plan)
+        self.assertIn('{ name: "json-robustness", args: ["scripts/review_json.py", "campaign", "--smoke"], fast: False }', plan)
         workflow = (review.ROOT / ".github" / "workflows" / "fuzz.yml").read_text()
         self.assertIn("          - json\n", workflow)
         self.assertIn("          - json-robustness\n", workflow)
@@ -555,3 +552,48 @@ class CampaignTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("roc"), "requires the current package compiler")
+class BoundedJsonTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.binary = str(Path(cls.temp.name) / "bounded-json")
+        result = subprocess.run(["roc", "build", "--no-cache", "scripts/json/bounded.roc", "--output=" + cls.binary],
+                                cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, timeout=180)
+        if result.returncode:
+            raise AssertionError(result.stdout + result.stderr)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def run_json(self, text, budget, indent=0):
+        result = subprocess.run([self.binary, str(budget), str(indent)], input=text,
+                                capture_output=True, text=True, timeout=180)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_large_inventory_preserves_every_component_and_exact_number(self):
+        # A complete inventory larger than the downstream codec's old 8 MiB cap.
+        inventory = {"components": [{"id": "component-" + str(i), "description": "x" * 5400,
+                                   "serial": 184467440737095516160000 + i} for i in range(1698)],
+                     "relationships": [{"from": i % 1698, "to": (i + 1) % 1698} for i in range(4079)]}
+        text = json.dumps(inventory, ensure_ascii=False, separators=(",", ":"))
+        self.assertGreater(len(text.encode()), 8 * 1024 * 1024)
+        actual = self.run_json(text, 16 * 1024 * 1024)
+        self.assertEqual(actual, text + "\n")
+        self.assertEqual(json.loads(actual), inventory)
+        self.assertEqual(self.run_json(text, 8 * 1024 * 1024), "parse limit or invalid JSON\n")
+
+    def test_exact_escaped_and_indented_output_budget(self):
+        rng = random.Random(82)
+        for _ in range(30):
+            inventory = {"é\\\n": [rng.choice([None, True, 184467440737095516160000, "é\\\n\t\x01"]) for _ in range(5)]}
+            compact = json.dumps(inventory, ensure_ascii=False, separators=(",", ":"))
+            pretty = json.dumps(inventory, ensure_ascii=False, indent=2)
+            with self.subTest(inventory=inventory):
+                budget = len(pretty.encode())
+                self.assertEqual(self.run_json(compact, budget, 2), pretty + "\n")
+                self.assertEqual(self.run_json(compact, budget - 1, 2), "write limit or invalid JSON\n")

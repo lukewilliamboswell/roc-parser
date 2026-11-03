@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "runtime_exceptions": [
+    {
+      "runtime": "Python 3, unittest",
+      "contract": "Independent regression tests, fixture audits and oracle build contracts; they do not publish artifacts.",
+      "paths": [
+        "scripts/roc_syntax/oracle/test_build.py",
+        "scripts/tests/test_asciidoc_complete.py",
+        "scripts/tests/test_asciidoc_models.py",
+        "scripts/tests/test_asciidoc_mutations.py",
+        "scripts/tests/test_asciidoc_oracle.py",
+        "scripts/tests/test_asciidoc_performance.py",
+        "scripts/tests/test_asciidoc_performance_cached.py",
+        "scripts/tests/test_asciidoc_performance_protocol.py",
+        "scripts/tests/test_asciidoc_verbatim_fixtures.py",
+        "scripts/tests/test_bench.py",
+        "scripts/tests/test_bench_roc_syntax.py",
+        "scripts/tests/test_bench_yaml.py",
+        "scripts/tests/test_check.py",
+        "scripts/tests/test_check_driver.py",
+        "scripts/tests/test_check_literals.py",
+        "scripts/tests/test_check_roc_syntax.py",
+        "scripts/tests/test_check_roc_syntax_corpus.py",
+        "scripts/tests/test_compare_roc_syntax_performance.py",
+        "scripts/tests/test_doc_examples_driver.py",
+        "scripts/tests/test_examples_contract.py",
+        "scripts/tests/test_harness_drivers.py",
+        "scripts/tests/test_import_roc_syntax_snapshots.py",
+        "scripts/tests/test_mutate_roc_syntax.py",
+        "scripts/tests/test_package_driver.py",
+        "scripts/tests/test_repository_policy.py",
+        "scripts/tests/test_review_json.py",
+        "scripts/tests/test_review_roc_syntax.py",
+        "scripts/tests/test_review_yaml.py",
+        "scripts/tests/test_roc_syntax_coverage.py",
+        "scripts/tests/test_roc_syntax_model_cases.py",
+        "scripts/tests/test_roc_syntax_pins.py",
+        "scripts/tests/test_roc_syntax_recovery.py",
+        "scripts/tests/test_run_fuzz.py",
+        "scripts/tests/test_source_inventory.py"
+      ]
+    },
+    {
+      "runtime": "Python 3 and the pinned reference toolchain",
+      "contract": "Install or build the independent oracle, verify supplier bytes or build identities, and expose its protocol to parser harnesses.",
+      "paths": [
+        "scripts/asciidoc/setup_oracle.py",
+        "scripts/roc_syntax/build_oracle.py",
+        "scripts/setup_oracles.py"
+      ]
+    },
+    {
+      "runtime": "Python 3 and requirements pinned beside each oracle",
+      "contract": "Independent parsing, compiler fixture, fuzz and benchmark harnesses own generated inputs, reference comparisons, subprocess measurement and failure evidence. Python is their test runtime; repository checks, release assembly and documentation generation are Roc entry points.",
+      "paths": [
+        "scripts/_common.py",
+        "scripts/asciidoc/generate_standard_tree.py",
+        "scripts/asciidoc/models.py",
+        "scripts/asciidoc/mutations.py",
+        "scripts/bench.py",
+        "scripts/bench_python.py",
+        "scripts/bench_roc_syntax.py",
+        "scripts/bench_yaml.py",
+        "scripts/check_asciidoc_performance.py",
+        "scripts/check_asciidoc_performance_cached.py",
+        "scripts/check_literals.py",
+        "scripts/check_roc_syntax.py",
+        "scripts/check_roc_syntax_corpus.py",
+        "scripts/check_roc_syntax_recovery.py",
+        "scripts/compare_roc_syntax_performance.py",
+        "scripts/import_roc_syntax_snapshots.py",
+        "scripts/markdown/gen_entities.py",
+        "scripts/markdown/import_specs.py",
+        "scripts/mutate_roc_syntax.py",
+        "scripts/review_asciidoc.py",
+        "scripts/review_csv.py",
+        "scripts/review_http.py",
+        "scripts/review_json.py",
+        "scripts/review_markdown.py",
+        "scripts/review_markdown_blocks.py",
+        "scripts/review_roc_syntax.py",
+        "scripts/review_xml.py",
+        "scripts/review_yaml.py",
+        "scripts/roc_syntax/model_cases.py",
+        "scripts/run_fuzz.py"
+      ]
+    },
+    {
+      "runtime": "Node.js with Puppeteer and Chromium on the optional audit host",
+      "contract": "Independent browser audit of text contrast, local resources and responsive layout; it is not required to generate documentation.",
+      "paths": [
+        "scripts/check_manual_render.cjs"
+      ]
+    },
+    {
+      "runtime": "Ruby with the hash-pinned Asciidoctor gem",
+      "contract": "Bounded independent Asciidoctor reference process used by parser differential tests.",
+      "paths": [
+        "scripts/asciidoc/oracle.rb",
+        "scripts/asciidoc/performance_oracle.rb"
+      ]
+    },
+    {
+      "runtime": "Zig 0.17.0 from Blueprint.lock",
+      "contract": "Adapter and build definition for the pinned compiler parser oracle.",
+      "paths": [
+        "scripts/roc_syntax/oracle/build.zig",
+        "scripts/roc_syntax/oracle/main.zig"
+      ]
+    }
+  ],
+  "nightly_compiler_apps": [
+    "scripts/asciidoc/performance.roc",
+    "scripts/asciidoc/probe.roc",
+    "scripts/csv/probe.roc",
+    "scripts/http/probe.roc",
+    "scripts/json/bounded.roc",
+    "scripts/json/probe.roc",
+    "scripts/markdown/blocks/probe.roc",
+    "scripts/markdown/probe.roc",
+    "scripts/roc_syntax/probe.roc",
+    "scripts/roc_syntax/repros/var-join.roc",
+    "scripts/xml/probe.roc",
+    "scripts/yaml/benchmark.roc",
+    "scripts/yaml/probe.roc"
+  ]
+}

@@ -16,7 +16,7 @@ import parser.Utf8
 ## - `{"status":"ok","value":TREE,"compact":W,"pretty":W,"sorted":W,"parser_agrees":B}`
 ##   where TREE is null, true, false, a string, `["number","<lexeme>"]`,
 ##   `["array",[TREE,...]]` or `["object",[[key,TREE],...]]`, and each W is the
-##   written string or `{"error":"InvalidNumber"|"DuplicateKey"|"TooDeep","value":...}`;
+##   written string or `{"error":"InvalidNumber"|"DuplicateKey"|"TooDeep"|"TooLarge","value":...}`;
 ## - `{"status":"error","line":L,"column":C,"message":M,"parser_agrees":B}`;
 ## - for input that is not UTF-8, the result of `JsonValue.parser_with`, with
 ##   `"offset"` added to an error;
@@ -198,12 +198,13 @@ accepted = |value, tree, flags, agrees| {
 	"{\"status\":\"ok\",\"value\":${tree},\"compact\":${compact},\"pretty\":${pretty},\"sorted\":${sorted},\"parser_agrees\":${boolean(agrees)}}"
 }
 
-written : Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep]) -> Str
+written : Try(Str, [InvalidNumber(Str), DuplicateKey(Str), TooDeep, TooLarge(U64)]) -> Str
 written = |result| {
 	match result {
 		Ok(text) => json_string(text)
 		Err(InvalidNumber(lexeme)) => "{\"error\":\"InvalidNumber\",\"value\":${json_string(lexeme)}}"
 		Err(DuplicateKey(key)) => "{\"error\":\"DuplicateKey\",\"value\":${json_string(key)}}"
+		Err(TooLarge(limit)) => "{\"error\":\"TooLarge\",\"value\":${limit.to_str()}}"
 		Err(TooDeep) => "{\"error\":\"TooDeep\",\"value\":null}"
 	}
 }

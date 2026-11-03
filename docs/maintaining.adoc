@@ -4,10 +4,12 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
-:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8a6c914fa8400c9d1f5a3815ab06e06687d58148
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
 
 [#maintaining]
 = Compiler, releases, settings and security reports
+:idprefix: _
+:idseparator: _
 
 This chapter is for maintainers with write access to the repository. It covers
 which Roc compiler the repository uses, how a release is cut and what it
@@ -71,12 +73,12 @@ reproduce a past combination; such a run never opens or closes the issue.
 These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
-  the reviewed revision `8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-  (`tools-0.2.0`), and `scripts/tests/test_repository_policy.py` fails if a
+  the reviewed revision `8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
+  (`tools-0.10.0`), and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
-* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.6.0, by its
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.11.0, by its
   platform URL, and `actions/setup-blueprint` installs the binary of that
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
@@ -90,29 +92,27 @@ These change only through a pull request a maintainer reviews:
   `scripts/roc_syntax/build_oracle.py`.
 
 [#maintaining-deviations]
-== Declared deviations from the model
+== Repository tooling
 
-roc-parser differs from the roc-automation model in these ways, on purpose:
+The check, package, bundle, documentation-example and release drivers are
+executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
+compiler fetched by Blueprint. Package commands use the separate `roc` on
+`PATH`. The released `release-package` utility from tools-0.10.0 builds the
+bundle, examples archive, API archive and notes, and tests archived examples
+against the exact bundle. The shared release workflow composes it with the
+manual and the bundle's SBOM. These local commands publish nothing.
+Independent Python, Ruby and Zig oracle harnesses compare parser behavior.
+`scripts/automation-policy.json` lists every runtime exception and each probe
+or compiler fixture that must use the floating nightly. The policy check rejects
+unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
+The shared working-tree and archive checks both use `tests/spec.json`.
 
-* *The automation is Python.* The model writes product-specific automation as
-  Roc scripts run by a fixed `roc-stable` compiler. roc-parser keeps its
-  automation in Python under `scripts/`, about 45 scripts and 35 test files.
-  They include every conformance oracle, which compares the package with a
-  reference implementation that is itself a Python, Ruby or Zig program. The Blueprint
-  tasks run these scripts, so there is no `roc-stable` environment and no
-  script carries a `roc` header field. `scripts/tests/test_repository_policy.py`
-  keeps the automation in Python under `scripts/`, with no shell scripts.
-* *The manual is built with Asciidoctor.* `scripts/build_manual.py` renders the
-  manual as HTML and PDF in Docker (`.github/docs.Dockerfile`), rather than with
-  the model's shared `roc-docs` renderer. Moving to the shared renderer is
-  planned for a later change, once
-  https://github.com/lukewilliamboswell/roc-automation/issues/70[roc-automation#70]
-  is resolved. Until then the release notes are linked from the manual rather
-  than included in it.
-* *Unreleased notes have their own file.* Changes that no release has yet are
-  described in `docs/releases/unreleased.adoc`, which the first such change
-  creates and the pull request that prepares a release renames to
-  `docs/releases/<version>.adoc`.
+The manual builds as HTML and PDF with `roc-docs` from tools-0.10.0. Blueprint
+fetches the native binary and checks its digest against `Blueprint.lock`. Use
+the documentation commands in <<contributing>> to reproduce the build.
+
+Write upcoming release changes in `docs/releases/unreleased.adoc`; rename that
+file to the chosen version when preparing its release record.
 
 [#maintaining-release]
 == Release a new version
@@ -121,6 +121,7 @@ Releases follow semantic versioning: a release that changes the result of a
 public function on any input, or removes or changes a public signature, is a
 major release.
 
+[#_before_you_start_2]
 === Before you start
 
 . Confirm that `main` is green: `CI`, and the `Release` dry run of the last
@@ -133,14 +134,12 @@ major release.
 roc bump --old https://github.com/lukewilliamboswell/roc-parser/releases/download/<latest>/<hash>.tar.zst package/main.roc
 ----
 +
-The release workflow runs the same comparison with `--expect <version>` and
-stops when the version understates the change. `roc bump` needs both the
-latest release and the working tree to compile with the latest nightly; when it
-cannot compare them, the release stops too. The one exception is a major
-release: no change can understate it, so it continues with a warning when
-`roc bump` cannot compile the latest release or read its API
-(https://github.com/roc-lang/roc/issues/12506[roc#12506]). 3.0.0 was released
-this way, because 2.0.0 no longer compiles.
+The shared release gate accepts a requested major greater than the latest
+final major before API extraction: every possible API change fits that bump.
+For a same-major release, it runs `roc bump --expect <version>` and stops if
+the comparison fails or understates the change. Compilation, the full package
+checks and exact release-candidate tests remain required for every release.
+The build allows 75 minutes so the full checks complete before assembly.
 . Write the release notes as `docs/releases/<version>.adoc`, usually by renaming
   `docs/releases/unreleased.adoc`, and link them from
   `docs/releases/index.adoc`. Put the upgrade impact first. Show how to depend on
@@ -164,36 +163,20 @@ start the workflow; a mistake needs a new release, not an edit.
 Run the `Release` workflow
 ({src}/.github/workflows/release.yml[`release.yml`]) from the Actions tab on
 `main`, with `version` set to the new version, for example `2.1.0`, or
-`2.1.0-rc.4` for a release candidate. Each job calls one Blueprint task, and a
-job that can write runs no repository code:
+`2.1.0-rc.4` for a release candidate. The pinned roc-automation
+`release-package.yml` workflow validates the version, runs the checks, builds
+the package and tests the unchanged release candidate. It owns SBOM validation,
+attestations and publication. Its publishing jobs run no repository code.
 
-Validate the release:: Requires `main`, a version that has no tag or release,
-and its notes; runs `roc bump --expect` against the latest final release; and
-resolves the nightly that every later job uses (`blueprint run release-validate`).
-Check the release commit:: Runs `blueprint run check` on the release commit.
-Build the release:: Builds every file once (`blueprint run release-build`): the
-bundle, the examples archive pinned to the bundle's release URL, the
-documentation site and the PDF manual, the bundle's SPDX SBOM, and the
-rendered release notes.
-Test the exact release files:: Downloads those files, checks the SBOM against
-the bundle, and checks, builds and runs every case of the examples archive's
-`spec.json` against a loopback copy of the bundle, with an empty package cache
-(`blueprint run release-test`).
-Attest the release files:: Signs build provenance for every asset and an SBOM
-attestation for the bundle with `actions/attest`. It checks out nothing.
-Prepare the attestation asset:: Joins the two attestations into
-`<bundle>.intoto.jsonl` in a read-only job.
-Publish the release:: In the `release` environment, with `contents: write` and
-no checkout, hands the tested files and the rendered notes to roc-automation's
-`publish-release` action. It stages a draft at the tested commit, downloads
-every uploaded asset and compares it with the tested file, and only then
-publishes. A release candidate is published as a prerelease.
-Build and deploy the Pages site:: For a final release only, publishes the
-release's documentation site, built and tested above, to GitHub Pages.
+The `sbom-composition` task accounts for package source files and the reviewed
+Unicode inputs in `scripts/release/dependencies.json`. It checks archive
+members against checkout SHA-256 digests; the shared tools validate the graph
+and bind the sidecars to the actual bundle.
 
-Every pull request runs `Validate the release`, `Build the release` and `Test
-the exact release files` as a dry run, with the version `0.0.1-dry-run`, and
-publishes nothing.
+Every pull request runs the shared release workflow with `0.0.1-dryrun` and
+publishes nothing. A separate read-only job builds the manual and unmodified
+compiler API documentation using the release's resolved nightly. A final
+release deploys that site to GitHub Pages.
 
 === What a release contains
 
@@ -207,19 +190,19 @@ publishes nothing.
 | `roc-parser-examples-<version>.zip`
 | The examples, with their `parser` dependency pinned to the bundle's URL and
   nothing else changed, a README, and `spec.json`: what each example prints,
-  from `tests/examples.json`, in the form roc-automation's nightly
+  from `tests/spec.json`, in the form roc-automation's nightly
   compatibility runner reads.
 
 | `roc-parser-docs-<version>.zip`
-| The documentation site for the version: the manual at the root, the `roc docs`
-  API reference under `api/`, and the PDF. GitHub Pages serves the same files
-  for the latest final release.
+| The unmodified `roc docs` API reference, under the version directory.
+  The manual is a separate PDF asset; GitHub Pages serves the manual and API
+  reference together for the latest final release.
 
 | `roc-parser-<version>.pdf`
 | The manual as one PDF.
 
 | `<hash>.tar.zst.spdx.json`
-| An SPDX 2.3 SBOM bound to the bundle's SHA-256, naming the package's
+| An SPDX SBOM bound to the bundle's SHA-256, naming the package's
   dependencies, which Roc fetches by URL and the bundle does not contain.
 
 | `<hash>.tar.zst.intoto.jsonl`
@@ -256,32 +239,20 @@ The workflows rely on these settings, which a maintainer applies on GitHub;
 roc-automation's `check-settings` task, run from a checkout of roc-automation,
 reports which are in place:
 
-* *Required status checks.* The `CI` ruleset on `main` requires `check`, the
-  job of `ci.yml`, and `Build the release`, the build job of the `release.yml`
-  dry run, in place of `test-examples`, `published-examples`,
-  `property-quality` and `release-validation`, which no workflow produces any
-  more. `codeql` stays required.
+* *Required status checks.* The `CI` ruleset on `main` requires `check` and
+  `codeql`, plus `Release / Build and test the source`,
+  `Release / Test the release candidate` and `Build the documentation site`
+  from the release dry run.
 * *The `release` environment* is limited to `main` by name ("Selected branches
   and tags", with `main` alone), rather than "Protected branches only".
 * *A tag ruleset* targets all tags and restricts updates and deletions, so that
   a version tag can never move.
 * *"Allow GitHub Actions to create and approve pull requests"* is off. No
   workflow opens a pull request.
-* *The `automation/roc-nightly` branch* is deleted. It belonged to the nightly
-  update controller this repository no longer has.
-* *The Actions allowlist* names each roc-automation action and workflow at its
-  reviewed revision, because an entry without `@<sha>` does not match a pinned
-  reference:
-** `lukewilliamboswell/roc-automation/actions/setup-blueprint@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-** `lukewilliamboswell/roc-automation/actions/publish-release@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-** `lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8a6c914fa8400c9d1f5a3815ab06e06687d58148`
-** and the actions that workflow calls at their own revisions:
-   `lukewilliamboswell/roc-automation/actions/release-compatibility@1a08ce49ab69003977745e17fbf37baffa47c94a`,
-   `lukewilliamboswell/roc-automation/actions/nightly-report@7b1f87cded465a7bd280c1370b63d93bccfe4c3e`
-   and `lukewilliamboswell/roc-automation/actions/setup-blueprint@2c563fdc7e07e76f30477769bc706bbc49dac36f`.
-
-`cachix/install-nix-action`, which `setup-blueprint` and `publish-release` use,
-and `roc-lang/setup-roc` are already allowed.
+* *Actions permissions* allow this owner's actions and reusable workflows,
+  GitHub-authored actions and the configured external exceptions. GitHub requires
+  action SHA pins; the repository policy also checks full SHA pins for reusable
+  workflows. Review the immutable shared sources when updating those pins.
 
 == Security reports
 

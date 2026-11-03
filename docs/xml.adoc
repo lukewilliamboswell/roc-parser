@@ -8,6 +8,8 @@ endif::[]
 
 [#xml]
 = Read XML documents
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to parse an XML document into a tree, find elements,
 attributes and text in it, and report malformed input with a line and column.

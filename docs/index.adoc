@@ -1,4 +1,6 @@
 = roc-parser: A manual for parsing text and data in Roc
+:idprefix: _
+:idseparator: _
 :doctype: book
 :author: The roc-parser contributors
 // The build stamps the package version it documents. A checkout that has not
@@ -10,7 +12,6 @@
 :sectnums:
 :sectanchors:
 :!icons:
-:source-highlighter: rouge
 :imagesdir: images
 // Links into the repository. The manual is published away from the source
 // tree, so a relative link to an example or script would not resolve.

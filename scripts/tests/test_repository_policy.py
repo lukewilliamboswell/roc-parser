@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -9,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
-# The reviewed roc-automation revision (tools-0.2.0) every workflow uses.
-ROC_AUTOMATION = "8a6c914fa8400c9d1f5a3815ab06e06687d58148"
+# The reviewed roc-automation revision every workflow uses.
+ROC_AUTOMATION = "2f2a1294ad903dc71029ed2f6bc133a8837958f2"
 
 
 def repository_files() -> list[Path]:
@@ -25,7 +26,29 @@ def repository_files() -> list[Path]:
 
 
 class RepositoryPolicyTests(unittest.TestCase):
-    def test_repo_owned_automation_is_python_under_scripts(self) -> None:
+    def test_runtime_exceptions_are_explicit_and_current(self) -> None:
+        policy = json.loads((ROOT / "scripts/automation-policy.json").read_text())
+        self.assertEqual(policy["schema_version"], 1)
+        declared = []
+        for group in policy["runtime_exceptions"]:
+            self.assertTrue(group["runtime"])
+            self.assertTrue(group["contract"])
+            self.assertTrue(group["paths"])
+            self.assertEqual(group["paths"], sorted(group["paths"]))
+            declared.extend(group["paths"])
+        actual = sorted(str(path.relative_to(ROOT)) for path in repository_files()
+                        if path.is_file() and path.suffix in (".py", ".rb", ".cjs", ".js", ".mjs", ".zig"))
+        self.assertEqual(sorted(declared), actual, "review and declare each independent harness or platform adapter")
+        self.assertEqual(len(declared), len(set(declared)))
+
+        nightly = sorted(str(path.relative_to(ROOT)) for path in repository_files()
+                         if path.is_file() and path.suffix == ".roc" and path.parent != ROOT / "scripts"
+                         and "scripts" in path.relative_to(ROOT).parts
+                         and re.search(r"(?m)^app ", path.read_text()))
+        self.assertEqual(policy["nightly_compiler_apps"], nightly,
+                         "list each probe or compiler fixture that requires the nightly")
+
+    def test_repo_owned_automation_lives_under_scripts(self) -> None:
         paths = repository_files()
         shell_scripts = sorted(path for path in paths if path.suffix == ".sh")
         self.assertEqual(shell_scripts, [], "repository-owned Bash scripts are not allowed")
@@ -40,6 +63,35 @@ class RepositoryPolicyTests(unittest.TestCase):
             [],
             "repository automation must live under scripts/",
         )
+
+    def test_roc_tooling_uses_its_own_fixed_compiler(self) -> None:
+        blueprint = (ROOT / "Blueprint.roc").read_text()
+        stable = re.findall(r'Fetch\("roc-stable", Recipes.roc_nightly\("([^"\n]+)"\)\)', blueprint)
+        self.assertEqual(len(stable), 1)
+        tasks = re.findall(r'Task\("[^"\n]+",[^\n]*', blueprint)
+        for path in repository_files():
+            if path.suffix != ".roc" or not path.is_file():
+                continue
+            text = path.read_text()
+            pin = re.findall(r'(?m)^\s*roc:\s*"([^"\n]+)"', text)
+            # The oracle probes are built by the floating package compiler.
+            # Only executable orchestration entry points carry the tooling pin.
+            if path.parent == ROOT / "scripts":
+                if not re.search(r'(?m)^app ', text):
+                    continue
+                self.assertEqual(pin, stable, str(path))
+                header = text.split("}", 1)[0]
+                dependencies = re.findall(r'\b(\w+):\s*(?:platform\s*)?"([^"\n]+)"', header)
+                for field, dependency in dependencies:
+                    if field == "roc":
+                        continue
+                    self.assertRegex(dependency, r'^https://[^/]+/[^/]+/[^/]+/releases/download/[^/]+/[A-Za-z0-9_-]{43,44}\.tar\.zst$')
+                    self.assertIn('"' + dependency + '"', blueprint)
+                self.assertTrue(text.startswith("#!/usr/bin/env roc-stable\n"), str(path))
+                self.assertTrue(path.stat().st_mode & 0o111, str(path))
+                self.assertTrue(any(str(path.relative_to(ROOT)) in task for task in tasks), str(path))
+            else:
+                self.assertEqual(pin, [], str(path))
 
     def test_workflow_actions_are_pinned_to_full_commit_shas(self) -> None:
         failures: list[str] = []

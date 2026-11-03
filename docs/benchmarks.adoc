@@ -8,6 +8,8 @@ endif::[]
 
 [#benchmarks]
 = Benchmarks
+:idprefix: _
+:idseparator: _
 
 This chapter is for contributors who want to measure a change, add a
 benchmark or reproduce the figures in <<performance>>. It covers the harness,
@@ -73,7 +75,7 @@ For each document and implementation, `scripts/bench.py`:
 . runs `--repetitions` batches (7, or 3 with `--quick`), each in a fresh
   process;
 . records the median time per parse, the minimum, maximum, standard deviation
-  and spread (`(max - min) / median`), throughput in MB/s (10^6^ bytes per
+  and spread (`(max - min) / median`), throughput in MB/s (1,000,000 bytes per
   second, from the median), and the peak resident set size of the batch
   processes;
 . with `--allocations`, replays the document once through

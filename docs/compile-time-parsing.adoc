@@ -5,6 +5,8 @@ endif::[]
 
 [#compile-time-parsing]
 = Parse and validate during compilation
+:idprefix: _
+:idseparator: _
 
 Compile-time parsing and useful validation are enduring design goals for every
 format in roc-parser. A quoted document or an adjacent imported file should

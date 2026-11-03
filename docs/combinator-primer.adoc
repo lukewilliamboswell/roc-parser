@@ -8,6 +8,8 @@ endif::[]
 
 [#combinator-primer]
 = Your first parser
+:idprefix: _
+:idseparator: _
 
 In this tutorial you write a parser for a small settings format, one line per
 setting:
@@ -29,7 +31,7 @@ file. Run a step with `roc <file>` and its tests with `roc test <file>`.
 
 == Step 1: read a key
 
-`{src}/docs/examples/combinator-primer-step1.roc[combinator-primer-step1.roc]`
+{src}/docs/examples/combinator-primer-step1.roc[combinator-primer-step1.roc]
 
 A key is one or more lowercase letters or underscores. Start with a parser
 for one such byte, repeat it, and turn the bytes into a `Str`:
@@ -62,7 +64,7 @@ byte can be read.
 
 == Step 2: read a whole setting
 
-`{src}/docs/examples/combinator-primer-step2.roc[combinator-primer-step2.roc]`
+{src}/docs/examples/combinator-primer-step2.roc[combinator-primer-step2.roc]
 
 A setting is a key, an `=`, and a value. For now, the value is everything up
 to the end of the line:
@@ -99,7 +101,7 @@ include::examples/combinator-primer-step2.expected[]
 
 == Step 3: choose between kinds of value
 
-`{src}/docs/examples/combinator-primer-step3.roc[combinator-primer-step3.roc]`
+{src}/docs/examples/combinator-primer-step3.roc[combinator-primer-step3.roc]
 
 A value is a number, `true` or `false`, or text in double quotes. Write one
 parser for each kind, then try them in order with `Parser.one_of`:
@@ -132,7 +134,7 @@ include::examples/combinator-primer-step3.expected[]
 
 == Step 4: read every line, and read the errors
 
-`{src}/docs/examples/combinator-primer-step4.roc[combinator-primer-step4.roc]`
+{src}/docs/examples/combinator-primer-step4.roc[combinator-primer-step4.roc]
 
 A settings file is entries separated by line breaks. `sep_by` reads that
 shape and drops the separators:

@@ -8,6 +8,8 @@ endif::[]
 
 [#errors]
 = Report parse errors
+:idprefix: _
+:idseparator: _
 
 This guide shows what each module returns when its input is invalid, and how
 to turn that into a message a person can act on. The format parsers report
@@ -15,9 +17,9 @@ invalid input as an `Err` value rather than crashing, and the repository's
 fuzz tests check that they do.
 
 The examples come from
-`{src}/docs/examples/errors-report.roc[errors-report.roc]`, whose complete
+{src}/docs/examples/errors-report.roc[errors-report.roc], whose complete
 output is checked in as
-`{src}/docs/examples/errors-report.expected[errors-report.expected]`.
+{src}/docs/examples/errors-report.expected[errors-report.expected].
 
 == Summary
 

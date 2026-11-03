@@ -28,10 +28,10 @@ import Literal as Quotation
 ##
 ## - [Yaml.decode] reads it straight into your own record, list, dict or tuple
 ##   type, which the compiler infers from how the result is used;
-## - [Yaml.parse_str] returns a [Yaml] tree, which [Yaml.get], [Yaml.at],
+## - [Yaml.parse_str] returns a `Yaml` tree, which [Yaml.get], [Yaml.at],
 ##   [Yaml.get_path] and the `as_` helpers make easy to explore.
 ##
-## A [Yaml] tree value is one of:
+## A `Yaml` tree value is one of:
 ##
 ## - `Null` for `null`, `~`, an empty value or an empty document;
 ## - `Bool`, `Int` (an `I64`; larger integers are an error) and `Float` for

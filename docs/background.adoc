@@ -8,6 +8,8 @@ endif::[]
 
 [#background]
 = Where the design comes from
+:idprefix: _
+:idseparator: _
 
 roc-parser is not a new idea. Parser combinators have been studied and used
 for fifty years, and almost every choice in the `Parser` and `Utf8` modules
@@ -18,7 +20,7 @@ know. It assumes you have read <<combinator-primer>>; you do not need it to
 use the package.
 
 The examples come from
-`{src}/docs/examples/background-lineage.roc[background-lineage.roc]`; every
+{src}/docs/examples/background-lineage.roc[background-lineage.roc]; every
 `expect` in it passes.
 
 == A parser is a function
@@ -183,6 +185,7 @@ The format modules go further on their own: `Yaml` and `Xml` report line
 and column, `CSV` the record and field, and `HTTP` the byte offset, each in an
 error tag named after the format. <<errors>> shows how to present them.
 
+[#_bytes_not_characters_2]
 == Bytes, not characters
 
 Haskell's early combinator libraries read lists of characters. The libraries

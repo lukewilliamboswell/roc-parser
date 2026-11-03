@@ -1,41 +1,13 @@
-// Defined by index.adoc; repeated so the page renders on its own, as it
-// does when browsed on GitHub.
-ifndef::src[]
-:repo: https://github.com/lukewilliamboswell/roc-parser
-:src: {repo}/blob/main
-endif::[]
-
 [#releases]
-= Release notes
+= Published releases
 
-Each release has a notes file, `docs/releases/<version>.adoc`. The release
-workflow publishes it as the GitHub release description, with the released
-bundle's URL in place of `+{package-url}+` and the output of `roc version`
-under "Compilers". The notes start with the upgrade impact: every change your
-code or data might notice.
+Use the https://github.com/lukewilliamboswell/roc-parser/releases[published release records] for package URLs, compiler requirements and upgrade instructions.
+Choose a final release for normal use; preview releases may change their APIs.
 
-* {src}/docs/releases/3.0.0.adoc[roc-parser 3.0.0 release notes]: `JsonValue`, a
-  lossless JSON reader and writer with strict defaults and opt-in relaxations
-  and checks; compile-time quotations, checked imported constants, typed
-  decoding and configurable validation; Roc source tokens and syntax trees;
-  AsciiDoc parsing and rendering with Asciidoctor-exact include selection; and
-  source-preserving YAML highlighting. The first final release since 2.0.0.
-
-* {src}/docs/releases/2.0.0.adoc[roc-parser 2.0.0 release notes]: a redesigned API with an upgrade guide, type-directed decoding
-  of CSV and YAML into records, CommonMark and GFM Markdown, strict RFC 9112
-  HTTP, XML 1.0 well-formedness, the YAML 1.2 core schema, RFC 4180 CSV, and
-  property tests and conformance reviews for every format.
-
-Earlier releases are described on the
-{repo}/releases[roc-parser GitHub releases page].
+Read the {src}/docs/releases/4.0.0.adoc[4.0.0 upgrade notes] for JSON byte
+limits, writer error handling and Roc syntax span changes.
 
 == Release candidates
 
-* {repo}/releases/tag/2.1.0-rc.3[2.1.0-rc.3]: source-preserving YAML tokens, highlighting categories and diagnostics,
-  with malformed-snippet recovery and source fuzzing. Includes the rc.2 previews.
-
-* {repo}/releases/tag/2.1.0-rc.2[2.1.0-rc.2]: AsciiDoc parsing, preprocessing and HTML rendering,
-  with cached oracle baselines and local performance and scaling checks.
-
-* {repo}/releases/tag/2.1.0-rc.1[2.1.0-rc.1]: current Roc syntax tooling for downstream testing,
-  with performance optimization continuing on the feature branch.
+A release marked prerelease is a preview. Read that release's notes and keep its
+package and examples together when testing it.

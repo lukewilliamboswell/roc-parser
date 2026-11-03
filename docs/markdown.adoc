@@ -7,6 +7,8 @@ endif::[]
 
 [#markdown]
 = Markdown
+:idprefix: _
+:idseparator: _
 
 This chapter shows how to turn Markdown text into a tree of Roc values and how
 to walk that tree to produce your own output, such as HTML or a table of
@@ -65,7 +67,7 @@ include::examples/markdown-blocks.expected[]
 
 The block variants are:
 
-[cols="1,3"]
+[cols="1,3",options="header"]
 |===
 |Variant |Contents
 
