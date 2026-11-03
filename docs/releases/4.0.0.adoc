@@ -1,4 +1,4 @@
-= Unreleased
+= roc-parser 4.0.0
 
 == Upgrade impact
 
@@ -29,6 +29,18 @@
   comment is no longer an error, and `parse_header_str` accepts a source holding
   only whitespace and comments as the implicit header of a type module.
 
+== Use this release
+
+Add the package to your app's header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Use a current Roc nightly. Applications using basic-cli should use 0.26.0.
+The release record names the exact compiler used to build and test the package.
+
 == Added
 
 * `max_bytes` in `JsonValue.Options` and `JsonValue.WriteOptions` bounds input
@@ -41,3 +53,12 @@
 * `RocSyntax` reported a parenthesized function type's span with its opening
   parenthesis but not its closing one
   (https://github.com/lukewilliamboswell/roc-parser/issues/101[#101]).
+
+== Documentation and release assets
+
+* The manual and API reference use the shared documentation tools. The API
+  archive contains unmodified compiler output; the manual is a separate PDF
+  asset. GitHub Pages serves the manual and API reference together.
+* The shared release workflow builds and tests the exact release candidate,
+  validates the source inventory and SBOM sidecars, and publishes attestations.
+  The inventory accounts for package source files and Unicode production inputs.

@@ -4,6 +4,9 @@
 Use the https://github.com/lukewilliamboswell/roc-parser/releases[published release records] for package URLs, compiler requirements and upgrade instructions.
 Choose a final release for normal use; preview releases may change their APIs.
 
+Read the {src}/docs/releases/4.0.0.adoc[4.0.0 upgrade notes] for JSON byte
+limits, writer error handling and Roc syntax span changes.
+
 == Release candidates
 
 A release marked prerelease is a preview. Read that release's notes and keep its
