@@ -201,13 +201,20 @@ release deploys that site to GitHub Pages.
 | `roc-parser-<version>.pdf`
 | The manual as one PDF.
 
-| `<hash>.tar.zst.spdx.json`
-| An SPDX SBOM bound to the bundle's SHA-256, naming the package's
-  dependencies, which Roc fetches by URL and the bundle does not contain.
+| `<hash>.tar.zst.spdx.json`, `<hash>.tar.zst.spdx-2.3.json`,
+  `<hash>.tar.zst.cdx.json`
+| The source inventory in SPDX 3.0.1, SPDX 2.3 and CycloneDX 1.7 formats,
+  bound to the bundle's SHA-256 and accounting for its source and dependencies.
 
-| `<hash>.tar.zst.intoto.jsonl`
-| The build-provenance and SBOM attestations, for offline verification.
+| `<hash>.tar.zst.sbom-manifest.json`
+| The manifest binding the bundle and its SPDX 3.0.1 and CycloneDX sidecars
+  by SHA-256.
+
+| `LICENSE`
+| The package license.
 |===
+
+GitHub stores build-provenance attestations for the release assets.
 
 Nothing in the repository changes after a release. The examples in
 `examples/` always use the package source (`parser: "../package/main.roc"`);
@@ -222,6 +229,9 @@ only the archive attached to the release points them at its URL.
 [source,bash]
 ----
 gh attestation verify <hash>.tar.zst --repo lukewilliamboswell/roc-parser
+
+# Download the attestation for offline use.
+gh attestation download <hash>.tar.zst --repo lukewilliamboswell/roc-parser
 ----
 . For a final release, open the published manual and API reference and check
   that they show the new version, and dispatch `Nightly compatibility` to test
