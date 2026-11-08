@@ -1,0 +1,33 @@
+= roc-parser 5.0.0
+
+== Upgrade impact
+
+Use Roc `nightly-2026-11-07-ad3a5d2` and basic-cli 0.27.0 for the maintained
+examples, probes and benchmarks. The package now depends on Unicode 4.3.2,
+which supports the compiler's iterator size-hint contract. Repository tooling
+continues to use its separate fixed compiler.
+
+This major release permits the compiler upgrade under the existing version
+gate: the previous release's immutable Unicode dependency cannot compile with
+the new compiler, so its public API cannot be compared by `roc bump`. No parser
+API or behavior change is intended by this dependency update. Existing format
+conformance checks and recorded example outputs remain required.
+
+== Use this release
+
+Add the package to your app's header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Applications using basic-cli should use 0.27.0. The release record identifies
+the compiler used to build and test the delivered package.
+
+== Fixed
+
+* Updated maintained application platforms for the compiler's iterator,
+  stream and interpolation contracts.
+* Updated the reviewed Unicode bundle identity, digest and supplier evidence
+  used to generate source SBOM sidecars. Unicode data remains version 17.0.0.

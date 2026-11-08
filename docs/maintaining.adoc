@@ -163,7 +163,10 @@ start the workflow; a mistake needs a new release, not an edit.
 Run the `Release` workflow
 ({src}/.github/workflows/release.yml[`release.yml`]) from the Actions tab on
 `main`, with `version` set to the new version, for example `2.1.0`, or
-`2.1.0-rc.4` for a release candidate. The pinned roc-automation
+`2.1.0-rc.4` for a release candidate. Leave `nightly-tag` empty to resolve the
+latest compiler, or name an exact nightly to reproduce reviewed compiler
+evidence. The shared workflow passes that one compiler identity to its build,
+candidate tests and documentation jobs. The pinned roc-automation
 `release-package.yml` workflow validates the version, runs the checks, builds
 the package and tests the unchanged release candidate. It owns SBOM validation,
 attestations and publication. Its publishing jobs run no repository code.
