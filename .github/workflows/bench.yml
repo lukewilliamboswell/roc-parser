@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@0ad737abd3cad3d14d7e409e91161cd42c05142c
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@e12512e2605608588782edb044dd766137e34869
         with:
           install-nix: 'true'
       - id: nightly
@@ -38,8 +38,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
-      - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
+      - uses: roc-lang/setup-roc@30af91a173612e462a5df47f3b697c53c211f48c
         with:
+          download-method: asset-api
           version: nightly
           nightly-tag: ${{ steps.nightly.outputs.tag }}
       - name: Run the full comparison
