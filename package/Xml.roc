@@ -227,7 +227,8 @@ Xml := {
 	##
 	## Leading and trailing whitespace, comments and processing instructions
 	## around the root element are allowed; anything else after it is an error.
-	## A leading byte order mark is accepted.
+	## A leading byte order mark is accepted. No limits apply: use [Xml.parse]
+	## for untrusted input.
 	##
 	## ```roc
 	## expect Xml.parse_str("<a>x &amp; y</a>").map_ok(|xml| xml.root) == Ok(Element({ name: "a", attributes: [], children: [Text("x & y")] }))
@@ -237,7 +238,7 @@ Xml := {
 	parse_str : Str -> Try(Xml, [InvalidXml(Error)])
 	parse_str = |input| {
 		bytes = input.to_utf8()
-		match parse_document(input, bytes) {
+		match read_document(input, bytes, unbounded(bytes)) {
 			Ok({ val, pos }) =>
 				if pos == bytes.len() {
 					Ok(val)
@@ -246,6 +247,32 @@ Xml := {
 				}
 
 			Err(XmlFail(failure)) => Err(InvalidXml(locate(bytes, failure.offset, failure.message)))
+			Err(LimitFail(exceeded)) => Err(InvalidXml(locate(bytes, exceeded.offset, "limit exceeded")))
+		}
+	}
+
+	## Parse one complete XML document from untrusted input, within the
+	## limits of `props`. A document that would exceed one fails with
+	## `LimitExceeded`, located at the start tag or attribute that would
+	## exceed it, before anything is built for it.
+	##
+	## ```roc
+	## expect Xml.parse("<a><b/></a>", { max_depth: 1 }) == Err(LimitExceeded({ limit: Depth, max: 1, line: 1, column: 4 }))
+	##
+	## expect Xml.parse("<a><b/></a>", {}).is_ok()
+	## ```
+	parse : Str, ReaderProps -> Try(Xml, ReadError)
+	parse = |input, props| {
+		bytes = input.to_utf8()
+		match read_document(input, bytes, reader_limits(props)) {
+			Ok({ val, pos }) =>
+				if pos == bytes.len() {
+					Ok(val)
+				} else {
+					Err(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
+				}
+
+			Err(failure) => Err(read_error(bytes, failure))
 		}
 	}
 
@@ -269,25 +296,211 @@ Xml := {
 			|input| {
 				# Validate once, so names and text can be cut from the string
 				# without validating each one again.
-				match parse_document(Str.from_utf8(input) ?? "", input) {
+				match read_document(Str.from_utf8(input) ?? "", input, unbounded(input)) {
 					Ok({ val, pos }) => Ok({ value: val, rest: input.drop_first(pos) })
 					Err(XmlFail(failure)) => Err(ParseError({ message: failure.message, offset: failure.offset }))
+					Err(LimitFail(exceeded)) => Err(ParseError({ message: "limit exceeded", offset: exceeded.offset }))
 				}
 			},
 		)
+
+	## Limits for untrusted input, checked while reading.
+	##
+	## A document deeper than `max_depth` elements, with more than
+	## `max_elements` elements, or with an element that has more than
+	## `max_attributes` attributes fails with `LimitExceeded`. The defaults
+	## admit large real documents: at about 28 bytes per element,
+	## 4,194,304 elements is a 117 MB document.
+	##
+	## `namespaces` also rejects processing instruction targets that contain
+	## a colon, as [Namespaces in XML 1.0](https://www.w3.org/TR/xml-names/#Conformance)
+	## requires. [XmlNs] sets it; names are still reported as written.
+	ReaderProps := { max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, namespaces : Bool ?? False }
+
+	## A limit of [Xml.ReaderProps].
+	Limit : [Depth, Elements, Attributes]
+
+	## Why reading stopped: malformed XML, or a document that would exceed a
+	## limit of [Xml.ReaderProps]. `max` is the limit, and the line and column
+	## locate the start tag (or, for `Attributes`, the attribute) that would
+	## exceed it.
+	ReadError : [
+		InvalidXml(Xml.Error),
+		LimitExceeded({ limit : Limit, max : U64, line : U64, column : U64 }),
+	]
+
+	## One step through a document, in document order.
+	##
+	## Events match the tree [Xml.parse_str] builds: an empty-element tag
+	## such as `<a/>` gives `Start` then `End`, adjacent character data, CDATA
+	## sections and references form one `Text`, and comments and processing
+	## instructions are checked and then dropped. Text before and after the
+	## root element is not reported.
+	Event : [
+		Start({ name : Str, attributes : List(Xml.Attribute) }),
+		End(Str),
+		Text(Str),
+	]
+
+	## A pull reader over one document, for reading a large document an
+	## element at a time without building its whole tree.
+	##
+	## Get one with [Xml.reader], then call `next` until it returns `Done`.
+	## `element`, called directly after a `Start`, builds that element's
+	## subtree and continues after its end tag. A reader is a plain value:
+	## keep only the latest one, and `return` from the loop's `Done` arm, so
+	## each step updates the reader's stack of open elements in place.
+	##
+	## ```roc
+	## expect {
+	##     count_items = |reader| {
+	##         var $reader = reader
+	##         var $count = 0
+	##         while True {
+	##             match $reader.next() {
+	##                 Event(Start({ name: "item", .. }), rest) => {
+	##                     $reader = rest
+	##                     $count = $count + 1
+	##                 }
+	##
+	##                 Event(_, rest) => {
+	##                     $reader = rest
+	##                 }
+	##
+	##                 Done => return Ok($count)
+	##                 Failed(error) => return Err(error)
+	##             }
+	##         }
+	##     }
+	##     count_items(Xml.reader("<list><item/><item>x</item></list>", {})?) == Ok(2)
+	## }
+	## ```
+	Reader :: { doc : Box(Doc), cursor : Cursor }.{
+
+		## The next event, `Done` once the root element has ended and the rest
+		## of the input is only comments, processing instructions and
+		## whitespace, or `Failed` at the first problem.
+		##
+		## ```roc
+		## expect {
+		##     reader = Xml.reader("<a>x</a>", {})?
+		##     match reader.next() {
+		##         Event(Start({ name, .. }), rest) =>
+		##             match rest.next() {
+		##                 Event(Text(text), _) => name == "a" and text == "x"
+		##                 _ => False
+		##             }
+		##
+		##         _ => False
+		##     }
+		## }
+		## ```
+		next : Reader -> [Event(Xml.Event, Reader), Done, Failed(Xml.ReadError)]
+		next = |reader| {
+			doc = Box.unbox(reader.doc)
+			bytes = doc.bytes
+			match step(doc.src, bytes, doc.limits, reader.cursor) {
+				Ok(Ev(event, cursor)) => Event(event, { doc: reader.doc, cursor })
+				Ok(Finished(pos)) =>
+					if pos == bytes.len() {
+						Done
+					} else {
+						Failed(InvalidXml(locate(bytes, pos, "unexpected content after the root element")))
+					}
+
+				Err(failure) => Failed(read_error(bytes, failure))
+			}
+		}
+
+		## Directly after a `Start` event, that element and its subtree, and
+		## the reader after its end tag. `NotAfterStart` when the most recent
+		## event was not a `Start`.
+		##
+		## ```roc
+		## expect {
+		##     reader = Xml.reader("<doc><p>one</p><p>two</p></doc>", {})?
+		##     match reader.next() {
+		##         Event(Start(_), after_doc) =>
+		##             match after_doc.next() {
+		##                 Event(Start(_), after_p) =>
+		##                     match after_p.element() {
+		##                         Element(p, _) => p.text() == "one"
+		##                         _ => False
+		##                     }
+		##
+		##                 _ => False
+		##             }
+		##
+		##         _ => False
+		##     }
+		## }
+		## ```
+		element : Reader -> [Element(Xml.Node, Reader), Failed(Xml.ReadError), NotAfterStart]
+		element = |reader| {
+			if reader.cursor.start == no_start {
+				return NotAfterStart
+			}
+			doc = Box.unbox(reader.doc)
+			bytes = doc.bytes
+			tag =
+				match parse_start_tag(doc.src, bytes, reader.cursor.start, doc.limits.attributes) {
+					Ok(parsed) => parsed
+					Err(failure) => return Failed(read_error(bytes, failure))
+				}
+			match build_element(doc.src, bytes, doc.limits, reader.cursor, tag.name, tag.attributes) {
+				Ok(built) => Element(built.node, { doc: reader.doc, cursor: built.cursor })
+				Err(failure) => Failed(read_error(bytes, failure))
+			}
+		}
+
+		## The document's XML declaration, or `Err(Missing)` when it has none.
+		declaration : Reader -> Try(Xml.Declaration, [Missing])
+		declaration = |reader| Box.unbox(reader.doc).declaration
+
+		## Where the most recent event starts: the `<` of its tag, or the
+		## first byte of its text. Before the first event, the root's start
+		## tag. Lines and columns count as in [Xml.Error].
+		location : Reader -> { line : U64, column : U64 }
+		location = |reader| {
+			at = locate(Box.unbox(reader.doc).bytes, reader.cursor.at, "")
+			{ line: at.line, column: at.column }
+		}
+	}
+
+	## A [Xml.Reader] positioned before the root element, after reading and
+	## checking the document's prolog.
+	##
+	## ```roc
+	## expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
+	##
+	## expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, message: "expected a root element, but found text" }))
+	## ```
+	reader : Str, ReaderProps -> Try(Reader, ReadError)
+	reader = |input, props| {
+		bytes = input.to_utf8()
+		open_reader(input, bytes, reader_limits(props)).map_err(|failure| read_error(bytes, failure))
+	}
 }
 
 Failure : { offset : U64, message : Str }
 
-Parsed(a) : Try({ val : a, pos : U64 }, [XmlFail(Failure)])
+ReadFailure : [XmlFail(Failure), LimitFail({ limit : Xml.Limit, max : U64, offset : U64 })]
 
-## An element whose end tag has not been read yet. Its children so far are
-## the entries of the shared node list from `first_child` on.
-Open : {
-	name : Str,
-	attributes : List(Xml.Attribute),
-	first_child : U64,
-}
+Parsed(a) : Try({ val : a, pos : U64 }, ReadFailure)
+
+Limits : { depth : U64, elements : U64, attributes : U64, namespaces : Bool }
+
+## What a reader never changes. A reader keeps it boxed; the tree builder
+## passes its parts as plain parameters, so each step moves only the cursor.
+Doc : { src : Str, bytes : List(U8), limits : Limits, declaration : Try(Xml.Declaration, [Missing]) }
+
+## Where a reader is: its position, where the names of the open elements
+## are in the input (offsets, so that no step touches a reference count),
+## whether
+## the most recent start tag was an empty-element tag whose end is still to
+## be reported, whether the root has ended, where the most recent `Start`
+## (or `no_start`) and the most recent event began, and the element count.
+Cursor : { pos : U64, open : List({ start : U64, end : U64 }), pending_end : Bool, closed : Bool, start : U64, at : U64, elements : U64 }
 
 StartTag : {
 	name : Str,
@@ -296,8 +509,44 @@ StartTag : {
 	pos : U64,
 }
 
-fail : U64, Str -> Try(_, [XmlFail(Failure)])
+## An element whose end tag has not been read yet. Its children so far are
+## the entries of the shared node list from `first_child` on.
+Open : {
+	name : Str,
+	attributes : List(Xml.Attribute),
+	range : { start : U64, end : U64 },
+	first_child : U64,
+}
+
+## A reader event, or the position after the root element and the comments,
+## processing instructions and whitespace that follow it.
+Step : [Ev(Xml.Event, Cursor), Finished(U64)]
+
+fail : U64, Str -> Try(_, ReadFailure)
 fail = |offset, message| Err(XmlFail({ offset, message }))
+
+read_error : List(U8), ReadFailure -> Xml.ReadError
+read_error = |bytes, failure| {
+	match failure {
+		XmlFail(problem) => InvalidXml(locate(bytes, problem.offset, problem.message))
+		LimitFail(exceeded) => {
+			at = locate(bytes, exceeded.offset, "")
+			LimitExceeded({ limit: exceeded.limit, max: exceeded.max, line: at.line, column: at.column })
+		}
+	}
+}
+
+reader_limits : Xml.ReaderProps -> Limits
+reader_limits = |props| { depth: props.max_depth, elements: props.max_elements, attributes: props.max_attributes, namespaces: props.namespaces }
+
+# Limits no document can reach: an element takes at least four bytes, a
+# level of depth at least seven and an attribute at least five.
+unbounded : List(U8) -> Limits
+unbounded = |bytes| { depth: bytes.len(), elements: bytes.len(), attributes: bytes.len(), namespaces: False }
+
+# `start` when the most recent event was not `Start`.
+no_start : U64
+no_start = 18_446_744_073_709_551_615
 
 locate : List(U8), U64, Str -> Xml.Error
 locate = |bytes, offset, message| {
@@ -322,10 +571,31 @@ locate = |bytes, offset, message| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-document
-# `src` is the input as a `Str` when it is valid UTF-8, or "" when it is not;
-# leaves are then cut from it instead of being validated one by one.
-parse_document : Str, List(U8) -> Parsed(Xml)
-parse_document = |src, bytes| {
+#
+# The tree is built from the reader's events, so well-formedness and limits
+# are checked in one place. `src` is the input as a `Str` when it is valid
+# UTF-8, or "" when it is not; names and text are then cut from it instead
+# of being validated one by one.
+read_document : Str, List(U8), Limits -> Parsed(Xml)
+read_document = |src, bytes, limits| {
+	opened = open_reader(src, bytes, limits)?
+	declaration = Box.unbox(opened.doc).declaration
+	match step(src, bytes, limits, opened.cursor)? {
+		Ev(Start(root), after_start) => {
+			built = build_element(src, bytes, limits, after_start, root.name, root.attributes)?
+			match step(src, bytes, limits, built.cursor)? {
+				Finished(end) => Ok({ val: { declaration, root: built.node }, pos: end })
+				Ev(_, _) => fail(0, "internal error: an event after the root element")
+			}
+		}
+
+		_ => fail(0, "internal error: the document did not start with its root element")
+	}
+}
+
+# Reads the prolog up to the root element's start tag.
+open_reader : Str, List(U8), Limits -> Try(Xml.Reader, ReadFailure)
+open_reader = |src, bytes, limits| {
 	var $pos = if (starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF])) 3 else 0
 	var $declaration = Err(Missing)
 	if starts_with_at(bytes, $pos, "<?xml".to_utf8()) and is_space_at(bytes, $pos + 5) {
@@ -333,7 +603,7 @@ parse_document = |src, bytes| {
 		$declaration = Ok(parsed.val)
 		$pos = parsed.pos
 	}
-	$pos = skip_misc(bytes, $pos)?
+	$pos = skip_misc(bytes, $pos, limits.namespaces)?
 	if starts_with_at(bytes, $pos, "<!DOCTYPE".to_utf8()) {
 		return fail($pos, "document type declarations are not supported")
 	}
@@ -344,9 +614,289 @@ parse_document = |src, bytes| {
 			fail($pos, "expected a root element, but found text")
 		}
 	}
-	root = parse_element(src, bytes, $pos)?
-	end = skip_misc(bytes, root.pos)?
-	Ok({ val: { declaration: $declaration, root: root.val }, pos: end })
+	Ok({ doc: Box.box({ src, bytes, limits, declaration: $declaration }), cursor: { pos: $pos, open: [], pending_end: False, closed: False, start: no_start, at: $pos, elements: 0 } })
+}
+
+# One event. Fields are read before the cursor is updated, so its stack of
+# open element names stays uniquely referenced and is updated in place.
+# Every event is built here, once.
+step : Str, List(U8), Limits, Cursor -> Try(Step, ReadFailure)
+step = |src, bytes, limits, r| {
+	if r.pending_end {
+		# The end of an empty-element tag.
+		name = open_name(src, bytes, r.open)
+		open = r.open.drop_last(1)
+		closed = open.is_empty()
+		return Ok(Ev(End(name), { ..r, open, pending_end: False, closed, start: no_start }))
+	}
+	if r.closed {
+		return Ok(Finished(skip_misc(bytes, r.pos, limits.namespaces)?))
+	}
+	at =
+		if r.open.is_empty() {
+			r.pos
+		} else {
+			match scan(src, bytes, limits.namespaces, r.pos)? {
+				TagAt(tag) => tag
+				TextUntil(text, pos) => return Ok(Ev(Text(text), { ..r, pos, start: no_start, at: r.pos }))
+				EndOfInput(pos) => return fail(pos, "expected </${open_name(src, bytes, r.open)}> before the end of the document")
+			}
+		}
+	if bytes.get(at + 1) == Ok('/') {
+		end_tag = read_end_tag(src, bytes, at, r.open.last() ?? { start: 0, end: 0 })?
+		open = r.open.drop_last(1)
+		closed = open.is_empty()
+		return Ok(Ev(End(slice_str(src, bytes, at + 2, end_tag.name_end)), { ..r, pos: end_tag.pos, open, closed, start: no_start, at }))
+	}
+	check_start(limits, r.open.len(), r.elements, at)?
+	tag = parse_start_tag(src, bytes, at, limits.attributes)?
+	elements = r.elements + 1
+	open = r.open.append({ start: at + 1, end: at + 1 + tag.name.count_utf8_bytes() })
+	Ok(Ev(Start({ name: tag.name, attributes: tag.attributes }), { ..r, pos: tag.pos, open, pending_end: tag.empty, start: at, at, elements }))
+}
+
+# The name of the innermost open element.
+open_name : Str, List(U8), List({ start : U64, end : U64 }) -> Str
+open_name = |src, bytes, open| {
+	name = open.last() ?? { start: 0, end: 0 }
+	slice_str(src, bytes, name.start, name.end)
+}
+
+# `scan_content`, without its call for the common cases: a tag, or plain
+# ASCII text up to a tag. Small enough to be inlined into the loops.
+scan : Str, List(U8), Bool, U64 -> Try(Scanned, ReadFailure)
+scan = |src, bytes, namespaces, start| {
+	byte = bytes.get(start) ?? 0
+	if byte == '<' and starts_tag(bytes, start) {
+		Ok(TagAt(start))
+	} else {
+		end = Utf8.skip_class(bytes, start, text_class)
+		if end > start and bytes.get(end) == Ok('<') and starts_tag(bytes, end) {
+			Ok(TextUntil(slice_str(src, bytes, start, end), end))
+		} else {
+			scan_content(src, bytes, namespaces, start)
+		}
+	}
+}
+
+# Whether the '<' at `pos` starts a start or end tag rather than markup that
+# text continues across.
+starts_tag : List(U8), U64 -> Bool
+starts_tag = |bytes, pos| {
+	next = bytes.get(pos + 1) ?? 0
+	next != '!' and next != '?'
+}
+
+## What follows in element content: text ending before a tag, a start or
+## end tag, or the end of the input.
+Scanned : [TextUntil(Str, U64), TagAt(U64), EndOfInput(U64)]
+
+# See https://www.w3.org/TR/xml/#NT-content
+#
+# Text is merged across character data, references, CDATA sections,
+# comments and processing instructions, and reported before the next tag.
+# Pending text is `$text` followed by the input slice [$run_start, $run_end).
+# Bytes kept as they are extend the slice; a rewrite (a reference, a line
+# ending or a gap left by markup) copies the slice once and starts a new
+# one, so decoding stays linear in the text's length.
+scan_content : Str, List(U8), Bool, U64 -> Try(Scanned, ReadFailure)
+scan_content = |src, bytes, namespaces, start| {
+	var $text = []
+	var $run_start = start
+	var $run_end = start
+	var $pos = start
+	while True {
+		byte =
+			match bytes.get($pos) {
+				Ok(b) => b
+				Err(_) => return Ok(EndOfInput($pos))
+			}
+		if byte == '<' {
+			next = bytes.get($pos + 1) ?? 0
+			pending = $run_end > $run_start or !$text.is_empty()
+			if (next != '!' and next != '?') and pending {
+				return Ok(TextUntil(text_str(src, bytes, $text, $run_start, $run_end), $pos))
+			}
+			if next == '/' {
+				return Ok(TagAt($pos))
+			} else if next == '!' and starts_with_at(bytes, $pos, "<!--".to_utf8()) {
+				$pos = skip_comment(bytes, $pos)?
+			} else if next == '!' and starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
+				# See https://www.w3.org/TR/xml/#NT-CDSect
+				cdata_start = $pos
+				$pos = $pos + 9
+				var $open = True
+				while $open {
+					cdata_byte =
+						match bytes.get($pos) {
+							Ok(b) => b
+							Err(_) => return fail(cdata_start, "unterminated CDATA section")
+						}
+					if cdata_byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
+						$pos = $pos + 3
+						$open = False
+					} else if cdata_byte == '\r' {
+						$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
+						$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
+						$run_start = $pos
+						$run_end = $pos
+					} else {
+						end =
+							if cdata_byte >= 0x20 and cdata_byte < 0x80 and cdata_byte != ']' {
+								Utf8.skip_class(bytes, $pos + 1, cdata_class)
+							} else {
+								check_char(bytes, $pos)?
+							}
+						if $run_end != $pos {
+							$text = materialize(bytes, $text, $run_start, $run_end)
+							$run_start = $pos
+						}
+						$run_end = end
+						$pos = end
+					}
+				}
+			} else if next == '?' {
+				$pos = skip_processing_instruction(bytes, $pos, namespaces)?
+			} else if next == '!' {
+				return fail($pos, "expected a comment or CDATA section after '<!'")
+			} else {
+				return Ok(TagAt($pos))
+			}
+		} else if byte == '&' {
+			reference = parse_reference(bytes, $pos)?
+			$text = append_utf8(materialize(bytes, $text, $run_start, $run_end), reference.val)
+			$pos = reference.pos
+			$run_start = $pos
+			$run_end = $pos
+		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
+			return fail($pos, "']]>' is not allowed in character data")
+		} else if byte == '\r' {
+			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
+			$run_start = $pos
+			$run_end = $pos
+		} else {
+			# Plain ASCII found 16 bytes at a time, or one checked character.
+			end =
+				if byte >= 0x20 and byte < 0x80 {
+					Utf8.skip_class(bytes, $pos + 1, text_class)
+				} else {
+					check_char(bytes, $pos)?
+				}
+			if $run_end != $pos {
+				$text = materialize(bytes, $text, $run_start, $run_end)
+				$run_start = $pos
+			}
+			$run_end = end
+			$pos = end
+		}
+	}
+}
+
+# See https://www.w3.org/TR/xml/#NT-ETag and the Element Type Match
+# constraint: the end tag at `at` must name the innermost open element,
+# whose name is the input range `expected`.
+read_end_tag : Str, List(U8), U64, { start : U64, end : U64 } -> Try({ name_end : U64, pos : U64 }, ReadFailure)
+read_end_tag = |src, bytes, at, expected| {
+	end =
+		match name_end(bytes, at + 2) {
+			Ok(pos) => pos
+			Err(_) => return fail(at + 2, "expected an element name in the end tag")
+		}
+	len = end - (at + 2)
+	if len != expected.end - expected.start or !same_bytes(bytes, at + 2, expected.start, len) {
+		return fail(at, "end tag </${slice_str(src, bytes, at + 2, end)}> does not match start tag <${slice_str(src, bytes, expected.start, expected.end)}>")
+	}
+	close = skip_space(bytes, end)
+	if bytes.get(close) != Ok('>') {
+		return fail(close, "expected '>' to close the end tag")
+	}
+	Ok({ name_end: end, pos: close + 1 })
+}
+
+# See https://www.w3.org/TR/xml/#NT-STag. Limits are checked before the tag
+# at `at` is parsed, so nothing is built for a tag that would exceed one.
+check_start : Limits, U64, U64, U64 -> Try({}, ReadFailure)
+check_start = |limits, depth, elements, at| {
+	if depth >= limits.depth {
+		Err(LimitFail({ limit: Depth, max: limits.depth, offset: at }))
+	} else if elements >= limits.elements {
+		Err(LimitFail({ limit: Elements, max: limits.elements, offset: at }))
+	} else {
+		Ok({})
+	}
+}
+
+# Builds the element whose start tag was the reader's most recent event, and
+# returns the cursor after its end tag. It reads content with the helpers
+# `step` uses, so both check the same rules; fuzzing compares the trees they
+# give. Going around the events keeps a cursor and an event from being made
+# for every tag and text.
+#
+# The children of every open element live in one flat `$nodes` list (each
+# `Open` frame remembers where its children start). It is a plain variable
+# that nothing else refers to, so appending updates it in place; an
+# element's children are copied out once, when its end tag is read.
+build_element : Str, List(U8), Limits, Cursor, Str, List(Xml.Attribute) -> Try({ node : Xml.Node, cursor : Cursor }, ReadFailure)
+build_element = |src, bytes, limits, r, name, attributes| {
+	outer = r.open.drop_last(1)
+	if r.pending_end {
+		closed = outer.is_empty()
+		return Ok({ node: Element({ name, attributes, children: [] }), cursor: { ..r, open: outer, pending_end: False, closed, start: no_start } })
+	}
+	var $open = []
+	var $name = name
+	var $attributes = attributes
+	var $range = r.open.last() ?? { start: 0, end: 0 }
+	var $first_child = 0
+	var $nodes = []
+	var $elements = r.elements
+	var $pos = r.pos
+	while True {
+		match scan(src, bytes, limits.namespaces, $pos)? {
+			TextUntil(text, pos) => {
+				$nodes = $nodes.append(Text(text))
+				$pos = pos
+			}
+
+			EndOfInput(pos) => return fail(pos, "expected </${slice_str(src, bytes, $range.start, $range.end)}> before the end of the document")
+			TagAt(at) =>
+				if bytes.get(at + 1) == Ok('/') {
+					end_tag = read_end_tag(src, bytes, at, $range)?
+					node = Element({ name: $name, attributes: $attributes, children: copy_from($nodes, $first_child) })
+					match $open.last() {
+						Err(_) => {
+							closed = outer.is_empty()
+							return Ok({ node, cursor: { ..r, pos: end_tag.pos, open: outer, closed, start: no_start, at, elements: $elements } })
+						}
+
+						Ok(parent) => {
+							$open = $open.drop_last(1)
+							$nodes = truncate($nodes, $first_child).append(node)
+							$name = parent.name
+							$attributes = parent.attributes
+							$range = parent.range
+							$first_child = parent.first_child
+							$pos = end_tag.pos
+						}
+					}
+				} else {
+					check_start(limits, r.open.len() + $open.len(), $elements, at)?
+					tag = parse_start_tag(src, bytes, at, limits.attributes)?
+					$elements = $elements + 1
+					$pos = tag.pos
+					if tag.empty {
+						$nodes = $nodes.append(Element({ name: tag.name, attributes: tag.attributes, children: [] }))
+					} else {
+						$open = $open.append({ name: $name, attributes: $attributes, range: $range, first_child: $first_child })
+						$name = tag.name
+						$attributes = tag.attributes
+						$range = { start: at + 1, end: at + 1 + tag.name.count_utf8_bytes() }
+						$first_child = $nodes.len()
+					}
+				}
+		}
+	}
 }
 
 # See https://www.w3.org/TR/xml/#NT-XMLDecl
@@ -451,7 +1001,7 @@ skip_space_start = |bytes, end| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-Eq
-skip_eq : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
+skip_eq : List(U8), U64 -> Try(U64, ReadFailure)
 skip_eq = |bytes, start| {
 	pos = skip_space(bytes, start)
 	if bytes.get(pos) == Ok('=') {
@@ -462,8 +1012,8 @@ skip_eq = |bytes, start| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-Misc
-skip_misc : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
-skip_misc = |bytes, start| {
+skip_misc : List(U8), U64, Bool -> Try(U64, ReadFailure)
+skip_misc = |bytes, start, namespaces| {
 	var $pos = start
 	var $done = False
 	while !$done {
@@ -472,7 +1022,7 @@ skip_misc = |bytes, start| {
 		} else if starts_with_at(bytes, $pos, "<!--".to_utf8()) {
 			$pos = skip_comment(bytes, $pos)?
 		} else if starts_with_at(bytes, $pos, "<?".to_utf8()) {
-			$pos = skip_processing_instruction(bytes, $pos)?
+			$pos = skip_processing_instruction(bytes, $pos, namespaces)?
 		} else {
 			$done = True
 		}
@@ -481,7 +1031,7 @@ skip_misc = |bytes, start| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-Comment
-skip_comment : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
+skip_comment : List(U8), U64 -> Try(U64, ReadFailure)
 skip_comment = |bytes, start| {
 	var $pos = start + 4
 	while $pos < bytes.len() {
@@ -497,9 +1047,10 @@ skip_comment = |bytes, start| {
 	fail(start, "unterminated comment")
 }
 
-# See https://www.w3.org/TR/xml/#NT-PI
-skip_processing_instruction : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
-skip_processing_instruction = |bytes, start| {
+# See https://www.w3.org/TR/xml/#NT-PI. With namespaces, a target may not
+# contain a colon (https://www.w3.org/TR/xml-names/#Conformance).
+skip_processing_instruction : List(U8), U64, Bool -> Try(U64, ReadFailure)
+skip_processing_instruction = |bytes, start, namespaces| {
 	target =
 		match parse_name("", bytes, start + 2) {
 			Ok(name) => name
@@ -511,6 +1062,9 @@ skip_processing_instruction = |bytes, start| {
 		} else {
 			fail(start + 2, "processing instruction targets matching 'xml' are reserved")
 		}
+	}
+	if namespaces and target.val.contains(":") {
+		return fail(start + 2, "processing instruction targets may not contain ':' when namespaces are processed")
 	}
 	if starts_with_at(bytes, target.pos, "?>".to_utf8()) {
 		return Ok(target.pos + 2)
@@ -528,169 +1082,14 @@ skip_processing_instruction = |bytes, start| {
 	fail(start, "unterminated processing instruction")
 }
 
-# See https://www.w3.org/TR/xml/#NT-CDSect
-parse_cdata : List(U8), U64, List(U8) -> Parsed(List(U8))
-parse_cdata = |bytes, start, text| {
-	var $pos = start + 9
-	var $text = text
-	while $pos < bytes.len() {
-		byte = bytes.get($pos) ?? 0
-		if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
-			return Ok({ val: $text, pos: $pos + 3 })
-		} else if byte == '\r' {
-			$text = $text.append('\n')
-			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
-		} else {
-			next = check_char(bytes, $pos)?
-			$text = $text.concat(bytes.sublist({ start: $pos, len: next - $pos }))
-			$pos = next
-		}
-	}
-	fail(start, "unterminated CDATA section")
-}
-
-# See https://www.w3.org/TR/xml/#NT-element
-#
-# Elements are parsed with an explicit stack so deep nesting cannot exhaust
-# the call stack. The children of every open element live in one flat
-# `$nodes` list (each `Open` frame remembers where its children start), and
-# the text being collected lives in `$text`. Both are plain variables that
-# nothing else refers to, so appending updates them in place; an element's
-# children are copied out once, when its end tag is read. Keeping each
-# element's children inside its stack frame instead made every append to a
-# parent copy the whole child list, which was quadratic in the number of
-# siblings.
-parse_element : Str, List(U8), U64 -> Parsed(Xml.Node)
-parse_element = |src, bytes, start| {
-	first = parse_start_tag(src, bytes, start)?
-	if first.empty {
-		return Ok({ val: Element({ name: first.name, attributes: first.attributes, children: [] }), pos: first.pos })
-	}
-	var $open = []
-	var $name = first.name
-	var $attributes = first.attributes
-	var $first_child = 0
-	var $nodes = []
-	# Pending text is the input slice [$run_start, $run_end) followed by
-	# nothing, while it needs no rewriting; once it does, it is copied into
-	# `$text` and the slice is emptied.
-	var $text = []
-	var $run_start = 0
-	var $run_end = 0
-	var $pos = first.pos
-	while True {
-		byte =
-			match bytes.get($pos) {
-				Ok(b) => b
-				Err(_) => return fail($pos, "expected </${$name}> before the end of the document")
-			}
-		if byte == '<' {
-			next = bytes.get($pos + 1) ?? 0
-			if next == '/' {
-				end_name =
-					match parse_name(src, bytes, $pos + 2) {
-						Ok(parsed) => parsed
-						Err(_) => return fail($pos + 2, "expected an element name in the end tag")
-					}
-				if end_name.val != $name {
-					return fail($pos, "end tag </${end_name.val}> does not match start tag <${$name}>")
-				}
-				close = skip_space(bytes, end_name.pos)
-				if bytes.get(close) != Ok('>') {
-					return fail(close, "expected '>' to close the end tag")
-				}
-				$pos = close + 1
-				if $run_end > $run_start or !$text.is_empty() {
-					$nodes = $nodes.append(text_node(src, bytes, $text, $run_start, $run_end))
-					$text = []
-					$run_start = $pos
-					$run_end = $pos
-				}
-				node = Element({ name: $name, attributes: $attributes, children: copy_from($nodes, $first_child) })
-				match $open.last() {
-					Err(_) => return Ok({ val: node, pos: $pos })
-					Ok(parent) => {
-						$open = $open.drop_last(1)
-						$nodes = truncate($nodes, $first_child).append(node)
-						$name = parent.name
-						$attributes = parent.attributes
-						$first_child = parent.first_child
-					}
-				}
-			} else if next == '!' and starts_with_at(bytes, $pos, "<!--".to_utf8()) {
-				$pos = skip_comment(bytes, $pos)?
-			} else if next == '!' and starts_with_at(bytes, $pos, "<![CDATA[".to_utf8()) {
-				parsed = parse_cdata(bytes, $pos, materialize(bytes, $text, $run_start, $run_end))?
-				$run_start = 0
-				$run_end = 0
-				$text = parsed.val
-				$pos = parsed.pos
-			} else if next == '?' {
-				$pos = skip_processing_instruction(bytes, $pos)?
-			} else if next == '!' {
-				return fail($pos, "expected a comment or CDATA section after '<!'")
-			} else {
-				tag = parse_start_tag(src, bytes, $pos)?
-				$pos = tag.pos
-				if $run_end > $run_start or !$text.is_empty() {
-					$nodes = $nodes.append(text_node(src, bytes, $text, $run_start, $run_end))
-					$text = []
-				}
-				$run_start = $pos
-				$run_end = $pos
-				if tag.empty {
-					$nodes = $nodes.append(Element({ name: tag.name, attributes: tag.attributes, children: [] }))
-				} else {
-					$open = $open.append({ name: $name, attributes: $attributes, first_child: $first_child })
-					$name = tag.name
-					$attributes = tag.attributes
-					$first_child = $nodes.len()
-				}
-			}
-		} else if byte == '&' {
-			reference = parse_reference(bytes, $pos)?
-			$text = append_utf8(materialize(bytes, $text, $run_start, $run_end), reference.val)
-			$run_start = 0
-			$run_end = 0
-			$pos = reference.pos
-		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
-			return fail($pos, "']]>' is not allowed in character data")
-		} else if byte == '\r' {
-			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
-			$run_start = 0
-			$run_end = 0
-			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
-		} else {
-			# A run of bytes kept as they are: plain ASCII found 16 bytes at a
-			# time, or one checked non-ASCII character.
-			end =
-				if byte >= 0x20 and byte < 0x80 {
-					Utf8.skip_class(bytes, $pos + 1, text_class)
-				} else {
-					check_char(bytes, $pos)?
-				}
-			if $text.is_empty() and ($run_end == $pos or $run_end == $run_start) {
-				if $run_end == $run_start {
-					$run_start = $pos
-				}
-				$run_end = end
-			} else {
-				$text = materialize(bytes, $text, $run_start, $run_end).concat(bytes.sublist({ start: $pos, len: end - $pos }))
-				$run_start = 0
-				$run_end = 0
-			}
-			$pos = end
-		}
-	}
-}
-
-# The pending text: the input slice when nothing was rewritten, else `text`.
-text_node : Str, List(U8), List(U8), U64, U64 -> Xml.Node
-text_node = |src, bytes, text, run_start, run_end| {
+# The pending text as a `Str`: a slice of the input when nothing was
+# rewritten, else `text` followed by the pending slice.
+text_str : Str, List(U8), List(U8), U64, U64 -> Str
+text_str = |src, bytes, text, run_start, run_end| {
 	if text.is_empty() {
-		Text(slice_str(src, bytes, run_start, run_end))
+		slice_str(src, bytes, run_start, run_end)
 	} else {
-		Text(Str.from_utf8(materialize(bytes, text, run_start, run_end)) ?? "")
+		Str.from_utf8(materialize(bytes, text, run_start, run_end)) ?? ""
 	}
 }
 
@@ -750,8 +1149,8 @@ truncate = |nodes, len| {
 }
 
 # See https://www.w3.org/TR/xml/#NT-STag and https://www.w3.org/TR/xml/#NT-EmptyElemTag
-parse_start_tag : Str, List(U8), U64 -> Try(StartTag, [XmlFail(Failure)])
-parse_start_tag = |src, bytes, start| {
+parse_start_tag : Str, List(U8), U64, U64 -> Try(StartTag, ReadFailure)
+parse_start_tag = |src, bytes, start, max_attributes| {
 	name =
 		match parse_name(src, bytes, start + 1) {
 			Ok(parsed) => parsed
@@ -783,6 +1182,9 @@ parse_start_tag = |src, bytes, start| {
 				Ok(parsed) => parsed
 				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
 			}
+		if $attributes.len() >= max_attributes {
+			return Err(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos }))
+		}
 		duplicate =
 			if $attributes.len() <= small_attribute_count {
 				$attributes.any(|attribute| attribute.name == attribute_name.val)
@@ -812,44 +1214,52 @@ small_attribute_count : U64
 small_attribute_count = 16
 
 # See https://www.w3.org/TR/xml/#NT-AttValue and https://www.w3.org/TR/xml/#AVNormalize
+#
+# The value is `$value` followed by the input slice [$run_start, $run_end),
+# as for character data: bytes kept as they are extend the slice, and a
+# reference or normalised whitespace copies it once.
 parse_attribute_value : Str, List(U8), U64 -> Parsed(Str)
 parse_attribute_value = |src, bytes, start| {
 	quote = bytes.get(start) ?? 0
 	if quote != '"' and quote != '\'' {
 		return fail(start, "attribute values must be quoted")
 	}
+	plain = if (quote == '"') double_quoted_class else single_quoted_class
 	# Most values are plain ASCII up to the closing quote: find it 16 bytes
 	# at a time and return a slice of the input.
-	plain_end = Utf8.skip_class(bytes, start + 1, if (quote == '"') double_quoted_class else single_quoted_class)
+	plain_end = Utf8.skip_class(bytes, start + 1, plain)
 	if bytes.get(plain_end) == Ok(quote) {
 		return Ok({ val: slice_str(src, bytes, start + 1, plain_end), pos: plain_end + 1 })
 	}
-	var $value = bytes.sublist({ start: start + 1, len: plain_end - start - 1 })
+	var $value = []
+	var $run_start = start + 1
+	var $run_end = plain_end
 	var $pos = plain_end
 	while $pos < bytes.len() {
 		byte = bytes.get($pos) ?? 0
 		if byte == quote {
-			return Ok({ val: Str.from_utf8($value) ?? "", pos: $pos + 1 })
+			return Ok({ val: text_str(src, bytes, $value, $run_start, $run_end), pos: $pos + 1 })
 		} else if byte == '<' {
 			return fail($pos, "'<' is not allowed in attribute values")
 		} else if byte == '&' {
 			reference = parse_reference(bytes, $pos)?
-			$value = append_utf8($value, reference.val)
+			$value = append_utf8(materialize(bytes, $value, $run_start, $run_end), reference.val)
 			$pos = reference.pos
-		} else if byte == '\r' {
-			$value = $value.append(' ')
-			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
-		} else if byte == '\n' or byte == '\t' {
-			$value = $value.append(' ')
-			$pos = $pos + 1
-		} else if byte >= 0x20 and byte < 0x80 {
-			end = plain_run_end(bytes, $pos + 1)
-			$value = append_run($value, bytes.sublist({ start: $pos, len: end - $pos }))
-			$pos = end
+			$run_start = $pos
+			$run_end = $pos
+		} else if byte == '\r' or byte == '\n' or byte == '\t' {
+			$value = materialize(bytes, $value, $run_start, $run_end).append(' ')
+			$pos = if (byte == '\r' and bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
+			$run_start = $pos
+			$run_end = $pos
 		} else {
-			next = check_char(bytes, $pos)?
-			$value = $value.concat(bytes.sublist({ start: $pos, len: next - $pos }))
-			$pos = next
+			$pos =
+				if byte >= 0x20 and byte < 0x80 {
+					Utf8.skip_class(bytes, $pos + 1, plain)
+				} else {
+					check_char(bytes, $pos)?
+				}
+			$run_end = $pos
 		}
 	}
 	fail(start, "unterminated attribute value")
@@ -932,6 +1342,13 @@ digit_value = |byte| {
 # See https://www.w3.org/TR/xml/#NT-Name
 parse_name : Str, List(U8), U64 -> Try({ val : Str, pos : U64 }, [NotAName])
 parse_name = |src, bytes, start| {
+	end = name_end(bytes, start)?
+	Ok({ val: slice_str(src, bytes, start, end), pos: end })
+}
+
+# The end of the name starting at `start`, without building it.
+name_end : List(U8), U64 -> Try(U64, [NotAName])
+name_end = |bytes, start| {
 	first = decode_scalar(bytes, start) ?? { code: 0, len: 0 }
 	if !is_name_start_char(first.code) {
 		return Err(NotAName)
@@ -946,7 +1363,20 @@ parse_name = |src, bytes, start| {
 			$done = True
 		}
 	}
-	Ok({ val: slice_str(src, bytes, start, $pos), pos: $pos })
+	Ok($pos)
+}
+
+# Whether the input bytes at `a` and `b` agree for `len` bytes.
+same_bytes : List(U8), U64, U64, U64 -> Bool
+same_bytes = |bytes, a, b, len| {
+	var $index = 0
+	while $index < len {
+		if bytes.get(a + $index) != bytes.get(b + $index) {
+			return False
+		}
+		$index = $index + 1
+	}
+	True
 }
 
 is_name_start_char : U32 -> Bool
@@ -992,7 +1422,7 @@ is_xml_char = |c| {
 }
 
 ## Check that a legal XML character starts at `pos` and return the position after it.
-check_char : List(U8), U64 -> Try(U64, [XmlFail(Failure)])
+check_char : List(U8), U64 -> Try(U64, ReadFailure)
 check_char = |bytes, pos| {
 	match decode_scalar(bytes, pos) {
 		Err(_) => fail(pos, "invalid UTF-8")
@@ -1054,27 +1484,16 @@ append_utf8 = |out, code| {
 	}
 }
 
-# The end of a run of printable ASCII from `start` that needs no special
-# handling in character data or attribute values: anything but '<', '&', ']'
-# and quotes. Stopping early is harmless; the caller handles the byte and
-# starts a new run.
-## `out` followed by `run`, a slice of the input. When `out` is empty the
-## slice itself is kept, so text with no references or line breaks to rewrite
-## becomes a `Str` that shares the input's bytes instead of a copy.
-append_run : List(U8), List(U8) -> List(U8)
-append_run = |out, run| if (out.is_empty()) run else out.concat(run)
-
-plain_run_end : List(U8), U64 -> U64
-plain_run_end = |bytes, start| Utf8.skip_class(bytes, start, plain_class)
-
-# Printable ASCII other than '<', '&', ']' and quotes; scanned 16 bytes at a time.
-plain_class : Utf8.ByteClass
-plain_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']' and b != '"' and b != '\'')
-
-# Character data that needs no handling: printable ASCII but '<', '&' and
-# ']' (which may start "]]>").
+# Character data that needs no handling: tab, line feed, and printable
+# ASCII but '<', '&' and ']' (which may start "]]>").
 text_class : Utf8.ByteClass
-text_class = Utf8.ByteClass.from_predicate(|b| b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']')
+text_class = Utf8.ByteClass.from_predicate(|b| b == '\t' or b == '\n' or (b >= 0x20 and b < 0x80 and b != '<' and b != '&' and b != ']'))
+
+# CDATA section content that needs no handling: tab, line feed, and
+# printable ASCII but ']'
+# (which may start "]]>").
+cdata_class : Utf8.ByteClass
+cdata_class = Utf8.ByteClass.from_predicate(|b| b == '\t' or b == '\n' or (b >= 0x20 and b < 0x80 and b != ']'))
 
 # Attribute value bytes that need no handling, inside each kind of quote.
 double_quoted_class : Utf8.ByteClass
@@ -1468,3 +1887,245 @@ expect match Xml.validate({ source: "<?xml version='1.0' encoding='latin1'?><a><
 	Err(BadQuotedBytes(message)) => !message.contains("non_utf8_declaration") and message.contains("XML")
 	Ok(_) => False
 }
+
+# All events of a document, or the first failure.
+events_of : Str, Xml.ReaderProps -> Try(List(Xml.Event), Xml.ReadError)
+events_of = |input, props| {
+	var $reader = Xml.reader(input, props)?
+	var $events = []
+	while True {
+		match $reader.next() {
+			Event(event, rest) => {
+				$reader = rest
+				$events = $events.append(event)
+			}
+
+			Done => return Ok($events)
+			Failed(error) => return Err(error)
+		}
+	}
+}
+
+is_event : [Event(Xml.Event, Xml.Reader), Done, Failed(Xml.ReadError)] -> Bool
+is_event = |result| match result {
+	Event(_, _) => True
+	_ => False
+}
+
+is_done : [Event(Xml.Event, Xml.Reader), Done, Failed(Xml.ReadError)] -> Bool
+is_done = |result| match result {
+	Done => True
+	_ => False
+}
+
+not_after_start : [Element(Xml.Node, Xml.Reader), Failed(Xml.ReadError), NotAfterStart] -> Bool
+not_after_start = |result| match result {
+	NotAfterStart => True
+	_ => False
+}
+
+# The tree built from a document's events, as a consumer of the reader would.
+tree_of_events : List(Xml.Event) -> Try(Xml.Node, [NoRoot])
+tree_of_events = |events| {
+	var $stack = []
+	var $current = { name: "", attributes: [], children: [] }
+	for event in events {
+		match event {
+			Start(tag) => {
+				$stack = $stack.append($current)
+				$current = { name: tag.name, attributes: tag.attributes, children: [] }
+			}
+
+			Text(text) => {
+				$current = { ..$current, children: $current.children.append(Text(text)) }
+			}
+
+			End(_) => {
+				node = Element($current)
+				parent = $stack.last() ?? { name: "", attributes: [], children: [] }
+				$stack = $stack.drop_last(1)
+				$current = { ..parent, children: parent.children.append(node) }
+			}
+		}
+	}
+	$current.children.first().map_err(|_| NoRoot)
+}
+
+# Events match the tree: an empty-element tag is a start and an end, and
+# text, references and CDATA are merged across comments and processing
+# instructions.
+expect events_of("<a x='1'>t<b/>&amp;<![CDATA[c]]><!--x--><?p?>d</a>", {}) == Ok([Start({ name: "a", attributes: [{ name: "x", value: "1" }] }), Text("t"), Start({ name: "b", attributes: [] }), End("b"), Text("&cd"), End("a")])
+expect events_of("<?xml version='1.0'?>\n<!-- c -->\n<a/>\n<?pi?>\n", {}) == Ok([Start({ name: "a", attributes: [] }), End("a")])
+
+# Building a tree from the events gives the tree parse_str builds.
+expect {
+	inputs = ["<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>", "<p id='x'>Hi <b>there</b><b/>!</p>", "<a>1\r\n2\r3<![CDATA[\r\n]]>&#x1F600;</a>", "<r>\n  <i k='a&amp;b'/>\n</r>"]
+	inputs.all(|input| events_of(input, {}).map_ok(tree_of_events) == Xml.parse_str(input).map_ok(|xml| Ok(xml.root)))
+}
+
+# Failures match parse_str's, including content after the root element.
+expect events_of("<a></b>", {}) == Err(InvalidXml({ line: 1, column: 4, message: "end tag </b> does not match start tag <a>" }))
+expect events_of("<a/><b/>", {}) == Err(InvalidXml({ line: 1, column: 5, message: "unexpected content after the root element" }))
+expect events_of("<a>x", {}) == Err(InvalidXml({ line: 1, column: 5, message: "expected </a> before the end of the document" }))
+
+# `element` builds the subtree directly after a start, then reading
+# continues after its end tag; anywhere else it reports NotAfterStart.
+expect {
+	match Xml.reader("<doc><p>one<b>!</b></p><p>two</p></doc>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start(_), after_doc) =>
+					match (after_doc.element(), after_doc.next()) {
+						(Element(doc, _), Event(Start(_), after_p)) =>
+							match after_p.element() {
+								Element(p, rest) => doc.children_named("p").len() == 2 and p == Element({ name: "p", attributes: [], children: [Text("one"), Element({ name: "b", attributes: [], children: [Text("!")] })] }) and is_event(rest.next()) and not_after_start(rest.element())
+								_ => False
+							}
+
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+expect {
+	match Xml.reader("<a/>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start(_), rest) =>
+					match rest.element() {
+						Element(node, after) => node == Element({ name: "a", attributes: [], children: [] }) and is_done(after.next())
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+
+# The location of the most recent event.
+expect {
+	match Xml.reader("<a>\n  <b/></a>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(_, after_a) =>
+					match after_a.next() {
+						Event(Text(_), after_text) =>
+							match after_text.next() {
+								Event(Start(_), after_b) => after_a.location() == { line: 1, column: 1 } and after_text.location() == { line: 1, column: 4 } and after_b.location() == { line: 2, column: 3 }
+								_ => False
+							}
+
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+
+# Each limit admits a document exactly at it and rejects one past it, at
+# the start tag or attribute that would exceed it.
+expect Xml.parse("<a><b><c/></b></a>", { max_depth: 3 }).is_ok()
+expect Xml.parse("<a><b><c/></b></a>", { max_depth: 2 }) == Err(LimitExceeded({ limit: Depth, max: 2, line: 1, column: 7 }))
+expect Xml.parse("<a><b/>\n<c/></a>", { max_elements: 3 }).is_ok()
+expect Xml.parse("<a><b/>\n<c/></a>", { max_elements: 2 }) == Err(LimitExceeded({ limit: Elements, max: 2, line: 2, column: 1 }))
+expect Xml.parse("<a x='1' y='2'/>", { max_attributes: 2 }).is_ok()
+expect Xml.parse("<a x='1' y='2'/>", { max_attributes: 1 }) == Err(LimitExceeded({ limit: Attributes, max: 1, line: 1, column: 10 }))
+expect events_of("<a><b/></a>", { max_depth: 1 }) == Err(LimitExceeded({ limit: Depth, max: 1, line: 1, column: 4 }))
+expect Xml.reader("<a/>", { max_elements: 0 }).is_ok() and events_of("<a/>", { max_elements: 0 }) == Err(LimitExceeded({ limit: Elements, max: 0, line: 1, column: 1 }))
+
+# The default limits admit the deep document parse_str reads; a lower one
+# stops it at the first start tag past the limit.
+expect {
+	depth = 20000
+	input = Str.concat(Str.repeat("<a>", depth), Str.concat("x", Str.repeat("</a>", depth)))
+	Xml.parse(input, { max_depth: depth }).map_ok(|xml| xml.root.text()) == Ok("x") and Xml.parse(input, {}) == Err(LimitExceeded({ limit: Depth, max: 1024, line: 1, column: 3073 }))
+}
+
+# With namespaces, processing instruction targets may not contain a colon.
+expect Xml.parse("<a><?x:y?></a>", {}).is_ok()
+expect Xml.parse("<a><?x:y?></a>", { namespaces: True }) == Err(InvalidXml({ line: 1, column: 6, message: "processing instruction targets may not contain ':' when namespaces are processed" }))
+
+# Text after a rewrite keeps growing in place: these take linear time.
+expect {
+	count = 100000
+	text = Xml.parse_str("<a>&amp;${Str.repeat("é", count)}<![CDATA[${Str.repeat("x]", count)}]]>${Str.repeat("&lt;b", count)}\r\n</a>").map_ok(|xml| xml.root.text().count_utf8_bytes())
+	value = Xml.parse_str("<a v='&amp;${Str.repeat("é\t", count)}'/>").map_ok(|xml| xml.root.attribute("v").map_ok(|v| v.count_utf8_bytes()))
+	text == Ok(1 + 2 * count + 2 * count + 2 * count + 1) and value == Ok(Ok(1 + 3 * count))
+}
+
+# Doc examples: parse, Reader and reader.
+expect Xml.parse("<a><b/></a>", { max_depth: 1 }) == Err(LimitExceeded({ limit: Depth, max: 1, line: 1, column: 4 }))
+expect Xml.parse("<a><b/></a>", {}).is_ok()
+expect {
+	count_items = |reader| {
+		var $reader = reader
+		var $count = 0
+		while True {
+			match $reader.next() {
+				Event(Start({ name: "item", .. }), rest) => {
+					$reader = rest
+					$count = $count + 1
+				}
+
+				Event(_, rest) => {
+					$reader = rest
+				}
+
+				Done => return Ok($count)
+				Failed(error) => return Err(error)
+			}
+		}
+	}
+	match Xml.reader("<list><item/><item>x</item></list>", {}) {
+		Ok(reader) => count_items(reader) == Ok(2)
+		Err(_) => False
+	}
+}
+expect {
+	match Xml.reader("<a>x</a>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start({ name, .. }), rest) =>
+					match rest.next() {
+						Event(Text(text), _) => name == "a" and text == "x"
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+expect {
+	match Xml.reader("<doc><p>one</p><p>two</p></doc>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start(_), after_doc) =>
+					match after_doc.next() {
+						Event(Start(_), after_p) =>
+							match after_p.element() {
+								Element(p, _) => p.text() == "one"
+								_ => False
+							}
+
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
+expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, message: "expected a root element, but found text" }))
