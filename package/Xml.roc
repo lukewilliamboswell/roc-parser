@@ -453,6 +453,49 @@ Xml := {
 			}
 		}
 
+		## Directly after a `Start` event, builds that element's subtree as
+		## your own type, as `element` builds an [Xml.Node], and returns the
+		## reader after its end tag. Use it to build a model of the document
+		## without an [Xml.Node] tree beside it.
+		##
+		## `first` stands for the element whose `Start` was just read. Each
+		## element inside it is passed to `start` with its name and attributes,
+		## which may fail with your own error; `text` makes a node of text; and
+		## `end` makes an element's node from what `start` (or `first`) gave and
+		## its children. `context` is threaded through `start` and `end` in
+		## document order. A failure of `start` is `Rejected` with the location
+		## of that start tag.
+		##
+		## ```roc
+		## expect {
+		##     reader = Xml.reader("<doc><p>one</p><p>two<b/></p></doc>", {})?
+		##     match reader.next() {
+		##         Event(Start(_), rest) =>
+		##             match rest.element_with({ context: 0, first: "doc", start: |count, name, _| Ok({ context: count + 1, open: name }), text: |text| text, end: |count, name, children| { context: count, node: "${name}(${Str.join_with(children, ",")})" } }) {
+		##                 Element(tree, count, _) => tree == "doc(p(one),p(two,b()))" and count == 3
+		##                 _ => False
+		##             }
+		##
+		##         _ => False
+		##     }
+		## }
+		## ```
+		element_with : Reader, { context : ctx, first : open, start : ctx, Str, List(Xml.Attribute) -> Try({ context : ctx, open : open }, err), text : Str -> node, end : ctx, open, List(node) -> { context : ctx, node : node } } -> [Element(node, ctx, Reader), Failed(Xml.ReadError), Rejected(err, { line : U64, column : U64 }), NotAfterStart]
+		element_with = |reader, builder| {
+			if reader.cursor.start == no_start {
+				return NotAfterStart
+			}
+			bytes = reader.bytes
+			match build_with(reader.src, bytes, reader.limits, reader.cursor, builder.context, builder.first, builder.start, builder.text, builder.end) {
+				Built(built) => Element(built.node, built.context, { ..reader, cursor: built.cursor })
+				Unread(failure) => Failed(read_error(bytes, failure))
+				Rejected(error, offset) => {
+					at = locate(bytes, offset, "")
+					Rejected(error, { line: at.line, column: at.column })
+				}
+			}
+		}
+
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
 		declaration = |reader| Box.unbox(reader.declaration)
@@ -1119,9 +1162,98 @@ slice_str = |src, bytes, start, end| {
 	}
 }
 
+# `build_element` for a tree of the caller's type: `start` and `end` make
+# what an element is, and `text` what text is. The same helpers check the
+# same rules; only what is built differs.
+build_with : Str, List(U8), Limits, Cursor, ctx, open, (ctx, Str, List(Xml.Attribute) -> Try({ context : ctx, open : open }, err)), (Str -> node), (ctx, open, List(node) -> { context : ctx, node : node }) -> [Built({ node : node, context : ctx, cursor : Cursor }), Unread(ReadFailure), Rejected(err, U64)]
+build_with = |src, bytes, limits, r, context, first, on_start, on_text, on_end| {
+	outer = r.open.drop_last(1)
+	if r.pending_end {
+		closed = outer.is_empty()
+		ended = on_end(context, first, [])
+		return Built({ node: ended.node, context: ended.context, cursor: { ..r, open: outer, pending_end: False, closed, start: no_start } })
+	}
+	var $context = context
+	var $frames = []
+	var $current = first
+	var $range = r.open.last() ?? { start: 0, end: 0 }
+	var $first_child = 0
+	var $nodes = []
+	var $elements = r.elements
+	var $pos = r.pos
+	while True {
+		scanned =
+			match scan(src, bytes, limits.namespaces, $pos) {
+				Ok(next) => next
+				Err(failure) => return Unread(failure)
+			}
+		match scanned {
+			TextUntil(text, pos) => {
+				$nodes = $nodes.append(on_text(text))
+				$pos = pos
+			}
+
+			EndOfInput(pos) => return Unread(XmlFail({ offset: pos, message: "expected </${slice_str(src, bytes, $range.start, $range.end)}> before the end of the document" }))
+			TagAt(at) =>
+				if bytes.get(at + 1) == Ok('/') {
+					end_tag =
+						match read_end_tag(src, bytes, at, $range) {
+							Ok(tag) => tag
+							Err(failure) => return Unread(failure)
+						}
+					ended = on_end($context, $current, copy_from($nodes, $first_child))
+					$context = ended.context
+					match $frames.last() {
+						Err(_) => {
+							closed = outer.is_empty()
+							return Built({ node: ended.node, context: $context, cursor: { ..r, pos: end_tag.pos, open: outer, closed, start: no_start, at, elements: $elements } })
+						}
+
+						Ok(parent) => {
+							$frames = $frames.drop_last(1)
+							$nodes = truncate($nodes, $first_child).append(ended.node)
+							$current = parent.open
+							$range = parent.range
+							$first_child = parent.first_child
+							$pos = end_tag.pos
+						}
+					}
+				} else {
+					match check_start(limits, r.open.len() + $frames.len(), $elements, at) {
+						Ok({}) => {}
+						Err(failure) => return Unread(failure)
+					}
+					tag =
+						match parse_start_tag(src, bytes, at, limits.attributes) {
+							Ok(parsed) => parsed
+							Err(failure) => return Unread(failure)
+						}
+					started =
+						match on_start($context, tag.name, tag.attributes) {
+							Ok(value) => value
+							Err(error) => return Rejected(error, at)
+						}
+					$elements = $elements + 1
+					$pos = tag.pos
+					if tag.empty {
+						ended = on_end(started.context, started.open, [])
+						$context = ended.context
+						$nodes = $nodes.append(ended.node)
+					} else {
+						$context = started.context
+						$frames = $frames.append({ open: $current, range: $range, first_child: $first_child })
+						$current = started.open
+						$range = { start: at + 1, end: at + 1 + tag.name.count_utf8_bytes() }
+						$first_child = $nodes.len()
+					}
+				}
+		}
+	}
+}
+
 ## A fresh copy of the nodes from `start` on, so the shared list stays
 ## uniquely referenced.
-copy_from : List(Xml.Node), U64 -> List(Xml.Node)
+copy_from : List(a), U64 -> List(a)
 copy_from = |nodes, start| {
 	var $out = List.with_capacity(nodes.len() - start)
 	var $index = start
@@ -1140,7 +1272,7 @@ copy_from = |nodes, start| {
 
 ## Drop the nodes from `len` on, one at a time from the end so the list
 ## keeps its allocation.
-truncate : List(Xml.Node), U64 -> List(Xml.Node)
+truncate : List(a), U64 -> List(a)
 truncate = |nodes, len| {
 	var $out = nodes
 	while $out.len() > len {
@@ -2130,3 +2262,39 @@ expect {
 }
 expect Xml.reader("<?xml version='1.0'?><a/>", {}).map_ok(|reader| reader.declaration().is_ok()) == Ok(True)
 expect Xml.reader("text", {}).map_ok(|_| {}) == Err(InvalidXml({ line: 1, column: 1, message: "expected a root element, but found text" }))
+
+# Doc examples: element_with.
+expect {
+	match Xml.reader("<doc><p>one</p><p>two<b/></p></doc>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start(_), rest) =>
+					match rest.element_with({ context: 0, first: "doc", start: |count, name, _| Ok({ context: count + 1, open: name }), text: |text| text, end: |count, name, children| { context: count, node: "${name}(${Str.join_with(children, ",")})" } }) {
+						Element(tree, count, _) => tree == "doc(p(one),p(two,b()))" and count == 3
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}
+
+# A rejecting start fails at its start tag.
+expect {
+	match Xml.reader("<doc>\n  <ok/><no/></doc>", {}) {
+		Ok(reader) =>
+			match reader.next() {
+				Event(Start(_), rest) =>
+					match rest.element_with({ context: {}, first: {}, start: |_, name, _| if (name == "no") Err(Refused) else Ok({ context: {}, open: {} }), text: |_| {}, end: |_, _, _| { context: {}, node: {} } }) {
+						Rejected(Refused, at) => at == { line: 2, column: 8 }
+						_ => False
+					}
+
+				_ => False
+			}
+
+		Err(_) => False
+	}
+}

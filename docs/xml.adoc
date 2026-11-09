@@ -195,6 +195,12 @@ include::examples/xml-guide.roc[tag=reader-run,indent=0]
 include::examples/xml-guide.expected[lines=10]
 ----
 
+To build a model of your own instead of `Xml.Node` values, call
+`element_with` after a `Start`, with functions that make your type from each
+start tag, each text and each finished element. It reads the subtree as fast
+as `Xml.parse_str` builds a tree, and a `start` function may reject an
+element with your own error, reported with its location.
+
 Keep only the latest reader, as here, and `return` from the `Done` arm rather
 than setting a flag: then each step updates the reader in place, and a loop
 that keeps no events holds memory for the open elements only. The same
@@ -302,7 +308,7 @@ CDATA, and the `xml-ceilings` fuzz target holds every reading path to
 allocation ceilings linear in the document.
 
 Reading every event with `Xml.reader` takes about 70% of the time
-`Xml.parse_str` takes to build the whole tree. `XmlNs.parse_str` runs at about
-a third of `Xml.parse_str`'s speed on an OOXML-like document, since it splits
-and resolves every name and its nodes are larger; it holds about twice the
-memory. See <<performance>> for the measurements and caveats.
+`Xml.parse_str` takes to build the whole tree. `XmlNs.parse_str` builds its
+tree with `element_with` and runs at about 40% of `Xml.parse_str`'s speed on an
+OOXML-like document, since it splits and resolves every name and its names
+and nodes are larger; it holds about twice the memory. See <<performance>> for the measurements and caveats.

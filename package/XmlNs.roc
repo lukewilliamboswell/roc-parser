@@ -462,12 +462,25 @@ resolve_start = |scope, name, attributes| {
 			Err(NotADeclaration) => {}
 		}
 	}
+	resolved = resolve_names($entries, $active, name, attributes)?
+	names = scope.names.append(resolved.name)
+	Ok({ scope: { entries: $entries, active: $active, frames, names }, name: resolved.name, bindings: $bindings, attributes: resolved.attributes })
+}
+
+# Resolves an element's name and its attributes other than declarations,
+# with the bindings in scope. The bindings are separate arguments that are
+# only read, so a lookup touches no reference counts.
+resolve_names : List(Entry), Dict(Str, U64), Str, List(Xml.Attribute) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.Attribute) }, XmlNs.Problem)
+resolve_names = |entries, active, name, attributes| {
 	element_name = split_qname(name)?
 	if element_name.prefix == "xmlns" {
 		return Err(ReservedPrefix("xmlns"))
 	}
-	resolved_name = resolve(element_name, $entries, $active, True)?
-	var $resolved = []
+	resolved_name = resolve(element_name, entries, active, True)?
+	if attributes.is_empty() {
+		return Ok({ name: resolved_name, attributes: [] })
+	}
+	var $resolved = List.with_capacity(attributes.len())
 	var $prefixed = 0
 	for attribute in attributes {
 		if !is_declaration(attribute.name) {
@@ -475,14 +488,36 @@ resolve_start = |scope, name, attributes| {
 			if attribute_name.prefix != "" {
 				$prefixed = $prefixed + 1
 			}
-			$resolved = $resolved.append({ name: resolve(attribute_name, $entries, $active, False)?, value: attribute.value })
+			$resolved = $resolved.append({ name: resolve(attribute_name, entries, active, False)?, value: attribute.value })
 		}
 	}
 	if $prefixed > 1 {
 		check_unique($resolved)?
 	}
-	names = scope.names.append(resolved_name)
-	Ok({ scope: { entries: $entries, active: $active, frames, names }, name: resolved_name, bindings: $bindings, attributes: $resolved })
+	Ok({ name: resolved_name, attributes: $resolved })
+}
+
+Entry : { prefix : Str, namespace : XmlNs.Namespace, previous : U64 }
+
+has_declaration : List(Xml.Attribute) -> Bool
+has_declaration = |attributes| attributes.any(|attribute| is_declaration(attribute.name))
+
+# Drops the bindings from `mark` on, restoring the ones they shadowed.
+unbind : List(Entry), Dict(Str, U64), U64 -> { entries : List(Entry), active : Dict(Str, U64) }
+unbind = |entries, active, mark| {
+	var $entries = entries
+	var $active = active
+	while $entries.len() > mark {
+		match $entries.last() {
+			Ok(entry) => {
+				$active = if (entry.previous == none) $active.remove(entry.prefix) else $active.insert(entry.prefix, entry.previous)
+			}
+
+			Err(_) => {}
+		}
+		$entries = $entries.drop_last(1)
+	}
+	{ entries: $entries, active: $active }
 }
 
 # Leaves the innermost element: its bindings go out of scope, and the ones
@@ -661,81 +696,44 @@ check_unique = |attributes| {
 	}
 }
 
-Open : {
-	name : XmlNs.Name,
-	bindings : List(XmlNs.Binding),
-	attributes : List(XmlNs.Attribute),
-	first_child : U64,
-}
-
-# Builds the element whose start was the reader's most recent event, as
-# Xml builds its tree: children of every open element in one flat list.
+# Builds the element whose start was the reader's most recent event with
+# Xml.Reader.element_with, so the subtree is read at the speed of the plain
+# tree parser, with the bindings as the context. Bindings are declared and
+# restored only at elements that declare some, so the common element costs a
+# lookup per name and nothing more.
 build_element : XmlNs.Reader, { name : XmlNs.Name, bindings : List(XmlNs.Binding), attributes : List(XmlNs.Attribute) } -> [Element(XmlNs.Node, XmlNs.Reader), Failed(XmlNs.ReadError), NotAfterStart]
 build_element = |reader, start| {
-	var $reader = reader
-	var $open : List(Open)
-	var $open = []
-	var $current = start
-	var $first_child = 0
-	var $nodes = []
-	while True {
-		match $reader.next() {
-			Event(Start(tag), rest) => {
-				$reader = rest
-				$open = $open.append({ name: $current.name, bindings: $current.bindings, attributes: $current.attributes, first_child: $first_child })
-				$current = tag
-				$first_child = $nodes.len()
+	scope = reader.scope
+	outer_frames = scope.frames.drop_last(1)
+	outer_names = scope.names.drop_last(1)
+	mark = scope.frames.last() ?? 0
+	built = reader.inner.element_with({
+		context: { entries: scope.entries, active: scope.active },
+		first: { name: start.name, bindings: start.bindings, attributes: start.attributes, mark },
+		start: |bound, name, attributes| {
+			at_mark = bound.entries.len()
+			if has_declaration(attributes) {
+				declared = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, name, attributes)?
+				Ok({ context: { entries: declared.scope.entries, active: declared.scope.active }, open: { name: declared.name, bindings: declared.bindings, attributes: declared.attributes, mark: at_mark } })
+			} else {
+				names = resolve_names(bound.entries, bound.active, name, attributes)?
+				Ok({ context: bound, open: { name: names.name, bindings: [], attributes: names.attributes, mark: at_mark } })
 			}
-
-			Event(Text(text), rest) => {
-				$reader = rest
-				$nodes = $nodes.append(Text(text))
-			}
-
-			Event(End(_), rest) => {
-				node = Element({ name: $current.name, bindings: $current.bindings, attributes: $current.attributes, children: copy_from($nodes, $first_child) })
-				match $open.last() {
-					Err(_) => return Element(node, rest)
-					Ok(parent) => {
-						$reader = rest
-						$open = $open.drop_last(1)
-						$nodes = truncate($nodes, $first_child).append(node)
-						$current = { name: parent.name, bindings: parent.bindings, attributes: parent.attributes }
-						$first_child = parent.first_child
-					}
-				}
-			}
-
-			Done => return Failed(InvalidXml({ line: 1, column: 1, message: "internal error: the document ended inside an element" }))
-			Failed(error) => return Failed(error)
-		}
+		},
+		text: |text| Text(text),
+		end: |bound, open, children| {
+			node : XmlNs.Node
+			node = Element({ name: open.name, bindings: open.bindings, attributes: open.attributes, children })
+			context = if (bound.entries.len() > open.mark) unbind(bound.entries, bound.active, open.mark) else bound
+			{ context, node }
+		},
+	})
+	match built {
+		Element(node, bound, rest) => Element(node, { inner: rest, scope: { entries: bound.entries, active: bound.active, frames: outer_frames, names: outer_names }, last_start: NotStarted })
+		Failed(error) => Failed(widen(error))
+		Rejected(problem, at) => Failed(InvalidNamespace({ problem, line: at.line, column: at.column }))
+		NotAfterStart => NotAfterStart
 	}
-}
-
-copy_from : List(XmlNs.Node), U64 -> List(XmlNs.Node)
-copy_from = |nodes, start| {
-	var $out = List.with_capacity(nodes.len() - start)
-	var $index = start
-	while $index < nodes.len() {
-		match nodes.get($index) {
-			Ok(node) => {
-				$out = $out.append(node)
-			}
-
-			Err(_) => {}
-		}
-		$index = $index + 1
-	}
-	$out
-}
-
-truncate : List(XmlNs.Node), U64 -> List(XmlNs.Node)
-truncate = |nodes, len| {
-	var $out = nodes
-	while $out.len() > len {
-		$out = $out.drop_last(1)
-	}
-	$out
 }
 
 # Writing

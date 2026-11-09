@@ -265,8 +265,9 @@ before you render untrusted input (see <<markdown>>).
 * `Xml.parse` sets limits on depth, element count and attributes per element
   for untrusted input, and fails with `LimitExceeded` before building past one.
 * `Xml.reader` is a pull reader with the same limits: `next` returns `Start`,
-  `End` and `Text` events, and `element` builds one subtree, so a large
-  document can be read an element at a time.
+  `End` and `Text` events, and `element` builds one subtree (or
+  `element_with`, one subtree of your own type), so a large document can be
+  read an element at a time.
 
 Documents with a `<!DOCTYPE>` declaration are rejected, names are kept as
 written, and comments and processing instructions are checked and then

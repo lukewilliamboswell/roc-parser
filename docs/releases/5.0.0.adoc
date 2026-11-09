@@ -39,7 +39,8 @@ the compiler used to build and test the delivered package.
   `element` builds the subtree after a `Start`, and `location` and
   `declaration` describe the document. A loop over `next` holds memory for the
   open elements and one event, so a large document can be read an element at a
-  time.
+  time. `element_with` builds a subtree as the caller's own type, as fast as
+  `Xml.parse_str` builds its tree.
 * `Xml.parse` and `Xml.ReaderProps`, limits for untrusted input: `max_depth`,
   `max_elements` and `max_attributes` per element, with defaults. A document
   that would exceed one fails with `LimitExceeded` at the start tag or

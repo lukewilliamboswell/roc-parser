@@ -185,6 +185,7 @@ check_element = |input, root, events, bytes| {
 			Event(Start(_), rest) => {
 				$consumed = $consumed + 1
 				if $starts == k {
+					check_element_with(rest, elements.get(k))
 					match rest.element() {
 						Element(node, after) => {
 							if Ok(node) != elements.get(k) {
@@ -216,6 +217,50 @@ check_element = |input, root, events, bytes| {
 
 			_ => crash "the document ended before start ${k.to_str()}"
 		}
+	}
+}
+
+## Reader.element_with builds the same subtree as element when it builds
+## Xml nodes, counts the elements it starts, and reports a rejecting start
+## at the first start tag inside the subtree.
+check_element_with : Xml.Reader, Try(Xml.Node, [OutOfBounds]) -> {}
+check_element_with = |reader, expected| {
+	first = match expected {
+		Ok(Element(element)) => { name: element.name, attributes: element.attributes }
+		_ => crash "the chosen start is not an element"
+	}
+	built = reader.element_with({
+		context: 0,
+		first,
+		start: |count, name, attributes| Ok({ context: count + 1, open: { name, attributes } }),
+		text: |text| Xml.Node.Text(text),
+		end: |count, open, children| { context: count, node: Xml.Node.Element({ name: open.name, attributes: open.attributes, children }) },
+	})
+	inner = match expected {
+		Ok(node) => elements_of(node).len() - 1
+		Err(_) => 0
+	}
+	match built {
+		Element(node, count, _) =>
+			if Ok(node) != expected or count != inner {
+				crash "element_with built ${Str.inspect(node)} with ${count.to_str()} starts"
+			}
+
+		other => crash "element_with failed where element succeeds: ${Str.inspect(other)}"
+	}
+	rejected = reader.element_with({ context: {}, first: {}, start: |_, _, _| Err(NoElements), text: |_| {}, end: |_, _, _| { context: {}, node: {} } })
+	match rejected {
+		Element(_, _, _) =>
+			if inner > 0 {
+				crash "a rejecting start was not called"
+			}
+
+		Rejected(NoElements, _) =>
+			if inner == 0 {
+				crash "a rejecting start was called for an element with no child elements"
+			}
+
+		other => crash "element_with with a rejecting start gave ${Str.inspect(other)}"
 	}
 }
 
