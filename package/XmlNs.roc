@@ -320,6 +320,77 @@ XmlNs := {
 		}
 	}
 
+	## How [XmlNs.render] writes a document.
+	##
+	## - `declaration`: `Plain` writes `<?xml version="1.0" encoding="UTF-8"?>`
+	##   and a line feed, `Standalone` also declares `standalone="yes"`, and
+	##   `Omitted` writes no declaration.
+	## - `prefixes`: `AsRead` writes each element's own `bindings` and each
+	##   name's own prefix. `Table(entries)` writes each name with its
+	##   namespace's prefix from the table, ignoring the tree's prefixes and
+	##   bindings, and declares on the root, in table order, every namespace
+	##   the document uses. An empty prefix makes a namespace the default for
+	##   elements; `xmlns=""` or `xmlns="u"` is then written where the default
+	##   must change. The `xml` namespace is always written with `xml`.
+	## - `attribute_order`: `AsGiven` keeps each element's attributes in order,
+	##   and `SortedBy(compare)` sorts them.
+	RenderProps := {
+		declaration : [Plain, Standalone, Omitted] ?? Plain,
+		prefixes : [AsRead, Table(List({ prefix : Str, namespace : Str }))] ?? AsRead,
+		attribute_order : [AsGiven, SortedBy((Name, Name -> [Before, Same, After]))] ?? AsGiven,
+	}
+
+	## Why a tree cannot be written as namespace-well-formed XML 1.0.
+	##
+	## - `InvalidName(name)`: a prefix or local name that is not an NCName, or
+	##   a binding of a reserved prefix, a table that gives one prefix two
+	##   namespaces, or `Prefix(p)` bound to `NoNamespace`.
+	## - `InvalidChar(code)`: a character XML 1.0 does not allow.
+	## - `UnboundNamespace(namespace)`: a name whose prefix is not bound to its
+	##   namespace where it is used, or a namespace missing from the table.
+	##   `""` stands for no namespace, when a default namespace is in scope.
+	## - `DuplicateAttribute(name)`: two attributes with the same namespace
+	##   and local name.
+	RenderProblem : [InvalidName(Str), InvalidChar(U32), UnboundNamespace(Str), DuplicateAttribute(Str)]
+
+	## Write a document as XML 1.0 text. The output is a function of the
+	## tree and `props` alone, and [XmlNs.parse_str] reads it back as the
+	## same tree, up to prefixes and bindings with `Table`.
+	##
+	## Text escapes `&` and `<`, `>` after `]]`, and a carriage return as
+	## `&#xD;`. Attribute values are double-quoted and also escape `"`, tab
+	## and line feed, so they survive attribute value normalisation. A
+	## failure names the problem and the path of written element names from
+	## the root to the element it is in.
+	##
+	## ```roc
+	## expect {
+	##     doc = XmlNs.parse_str("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>")?
+	##     XmlNs.render(doc, { declaration: Omitted }) == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
+	## }
+	##
+	## expect {
+	##     doc = XmlNs.parse_str("<a xmlns='urn:w'><b/></a>")?
+	##     XmlNs.render(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
+	## }
+	## ```
+	render : XmlNs, RenderProps -> Try(Str, [Unrenderable({ problem : RenderProblem, path : List(Str) })])
+	render = |doc, props| {
+		start =
+			match props.declaration {
+				Plain => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n".to_utf8()
+				Standalone => "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n".to_utf8()
+				Omitted => []
+			}
+		order = props.attribute_order
+		written =
+			match props.prefixes {
+				AsRead => render_as_read(start, doc.root, order)
+				Table(entries) => render_with_table(start, doc.root, order, entries)
+			}
+		written.map_ok(|bytes| Str.from_utf8(bytes) ?? "")
+	}
+
 	## The namespace the `xml` prefix is always bound to.
 	xml_namespace : Str
 	xml_namespace = "http://www.w3.org/XML/1998/namespace"
@@ -663,6 +734,537 @@ truncate = |nodes, len| {
 	$out
 }
 
+# Writing
+
+RenderError : [Unrenderable({ problem : XmlNs.RenderProblem, path : List(Str) })]
+
+AttributeOrder : [AsGiven, SortedBy((XmlNs.Name, XmlNs.Name -> [Before, Same, After]))]
+
+# Bindings in scope while writing: as `Scope`, without names and frames.
+Bound : {
+	entries : List({ prefix : Str, namespace : XmlNs.Namespace, previous : U64 }),
+	active : Dict(Str, U64),
+}
+
+Work : [Enter(XmlNs.Node), Leave({ written : Str, mark : U64 })]
+
+unrenderable : XmlNs.RenderProblem, List(Str) -> Try(_, RenderError)
+unrenderable = |problem, path| Err(Unrenderable({ problem, path }))
+
+bind : Bound, Str, XmlNs.Namespace -> Bound
+bind = |bound, key, namespace| {
+	previous = bound.active.get(key) ?? none
+	index = bound.entries.len()
+	{ entries: bound.entries.append({ prefix: key, namespace, previous }), active: bound.active.insert(key, index) }
+}
+
+unbind_to : Bound, U64 -> Bound
+unbind_to = |bound, len| {
+	var $entries = bound.entries
+	var $active = bound.active
+	while $entries.len() > len {
+		match $entries.last() {
+			Ok(entry) => {
+				$active = if (entry.previous == none) $active.remove(entry.prefix) else $active.insert(entry.prefix, entry.previous)
+			}
+
+			Err(_) => {}
+		}
+		$entries = $entries.drop_last(1)
+	}
+	{ entries: $entries, active: $active }
+}
+
+# The namespace bound to a prefix ("" for the default) where it is used.
+bound_namespace : Bound, Str -> XmlNs.Namespace
+bound_namespace = |bound, key| {
+	match bound.active.get(key) {
+		Ok(index) => bound.entries.get(index).map_ok(|entry| entry.namespace) ?? NoNamespace
+		Err(_) => if (key == "xml") Uri(XmlNs.xml_namespace) else NoNamespace
+	}
+}
+
+namespace_str : XmlNs.Namespace -> Str
+namespace_str = |namespace| {
+	match namespace {
+		Uri(uri) => uri
+		NoNamespace => ""
+	}
+}
+
+ordered : List(XmlNs.Attribute), AttributeOrder -> List(XmlNs.Attribute)
+ordered = |attributes, order| {
+	match order {
+		AsGiven => attributes
+		SortedBy(compare) => attributes.sort_with(|a, b| compare(a.name, b.name))
+	}
+}
+
+# Each element's own prefixes and bindings, checked against the scope.
+render_as_read : List(U8), XmlNs.Node, AttributeOrder -> Try(List(U8), RenderError)
+render_as_read = |start, root, order| {
+	var $out = start
+	var $bound = { entries: [], active: Dict.empty() }
+	var $path = []
+	var $work = [Enter(root)]
+	while !$work.is_empty() {
+		item = $work.last() ?? Leave({ written: "", mark: 0 })
+		$work = $work.drop_last(1)
+		match item {
+			Leave(leaving) => {
+				$out = $out.append('<').append('/').concat(leaving.written.to_utf8()).append('>')
+				$bound = unbind_to($bound, leaving.mark)
+				$path = $path.drop_last(1)
+			}
+
+			Enter(Text(text)) => {
+				$out = escape_text($out, text).map_err(|problem| Unrenderable({ problem, path: $path }))?
+			}
+
+			Enter(Element(element)) => {
+				written = written_name(element.name.prefix, element.name.local)
+				$path = $path.append(written)
+				check_name(element.name.prefix, element.name.local, $path)?
+				mark = $bound.entries.len()
+				$out = $out.append('<').concat(written.to_utf8())
+				for binding in element.bindings {
+					declared = check_binding(binding, $path)?
+					$bound = bind($bound, declared.key, binding.namespace)
+					$out = write_attribute($out, declared.attribute, namespace_str(binding.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
+				}
+				key = match element.name.prefix {
+					Prefix(prefix) => prefix
+					Unprefixed => ""
+				}
+				if bound_namespace($bound, key) != element.name.namespace {
+					return unrenderable(UnboundNamespace(namespace_str(element.name.namespace)), $path)
+				}
+				attributes = ordered(element.attributes, order)
+				if attributes.len() > 1 {
+					check_unique(attributes).map_err(|_| Unrenderable({ problem: DuplicateAttribute(written_name_of(attributes)), path: $path }))?
+				}
+				for attribute in attributes {
+					check_name(attribute.name.prefix, attribute.name.local, $path)?
+					in_scope =
+						match attribute.name.prefix {
+							Prefix(prefix) => bound_namespace($bound, prefix) == attribute.name.namespace and attribute.name.namespace != NoNamespace
+							Unprefixed => attribute.name.namespace == NoNamespace
+						}
+					if !in_scope {
+						return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
+					}
+					$out = write_attribute($out, written_name(attribute.name.prefix, attribute.name.local), attribute.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+				}
+				if element.children.is_empty() {
+					$out = $out.append('/').append('>')
+					$bound = unbind_to($bound, mark)
+					$path = $path.drop_last(1)
+				} else {
+					$out = $out.append('>')
+					$work = $work.append(Leave({ written, mark }))
+					var $index = element.children.len()
+					while $index > 0 {
+						$index = $index - 1
+						match element.children.get($index) {
+							Ok(child) => {
+								$work = $work.append(Enter(child))
+							}
+
+							Err(_) => {}
+						}
+					}
+				}
+			}
+		}
+	}
+	Ok($out)
+}
+
+# Prefixes from a table, declared on the root. `$default` is the default
+# namespace in effect, changed with `xmlns` where an unprefixed element needs
+# another; `$defaults` remembers it for each open element.
+render_with_table : List(U8), XmlNs.Node, AttributeOrder, List({ prefix : Str, namespace : Str }) -> Try(List(U8), RenderError)
+render_with_table = |start, root, order, entries| {
+	root_path = match root {
+		Element(element) => [written_name(element.name.prefix, element.name.local)]
+		Text(_) => []
+	}
+	var $prefix_of = Dict.empty()
+	var $namespace_of = Dict.empty()
+	for entry in entries {
+		attribute = if (entry.prefix == "") "xmlns" else "xmlns:${entry.prefix}"
+		reserved = entry.prefix == "xmlns" or entry.namespace == XmlNs.xmlns_namespace or ((entry.prefix == "xml") != (entry.namespace == XmlNs.xml_namespace)) or entry.namespace == ""
+		if reserved or (entry.prefix != "" and !is_ncname(entry.prefix)) {
+			return unrenderable(InvalidName(attribute), root_path)
+		}
+		match $namespace_of.get(entry.prefix) {
+			Ok(other) =>
+				if other != entry.namespace {
+					return unrenderable(InvalidName(attribute), root_path)
+				}
+
+			Err(_) => {
+				$namespace_of = $namespace_of.insert(entry.prefix, entry.namespace)
+			}
+		}
+		if !$prefix_of.contains(entry.namespace) {
+			$prefix_of = $prefix_of.insert(entry.namespace, entry.prefix)
+		}
+	}
+	used = used_namespaces(root)
+	var $out = start
+	var $declarations = []
+	var $root_default = NoNamespace
+	for entry in entries {
+		if used.contains(entry.namespace) and $prefix_of.get(entry.namespace) == Ok(entry.prefix) and entry.prefix != "xml" {
+			$declarations = $declarations.append({ name: if (entry.prefix == "") "xmlns" else "xmlns:${entry.prefix}", value: entry.namespace })
+			if entry.prefix == "" {
+				$root_default = Uri(entry.namespace)
+			}
+		}
+	}
+	var $default = $root_default
+	var $defaults = []
+	var $path = []
+	var $work = [Enter(root)]
+	var $first = True
+	while !$work.is_empty() {
+		item = $work.last() ?? Leave({ written: "", mark: 0 })
+		$work = $work.drop_last(1)
+		match item {
+			Leave(leaving) => {
+				$out = $out.append('<').append('/').concat(leaving.written.to_utf8()).append('>')
+				$default = $defaults.last() ?? NoNamespace
+				$defaults = $defaults.drop_last(1)
+				$path = $path.drop_last(1)
+			}
+
+			Enter(Text(text)) => {
+				$out = escape_text($out, text).map_err(|problem| Unrenderable({ problem, path: $path }))?
+			}
+
+			Enter(Element(element)) => {
+				prefix = table_prefix($prefix_of, element.name.namespace, True)
+				$path = $path.append(written_name(element.name.prefix, element.name.local))
+				local_ok = is_ncname(element.name.local)
+				if !local_ok {
+					return unrenderable(InvalidName(element.name.local), $path)
+				}
+				written =
+					match prefix {
+						Ok("") => element.name.local
+						Ok(p) => "${p}:${element.name.local}"
+						Err(_) => return unrenderable(UnboundNamespace(namespace_str(element.name.namespace)), $path)
+					}
+				$out = $out.append('<').concat(written.to_utf8())
+				outer_default = $default
+				if $first {
+					for declared in $declarations {
+						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					}
+					$first = False
+				}
+				if prefix == Ok("") and $default != element.name.namespace {
+					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$default = element.name.namespace
+				}
+				attributes = ordered(element.attributes, order)
+				if attributes.len() > 1 {
+					check_unique(attributes).map_err(|_| Unrenderable({ problem: DuplicateAttribute(written_name_of(attributes)), path: $path }))?
+				}
+				for attribute in attributes {
+					if !is_ncname(attribute.name.local) {
+						return unrenderable(InvalidName(attribute.name.local), $path)
+					}
+					attribute_name =
+						match table_prefix($prefix_of, attribute.name.namespace, False) {
+							Ok("") => attribute.name.local
+							Ok(p) => "${p}:${attribute.name.local}"
+							Err(_) => return unrenderable(UnboundNamespace(namespace_str(attribute.name.namespace)), $path)
+						}
+					$out = write_attribute($out, attribute_name, attribute.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
+				}
+				if element.children.is_empty() {
+					$out = $out.append('/').append('>')
+					$default = outer_default
+					$path = $path.drop_last(1)
+				} else {
+					$out = $out.append('>')
+					$defaults = $defaults.append(outer_default)
+					$work = $work.append(Leave({ written, mark: 0 }))
+					var $index = element.children.len()
+					while $index > 0 {
+						$index = $index - 1
+						match element.children.get($index) {
+							Ok(child) => {
+								$work = $work.append(Enter(child))
+							}
+
+							Err(_) => {}
+						}
+					}
+				}
+			}
+		}
+	}
+	Ok($out)
+}
+
+# The prefix a namespace is written with: "" for an unprefixed element name
+# (no namespace, or the table's default) or an attribute in no namespace.
+table_prefix : Dict(Str, Str), XmlNs.Namespace, Bool -> Try(Str, [Unbound])
+table_prefix = |prefix_of, namespace, is_element| {
+	match namespace {
+		NoNamespace => Ok("")
+		Uri(uri) =>
+			if uri == XmlNs.xml_namespace {
+				Ok("xml")
+			} else {
+				match prefix_of.get(uri) {
+					Ok("") => if (is_element) Ok("") else Err(Unbound)
+					Ok(prefix) => Ok(prefix)
+					Err(_) => Err(Unbound)
+				}
+			}
+	}
+}
+
+# Every namespace an element or attribute name of the tree is in.
+used_namespaces : XmlNs.Node -> Set(Str)
+used_namespaces = |root| {
+	var $used = Set.empty()
+	var $pending = [root]
+	while !$pending.is_empty() {
+		match $pending.last() {
+			Ok(Element(element)) => {
+				$pending = $pending.drop_last(1)
+				$used = match element.name.namespace {
+					Uri(uri) => $used.insert(uri)
+					NoNamespace => $used
+				}
+				for attribute in element.attributes {
+					$used = match attribute.name.namespace {
+						Uri(uri) => $used.insert(uri)
+						NoNamespace => $used
+					}
+				}
+				$pending = $pending.concat(element.children)
+			}
+
+			Ok(Text(_)) => {
+				$pending = $pending.drop_last(1)
+			}
+
+			Err(_) => {
+				$pending = []
+			}
+		}
+	}
+	$used
+}
+
+written_name : [Prefix(Str), Unprefixed], Str -> Str
+written_name = |prefix, local| {
+	match prefix {
+		Prefix(p) => "${p}:${local}"
+		Unprefixed => local
+	}
+}
+
+# The written name of the second attribute that duplicates an earlier one.
+written_name_of : List(XmlNs.Attribute) -> Str
+written_name_of = |attributes| {
+	match check_unique(attributes) {
+		Err(DuplicateAttribute(duplicate)) => written_name(duplicate.prefix, duplicate.local)
+		_ => ""
+	}
+}
+
+check_name : [Prefix(Str), Unprefixed], Str, List(Str) -> Try({}, RenderError)
+check_name = |prefix, local, path| {
+	match prefix {
+		Prefix(p) if !is_ncname(p) => unrenderable(InvalidName(p), path)
+		_ => if (is_ncname(local)) Ok({}) else unrenderable(InvalidName(local), path)
+	}
+}
+
+# A binding's attribute name and scope key, with the reserved-prefix rules.
+check_binding : XmlNs.Binding, List(Str) -> Try({ key : Str, attribute : Str }, RenderError)
+check_binding = |binding, path| {
+	match binding.prefix {
+		Default =>
+			if binding.namespace == Uri(XmlNs.xml_namespace) or binding.namespace == Uri(XmlNs.xmlns_namespace) {
+				unrenderable(InvalidName("xmlns"), path)
+			} else {
+				Ok({ key: "", attribute: "xmlns" })
+			}
+
+		Prefix(prefix) => {
+			attribute = "xmlns:${prefix}"
+			reserved = prefix == "xmlns" or binding.namespace == NoNamespace or binding.namespace == Uri(XmlNs.xmlns_namespace) or ((prefix == "xml") != (binding.namespace == Uri(XmlNs.xml_namespace)))
+			if !is_ncname(prefix) or reserved {
+				unrenderable(InvalidName(attribute), path)
+			} else {
+				Ok({ key: prefix, attribute })
+			}
+		}
+	}
+}
+
+write_attribute : List(U8), Str, Str -> Try(List(U8), XmlNs.RenderProblem)
+write_attribute = |out, attribute_name, value| {
+	escaped = escape_value(out.append(' ').concat(attribute_name.to_utf8()).append('=').append('"'), value)?
+	Ok(escaped.append('"'))
+}
+
+# See https://www.w3.org/TR/xml/#syntax. Runs that need no escaping are
+# copied whole.
+escape_text : List(U8), Str -> Try(List(U8), XmlNs.RenderProblem)
+escape_text = |out, text| {
+	bytes = text.to_utf8()
+	var $out = out
+	var $run = 0
+	var $pos = 0
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		replacement =
+			if byte == '&' {
+				Ok("&amp;")
+			} else if byte == '<' {
+				Ok("&lt;")
+			} else if byte == '>' and $pos >= 2 and bytes.get($pos - 1) == Ok(']') and bytes.get($pos - 2) == Ok(']') {
+				Ok("&gt;")
+			} else if byte == '\r' {
+				Ok("&#xD;")
+			} else {
+				Err(Kept)
+			}
+		match replacement {
+			Ok(escaped) => {
+				$out = $out.concat(bytes.sublist({ start: $run, len: $pos - $run })).concat(escaped.to_utf8())
+				$pos = $pos + 1
+				$run = $pos
+			}
+
+			Err(Kept) => {
+				$pos = check_scalar(bytes, $pos)?
+			}
+		}
+	}
+	Ok($out.concat(bytes.sublist({ start: $run, len: $pos - $run })))
+}
+
+# See https://www.w3.org/TR/xml/#AVNormalize: whitespace characters are
+# written as references, so normalisation keeps them.
+escape_value : List(U8), Str -> Try(List(U8), XmlNs.RenderProblem)
+escape_value = |out, value| {
+	bytes = value.to_utf8()
+	var $out = out
+	var $run = 0
+	var $pos = 0
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		replacement =
+			if byte == '&' {
+				Ok("&amp;")
+			} else if byte == '<' {
+				Ok("&lt;")
+			} else if byte == '"' {
+				Ok("&quot;")
+			} else if byte == '\t' {
+				Ok("&#x9;")
+			} else if byte == '\n' {
+				Ok("&#xA;")
+			} else if byte == '\r' {
+				Ok("&#xD;")
+			} else {
+				Err(Kept)
+			}
+		match replacement {
+			Ok(escaped) => {
+				$out = $out.concat(bytes.sublist({ start: $run, len: $pos - $run })).concat(escaped.to_utf8())
+				$pos = $pos + 1
+				$run = $pos
+			}
+
+			Err(Kept) => {
+				$pos = check_scalar(bytes, $pos)?
+			}
+		}
+	}
+	Ok($out.concat(bytes.sublist({ start: $run, len: $pos - $run })))
+}
+
+# The position after the character at `pos` of valid UTF-8, if XML 1.0
+# allows it (https://www.w3.org/TR/xml/#NT-Char).
+check_scalar : List(U8), U64 -> Try(U64, XmlNs.RenderProblem)
+check_scalar = |bytes, pos| {
+	scalar = scalar_at(bytes, pos)
+	c = scalar.code
+	allowed = c == 0x9 or c == 0xA or c == 0xD or (c >= 0x20 and c <= 0xD7FF) or (c >= 0xE000 and c <= 0xFFFD) or c >= 0x10000
+	if (allowed) Ok(pos + scalar.len) else Err(InvalidChar(c))
+}
+
+# The scalar starting at `pos` of valid UTF-8.
+scalar_at : List(U8), U64 -> { code : U32, len : U64 }
+scalar_at = |bytes, pos| {
+	b0 = U8.to_u32(bytes.get(pos) ?? 0)
+	cont = |offset| U8.to_u32((bytes.get(pos + offset) ?? 0x80) - 0x80)
+	if b0 < 0x80 {
+		{ code: b0, len: 1 }
+	} else if b0 < 0xE0 {
+		{ code: (b0 - 0xC0) * 64 + cont(1), len: 2 }
+	} else if b0 < 0xF0 {
+		{ code: (b0 - 0xE0) * 4096 + cont(1) * 64 + cont(2), len: 3 }
+	} else {
+		{ code: (b0 - 0xF0) * 262144 + cont(1) * 4096 + cont(2) * 64 + cont(3), len: 4 }
+	}
+}
+
+# See https://www.w3.org/TR/xml-names/#NT-NCName
+is_ncname : Str -> Bool
+is_ncname = |text| {
+	bytes = text.to_utf8()
+	if bytes.is_empty() {
+		return False
+	}
+	var $pos = 0
+	while $pos < bytes.len() {
+		scalar = scalar_at(bytes, $pos)
+		valid = if ($pos == 0) is_name_start(scalar.code) else is_name_start(scalar.code) or is_name_rest(scalar.code)
+		if !valid {
+			return False
+		}
+		$pos = $pos + scalar.len
+	}
+	True
+}
+
+# See https://www.w3.org/TR/xml/#NT-NameStartChar, without ':'.
+is_name_start : U32 -> Bool
+is_name_start = |c| {
+	(c >= 'a' and c <= 'z')
+		or (c >= 'A' and c <= 'Z')
+		or c == '_'
+		or (c >= 0xC0 and c <= 0xD6)
+		or (c >= 0xD8 and c <= 0xF6)
+		or (c >= 0xF8 and c <= 0x2FF)
+		or (c >= 0x370 and c <= 0x37D)
+		or (c >= 0x37F and c <= 0x1FFF)
+		or (c >= 0x200C and c <= 0x200D)
+		or (c >= 0x2070 and c <= 0x218F)
+		or (c >= 0x2C00 and c <= 0x2FEF)
+		or (c >= 0x3001 and c <= 0xD7FF)
+		or (c >= 0xF900 and c <= 0xFDCF)
+		or (c >= 0xFDF0 and c <= 0xFFFD)
+		or (c >= 0x10000 and c <= 0xEFFFF)
+}
+
+# See https://www.w3.org/TR/xml/#NT-NameChar: the characters a name may have
+# after its first.
+is_name_rest : U32 -> Bool
+is_name_rest = |c| c == '-' or c == '.' or (c >= '0' and c <= '9') or c == 0xB7 or (c >= 0x300 and c <= 0x36F) or (c >= 0x203F and c <= 0x2040)
+
 problem_of : Str -> Try(XmlNs.Problem, [Parsed, OtherError])
 problem_of = |input| {
 	match XmlNs.parse_str(input) {
@@ -837,4 +1439,126 @@ expect {
 	depth = 20000
 	input = Str.concat("<a xmlns='urn:a'>", Str.concat(Str.repeat("<p:a xmlns:p='urn:p'>", depth), Str.concat(Str.repeat("</p:a>", depth), "</a>")))
 	XmlNs.parse_str(input).is_ok()
+}
+
+render_omitted : Str -> Try(Str, [Parse, Render(XmlNs.RenderProblem)])
+render_omitted = |input| {
+	match XmlNs.parse_str(input) {
+		Ok(doc) => XmlNs.render(doc, { declaration: Omitted }).map_err(|Unrenderable(failure)| Render(failure.problem))
+		Err(_) => Err(Parse)
+	}
+}
+
+element : XmlNs.Name, List(XmlNs.Binding), List(XmlNs.Attribute), List(XmlNs.Node) -> XmlNs.Node
+element = |element_name, bindings, attributes, children| Element({ name: element_name, bindings, attributes, children })
+
+plain : Str -> XmlNs.Name
+plain = |local| { namespace: NoNamespace, local, prefix: Unprefixed }
+
+render_tree : XmlNs.Node, XmlNs.RenderProps -> Try(Str, [Unrenderable({ problem : XmlNs.RenderProblem, path : List(Str) })])
+render_tree = |root, props| XmlNs.render({ declaration: Err(Missing), root }, props)
+
+# Escaping: `&` and `<` everywhere, `>` after `]]`, `"` and whitespace in
+# attribute values, and a carriage return in text.
+expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "<&\"'>\t\n\r" }], [Text("a<b&c]]>d>\r]>")]), { declaration: Omitted }) == Ok("<a k=\"&lt;&amp;&quot;'>&#x9;&#xA;&#xD;\">a&lt;b&amp;c]]&gt;d>&#xD;]></a>")
+expect render_omitted("<a k='x&#9;y&#10;z'>&#13;é&#x1F600;</a>") == Ok("<a k=\"x&#x9;y&#xA;z\">&#xD;é😀</a>")
+
+# Declarations.
+expect render_tree(element(plain("a"), [], [], []), {}) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<a/>")
+expect render_tree(element(plain("a"), [], [], []), { declaration: Standalone }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<a/>")
+
+# AsRead writes the tree's own prefixes and bindings.
+expect render_omitted("<r xmlns='urn:d' xmlns:p='urn:p'><p:a p:k='1' k='2'/><b xmlns=''/>t</r>") == Ok("<r xmlns=\"urn:d\" xmlns:p=\"urn:p\"><p:a p:k=\"1\" k=\"2\"/><b xmlns=\"\"/>t</r>")
+
+# Characters and names XML 1.0 does not allow are refused, with a path.
+expect render_tree(element(plain("a"), [], [], [element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
+expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
+expect render_tree(element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
+expect render_tree(element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
+expect render_tree(element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
+expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+
+# A prefix must be bound to its name's namespace where it is used.
+expect render_tree(element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
+expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(element(plain("a"), [], [{ name: { namespace: Uri(XmlNs.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
+
+# Duplicate expanded attribute names are refused.
+expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
+
+# A table names every namespace once, on the root, in table order, with no
+# unused declarations, and switches the default where needed.
+expect {
+	match XmlNs.parse_str("<x:doc xmlns:x='urn:w' xmlns:r='urn:r'><x:body><p xmlns='' r:id='1'/><x:p/></x:body></x:doc>") {
+		Ok(doc) =>
+			XmlNs.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "unused", namespace: "urn:unused" }, { prefix: "", namespace: "urn:w" }, { prefix: "rel", namespace: "urn:r" }]) })
+				== Ok("<doc xmlns=\"urn:w\" xmlns:rel=\"urn:r\"><body><p xmlns=\"\" rel:id=\"1\"/><p/></body></doc>")
+
+		Err(_) => False
+	}
+}
+expect {
+	match XmlNs.parse_str("<a xmlns='urn:a'/>") {
+		Ok(doc) => XmlNs.render(doc, { prefixes: Table([]) }) == Err(Unrenderable({ problem: UnboundNamespace("urn:a"), path: ["a"] }))
+		Err(_) => False
+	}
+}
+expect {
+	match XmlNs.parse_str("<a xmlns='urn:a'/>") {
+		Ok(doc) => XmlNs.render(doc, { prefixes: Table([{ prefix: "p", namespace: "urn:a" }, { prefix: "p", namespace: "urn:b" }]) }) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+		Err(_) => False
+	}
+}
+
+# Attributes can be sorted.
+by_first_byte : Str, Str -> [Before, Same, After]
+by_first_byte = |a, b| {
+	x = a.to_utf8().first() ?? 0
+	y = b.to_utf8().first() ?? 0
+	if (x < y) Before else if (x > y) After else Same
+}
+expect render_omitted("<a z='1' y='2' x='3'/>") == Ok("<a z=\"1\" y=\"2\" x=\"3\"/>")
+expect {
+	match XmlNs.parse_str("<a z='1' y='2' x='3'/>") {
+		Ok(doc) => XmlNs.render(doc, { declaration: Omitted, attribute_order: SortedBy(|a, b| by_first_byte(a.local, b.local)) }) == Ok("<a x=\"3\" y=\"2\" z=\"1\"/>")
+		Err(_) => False
+	}
+}
+
+# Rendering a parsed document and parsing it again gives the same tree.
+expect {
+	inputs = [
+		"<r xmlns='urn:d' xmlns:p='urn:p'><p:a p:k='1&#10;2' k='&quot;'/><b xmlns=''>x]]&gt;y&#13;</b>t<![CDATA[<c>]]></r>",
+		"<?xml version='1.0' standalone='yes'?><w:document xmlns:w='urn:w' xml:space='preserve'><w:body><w:p><w:r><w:t>Hi</w:t></w:r></w:p></w:body></w:document>",
+	]
+	inputs.all(
+		|input| {
+			match XmlNs.parse_str(input) {
+				Ok(doc) =>
+					match XmlNs.render(doc, {}) {
+						Ok(text) => XmlNs.parse_str(text).map_ok(|again| again.root) == Ok(doc.root) and XmlNs.render(doc, {}) == Ok(text)
+						Err(_) => False
+					}
+
+				Err(_) => False
+			}
+		},
+	)
+}
+
+# Deep trees are written without exhausting the call stack.
+expect {
+	depth = 20000
+	input = Str.concat(Str.repeat("<a>", depth), Str.repeat("</a>", depth))
+	render_omitted(input) == Ok(Str.concat(Str.repeat("<a>", depth - 1), Str.concat("<a/>", Str.repeat("</a>", depth - 1))))
+}
+
+# Doc examples: render.
+expect render_omitted("<p:a xmlns:p='urn:p' k='1 &amp; 2'>x &lt; y</p:a>") == Ok("<p:a xmlns:p=\"urn:p\" k=\"1 &amp; 2\">x &lt; y</p:a>")
+expect {
+	match XmlNs.parse_str("<a xmlns='urn:w'><b/></a>") {
+		Ok(doc) => XmlNs.render(doc, { declaration: Standalone, prefixes: Table([{ prefix: "w", namespace: "urn:w" }]) }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:a xmlns:w=\"urn:w\"><w:b/></w:a>")
+		Err(_) => False
+	}
 }
