@@ -1,0 +1,39 @@
+= roc-parser 6.0.0-rc.1
+
+This release candidate adds a pull reader, resource limits, namespace processing and a writer to XML, and corrects AsciiDoc list and inline output to match Asciidoctor. It is a preview for downstream testing, such as roc-docx, and requires **Roc nightly `nightly-2026-11-07-ad3a5d2`** and basic-cli 0.27.0.
+
+== Upgrade impact
+
+* *AsciiDoc output changes where it disagreed with Asciidoctor.* That makes this a major release: rendered HTML differs from 5.0.0 for documents that use these constructs.
+** Block metadata before a nested list, such as `[lowerroman]` after a list continuation, now styles that list. Unordered lists render their style.
+** Lists are identified by marker style: `b.` items under a `.` list, `i)` items, and `*` items under `-` items now nest as their own list. Roman markers are recognised.
+** A verbatim style (`literal`, `listing`, `source`, `verse`) makes a following block macro line a paragraph. A title before a thematic break stays on it.
+** In attribute lists, `name=value` is named only when the name is a word, and a later same-named media attribute wins.
+** `pass:` is a macro only when `[` follows its substitutions, and an `xref:` target may span a line break.
+** `cols` is read as Asciidoctor reads it: a record that is not a column spec declares no column, and a bare number is that many columns.
+* *Additions to `Xml` and a new `XmlNs` module.* Existing `Xml` code is unaffected: `Xml.parse_str` and `Xml.parser` keep their signatures and results.
+
+== Use this release
+
+Add the package to your app's header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+== Added
+
+* `Xml.reader`, a pull reader: `next` returns `Start`, `End` and `Text` events, `element` builds the subtree after a `Start`, `element_with` builds it as your own type at the tree parser's speed, and `location` and `declaration` describe the document.
+* `Xml.parse` and `Xml.ReaderProps`: `max_depth`, `max_elements` and `max_attributes` per element, with defaults. A document that would exceed one fails with `LimitExceeded` at the tag or attribute, before anything is built for it.
+* `XmlNs`, namespace processing following Namespaces in XML 1.0 (Third Edition), with `parse_str`, `parse` and a reader that resolves names as it reads.
+* `XmlNs.render`, which writes a namespaced tree with its own prefixes or a prefix table, escaping text and attribute values so that they read back unchanged.
+
+== Fixed
+
+* AsciiDoc keeps block metadata on nested lists (https://github.com/lukewilliamboswell/roc-parser/issues/110[#110]), and the full Asciidoctor review (1000 generated models and 1000 mutations, seed 13) now passes every case.
+* XML text and attribute values decode in linear time however references, line endings and CDATA sections are mixed.
+
+== About this candidate
+
+This candidate was built and uploaded by hand while GitHub release downloads failed in CI. It was built with the repository's `release-package` tool and its archived examples were tested against this exact bundle, but it has no manual PDF, SBOM sidecars or build-provenance attestations. Preview APIs may change before the final release.
