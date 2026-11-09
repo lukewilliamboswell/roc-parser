@@ -22,6 +22,7 @@ package
 		RocSyntax,
 		Utf8,
 		Xml,
+		XmlNs,
 		Yaml,
 	]
 	{
