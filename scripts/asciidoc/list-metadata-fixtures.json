@@ -1,0 +1,839 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Original list cases for block metadata attached to nested lists, with and without list continuations (issue #110), and unordered list styles. The runtime also compares full native projection and HTML.",
+    "reference_family": "Asciidoctor 2.0 list documentation",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle; no external includes."
+  },
+  "coverage": [
+    {
+      "category": "list-metadata",
+      "required_cases": [
+        "list-metadata-continuation-ordered",
+        "list-metadata-without-continuation",
+        "list-metadata-sibling-continuation",
+        "list-metadata-description-entry",
+        "list-metadata-title-id-start",
+        "list-metadata-return-to-parent",
+        "list-metadata-blank-lines",
+        "list-metadata-sibling-dropped",
+        "list-metadata-parent-dropped",
+        "list-metadata-literal-listing",
+        "list-metadata-source-block",
+        "list-unordered-styles"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "list-metadata-continuation-ordered",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". Parent item\n+\n[lowerroman]\n.. First detail\n.. Second detail\n\n. Next parent item\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"lowerroman\" type=\"i\">",
+          "<p>Next parent item</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-without-continuation",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". Parent item\n[lowerroman]\n.. First detail\n.. Second detail\n. Next\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"lowerroman\" type=\"i\">",
+          "<p>Next</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-sibling-continuation",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": "* a\n+\n[square]\n** x\n** y\n+\nmore\n* b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ul class=\"square\">",
+          "<p>more</p>",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "ulist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": [
+                            {
+                              "context": "paragraph",
+                              "level": 0,
+                              "title": "",
+                              "source": "more",
+                              "blocks": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-description-entry",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": "Term:: def\n+\n[lowerroman]\n. one\n. two\nOther:: d2\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"lowerroman\" type=\"i\">",
+          "<dt class=\"hdlist1\">Other</dt>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "dlist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-title-id-start",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". a\n+\n.Title\n[[myid]]\n[lowerroman,start=3]\n.. x\n\n.. y\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "id=\"myid\"",
+          "<div class=\"title\">Title</div>",
+          "start=\"3\""
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "Title",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-return-to-parent",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". a\n+\n[lowerroman]\n.. x\n... deep\n.. y\n+\n[upperalpha]\n... z\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"upperalpha\" type=\"A\">",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": [
+                            {
+                              "context": "olist",
+                              "level": 0,
+                              "title": "",
+                              "source": "",
+                              "blocks": [
+                                {
+                                  "context": "list_item",
+                                  "level": 0,
+                                  "title": "",
+                                  "source": "",
+                                  "blocks": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": [
+                            {
+                              "context": "olist",
+                              "level": 0,
+                              "title": "",
+                              "source": "",
+                              "blocks": [
+                                {
+                                  "context": "list_item",
+                                  "level": 0,
+                                  "title": "",
+                                  "source": "",
+                                  "blocks": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-blank-lines",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": "* a\n+\n\n[square]\n\n** x\n* b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ul class=\"square\">",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "ulist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-sibling-dropped",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". a\n+\n[lowerroman]\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"arabic\">",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-parent-dropped",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". a\n.. x\n+\n[square]\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<ol class=\"loweralpha\" type=\"a\">",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-literal-listing",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": ". a\n+\n----\n[lowerroman]\n.. not a list\n----\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "[lowerroman]\n.. not a list</pre>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "listing",
+                      "level": 0,
+                      "title": "",
+                      "source": "[lowerroman]\n.. not a list",
+                      "blocks": []
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-metadata-source-block",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": "* a\n+\n[source,ruby]\n----\nputs 1\n----\n* b\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "class=\"language-ruby\"",
+          "<p>b</p>"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "listing",
+                      "level": 0,
+                      "title": "",
+                      "source": "puts 1",
+                      "blocks": []
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    },
+    {
+      "id": "list-unordered-styles",
+      "category": "list-metadata",
+      "features": [
+        "list-metadata"
+      ],
+      "source": "[square]\n* x\n\n[bibliography]\n* [[[a]]] y\n\n[circle]\n* [x] done\n",
+      "support": "minimal",
+      "expect": {
+        "html_contains": [
+          "<div class=\"ulist square\">",
+          "<ul class=\"square\">",
+          "<ul class=\"bibliography\">",
+          "<div class=\"ulist checklist circle\">"
+        ],
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            },
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            },
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/lists/continuation/"
+      ]
+    }
+  ]
+}

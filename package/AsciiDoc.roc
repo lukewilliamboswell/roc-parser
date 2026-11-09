@@ -756,8 +756,19 @@ parse_list = |lines, kind, level, ancestors| {
 					$item_done = True
 					$done = True
 				} else if m.kind != "" and (m.level != level or m.kind != kind) {
-					nested = parse_list($rest, m.kind, m.level, ancestors.append("${kind}:${level.to_str()}"))
-					$children = $children.append(rich(m.kind, "", "", "", "", AsciiDocAttributes.flat([]), nested.blocks, m.level))
+					nested = nested_list([], $rest, ancestors.append("${kind}:${level.to_str()}"))
+					$children = $children.append(nested.block)
+					$rest = nested.rest
+					if list_marker(($rest.first() ?? empty_line).text).kind == "" and ($rest.first() ?? empty_line).text != "+" {
+						$item_done = True
+						$done = True
+					}
+				} else if (next == "+" or is_list_metadata(next)) and attaches_nested_list(if (next == "+") $rest.drop_first(1) else $rest, kind, level, ancestors) {
+					# Metadata lines before a nested list, attached with or
+					# without a continuation, describe that list.
+					meta = take_list_metadata(if (next == "+") $rest.drop_first(1) else $rest)
+					nested = nested_list(meta.lines, meta.rest, ancestors.append("${kind}:${level.to_str()}"))
+					$children = $children.append(nested.block)
 					$rest = nested.rest
 					if list_marker(($rest.first() ?? empty_line).text).kind == "" and ($rest.first() ?? empty_line).text != "+" {
 						$item_done = True
@@ -801,6 +812,78 @@ parse_list = |lines, kind, level, ancestors| {
 		}
 	}
 	{ blocks: $items, rest: $rest }
+}
+
+## A block attribute list, anchor or block title that can precede a list.
+is_list_metadata : Str -> Bool
+is_list_metadata = |text| (is_block_metadata(text) or is_block_title(text)) and delimiter(text) == "" and list_marker(text).kind == ""
+
+## The metadata lines at the start of `lines`, with the blank lines around
+## them dropped, and the lines after them.
+take_list_metadata : List(Line) -> { lines : List(Line), rest : List(Line) }
+take_list_metadata = |lines| {
+	var $rest = lines
+	var $meta = []
+	while !$rest.is_empty() and (($rest.first() ?? empty_line).text == "" or is_list_metadata(($rest.first() ?? empty_line).text)) {
+		line = $rest.first() ?? empty_line
+		if line.text != "" {
+			$meta = $meta.append(line)
+		}
+		$rest = $rest.drop_first(1)
+	}
+	{ lines: $meta, rest: $rest }
+}
+
+## Whether `lines` start with metadata (after optional blank lines) that
+## precedes a list nested in the current item: one that is neither a
+## sibling item nor an item of an enclosing list.
+attaches_nested_list : List(Line), Str, U64, List(Str) -> Bool
+attaches_nested_list = |lines, kind, level, ancestors| {
+	var $index = 0
+	var $found = False
+	while ((lines.get($index) ?? empty_line).text == "" or is_list_metadata((lines.get($index) ?? empty_line).text)) and $index < lines.len() {
+		if (lines.get($index) ?? empty_line).text != "" {
+			$found = True
+		}
+		$index = $index + 1
+	}
+	m = list_marker((lines.get($index) ?? empty_line).text)
+	$found and m.kind != "" and (m.kind != kind or m.level != level) and !ancestors.contains("${m.kind}:${m.level.to_str()}")
+}
+
+## The list starting at the first of `lines`, nested in an item, with the
+## style, ID, title and attributes from the `meta` lines before it.
+nested_list : List(Line), List(Line), List(Str) -> { block : AsciiDoc.Block, rest : List(Line) }
+nested_list = |meta, lines, ancestors| {
+	line = lines.first() ?? empty_line
+	marker = list_marker(line.text)
+	list = parse_list(lines, marker.kind, marker.level, ancestors)
+	var $attrs = AsciiDocAttributes.flat([])
+	var $title = ""
+	var $id = ""
+	for meta_line in meta {
+		text = meta_line.text
+		if text.starts_with("[[") and text.ends_with("]]") {
+			parts = split_attributes(Str.from_utf8_lossy(text.to_utf8().drop_first(2).drop_last(2)))
+			$id = (parts.first() ?? "").trim()
+			if parts.len() > 1 {
+				$attrs = $attrs.append({ name: "reftext", value: unquote(Str.join_with(parts.drop_first(1), ",")) })
+			}
+		} else if is_block_metadata(text) {
+			$attrs = $attrs.concat(parse_metadata(text))
+		} else {
+			$title = drop_text(text, 1)
+		}
+	}
+	attrs = if (meta.is_empty()) $attrs else $attrs.concat(line.attrs)
+	style = attribute(attrs, "1")
+	id = if ($id != "") $id else attribute(attrs, "id")
+	inferred = implicit_list_style(line.text)
+	blocks = if (style == "bibliography") list.blocks.map(bibliography_item) else list.blocks
+	{
+		block: rich(marker.kind, "", $title, if (style == "") inferred else style, id, if (style == "" and inferred != "") attrs.append({ name: "__implicit-list-style", value: "" }) else attrs, blocks, marker.level),
+		rest: list.rest,
+	}
 }
 
 escape : Str -> Str
@@ -3066,3 +3149,23 @@ expect {
 	html = render_source("* `a`'s item\n\n|===\n|`b`'s cell\n|===\n\n.`c`'s title\n`d`'s `e`\n\n----\n`f`'s\n----")
 	html.contains("<p>`a&#8217;s item</p>") and html.contains("<p class=\"tableblock\">`b&#8217;s cell</p>") and html.contains("<div class=\"title\">`c&#8217;s title</div>") and html.contains("<p><code>d&#8217;s `e</code></p>") and html.contains("<pre>`f`'s</pre>")
 }
+
+# Block metadata before a nested list styles that list, attached with or
+# without a list continuation, and the parent list keeps its later items.
+expect {
+	html = render_source(". Parent item\n+\n[lowerroman]\n.. First detail\n.. Second detail\n\n. Next parent item")
+	html.contains("<ol class=\"lowerroman\" type=\"i\">\n<li>\n<p>First detail</p>\n</li>\n<li>\n<p>Second detail</p>\n</li>\n</ol>\n</div>\n</li>\n<li>\n<p>Next parent item</p>")
+}
+expect render_source(". Parent item\n[lowerroman]\n.. First detail\n. Next").contains("<ol class=\"lowerroman\" type=\"i\">\n<li>\n<p>First detail</p>")
+expect render_source("Term:: def\n+\n[lowerroman]\n. one\nOther:: d2").contains("<ol class=\"lowerroman\" type=\"i\">\n<li>\n<p>one</p>\n</li>\n</ol>\n</div>\n</dd>\n<dt class=\"hdlist1\">Other</dt>")
+expect {
+	html = render_source(". a\n+\n.Title\n[[myid]]\n[lowerroman,start=3]\n.. x\n\n.. y\n. b")
+	html.contains("<div id=\"myid\" class=\"olist lowerroman\">\n<div class=\"title\">Title</div>\n<ol class=\"lowerroman\" type=\"i\" start=\"3\">")
+}
+# Metadata before a sibling or parent item is dropped, as Asciidoctor does,
+# and metadata-looking lines in a delimited block stay text.
+expect render_source(". a\n+\n[lowerroman]\n. b") == "<div class=\"olist arabic\">\n<ol class=\"arabic\">\n<li>\n<p>a</p>\n</li>\n<li>\n<p>b</p>\n</li>\n</ol>\n</div>"
+expect render_source(". a\n+\n----\n[lowerroman]\n.. no\n----\n. b").contains("<pre>[lowerroman]\n.. no</pre>")
+# Unordered lists render their style on the wrapper and the list.
+expect render_source("* a\n+\n[square]\n** x").contains("<div class=\"ulist square\">\n<ul class=\"square\">")
+expect render_source("[circle]\n* [x] done").contains("<div class=\"ulist checklist circle\">\n<ul class=\"checklist\">")

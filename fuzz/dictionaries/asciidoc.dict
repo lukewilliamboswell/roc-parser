@@ -59,3 +59,6 @@
 ":sectids!:"
 "ADOC1\x0a"
 "//-"
+"[lowerroman]\x0a"
+"[square]\x0a"
+"\x0a+\x0a[loweralpha]\x0a.. "
