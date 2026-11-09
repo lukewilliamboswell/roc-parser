@@ -119,11 +119,11 @@ AsciiDocBlockHtml :: [].{
 			5 => "upperroman"
 			_ => "arabic"
 		}
-		extra = if (context == "olist") " ${resolved}" else if (context == "colist") " arabic" else if (style == "bibliography") " bibliography" else if (checklist) " checklist" else ""
+		extra = if (context == "olist") " ${resolved}" else if (context == "colist") " arabic" else "${if (checklist) " checklist" else ""}${if (style == "") "" else " ${escape(style)}"}"
 		roles = if (attr(attrs, "role") == "") "" else " ${attr(attrs, "role")}"
 		idattr = if (id == "") "" else " id=\"${escape(id)}\""
 		title_html = if (title == "") "" else "<div class=\"title\">${title}</div>\n"
-		tagattrs = if (context == "olist") " class=\"${resolved}\"${if (has_attr(attrs, "__implicit-list-style")) "" else list_type(resolved)}${if (attr(attrs, "start") == "") "" else " start=\"${escape(attr(attrs, "start"))}\""}" else if (style == "bibliography") " class=\"bibliography\"" else if (checklist) " class=\"checklist\"" else ""
+		tagattrs = if (context == "olist") " class=\"${resolved}\"${if (has_attr(attrs, "__implicit-list-style")) "" else list_type(resolved)}${if (attr(attrs, "start") == "") "" else " start=\"${escape(attr(attrs, "start"))}\""}" else if (checklist) " class=\"checklist\"" else if (style != "" and context == "ulist") " class=\"${escape(style)}\"" else ""
 		"<div${idattr} class=\"${context}${extra}${roles}\">\n${title_html}<${tag}${tagattrs}>\n${body}\n</${tag}>\n</div>"
 	}
 }
