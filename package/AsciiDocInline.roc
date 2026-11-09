@@ -787,8 +787,10 @@ scan_view_context = |input, incoming_attrs, options, depth, protected| {
 				if !g.passes_done and g.macros and (rest.starts_with("+++") or rest.starts_with("++") or rest.starts_with("pass:")) {
 					marker = if (rest.starts_with("+++")) "+++" else if (rest.starts_with("++")) "++" else "pass:"
 					if marker == "pass:" {
+						# The substitutions, if any, come straight before '[':
+						# `pass:` followed by anything else is text.
 						match find(source, "[", $i + 5) {
-							Ok(open) => match bracket_end(source, open) {
+							Ok(open) if pass_subs(slice(source, $i + 5, open - $i - 5)) => match bracket_end(source, open) {
 								Ok(end) => {
 									sub = slice(source, $i + 5, open - $i - 5)
 									$out = $out.concat(scan_view(slice(source, open + 1, end - open - 1), attrs, groups(sub), depth + 1))
@@ -797,7 +799,7 @@ scan_view_context = |input, incoming_attrs, options, depth, protected| {
 								}
 								Err(_) => {}
 							}
-							Err(_) => {}
+							_ => {}
 						}
 					} else {
 						n = marker.to_utf8().len()
@@ -976,6 +978,32 @@ Macro : { used : U64, html : Str }
 
 # A macro target ends before the first label bracket or existing whitespace.
 # Other control bytes retain their prior treatment by the macro parser.
+# Whether `text` is a pass macro's substitution list: empty, or lowercase
+# names separated by commas (Asciidoctor's `[a-z]+(?:,[a-z-]+)*`).
+pass_subs : Str -> Bool
+pass_subs = |text| {
+	bytes = text.to_utf8()
+	var $index = 0
+	var $name_len = 0
+	var $first = True
+	while $index < bytes.len() {
+		byte = bytes.get($index) ?? 0
+		if byte == ',' {
+			if $name_len == 0 {
+				return False
+			}
+			$name_len = 0
+			$first = False
+		} else if (byte >= 'a' and byte <= 'z') or (byte == '-' and !$first and $name_len > 0) {
+			$name_len = $name_len + 1
+		} else {
+			return False
+		}
+		$index = $index + 1
+	}
+	bytes.is_empty() or $name_len > 0
+}
+
 macro_label_open : Str, U64 -> Try(U64, [Missing])
 macro_label_open = |source, start| {
 	bytes = source.to_utf8()
@@ -1205,7 +1233,11 @@ parse_macro_context = |source, attrs, g, depth, base, incoming_cursor, incoming_
 	if is_url and lookup_view(attrs, "__suppress-url-label").is_ok() {
 		return { macro: none, cursor: $cursor, literals: $literals }
 	}
-	match macro_label_open(source, $prefix.count_utf8_bytes()) {
+	# An xref target runs to the first '[', across spaces and line breaks, as
+	# Asciidoctor's InlineXrefMacroRx matches it; other macro targets stop at
+	# whitespace.
+	label_open = if ($prefix == "xref:") find(source, "[", $prefix.count_utf8_bytes()) else macro_label_open(source, $prefix.count_utf8_bytes())
+	match label_open {
 		Ok(open) => {
 			searched = cached_bracket_end(source, open, base, $cursor)
 			$cursor = searched.cursor
@@ -2563,7 +2595,7 @@ pass_match_cached = |source, prev, attrs, single, prev_word, base, incoming_curs
 	}
 	if !single and rest.starts_with("pass:") {
 		match find(rest, "[", 5) {
-			Ok(open) => {
+			Ok(open) if pass_subs(slice(rest, 5, open - 5)) => {
 				searched = cached_bracket_end(rest, open, base + $offset, $cursor)
 				$cursor = searched.cursor
 				match searched.end {
@@ -2579,7 +2611,7 @@ pass_match_cached = |source, prev, attrs, single, prev_word, base, incoming_curs
 					Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 				}
 			}
-			Err(_) => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
+			_ => return { matched: none, cursor: $cursor, role_cursor: $role_cursor }
 		}
 	}
 	choices = if single {
@@ -3282,7 +3314,7 @@ deferred_pass_cached = |source, base, cursor| {
 		return { result: Err(Missing), cursor }
 	}
 	match find(source, "[", 5) {
-		Ok(open) => {
+		Ok(open) if pass_subs(slice(source, 5, open - 5)) => {
 			subs = slice(source, 5, open - 5)
 			selected = groups(subs)
 			# Pure quote/special-character passes are never deferred. Reject
@@ -3297,7 +3329,7 @@ deferred_pass_cached = |source, base, cursor| {
 			}
 			{ result, cursor: searched.cursor }
 		}
-		Err(_) => { result: Err(Missing), cursor }
+		_ => { result: Err(Missing), cursor }
 	}
 }
 

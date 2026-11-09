@@ -1,0 +1,641 @@
+{
+  "schema_version": 1,
+  "oracle_version": "2.0.23",
+  "provenance": {
+    "authorship": "Mutation cases from the generated review (seed 13) that disagreed with Asciidoctor, and list marker-style nesting cases. The runtime also compares full native projection and HTML.",
+    "reference_family": "Asciidoctor 2.0",
+    "reference_url": "https://docs.asciidoctor.org/asciidoc/latest/",
+    "oracle_pin": "asciidoctor 2.0.23",
+    "execution_policy": "Pinned secure oracle; no external includes."
+  },
+  "coverage": [
+    {
+      "category": "review-regressions",
+      "required_cases": [
+        "verbatim-style-block-macro",
+        "media-duplicate-attribute",
+        "media-positional-with-bracket",
+        "thematic-break-title",
+        "pass-macro-needs-bracket",
+        "xref-target-line-break",
+        "table-invalid-cols",
+        "list-alpha-under-dots",
+        "list-alpha-start-under-dots",
+        "list-roman-under-dots",
+        "list-star-under-dash",
+        "list-dots-under-arabic"
+      ],
+      "scope": "complete"
+    }
+  ],
+  "cases": [
+    {
+      "id": "verbatim-style-block-macro",
+      "category": "review-regressions",
+      "features": [
+        "verbatim-style-block-macro"
+      ],
+      "source": "[#picture]\n[source,roc]\nimage::cat.png[]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "image::cat.png[]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "A verbatim style makes a block macro line a paragraph",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "media-duplicate-attribute",
+      "category": "review-regressions",
+      "features": [
+        "media-duplicate-attribute"
+      ],
+      "source": "image::cat.png[Cat,link=guideCat,link=guide.html,options=nofollow]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "image",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "The later of two same-named media attributes wins",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "media-positional-with-bracket",
+      "category": "review-regressions",
+      "features": [
+        "media-positional-with-bracket"
+      ],
+      "source": "video::clip.mp4[stclip.mp4[start=5,end=15]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "video",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "A positional media value containing [ stays positional",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "thematic-break-title",
+      "category": "review-regressions",
+      "features": [
+        "thematic-break-title"
+      ],
+      "source": "= quiet river 7743\n\n....\ncafé 7597\n....\n\nquiet river 8391\nquiet river 6784\n\n----\n🦊 1487\nnaïve façade 1942\n----\n\n== 🦊 4587\n\ncafé 8990\nnaïve façade 1518\n東京 5774\n\namber 1724\nΔοκιμή 8311\n\n=== amber 8704\n\n東京 5059\n\n==== Δοκιμή 358\n\n🦊 6697\nΔοκιμή 1951\n\n東京 4140\ncafé 5053\n\namber 2047\namber 2408\nnaïve façade 3499\n\n..= 283\n\n'''\n\n'''\n\n'''\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "quiet river 7743",
+          "blocks": [
+            {
+              "context": "literal",
+              "level": 0,
+              "title": "",
+              "source": "café 7597",
+              "blocks": []
+            },
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "quiet river 8391\nquiet river 6784",
+              "blocks": []
+            },
+            {
+              "context": "listing",
+              "level": 0,
+              "title": "",
+              "source": "🦊 1487\nnaïve façade 1942",
+              "blocks": []
+            },
+            {
+              "context": "section",
+              "level": 1,
+              "title": "🦊 4587",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "café 8990\nnaïve façade 1518\n東京 5774",
+                  "blocks": []
+                },
+                {
+                  "context": "paragraph",
+                  "level": 0,
+                  "title": "",
+                  "source": "amber 1724\nΔοκιμή 8311",
+                  "blocks": []
+                },
+                {
+                  "context": "section",
+                  "level": 2,
+                  "title": "amber 8704",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "paragraph",
+                      "level": 0,
+                      "title": "",
+                      "source": "東京 5059",
+                      "blocks": []
+                    },
+                    {
+                      "context": "section",
+                      "level": 3,
+                      "title": "Δοκιμή 358",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "paragraph",
+                          "level": 0,
+                          "title": "",
+                          "source": "🦊 6697\nΔοκιμή 1951",
+                          "blocks": []
+                        },
+                        {
+                          "context": "paragraph",
+                          "level": 0,
+                          "title": "",
+                          "source": "東京 4140\ncafé 5053",
+                          "blocks": []
+                        },
+                        {
+                          "context": "paragraph",
+                          "level": 0,
+                          "title": "",
+                          "source": "amber 2047\namber 2408\nnaïve façade 3499",
+                          "blocks": []
+                        },
+                        {
+                          "context": "thematic_break",
+                          "level": 0,
+                          "title": ".= 283",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "thematic_break",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "thematic_break",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "A block title before a thematic break stays on it",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "pass-macro-needs-bracket",
+      "category": "review-regressions",
+      "features": [
+        "pass-macro-needs-bracket"
+      ],
+      "source": ":value: *attribute*\n\n[subs=\"replacements,macros,specialcharacters,post_replacements,attributes,quotes\"]\n*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass: {value} +\nnext pass:q[*passed*]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "*strong* <raw> &copy; ... https://example.test[*label*] {value} +\nnext pass: {value} +\nnext pass:q[*passed*]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "pass: is a macro only when [ follows its substitutions",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "xref-target-line-break",
+      "category": "review-regressions",
+      "features": [
+        "xref-target-line-break"
+      ],
+      "source": "xref:other\noc[Other]",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "paragraph",
+              "level": 0,
+              "title": "",
+              "source": "xref:other\noc[Other]",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "An xref target runs to the first [ across a line break",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "table-invalid-cols",
+      "category": "review-regressions",
+      "features": [
+        "table-invalid-cols"
+      ],
+      "source": "[cols== 1\"]\n|===\n2.2+|Wide and tall |A\n|B\n|===",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "table",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": []
+            }
+          ]
+        }
+      },
+      "description": "A cols record that is not a spec declares no column",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-alpha-under-dots",
+      "category": "review-regressions",
+      "features": [
+        "list-alpha-under-dots"
+      ],
+      "source": ". a\nb. x\nc. y\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "Alpha markers under a dot list nest as their own list",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-alpha-start-under-dots",
+      "category": "review-regressions",
+      "features": [
+        "list-alpha-start-under-dots"
+      ],
+      "source": ". a\n+\n[start=4]\nb. x\nc. y\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "An attached alpha list keeps its start",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-roman-under-dots",
+      "category": "review-regressions",
+      "features": [
+        "list-roman-under-dots"
+      ],
+      "source": ". a\ni) x\nii) y\n. b\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        },
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "Roman markers nest as a lowerroman list",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-star-under-dash",
+      "category": "review-regressions",
+      "features": [
+        "list-star-under-dash"
+      ],
+      "source": "- a\n* b\n- c\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "ulist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "ulist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "A star list under a dash list nests",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    },
+    {
+      "id": "list-dots-under-arabic",
+      "category": "review-regressions",
+      "features": [
+        "list-dots-under-arabic"
+      ],
+      "source": "1. a\n2. b\n. c\n3. d\n",
+      "support": "minimal",
+      "expect": {
+        "projection": {
+          "title": "",
+          "blocks": [
+            {
+              "context": "olist",
+              "level": 0,
+              "title": "",
+              "source": "",
+              "blocks": [
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": [
+                    {
+                      "context": "olist",
+                      "level": 0,
+                      "title": "",
+                      "source": "",
+                      "blocks": [
+                        {
+                          "context": "list_item",
+                          "level": 0,
+                          "title": "",
+                          "source": "",
+                          "blocks": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "context": "list_item",
+                  "level": 0,
+                  "title": "",
+                  "source": "",
+                  "blocks": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "description": "A dot list under an arabic list nests",
+      "references": [
+        "https://docs.asciidoctor.org/asciidoc/latest/syntax-quick-reference/"
+      ]
+    }
+  ]
+}
