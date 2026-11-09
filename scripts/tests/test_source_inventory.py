@@ -48,7 +48,7 @@ class SourceInventoryTests(unittest.TestCase):
             url="https://github.com/lukewilliamboswell/roc-parser/releases/download/" + VERSION + "/" + cls.bundle.name)))
         context = cls.directory / "context.json"
         context.write_text(json.dumps(dict(namespace="https://example.com/sbom/inventory-test/revision-1", revision="1",
-            created="2026-11-03T00:00:00Z", author="Organization: roc-parser contributors", generator="Tool: blueprint-sbom-0.11.0")))
+            created="2026-11-03T00:00:00Z", author="Organization: roc-parser contributors", generator="Tool: blueprint-sbom-0.12.0")))
         cls.run_tool(["blueprint-sbom", "bind", str(cls.inventory), str(subject), str(context), str(cls.bundle), str(cls.sbom), "--spdx-2.3"])
 
     @classmethod

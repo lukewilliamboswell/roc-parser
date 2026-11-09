@@ -1,6 +1,6 @@
 ## Product inventory boundaries. The shared Blueprint tool validates the graph.
 Inventory := [].{
-	unicode_url = "https://github.com/roc-lang/unicode/releases/download/4.3.0/7HGaK8HUHMs5judroSmUoS4TjPGZ1kAjPTyPDSCWiSKM.tar.zst"
+	unicode_url = "https://github.com/roc-lang/unicode/releases/download/4.3.2/3gvgiWm6BShjHKbNV2zRH6fhC5ZvScZgWF7AnVDWHSdd.tar.zst"
 
 	## Refuse a changed closure until its supplier metadata has been reviewed.
 	## `roc deps` reads headers, and reports a transitive child on its own line.
