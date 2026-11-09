@@ -21,11 +21,13 @@ import Literal as Quotation
 ## Document type declarations (`<!DOCTYPE ...>`) are rejected, so entities
 ## other than the predefined ones are never declared and referring to one is
 ## a well-formedness error. Namespaces are not processed: a name such as
-## `svg:path` is kept as written. Input is already decoded text, so a declared
-## encoding is reported but not used to decode.
+## `svg:path` is kept as written; [XmlNs] resolves them. Input is already
+## decoded text, so a declared encoding is reported but not used to decode.
 ##
-## Read a document with [Xml.parse_str], then walk it with pattern matching or
-## the [Xml.Node] helpers `name`, `attribute`, `children_named` and `text`:
+## Read a document with [Xml.parse_str], or with [Xml.parse] and limits for
+## untrusted input, then walk it with pattern matching or the [Xml.Node]
+## helpers `name`, `attribute`, `children_named` and `text`. [Xml.reader]
+## reads a document one event at a time instead:
 ##
 ## ```roc
 ## expect {

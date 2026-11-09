@@ -9,9 +9,17 @@ continues to use its separate fixed compiler.
 
 This major release permits the compiler upgrade under the existing version
 gate: the previous release's immutable Unicode dependency cannot compile with
-the new compiler, so its public API cannot be compared by `roc bump`. No parser
-API or behavior change is intended by this dependency update. Existing format
+the new compiler, so its public API cannot be compared by `roc bump`. The
+dependency update itself changes no parser API or behavior. Existing format
 conformance checks and recorded example outputs remain required.
+
+* *AsciiDoc list output changes where it was wrong.* Block metadata before a
+  nested list, such as `[lowerroman]` after a list continuation, now styles that
+  list instead of being lost, and unordered lists render their style
+  (`<div class="ulist square">` and `<ul class="square">`), as Asciidoctor does.
+  Rendered HTML for such documents differs from 4.0.0.
+* *Additions to `Xml` and a new `XmlNs` module.* Existing `Xml` code is
+  unaffected: `Xml.parse_str` and `Xml.parser` keep their signatures and results.
 
 == Use this release
 
@@ -25,8 +33,37 @@ parser: "{package-url}",
 Applications using basic-cli should use 0.27.0. The release record identifies
 the compiler used to build and test the delivered package.
 
+== Added
+
+* `Xml.reader`, a pull reader: `next` returns `Start`, `End` and `Text` events,
+  `element` builds the subtree after a `Start`, and `location` and
+  `declaration` describe the document. A loop over `next` holds memory for the
+  open elements and one event, so a large document can be read an element at a
+  time.
+* `Xml.parse` and `Xml.ReaderProps`, limits for untrusted input: `max_depth`,
+  `max_elements` and `max_attributes` per element, with defaults. A document
+  that would exceed one fails with `LimitExceeded` at the start tag or
+  attribute, before anything is built for it.
+* `XmlNs`, namespace processing following Namespaces in XML 1.0 (Third
+  Edition). Names resolve to `{ namespace, local, prefix }`, declarations are
+  kept as each element's `bindings`, and namespace problems are reported with
+  their location. It mirrors `Xml`, with `parse_str`, `parse` and a reader that
+  resolves names as it reads, so only one tree is built.
+* `XmlNs.render`, which writes a namespaced tree as XML 1.0 with the tree's own
+  prefixes or a prefix table, escaping text and attribute values so that they
+  read back unchanged.
+
 == Fixed
 
+* AsciiDoc keeps block metadata (a style, ID, title or attributes) on a list
+  nested in a list item, with or without a list continuation, including lists
+  attached to description list entries
+  (https://github.com/lukewilliamboswell/roc-parser/issues/110[#110]).
+* AsciiDoc renders the style of an unordered list.
+* XML text and attribute values decode in linear time however references,
+  line endings and CDATA sections are mixed, without depending on how the
+  compiler grows lists. Fuzz targets now hold the reader, the limits and every
+  reading path to allocation ceilings.
 * Updated maintained application platforms for the compiler's iterator,
   stream and interpolation contracts.
 * Updated the reviewed Unicode bundle identity, digest and supplier evidence

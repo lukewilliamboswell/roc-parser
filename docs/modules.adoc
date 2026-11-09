@@ -59,8 +59,12 @@ helpers, and parsers for data formats and Roc source.
 |`Markdown.parse_str`, `Markdown.parse_inlines`
 
 |{api}Xml/[`Xml`]
-|Check that an XML document is well-formed and read it as a tree
-|`Xml.parse_str`, `Xml.Node.attribute`, `Xml.Node.children_named`
+|Check that an XML document is well-formed and read it as a tree, or an element at a time
+|`Xml.parse_str`, `Xml.parse`, `Xml.reader`, `Xml.Node.children_named`
+
+|{api}XmlNs/[`XmlNs`]
+|Read XML with namespaces resolved, and write it back out
+|`XmlNs.parse_str`, `XmlNs.reader`, `XmlNs.render`
 
 |{api}Yaml/[`Yaml`]
 |Read a YAML configuration file or Markdown frontmatter
@@ -258,10 +262,21 @@ before you render untrusted input (see <<markdown>>).
 * The node methods `name`, `attribute`, `children_named` and `text` read the
   tree: `root.attribute("href")` is `Try(Str, [Missing])`.
 * `Xml.parser` is the same parser for use inside a larger parser.
+* `Xml.parse` sets limits on depth, element count and attributes per element
+  for untrusted input, and fails with `LimitExceeded` before building past one.
+* `Xml.reader` is a pull reader with the same limits: `next` returns `Start`,
+  `End` and `Text` events, and `element` builds one subtree, so a large
+  document can be read an element at a time.
 
-Documents with a `<!DOCTYPE>` declaration are rejected, namespaces are not
-interpreted, and comments and processing instructions are checked and then
+Documents with a `<!DOCTYPE>` declaration are rejected, names are kept as
+written, and comments and processing instructions are checked and then
 dropped.
+
+`XmlNs` resolves namespaces following Namespaces in XML 1.0. Its tree,
+`XmlNs.Node`, holds `{ namespace, local, prefix }` names and each element's
+`bindings`; `XmlNs.parse_str`, `XmlNs.parse` and `XmlNs.reader` mirror `Xml`,
+and namespace problems are `InvalidNamespace({ problem, line, column })`.
+`XmlNs.render` writes a tree back as XML, with its own prefixes or a table.
 
 == Yaml
 
@@ -292,7 +307,7 @@ rather than misread. Nesting is limited to 100 levels.
 |Raw bytes of an HTTP/1.1 message from a socket or a capture |`HTTP`
 |Documentation, notes or a README |`Markdown`
 |A configuration file, or the frontmatter of a Markdown file |`Yaml`
-|An XML document without a document type declaration, such as SVG or a feed |`Xml`
+|An XML document without a document type declaration, such as SVG or a feed |`Xml`, or `XmlNs` when its namespaces matter
 |JSON whose shape you know, decoded into a record |Roc's builtin `Json`
 |JSON of any shape, JSON with comments, or JSON that must be written back unchanged |`JsonValue`
 |TOML, or YAML that uses anchors or several documents |Another package: these modules do not support them

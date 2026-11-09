@@ -94,9 +94,13 @@ rejected with an error rather than misread.
 no anchors, aliases or tags
 
 |`Xml`
-|A whole XML document as a tree
+|An XML document as a tree, or an event at a time with limits for untrusted input
 |https://www.w3.org/TR/xml/[XML 1.0 (Fifth Edition)] well-formedness, without
-document type declarations or namespaces
+document type declarations
+
+|`XmlNs`
+|XML with namespaces resolved, read as a tree or an event at a time, and written back
+|https://www.w3.org/TR/xml-names/[Namespaces in XML 1.0 (Third Edition)]
 
 |`JsonValue`
 |A JSON document of any shape as a lossless tree, and JSON written back out

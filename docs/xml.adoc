@@ -13,8 +13,10 @@ endif::[]
 
 This chapter shows how to parse an XML document into a tree, find elements,
 attributes and text in it, and report malformed input with a line and column.
-It is for Roc programmers who have added `parser` to their app's dependencies
-and need data out of XML such as feeds, SVG files or configuration.
+It also shows how to read untrusted or very large documents, resolve
+namespaces, and write a document back out. It is for Roc programmers who have
+added `parser` to their app's dependencies and need data out of XML such as
+feeds, SVG files, office documents or configuration.
 
 The parser checks that a document is well-formed according to XML 1.0 and
 gives you the tree after the usual XML clean-up: references replaced by their
@@ -25,7 +27,7 @@ other tools.
 
 Every example on this page comes from
 link:{src}/docs/examples/xml-guide.roc[`docs/examples/xml-guide.roc`], which
-CI runs, and imports `parser.Xml`.
+CI runs, and imports `parser.Xml` and `parser.XmlNs`.
 
 == Parse a document and find elements
 
@@ -139,6 +141,122 @@ parser as a `Parser(Utf8.Bytes, Xml)`. It leaves any input after the document
 for the next parser. Its failures are `ParseError({ message, offset })`, with
 the same message as `Xml.parse_str` and the byte offset of the problem.
 
+[#xml-untrusted]
+== Read untrusted documents
+
+`Xml.parse_str` sets no limits, so a hostile document can make it build a
+very large tree. `Xml.parse` takes `Xml.ReaderProps`, whose fields all have
+defaults: `max_depth` (1,024), `max_elements` (4,194,304) and
+`max_attributes` per element (1,024). A document that would exceed one fails
+with `LimitExceeded({ limit, max, line, column })` at the start tag, or the
+attribute, that would exceed it, before anything is built for it:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=limits,indent=0]
+----
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=limits-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=11..12]
+----
+
+[#xml-reader]
+== Read a large document an element at a time
+
+`Xml.reader` returns an `Xml.Reader` positioned before the root element.
+Each call to `next` returns the next `Event`, `Start({ name, attributes })`,
+`End(name)` or `Text(text)`, with the reader after it, then `Done` at the end
+of the document, or `Failed(error)`. The events match the tree: `<a/>` is a
+`Start` and an `End`, text is merged as in the tree, and comments are
+dropped. Directly after a `Start`, `element` builds that element's subtree
+and continues after its end tag, so a program can keep one small tree at a
+time instead of the whole document:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=reader,indent=0]
+----
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=reader-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=10]
+----
+
+Keep only the latest reader, as here, and `return` from the `Done` arm rather
+than setting a flag: then each step updates the reader in place, and a loop
+that keeps no events holds memory for the open elements only. The same
+limits apply as for `Xml.parse`, and `location` gives the line and column of
+the most recent event.
+
+[#xml-namespaces]
+== Resolve namespaces
+
+`XmlNs` processes namespaces following Namespaces in XML 1.0. Each element and
+attribute name becomes `{ namespace, local, prefix }`, where `namespace` is
+`Uri(uri)` or `NoNamespace`. A binding covers its element and descendants,
+`xmlns=""` removes the default namespace, unprefixed attributes are in no
+namespace, and `xml` is always bound. The `xmlns` declarations become each
+element's `bindings`. Look elements up by namespace and local name, so the
+same code reads both spellings of an Atom feed:
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=namespaces,indent=0]
+----
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=namespaces-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=13..15]
+----
+
+A namespace problem, such as an undeclared prefix, a reserved prefix bound
+to the wrong namespace or two attributes with the same expanded name, is
+`InvalidNamespace({ problem, line, column })` at the start tag. `XmlNs`
+mirrors `Xml`: `XmlNs.parse` takes the same limits, and `XmlNs.reader`
+resolves names while it reads, so only one tree is built.
+
+[#xml-write]
+== Write a document
+
+`XmlNs.render` writes a namespaced tree as XML 1.0 text. By default it
+writes the tree's own prefixes and declarations, so a parsed document is
+written as it was read. `prefixes: Table(entries)` writes every name with
+its namespace's prefix from the table instead, declared once; an empty prefix
+makes a namespace the default. Text and attribute values are escaped so that
+they read back unchanged. A tree that cannot be written, with a name that is
+not allowed, a character XML 1.0 does not allow, or a prefix not bound where
+it is used, fails with `Unrenderable({ problem, path })`.
+
+[source,roc]
+----
+include::examples/xml-guide.roc[tag=render-run,indent=0]
+----
+
+.Output
+[source,text]
+----
+include::examples/xml-guide.expected[lines=16]
+----
+
 [#xml-unsupported]
 == What is not supported
 
@@ -148,16 +266,17 @@ Document type declarations:: A `<!DOCTYPE ...>` is rejected. As a result only
 the five predefined entities exist, and any other reference, such as
 `&nbsp;`, is an error. Replace HTML entities with character references
 (`&#160;`) before parsing.
-Namespaces:: Names are kept exactly as written. `svg:path` is an element
-named `"svg:path"`, and `xmlns` declarations are ordinary attributes; prefixes
-are not resolved to URIs.
+Namespaces in Xml:: `Xml` keeps names exactly as written: `svg:path` is an
+element named `"svg:path"`, and `xmlns` declarations are ordinary
+attributes. Use `XmlNs` to resolve them.
 Declared encodings:: The input is a Roc `Str`, which is already UTF-8. An
 `encoding="..."` in the declaration is reported in `declaration` but not
 used. Convert other encodings to UTF-8 before parsing.
 Validation:: Only well-formedness is checked. Required elements, attribute
 types and schemas are not.
 
-For the full module interface, see the link:{api}Xml[Xml API reference].
+For the full module interfaces, see the link:{api}Xml[Xml] and
+link:{api}XmlNs[XmlNs] API references.
 
 [#xml-performance]
 == Performance
@@ -172,5 +291,8 @@ attribute values with nothing to unescape are slices of the input string,
 so they keep the input alive.
 Elements are parsed with an explicit stack, so 5,000 levels of nesting are
 safe, and duplicate-attribute checks are linear: an element with 5,000
-attributes parses 19 times faster than with the Rust libraries. See
-<<performance>> for the measurements and caveats.
+attributes parses 19 times faster than with the Rust libraries. Decoding text
+and attribute values is linear however they mix references, line endings and
+CDATA, and the `xml-ceilings` fuzz target holds every reading path to
+allocation ceilings linear in the document. See <<performance>> for the
+measurements and caveats.

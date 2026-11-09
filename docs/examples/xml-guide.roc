@@ -6,6 +6,7 @@ app [main!] {
 import cli.OsStr
 import cli.Stdout
 import parser.Xml
+import parser.XmlNs
 
 # tag::document[]
 feed_text =
@@ -56,6 +57,69 @@ print_feed! = |text| {
 	Ok({})
 }
 
+# tag::reader[]
+## The titles of a feed's entries, read one entry at a time: only the entry
+## being read is ever a tree.
+entry_titles : Str -> Try(List(Str), Xml.ReadError)
+entry_titles = |text| {
+	var $reader = Xml.reader(text, {})?
+	var $titles = []
+	while True {
+		match $reader.next() {
+			Event(Start({ name: "entry", .. }), at_entry) =>
+				match at_entry.element() {
+					Element(entry, after) => {
+						$titles = $titles.concat(entry.children_named("title").map(|title| title.text()))
+						$reader = after
+					}
+
+					Failed(error) => return Err(error)
+					NotAfterStart => return Ok($titles)
+				}
+
+			Event(_, rest) => {
+				$reader = rest
+			}
+
+			Done => return Ok($titles)
+			Failed(error) => return Err(error)
+		}
+	}
+}
+
+# end::reader[]
+
+# tag::limits[]
+check_untrusted : Str -> Str
+check_untrusted = |text| {
+	match Xml.parse(text, { max_depth: 3, max_elements: 100 }) {
+		Ok(_) => "accepted"
+		Err(LimitExceeded({ limit, max, line, column })) => "${line.to_str()}:${column.to_str()}: more than ${max.to_str()} (${Str.inspect(limit)})"
+		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+	}
+}
+
+# end::limits[]
+
+# tag::namespaces[]
+atom : XmlNs.Namespace
+atom = Uri("http://www.w3.org/2005/Atom")
+
+describe_atom : Str -> Str
+describe_atom = |text| {
+	match XmlNs.parse_str(text) {
+		Ok(doc) => {
+			titles = doc.root.children_named(atom, "title").map(|title| title.text())
+			"${Str.inspect(doc.root.name())} ${Str.inspect(titles)}"
+		}
+
+		Err(InvalidNamespace({ problem, line, column })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
+		Err(InvalidXml({ message, .. })) => message
+	}
+}
+
+# end::namespaces[]
+
 print_tree! : Str => Try({}, _)
 print_tree! = |text| {
 	match Xml.parse_str(text) {
@@ -82,6 +146,33 @@ main! = |_args| {
 	Stdout.line!(check("<a/><b/>"))?
 	Stdout.line!(check("<!DOCTYPE html><html/>"))?
 	# end::errors-run[]
+
+	# tag::reader-run[]
+	Stdout.line!(Str.inspect(entry_titles("<feed><entry><title>One</title></entry><entry><title>Two</title></entry></feed>")))?
+	# end::reader-run[]
+
+	# tag::limits-run[]
+	Stdout.line!(check_untrusted("<a><b><c/></b></a>"))?
+	Stdout.line!(check_untrusted("<a>\n  <b><c><d/></c></b>\n</a>"))?
+	# end::limits-run[]
+
+	# tag::namespaces-run[]
+	Stdout.line!(describe_atom("<feed xmlns='http://www.w3.org/2005/Atom'><title>News</title></feed>"))?
+	Stdout.line!(describe_atom("<a:feed xmlns:a='http://www.w3.org/2005/Atom'><a:title>News</a:title></a:feed>"))?
+	Stdout.line!(describe_atom("<feed><x:title/></feed>"))?
+	# end::namespaces-run[]
+
+	# tag::render-run[]
+	match XmlNs.parse_str("<a:feed xmlns:a='http://www.w3.org/2005/Atom'><a:title>Fish &amp; Chips</a:title></a:feed>") {
+		Ok(doc) =>
+			match XmlNs.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "http://www.w3.org/2005/Atom" }]) }) {
+				Ok(text) => Stdout.line!(text)?
+				Err(Unrenderable({ problem, .. })) => Stdout.line!(Str.inspect(problem))?
+			}
+
+		Err(_) => Stdout.line!("invalid")?
+	}
+	# end::render-run[]
 
 	Ok({})
 }
