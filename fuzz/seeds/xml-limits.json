@@ -1,0 +1,15 @@
+[
+ "\u0001\u0000\u0000",
+ "\u0002\u0001\u0001<element/>",
+ "\u0003\u0002\u0002<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><child key=\"value\">text</child></root>",
+ "\u0004\u0003\u0000<root><![CDATA[<not-an-element>]]></root>",
+ "\u0001\u0004\u0001<root>text &amp; more</root>",
+ "\u0002\u0005\u0002<root><nested><leaf /></nested></root>",
+ "\u0003\u0006\u0000<root><mismatch></root>",
+ "\u0004\u0007\u0001<root attribute=\"unterminated></root>",
+ "\u0002\u0003\u0001<a><b x='1'/><c/></a>",
+ "\u0001?\u0007<a><b/></a>",
+ "\u000f\u0001\u0007<a><b/></a>",
+ "\u000f?\u0001<a x='1' y='2'/>",
+ "\u0003?\u0007<a><b><c><d/></c></b></a>"
+]

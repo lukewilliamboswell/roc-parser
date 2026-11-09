@@ -43,6 +43,9 @@ class TargetConfig:
     dictionary: Path | None
     max_input_size: int = 4096
     timeout: int = 5
+    # Whether the target declares examples, which `check` runs before
+    # exploring; exploration alone only replays the corpus.
+    examples: bool = False
 
 
 def target(
@@ -52,6 +55,7 @@ def target(
     dictionary: str | None = None,
     max_input_size: int = 4096,
     timeout: int = 5,
+    examples: bool = False,
 ) -> tuple[str, TargetConfig]:
     return name, TargetConfig(
         source=FUZZ_ROOT / f"{name}.roc",
@@ -60,6 +64,7 @@ def target(
         dictionary=FUZZ_ROOT / "dictionaries" / f"{dictionary}.dict" if dictionary else None,
         max_input_size=max_input_size,
         timeout=timeout,
+        examples=examples,
     )
 
 
@@ -82,6 +87,13 @@ TARGETS = dict(
         target("xml-raw", "xml", "raw", "xml", timeout=10),
         target("xml-roundtrip", max_input_size=1024),
         target("xml-malformed", max_input_size=1024),
+        target("xml-reader", "xml", "raw", "xml", timeout=10),
+        # The first three bytes choose the limits; the rest is the document.
+        target("xml-limits", "xml-limits", "raw", "xml", max_input_size=1024),
+        # Two bytes choose a shape and a size; its examples hold the ceilings.
+        target("xml-ceilings", "xml-ceilings", "raw", max_input_size=2, timeout=20, examples=True),
+        target("xmlns-raw", "xmlns", "raw", "xmlns", timeout=10),
+        target("xmlns-roundtrip", max_input_size=1024, timeout=10),
         target("json-raw", "json", "raw", "json", timeout=10),
         # The first two bytes choose the options, so its seeds carry them.
         target("json-options", "json-options", "raw", "json", timeout=10),
@@ -96,6 +108,8 @@ TARGETS = dict(
         target("http-roundtrip", timeout=10),
         target("http-smuggling", timeout=10),
         target("parser-combinators", max_input_size=256),
+        # The first byte chooses the format and the second an offset.
+        target("validate", "validate", "raw", max_input_size=1024, timeout=10),
         target("string-primitives", max_input_size=256, timeout=10),
         target("byte-scan", max_input_size=256, timeout=10),
         target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),
@@ -374,10 +388,17 @@ def run_fuzz_mode(args: argparse.Namespace) -> int:
         else:
             options.append(f"--time={args.seconds}")
 
+        no_build = args.no_build or target_name in prebuilt
+        if config.examples:
+            status = execute_target_command(target_name, args.roc, no_build, ["check", f"--timeout={args.timeout or config.timeout}"])
+            if status != 0:
+                overall_status = overall_status or status
+                continue
+            no_build = True
         status = execute_target_command(
             target_name,
             args.roc,
-            args.no_build or target_name in prebuilt,
+            no_build,
             options,
         )
         if status != 0 and overall_status == 0:

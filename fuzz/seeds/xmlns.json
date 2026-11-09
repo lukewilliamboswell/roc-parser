@@ -1,0 +1,16 @@
+[
+ "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><w:body><w:p><w:r><w:t xml:space=\"preserve\">Hi </w:t></w:r></w:p><w:sectPr r:id=\"rId1\"/></w:body></w:document>",
+ "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><use xlink:href=\"#a\"/></svg>",
+ "<feed xmlns=\"http://www.w3.org/2005/Atom\"><title type=\"text\">News</title><entry><link href=\"/a\"/></entry></feed>",
+ "<a xmlns=\"urn:a\"><b xmlns=\"\"><c xmlns=\"urn:c\"/></b></a>",
+ "<p:a xmlns:p=\"urn:p\"><p:b xmlns:p=\"urn:q\" p:x=\"1\"/><p:c/></p:a>",
+ "<a xmlns:a=\"urn:x\" xmlns:b=\"urn:x\" a:k=\"1\" b:k=\"2\"/>",
+ "<a xmlns:xml=\"http://www.w3.org/XML/1998/namespace\" xml:lang=\"en\"/>",
+ "<a xmlns:p=\"\"/>",
+ "<p:a/>",
+ "<a:b:c xmlns:a=\"urn:a\"/>",
+ "<a><?p:i?></a>",
+ "<xmlns:a/>",
+ "<a xmlns:xmlns=\"urn:x\"/>",
+ "<r xmlns=\"urn:d\" xmlns:p=\"urn:p\"><p:a p:k=\"1&#10;2\" k=\"&quot;\"/><b xmlns=\"\">x]]&gt;y&#13;</b>t<![CDATA[<c>]]></r>"
+]
