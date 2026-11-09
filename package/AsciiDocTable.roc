@@ -81,6 +81,85 @@ option = |attrs, name| {
 	False
 }
 
+# The columns a `cols` attribute declares, as Asciidoctor's parse_colspecs
+# reads it: spaces are ignored, a bare number is that many equal columns,
+# records are separated by commas (or semicolons when there are none), an
+# empty record is a default column, and a record that is not a column spec
+# declares nothing. No columns means the first row decides.
+column_specs : Str -> List(AsciiDocTable.Column)
+column_specs = |cols| {
+	records = cols.replace_each(" ", "")
+	if records == "" {
+		return []
+	}
+	match U64.from_str(records) {
+		Ok(count) => return List.repeat(column(""), if (count > 256) 256 else count)
+		Err(_) => {}
+	}
+	var $columns = []
+	for record in records.split_on(if (records.contains(",")) "," else ";") {
+		parts = record.split_on("*")
+		repeat =
+			match parts {
+				[_] => Ok({ count: 1, body: record })
+				[count, body] => U64.from_str(count).map_ok(|n| { count: n, body }).map_err(|_| Invalid)
+				_ => Err(Invalid)
+			}
+		match repeat {
+			Ok({ count, body }) if body == "" or is_column_spec(body) => {
+				var $index = 0
+				while $index < count and $columns.len() < 256 {
+					$columns = $columns.append(column(body))
+					$index = $index + 1
+				}
+			}
+
+			_ => {}
+		}
+	}
+	$columns
+}
+
+# Whether `spec` matches Asciidoctor's ColumnSpecRx without its repeat: an
+# optional alignment (`h`, `h.`, `h.v` or `.v` over `<^>`), an optional width
+# (digits with an optional `%`, or `~`) and an optional style letter.
+is_column_spec : Str -> Bool
+is_column_spec = |spec| {
+	bytes = spec.to_utf8()
+	align = |b| b == '<' or b == '^' or b == '>'
+	var $pos = 0
+	if align(bytes.get(0) ?? 0) {
+		$pos = 1
+		if bytes.get($pos) == Ok('.') {
+			$pos = $pos + 1
+			if align(bytes.get($pos) ?? 0) {
+				$pos = $pos + 1
+			}
+		}
+	} else if bytes.get(0) == Ok('.') {
+		if !align(bytes.get(1) ?? 0) {
+			return False
+		}
+		$pos = 2
+	}
+	if bytes.get($pos) == Ok('~') {
+		$pos = $pos + 1
+	} else {
+		var $digits = 0
+		while (bytes.get($pos) ?? 0) >= '0' and (bytes.get($pos) ?? 0) <= '9' {
+			$pos = $pos + 1
+			$digits = $digits + 1
+		}
+		if $digits > 0 and bytes.get($pos) == Ok('%') {
+			$pos = $pos + 1
+		}
+	}
+	if (bytes.get($pos) ?? 0) >= 'a' and (bytes.get($pos) ?? 0) <= 'z' {
+		$pos = $pos + 1
+	}
+	$pos == bytes.len()
+}
+
 column : Str -> AsciiDocTable.Column
 column = |spec| {
 	bytes = spec.to_utf8()
@@ -213,7 +292,7 @@ parse_environment = |source, attrs| {
 				if byte == '\n' and !$first_line_done and $line_separators > 0 and $index == first_row.end {
 					$first_line_done = True
 					$first_row_count = $line_separators
-					$inferred_header = first_row.header and !["asciidoc", "literal"].contains(column((attr(attrs, "cols", "").split_on(",").first() ?? "")).style)
+					$inferred_header = first_row.header and !["asciidoc", "literal"].contains((column_specs(attr(attrs, "cols", "")).first() ?? column("")).style)
 				}
 				$text = $text.append(byte)
 				$index = $index + 1
@@ -226,20 +305,8 @@ parse_environment = |source, attrs| {
 			$first_row_count = $line_separators
 		}
 	}
-	var $columns = []
-	cols = attr(attrs, "cols", "")
-	if cols != "" {
-		for spec in cols.split_on(",") {
-			parts = spec.split_on("*")
-			count = if (parts.len() > 1) U64.from_str(parts.first() ?? "") ?? 1 else 1
-			body = if (parts.len() > 1) parts.last() ?? "" else spec
-			var $repeat = 0
-			while $repeat < count and $columns.len() < 256 {
-				$columns = $columns.append(column(body))
-				$repeat = $repeat + 1
-			}
-		}
-	} else {
+	var $columns = column_specs(attr(attrs, "cols", ""))
+	if $columns.is_empty() {
 		var $index = 0
 		inferred_columns = $cells.take_first($first_row_count).fold(0.U64, |sum, c| if (sum >= 256 or c.colspan >= 256 - sum) 256 else sum + c.colspan)
 		while $index < inferred_columns and $index < 256 {

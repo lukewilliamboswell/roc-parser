@@ -400,7 +400,7 @@ parse_metadata = |text| {
 		value = part.trim()
 		bits = value.split_on("=")
 		match bits {
-			[name, .. as rest] if !rest.is_empty() => {
+			[name, .. as rest] if !rest.is_empty() and is_attribute_name(name.trim()) => {
 				value_text = Str.join_with(rest, "=").trim()
 				if value_text != "None" {
 					$attrs = $attrs.append({ name: name.trim(), value: unquote(value_text) })
@@ -414,7 +414,10 @@ parse_metadata = |text| {
 	$attrs
 }
 
-list_marker : Str -> { kind : Str, level : U64, text : Str, term : Str }
+## A list item's marker: its kind, level, text and term, and `key`, the
+## marker style that identifies its list. As in Asciidoctor, items with a
+## different style (`.` and `a.`, `*` and `-`) start a nested list.
+list_marker : Str -> { kind : Str, level : U64, key : Str, text : Str, term : Str }
 list_marker = |text| {
 	if text.starts_with(" ") or text.starts_with("\t") {
 		return list_marker(text.trim_start())
@@ -426,31 +429,43 @@ list_marker = |text| {
 		$n = $n + 1
 	}
 	if $n > 0 and (bytes.get($n) == Ok(' ') or bytes.get($n) == Ok(9)) {
-		return { kind: if (first == '*') "ulist" else "olist", level: $n, text: drop_text(text, $n + 1).trim_start(), term: "" }
+		return { kind: if (first == '*') "ulist" else "olist", level: $n, key: Str.from_utf8_lossy(bytes.take_first($n)), text: drop_text(text, $n + 1).trim_start(), term: "" }
 	}
 	if bytes.len() > 3 and ((first >= 65 and first <= 90) or (first >= 97 and first <= 122)) and bytes.get(1) == Ok(46) and bytes.get(2) == Ok(32) {
-		return { kind: "olist", level: 1, text: drop_text(text, 3).trim_start(), term: "" }
+		return { kind: "olist", level: 1, key: if (first >= 65 and first <= 90) "A." else "a.", text: drop_text(text, 3).trim_start(), term: "" }
 	}
 	if text.starts_with("- ") {
-		return { kind: "ulist", level: 1, text: drop_text(text, 2), term: "" }
+		return { kind: "ulist", level: 1, key: "-", text: drop_text(text, 2), term: "" }
 	}
 	var $digits = 0
 	while (bytes.get($digits) ?? 0) >= '0' and (bytes.get($digits) ?? 255) <= '9' {
 		$digits = $digits + 1
 	}
 	if $digits > 0 and bytes.get($digits) == Ok('.') and bytes.get($digits + 1) == Ok(' ') {
-		return { kind: "olist", level: 1, text: drop_text(text, $digits + 2), term: "" }
+		return { kind: "olist", level: 1, key: "1.", text: drop_text(text, $digits + 2), term: "" }
+	}
+	# Roman numerals: `i)` to `xx)` and `I)` to `XX)`, in one case.
+	var $roman = 0
+	while ['i', 'v', 'x', 'I', 'V', 'X'].contains(bytes.get($roman) ?? 0) {
+		$roman = $roman + 1
+	}
+	if $roman > 0 and bytes.get($roman) == Ok(')') and (bytes.get($roman + 1) == Ok(' ') or bytes.get($roman + 1) == Ok('\t')) {
+		upper = bytes.take_first($roman).all(|b| b == 'I' or b == 'V' or b == 'X')
+		lower = bytes.take_first($roman).all(|b| b == 'i' or b == 'v' or b == 'x')
+		if upper or lower {
+			return { kind: "olist", level: 1, key: if (upper) "I)" else "i)", text: drop_text(text, $roman + 2).trim_start(), term: "" }
+		}
 	}
 	if text.starts_with("<") {
 		match text.split_on("> ") {
 			[marker, body] => if marker == "<." or (U64.from_str(drop_text(marker, 1)).is_ok()) {
-				return { kind: "colist", level: 1, text: body, term: "" }
+				return { kind: "colist", level: 1, key: "<>", text: body, term: "" }
 			}
 			_ => {}
 		}
 	}
 	if !text.contains("::") and !text.contains(";;") {
-		return { kind: "", level: 0, text: "", term: "" }
+		return { kind: "", level: 0, key: "", text: "", term: "" }
 	}
 	var $colon = 1.U64
 	while $colon + 1 < bytes.len() {
@@ -461,13 +476,13 @@ list_marker = |text| {
 				$count = $count + 1
 			}
 			if $count >= 2 and $count <= (if (first_colon == 59) 2 else 4) and ($colon + $count == bytes.len() or bytes.get($colon + $count) == Ok(32) or bytes.get($colon + $count) == Ok(9)) {
-				return { kind: "dlist", level: $count - 1, text: drop_text(text, $colon + $count).trim_start(), term: Str.from_utf8_lossy(bytes.take_first($colon)) }
+				return { kind: "dlist", level: $count - 1, key: Str.from_utf8_lossy(bytes.sublist({ start: $colon, len: $count })), text: drop_text(text, $colon + $count).trim_start(), term: Str.from_utf8_lossy(bytes.take_first($colon)) }
 			}
 		}
 		$colon = $colon + 1
 	}
 
-	{ kind: "", level: 0, text: "", term: "" }
+	{ kind: "", level: 0, key: "", text: "", term: "" }
 }
 
 delimiter : Str -> Str
@@ -599,6 +614,10 @@ parse_blocks_cached = |lines, parent, cache| {
 			explicit_id = if ($id != "") $id else cached_attribute($attrs, indexed.view, "id")
 			id = if (explicit_id != "") explicit_id else if (h.title != "") heading_id(text) else ""
 			kind = delimiter(text)
+			# A verbatim style makes the lines a paragraph of that style before
+			# breaks, lists or block macros are recognised (Asciidoctor's
+			# strict_verbatim_paragraphs); delimited blocks are found first.
+			verbatim_style = ["literal", "listing", "source", "verse"].contains(style)
 			if h.title != "" and parent < 99 {
 				if style == "discrete" {
 					$blocks = $blocks.append(rich("floating_title", "", h.title, style, id, $attrs, [], h.level))
@@ -651,26 +670,28 @@ parse_blocks_cached = |lines, parent, cache| {
 						$blocks = $blocks.append(rich(context, if (compound) "" else content, $title, style, id, $attrs, children, 0))
 					}
 				}
-			} else if (text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 39)) or text == "---" or text == "***" {
-				$blocks = $blocks.append(ThematicBreak)
+			} else if !verbatim_style and ((text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 39)) or text == "---" or text == "***") {
+				# A title, ID or attributes before a break stay on it, as
+				# Asciidoctor keeps them, though HTML shows none of them.
+				$blocks = $blocks.append(if (plain_attrs($attrs) and $title == "" and id == "") ThematicBreak else rich("thematic_break", "", $title, style, id, $attrs, [], 0))
 				$rest = tail
 			}
-			else if text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 60) {
+			else if !verbatim_style and text.to_utf8().len() >= 3 and text.to_utf8().all(|b| b == 60) {
 				$blocks = $blocks.append(rich("page_break", "", $title, style, id, $attrs, [], 0))
 				$rest = tail
 			}
-			else if text.starts_with("toc::[") {
+			else if !verbatim_style and text.starts_with("toc::[") {
 				$blocks = $blocks.append(rich("toc", "", $title, style, id, $attrs, [], 0))
 				$rest = tail
 			}
-			else if list_marker(text).kind != "" {
+			else if !verbatim_style and list_marker(text).kind != "" {
 				marker = list_marker(text)
-				list = parse_list($rest, marker.kind, marker.level, [])
+				list = parse_list($rest, marker.kind, marker.key, [])
 				inferred = implicit_list_style(text)
 				list_blocks = if (style == "bibliography") list.blocks.map(bibliography_item) else list.blocks
 				$blocks = $blocks.append(rich(marker.kind, "", $title, if (style == "") inferred else style, id, if (style == "" and inferred != "") $attrs.append({ name: "__implicit-list-style", value: "" }) else $attrs, list_blocks, marker.level))
 				$rest = list.rest
-			} else if valid_media(text) {
+			} else if !verbatim_style and valid_media(text) {
 				context = if (text.starts_with("image::")) "image" else if (text.starts_with("video::")) "video" else "audio"
 				value = drop_text(text, context.to_utf8().len() + 2)
 				bits = value.split_on("[")
@@ -730,8 +751,8 @@ parse_blocks_cached = |lines, parent, cache| {
 	{ blocks: $blocks, rest: $rest, cache: $attribute_cache }
 }
 
-parse_list : List(Line), Str, U64, List(Str) -> { blocks : List(AsciiDoc.Block), rest : List(Line) }
-parse_list = |lines, kind, level, ancestors| {
+parse_list : List(Line), Str, Str, List(Str) -> { blocks : List(AsciiDoc.Block), rest : List(Line) }
+parse_list = |lines, kind, key, ancestors| {
 	var $rest = lines
 	var $items = []
 	var $done = False
@@ -739,7 +760,7 @@ parse_list = |lines, kind, level, ancestors| {
 		line = $rest.first() ?? empty_line
 		text = line.text
 		marker = list_marker(text)
-		if marker.kind == kind and marker.level == level {
+		if marker.key == key {
 			$rest = $rest.drop_first(1)
 			var $body = marker.text
 			var $children = []
@@ -752,22 +773,22 @@ parse_list = |lines, kind, level, ancestors| {
 					$done = True
 				} else if next.starts_with("//") and delimiter(next) != "comment" {
 					$rest = $rest.drop_first(1)
-				} else if m.kind != "" and ancestors.contains("${m.kind}:${m.level.to_str()}") {
+				} else if m.kind != "" and ancestors.contains(m.key) {
 					$item_done = True
 					$done = True
-				} else if m.kind != "" and (m.level != level or m.kind != kind) {
-					nested = nested_list([], $rest, ancestors.append("${kind}:${level.to_str()}"))
+				} else if m.kind != "" and m.key != key {
+					nested = nested_list([], $rest, ancestors.append(key))
 					$children = $children.append(nested.block)
 					$rest = nested.rest
 					if list_marker(($rest.first() ?? empty_line).text).kind == "" and ($rest.first() ?? empty_line).text != "+" {
 						$item_done = True
 						$done = True
 					}
-				} else if (next == "+" or is_list_metadata(next)) and attaches_nested_list(if (next == "+") $rest.drop_first(1) else $rest, kind, level, ancestors) {
+				} else if (next == "+" or is_list_metadata(next)) and attaches_nested_list(if (next == "+") $rest.drop_first(1) else $rest, key, ancestors) {
 					# Metadata lines before a nested list, attached with or
 					# without a continuation, describe that list.
 					meta = take_list_metadata(if (next == "+") $rest.drop_first(1) else $rest)
-					nested = nested_list(meta.lines, meta.rest, ancestors.append("${kind}:${level.to_str()}"))
+					nested = nested_list(meta.lines, meta.rest, ancestors.append(key))
 					$children = $children.append(nested.block)
 					$rest = nested.rest
 					if list_marker(($rest.first() ?? empty_line).text).kind == "" and ($rest.first() ?? empty_line).text != "+" {
@@ -837,8 +858,8 @@ take_list_metadata = |lines| {
 ## Whether `lines` start with metadata (after optional blank lines) that
 ## precedes a list nested in the current item: one that is neither a
 ## sibling item nor an item of an enclosing list.
-attaches_nested_list : List(Line), Str, U64, List(Str) -> Bool
-attaches_nested_list = |lines, kind, level, ancestors| {
+attaches_nested_list : List(Line), Str, List(Str) -> Bool
+attaches_nested_list = |lines, key, ancestors| {
 	var $index = 0
 	var $found = False
 	while ((lines.get($index) ?? empty_line).text == "" or is_list_metadata((lines.get($index) ?? empty_line).text)) and $index < lines.len() {
@@ -848,7 +869,7 @@ attaches_nested_list = |lines, kind, level, ancestors| {
 		$index = $index + 1
 	}
 	m = list_marker((lines.get($index) ?? empty_line).text)
-	$found and m.kind != "" and (m.kind != kind or m.level != level) and !ancestors.contains("${m.kind}:${m.level.to_str()}")
+	$found and m.kind != "" and m.key != key and !ancestors.contains(m.key)
 }
 
 ## The list starting at the first of `lines`, nested in an item, with the
@@ -857,7 +878,7 @@ nested_list : List(Line), List(Line), List(Str) -> { block : AsciiDoc.Block, res
 nested_list = |meta, lines, ancestors| {
 	line = lines.first() ?? empty_line
 	marker = list_marker(line.text)
-	list = parse_list(lines, marker.kind, marker.level, ancestors)
+	list = parse_list(lines, marker.kind, marker.key, ancestors)
 	var $attrs = AsciiDocAttributes.flat([])
 	var $title = ""
 	var $id = ""
@@ -1927,10 +1948,11 @@ parse_media_metadata = |text| {
 		$position = $position + 1
 		bits = part.split_on("=")
 		match bits {
-			[name, .. as rest] if !rest.is_empty() => {
+			[name, .. as rest] if !rest.is_empty() and is_attribute_name(name.trim()) => {
 				value_text = Str.join_with(rest, "=").trim()
 				if value_text != "None" {
-					$attrs = $attrs.append({ name: name.trim(), value: unquote(value_text) })
+					# A later value of the same name replaces an earlier one.
+					$attrs = $attrs.keep_if(|attr| attr.name != name.trim()).append({ name: name.trim(), value: unquote(value_text) })
 				}
 			}
 			_ => {
@@ -1942,6 +1964,18 @@ parse_media_metadata = |text| {
 		}
 	}
 	$attrs
+}
+
+## Whether `name` is an attribute name, `\w[\w-]*` as Asciidoctor reads
+## one: `stclip.mp4[start=5` is a positional value, not `stclip.mp4[start`.
+is_attribute_name : Str -> Bool
+is_attribute_name = |name| {
+	bytes = name.to_utf8()
+	word = |b| (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '_' or b >= 0x80
+	match bytes {
+		[first, .. as rest] => word(first) and rest.all(|b| word(b) or b == '-')
+		[] => False
+	}
 }
 
 # Bound structural recursion before allocating the recursive tree. Opaque
@@ -2049,7 +2083,13 @@ implicit_list_style = |text| {
 	b = bytes.first() ?? 0
 	if bytes.get(1) == Ok(46) and bytes.get(2) == Ok(32) {
 		if (b >= 65 and b <= 90) "upperalpha" else if (b >= 97 and b <= 122) "loweralpha" else ""
-	} else ""
+	} else {
+		match list_marker(text).key {
+			"i)" => "lowerroman"
+			"I)" => "upperroman"
+			_ => ""
+		}
+	}
 }
 
 # Paragraph-style verbatim blocks consume delimiter-looking lines as text.
@@ -3169,3 +3209,28 @@ expect render_source(". a\n+\n----\n[lowerroman]\n.. no\n----\n. b").contains("<
 # Unordered lists render their style on the wrapper and the list.
 expect render_source("* a\n+\n[square]\n** x").contains("<div class=\"ulist square\">\n<ul class=\"square\">")
 expect render_source("[circle]\n* [x] done").contains("<div class=\"ulist checklist circle\">\n<ul class=\"checklist\">")
+
+# Each marker style is its own list: alpha, roman, arabic and dot markers,
+# and dash and star bullets, nest instead of joining the list above them.
+expect render_source(". a\nb. x\nc. y\n. b").contains("<li>\n<p>a</p>\n<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\">\n<li>\n<p>x</p>")
+expect render_source(". a\ni) x\nii) y\n. b").contains("<div class=\"olist lowerroman\">\n<ol class=\"lowerroman\">\n<li>\n<p>x</p>\n</li>\n<li>\n<p>y</p>")
+expect render_source("- a\n* b\n- c").contains("<li>\n<p>a</p>\n<div class=\"ulist\">\n<ul>\n<li>\n<p>b</p>")
+expect render_source("a. x\nb. y").contains("<ol class=\"loweralpha\">\n<li>\n<p>x</p>\n</li>\n<li>\n<p>y</p>")
+
+# A verbatim style makes a block macro line a paragraph of that style.
+expect render_source("[source,roc]\nimage::cat.png[]").contains("<code class=\"language-roc\" data-lang=\"roc\">image::cat.png[]</code>")
+
+# The later of two same-named media attributes wins, and a positional value
+# that is not `name=value` stays positional.
+expect render_source("image::cat.png[Cat,link=a.html,link=b.html]").contains("href=\"b.html\"")
+expect render_source("video::clip.mp4[poster[x=1,end=15]").contains("poster=\"poster[x=1\"")
+
+# `pass:` is a macro only when '[' follows its substitutions, and an xref
+# target runs to the first '[' across a line break.
+expect render_source("next pass: x\nnext pass:q[*passed*]") == "<div class=\"paragraph\">\n<p>next pass: x\nnext <strong>passed</strong></p>\n</div>"
+expect render_source("xref:other\noc[Other]").contains("<a href=\"#other\noc\">Other</a>")
+
+# A cols record that is not a column spec declares no column, so the first
+# row decides; a bare number is that many columns.
+expect render_source("[cols=\"= 1\"]\n|===\n2.2+|Wide |A\n|B\n|===").contains("<col style=\"width: 33.3333%;\">")
+expect render_source("[cols=3]\n|===\n|A |B |C\n|===").contains("<col style=\"width: 33.3333%;\">")
