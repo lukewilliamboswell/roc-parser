@@ -299,5 +299,10 @@ safe, and duplicate-attribute checks are linear: an element with 5,000
 attributes parses 19 times faster than with the Rust libraries. Decoding text
 and attribute values is linear however they mix references, line endings and
 CDATA, and the `xml-ceilings` fuzz target holds every reading path to
-allocation ceilings linear in the document. See <<performance>> for the
-measurements and caveats.
+allocation ceilings linear in the document.
+
+Reading every event with `Xml.reader` takes about 70% of the time
+`Xml.parse_str` takes to build the whole tree. `XmlNs.parse_str` runs at about
+a third of `Xml.parse_str`'s speed on an OOXML-like document, since it splits
+and resolves every name and its nodes are larger; it holds about twice the
+memory. See <<performance>> for the measurements and caveats.
