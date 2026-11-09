@@ -120,6 +120,24 @@ describe_atom = |text| {
 
 # end::namespaces[]
 
+# tag::render[]
+## Writes an Atom feed with Atom as the default namespace, whatever prefix it
+## was read with.
+rewrite_atom : Str -> Str
+rewrite_atom = |text| {
+	match XmlNs.parse_str(text) {
+		Ok(doc) =>
+			match XmlNs.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "http://www.w3.org/2005/Atom" }]) }) {
+				Ok(written) => written
+				Err(Unrenderable({ problem, .. })) => Str.inspect(problem)
+			}
+
+		Err(_) => "invalid"
+	}
+}
+
+# end::render[]
+
 print_tree! : Str => Try({}, _)
 print_tree! = |text| {
 	match Xml.parse_str(text) {
@@ -163,15 +181,7 @@ main! = |_args| {
 	# end::namespaces-run[]
 
 	# tag::render-run[]
-	match XmlNs.parse_str("<a:feed xmlns:a='http://www.w3.org/2005/Atom'><a:title>Fish &amp; Chips</a:title></a:feed>") {
-		Ok(doc) =>
-			match XmlNs.render(doc, { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "http://www.w3.org/2005/Atom" }]) }) {
-				Ok(text) => Stdout.line!(text)?
-				Err(Unrenderable({ problem, .. })) => Stdout.line!(Str.inspect(problem))?
-			}
-
-		Err(_) => Stdout.line!("invalid")?
-	}
+	Stdout.line!(rewrite_atom("<a:feed xmlns:a='http://www.w3.org/2005/Atom'><a:title>Fish &amp; Chips</a:title></a:feed>"))?
 	# end::render-run[]
 
 	Ok({})

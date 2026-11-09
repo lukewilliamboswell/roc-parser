@@ -248,6 +248,11 @@ it is used, fails with `Unrenderable({ problem, path })`.
 
 [source,roc]
 ----
+include::examples/xml-guide.roc[tag=render,indent=0]
+----
+
+[source,roc]
+----
 include::examples/xml-guide.roc[tag=render-run,indent=0]
 ----
 

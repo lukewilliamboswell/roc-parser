@@ -377,7 +377,7 @@ Xml := {
 	##     count_items(Xml.reader("<list><item/><item>x</item></list>", {})?) == Ok(2)
 	## }
 	## ```
-	Reader :: { doc : Box(Doc), cursor : Cursor }.{
+	Reader :: { src : Str, bytes : List(U8), limits : Limits, declaration : Box(Try(Xml.Declaration, [Missing])), cursor : Cursor }.{
 
 		## The next event, `Done` once the root element has ended and the rest
 		## of the input is only comments, processing instructions and
@@ -399,10 +399,9 @@ Xml := {
 		## ```
 		next : Reader -> [Event(Xml.Event, Reader), Done, Failed(Xml.ReadError)]
 		next = |reader| {
-			doc = Box.unbox(reader.doc)
-			bytes = doc.bytes
-			match step(doc.src, bytes, doc.limits, reader.cursor) {
-				Ok(Ev(event, cursor)) => Event(event, { doc: reader.doc, cursor })
+			bytes = reader.bytes
+			match step(reader.src, bytes, reader.limits, reader.cursor) {
+				Ok(Ev(event, cursor)) => Event(event, { ..reader, cursor })
 				Ok(Finished(pos)) =>
 					if pos == bytes.len() {
 						Done
@@ -442,29 +441,28 @@ Xml := {
 			if reader.cursor.start == no_start {
 				return NotAfterStart
 			}
-			doc = Box.unbox(reader.doc)
-			bytes = doc.bytes
+			bytes = reader.bytes
 			tag =
-				match parse_start_tag(doc.src, bytes, reader.cursor.start, doc.limits.attributes) {
+				match parse_start_tag(reader.src, bytes, reader.cursor.start, reader.limits.attributes) {
 					Ok(parsed) => parsed
 					Err(failure) => return Failed(read_error(bytes, failure))
 				}
-			match build_element(doc.src, bytes, doc.limits, reader.cursor, tag.name, tag.attributes) {
-				Ok(built) => Element(built.node, { doc: reader.doc, cursor: built.cursor })
+			match build_element(reader.src, bytes, reader.limits, reader.cursor, tag.name, tag.attributes) {
+				Ok(built) => Element(built.node, { ..reader, cursor: built.cursor })
 				Err(failure) => Failed(read_error(bytes, failure))
 			}
 		}
 
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
-		declaration = |reader| Box.unbox(reader.doc).declaration
+		declaration = |reader| Box.unbox(reader.declaration)
 
 		## Where the most recent event starts: the `<` of its tag, or the
 		## first byte of its text. Before the first event, the root's start
 		## tag. Lines and columns count as in [Xml.Error].
 		location : Reader -> { line : U64, column : U64 }
 		location = |reader| {
-			at = locate(Box.unbox(reader.doc).bytes, reader.cursor.at, "")
+			at = locate(reader.bytes, reader.cursor.at, "")
 			{ line: at.line, column: at.column }
 		}
 	}
@@ -492,10 +490,11 @@ Parsed(a) : Try({ val : a, pos : U64 }, ReadFailure)
 
 Limits : { depth : U64, elements : U64, attributes : U64, namespaces : Bool }
 
-## What a reader never changes. A reader keeps it boxed; the tree builder
-## passes its parts as plain parameters, so each step moves only the cursor.
-Doc : { src : Str, bytes : List(U8), limits : Limits, declaration : Try(Xml.Declaration, [Missing]) }
-
+## A reader holds the input and limits directly, which are only read, and
+## its declaration boxed, which is rarely read: then a step moves no more
+## than it must and touches no reference counts to reach the input. The tree
+## builder passes the same parts as plain parameters.
+##
 ## Where a reader is: its position, where the names of the open elements
 ## are in the input (offsets, so that no step touches a reference count),
 ## whether
@@ -581,7 +580,7 @@ locate = |bytes, offset, message| {
 read_document : Str, List(U8), Limits -> Parsed(Xml)
 read_document = |src, bytes, limits| {
 	opened = open_reader(src, bytes, limits)?
-	declaration = Box.unbox(opened.doc).declaration
+	declaration = Box.unbox(opened.declaration)
 	match step(src, bytes, limits, opened.cursor)? {
 		Ev(Start(root), after_start) => {
 			built = build_element(src, bytes, limits, after_start, root.name, root.attributes)?
@@ -616,7 +615,7 @@ open_reader = |src, bytes, limits| {
 			fail($pos, "expected a root element, but found text")
 		}
 	}
-	Ok({ doc: Box.box({ src, bytes, limits, declaration: $declaration }), cursor: { pos: $pos, open: [], pending_end: False, closed: False, start: no_start, at: $pos, elements: 0 } })
+	Ok({ src, bytes, limits, declaration: Box.box($declaration), cursor: { pos: $pos, open: [], pending_end: False, closed: False, start: no_start, at: $pos, elements: 0 } })
 }
 
 # One event. Fields are read before the cursor is updated, so its stack of

@@ -1568,3 +1568,35 @@ expect {
 # With a table, a root in no namespace leaves the default to the first
 # element in it.
 expect render_tree(element(plain("r"), [], [], [element(name("urn:a", "a"), [], [], [element(name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
+
+# Many bindings shadow and restore like a few do.
+expect {
+	outer = Str.join_with(List.repeat(0, 6).map_with_index(|_, index| " xmlns:p${index.to_str()}='urn:${index.to_str()}'"), "")
+	inner = Str.join_with(List.repeat(0, 6).map_with_index(|_, index| " xmlns:q${index.to_str()}='urn:q${index.to_str()}'"), "")
+	input = "<r${outer}><a${inner} xmlns:p3='urn:shadow'><p3:x q5:k='v'/></a><p3:y/><b xmlns:q0='urn:b'><q0:z/></b></r>"
+	match XmlNs.parse_str(input) {
+		Ok(doc) =>
+			match doc.root {
+				Element(r) =>
+					match r.children {
+						[Element(a), Element(y), Element(b)] =>
+							match (a.children, b.children) {
+								([Element(x)], [Element(z)]) =>
+									x.name.namespace == Uri("urn:shadow")
+										and x.attributes.map(|attribute| attribute.name.namespace) == [Uri("urn:q5")]
+										and y.name.namespace == Uri("urn:3")
+										and z.name.namespace == Uri("urn:b")
+
+								_ => False
+							}
+
+						_ => False
+					}
+
+				Text(_) => False
+			}
+
+		Err(_) => False
+	}
+}
+expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
