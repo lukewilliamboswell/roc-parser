@@ -63,6 +63,11 @@ jobs:
           - xml-raw
           - xml-roundtrip
           - xml-malformed
+          - xml-reader
+          - xml-limits
+          - xml-ceilings
+          - xmlns-raw
+          - xmlns-roundtrip
           - json-raw
           - json-options
           - json-roundtrip
@@ -76,6 +81,7 @@ jobs:
           - http-roundtrip
           - http-smuggling
           - parser-combinators
+          - validate
           - string-primitives
           - byte-scan
           - roc-syntax-raw

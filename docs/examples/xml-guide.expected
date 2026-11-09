@@ -7,3 +7,10 @@ Element({ attributes: [{ name: "class", value: "a b" }], children: [Text("x < y 
 1:10: duplicate attribute x
 1:5: unexpected content after the root element
 1:1: document type declarations are not supported
+Ok(["One", "Two"])
+accepted
+2:9: more than 3 (Depth)
+Ok({ local: "feed", namespace: Uri("http://www.w3.org/2005/Atom"), prefix: Unprefixed }) ["News"]
+Ok({ local: "feed", namespace: Uri("http://www.w3.org/2005/Atom"), prefix: Prefix("a") }) ["News"]
+1:7: UndeclaredPrefix("x")
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Fish &amp; Chips</title></feed>
