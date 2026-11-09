@@ -309,6 +309,8 @@ allocation ceilings linear in the document.
 
 Reading every event with `Xml.reader` takes about 70% of the time
 `Xml.parse_str` takes to build the whole tree. `XmlNs.parse_str` builds its
-tree with `element_with` and runs at about 40% of `Xml.parse_str`'s speed on an
+tree with `element_with` and runs at about 45% of `Xml.parse_str`'s speed on an
 OOXML-like document, since it splits and resolves every name and its names
-and nodes are larger; it holds about twice the memory. See <<performance>> for the measurements and caveats.
+and nodes are larger; it holds about twice the memory. That is as fast as
+parsing with `Xml` and then resolving names over the tree, while checking
+every namespace rule and holding one tree instead of two. See <<performance>> for the measurements and caveats.

@@ -462,7 +462,7 @@ resolve_start = |scope, name, attributes| {
 			Err(NotADeclaration) => {}
 		}
 	}
-	resolved = resolve_names($entries, $active, name, attributes)?
+	resolved = resolve_names($entries, $active, name, attributes, False).map_err(problem_of_names)?
 	names = scope.names.append(resolved.name)
 	Ok({ scope: { entries: $entries, active: $active, frames, names }, name: resolved.name, bindings: $bindings, attributes: resolved.attributes })
 }
@@ -470,31 +470,47 @@ resolve_start = |scope, name, attributes| {
 # Resolves an element's name and its attributes other than declarations,
 # with the bindings in scope. The bindings are separate arguments that are
 # only read, so a lookup touches no reference counts.
-resolve_names : List(Entry), Dict(Str, U64), Str, List(Xml.Attribute) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.Attribute) }, XmlNs.Problem)
-resolve_names = |entries, active, name, attributes| {
-	element_name = split_qname(name)?
-	if element_name.prefix == "xmlns" {
-		return Err(ReservedPrefix("xmlns"))
+# With `stop`, a declaration among the attributes fails with `Declares`
+# instead of being skipped, for a caller whose bindings cannot change.
+resolve_names : List(Entry), Dict(Str, U64), Str, List(Xml.Attribute), Bool -> Try({ name : XmlNs.Name, attributes : List(XmlNs.Attribute) }, [Declares, Invalid(XmlNs.Problem)])
+resolve_names = |entries, active, name, attributes, stop| {
+	# A declaration can bind the element's own prefix, so look for one first.
+	if stop and has_declaration(attributes) {
+		return Err(Declares)
 	}
-	resolved_name = resolve(element_name, entries, active, True)?
+	element_name = split_qname(name).map_err(|problem| Invalid(problem))?
+	if element_name.prefix == "xmlns" {
+		return Err(Invalid(ReservedPrefix("xmlns")))
+	}
+	resolved_name = resolve(element_name, entries, active, True).map_err(|problem| Invalid(problem))?
 	if attributes.is_empty() {
 		return Ok({ name: resolved_name, attributes: [] })
 	}
 	var $resolved = List.with_capacity(attributes.len())
 	var $prefixed = 0
 	for attribute in attributes {
-		if !is_declaration(attribute.name) {
-			attribute_name = split_qname(attribute.name)?
+		# With `stop` there are none to skip.
+		if stop or !is_declaration(attribute.name) {
+			attribute_name = split_qname(attribute.name).map_err(|problem| Invalid(problem))?
 			if attribute_name.prefix != "" {
 				$prefixed = $prefixed + 1
 			}
-			$resolved = $resolved.append({ name: resolve(attribute_name, entries, active, False)?, value: attribute.value })
+			$resolved = $resolved.append({ name: resolve(attribute_name, entries, active, False).map_err(|problem| Invalid(problem))?, value: attribute.value })
 		}
 	}
 	if $prefixed > 1 {
-		check_unique($resolved)?
+		check_unique($resolved).map_err(|problem| Invalid(problem))?
 	}
 	Ok({ name: resolved_name, attributes: $resolved })
+}
+
+# The problem of a resolution that cannot stop at a declaration.
+problem_of_names : [Declares, Invalid(XmlNs.Problem)] -> XmlNs.Problem
+problem_of_names = |error| {
+	match error {
+		Invalid(problem) => problem
+		Declares => crash "resolve_names stopped at a declaration it was told to skip"
+	}
 }
 
 Entry : { prefix : Str, namespace : XmlNs.Namespace, previous : U64 }
@@ -543,7 +559,7 @@ pop_scope = |scope| {
 }
 
 is_declaration : Str -> Bool
-is_declaration = |name| name == "xmlns" or name.starts_with("xmlns:")
+is_declaration = |name| name.starts_with("xmlns") and (name.count_utf8_bytes() == 5 or name.to_utf8().get(5) == Ok(':'))
 
 # The binding an attribute declares, with the rules for reserved prefixes
 # and namespaces (https://www.w3.org/TR/xml-names/#xmlReserved).
@@ -707,6 +723,50 @@ build_element = |reader, start| {
 	outer_frames = scope.frames.drop_last(1)
 	outer_names = scope.names.drop_last(1)
 	mark = scope.frames.last() ?? 0
+	entries = scope.entries
+	active = scope.active
+	# Most subtrees declare nothing: an OOXML part declares every namespace
+	# on its root. They are built with the bindings in force when the subtree
+	# started and no context at all, which carrying the bindings through every
+	# start and end would cost a fifth of the parse. The first declaration
+	# stops that build, and the subtree is built again with the bindings as
+	# the context, so a document pays at most one extra partial pass.
+	fast = reader.inner.element_with({
+		context: {},
+		first: start,
+		start: |{}, name, attributes| {
+			names = resolve_names(entries, active, name, attributes, True)?
+			Ok({ context: {}, open: { name: names.name, bindings: [], attributes: names.attributes } })
+		},
+		text: |text| Text(text),
+		end: |{}, open, children| {
+			node : XmlNs.Node
+			node = Element({ name: open.name, bindings: open.bindings, attributes: open.attributes, children })
+			{ context: {}, node }
+		},
+	})
+	match fast {
+		Element(node, _, rest) => {
+			# The element's own declarations go out of scope after it.
+			bound = if (entries.len() > mark) unbind(entries, active, mark) else { entries, active }
+			Element(node, { inner: rest, scope: { entries: bound.entries, active: bound.active, frames: outer_frames, names: outer_names }, last_start: NotStarted })
+		}
+
+		Rejected(Declares, _) => build_scoped(reader, start)
+		Rejected(Invalid(problem), at) => Failed(InvalidNamespace({ problem, line: at.line, column: at.column }))
+		Failed(error) => Failed(widen(error))
+		NotAfterStart => NotAfterStart
+	}
+}
+
+# `build_element` for a subtree that declares namespaces: the bindings in
+# scope are the context, declared and restored as elements start and end.
+build_scoped : XmlNs.Reader, { name : XmlNs.Name, bindings : List(XmlNs.Binding), attributes : List(XmlNs.Attribute) } -> [Element(XmlNs.Node, XmlNs.Reader), Failed(XmlNs.ReadError), NotAfterStart]
+build_scoped = |reader, start| {
+	scope = reader.scope
+	outer_frames = scope.frames.drop_last(1)
+	outer_names = scope.names.drop_last(1)
+	mark = scope.frames.last() ?? 0
 	built = reader.inner.element_with({
 		context: { entries: scope.entries, active: scope.active },
 		first: { name: start.name, bindings: start.bindings, attributes: start.attributes, mark },
@@ -716,7 +776,7 @@ build_element = |reader, start| {
 				declared = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, name, attributes)?
 				Ok({ context: { entries: declared.scope.entries, active: declared.scope.active }, open: { name: declared.name, bindings: declared.bindings, attributes: declared.attributes, mark: at_mark } })
 			} else {
-				names = resolve_names(bound.entries, bound.active, name, attributes)?
+				names = resolve_names(bound.entries, bound.active, name, attributes, False).map_err(problem_of_names)?
 				Ok({ context: bound, open: { name: names.name, bindings: [], attributes: names.attributes, mark: at_mark } })
 			}
 		},
