@@ -26,6 +26,8 @@ import Xml
 ##
 ## Namespace names are compared as strings, as the specification requires,
 ## and a namespace problem is reported with the location of the start tag.
+## Problems are reported in document order: a namespace problem in a start
+## tag comes before a well-formedness error later in the document.
 XmlNs := {
 	declaration : Try(Xml.Declaration, [Missing]),
 	root : XmlNs.Node,
@@ -330,8 +332,10 @@ XmlNs := {
 	##   namespace's prefix from the table, ignoring the tree's prefixes and
 	##   bindings, and declares on the root, in table order, every namespace
 	##   the document uses. An empty prefix makes a namespace the default for
-	##   elements; `xmlns=""` or `xmlns="u"` is then written where the default
-	##   must change. The `xml` namespace is always written with `xml`.
+	##   elements, declared with `xmlns="u"` on the first element that needs it
+	##   (the root, when it is in that namespace), and `xmlns=""` or `xmlns="u"`
+	##   is written wherever the default must change. The `xml` namespace is
+	##   always written with `xml`.
 	## - `attribute_order`: `AsGiven` keeps each element's attributes in order,
 	##   and `SortedBy(compare)` sorts them.
 	RenderProps := {
@@ -913,17 +917,15 @@ render_with_table = |start, root, order, entries| {
 	}
 	used = used_namespaces(root)
 	var $out = start
+	# The default namespace is declared where an element first needs it, as
+	# the root may be in no namespace.
 	var $declarations = []
-	var $root_default = NoNamespace
 	for entry in entries {
-		if used.contains(entry.namespace) and $prefix_of.get(entry.namespace) == Ok(entry.prefix) and entry.prefix != "xml" {
-			$declarations = $declarations.append({ name: if (entry.prefix == "") "xmlns" else "xmlns:${entry.prefix}", value: entry.namespace })
-			if entry.prefix == "" {
-				$root_default = Uri(entry.namespace)
-			}
+		if used.contains(entry.namespace) and $prefix_of.get(entry.namespace) == Ok(entry.prefix) and entry.prefix != "xml" and entry.prefix != "" {
+			$declarations = $declarations.append({ name: "xmlns:${entry.prefix}", value: entry.namespace })
 		}
 	}
-	var $default = $root_default
+	var $default = NoNamespace
 	var $defaults = []
 	var $path = []
 	var $work = [Enter(root)]
@@ -958,15 +960,15 @@ render_with_table = |start, root, order, entries| {
 					}
 				$out = $out.append('<').concat(written.to_utf8())
 				outer_default = $default
+				if prefix == Ok("") and $default != element.name.namespace {
+					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
+					$default = element.name.namespace
+				}
 				if $first {
 					for declared in $declarations {
 						$out = write_attribute($out, declared.name, declared.value).map_err(|problem| Unrenderable({ problem, path: $path }))?
 					}
 					$first = False
-				}
-				if prefix == Ok("") and $default != element.name.namespace {
-					$out = write_attribute($out, "xmlns", namespace_str(element.name.namespace)).map_err(|problem| Unrenderable({ problem, path: $path }))?
-					$default = element.name.namespace
 				}
 				attributes = ordered(element.attributes, order)
 				if attributes.len() > 1 {
@@ -1562,3 +1564,7 @@ expect {
 		Err(_) => False
 	}
 }
+
+# With a table, a root in no namespace leaves the default to the first
+# element in it.
+expect render_tree(element(plain("r"), [], [], [element(name("urn:a", "a"), [], [], [element(name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
