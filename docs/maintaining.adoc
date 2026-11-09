@@ -4,7 +4,7 @@ ifndef::src[]
 :repo: https://github.com/lukewilliamboswell/roc-parser
 :src: {repo}/blob/main
 endif::[]
-:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
+:roc-automation: https://github.com/lukewilliamboswell/roc-automation/blob/0ad737abd3cad3d14d7e409e91161cd42c05142c
 
 [#maintaining]
 = Compiler, releases, settings and security reports
@@ -73,12 +73,12 @@ reproduce a past combination; such a run never opens or closes the issue.
 These change only through a pull request a maintainer reviews:
 
 * *roc-automation.* Every roc-automation action and reusable workflow is used at
-  the reviewed revision `8454f8ed9acc026c85e31e87b132dfeeaf9f1b81`
-  (`tools-0.10.0`), and `scripts/tests/test_repository_policy.py` fails if a
+  the reviewed revision `0ad737abd3cad3d14d7e409e91161cd42c05142c`
+  (`tools-0.10.1`), and `scripts/tests/test_repository_policy.py` fails if a
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
-* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.11.0, by its
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.12.0, by its
   platform URL, and `actions/setup-blueprint` installs the binary of that
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].
@@ -97,7 +97,7 @@ These change only through a pull request a maintainer reviews:
 The check, package, bundle, documentation-example and release drivers are
 executable Roc scripts under `scripts/`, run with the fixed `roc-stable`
 compiler fetched by Blueprint. Package commands use the separate `roc` on
-`PATH`. The released `release-package` utility from tools-0.10.0 builds the
+`PATH`. The released `release-package` utility from tools-0.10.1 builds the
 bundle, examples archive, API archive and notes, and tests archived examples
 against the exact bundle. The shared release workflow composes it with the
 manual and the bundle's SBOM. These local commands publish nothing.
@@ -107,7 +107,7 @@ or compiler fixture that must use the floating nightly. The policy check rejects
 unlisted files, stale exceptions, tooling pin drift and workflow pin drift.
 The shared working-tree and archive checks both use `tests/spec.json`.
 
-The manual builds as HTML and PDF with `roc-docs` from tools-0.10.0. Blueprint
+The manual builds as HTML and PDF with `roc-docs` from tools-0.10.1. Blueprint
 fetches the native binary and checks its digest against `Blueprint.lock`. Use
 the documentation commands in <<contributing>> to reproduce the build.
 
