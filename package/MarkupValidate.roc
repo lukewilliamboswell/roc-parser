@@ -312,3 +312,56 @@ check_svg_children = |parsed, node, name| {
 	}
 	Ok({})
 }
+
+valid_paint : Str -> Bool
+valid_paint = |text| {
+	value = text.trim()
+	if ["none", "context-fill", "context-stroke"].contains(value) {
+		return True
+	}
+	if value.starts_with("url(") {
+		match value.split_first(")") {
+			Ok({ before, after }) => before.count_utf8_bytes() > 4 and (after.trim().is_empty() or valid_color(after.trim()) or after.trim() == "none")
+			Err(_) => False
+		}
+	} else {
+		valid_color(value)
+	}
+}
+
+valid_color : Str -> Bool
+valid_color = |text| {
+	value = Str.from_utf8_lossy(text.trim().to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+	if color_names.contains(value) or ["currentcolor", "transparent", "inherit", "initial", "unset", "revert", "revert-layer"].contains(value) {
+		return True
+	}
+	if value.starts_with("#") {
+		hex = value.to_utf8().drop_first(1)
+		return [3, 4, 6, 8].contains(hex.len()) and hex.all(|b| (b >= '0' and b <= '9') or (b >= 'a' and b <= 'f'))
+	}
+	# Embedded CSS functions remain CSS; check their lexical envelope here,
+	# leaving CSS evaluation and complete CSS syntax validation to consumers.
+	match value.split_first("(") {
+		Ok({ before, after }) => {
+			if !["rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix", "light-dark", "var"].contains(before) or !after.ends_with(")") {
+				return False
+			}
+			var $depth = 1.I64
+			for b in after.to_utf8() {
+				if b == '(' {
+					$depth = $depth + 1
+				}
+				if b == ')' {
+					$depth = $depth - 1
+				}
+				if $depth < 0 {
+					return False
+				}
+			}
+			$depth == 0 and after.count_utf8_bytes() > 1
+		}
+		Err(_) => False
+	}
+}
+
+color_names = "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split_on(" ")

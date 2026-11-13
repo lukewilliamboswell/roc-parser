@@ -1,6 +1,7 @@
 import Markup
 import MarkupValidate
 import MarkupTemplate
+import Literal
 
 ## Strict namespace-aware Svg documents and fragments.
 ## XML syntax is the default; fragments start in the Svg namespace.
@@ -46,7 +47,7 @@ Svg := { parsed : Markup.Parsed }.{
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(Svg, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))
+	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
 
 	## Convert a checked complete document literal.
 	from_quote : Str -> Try(Svg, [BadQuotedBytes(Str)])
