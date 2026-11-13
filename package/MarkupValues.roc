@@ -17,6 +17,7 @@ MarkupValues :: [].{
 			$digits = $digits + 1
 			$pos = $pos + 1
 		}
+		integer_end = $pos
 		if bytes.get($pos) == Ok('.') and digit(bytes.get($pos + 1)) {
 			$pos = $pos + 1
 			while digit(bytes.get($pos)) {
@@ -39,6 +40,10 @@ MarkupValues :: [].{
 			if $pos == exponent {
 				return Err(InvalidNumber($pos))
 			}
+		}
+		if $pos == integer_end and $digits <= 15 {
+			value = short_integer(bytes, $pos - $digits, $pos).to_f64()
+			return Ok({ value: if (bytes.get(start) == Ok('-')) value.negate() else value, start, end: $pos })
 		}
 		text = Str.from_utf8(bytes.sublist({ start, len: $pos - start })) ?? ""
 		match F64.from_str(text) {
@@ -173,6 +178,20 @@ MarkupValues :: [].{
 	}
 }
 
+# Called only after the existing scanner proves 1 to 15 ASCII decimal digits.
+# Maximum 999_999_999_999_999 fits both U64 and exact F64 integer precision.
+short_integer : List(U8), U64, U64 -> U64
+short_integer = |bytes, start, end| {
+	var $value = 0.U64
+	var $index = start
+	while $index < end {
+		digit_value = (bytes.get($index) ?? 48).to_u64().minus_wrap(48)
+		$value = $value.times_wrap(10).plus_wrap(digit_value)
+		$index = $index + 1
+	}
+	$value
+}
+
 digit : Try(U8, [OutOfBounds]) -> Bool
 digit = |byte| match byte {
 	Ok(b) => b >= '0' and b <= '9'
@@ -208,4 +227,18 @@ length_unit : Str -> Bool
 length_unit = |unit| match unit {
 	"" | "%" | "px" | "em" | "ex" | "ch" | "rem" | "vw" | "vh" | "vmin" | "vmax" | "cm" | "mm" | "q" | "in" | "pt" | "pc" => True
 	_ => False
+}
+
+expect MarkupValues.number("-0".to_utf8(), 0).map_ok(|parsed| parsed.value.to_bits()) == Ok(0x8000_0000_0000_0000)
+expect MarkupValues.number("xx-999999999999999,".to_utf8(), 2) == Ok({ value: -999_999_999_999_999.F64, start: 2, end: 18 })
+expect {
+	["999999999999999", "1000000000000000", "-0.0", "1e3", "1e", "1.", ".5"].all(
+		|source| match MarkupValues.number(source.to_utf8(), 0) {
+			Ok(parsed) => {
+				prefix = source.drop_last_bytes(source.count_utf8_bytes() - parsed.end) ?? ""
+				F64.from_str(prefix).map_ok(|value| value.to_bits()) == Ok(parsed.value.to_bits())
+			}
+			Err(_) => False
+		},
+	)
 }
