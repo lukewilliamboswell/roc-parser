@@ -44,6 +44,33 @@ HtmlTokenizer :: [].{
 		{ token, reader: { bytes: result.reader.bytes, pos: result.reader.pos, diagnostics }, limited }
 	}
 
+	## Tokenize a reader derived from this original source string. The source
+	## bytes must match reader.bytes. Long DataMixed text keeps a validated
+	## source slice; other tokens use the byte tokenizer and its resource limits.
+	next_with_source : Reader, Str, Mode, Bool, Limits -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics] }
+	next_with_source = |reader, source, mode, foreign, limits| {
+		if mode == DataMixed and reader.pos < reader.bytes.len() and byte_at(reader.bytes, reader.pos) != '<' and reader.diagnostics.len() <= limits.max_diagnostics and source.count_utf8_bytes() == reader.bytes.len() {
+			scanned = MarkupScan.html_data(reader.bytes, reader.pos)
+			if !scanned.normalize {
+				# Short runs fit inline and need no retained source slice.
+				if scanned.end - reader.pos <= 23 {
+					text = text_at(reader.bytes, reader.pos, scanned.end)
+					return { token: { kind: Characters(text), span: { start: reader.pos, end: scanned.end } }, reader: { ..reader, pos: scanned.end }, limited: NoLimit }
+				}
+				match source.drop_first_bytes(reader.pos) {
+					Ok(tail) => {
+						match tail.drop_last_bytes(reader.bytes.len() - scanned.end) {
+							Ok(text) => return { token: { kind: Characters(text), span: { start: reader.pos, end: scanned.end } }, reader: { ..reader, pos: scanned.end }, limited: NoLimit }
+							Err(_) => {}
+						}
+					}
+					Err(_) => {}
+				}
+			}
+		}
+		next_with(reader, mode, foreign, limits)
+	}
+
 	scan_next : ScanReader, Mode, Bool -> { token : Token, reader : ScanReader }
 	scan_next = |reader, mode, foreign| {
 		bytes = reader.bytes
@@ -293,34 +320,12 @@ HtmlTokenizer :: [].{
 	## Stop after the first diagnostic past the budget. That extra witness lets
 	## the tree reader reject exhaustion without silently accepting truncation.
 	input_diagnostics_with : List(U8), U64 -> List(Diagnostic)
-	input_diagnostics_with = |bytes, limit| {
-		var $diagnostics = []
-		var $pos = 0
-		while $pos < bytes.len() {
-			$pos = MarkupScan.printable_ascii(bytes, $pos)
-			if $pos >= bytes.len() {
-				break
-			}
-			lead = byte_at(bytes, $pos).to_u64()
-			width = if (lead >= 0xF0) 4 else if (lead >= 0xE0) 3 else if (lead >= 0xC0) 2 else 1
-			var $scalar = if (width == 1) lead else if (width == 2) lead % 32 else if (width == 3) lead % 16 else lead % 8
-			var $i = 1
-			while $i < width {
-				$scalar = $scalar * 64 + byte_at(bytes, $pos + $i).to_u64() % 64
-				$i = $i + 1
-			}
-			if ($scalar >= 1 and $scalar <= 8) or $scalar == 11 or ($scalar >= 14 and $scalar <= 31) or ($scalar >= 127 and $scalar <= 159) {
-				$diagnostics = $diagnostics.append({ code: ControlCharacterInInputStream, offset: $pos })
-			} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or $scalar % 65536 >= 65534 {
-				$diagnostics = $diagnostics.append({ code: NoncharacterInInputStream, offset: $pos })
-			}
-			if $diagnostics.len() > limit {
-				break
-			}
-			$pos = $pos + width
-		}
-		$diagnostics
-	}
+	input_diagnostics_with = |bytes, limit| input_diagnostics_scan(bytes, limit, False)
+
+	## Input-stream diagnostics for an already valid string. Skip ordinary
+	## Unicode bytes and decode only candidates for controls/noncharacters.
+	input_diagnostics_from_str : Str, U64 -> List(Diagnostic)
+	input_diagnostics_from_str = |source, limit| input_diagnostics_scan(source.to_utf8(), limit, True)
 
 	lower : Str -> Str
 	lower = |s| {
@@ -1337,6 +1342,11 @@ expect {
 	y = Str.join_with(List.repeat("y", 33), "")
 	HtmlTokenizer.input_diagnostics("${x}\u(85)${y}\u(FDD0)".to_utf8()) == [{ code: ControlCharacterInInputStream, offset: 32 }, { code: NoncharacterInInputStream, offset: 67 }]
 }
+
+expect {
+	sources = ["", "ordinary text", "café Αθήνα 東京\u(1F642)", "\u(1)\u(85)text\u(FDD0)\u(1FFFE)\u(10FFFF)"]
+	sources.all(|source| [0.U64, 1, 5, 18_446_744_073_709_551_615].all(|limit| HtmlTokenizer.input_diagnostics_from_str(source, limit) == HtmlTokenizer.input_diagnostics_with(source.to_utf8(), limit)))
+}
 expect token_kind("\u(FEFF)<p>") == Characters("\u(FEFF)")
 
 expect HtmlTokenizer.next({ bytes: "foo</textarea><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RcdataFragment, False).token.kind == Characters("foo</textarea><b>&")
@@ -1345,6 +1355,36 @@ expect HtmlTokenizer.next({ bytes: "<!-- inside </script> -->".to_utf8(), pos: 0
 expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("</script><b>&amp;")
 
 ScanReader : { bytes : List(U8), pos : U64, diagnostics : List(HtmlTokenizer.Diagnostic), max_diagnostics : U64, max_attributes : U64, attribute_limit : Bool }
+
+input_diagnostics_scan : List(U8), U64, Bool -> List(HtmlTokenizer.Diagnostic)
+input_diagnostics_scan = |bytes, limit, valid_utf8| {
+	var $diagnostics = []
+	var $pos = 0
+	while $pos < bytes.len() {
+		$pos = if (valid_utf8) MarkupScan.valid_utf8_diagnostic_candidate(bytes, $pos) else MarkupScan.printable_ascii(bytes, $pos)
+		if $pos >= bytes.len() {
+			break
+		}
+		lead = HtmlTokenizer.byte_at(bytes, $pos).to_u64()
+		width = if (lead >= 0xF0) 4 else if (lead >= 0xE0) 3 else if (lead >= 0xC0) 2 else 1
+		var $scalar = if (width == 1) lead else if (width == 2) lead % 32 else if (width == 3) lead % 16 else lead % 8
+		var $i = 1
+		while $i < width {
+			$scalar = $scalar * 64 + HtmlTokenizer.byte_at(bytes, $pos + $i).to_u64() % 64
+			$i = $i + 1
+		}
+		if ($scalar >= 1 and $scalar <= 8) or $scalar == 11 or ($scalar >= 14 and $scalar <= 31) or ($scalar >= 127 and $scalar <= 159) {
+			$diagnostics = $diagnostics.append({ code: ControlCharacterInInputStream, offset: $pos })
+		} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or $scalar % 65536 >= 65534 {
+			$diagnostics = $diagnostics.append({ code: NoncharacterInInputStream, offset: $pos })
+		}
+		if $diagnostics.len() > limit {
+			break
+		}
+		$pos = $pos + width
+	}
+	$diagnostics
+}
 
 remaining_diagnostics : U64, U64 -> U64
 remaining_diagnostics = |limit, count| if (count < limit) limit - count else 0
@@ -1418,4 +1458,22 @@ expect {
 	input = "<a x=v${Str.join_with(List.repeat("\"", 4096), "")}>"
 	r = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_diagnostics: 0 })
 	r.limited == Diagnostics and r.reader.pos == 7 and r.reader.diagnostics == [{ code: InvalidAttributeCharacter, offset: 6 }]
+}
+
+expect {
+	# Source slicing and byte decoding agree at every starting byte, including
+	# offsets inside UTF-8 and tokens that exhaust the diagnostic budget.
+	prefix = Str.join_with(List.repeat("éx", 16), "")
+	source = "${prefix}<P title='café' data-v='x&amp;y'>éa\u(0)b\r\n<z/>"
+	bytes = source.to_utf8()
+	var $at = 0
+	var $same = True
+	while $at <= bytes.len() {
+		reader = { bytes, pos: $at, diagnostics: [] }
+		byte_result = HtmlTokenizer.next_with(reader, DataMixed, False, { max_diagnostics: 0 })
+		source_result = HtmlTokenizer.next_with_source(reader, source, DataMixed, False, { max_diagnostics: 0 })
+		$same = $same and byte_result == source_result
+		$at = $at + 1
+	}
+	$same
 }

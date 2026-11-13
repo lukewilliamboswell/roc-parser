@@ -66,13 +66,17 @@ HtmlTree :: [].{
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
 			$state = { ..$state, mode: context_mode(context.name) }
 		}
-		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_with(source.to_utf8(), props.max_diagnostics) }
+		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
 		var $done = False
 		var $source_regions = []
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace($state) != Markup.html_namespace
-			next = Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+				Tok.next_with_source($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			} else {
+				Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			}
 			match next.limited {
 				NoLimit => {}
 				Attributes => {
