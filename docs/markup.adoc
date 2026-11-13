@@ -180,7 +180,7 @@ Fuzz campaigns and markup benchmarks are local work, with no scheduled runs:
 
 [source,sh]
 ----
-python3 scripts/run_fuzz.py smoke html-raw svg-raw mathml-raw markup-source markup-structured markup-limits markup-segments
+python3 scripts/run_fuzz.py smoke html-raw svg-raw svg-path mathml-raw markup-source markup-structured markup-limits markup-segments
 python3 scripts/review_markup.py campaign --smoke
 python3 scripts/review_markup.py browser --engines chromium firefox webkit
 python3 scripts/bench_markup.py --allocations --check-scaling --compile-literals

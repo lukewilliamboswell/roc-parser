@@ -387,7 +387,7 @@ detection gap, not evidence that these campaigns did not run.
 
 == Local web-markup campaigns
 
-The `html-raw`, `svg-raw`, `mathml-raw`, `markup-source`, `markup-structured`,
+The `html-raw`, `svg-raw`, `svg-path`, `mathml-raw`, `markup-source`, `markup-structured`,
 `markup-limits` and `markup-segments` targets exercise malformed input,
 independently generated structure, source partitioning, bounds and typed holes.
 They are registered with `scheduled: False`. Run them locally using the commands

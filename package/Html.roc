@@ -210,3 +210,6 @@ expect {
 	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "AB"
 }
 
+expect Html.parse_segments(["<script>if(a<b)x()</script><p>", "</p>"], {}).is_ok()
+expect Html.parse_segments(["<style>p::before{content:'<';}</style><p>", "</p>"], {}).is_ok()
+expect Html.parse_segments(["<script>if(a<b)", "</script>"], {}).is_err()
