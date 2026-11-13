@@ -7,7 +7,7 @@ HtmlTokenizer :: [].{
 	Span : { start : U64, end : U64 }
 	Attribute : { name : Str, value : Str, span : Span }
 	Tag : { name : Str, attributes : List(Attribute), self_closing : Bool }
-	Kind : [Start(Tag), End(Str), Characters(Str), Comment(Str), ProcessingInstruction({ target : Str, data : Str }), Doctype({ name : Str, public_id : Str, system_id : Str, quirks : Bool }), Eof]
+	Kind : [Start(Tag), End(Str), Characters(Str), Comment(Str), ProcessingInstruction({ target : Str, data : Str }), Doctype({ name : Str, public_id : Str, system_id : Str, has_public : Bool, has_system : Bool, quirks : Bool }), Eof]
 	Token : { kind : Kind, span : Span }
 	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
@@ -41,12 +41,9 @@ HtmlTokenizer :: [].{
 			Data => {}
 		}
 		if byte_at(bytes, start) != '<' {
-			var $end = start + 1
-			while $end < bytes.len() and byte_at(bytes, $end) != '<' {
-				$end = $end + 1
-			}
-			return characters(reader, $end, True, True)
+			return data_characters(reader)
 		}
+
 		if starts(bytes, start, "<!--") {
 			return comment(reader)
 		}
@@ -58,7 +55,7 @@ HtmlTokenizer :: [].{
 			while $end < bytes.len() and !starts(bytes, $end, "]]>") {
 				$end = $end + 1
 			}
-			text = normalized(bytes.sublist({ start: start + 9, len: $end - start - 9 }), False, False)
+			text = normalized_with_nulls(bytes.sublist({ start: start + 9, len: $end - start - 9 }), False, False, False)
 			end = if ($end < bytes.len()) $end + 3 else $end
 			return { token: { kind: Characters(text.text), span: { start, end } }, reader: { ..reader, pos: end } }
 		}
@@ -66,13 +63,9 @@ HtmlTokenizer :: [].{
 			return processing_instruction(reader)
 		}
 		if starts(bytes, start, "<!") {
-			var $end = start + 2
-			while $end < bytes.len() and byte_at(bytes, $end) != '>' {
-				$end = $end + 1
-			}
-			end = if ($end < bytes.len()) $end + 1 else $end
-			return { token: { kind: Comment(text_at(bytes, if (byte_at(bytes, start + 1) == '?') start + 1 else start + 2, $end)), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code: BogusComment, offset: start }) } }
+			return bogus_comment(reader, start + 2, BogusComment, start)
 		}
+
 		closing = byte_at(bytes, start + 1) == '/'
 		name_start = start + if (closing) 2 else 1
 		if closing and !ascii_alpha(byte_at(bytes, name_start)) {
@@ -80,13 +73,9 @@ HtmlTokenizer :: [].{
 				return { token: { kind: Characters(""), span: { start, end: name_start + 1 } }, reader: { ..reader, pos: name_start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
 			}
 			if name_start < bytes.len() {
-				var $end = name_start
-				while $end < bytes.len() and byte_at(bytes, $end) != '>' {
-					$end = $end + 1
-				}
-				end = if ($end < bytes.len()) $end + 1 else $end
-				return { token: { kind: Comment(text_at(bytes, name_start, $end)), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code: BogusComment, offset: start }) } }
+				return bogus_comment(reader, name_start, BogusComment, start)
 			}
+			return { token: { kind: Characters("</"), span: { start, end: name_start } }, reader: { ..reader, pos: name_start, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
 		}
 		if !ascii_alpha(byte_at(bytes, name_start)) {
 			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
@@ -95,9 +84,10 @@ HtmlTokenizer :: [].{
 		while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['/', '>'].contains(byte_at(bytes, $pos)) {
 			$pos = $pos + 1
 		}
-		name = lower(text_at(bytes, name_start, $pos))
+		normalized_name = normalized(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False)
+		name = lower(normalized_name.text)
 		var $attributes = []
-		var $diagnostics = reader.diagnostics
+		var $diagnostics = reader.diagnostics.concat(normalized_name.diagnostics.map(|d| { ..d, offset: name_start + d.offset }))
 		var $self_closing = False
 		var $done = False
 		while $pos < bytes.len() and !$done {
@@ -125,8 +115,12 @@ HtmlTokenizer :: [].{
 					$diagnostics = $diagnostics.append({ code: MissingWhitespace, offset: $pos })
 				}
 				attr_start = $pos
+				if byte_at(bytes, $pos) == '=' {
+					$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
+					$pos = $pos + 1
+				}
 				while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['=', '/', '>'].contains(byte_at(bytes, $pos)) {
-					if ['"', '\'', '<', 0].contains(byte_at(bytes, $pos)) {
+					if ['"', '\'', '<'].contains(byte_at(bytes, $pos)) {
 						$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					}
 					$pos = $pos + 1
@@ -134,7 +128,9 @@ HtmlTokenizer :: [].{
 				if $pos == attr_start {
 					$pos = $pos + 1
 				}
-				attr_name = lower(text_at(bytes, attr_start, $pos))
+				normalized_attr = normalized(bytes.sublist({ start: attr_start, len: $pos - attr_start }), False, False)
+				attr_name = lower(normalized_attr.text)
+				$diagnostics = $diagnostics.concat(normalized_attr.diagnostics.map(|d| { ..d, offset: attr_start + d.offset }))
 				after_name = $pos
 				while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
 					$pos = $pos + 1
@@ -286,33 +282,157 @@ raw_characters = |reader, name, references, script| {
 comment = |reader| {
 	bytes = reader.bytes
 	start = reader.pos
-	var $end = start + 4
+	var $pos = start + 4
+	var $state = CommentStart
+	var $out = []
 	var $diagnostics = reader.diagnostics
-	if HtmlTokenizer.byte_at(bytes, $end) == '-' and HtmlTokenizer.byte_at(bytes, $end + 1) == '>' {
-		return { token: { kind: Comment(""), span: { start, end: $end + 2 } }, reader: { ..reader, pos: $end + 2, diagnostics: $diagnostics.append({ code: IncorrectComment, offset: start }) } }
-	}
-	if HtmlTokenizer.byte_at(bytes, $end) == '>' {
-		return { token: { kind: Comment(""), span: { start, end: $end + 1 } }, reader: { ..reader, pos: $end + 1, diagnostics: $diagnostics.append({ code: IncorrectComment, offset: start }) } }
-	}
-	while $end < bytes.len() and !HtmlTokenizer.starts(bytes, $end, "-->") and !HtmlTokenizer.starts(bytes, $end, "--!>") {
-		if HtmlTokenizer.starts(bytes, $end, "<!--") {
-			$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $end })
+	var $done = False
+	while !$done {
+		if $pos >= bytes.len() {
+			$diagnostics = $diagnostics.append({ code: EofInComment, offset: $pos })
+			break
 		}
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		var $consume = True
+		match $state {
+			CommentStart => {
+				if byte == '-' {
+					$state = StartDash
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $pos })
+					$done = True
+				}
+				else {
+					$state = CommentData
+					$consume = False
+				}
+			}
+			StartDash => {
+				if byte == '-' {
+					$state = CommentEnd
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $pos })
+					$done = True
+				}
+				else {
+					$out = $out.append('-')
+					$state = CommentData
+					$consume = False
+				}
+			}
+			CommentData => {
+				if byte == '<' {
+					$out = $out.append('<')
+					$state = LessThan
+				}
+				else if byte == '-' {
+					$state = EndDash
+				}
+				else if byte == 0 {
+					$out = $out.concat([239, 191, 189])
+					$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+				}
+				else {
+					$out = $out.append(byte)
+				}
+			}
+			LessThan => {
+				if byte == '!' {
+					$out = $out.append('!')
+					$state = Bang
+				}
+				else if byte == '<' {
+					$out = $out.append('<')
+				}
+				else {
+					$state = CommentData
+					$consume = False
+				}
+			}
+			Bang => {
+				if byte == '-' {
+					$state = BangDash
+				} else {
+					$state = CommentData
+					$consume = False
+				}
+			}
+			BangDash => {
+				if byte == '-' {
+					$state = BangDashDash
+				} else {
+					$state = EndDash
+					$consume = False
+				}
+			}
+			BangDashDash => {
+				if byte != '>' {
+					$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $pos })
+				}
+				$state = CommentEnd
+				$consume = False
+			}
+			EndDash => {
+				if byte == '-' {
+					$state = CommentEnd
+				} else {
+					$out = $out.append('-')
+					$state = CommentData
+					$consume = False
+				}
+			}
+			CommentEnd => {
+				if byte == '>' {
+					$done = True
+				}
+				else if byte == '!' {
+					$state = EndBang
+				}
+				else if byte == '-' {
+					$out = $out.append('-')
+				}
+				else {
+					$out = $out.concat(['-', '-'])
+					$state = CommentData
+					$consume = False
+				}
+			}
+			EndBang => {
+				if byte == '-' {
+					$out = $out.concat(['-', '-', '!'])
+					$state = EndDash
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $pos })
+					$done = True
+				}
+				else {
+					$out = $out.concat(['-', '-', '!'])
+					$state = CommentData
+					$consume = False
+				}
+			}
+		}
+		if $consume {
+			$pos = $pos + 1
+		}
+	}
+	decoded = HtmlTokenizer.normalized($out, False, False)
+	{ token: { kind: Comment(decoded.text), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+}
+
+bogus_comment = |reader, content_start, code, offset| {
+	bytes = reader.bytes
+	start = reader.pos
+	var $end = content_start
+	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != '>' {
 		$end = $end + 1
 	}
-	text_end = $end
-	if $end >= bytes.len() {
-		$diagnostics = $diagnostics.append({ code: EofInComment, offset: start })
-	}
-	else if HtmlTokenizer.starts(bytes, $end, "--!>") {
-		$diagnostics = $diagnostics.append({ code: IncorrectComment, offset: $end })
-		$end = $end + 4
-	}
-	else {
-		$end = $end + 3
-	}
-	decoded = HtmlTokenizer.normalized(bytes.sublist({ start: start + 4, len: text_end - start - 4 }), False, False)
-	{ token: { kind: Comment(decoded.text), span: { start, end: $end } }, reader: { ..reader, pos: $end, diagnostics: $diagnostics.concat(decoded.diagnostics.map(|d| { ..d, offset: start + 4 + d.offset })) } }
+	decoded = HtmlTokenizer.normalized(bytes.sublist({ start: content_start, len: $end - content_start }), False, False)
+	end = if ($end < bytes.len()) $end + 1 else $end
+	{ token: { kind: Comment(decoded.text), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code, offset }).concat(decoded.diagnostics.map(|d| { ..d, offset: content_start + d.offset })) } }
 }
 
 doctype = |reader| {
@@ -340,6 +460,8 @@ doctype = |reader| {
 	}
 	var $public_id = ""
 	var $system_id = ""
+	var $has_public = False
+	var $has_system = False
 	public = HtmlTokenizer.starts_caseless(bytes, $pos, "public")
 	system = HtmlTokenizer.starts_caseless(bytes, $pos, "system")
 	if public or system {
@@ -351,8 +473,10 @@ doctype = |reader| {
 		$pos = id.end
 		if public {
 			$public_id = id.text
+			$has_public = id.present
 		} else {
 			$system_id = id.text
+			$has_system = id.present
 		}
 		if !id.valid {
 			$quirks = True
@@ -364,6 +488,7 @@ doctype = |reader| {
 		if public and ['"', '\''].contains(HtmlTokenizer.byte_at(bytes, $pos)) {
 			second = quoted_identifier(bytes, $pos)
 			$system_id = second.text
+			$has_system = second.present
 			$pos = second.end
 		}
 	}
@@ -380,20 +505,20 @@ doctype = |reader| {
 	else {
 		$pos = $pos + 1
 	}
-	{ token: { kind: Doctype({ name, public_id: $public_id, system_id: $system_id, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+	{ token: { kind: Doctype({ name, public_id: $public_id, system_id: $system_id, has_public: $has_public, has_system: $has_system, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 }
 
 quoted_identifier = |bytes, start| {
 	quote = HtmlTokenizer.byte_at(bytes, start)
 	if !['"', '\''].contains(quote) {
-		return { text: "", end: start, valid: False }
+		return { text: "", end: start, valid: False, present: False }
 	}
 	var $end = start + 1
 	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != quote and HtmlTokenizer.byte_at(bytes, $end) != '>' {
 		$end = $end + 1
 	}
 	valid = HtmlTokenizer.byte_at(bytes, $end) == quote
-	{ text: HtmlTokenizer.text_at(bytes, start + 1, $end), end: if (valid) $end + 1 else $end, valid }
+	{ text: HtmlTokenizer.text_at(bytes, start + 1, $end), end: if (valid) $end + 1 else $end, valid, present: True }
 }
 
 consume_reference = |bytes, start, attribute| {
@@ -428,7 +553,7 @@ consume_reference = |bytes, start, attribute| {
 		} else if $scalar >= 0x80 and $scalar <= 0x9F {
 			$scalar = c1.get($scalar - 0x80) ?? $scalar
 			$diagnostics = $diagnostics.append({ code: InvalidCharacterReference, offset: start })
-		} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or ($scalar % 65536 >= 65534) or ($scalar < 32 and ![9, 10, 12, 13].contains($scalar)) or $scalar == 127 {
+		} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or ($scalar % 65536 >= 65534) or $scalar == 13 or ($scalar < 32 and ![9, 10, 12, 13].contains($scalar)) or $scalar == 127 {
 			$diagnostics = $diagnostics.append({ code: InvalidCharacterReference, offset: start })
 		}
 		return { bytes: encode_scalar($scalar), end: $pos, diagnostics: $diagnostics }
@@ -585,3 +710,95 @@ expect {
 
 token_kind : Str -> HtmlTokenizer.Kind
 token_kind = |input| HtmlTokenizer.next({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False).token.kind
+
+# Tree-construction states distinguish whitespace, nulls, and other character
+# tokens. Emit homogeneous decoded runs, preserving source intervals even for
+# references that become whitespace, rather than bundling unlike characters.
+data_characters = |reader| {
+	bytes = reader.bytes
+	var $pos = reader.pos
+	var $out = []
+	var $diagnostics = reader.diagnostics
+	var $class = Unset
+	while $pos < bytes.len() and HtmlTokenizer.byte_at(bytes, $pos) != '<' {
+		unit = data_unit(bytes, $pos)
+		next_class = if (unit.bytes == [0]) Null else if (unit.bytes.all(HtmlTokenizer.space)) Whitespace else Other
+		if $class != Unset and $class != next_class {
+			break
+		}
+		$class = next_class
+		$out = $out.concat(unit.bytes)
+		$diagnostics = $diagnostics.concat(unit.diagnostics)
+		$pos = unit.end
+	}
+	{ token: { kind: Characters(Str.from_utf8_lossy($out)), span: { start: reader.pos, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+}
+
+data_unit = |bytes, pos| {
+	byte = HtmlTokenizer.byte_at(bytes, pos)
+	if byte == '&' {
+		consume_reference(bytes, pos, False)
+	}
+	else if byte == '\r' {
+		{ bytes: ['\n'], end: pos + if (HtmlTokenizer.byte_at(bytes, pos + 1) == '\n') 2 else 1, diagnostics: [] }
+	}
+	else {
+		{ bytes: [byte], end: pos + 1, diagnostics: if (byte == 0) [{ code: UnexpectedNull, offset: pos }] else [] }
+	}
+}
+
+expect {
+	first = HtmlTokenizer.next({ bytes: "&#32;x\u(0) y".to_utf8(), pos: 0, diagnostics: [] }, Data, False)
+	second = HtmlTokenizer.next(first.reader, Data, False)
+	third = HtmlTokenizer.next(second.reader, Data, False)
+	fourth = HtmlTokenizer.next(third.reader, Data, False)
+	first.token.kind == Characters(" ") and first.token.span == { start: 0, end: 5 } and second.token.kind == Characters("x") and third.token.kind == Characters("\u(0)") and fourth.token.kind == Characters(" ")
+}
+expect {
+	result = HtmlTokenizer.next({ bytes: "<![CDATA[a\u(0)b]]>".to_utf8(), pos: 0, diagnostics: [] }, Data, True)
+	result.token.kind == Characters("a\u(0)b")
+}
+
+expect token_kind("<!--->tail") == Comment("")
+expect token_kind("<!-->tail") == Comment("")
+expect token_kind("<!--x-") == Comment("x")
+expect token_kind("<!--x--") == Comment("x")
+expect token_kind("<!--x--!") == Comment("x")
+expect token_kind("<!--x--!>tail") == Comment("x")
+expect token_kind("<!--x--!-y-->") == Comment("x--!-y")
+expect token_kind("<!--a<!--b-->") == Comment("a<!--b")
+expect token_kind("<!--a\r\nb\rc-->") == Comment("a\nb\nc")
+expect token_kind("<!--a\u(0)b-->") == Comment("a�b")
+expect token_kind("<!a\u(0)b>") == Comment("a�b")
+expect token_kind("</a\u(0)b>") == End("a�b")
+expect token_kind("</#\u(0)>") == Comment("#�")
+expect token_kind("</") == Characters("</")
+expect {
+	result = HtmlTokenizer.next({ bytes: "<A\u(0)B c\u(0)d='a\u(0)b'>".to_utf8(), pos: 0, diagnostics: [] }, Data, False)
+	match result.token.kind {
+		Start(tag) => tag.name == "a�b" and tag.attributes.map(|a| (a.name, a.value)) == [("c�d", "a�b")] and result.reader.diagnostics.len() == 3
+		_ => False
+	}
+}
+expect {
+	match token_kind("<a =x=y>") {
+		Start(tag) => tag.attributes.map(|a| (a.name, a.value)) == [("=x", "y")]
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html PUBLIC '' ''>") {
+		Doctype(d) => d.has_public and d.has_system and d.public_id == "" and d.system_id == ""
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html>") {
+		Doctype(d) => !d.has_public and !d.has_system
+		_ => False
+	}
+}
+expect {
+	decoded = HtmlTokenizer.normalized("&#13;".to_utf8(), True, False)
+	decoded.text == "\r" and decoded.diagnostics == [{ code: InvalidCharacterReference, offset: 0 }]
+}
