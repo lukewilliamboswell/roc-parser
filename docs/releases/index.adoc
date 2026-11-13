@@ -17,3 +17,8 @@ limits, writer error handling and Roc syntax span changes.
 
 A release marked prerelease is a preview. Read that release's notes and keep its
 package and examples together when testing it.
+
+== Source checkout
+
+See {src}/docs/releases/unreleased.adoc[unreleased source changes] for additions
+and compiler compatibility changes in the current checkout.

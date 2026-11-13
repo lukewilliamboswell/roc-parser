@@ -1,0 +1,29 @@
+= Unreleased source changes
+
+== Web markup
+
+* Add `Html`, `Svg` and `MathML` document and fragment parsers, with explicit
+  HTML/XML syntax selection, strict authoring checks, typed errors, and
+  configurable browser recovery and extension handling.
+* Add checked literals and generic `Template(a)` interpolation plans. Fixed
+  markup is checked during compilation; values bind to indexed text/attribute
+  positions without source-text reparsing.
+* Add shared `Markup` trees, source spans, resource limits and lossless original
+  bytes, plus `SvgPath` command parsing.
+* Add independent parser/validator harnesses, a pinned WPT tree-construction
+  corpus, compiled downstream examples, and local-only fuzz and benchmark runs.
+
+See xref:../markup.adoc#markup[Parse HTML, SVG and MathML] for the supported
+checks, syntax differences and configuration options. Runtime parsing remains
+pure Roc and platform-independent.
+
+== Compiler compatibility
+
+The source is tested with Roc `nightly-2026-11-12-ce942d6`. Examples and probes
+use basic-cli 0.28.0; fuzz targets use roc-fuzz 0.6.1; Blueprint tooling uses
+0.13.0 with its separate compatible orchestration compiler.
+
+CSV and YAML derived formats use the compiler's current format-owned error
+contract. All derived operations include `MissingRequiredField(Str)`, including
+headerless CSV tuple parsing. Update explicitly closed result annotations that
+previously allowed only `InvalidCsv(CSV.Error)`.
