@@ -739,7 +739,7 @@ valid_paint = |text| {
 
 valid_color : Str -> Bool
 valid_color = |text| {
-	value = Str.from_utf8_lossy(MarkupValues.trim_space(text).to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+	value = MarkupValues.trim_space(text).with_ascii_lowercased()
 	if color_names(value) or member(["currentcolor", "transparent", "inherit", "initial", "unset", "revert", "revert-layer"], value) {
 		return True
 	}
@@ -780,7 +780,7 @@ color_names = |key| match key {
 aria_attributes = MarkupVocabulary.aria_name
 
 ascii_lower : Str -> Str
-ascii_lower = |text| Str.from_utf8_lossy(text.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+ascii_lower = |text| text.with_ascii_lowercased()
 
 # Fixed vocabulary scans use an index so a membership check creates no iterator
 # state. Dynamic per-element vocabularies above use direct predicates.
