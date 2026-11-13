@@ -11,6 +11,28 @@ from scripts.markup.compare_python import element_weight
 
 
 class MarkupComparisonTests(unittest.TestCase):
+    def test_cold_first_parse_does_not_set_the_measured_batch_length(self):
+        calls = []
+        def synthetic_batch(implementation, data, count):
+            # A cold first invocation is 100 times slower than sustained work.
+            elapsed = 100_000 if not calls else count * 1_000
+            calls.append(count)
+            return {'iterations': count, 'successes': count, 'elapsed_ns': elapsed,
+                    'checksum': 7 * count}
+        with patch.object(compare, 'batch', side_effect=synthetic_batch):
+            count, calibration = compare.calibrate({'name': 'synthetic'}, b'x', 7, 50)
+        self.assertEqual(count, 50_000)
+        self.assertEqual(calibration[-1]['elapsed_ns'], 50_000_000)
+        self.assertEqual(calibration[-1]['iterations'], count)
+
+    def test_calibration_requires_complete_consumption_on_every_warm_batch(self):
+        def corrupt_warmup(implementation, data, count):
+            return {'iterations': count, 'successes': count, 'elapsed_ns': 1_000,
+                    'checksum': 7 if count == 1 else 0}
+        with patch.object(compare, 'batch', side_effect=corrupt_warmup):
+            with self.assertRaisesRegex(RuntimeError, 'warmup checksum changed'):
+                compare.calibrate({'name': 'synthetic'}, b'x', 7, 50)
+
     def test_gate_uses_fastest_dom_across_languages_and_full_roc_pipeline(self):
         rows = [
             {'name': 'roc-full', 'eligible': False, 'median_ns': 200},

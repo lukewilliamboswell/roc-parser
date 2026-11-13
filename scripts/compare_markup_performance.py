@@ -218,6 +218,26 @@ def model_checksum(roots):
     return total
 
 
+def calibrate(implementation, data, expected, target_ms):
+    target_ns = target_ms * 1e6
+    initial = batch(implementation, data, 1)
+    if initial['checksum'] != expected:
+        raise RuntimeError('tree-consumption mismatch during calibration')
+    count = max(1, min(1_000_000, int(target_ns / initial['elapsed_ns'])))
+    samples = []
+    for _ in range(3):
+        warm = batch(implementation, data, count)
+        if warm['checksum'] != expected * count:
+            raise RuntimeError('warmup checksum changed')
+        samples.append({'iterations': count, 'elapsed_ns': warm['elapsed_ns']})
+        count = max(1, min(1_000_000, round(count * target_ns / warm['elapsed_ns'])))
+    warm = batch(implementation, data, count)
+    if warm['checksum'] != expected * count:
+        raise RuntimeError('warmup checksum changed')
+    samples.append({'iterations': count, 'elapsed_ns': warm['elapsed_ns']})
+    return count, samples
+
+
 def ratios(rows, threshold):
     baseline = min((r for r in rows if r['eligible']), key=lambda r: r['median_ns'])
     return {'best': baseline['name'], 'best_ns': baseline['median_ns'], 'threshold': threshold,
@@ -256,14 +276,9 @@ def run(args):
             (canonical_folder / (impl['name'] + '.json')).write_text(json.dumps(tree, ensure_ascii=False) + '\n')
             if tree != expected_tree:
                 raise RuntimeError(f"canonical tree mismatch {case['id']}/{impl['name']}: see {canonical_folder}")
-            first = batch(impl, data, 1)
-            if first['checksum'] != expected:
-                raise RuntimeError(f"tree-consumption mismatch {case['id']}/{impl['name']}: {first['checksum']} != {expected}")
-            count = max(1, min(1_000_000, int(args.target_ms * 1e6 / first['elapsed_ns'])))
-            warm = batch(impl, data, count)
-            if warm['checksum'] != expected * count:
-                raise RuntimeError('warmup checksum changed')
-            records.append({**impl, 'iterations': count, 'samples_ns': []})
+            count, calibration = calibrate(impl, data, expected, args.target_ms)
+            records.append({**impl, 'iterations': count, 'calibration': calibration,
+                            'samples_ns': [], 'sample_elapsed_ns': []})
         rng = random.Random(args.seed)
         for _ in range(args.repetitions):
             order = list(records)
@@ -273,6 +288,7 @@ def run(args):
                 if sample['checksum'] != expected * record['iterations']:
                     raise RuntimeError('measured checksum changed')
                 record['samples_ns'].append(sample['elapsed_ns'] / record['iterations'])
+                record['sample_elapsed_ns'].append(sample['elapsed_ns'])
         for record in records:
             record.update({'case': case['id'], 'bytes': len(data), 'input_sha256': hashlib.sha256(data).hexdigest(),
                            'checksum_per_parse': expected, 'canonical_sha256': expected_tree_sha256, 'canonical_reference': reference_name,
