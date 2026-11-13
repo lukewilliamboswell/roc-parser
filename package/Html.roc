@@ -66,8 +66,12 @@ Html := { parsed : Markup.Parsed }.{
 	## Validate mixed markup, skipping the future values of typed attribute holes.
 	validate_tree : Markup.Parsed, Markup.Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	validate_tree = |parsed, props, holes| {
-		foreign = MarkupValidate.foreign(parsed, props, holes)?
-		HtmlValidate.validate(foreign, props, holes)
+		foreign = MarkupValidate.foreign_with_html(parsed, props, holes)?
+		if foreign.has_html {
+			HtmlValidate.validate(foreign.parsed, props, holes)
+		} else {
+			Ok(foreign.parsed)
+		}
 	}
 
 	## Validate a complete document for a checked constant or imported file.
@@ -242,3 +246,35 @@ expect Html.parse_segments(["<br xmlns='http://www.w3.org/1999/xhtml'>", "</br>"
 
 expect Html.parse_fragment("<my-widget width='wide' loading='custom' disabled='false'></my-widget>", {}).is_ok()
 expect Html.parse_fragment("<my-widget hidden='false'></my-widget>", {}).is_err()
+
+expect {
+	sources = [
+		"<path d='M0 0'/>",
+		"<g><text>x</text><path d='L0 0'/></g>",
+		"<g><mystery bad='value'/></g>",
+		"<metadata><h:button xmlns:h='http://www.w3.org/1999/xhtml'><h:input/></h:button></metadata>",
+		"<foreignObject><h:img xmlns:h='http://www.w3.org/1999/xhtml'/></foreignObject>",
+		"<g><h:button xmlns:h='http://www.w3.org/1999/xhtml'><h:input/></h:button><mystery/></g>",
+		"<math xmlns='http://www.w3.org/1998/Math/MathML'><mfrac><mi>x</mi><mn>2</mn></mfrac></math>",
+		"<math xmlns='http://www.w3.org/1998/Math/MathML'><annotation-xml><h:img xmlns:h='http://www.w3.org/1999/xhtml'/></annotation-xml></math>",
+	]
+	options : List(Markup.Props)
+	options = [
+		{},
+		{ allow_unknown_elements: True, allow_unknown_attributes: True },
+		{ allow_unknown_elements: True, allow_unknown_attributes: True, max_diagnostics: 0 },
+		{ allow_unknown_elements: True, allow_unknown_attributes: True, max_diagnostics: 1 },
+	]
+	var $same = True
+	for source in sources {
+		parsed = Markup.parse_xml_fragment(source, Markup.svg_namespace, {})?
+		for props in options {
+			legacy = match MarkupValidate.foreign(parsed, props, []) {
+				Ok(foreign) => HtmlValidate.validate(foreign, props, [])
+				Err(error) => Err(error)
+			}
+			$same = $same and Html.validate_tree(parsed, props, []) == legacy
+		}
+	}
+	$same
+}

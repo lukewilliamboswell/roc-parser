@@ -12,9 +12,14 @@ MarkupValidate :: [].{
 
 	## Validate foreign vocabularies throughout a mixed-namespace tree.
 	foreign : Markup.Parsed, Markup.Props, List(Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	foreign = |parsed, props, holes| {
+	foreign = |parsed, props, holes| foreign_with_html(parsed, props, holes).map_ok(|checked| checked.parsed)
+
+	## Validate foreign vocabularies and report whether HTML checks are needed.
+	foreign_with_html : Markup.Parsed, Markup.Props, List(Hole) -> Try({ parsed : Markup.Parsed, has_html : Bool }, [InvalidMarkup(Markup.Error)])
+	foreign_with_html = |parsed, props, holes| {
 		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
 		var $diagnostics = parsed.diagnostics
+		var $has_html = False
 		var $pending = parsed.tree.roots.map(|index| { index, extension: False })
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, extension: False }
@@ -22,6 +27,7 @@ MarkupValidate :: [].{
 			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
 			match node.kind {
 				Element(name) => {
+					$has_html = $has_html or name.namespace == Uri(Markup.html_namespace)
 					svg = name.namespace == Uri(Markup.svg_namespace)
 					mathml = name.namespace == Uri(Markup.mathml_namespace)
 					if !item.extension {
@@ -80,7 +86,7 @@ MarkupValidate :: [].{
 				_ => {}
 			}
 		}
-		Ok({ ..parsed, diagnostics: $diagnostics })
+		Ok({ parsed: { ..parsed, diagnostics: $diagnostics }, has_html: $has_html })
 	}
 
 	## Reject text holes where a format permits only element/whitespace content.
