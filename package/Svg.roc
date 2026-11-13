@@ -4,6 +4,8 @@ import MarkupTemplate
 import Literal
 import Html
 import HtmlTemplate
+import HtmlTree
+import HtmlValidate
 
 ## Strict namespace-aware Svg documents and fragments.
 ## XML syntax is the default; fragments start in the Svg namespace.
@@ -24,7 +26,7 @@ Svg := { parsed : Markup.Parsed }.{
 	parse_with : Str, Props -> Try(Svg, [InvalidMarkup(Markup.Error)])
 	parse_with = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
-			Html.parse_syntax(source, props, True, { namespace: Uri(Markup.html_namespace), local: "body", prefix: Unprefixed })?
+			HtmlTree.parse(source, True, { namespace: Markup.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
 			Markup.parse_xml(source, props)?
 		}
@@ -36,7 +38,7 @@ Svg := { parsed : Markup.Parsed }.{
 			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "svg", actual: "text" }), line: 1, column: 1 }))
 		}
 		validated = validate_tree(parsed, props, [])?
-		Ok(Svg.{ parsed: validated })
+		Ok(Svg.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Parse any number of fragment roots in the format's default namespace.
@@ -44,7 +46,7 @@ Svg := { parsed : Markup.Parsed }.{
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
 		validated = validate_tree(parsed, props, [])?
-		Ok(Fragment.{ parsed: validated })
+		Ok(Fragment.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Validate fixed markup, skipping unavailable whole attribute holes.
@@ -83,7 +85,7 @@ Svg := { parsed : Markup.Parsed }.{
 					AttributeSlot(target) => {
 						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							(Element(name), Ok(attr)) => { ..slot, expected: if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
 							_ => slot
 						}
 					}
@@ -187,7 +189,7 @@ expect Svg.parse_segments(["<text>&am", "p;</text>"], {}).is_err()
 
 fragment_syntax : Str, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
-	Html.parse_syntax(source, props, True, { namespace: Uri(Markup.svg_namespace), local: "svg", prefix: Unprefixed })
+	HtmlTree.parse(source, True, { namespace: Markup.svg_namespace, name: "svg", defer_projection: True }, props)
 } else {
 	Markup.parse_xml_fragment(source, Markup.svg_namespace, props)
 }
@@ -207,3 +209,11 @@ expect Svg.parse_fragment("<filter><feGaussianBlur stdDeviation='-2'/></filter>"
 expect Svg.parse_fragment("<filter><feGaussianBlur stdDeviation='2 3'/></filter>", {}).is_ok()
 expect Svg.parse_fragment("<filter><feComposite operator='bogus'/></filter>", {}).is_err()
 expect Svg.parse_segments(["<circle>", "</circle>"], {}).is_err()
+
+project_checked = |parsed, props| if props.syntax == HtmlSyntax {
+	HtmlTree.project_parsed(parsed, props).map_ok(|projection| projection.parsed)
+} else {
+	Ok(parsed)
+}
+
+expect Svg.parse_fragment("<svg xmlns:x='urn:x' xmlns:r='urn:r'><path d='M0 0'/></svg>", {}).is_ok()

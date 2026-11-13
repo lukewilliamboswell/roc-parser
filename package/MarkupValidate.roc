@@ -56,7 +56,7 @@ MarkupValidate :: [].{
 									at = Markup.position(parsed.source, attr.span.start)
 									$diagnostics = $diagnostics.append({ problem, line: at.line, column: at.column })
 								}
-								if props.check_values and allowed and !hole_positions.contains((item.index, $attr_index)) {
+								if props.check_values and allowed and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $attr_index)) {
 									grammar = value_grammar(svg, name.local, attr.name.local)
 									if !valid_value(attr.value, grammar) and !(svg and (svg_presentation.contains(attr.name.local) or ["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"].contains(attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
 										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: grammar }))
@@ -102,7 +102,11 @@ MarkupValidate :: [].{
 							node = plan.parsed.tree.nodes.get(parent) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid text slot parent"), line: 1, column: 1 }))
 							match node.kind {
 								Element(name) => {
-									allowed = if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements.contains(name.local) or ["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"].contains(name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements.contains(name.local) or ["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"].contains(name.local) else if (name.namespace == Uri(Markup.html_namespace)) !["html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"].contains(name.local) else True
+									copied = match (plan.parsed.tree.nodes.get(target.node) ?? node).origin {
+										Cloned(_) => True
+										_ => False
+									}
+									allowed = copied or if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements.contains(name.local) or ["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"].contains(name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements.contains(name.local) or ["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"].contains(name.local) else if (name.namespace == Uri(Markup.html_namespace)) !["selectedcontent", "html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"].contains(name.local) else True
 									if !allowed {
 										at = Markup.position(plan.parsed.source, slot.location.start)
 										return Err(InvalidMarkup({ problem: Interpolation({ index: slot.index, reason: "text holes are not allowed inside ${name.local}" }), line: at.line, column: at.column }))
@@ -299,7 +303,7 @@ valid_value = |text, grammar| {
 		Length => MarkupValues.length(text).is_ok()
 		NonnegativeLength => MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		NumberList(count) => MarkupValues.numbers(text).map_ok(|values| values.len() == count and (count != 4 or ((values.get(2) ?? -1) >= 0 and (values.get(3) ?? -1) >= 0))) == Ok(True)
-		LengthList => !text.trim().is_empty() and words_of(text).all(|v| MarkupValues.length(v).is_ok())
+		LengthList => !Markup.whitespace(text) and words_of(text).all(|v| MarkupValues.length(v).is_ok())
 		PathData => text == "none" or SvgPath.parse_str(text).is_ok()
 		Paint => valid_paint(text)
 		Color => valid_color(text)
@@ -335,7 +339,7 @@ check_math_children = |parsed, node, name| {
 			Element(n) => {
 				$elements = $elements.append(n.local)
 			}
-			Text(text) if !text.trim().is_empty() and !["mi", "mn", "mo", "ms", "mtext", "annotation"].contains(name) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
+			Text(text) if !Markup.whitespace(text) and !["mi", "mn", "mo", "ms", "mtext", "annotation"].contains(name) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
 			_ => {}
 		}
 	}
@@ -420,7 +424,7 @@ check_svg_children = |parsed, node, name| {
 					return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
 				}
 			}
-			Text(text) if !text.trim().is_empty() and ["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"].contains(name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
+			Text(text) if !Markup.whitespace(text) and ["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"].contains(name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
 			_ => {}
 		}
 	}
@@ -429,13 +433,13 @@ check_svg_children = |parsed, node, name| {
 
 valid_paint : Str -> Bool
 valid_paint = |text| {
-	value = text.trim()
+	value = MarkupValues.trim_space(text)
 	if ["none", "context-fill", "context-stroke"].contains(value) {
 		return True
 	}
 	if value.starts_with("url(") {
 		match value.split_first(")") {
-			Ok({ before, after }) => before.count_utf8_bytes() > 4 and (after.trim().is_empty() or valid_color(after.trim()) or after.trim() == "none")
+			Ok({ before, after }) => before.count_utf8_bytes() > 4 and (MarkupValues.trim_space(after).is_empty() or valid_color(MarkupValues.trim_space(after)) or MarkupValues.trim_space(after) == "none")
 			Err(_) => False
 		}
 	} else {
@@ -445,7 +449,7 @@ valid_paint = |text| {
 
 valid_color : Str -> Bool
 valid_color = |text| {
-	value = Str.from_utf8_lossy(text.trim().to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+	value = Str.from_utf8_lossy(MarkupValues.trim_space(text).to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
 	if color_names.contains(value) or ["currentcolor", "transparent", "inherit", "initial", "unset", "revert", "revert-layer"].contains(value) {
 		return True
 	}

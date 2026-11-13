@@ -29,20 +29,22 @@ HtmlTemplate :: [].{
 				Markup.decode_xml_text(text)
 			},
 		)?
-		var $plan = unprojected
-		if props.syntax == HtmlSyntax {
-			projected = HtmlTree.project_parsed(unprojected.parsed, props)?
-			$plan = MarkupTemplate.fanout(unprojected, projected.parsed, projected.clones, props)?
-		}
-		_ = MarkupValidate.text_slots($plan)?
-		holes = $plan.slots.keep_oks(
+		_ = MarkupValidate.text_slots(unprojected)?
+		authored_holes = unprojected.slots.keep_oks(
 			|slot| match slot.target {
 				AttributeSlot(target) => Ok(target)
 				_ => Err(Skip)
 			},
 		)
-		foreign = MarkupValidate.foreign($plan.parsed, props, holes)?
-		checked = HtmlValidate.validate(foreign, props, holes)?
+		authored_foreign = MarkupValidate.foreign(unprojected.parsed, props, authored_holes)?
+		authored_checked = HtmlValidate.validate(authored_foreign, props, authored_holes)?
+		var $plan = { ..unprojected, parsed: authored_checked }
+		if props.syntax == HtmlSyntax {
+			projected = HtmlTree.project_parsed($plan.parsed, props)?
+			$plan = MarkupTemplate.fanout($plan, projected.parsed, projected.clones, props)?
+		}
+		_ = MarkupValidate.text_slots($plan)?
+		checked = $plan.parsed
 		slots = $plan.slots.map(
 			|slot| match slot.target {
 				AttributeSlot(target) => {

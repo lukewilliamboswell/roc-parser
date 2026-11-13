@@ -225,13 +225,17 @@ Markup :: [].{
 		{ line: $line, column: $column }
 	}
 
+	## Markup whitespace is ASCII, including HTML's form feed, not Unicode spaces.
+	whitespace : Str -> Bool
+	whitespace = |text| text.to_utf8().all(|byte| [9, 10, 12, 13, 32].contains(byte))
+
 	## The only element root, ignoring comments and processing instructions.
 	single_root : Tree -> Try(U64, [RootCount(U64)])
 	single_root = |tree| {
 		roots = tree.roots.keep_if(
 			|index| match tree.nodes.get(index) {
 				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
-				Ok({ kind: Text(text), .. }) => !text.to_utf8().all(|byte| space(byte) or byte == 12)
+				Ok({ kind: Text(text), .. }) => !whitespace(text)
 				Ok(_) => True
 				Err(_) => False
 			},

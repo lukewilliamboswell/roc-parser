@@ -24,7 +24,7 @@ Html := { parsed : Markup.Parsed }.{
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
 	parse_with : Str, Props -> Try(Html, [InvalidMarkup(Markup.Error)])
 	parse_with = |text, props| {
-		parsed = syntax(text, props, False)?
+		parsed = authored_syntax(text, props, False)?
 		root = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "html", actual: "fragment" }), line: 1, column: 1 }))?
 		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup({ problem: Unsupported("missing document root"), line: 1, column: 1 }))
 		match node.kind {
@@ -32,15 +32,15 @@ Html := { parsed : Markup.Parsed }.{
 			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "html in the HTML namespace", actual: "other" }), line: 1, column: 1 }))
 		}
 		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Html.{ parsed: checked })
+		Ok(Html.{ parsed: project_checked(checked, props)? })
 	}
 
 	## Parse one or more roots in the configured fragment context.
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
 	parse_fragment = |text, props| {
-		parsed = syntax(text, props, True)?
+		parsed = authored_syntax(text, props, True)?
 		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Fragment.{ parsed: checked })
+		Ok(Fragment.{ parsed: project_checked(checked, props)? })
 	}
 
 	## Syntax-only parsing with all HTML options, including the scripting flag
@@ -80,6 +80,10 @@ Html := { parsed : Markup.Parsed }.{
 
 	## A fragment preserves all authored roots and source bytes.
 	Fragment := { parsed : Markup.Parsed }.{
+
+		## Validate imported fragment text with named diagnostics and options.
+		validate : Html.ValidationProps -> Try(Fragment, [BadQuotedBytes(Str)])
+		validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(e)| Literal.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: e.line, column: e.column }))
 
 		## Check a fragment literal in the default body context.
 		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
@@ -200,3 +204,28 @@ expect {
 	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option><span title='", "'>x</span></option></select>"], {})?
 	p.slots.len() == 2 and p.slots.all(|slot| slot.index == 0)
 }
+
+authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
+	HtmlTree.parse(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting, defer_projection: True }, shared(props))
+} else {
+	syntax(text, props, fragment)
+}
+
+project_checked = |parsed, props| if props.syntax == HtmlSyntax {
+	HtmlTree.project_parsed(parsed, shared(props)).map_ok(|projection| projection.parsed)
+} else {
+	Ok(parsed)
+}
+
+expect Html.parse_fragment("<select><button><selectedcontent><mystery></mystery></selectedcontent></button><option>text</option></select>", {}).is_err()
+expect Html.parse_segments(["<select><button><selectedcontent>", "</selectedcontent></button><option>text</option></select>"], {}).is_err()
+expect Html.parse_fragment("<select><div><option>text</option></div></select>", {}).is_ok()
+expect Html.parse_fragment("<select><option><button>bad</button></option></select>", {}).is_err()
+expect Html.parse_fragment("<img role='button'>", {}).is_err()
+expect Html.parse_fragment("<input type='IMAGE'>", {}).is_err()
+expect Html.parse_fragment("<ul xmlns='http://www.w3.org/1999/xhtml'><div/></ul>", { syntax: XmlSyntax }).is_err()
+expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml'><br>x</br></div>", { syntax: XmlSyntax }).is_err()
+expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml'><ul>\u(00A0)</ul></div>", { syntax: XmlSyntax }).is_err()
+
+expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml' xmlns:hidden='urn:example'/>", { syntax: XmlSyntax }).is_ok()
+expect Html.parse_fragment("<img xmlns='http://www.w3.org/1999/xhtml' src='x' xml:alt='fake'/>", { syntax: XmlSyntax }).is_err()

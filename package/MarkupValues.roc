@@ -94,11 +94,23 @@ MarkupValues :: [].{
 		Ok(parsed.value)
 	}
 
+	## Trim only CSS/XML ASCII whitespace, preserving non-breaking spaces.
+	trim_space : Str -> Str
+	trim_space = |text| {
+		bytes = text.to_utf8()
+		start = whitespace(bytes, 0)
+		var $end = bytes.len()
+		while $end > start and [9, 10, 12, 13, 32].contains(bytes.get($end - 1) ?? 0) {
+			$end = $end - 1
+		}
+		Str.from_utf8(bytes.sublist({ start, len: $end - start })) ?? ""
+	}
+
 	## A CSS/SVG length with a recognized unit
 	## Unitless numbers are allowed.
 	length : Str -> Try({ value : F64, unit : Str }, [InvalidNumber(U64)])
 	length = |text| {
-		bytes = text.trim().to_utf8()
+		bytes = trim_space(text).to_utf8()
 		parsed = number(bytes, 0)?
 		unit = Str.from_utf8(bytes.drop_first(parsed.end)) ?? ""
 		lower_unit = Str.from_utf8_lossy(unit.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
@@ -183,3 +195,5 @@ expect MarkupValues.transforms("translate(2),").is_err()
 expect MarkupValues.scalar("1.").is_err()
 expect MarkupValues.length("2PX") == Ok({ value: 2, unit: "PX" })
 expect MarkupValues.scalar("\u(000C)2") == Ok(2)
+
+expect MarkupValues.length("\u(00A0)2px").is_err()

@@ -10,9 +10,9 @@ HtmlValidate :: [].{
 	validate = |parsed, props, holes| {
 		var $diagnostics = parsed.diagnostics
 		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
-		var $pending = parsed.tree.roots.map(|index| { index, parent: "", interactive: False, anchor: False })
+		var $pending = parsed.tree.roots.map(|index| { index, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, selected_context: False })
 		while !$pending.is_empty() {
-			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False }
+			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, selected_context: False }
 			$pending = $pending.drop_last(1)
 			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
 			match node.kind {
@@ -35,9 +35,11 @@ HtmlValidate :: [].{
 					}
 					var $at = 0
 					for attr in node.attributes {
-						known = allowed(name.local, attr.name.local) or custom
-						if attr.name.namespace != NoNamespace and attr.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attr.name.namespace != Uri("http://www.w3.org/XML/1998/namespace") and !props.allow_unknown_attributes {
-							return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
+						known = match attr.name.namespace {
+							NoNamespace => allowed(name.local, attr.name.local) or custom
+							Uri("http://www.w3.org/2000/xmlns/") => True
+							Uri("http://www.w3.org/XML/1998/namespace") => ["lang", "space", "base", "id"].contains(attr.name.local)
+							_ => False
 						}
 						if !known {
 							if !props.allow_unknown_attributes {
@@ -49,7 +51,7 @@ HtmlValidate :: [].{
 							}
 							$diagnostics = $diagnostics.append({ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), line: at.line, column: at.column })
 						}
-						if props.check_values and known and !hole_positions.contains((item.index, $at)) {
+						if props.check_values and known and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $at)) {
 							expected = grammar(name.local, attr.name.local)
 							if !valid(attr.value, expected) {
 								return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected }))
@@ -63,6 +65,13 @@ HtmlValidate :: [].{
 					if item.interactive and interactive(node, name.local) {
 						return fail(parsed, node, InvalidChildren({ element: "button", expected: "no nested interactive content" }))
 					}
+					if item.in_option and (interactive(node, name.local) or has_attribute(node, "tabindex")) {
+						return fail(parsed, node, InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
+					}
+					if name.local == "selectedcontent" and !item.selected_context {
+						return fail(parsed, node, InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
+					}
+					check_children(parsed, node, name.local)?
 					allowed_parent = match name.local {
 						"li" => ["ul", "ol", "menu"].contains(item.parent)
 						"dt" | "dd" => item.parent == "dl" or item.parent == "div"
@@ -70,10 +79,10 @@ HtmlValidate :: [].{
 						"td" | "th" => item.parent == "tr"
 						"thead" | "tbody" | "tfoot" | "caption" | "colgroup" => item.parent == "table"
 						"col" => item.parent == "colgroup"
-						"option" => ["select", "optgroup", "datalist"].contains(item.parent)
-						"optgroup" => item.parent == "select"
+						"option" => item.option_context
+						"optgroup" => item.option_context
 						"summary" => item.parent == "details"
-						"legend" => item.parent == "fieldset"
+						"legend" => ["fieldset", "optgroup"].contains(item.parent)
 						"source" => ["audio", "video", "picture"].contains(item.parent)
 						"track" => ["audio", "video"].contains(item.parent)
 						_ => True
@@ -84,19 +93,19 @@ HtmlValidate :: [].{
 					if item.parent != "" and !allowed_parent {
 						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: "allowed parent for ${name.local}" }))
 					}
-					if name.local == "img" and !has_attribute(node, "alt") and !has_attribute(node, "role") {
+					if name.local == "img" and !has_attribute(node, "alt") and !["presentation", "none"].contains(value(node, "role")) {
 						return fail(parsed, node, InvalidChildren({ element: "img", expected: "alt attribute (or explicit presentation role)" }))
 					}
-					if name.local == "input" and value(node, "type") == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
+					if name.local == "input" and HtmlTokenizer.lower(value(node, "type")) == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
 						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
 					}
 					for child in node.children {
-						$pending = $pending.append({ index: child, parent: name.local, interactive: item.interactive or name.local == "button", anchor: item.anchor or name.local == "a" })
+						$pending = $pending.append({ index: child, parent: name.local, interactive: item.interactive or name.local == "button", anchor: item.anchor or name.local == "a", option_context: item.option_context or ["select", "optgroup", "datalist"].contains(name.local), in_option: item.in_option or name.local == "option", selected_context: item.selected_context or (name.local == "button" and item.parent == "select") })
 					}
 				}
 				Element(_) => {
 					for child in node.children {
-						$pending = $pending.append({ index: child, parent: "", interactive: False, anchor: False })
+						$pending = $pending.append({ ..item, index: child, parent: "" })
 					}
 				}
 				_ => {}
@@ -149,9 +158,9 @@ custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b|
 
 allowed = |element, attr| global.contains(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria.contains(attr) or events.contains(attr) or attributes(element).contains(attr)
 
-has_attribute = |node, key| node.attributes.any(|a| a.name.local == key)
+has_attribute = |node, key| node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == key)
 
-value = |node, key| node.attributes.find_first(|a| a.name.local == key).map_ok(|a| a.value) ?? ""
+value = |node, key| node.attributes.find_first(|a| a.name.namespace == NoNamespace and a.name.local == key).map_ok(|a| a.value) ?? ""
 
 fail = |parsed, node, problem| {
 	offset = match node.origin {
@@ -225,3 +234,42 @@ attributes = |element| {
 }
 
 interactive = |node, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (["audio", "video"].contains(name) and has_attribute(node, "controls")) or (name == "img" and has_attribute(node, "usemap"))
+
+check_children : Markup.Parsed, Markup.Node, Str -> Try({}, [InvalidMarkup(Markup.Error)])
+check_children = |parsed, node, name| {
+	allowed_children = match name {
+		"ul" | "ol" | "menu" => ["li", "script", "template"]
+		"dl" => ["dt", "dd", "div", "script", "template"]
+		"table" => ["caption", "colgroup", "thead", "tbody", "tfoot", "tr", "script", "template"]
+		"thead" | "tbody" | "tfoot" => ["tr", "script", "template"]
+		"tr" => ["td", "th", "script", "template"]
+		"colgroup" => ["col", "script", "template"]
+		"select" => ["button", "option", "optgroup", "hr", "div", "script", "template", "noscript"]
+		"optgroup" => ["legend", "option", "div", "script", "template", "noscript"]
+		_ => []
+	}
+	nothing = void_elements.contains(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
+	for index in node.children {
+		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
+		derived = match child.origin {
+			Cloned(_) => True
+			_ => False
+		}
+		match child.kind {
+			Element(n) => {
+				if !(name == "selectedcontent" and derived) and (nothing or (!allowed_children.is_empty() and (n.namespace != Uri(Markup.html_namespace) or !allowed_children.contains(n.local)))) {
+					return fail(parsed, child, InvalidChildren({ element: name, expected: if (nothing) "no authored child content" else Str.join_with(allowed_children, ", ") }))
+				}
+			}
+			Text(text) if !Markup.whitespace(text) => {
+				if !(name == "selectedcontent" and derived) and (nothing or !allowed_children.is_empty()) {
+					return fail(parsed, child, InvalidChildren({ element: name, expected: "element-only content" }))
+				}
+			}
+			_ => {}
+		}
+	}
+	Ok({})
+}
+
+void_elements = "area base br col embed hr img input link meta param source track wbr".split_on(" ")

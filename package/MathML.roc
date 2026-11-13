@@ -4,6 +4,8 @@ import MarkupTemplate
 import Literal
 import Html
 import HtmlTemplate
+import HtmlTree
+import HtmlValidate
 
 ## Strict namespace-aware MathML documents and fragments.
 ## XML syntax is the default; fragments start in the MathML namespace.
@@ -24,7 +26,7 @@ MathML := { parsed : Markup.Parsed }.{
 	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(Markup.Error)])
 	parse_with = |source, props| {
 		parsed = if props.syntax == HtmlSyntax {
-			Html.parse_syntax(source, props, True, { namespace: Uri(Markup.html_namespace), local: "body", prefix: Unprefixed })?
+			HtmlTree.parse(source, True, { namespace: Markup.html_namespace, name: "body", defer_projection: True }, props)?
 		} else {
 			Markup.parse_xml(source, props)?
 		}
@@ -36,7 +38,7 @@ MathML := { parsed : Markup.Parsed }.{
 			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "text" }), line: 1, column: 1 }))
 		}
 		validated = validate_tree(parsed, props, [])?
-		Ok(MathML.{ parsed: validated })
+		Ok(MathML.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Parse any number of fragment roots in the format's default namespace.
@@ -44,7 +46,7 @@ MathML := { parsed : Markup.Parsed }.{
 	parse_fragment = |source, props| {
 		parsed = fragment_syntax(source, props)?
 		validated = validate_tree(parsed, props, [])?
-		Ok(Fragment.{ parsed: validated })
+		Ok(Fragment.{ parsed: project_checked(validated, props)? })
 	}
 
 	## Validate fixed markup, skipping unavailable whole attribute holes.
@@ -83,7 +85,7 @@ MathML := { parsed : Markup.Parsed }.{
 					AttributeSlot(target) => {
 						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							(Element(name), Ok(attr)) => { ..slot, expected: if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
 							_ => slot
 						}
 					}
@@ -167,7 +169,7 @@ expect MathML.parse_segments(["<mo stretchy='", "'>+</mo>"], {}).is_ok()
 
 fragment_syntax : Str, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
-	Html.parse_syntax(source, props, True, { namespace: Uri(Markup.mathml_namespace), local: "math", prefix: Unprefixed })
+	HtmlTree.parse(source, True, { namespace: Markup.mathml_namespace, name: "math", defer_projection: True }, props)
 } else {
 	Markup.parse_xml_fragment(source, Markup.mathml_namespace, props)
 }
@@ -182,3 +184,11 @@ expect MathML.parse_fragment("<mfrac linethickness='-2px'><mn>1</mn><mn>2</mn></
 expect MathML.parse_segments(["<mfrac>", "</mfrac>"], {}).is_err()
 
 expect MathML.parse_fragment("<semantics><annotation encoding='text/plain'>x</annotation></semantics>", {}).is_err()
+
+project_checked = |parsed, props| if props.syntax == HtmlSyntax {
+	HtmlTree.project_parsed(parsed, props).map_ok(|projection| projection.parsed)
+} else {
+	Ok(parsed)
+}
+
+expect MathML.parse_fragment("<math xmlns:display='urn:metadata'><mi>x</mi></math>", {}).is_ok()
