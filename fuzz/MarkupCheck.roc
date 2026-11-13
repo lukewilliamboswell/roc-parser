@@ -46,6 +46,9 @@ MarkupCheck :: [].{
 				Implied(offset) => if offset > input.count_utf8_bytes() {
 					crash "implied origin lies outside input"
 				}
+				Cloned(origin) => if origin.source.start > origin.source.end or origin.source.end > input.count_utf8_bytes() or origin.at > input.count_utf8_bytes() {
+					crash "cloned provenance lies outside source"
+				}
 			}
 		}
 	}

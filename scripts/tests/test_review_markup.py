@@ -197,3 +197,38 @@ class ProbeIdentityTests(unittest.TestCase):
             with patch.object(review, 'probe_identity', return_value={'source': 'current'}):
                 with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
                     review.resolve_probe(Namespace(probe=binary, roc='roc'))
+
+
+class StrictSuiteGateTests(unittest.TestCase):
+    def review(self, expected_errors, diagnostic, strict_status):
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case = {'id': 'upstream/strict', 'format': 'html', 'input': 'x', 'validate': False, 'recovery': 'browser', 'expected_dat': '| "x"', 'expected_error_count': expected_errors, 'scripting_modes': [False]}
+            (root / 'tree-suite.json').write_text(json.dumps({'source': {'revision': '0' * 40}, 'cases': [case]}))
+            recovered = {'status': 'ok', 'roots': [['text', 'x']], 'diagnostics': [{'code': 'issue'}] if diagnostic else []}
+            strict = {'status': strict_status, 'roots': [['text', 'x']], 'diagnostics': []}
+            args = Namespace(probe=Path('/fake'), roc='roc', work=root / 'results', cache=root, file=None, limit=None, trees_only=False)
+            node = unittest.mock.Mock()
+            node.parse.return_value = {'status': 'ok', 'roots': [['text', 'x']]}
+            context = unittest.mock.MagicMock()
+            context.__enter__.return_value = node
+            with patch.object(review, 'DATA', root), patch.object(review, 'resolve_probe', return_value=Path('/fake')), patch.object(review, 'NodeOracle', return_value=context), patch.object(review, 'probe', side_effect=[recovered, strict]):
+                status = review.suite_review(args)
+            return status, json.loads((root / 'results/suite.json').read_text())
+
+    def test_matching_recovered_tree_does_not_hide_missing_parse_error(self):
+        status, report = self.review(1, False, 'ok')
+        self.assertEqual(status, 1)
+        self.assertTrue(report['strict_checked'])
+        self.assertEqual(report['finding_counts'], {'wrong_diagnostic_presence': 1, 'wrong_strict_verdict': 1})
+
+    def test_matching_recovered_tree_does_not_hide_spurious_strict_rejection(self):
+        status, report = self.review(0, True, 'error')
+        self.assertEqual(status, 1)
+        self.assertEqual(report['finding_counts'], {'wrong_diagnostic_presence': 1, 'wrong_strict_verdict': 1})
+
+    def test_tree_and_strict_contract_are_both_required_for_pass(self):
+        status, report = self.review(0, False, 'ok')
+        self.assertEqual(status, 0)
+        self.assertEqual(report['counts'], {'pass': 1})

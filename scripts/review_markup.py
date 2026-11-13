@@ -432,16 +432,32 @@ def suite_review(args) -> int:
             expected_dat = case['expected_dat'] if case.get('include_bindings') else normalize_dat(case['expected_dat'])
             actual_dat = dat_tree(actual['roots']) if actual['status'] == 'ok' else None
             oracle_dat = dat_tree(reference['roots'])
-            kind = actual['status'] if actual['status'] in FATAL else 'wrong_tree' if actual_dat != expected_dat else 'pass'
-            row = {'id': case['id'], 'kind': kind, 'case': case, 'actual': actual, 'actual_dat': actual_dat,
+            findings = []
+            if actual['status'] in FATAL:
+                findings.append(actual['status'])
+            elif actual_dat != expected_dat:
+                findings.append('wrong_tree')
+            has_errors = case['expected_error_count'] > 0
+            if actual['status'] == 'ok' and bool(actual.get('diagnostics')) != has_errors:
+                findings.append('wrong_diagnostic_presence')
+            strict = None
+            if not args.trees_only:
+                strict = probe(executable, {**case, 'recovery': 'strict'})
+                expected_status = 'error' if has_errors else 'ok'
+                if strict['status'] in FATAL:
+                    findings.append('strict_' + strict['status'])
+                elif strict['status'] != expected_status:
+                    findings.append('wrong_strict_verdict')
+            kind = findings[0] if findings else 'pass'
+            row = {'id': case['id'], 'kind': kind, 'findings': findings, 'case': case, 'actual': actual, 'strict': strict, 'actual_dat': actual_dat,
                    'expected_dat': expected_dat, 'parse5_dat': oracle_dat, 'oracle_disagreement': oracle_dat != expected_dat}
             rows.append(row)
             if kind != 'pass':
                 retain(row, args.work)
     report = {'source': inventory['source'], 'counts': dict(Counter(row['kind'] for row in rows)),
-              'oracle_disagreements': sum(row['oracle_disagreement'] for row in rows), 'total': len(rows), 'rows': rows}
+              'oracle_disagreements': sum(row['oracle_disagreement'] for row in rows), 'finding_counts': dict(Counter(finding for row in rows for finding in row['findings'])), 'strict_checked': not args.trees_only, 'total': len(rows), 'rows': rows}
     write_json(args.work / 'suite.json', report)
-    print(json.dumps({key: report[key] for key in ['total', 'counts', 'oracle_disagreements']}))
+    print(json.dumps({key: report[key] for key in ['total', 'counts', 'finding_counts', 'strict_checked', 'oracle_disagreements']}))
     return int(not rows or any(row['kind'] != 'pass' for row in rows))
 
 
@@ -488,6 +504,7 @@ def main(argv=None) -> int:
     commands.add_parser('semantic')
     suite = commands.add_parser('suite')
     suite.add_argument('--limit', type=int)
+    suite.add_argument('--trees-only', action='store_true', help='diagnostic lane: omit strict re-execution; still check parse-diagnostic presence')
     suite.add_argument('--file', help='select upstream source filename substring')
     campaign = commands.add_parser('campaign')
     campaign.add_argument('--smoke', action='store_true')
