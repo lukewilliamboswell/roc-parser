@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "nu": {
+    "revision": "0f0f1f9eb6949e9044cfbfa4c45e55a6cd1a15d3",
+    "url": "https://github.com/validator/validator/releases/download/latest/vnu.jar",
+    "sha256": "62c7bfa87fb07e41d07231621a0bdb5d8316c11f1c74d01cd13c80a2d766e304"
+  },
+  "mathml": {
+    "revision": "9439b477f168127d4510e2d361043c27c61c18a1",
+    "license": "https://github.com/w3c/mathml-schema/blob/9439b477f168127d4510e2d361043c27c61c18a1/mathml4/rng/mathml4-core.rng",
+    "files": {
+      "mathml4-presentation.rng": {
+        "url": "https://raw.githubusercontent.com/w3c/mathml-schema/9439b477f168127d4510e2d361043c27c61c18a1/mathml4/rng/mathml4-presentation.rng",
+        "sha256": "78a5813f37b6f358444298ab8e4165d36a1bad3f0b7827b786c24b8724da8c65"
+      },
+      "mathml4-core.rng": {
+        "url": "https://raw.githubusercontent.com/w3c/mathml-schema/9439b477f168127d4510e2d361043c27c61c18a1/mathml4/rng/mathml4-core.rng",
+        "sha256": "548bf2beec783e92ec19d6ff86567e1e3650a299916a18861bf072e98f5ee1d0"
+      }
+    }
+  }
+}

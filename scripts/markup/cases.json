@@ -1,0 +1,473 @@
+{
+  "source": {
+    "html": "https://html.spec.whatwg.org/multipage/parsing.html",
+    "svg": "https://www.w3.org/TR/SVG2/paths.html#PathDataBNF",
+    "mathml": "https://www.w3.org/TR/mathml-core/"
+  },
+  "cases": [
+    {
+      "id": "html-text-entities",
+      "format": "html",
+      "input": "<p title=\"a&amp;b\">é &lt; 😀</p>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-optional-li",
+      "format": "html",
+      "input": "<ul><li>a<li>b</ul>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-optional-p",
+      "format": "html",
+      "input": "<p>one<p>two",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-void-boolean",
+      "format": "html",
+      "input": "<input disabled checked=\"\"><br><hr>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-unquoted",
+      "format": "html",
+      "input": "<a href=/a data-x=one>link</a>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-comments",
+      "format": "html",
+      "input": "a<!-- x > y -->b",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-rcdata",
+      "format": "html",
+      "input": "<textarea>&lt;div&gt; &amp;</textarea>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-raw-script",
+      "format": "html",
+      "input": "<script>if (a < b) x = \"&amp;\";</script>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-raw-style",
+      "format": "html",
+      "input": "<style>a > b { color: red }</style>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-leading-newline",
+      "format": "html",
+      "input": "<pre>\ntext</pre><textarea>\nvalue</textarea>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-table-insertion",
+      "format": "html",
+      "input": "<table><tr><td>x</td></tr></table>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-table-context",
+      "format": "html",
+      "input": "<tr><td>x<td>y",
+      "fragment": true,
+      "validate": false,
+      "context": {
+        "namespace": "http://www.w3.org/1999/xhtml",
+        "local": "table"
+      }
+    },
+    {
+      "id": "html-select-context",
+      "format": "html",
+      "input": "<option>a<option>b",
+      "fragment": true,
+      "validate": false,
+      "context": {
+        "namespace": "http://www.w3.org/1999/xhtml",
+        "local": "select"
+      }
+    },
+    {
+      "id": "html-template",
+      "format": "html",
+      "input": "<template><div>x</div></template>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-svg-adjustment",
+      "format": "html",
+      "input": "<svg viewbox=\"0 0 10 10\"><lineargradient id=\"g\"/><path pathlength=\"1\" d=\"M0 0L1 1\"/></svg>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-svg-foreignobject",
+      "format": "html",
+      "input": "<svg><foreignObject><div>html</div></foreignObject></svg>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-svg-title-integration",
+      "format": "html",
+      "input": "<svg><title><b>label</b></title></svg>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-math-text-integration",
+      "format": "html",
+      "input": "<math><mtext><span>label</span></mtext></math>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-math-annotation-integration",
+      "format": "html",
+      "input": "<math><annotation-xml encoding=\"text/html\"><div>html</div></annotation-xml></math>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-mixed-namespaced-attribute",
+      "format": "html",
+      "input": "<svg><use xlink:href=\"#a\" xml:lang=\"en\"/></svg>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-adoption-agency",
+      "format": "html",
+      "input": "<b><i>x</b>y</i>",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-foster-parenting",
+      "format": "html",
+      "input": "<table>outside<tr><td>inside</table>",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-duplicate-attribute",
+      "format": "html",
+      "input": "<div a=\"1\" a=\"2\"></div>",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-null-recovery",
+      "format": "html",
+      "input": "a\u0000b",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-self-closing-nonvoid",
+      "format": "html",
+      "input": "<div/>after",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-incomplete-tag",
+      "format": "html",
+      "input": "<div title=\"unfinished",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser"
+    },
+    {
+      "id": "html-strict-duplicate-attribute",
+      "format": "html",
+      "input": "<div id=\"a\" id=\"b\"></div>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-strict-self-closing",
+      "format": "html",
+      "input": "<div/>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-document",
+      "format": "html",
+      "input": "<!doctype html><html lang=\"en\"><head><title>T</title></head><body><p>x</p></body></html>",
+      "validate": false
+    },
+    {
+      "id": "html-implied-document",
+      "format": "html",
+      "input": "<!doctype html><title>T</title><p>x",
+      "validate": false
+    },
+    {
+      "id": "svg-fragment",
+      "format": "svg",
+      "input": "<g><path pathLength=\"1\" d=\"M0 0L10 10Z\"/></g>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-exact-case",
+      "format": "svg",
+      "input": "<linearGradient id=\"g\"><stop offset=\"0\"/></linearGradient>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-normalization",
+      "format": "svg",
+      "input": "<text a=\"x\t y\">a\r\nb<![CDATA[<&]]><!-- comment -->c</text>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-namespace-shadow",
+      "format": "svg",
+      "input": "<g xmlns:s=\"urn:other\"><s:x/><g xmlns=\"\"><x/></g></g>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-prefix",
+      "format": "svg",
+      "input": "<s:svg xmlns:s=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><s:use xlink:href=\"#a\"/></s:svg>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-comment-pi",
+      "format": "svg",
+      "input": "<!--a--><?target data?><g/>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-invalid-case-close",
+      "format": "svg",
+      "input": "<g></G>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-duplicate-expanded-attribute",
+      "format": "svg",
+      "input": "<g xmlns:a=\"urn:x\" xmlns:b=\"urn:x\" a:z=\"1\" b:z=\"2\"/>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-undeclared-prefix",
+      "format": "svg",
+      "input": "<s:g/>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-unknown-entity",
+      "format": "svg",
+      "input": "<text>&nbsp;</text>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-xml-invalid-character",
+      "format": "svg",
+      "input": "<text>&#0;</text>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "svg-document",
+      "format": "svg",
+      "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>",
+      "validate": false
+    },
+    {
+      "id": "mathml-fraction",
+      "format": "mathml",
+      "input": "<mfrac><mn>1</mn><mn>2</mn></mfrac>",
+      "fragment": true,
+      "validate": true,
+      "valid": true,
+      "semantic_oracle": "mathml-schema"
+    },
+    {
+      "id": "mathml-script",
+      "format": "mathml",
+      "input": "<msubsup><mi>x</mi><mn>1</mn><mn>2</mn></msubsup>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "mathml-table",
+      "format": "mathml",
+      "input": "<mtable><mtr><mtd><mi>x</mi></mtd></mtr></mtable>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "mathml-annotation",
+      "format": "mathml",
+      "input": "<semantics><mi>x</mi><annotation encoding=\"application/x-tex\">x</annotation></semantics>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "mathml-xml-html-boundary",
+      "format": "mathml",
+      "input": "<annotation-xml encoding=\"application/xhtml+xml\"><div xmlns=\"http://www.w3.org/1999/xhtml\">x</div></annotation-xml>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "mathml-document",
+      "format": "mathml",
+      "input": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><msqrt><mi>x</mi></msqrt></math>",
+      "validate": false
+    },
+    {
+      "id": "svg-valid-path",
+      "format": "svg",
+      "input": "<path d=\"M0 0 L10 10 H3 V4 C1 2 3 4 5 6 S7 8 9 10 Q1 2 3 4 T5 6 A7 8 0 0 1 9 10 Z\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": true,
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-bad-path-arity",
+      "format": "svg",
+      "input": "<path d=\"M0\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidValue",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-bad-path-start",
+      "format": "svg",
+      "input": "<path d=\"L0 0\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidValue",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-bad-arc-flag",
+      "format": "svg",
+      "input": "<path d=\"M0 0 A1 1 0 2 0 3 3\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidValue",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-bad-viewbox",
+      "format": "svg",
+      "input": "<svg viewBox=\"0 0 10\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidValue",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-bad-case-attribute",
+      "format": "svg",
+      "input": "<path pathlength=\"1\"/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "UnknownAttribute",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "svg-unknown-element",
+      "format": "svg",
+      "input": "<notSvg/>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "UnknownElement",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "mathml-bad-fraction-arity",
+      "format": "mathml",
+      "input": "<mfrac><mi>x</mi></mfrac>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidChildren"
+    },
+    {
+      "id": "mathml-bad-script-arity",
+      "format": "mathml",
+      "input": "<msubsup><mi>x</mi><mn>1</mn></msubsup>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidChildren"
+    },
+    {
+      "id": "mathml-content-extension-strict",
+      "format": "mathml",
+      "input": "<apply><plus/><ci>x</ci></apply>",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "UnknownElement",
+      "semantic_oracle": "mathml-schema"
+    },
+    {
+      "id": "html-boolean-false",
+      "format": "html",
+      "input": "<input disabled=\"false\">",
+      "fragment": true,
+      "validate": true,
+      "valid": false,
+      "problem": "InvalidValue",
+      "semantic_oracle": "nu"
+    },
+    {
+      "id": "html-enumerated-hidden",
+      "format": "html",
+      "input": "<div hidden=\"until-found\"></div>",
+      "fragment": true,
+      "validate": true,
+      "valid": true,
+      "semantic_oracle": "nu"
+    }
+  ]
+}

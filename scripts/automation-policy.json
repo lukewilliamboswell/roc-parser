@@ -31,6 +31,7 @@
         "scripts/tests/test_package_driver.py",
         "scripts/tests/test_repository_policy.py",
         "scripts/tests/test_review_json.py",
+        "scripts/tests/test_review_markup.py",
         "scripts/tests/test_review_roc_syntax.py",
         "scripts/tests/test_review_yaml.py",
         "scripts/tests/test_roc_syntax_coverage.py",
@@ -46,6 +47,7 @@
       "contract": "Install or build the independent oracle, verify supplier bytes or build identities, and expose its protocol to parser harnesses.",
       "paths": [
         "scripts/asciidoc/setup_oracle.py",
+        "scripts/markup/setup_oracle.py",
         "scripts/roc_syntax/build_oracle.py",
         "scripts/setup_oracles.py"
       ]
@@ -72,6 +74,7 @@
         "scripts/import_roc_syntax_snapshots.py",
         "scripts/markdown/gen_entities.py",
         "scripts/markdown/import_specs.py",
+        "scripts/markup/semantic_oracle.py",
         "scripts/mutate_roc_syntax.py",
         "scripts/review_asciidoc.py",
         "scripts/review_csv.py",
@@ -79,6 +82,7 @@
         "scripts/review_json.py",
         "scripts/review_markdown.py",
         "scripts/review_markdown_blocks.py",
+        "scripts/review_markup.py",
         "scripts/review_roc_syntax.py",
         "scripts/review_xml.py",
         "scripts/review_yaml.py",
@@ -107,6 +111,13 @@
       "paths": [
         "scripts/roc_syntax/oracle/build.zig",
         "scripts/roc_syntax/oracle/main.zig"
+      ]
+    },
+    {
+      "runtime": "Node.js >=20 with the locked parse5 and Playwright dependency graph",
+      "contract": "Independent markup tree and browser oracle adapters; no application code execution or external resource loading. Campaigns and browser comparisons are run locally.",
+      "paths": [
+        "scripts/markup/oracle.mjs"
       ]
     }
   ],
