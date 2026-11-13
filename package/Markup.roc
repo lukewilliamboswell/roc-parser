@@ -86,10 +86,31 @@ Markup :: [].{
 	Error : { problem : Problem, line : U64, column : U64 }
 
 	## Configurable validation and resource limits, strict by default.
-	Props := { syntax : Syntax ?? XmlSyntax, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024 }
+	Props := { syntax : Syntax ?? XmlSyntax, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
 
-	## Original source and decoded namespace-aware structure.
-	Parsed : { source : Source, document : XmlNs }
+	## Expanded names share the existing namespace-aware XML contract.
+	Name : XmlNs.Name
+
+	## Attribute spelling/value and its authored byte range. Namespace declarations
+	## are represented in the XMLNS namespace, preserving declaration order.
+	Attribute : { name : Name, value : Str, span : Span }
+
+	## Authored bytes, or the insertion point of a node implied by tree construction.
+	Origin : [Authored(Span), Implied(U64)]
+
+	## A flat tree node. Child indices refer to the containing tree's node list.
+	Node : {
+		kind : [Element(Name), Text(Str), Comment(Str), Doctype({ name : Str, public_id : Str, system_id : Str }), ProcessingInstruction({ target : Str, data : Str })],
+		attributes : List(Attribute),
+		children : List(U64),
+		origin : Origin,
+	}
+
+	## Indexed nodes with document/fragment roots in authored order.
+	Tree : { nodes : List(Node), roots : List(U64) }
+
+	## Exact input, namespace-aware structure, and accepted recovery diagnostics.
+	Parsed : { source : Source, tree : Tree, diagnostics : List(Error) }
 
 	## SVG namespace URI.
 	svg_namespace = "http://www.w3.org/2000/svg"
@@ -107,7 +128,7 @@ Markup :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		match XmlNs.parse(text, { max_depth: props.max_depth, max_elements: props.max_elements, max_attributes: props.max_attributes }) {
-			Ok(document) => Ok({ source: Source.from_str(text), document })
+			Ok(document) => Ok({ source: Source.from_str(text), tree: xml_tree(document.root), diagnostics: [] })
 			Err(InvalidXml(e)) => Err(InvalidMarkup({ problem: SyntaxError(e.message), line: e.line, column: e.column }))
 			Err(InvalidNamespace(e)) => Err(InvalidMarkup({ problem: NamespaceError(e.problem), line: e.line, column: e.column }))
 			Err(LimitExceeded(e)) => Err(InvalidMarkup({ problem: LimitExceeded(e.limit), line: e.line, column: e.column }))
@@ -124,3 +145,36 @@ expect {
 	Str.from_utf8(source.tokens.fold([], |out, token| out.concat(source.slice(token.span)))) == Ok("<a x='>'><!-- > -->&amp;</a>\r\n<broken")
 }
 expect Markup.Source.from_bytes([255, '<']).bytes == [255, '<']
+
+# Iterative conversion used until source-backed XML event construction below.
+xml_tree : XmlNs.Node -> Markup.Tree
+xml_tree = |root| {
+	var $nodes = []
+	var $pending = [(root, Err(Missing))]
+	while !$pending.is_empty() {
+		(item, parent) = $pending.last() ?? (XmlNs.Node.Text(""), Err(Missing))
+		$pending = $pending.drop_last(1)
+		index = $nodes.len()
+		match item {
+			Text(text) => {
+				$nodes = $nodes.append({ kind: Text(text), attributes: [], children: [], origin: Implied(0) })
+			}
+			Element(element) => {
+				$nodes = $nodes.append({ kind: Element(element.name), attributes: element.attributes.map(|a| { name: a.name, value: a.value, span: { start: 0, end: 0 } }), children: [], origin: Implied(0) })
+				var $i = element.children.len()
+				while $i > 0 {
+					$i = $i - 1
+					$pending = $pending.append((element.children.get($i) ?? XmlNs.Node.Text(""), Ok(index)))
+				}
+			}
+		}
+		match parent {
+			Ok(p) => {
+				node = $nodes.get(p) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
+				$nodes = $nodes.set(p, { ..node, children: node.children.append(index) }) ?? []
+			}
+			Err(Missing) => {}
+		}
+	}
+	{ nodes: $nodes, roots: [0] }
+}
