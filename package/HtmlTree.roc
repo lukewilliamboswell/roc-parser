@@ -13,19 +13,27 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "" }
+		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", plaintext: False, pending_text: [] }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
 			$state = { ..$state, mode: context_mode(context.name) }
 		}
-		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics(source.to_utf8()) }
+		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_with(source.to_utf8(), props.max_diagnostics) }
 		var $done = False
+		var $source_regions = []
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace($state) != Markup.html_namespace
 			next = Tok.next($reader, mode, foreign)
 			$reader = next.reader
+			match source_token(next.token, $reader.bytes) {
+				Ok(region) => {
+					$source_regions = $source_regions.append(region)
+				}
+				Err(_) => {}
+			}
+
 			if $state.skip_lf {
 				$state = { ..$state, skip_lf: False }
 				match next.token.kind {
@@ -95,7 +103,7 @@ HtmlTree :: [].{
 		roots = if fragment {
 			(node_at($state, 0)).children
 		} else $state.roots
-		Ok({ source: Markup.Source.from_str(source), tree: { nodes: $state.nodes, roots }, diagnostics })
+		Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
 	}
 }
 
@@ -103,7 +111,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str }
+State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }) }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -412,7 +420,7 @@ context_mode = |name| match name {
 	"colgroup" => InColgroup
 	"table" => InTable
 	"template" => InTemplate
-	"head" => InHead
+	"head" => InBody
 	"html" => BeforeHead
 	"frameset" => InFrameset
 	_ => InBody
@@ -424,7 +432,7 @@ reset_mode = |s| {
 		$i = $i - 1
 		n = if ($i == 0 and s.fragment) s.context.name else name_at(s, s.stack.get($i) ?? 0)
 		if ["td", "th", "tr", "tbody", "thead", "tfoot", "caption", "colgroup", "table", "template", "head", "frameset"].contains(n) {
-			return { ..s, mode: context_mode(n) }
+			return { ..s, mode: if (n == "template") (s.modes.last() ?? InTemplate) else if (n == "head") InHead else context_mode(n) }
 		}
 		if n == "body" {
 			return { ..s, mode: InBody }
@@ -437,6 +445,25 @@ reset_mode = |s| {
 }
 
 content_mode = |s| {
+	if s.plaintext {
+		return Plaintext
+	}
+	if s.fragment and s.stack.len() == 1 and s.context.namespace == Markup.html_namespace {
+		n = s.context.name
+		if n == "title" or n == "textarea" {
+			return RcdataFragment
+		}
+		if n == "script" {
+			return ScriptFragment
+		}
+		if n == "plaintext" {
+			return Plaintext
+		}
+		if ["style", "xmp", "iframe", "noembed", "noframes"].contains(n) or (n == "noscript" and s.context.scripting) {
+			return RawtextFragment
+		}
+	}
+
 	n = adjusted_name(s)
 	if adjusted_namespace(s) != Markup.html_namespace {
 		return Data
@@ -464,13 +491,26 @@ process = |initial_state, token, scripting| {
 		End(name) => name
 		_ => ""
 	}
-	state = { ..initial_state, token_span: token.span, token_end_name: end_name }
+	var $prepared = initial_state
+	match token.kind {
+		Characters(_) => {}
+		_ => {
+			$prepared = flush_table_text($prepared)
+		}
+	}
+	state = { ..$prepared, token_span: token.span, token_end_name: end_name }
+	match token.kind {
+		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(state)) => {
+			return { ..state, pending_text: state.pending_text.append({ text, span: token.span }) }
+		}
+		_ => {}
+	}
 	if state.work > state.work_limit {
 		return state
 	}
 	# Raw text is a tokenizer mode and a tree-construction text mode. The
 	# surrounding insertion mode (table/head/body) resumes after its end tag.
-	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and content_mode(state) != Data and current(state) != "html" {
+	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and content_mode(state) != Data and !state.plaintext and current(state) != "html" {
 		match token.kind {
 			Characters(text) => return insert_text(state, text, token.span)
 			End(name) if name == current(state) => return pop_current(state)
@@ -636,7 +676,7 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: InFrameset }
 			}
-			(AfterHead, Start(t)) if ["base", "link", "meta", "script", "style", "template", "title"].contains(t.name) => {
+			(AfterHead, Start(t)) if ["base", "basefont", "bgsound", "link", "meta", "script", "style", "template", "title"].contains(t.name) => {
 				$s = problem($s, HeadContentAfterHead, token.span.start)
 				match $s.head {
 					Ok(h) => {
@@ -751,7 +791,7 @@ process_html = |state, token, scripting| {
 						$s = problem($s, UnexpectedColEnd, token.span.start)
 					}
 					Eof => {}
-					_ if current($s) == "html" => {
+					_ if current($s) != "colgroup" => {
 						$s = problem($s, UnexpectedTableElement, token.span.start)
 					}
 					_ => {
@@ -881,26 +921,27 @@ body = |state, token| {
 		Start(tag) => {
 			name = tag.name
 			if name == "html" {
-				if last_named($s, "template").is_ok() {
+				if parsing_template($s) {
 					return problem($s, UnexpectedBodyStart, token.span.start)
 				}
 				if !$s.stack.is_empty() {
 					$s = merge_attributes($s, $s.stack.first() ?? 0, tag)
 				}
 			} else if name == "body" {
-				if last_named($s, "template").is_ok() {
+				if parsing_template($s) {
 					return problem($s, UnexpectedBodyStart, token.span.start)
 				}
 				match last_named($s, "body") {
 					Ok(id) => {
 						$s = merge_attributes($s, id, tag)
+						$s = { ..$s, frameset_ok: False }
 					}
 					_ => {
 						$s = problem($s, UnexpectedBodyStart, token.span.start)
 					}
 				}
 			} else if name == "frameset" {
-				if $s.frameset_ok and last_named($s, "body").is_ok() and last_named($s, "template").is_err() {
+				if $s.frameset_ok and last_named($s, "body").is_ok() and !parsing_template($s) {
 					body_id = last_named($s, "body") ?? 0
 					$s = detach($s, body_id)
 					$s = { ..$s, stack: $s.stack.take_first(1) }
@@ -939,7 +980,7 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, skip_lf: True, frameset_ok: False }
 			} else if name == "form" {
-				if $s.form.is_ok() and last_named($s, "template").is_err() {
+				if $s.form.is_ok() and !parsing_template($s) {
 					$s = problem($s, NestedForm, token.span.start)
 				}
 				else {
@@ -948,7 +989,7 @@ body = |state, token| {
 					}
 					id = $s.nodes.len()
 					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-					if last_named($s, "template").is_err() {
+					if !parsing_template($s) {
 						$s = { ..$s, form: Ok(id) }
 					}
 				}
@@ -975,6 +1016,7 @@ body = |state, token| {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, plaintext: True }
 			} else if name == "button" {
 				if in_scope($s, "button", DefaultScope) {
 					$s = problem($s, NestedButton, token.span.start)
@@ -1129,7 +1171,7 @@ body = |state, token| {
 			} else if formatting(name) {
 				$s = adoption($s, name, token.span.start)
 			}
-			else if name == "form" and last_named($s, "template").is_err() {
+			else if name == "form" and !parsing_template($s) {
 				match $s.form {
 					Ok(id) => {
 						if !s_in_scope_id($s, id) {
@@ -1679,7 +1721,7 @@ foreign_process = |state, token| {
 	var $s = state
 	match token.kind {
 		Characters(t) => {
-			if !whitespace(t) {
+			if !whitespace(Str.join_with(t.split_on("\u(0)"), "")) {
 				$s = { ..$s, frameset_ok: False }
 			}
 			$s = insert_text($s, Str.join_with(t.split_on("\u(0)"), "\u(FFFD)"), token.span)
@@ -1777,7 +1819,7 @@ svg_attributes = [("attributename", "attributeName"), ("attributetype", "attribu
 
 whitespace = |text| text.to_utf8().all(Tok.space)
 
-void = |n| ["area", "base", "basefont", "bgsound", "br", "col", "embed", "hr", "img", "image", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"].contains(n)
+void = |n| ["area", "base", "basefont", "bgsound", "br", "embed", "hr", "img", "image", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"].contains(n)
 
 formatting = |n| ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"].contains(n)
 
@@ -2043,3 +2085,60 @@ expect {
 }
 
 expect HtmlTree.parse("<p>x</p>", True, {}, { max_diagnostics: 0 }).is_ok()
+
+parsing_template = |s| last_named(s, "template").is_ok() or (s.fragment and s.context.name == "template" and s.context.namespace == Markup.html_namespace)
+
+flush_table_text : State -> State
+flush_table_text = |s| {
+	if s.pending_text.is_empty() {
+		return s
+	}
+	pending = s.pending_text
+	nonwhite = pending.any(|part| !whitespace(Str.join_with(part.text.split_on("\u(0)"), "")))
+	var $next = { ..s, pending_text: [] }
+	if nonwhite {
+		first = pending.first() ?? { text: "", span: { start: 0, end: 0 } }
+		$next = problem($next, FosterParentedContent, first.span.start)
+		for part in pending {
+			$next = body({ ..$next, foster: True }, { kind: Characters(part.text), span: part.span })
+		}
+		{ ..$next, foster: False }
+	} else {
+		for part in pending {
+			$next = insert_text($next, Str.join_with(part.text.split_on("\u(0)"), ""), part.span)
+		}
+		$next
+	}
+}
+expect {
+	p = HtmlTree.parse("<table> x </table>", True, {}, { recovery: Browser })?
+	Markup.text(p.tree, p.tree.roots.first()?) == " x "
+}
+expect {
+	p = HtmlTree.parse("<html a=b><template><col></col><html b=c><col></col></template>", False, {}, { recovery: Browser })?
+	p.tree.roots.len() == 1 and names(p.tree).contains("body")
+}
+expect {
+	p = HtmlTree.parse("<form><form>", True, { name: "template" }, { recovery: Browser })?
+	names(p.tree) == ["html", "form", "form"]
+}
+
+source_token : Tok.Token, List(U8) -> Try(Markup.Token, [Empty])
+source_token = |token, bytes| {
+	if token.span.end == token.span.start {
+		return Err(Empty)
+	}
+	kind = match token.kind {
+		Start(_) | End(_) => Tag
+		Characters(_) => if (Tok.starts(bytes, token.span.start, "<![CDATA[")) CData else Text
+		Comment(_) => Comment
+		Doctype(_) => Declaration
+		ProcessingInstruction(_) => ProcessingInstruction
+		Eof => Invalid
+	}
+	Ok({ kind, span: token.span })
+}
+expect {
+	p = HtmlTree.parse("<script>if(a<b)x()</script><p>text</p>", True, {}, {})?
+	p.source.tokens.map(|t| t.kind) == [Tag, Text, Tag, Tag, Text, Tag] and p.source.tokens.fold([], |out, t| out.concat(p.source.slice(t.span))) == p.source.bytes
+}
