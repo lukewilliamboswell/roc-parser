@@ -364,6 +364,28 @@ construct_xml_tree = |source, starts, fragment, props| {
 			}
 			Declaration | Invalid => {}
 		}
+		# XML coalesces adjacent character data, including CDATA. Comments and
+		# processing instructions remain explicit boundaries in this tree.
+		match $new_node {
+			Ok({ kind: Text(value), .. }) => {
+				last = match $stack.last() {
+					Ok(parent) => ($nodes.get(parent) ?? empty_node).children.last()
+					Err(_) => $roots.last()
+				}
+				match last {
+					Ok(index) => match $nodes.get(index) {
+						Ok({ kind: Text(previous), origin: Authored(span), .. }) => {
+							$nodes = $nodes.set(index, empty_node) ?? []
+							$nodes = $nodes.set(index, { kind: Text(Str.concat(previous, value)), attributes: [], children: [], origin: Authored({ start: span.start, end: token.span.end }) }) ?? []
+							$new_node = Err(Missing)
+						}
+						_ => {}
+					}
+					Err(_) => {}
+				}
+			}
+			_ => {}
+		}
 		match $new_node {
 			Ok(new_node) => {
 				index = $nodes.len()
@@ -411,6 +433,21 @@ source_attributes = |source, span, start| {
 	while $pos < span.end and !space(bytes.get($pos) ?? 0) and !['/', '>'].contains(bytes.get($pos) ?? 0) {
 		$pos = $pos + 1
 	}
+	var $lookup = Dict.empty()
+	for attribute in start.attributes {
+		$lookup = $lookup.insert(qualified_name(attribute.name), { name: attribute.name, value: attribute.value })
+	}
+	for binding in start.bindings {
+		value = match binding.namespace {
+			Uri(uri) => uri
+			NoNamespace => ""
+		}
+		(local, spelling, prefix) = match binding.prefix {
+			Default => ("xmlns", "xmlns", Unprefixed)
+			Prefix(p) => (p, "xmlns:${p}", Prefix("xmlns"))
+		}
+		$lookup = $lookup.insert(spelling, { name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix }, value })
+	}
 	var $attrs = []
 	while $pos < span.end {
 		while $pos < span.end and space(bytes.get($pos) ?? 0) {
@@ -437,31 +474,9 @@ source_attributes = |source, span, start| {
 			$pos = $pos + 1
 		}
 		$pos = $pos + 1
-		var $attr = Err(Missing)
-		if spelling == "xmlns" or spelling.starts_with("xmlns:") {
-			prefix = if (spelling == "xmlns") Default else Prefix(Str.from_utf8_lossy(spelling.to_utf8().drop_first(6)))
-			match start.bindings.find_first(|binding| binding.prefix == prefix) {
-				Ok(binding) => {
-					value = match binding.namespace {
-						Uri(uri) => uri
-						NoNamespace => ""
-					}
-					local = if (spelling == "xmlns") "xmlns" else Str.from_utf8_lossy(spelling.to_utf8().drop_first(6))
-					$attr = Ok({ name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix: if (spelling == "xmlns") Unprefixed else Prefix("xmlns") }, value, span: { start: begin, end: $pos } })
-				}
-				Err(_) => {}
-			}
-		} else {
-			match start.attributes.find_first(|attr| qualified_name(attr.name) == spelling) {
-				Ok(attr) => {
-					$attr = Ok({ name: attr.name, value: attr.value, span: { start: begin, end: $pos } })
-				}
-				Err(_) => {}
-			}
-		}
-		match $attr {
-			Ok(attr) => {
-				$attrs = $attrs.append(attr)
+		match $lookup.get(spelling) {
+			Ok(attribute) => {
+				$attrs = $attrs.append({ name: attribute.name, value: attribute.value, span: { start: begin, end: $pos } })
 			}
 			Err(_) => {}
 		}
@@ -523,3 +538,9 @@ expect Markup.parse_xml("<a><!--c-->text<?p q?></a>", { max_nodes: 4 }).is_ok()
 expect Markup.parse_xml_fragment("", "", { max_nodes: 0 }).is_ok()
 expect Markup.parse_xml_fragment("<!--c-->", "", { max_nodes: 0 }).is_err()
 expect Markup.parse_xml_fragment("<a/>", "", { max_depth: 18_446_744_073_709_551_615, max_elements: 18_446_744_073_709_551_615 }).is_ok()
+
+expect {
+	parsed = Markup.parse_xml_fragment("<text a=\"x\t y\">a\r\nb<![CDATA[<&]]><!-- comment -->c</text>", Markup.svg_namespace, {})?
+	root = parsed.tree.nodes.get(Markup.single_root(parsed.tree)?)?
+	root.children.map(|index| parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a\nb<&")), Ok(Comment(" comment ")), Ok(Text("c"))]
+}

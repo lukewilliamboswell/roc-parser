@@ -55,7 +55,7 @@ MarkupTemplate :: [].{
 		}
 		# Classify holes before calling the document parser, so a hole in a
 		# delimiter/name is rejected even when removing it makes valid syntax.
-		positions = classify_holes(source, $holes)?
+		positions = classify_holes(source, $holes, props.syntax)?
 		parsed = parse(source_text)?
 		if parsed.tree.nodes.len() > props.max_nodes {
 			return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
@@ -96,10 +96,10 @@ MarkupTemplate :: [].{
 
 Hole : { index : U64, offset : U64 }
 
-Position : { hole : Hole, kind : [Data, Attribute] }
+Position : { hole : Hole, kind : [Data, CData, Attribute] }
 
-classify_holes : Markup.Source, List(Hole) -> Try(List(Position), [InvalidMarkup(Markup.Error)])
-classify_holes = |source, holes| {
+classify_holes : Markup.Source, List(Hole), Markup.Syntax -> Try(List(Position), [InvalidMarkup(Markup.Error)])
+classify_holes = |source, holes, syntax| {
 	var $positions = []
 	var $token_index = 0
 	var $raw = ""
@@ -114,7 +114,8 @@ classify_holes = |source, holes| {
 			}
 			if token.kind == Tag {
 				bytes = source.slice(token.span)
-				name = tag_name(bytes)
+				qualified = tag_name(bytes)
+				name = qualified.split_on(":").last() ?? qualified
 				if bytes.get(1) == Ok('/') {
 					if name == $raw {
 						$raw = ""
@@ -150,8 +151,11 @@ classify_holes = |source, holes| {
 						}
 						$positions = $positions.append({ hole, kind: Data })
 					}
+					CData if hole.offset >= token.span.start + 9 and hole.offset <= token.span.end - 3 => {
+						$positions = $positions.append({ hole, kind: CData })
+					}
 					Tag => {
-						if !whole_attribute(source, token.span, hole.offset) {
+						if !whole_attribute(source, token.span, hole.offset, syntax) {
 							return Err(template_error(source, hole.offset, hole.index, "expected character data or an entire quoted attribute value"))
 						}
 						if $last_attribute == Ok(hole.offset) {
@@ -172,8 +176,8 @@ classify_holes = |source, holes| {
 	Ok($positions)
 }
 
-whole_attribute : Markup.Source, Markup.Span, U64 -> Bool
-whole_attribute = |source, span, hole| {
+whole_attribute : Markup.Source, Markup.Span, U64, Markup.Syntax -> Bool
+whole_attribute = |source, span, hole, syntax| {
 	bytes = source.bytes
 	var $pos = span.start + 1
 	while $pos < span.end and !space(bytes.get($pos) ?? 0) and !['/', '>'].contains(bytes.get($pos) ?? 0) {
@@ -191,7 +195,8 @@ whole_attribute = |source, span, hole| {
 		while $pos < span.end and !space(bytes.get($pos) ?? 0) and !['=', '/', '>'].contains(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
-		attr = ascii_lower(Str.from_utf8_lossy(bytes.drop_first(start).take_first($pos - start)))
+		raw_attr = Str.from_utf8_lossy(bytes.drop_first(start).take_first($pos - start))
+		attr = if (syntax == HtmlSyntax) ascii_lower(raw_attr) else raw_attr
 		while $pos < span.end and space(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
@@ -234,6 +239,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 	var $texts = []
 	var $attributes = []
 	var $elements = []
+	var $text_namespaces = Dict.empty()
 	var $index = 0
 	# Source intervals are sorted once. Holes already arrive in authored order,
 	# so locating every target is a bounded sweep instead of holes * nodes work.
@@ -249,6 +255,14 @@ build_plan = |segments, parsed, positions, props, decode| {
 				_ => {}
 			}
 			Implied(_) => {}
+		}
+		match node.kind {
+			Element(name) => {
+				for child in node.children {
+					$text_namespaces = $text_namespaces.insert(child, name.namespace)
+				}
+			}
+			_ => {}
 		}
 		var $attr_index = 0
 		for attribute in node.attributes {
@@ -293,6 +307,9 @@ build_plan = |segments, parsed, positions, props, decode| {
 					$text_groups = $text_groups.insert(entry.node, ($text_groups.get(entry.node) ?? []).append(hole))
 				}
 				_ => {
+					if position.kind == CData {
+						return Err(template_error(parsed.source, hole.offset, hole.index, "CDATA hole is not character data in this namespace"))
+					}
 					while $element_cursor < element_intervals.len() {
 						entry = element_intervals.get($element_cursor) ?? empty_interval
 						if entry.span.start >= hole.offset {
@@ -320,12 +337,14 @@ build_plan = |segments, parsed, positions, props, decode| {
 			Authored(value) => value
 			Implied(at) => { start: at, end: at }
 		}
+		cdata_markup = props.syntax == XmlSyntax or ($text_namespaces.get(index) ?? NoNamespace) != Uri(Markup.html_namespace)
+		content_end = span.end
 		var $pieces = []
 		var $start = span.start
 		var $first = True
 		for hole in holes {
 			if hole.offset > $start {
-				value = decode(Str.from_utf8_lossy(parsed.source.bytes.drop_first($start).take_first(hole.offset - $start)))?
+				value = decode_source_region(parsed.source, $start, hole.offset, cdata_markup, decode)?
 				part = { kind: Text(value), attributes: [], children: [], origin: Authored({ start: $start, end: hole.offset }) }
 				if $first {
 					$nodes = $nodes.set(index, part) ?? []
@@ -348,10 +367,10 @@ build_plan = |segments, parsed, positions, props, decode| {
 			$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: slot_index }), expected: Language("text") })
 			$start = hole.offset
 		}
-		if $start < span.end {
-			value = decode(Str.from_utf8_lossy(parsed.source.bytes.drop_first($start).take_first(span.end - $start)))?
+		if $start < content_end {
+			value = decode_source_region(parsed.source, $start, content_end, cdata_markup, decode)?
 			$pieces = $pieces.append($nodes.len())
-			$nodes = $nodes.append({ kind: Text(value), attributes: [], children: [], origin: Authored({ start: $start, end: span.end }) })
+			$nodes = $nodes.append({ kind: Text(value), attributes: [], children: [], origin: Authored({ start: $start, end: content_end }) })
 		}
 		$replacement = $replacement.insert(index, $pieces)
 	}
@@ -526,3 +545,72 @@ expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_slots: 0 }, |te
 expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_source_bytes: 6 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
 expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 1 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
 expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 2 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_ok()
+
+normalize_lines : Str -> Str
+normalize_lines = |text| Str.join_with(Str.join_with(text.split_on("\r\n"), "\n").split_on("\r"), "\n")
+
+expect {
+	plan = xml_plan(["<g><![CDATA[a&", "b<]]></g>"])?
+	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "a&b<" and plan.slots.len() == 1
+}
+expect xml_plan(["<s:script xmlns:s='http://www.w3.org/2000/svg'>", "</s:script>"]).is_err()
+expect xml_plan(["<g XMLNS='", "'/>"]).is_ok()
+
+# A coalesced text leaf can span ordinary character data and CDATA. Decode
+# each lexical region independently so holes never need synthetic marker text
+# or partial CDATA delimiters. Binary-search the first overlapping region.
+decode_source_region : Markup.Source, U64, U64, Bool, (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Str, [InvalidMarkup(Markup.Error)])
+decode_source_region = |source, start, end, cdata_markup, decode| {
+	var $low = 0
+	var $high = source.tokens.len()
+	while $low < $high {
+		middle = $low + ($high - $low) // 2
+		token = source.tokens.get(middle) ?? { kind: Text, span: { start: 0, end: 0 } }
+		if token.span.end <= start {
+			$low = middle + 1
+		} else {
+			$high = middle
+		}
+	}
+	var $out = []
+	var $cursor = $low
+	while $cursor < source.tokens.len() {
+		token = source.tokens.get($cursor) ?? { kind: Text, span: { start: 0, end: 0 } }
+		if token.span.start >= end {
+			break
+		}
+		region_start = if (cdata_markup and token.kind == CData) token.span.start + 9 else token.span.start
+		region_end = if (cdata_markup and token.kind == CData) token.span.end - 3 else token.span.end
+		left = if (start > region_start) start else region_start
+		right = if (end < region_end) end else region_end
+		if left < right {
+			text = Str.from_utf8_lossy(source.bytes.drop_first(left).take_first(right - left))
+			decoded = if (cdata_markup and token.kind == CData) normalize_lines(text) else decode(text)?
+			$out = $out.concat(decoded.to_utf8())
+		}
+		$cursor = $cursor + 1
+	}
+	Ok(Str.from_utf8_lossy($out))
+}
+
+expect {
+	plan = xml_plan(["<g>a<![CDATA[b&", "<c]]>d</g>"])?
+	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "ab&<cd" and plan.slots.len() == 1
+}
+
+CheckedTemplate(a) := { bound : MarkupTemplate.Bound(a) }.{
+	from_interpolation : List(Str) -> Try((Iter(a) -> CheckedTemplate(a)), [InvalidInterpolation(Str)])
+	from_interpolation = |segments| {
+		plan = xml_plan(segments).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
+		Ok(|values| CheckedTemplate.{ bound: MarkupTemplate.capture(plan, values) })
+	}
+}
+
+expect {
+	first = { number: 42.U64 }
+	second = { number: 43.U64 }
+	literal : CheckedTemplate({ number : U64 })
+	literal =
+		\\<g x="${first}">${second}</g>
+	literal.bound.values == [first, second] and literal.bound.plan.slots.len() == 2
+}
