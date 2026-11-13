@@ -326,6 +326,12 @@ parse_xml_source = |text, namespace, fragment, props| {
 	ceiling = text.count_utf8_bytes() + 1
 	depth = (if (props.max_depth < ceiling) props.max_depth else ceiling) + if (fragment) 1 else 0
 	elements = (if (props.max_elements < ceiling) props.max_elements else ceiling) + if (fragment) 1 else 0
+	# Reader calls and retained lexical work total at most 6n + 3 units.
+	# The conservative fast-path threshold leaves custom small budgets on the
+	# event-counted reader path, preserving their exact failure positions.
+	if props.max_work_per_byte >= 16 {
+		return parse_xml_fold(text, input, prefix.count_utf8_bytes(), depth, elements, fragment, props)
+	}
 	opened = XmlNs.reader(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }).map_err(|error| located_xml_error(error, text, prefix.count_utf8_bytes()))?
 	budget = Markup.work_budget(props, text.count_utf8_bytes())
 	var $work = text.count_utf8_bytes()
@@ -699,4 +705,191 @@ expect {
 expect {
 	parsed = Markup.parse_xml("<x xmlnsfoo='a' xmlns:p='urn:p' p:q='b'/>", {})?
 	parsed.tree.nodes.first()?.attributes.map(|a| (a.name.local, a.name.namespace)) == [("xmlnsfoo", NoNamespace), ("p", Uri("http://www.w3.org/2000/xmlns/")), ("q", Uri("urn:p"))]
+}
+
+SourceBuild : {
+	nodes : List(Markup.Node),
+	roots : List(U64),
+	stack : List(U64),
+	tokens : List(Markup.Token),
+	failure : Try({ offset : U64, problem : Markup.Problem }, [Missing]),
+}
+
+parse_xml_fold : Str, Str, U64, U64, U64, Bool, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+parse_xml_fold = |text, input, prefix, depth, elements, fragment, props| {
+	initial = { nodes: [], roots: [], stack: [], tokens: [], failure: Err(Missing) }
+	end = prefix + text.count_utf8_bytes()
+	state = XmlNs.fold_source(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }, initial, |before, event| fold_xml_event(before, event, prefix, end, props)).map_err(|error| located_xml_error(error, text, prefix))?
+	source = Markup.Source.from_tokens(text.to_utf8(), state.tokens)
+	match state.failure {
+		Ok(failure) => Err(error_at(source, failure.offset, failure.problem))
+		Err(_) => Ok({ source, tree: { nodes: state.nodes, roots: state.roots }, diagnostics: [] })
+	}
+}
+
+fold_xml_event : SourceBuild, XmlNs.SourceEvent, U64, U64, Markup.Props -> SourceBuild
+fold_xml_event = |state, event, prefix, source_end, props| {
+	(original_span, kind) = match event {
+		Start(tag) => (tag.span, Tag)
+		End(end_span) => (end_span, Tag)
+		Text(text) => (text.span, Text)
+		CData(text) => (text.span, CData)
+		Comment(comment) => (comment.span, Comment)
+		ProcessingInstruction(pi) => (pi.span, ProcessingInstruction)
+		Declaration(span) => (span, ProcessingInstruction)
+		Gap(span) => (span, Text)
+	}
+	if original_span.start < prefix or original_span.end > source_end {
+		return state
+	}
+	span = { start: original_span.start - prefix, end: original_span.end - prefix }
+	var $tokens = state.tokens
+	previous = $tokens.last() ?? { kind: Invalid, span: { start: 0, end: 0 } }
+	if kind == Text and previous.kind == Text and previous.span.end == span.start {
+		$tokens = $tokens.set($tokens.len() - 1, { kind: Text, span: { start: previous.span.start, end: span.end } }) ?? []
+	} else {
+		$tokens = $tokens.append({ kind, span })
+	}
+	next = { ..state, tokens: $tokens }
+	if next.failure.is_ok() {
+		return next
+	}
+	var $new_node = Err(Missing)
+	match event {
+		Start(tag) => {
+			attrs = authored_attributes(tag.raw_attributes, tag.attribute_spans, { name: tag.name, attributes: tag.attributes, bindings: tag.bindings }, prefix)
+			if attrs.len() > props.max_attributes {
+				return { ..next, failure: Ok({ offset: span.start, problem: LimitExceeded(Attributes) }) }
+			}
+			$new_node = Ok({ kind: Element(tag.name), attributes: attrs, children: [], origin: Authored(span) })
+		}
+		End(_) => {
+			match next.stack.last() {
+				Ok(index) => {
+					node = next.nodes.get(index) ?? empty_node
+					start = match node.origin {
+						Authored(origin) => origin.start
+						Implied(at) => at
+						Cloned(copy) => copy.source.start
+					}
+					return { ..next, stack: next.stack.drop_last(1), nodes: next.nodes.set(index, { ..node, origin: Authored({ start, end: span.end }) }) ?? [] }
+				}
+				Err(_) => return next
+			}
+		}
+		Text(text) | CData(text) => {
+			if text.value != "" {
+				$new_node = Ok({ kind: Text(text.value), attributes: [], children: [], origin: Authored(span) })
+			}
+		}
+		Comment(comment) => {
+			$new_node = Ok({ kind: Comment(comment.value), attributes: [], children: [], origin: Authored(span) })
+		}
+		ProcessingInstruction(pi) => {
+			$new_node = Ok({ kind: ProcessingInstruction({ target: pi.target, data: pi.data }), attributes: [], children: [], origin: Authored(span) })
+		}
+		Declaration(_) | Gap(_) => {}
+	}
+	match $new_node {
+		Ok({ kind: Text(value), .. }) => {
+			last = match next.stack.last() {
+				Ok(parent) => (next.nodes.get(parent) ?? empty_node).children.last()
+				Err(_) => next.roots.last()
+			}
+			match last {
+				Ok(index) => match next.nodes.get(index) {
+					Ok({ kind: Text(before), origin: Authored(origin), .. }) => {
+						moved = next.nodes.replace(index, empty_node) ?? { list: [], prev: empty_node }
+						return { ..next, nodes: moved.list.set(index, { kind: Text(Str.concat(before, value)), attributes: [], children: [], origin: Authored({ start: origin.start, end: span.end }) }) ?? [] }
+					}
+					_ => {}
+				}
+				Err(_) => {}
+			}
+		}
+		_ => {}
+	}
+	match $new_node {
+		Err(_) => next
+		Ok(node) => {
+			index = next.nodes.len()
+			if index >= props.max_nodes {
+				return { ..next, failure: Ok({ offset: span.start, problem: ResourceLimit("nodes") }) }
+			}
+			var $nodes = next.nodes.append(node)
+			var $roots = next.roots
+			match next.stack.last() {
+				Ok(parent) => {
+					moved = $nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
+					previous_node = moved.prev
+					$nodes = moved.list.set(parent, { ..previous_node, children: previous_node.children.append(index) }) ?? []
+				}
+				Err(_) => {
+					$roots = $roots.append(index)
+				}
+			}
+			stack = match event {
+				Start(tag) if !tag.empty => next.stack.append(index)
+				_ => next.stack
+			}
+			{ ..next, nodes: $nodes, roots: $roots, stack }
+		}
+	}
+}
+
+authored_attributes : List(Xml.Attribute), List(Xml.SourceSpan), StartInfo, U64 -> List(Markup.Attribute)
+authored_attributes = |raw, spans, start, prefix| {
+	var $attrs = List.with_capacity(raw.len())
+	var $index = 0
+	var $attribute_index = 0
+	var $binding_index = 0
+	while $index < raw.len() {
+		attribute = raw.get($index) ?? { name: "", value: "" }
+		original_span = spans.get($index) ?? { start: prefix, end: prefix }
+		span = { start: original_span.start - prefix, end: original_span.end - prefix }
+		$index = $index + 1
+		if attribute.name == "xmlns" or attribute.name.starts_with("xmlns:") {
+			match start.bindings.get($binding_index) {
+				Ok(binding) => {
+					$binding_index = $binding_index + 1
+					value = match binding.namespace {
+						Uri(uri) => uri
+						NoNamespace => ""
+					}
+					(local, name_prefix) = match binding.prefix {
+						Default => ("xmlns", Unprefixed)
+						Prefix(p) => (p, Prefix("xmlns"))
+					}
+					$attrs = $attrs.append({ name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix: name_prefix }, value, span })
+				}
+				Err(_) => {}
+			}
+		} else {
+			match start.attributes.get($attribute_index) {
+				Ok(resolved) => {
+					$attribute_index = $attribute_index + 1
+					$attrs = $attrs.append({ name: resolved.name, value: resolved.value, span })
+				}
+				Err(_) => {}
+			}
+		}
+	}
+	$attrs
+}
+
+expect {
+	["<", "</", "</nootg", "</a>", "<a/>", "<!bad>", "<?xml?>", "<a/>tail", "<a/><!--bad", "<a>x<!--bad-- ></a>", "<?xml version='1.0'?><a/>", "\u(FEFF)\r\n<!--p--><a>t<![CDATA[c]]>&amp;</a><?p d?>"].all(
+		|input| Markup.parse_xml(input, {}) == Markup.parse_xml(input, { max_work_per_byte: 15 }),
+	)
+}
+
+expect {
+	input = "<a x='1'><p:q/></a>"
+	Markup.parse_xml(input, { max_nodes: 0 }) == Markup.parse_xml(input, { max_nodes: 0, max_work_per_byte: 15 }) and Markup.parse_xml_fragment(input, "", { max_attributes: 0 }) == Markup.parse_xml_fragment(input, "", { max_attributes: 0, max_work_per_byte: 15 })
+}
+
+expect {
+	["", "a", "ab", "&", "<", "</", " ", "\r\n", "é", "<!--c--><x xmlns:p='urn:p' a='1' p:b='2'><![CDATA[&amp;]]></x>"].all(
+		|input| Markup.parse_xml_fragment(input, "urn:context", {}) == Markup.parse_xml_fragment(input, "urn:context", { max_work_per_byte: 15 }),
+	)
 }

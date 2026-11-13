@@ -274,6 +274,58 @@ XmlNs := {
 		}
 	}
 
+	## Authored events with expanded names and the original attribute ranges.
+	## Raw attributes include namespace declarations in their authored order.
+	SourceEvent : [
+		Start({ name : Name, bindings : List(Binding), attributes : List(Attribute), raw_attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), span : Xml.SourceSpan, empty : Bool }),
+		End(Xml.SourceSpan),
+		Text({ value : Str, span : Xml.SourceSpan }),
+		CData({ value : Str, span : Xml.SourceSpan }),
+		Comment({ value : Str, span : Xml.SourceSpan }),
+		ProcessingInstruction({ target : Str, data : Str, span : Xml.SourceSpan }),
+		Declaration(Xml.SourceSpan),
+		Gap(Xml.SourceSpan),
+	]
+
+	## Fold validated lexical source events while resolving namespace scope.
+	fold_source : Str, Xml.ReaderProps, state, (state, SourceEvent -> state) -> Try(state, ReadError)
+	fold_source = |input, props, initial, on_event| {
+		namespaced = { max_depth: props.max_depth, max_elements: props.max_elements, max_attributes: props.max_attributes, namespaces: True }
+		folded = Xml.fold_source(
+			input,
+			namespaced,
+			{ bound: { entries: [], active: Dict.empty() }, marks: [], value: initial },
+			|state, event| {
+				match event {
+					Start(tag) => {
+						mark = state.bound.entries.len()
+						resolved = resolve_source_start(state.bound, tag.name, tag.attributes)?
+						value = on_event(state.value, Start({ name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes, raw_attributes: tag.attributes, attribute_spans: tag.attribute_spans, span: tag.span, empty: tag.empty }))
+						bound = if (tag.empty and resolved.bound.entries.len() > mark) unbind_to(resolved.bound, mark) else resolved.bound
+						marks = if (tag.empty) state.marks else state.marks.append(mark)
+						Ok({ bound, marks, value })
+					}
+					End(span) => {
+						mark = state.marks.last() ?? 0
+						bound = if (state.bound.entries.len() > mark) unbind_to(state.bound, mark) else state.bound
+						Ok({ bound, marks: state.marks.drop_last(1), value: on_event(state.value, End(span)) })
+					}
+					Text(text) => Ok({ ..state, value: on_event(state.value, Text(text)) })
+					CData(text) => Ok({ ..state, value: on_event(state.value, CData(text)) })
+					Comment(comment) => Ok({ ..state, value: on_event(state.value, Comment(comment)) })
+					ProcessingInstruction(pi) => Ok({ ..state, value: on_event(state.value, ProcessingInstruction(pi)) })
+					Declaration(span) => Ok({ ..state, value: on_event(state.value, Declaration(span)) })
+					Gap(span) => Ok({ ..state, value: on_event(state.value, Gap(span)) })
+				}
+			},
+		)
+		match folded {
+			Folded(state) => Ok(state.value)
+			Failed(error) => Err(widen(error))
+			Rejected(problem, at) => Err(InvalidNamespace({ problem, line: at.line, column: at.column }))
+		}
+	}
+
 	## Parse one complete namespaced document within the limits of `props`.
 	##
 	## ```roc
@@ -1664,3 +1716,14 @@ expect {
 	}
 }
 expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
+
+resolve_source_start : Bound, Str, List(Xml.Attribute) -> Try({ bound : Bound, name : XmlNs.Name, bindings : List(XmlNs.Binding), attributes : List(XmlNs.Attribute) }, XmlNs.Problem)
+resolve_source_start = |bound, written, attributes| {
+	if has_declaration(attributes) {
+		resolved = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, written, attributes)?
+		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active }, name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes })
+	} else {
+		resolved = resolve_names(bound.entries, bound.active, written, attributes, False).map_err(problem_of_names)?
+		Ok({ bound, name: resolved.name, bindings: [], attributes: resolved.attributes })
+	}
+}
