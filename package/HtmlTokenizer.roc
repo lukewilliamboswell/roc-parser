@@ -14,11 +14,36 @@ HtmlTokenizer :: [].{
 	Mode : [Data, Rcdata(Str), Rawtext(Str), Script, RcdataFragment, RawtextFragment, ScriptFragment, Plaintext]
 	Reader : { bytes : List(U8), pos : U64, diagnostics : List(Diagnostic) }
 
+	## Read one token. Low-level callers choose allocation ceilings with next_with.
 	next : Reader, Mode, Bool -> { token : Token, reader : Reader }
 	next = |reader, mode, foreign| {
+		result = next_with(reader, mode, foreign, { max_diagnostics: 18_446_744_073_709_551_615, max_attributes: 18_446_744_073_709_551_615 })
+		{ token: result.token, reader: result.reader }
+	}
+
+	## Tokenizer ceilings. One excess attribute/diagnostic is retained as a
+	## witness so the document reader can reject the exceeded resource limit.
+	Limits := { max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024 }
+
+	## Bound allocation while reading a token, before building a giant tag or
+	## diagnostic list. Diagnostic exhaustion emits Eof with an excess witness;
+	## attribute exhaustion emits a partial start tag with max_attributes+1 attrs.
+	next_with : Reader, Mode, Bool, Limits -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics] }
+	next_with = |reader, mode, foreign, limits| {
+		result = scan_next({ bytes: reader.bytes, pos: reader.pos, diagnostics: reader.diagnostics, max_diagnostics: limits.max_diagnostics, max_attributes: limits.max_attributes, attribute_limit: False }, mode, foreign)
+		token = if result.reader.diagnostics.len() > limits.max_diagnostics {
+			{ ..result.token, kind: Eof }
+		} else result.token
+		limited = if (result.reader.diagnostics.len() > limits.max_diagnostics) Diagnostics else if (result.reader.attribute_limit) Attributes else NoLimit
+		diagnostics = result.reader.diagnostics.take_first(if (limits.max_diagnostics < 18_446_744_073_709_551_615) limits.max_diagnostics + 1 else limits.max_diagnostics)
+		{ token, reader: { bytes: result.reader.bytes, pos: result.reader.pos, diagnostics }, limited }
+	}
+
+	scan_next : ScanReader, Mode, Bool -> { token : Token, reader : ScanReader }
+	scan_next = |reader, mode, foreign| {
 		bytes = reader.bytes
 		start = reader.pos
-		if start >= bytes.len() {
+		if start >= bytes.len() or reader.diagnostics.len() > reader.max_diagnostics {
 			return { token: { kind: Eof, span: { start, end: start } }, reader }
 		}
 		match mode {
@@ -57,9 +82,9 @@ HtmlTokenizer :: [].{
 			while $end < bytes.len() and !starts(bytes, $end, "]]>") {
 				$end = $end + 1
 			}
-			text = normalized_with_nulls(bytes.sublist({ start: start + 9, len: $end - start - 9 }), False, False, False)
+			text = preprocessed_text(bytes.sublist({ start: start + 9, len: $end - start - 9 }))
 			end = if ($end < bytes.len()) $end + 3 else $end
-			return { token: { kind: Characters(text.text), span: { start, end } }, reader: { ..reader, pos: end } }
+			return { token: { kind: Characters(text), span: { start, end } }, reader: { ..reader, pos: end } }
 		}
 		if starts(bytes, start, "<?") {
 			return processing_instruction(reader)
@@ -86,13 +111,16 @@ HtmlTokenizer :: [].{
 		while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['/', '>'].contains(byte_at(bytes, $pos)) {
 			$pos = $pos + 1
 		}
-		normalized_name = normalized(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False)
+		normalized_name = normalized_limited(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False, True, diagnostic_budget(reader))
 		name = lower(normalized_name.text)
 		var $attributes = []
 		var $diagnostics = reader.diagnostics.concat(normalized_name.diagnostics.map(|d| { ..d, offset: name_start + d.offset }))
 		var $self_closing = False
 		var $done = False
 		while $pos < bytes.len() and !$done {
+			if $diagnostics.len() > reader.max_diagnostics {
+				return exhausted(reader, $pos, $diagnostics)
+			}
 			before = $pos
 			while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
 				$pos = $pos + 1
@@ -122,6 +150,9 @@ HtmlTokenizer :: [].{
 					$pos = $pos + 1
 				}
 				while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['=', '/', '>'].contains(byte_at(bytes, $pos)) {
+					if $diagnostics.len() > reader.max_diagnostics {
+						return exhausted(reader, $pos, $diagnostics)
+					}
 					if ['"', '\'', '<'].contains(byte_at(bytes, $pos)) {
 						$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					}
@@ -130,7 +161,7 @@ HtmlTokenizer :: [].{
 				if $pos == attr_start {
 					$pos = $pos + 1
 				}
-				normalized_attr = normalized(bytes.sublist({ start: attr_start, len: $pos - attr_start }), False, False)
+				normalized_attr = normalized_limited(bytes.sublist({ start: attr_start, len: $pos - attr_start }), False, False, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
 				attr_name = lower(normalized_attr.text)
 				$diagnostics = $diagnostics.concat(normalized_attr.diagnostics.map(|d| { ..d, offset: attr_start + d.offset }))
 				after_name = $pos
@@ -155,7 +186,7 @@ HtmlTokenizer :: [].{
 						}
 						$pos = $pos + 1
 					}
-					decoded = normalized(bytes.sublist({ start: value_start, len: $pos - value_start }), True, True)
+					decoded = normalized_limited(bytes.sublist({ start: value_start, len: $pos - value_start }), True, True, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
 					$value = decoded.text
 					$diagnostics = $diagnostics.concat(decoded.diagnostics.map(|d| { ..d, offset: value_start + d.offset }))
 					if quoted and $pos < bytes.len() {
@@ -180,6 +211,9 @@ HtmlTokenizer :: [].{
 				}
 				else {
 					$attributes = $attributes.append({ name: attr_name, value: $value, span: { start: attr_start, end: $pos } })
+					if $attributes.len() > reader.max_attributes {
+						return { token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: False }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics, attribute_limit: True } }
+					}
 				}
 			}
 		}
@@ -249,11 +283,17 @@ HtmlTokenizer :: [].{
 	normalized = |bytes, references, attribute| normalized_with_nulls(bytes, references, attribute, True)
 
 	normalized_with_nulls : List(U8), Bool, Bool, Bool -> { text : Str, diagnostics : List(Diagnostic) }
-	normalized_with_nulls = |bytes, references, attribute, replace_nulls| {
+	normalized_with_nulls = |bytes, references, attribute, replace_nulls| normalized_limited(bytes, references, attribute, replace_nulls, 18_446_744_073_709_551_615)
+
+	normalized_limited : List(U8), Bool, Bool, Bool, U64 -> { text : Str, diagnostics : List(Diagnostic) }
+	normalized_limited = |bytes, references, attribute, replace_nulls, limit| {
 		var $out = []
 		var $diagnostics = []
 		var $pos = 0
 		while $pos < bytes.len() {
+			if $diagnostics.len() > limit {
+				break
+			}
 			c = byte_at(bytes, $pos)
 			if c == '\r' {
 				$out = $out.append('\n')
@@ -272,12 +312,12 @@ HtmlTokenizer :: [].{
 				$pos = $pos + 1
 			}
 		}
-		{ text: Str.from_utf8_lossy($out), diagnostics: $diagnostics }
+		{ text: Str.from_utf8_lossy($out), diagnostics: $diagnostics.take_first(if (limit < 18_446_744_073_709_551_615) limit + 1 else limit) }
 	}
 }
 
 characters = |reader, end, references, data| {
-	decoded = HtmlTokenizer.normalized_with_nulls(reader.bytes.sublist({ start: reader.pos, len: end - reader.pos }), references, False, !data)
+	decoded = HtmlTokenizer.normalized_limited(reader.bytes.sublist({ start: reader.pos, len: end - reader.pos }), references, False, !data, diagnostic_budget(reader))
 	{ token: { kind: Characters(decoded.text), span: { start: reader.pos, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.concat(decoded.diagnostics.map(|d| { ..d, offset: reader.pos + d.offset })) } }
 }
 
@@ -464,6 +504,9 @@ comment = |reader| {
 	var $diagnostics = reader.diagnostics
 	var $done = False
 	while !$done {
+		if $diagnostics.len() > reader.max_diagnostics {
+			return exhausted(reader, $pos, $diagnostics)
+		}
 		if $pos >= bytes.len() {
 			$diagnostics = $diagnostics.append({ code: EofInComment, offset: $pos })
 			break
@@ -606,7 +649,7 @@ bogus_comment = |reader, content_start, code, offset| {
 	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != '>' {
 		$end = $end + 1
 	}
-	decoded = HtmlTokenizer.normalized(bytes.sublist({ start: content_start, len: $end - content_start }), False, False)
+	decoded = HtmlTokenizer.normalized_limited(bytes.sublist({ start: content_start, len: $end - content_start }), False, False, True, diagnostic_budget(reader))
 	end = if ($end < bytes.len()) $end + 1 else $end
 	{ token: { kind: Comment(decoded.text), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code, offset }).concat(decoded.diagnostics.map(|d| { ..d, offset: content_start + d.offset })) } }
 }
@@ -629,6 +672,9 @@ doctype = |reader| {
 		$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
 	}
 	while !$done {
+		if $diagnostics.len() > reader.max_diagnostics {
+			return exhausted(reader, $pos, $diagnostics)
+		}
 		if $pos >= bytes.len() {
 			if $state != Bogus {
 				$diagnostics = $diagnostics.append({ code: EofInDoctype, offset: $pos })
@@ -962,20 +1008,11 @@ processing_instruction = |reader| {
 	data_end = if ($pos > data_start and HtmlTokenizer.byte_at(bytes, $pos - 1) == '?') $pos - 1 else $pos
 	# Input preprocessing normalizes newlines. PI data has no reference or
 	# null-replacement state: all other input characters are appended verbatim.
-	data = HtmlTokenizer.normalized_with_nulls(bytes.sublist({ start: data_start, len: data_end - data_start }), False, False, False)
-	{ token: { kind: ProcessingInstruction({ target, data: data.text }), span: { start, end: $pos + 1 } }, reader: { ..reader, pos: $pos + 1, diagnostics: $diagnostics } }
+	data = preprocessed_text(bytes.sublist({ start: data_start, len: data_end - data_start }))
+	{ token: { kind: ProcessingInstruction({ target, data }), span: { start, end: $pos + 1 } }, reader: { ..reader, pos: $pos + 1, diagnostics: $diagnostics } }
 }
 
-pi_bogus = |reader, code, offset| {
-	bytes = reader.bytes
-	start = reader.pos
-	var $end = start + 2
-	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != '>' {
-		$end = $end + 1
-	}
-	decoded = HtmlTokenizer.normalized(bytes.sublist({ start: start + 1, len: $end - start - 1 }), False, False)
-	{ token: { kind: Comment(decoded.text), span: { start, end: if ($end < bytes.len()) $end + 1 else $end } }, reader: { ..reader, pos: if ($end < bytes.len()) $end + 1 else $end, diagnostics: reader.diagnostics.append({ code, offset }).concat(decoded.diagnostics.map(|d| { ..d, offset: start + 1 + d.offset })) } }
-}
+pi_bogus = |reader, code, offset| bogus_comment(reader, reader.pos + 1, code, offset)
 
 # Processing-instruction targets and data use the current HTML grammar,
 # including invalid-target bogus comments and EOF without an emitted PI.
@@ -1021,6 +1058,9 @@ data_characters = |reader| {
 	var $diagnostics = reader.diagnostics
 	var $class = Unset
 	while $pos < bytes.len() and HtmlTokenizer.byte_at(bytes, $pos) != '<' {
+		if $diagnostics.len() > reader.max_diagnostics {
+			return exhausted(reader, $pos, $diagnostics)
+		}
 		unit = data_unit(bytes, $pos)
 		next_class = if (unit.bytes == [0]) Null else if (unit.bytes.all(HtmlTokenizer.space)) Whitespace else Other
 		if $class != Unset and $class != next_class {
@@ -1184,3 +1224,68 @@ expect HtmlTokenizer.next({ bytes: "foo</textarea><b>&amp;".to_utf8(), pos: 0, d
 expect HtmlTokenizer.next({ bytes: "foo</style><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RawtextFragment, False).token.kind == Characters("foo</style><b>&amp;")
 expect HtmlTokenizer.next({ bytes: "<!-- inside </script> -->".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("<!-- inside </script> -->")
 expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("</script><b>&amp;")
+
+ScanReader : { bytes : List(U8), pos : U64, diagnostics : List(HtmlTokenizer.Diagnostic), max_diagnostics : U64, max_attributes : U64, attribute_limit : Bool }
+
+remaining_diagnostics : U64, U64 -> U64
+remaining_diagnostics = |limit, count| if (count < limit) limit - count else 0
+
+diagnostic_budget : ScanReader -> U64
+diagnostic_budget = |reader| remaining_diagnostics(reader.max_diagnostics, reader.diagnostics.len())
+
+exhausted : ScanReader, U64, List(HtmlTokenizer.Diagnostic) -> { token : HtmlTokenizer.Token, reader : ScanReader }
+exhausted = |reader, end, diagnostics| { token: { kind: Eof, span: { start: reader.pos, end } }, reader: { ..reader, pos: end, diagnostics } }
+
+# Newline preprocessing without diagnosing/replacing literal nulls. These
+# characters belong to PI data or CDATA, whose tree-construction context
+# determines their treatment rather than a character-reference state.
+preprocessed_text : List(U8) -> Str
+preprocessed_text = |bytes| {
+	var $out = []
+	var $pos = 0
+	while $pos < bytes.len() {
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		if byte == '\r' {
+			$out = $out.append('\n')
+			$pos = $pos + if (HtmlTokenizer.byte_at(bytes, $pos + 1) == '\n') 2 else 1
+		} else {
+			$out = $out.append(byte)
+			$pos = $pos + 1
+		}
+	}
+	Str.from_utf8_lossy($out)
+}
+
+expect {
+	input = "<a a=1 b=2 c=3>"
+	result = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_attributes: 0 })
+	result.limited == Attributes and result.reader.pos < input.count_utf8_bytes() and (
+		match result.token.kind {
+			Start(tag) => tag.attributes.len() == 1
+			_ => False
+		}
+	)
+}
+expect {
+	result = HtmlTokenizer.next_with({ bytes: "</a a=1 b=2>".to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_attributes: 0 })
+	result.limited == Attributes
+}
+expect {
+	input = "<!--${Str.repeat("\u(0)", 4096)}-->"
+	result = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_diagnostics: 0 })
+	result.limited == Diagnostics and result.reader.diagnostics.len() == 1 and result.reader.pos < input.count_utf8_bytes() and result.token.kind == Eof
+}
+expect {
+	input = "<a x='${Str.repeat("&#0;", 4096)}'>"
+	result = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_diagnostics: 0 })
+	result.limited == Diagnostics and result.reader.diagnostics.len() == 1
+}
+expect {
+	input = "<a ${Str.repeat("\"", 4096)}>"
+	result = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_diagnostics: 0 })
+	result.limited == Diagnostics and result.reader.diagnostics.len() == 1 and result.reader.pos < input.count_utf8_bytes()
+}
+expect {
+	result = HtmlTokenizer.next_with({ bytes: "<a x=1 y=2>".to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_attributes: 2, max_diagnostics: 0 })
+	result.limited == NoLimit and result.reader.diagnostics.is_empty()
+}
