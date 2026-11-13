@@ -4,8 +4,9 @@
 Use the https://github.com/lukewilliamboswell/roc-parser/releases[published release records] for package URLs, compiler requirements and upgrade instructions.
 Choose a final release for normal use; preview releases may change their APIs.
 
-Read the {src}/docs/releases/6.0.0-rc.1.adoc[6.0.0-rc.1 notes] to preview the XML
-reader, limits and namespaces, and the AsciiDoc output changes.
+Read the {src}/docs/releases/6.0.0.adoc[6.0.0 upgrade notes] for HTML, SVG and
+MathML parsing, typed markup templates, XML readers and namespaces, AsciiDoc
+output changes, and current compiler requirements.
 
 Read the {src}/docs/releases/5.0.0.adoc[5.0.0 upgrade notes] for current Roc
 compiler and application-platform requirements.
@@ -17,8 +18,3 @@ limits, writer error handling and Roc syntax span changes.
 
 A release marked prerelease is a preview. Read that release's notes and keep its
 package and examples together when testing it.
-
-== Source checkout
-
-See {src}/docs/releases/unreleased.adoc[unreleased source changes] for additions
-and compiler compatibility changes in the current checkout.
