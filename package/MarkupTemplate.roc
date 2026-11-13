@@ -123,7 +123,7 @@ classify_holes = |source, holes, syntax| {
 					if name == $raw {
 						$raw = ""
 					}
-				} else if bytes.get(bytes.len() - 2) != Ok('/') and ["script", "style", "xmp", "iframe", "noembed", "noframes", "plaintext"].contains(name) {
+				} else if bytes.get(bytes.len() - 2) != Ok('/') and ["script", "style", "noscript", "xmp", "iframe", "noembed", "noframes", "plaintext"].contains(name) {
 					$raw = name
 				}
 			}

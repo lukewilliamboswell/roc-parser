@@ -169,3 +169,9 @@ fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
 }
 expect MathML.parse_with("<math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>", { syntax: HtmlSyntax }).is_ok()
 expect MathML.parse_fragment("<mtext><span>HTML</span></mtext>", { syntax: HtmlSyntax }).is_ok()
+
+expect MathML.parse_fragment("<mmultiscripts/>", {}).is_err()
+expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mi>i</mi></mmultiscripts>", {}).is_err()
+expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mi>i</mi><mn>2</mn><mprescripts/><mi>j</mi><mn>3</mn></mmultiscripts>", {}).is_ok()
+expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mprescripts/><mi>i</mi></mmultiscripts>", {}).is_err()
+expect MathML.parse_fragment("<mfrac linethickness='-2px'><mn>1</mn><mn>2</mn></mfrac>", {}).is_err()

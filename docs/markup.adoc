@@ -74,9 +74,14 @@ and retains the parsed plan and the values separately.
 
 Holes may occupy character data or an entire quoted attribute value. A hole
 cannot change an element name, attribute name, namespace declaration, markup
-delimiter, comment, or script/style body. It cannot split a character reference
+delimiter, comment, or raw-text body (including script, style and noscript). It cannot split a character reference
 or occupy only part of a fixed attribute value. Namespace-switching attributes
 such as MathML `annotation-xml`'s `encoding` must remain fixed.
+
+A template's original input is its `List(Str)` of fixed segments. The plan retains
+those boundaries; its `parsed.source` contains the concatenated fixed text.
+The Roc expressions between segments belong to the compiler, not the markup
+source representation.
 
 The plan's `slots` identify text nodes or attribute positions by index and
 contain a typed `expected` grammar. Fixed values are validated during parsing;

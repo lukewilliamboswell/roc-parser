@@ -56,7 +56,7 @@ MarkupValidate :: [].{
 								}
 								if props.check_values and allowed and !hole_positions.contains((item.index, $attr_index)) {
 									grammar = value_grammar(svg, name.local, attr.name.local)
-									if !valid_value(attr.value, grammar) {
+									if !valid_value(attr.value, grammar) and !(svg and (svg_presentation.contains(attr.name.local) or ["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"].contains(attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
 										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: grammar }))
 									}
 								}
@@ -203,11 +203,26 @@ value_grammar = |svg, element, attr| {
 			"transform" | "gradientTransform" | "patternTransform" => TransformList
 			"preserveAspectRatio" => AspectRatio
 			"pathLength" => NonnegativeNumber
+			"stroke-dasharray" => Language("dasharray")
+			"stroke-miterlimit" => Language("miterlimit")
+			"fill" if ["animate", "set", "animateTransform", "animateMotion"].contains(element) => Keyword(["remove", "freeze"])
+			"stdDeviation" | "baseFrequency" | "radius" => Language("nonnegative-number-pair")
+			"numOctaves" | "targetX" | "targetY" => Language("nonnegative-integer")
+			"seed" | "scale" | "bias" | "divisor" | "surfaceScale" | "diffuseConstant" | "specularConstant" | "specularExponent" | "limitingConeAngle" | "azimuth" | "elevation" | "k1" | "k2" | "k3" | "k4" | "amplitude" | "exponent" | "intercept" | "slope" => Number
+			"operator" if element == "feComposite" => Keyword(["over", "in", "out", "atop", "xor", "arithmetic", "lighter"])
+			"operator" if element == "feMorphology" => Keyword(["erode", "dilate"])
+			"edgeMode" => Keyword(["duplicate", "wrap", "none"])
+			"preserveAlpha" => Keyword(["true", "false"])
+			"xChannelSelector" | "yChannelSelector" => Keyword(["R", "G", "B", "A"])
+			"type" if element == "feColorMatrix" => Keyword(["matrix", "saturate", "hueRotate", "luminanceToAlpha"])
+			"type" if element == "feTurbulence" => Keyword(["fractalNoise", "turbulence"])
+			"type" if ["feFuncA", "feFuncR", "feFuncG", "feFuncB"].contains(element) => Keyword(["identity", "table", "discrete", "linear", "gamma"])
+			"stitchTiles" => Keyword(["stitch", "noStitch"])
 			"points" => Language("coordinate-pairs")
 			"x" | "y" | "dx" | "dy" if ["text", "tspan"].contains(element) => LengthList
 			"width" | "height" => Language("auto-or-nonnegative-length")
-			"r" | "rx" | "ry" | "markerWidth" | "markerHeight" => NonnegativeLength
-			"x" | "y" | "cx" | "cy" | "x1" | "x2" | "y1" | "y2" | "fx" | "fy" | "fr" | "dx" | "dy" | "textLength" | "stroke-width" | "stroke-dashoffset" => Length
+			"r" | "rx" | "ry" | "markerWidth" | "markerHeight" | "stroke-width" => NonnegativeLength
+			"x" | "y" | "cx" | "cy" | "x1" | "x2" | "y1" | "y2" | "fx" | "fy" | "fr" | "dx" | "dy" | "textLength" | "stroke-dashoffset" => Length
 			"opacity" | "fill-opacity" | "stroke-opacity" | "stop-opacity" | "offset" => Language("number-or-percentage")
 			"rotate" if ["text", "tspan"].contains(element) => Language("number-list")
 			"gradientUnits" | "patternUnits" | "patternContentUnits" | "maskUnits" | "maskContentUnits" | "clipPathUnits" | "filterUnits" | "primitiveUnits" => Keyword(["userSpaceOnUse", "objectBoundingBox"])
@@ -228,7 +243,10 @@ value_grammar = |svg, element, attr| {
 			"form" => Keyword(["prefix", "infix", "postfix"])
 			"mathvariant" => Keyword(["normal", "bold", "italic", "bold-italic", "double-struck", "bold-fraktur", "script", "bold-script", "fraktur", "sans-serif", "bold-sans-serif", "sans-serif-italic", "sans-serif-bold-italic", "monospace", "initial", "tailed", "looped", "stretched"])
 			"columnspan" | "rowspan" | "selection" => Language("positive-integer")
-			"mathsize" | "width" | "height" | "depth" | "lspace" | "rspace" | "voffset" | "linethickness" | "subscriptshift" | "superscriptshift" => Language("math-length")
+			"scriptlevel" => Language("integer")
+			"linethickness" => Language("nonnegative-math-length")
+			"minsize" | "maxsize" => Language("math-length")
+			"mathsize" | "width" | "height" | "depth" | "lspace" | "rspace" | "voffset" | "subscriptshift" | "superscriptshift" => Language("math-length")
 			_ => Language("opaque")
 		}
 	}
@@ -243,7 +261,7 @@ valid_value = |text, grammar| {
 		NonnegativeLength => MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		NumberList(count) => MarkupValues.numbers(text).map_ok(|values| values.len() == count and (count != 4 or ((values.get(2) ?? -1) >= 0 and (values.get(3) ?? -1) >= 0))) == Ok(True)
 		LengthList => !text.trim().is_empty() and words_of(text).all(|v| MarkupValues.length(v).is_ok())
-		PathData => SvgPath.parse_str(text).is_ok()
+		PathData => text == "none" or SvgPath.parse_str(text).is_ok()
 		Paint => valid_paint(text)
 		Color => valid_color(text)
 		TransformList => text == "none" or MarkupValues.transforms(text).is_ok()
@@ -254,6 +272,12 @@ valid_value = |text, grammar| {
 			parts.len() >= 1 and parts.len() <= 2 and ["none", "xMinYMin", "xMidYMin", "xMaxYMin", "xMinYMid", "xMidYMid", "xMaxYMid", "xMinYMax", "xMidYMax", "xMaxYMax"].contains(align) and (parts.len() == 1 or [Ok("meet"), Ok("slice")].contains(parts.get(1)))
 		}
 		Language("auto-or-nonnegative-length") => text == "auto" or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
+		Language("integer") => I64.from_str(text).is_ok()
+		Language("nonnegative-integer") => U64.from_str(text).is_ok()
+		Language("nonnegative-number-pair") => MarkupValues.numbers(text).map_ok(|v| v.len() >= 1 and v.len() <= 2 and v.all(|n| n >= 0)) == Ok(True)
+		Language("miterlimit") => MarkupValues.scalar(text).map_ok(|v| v >= 1) == Ok(True)
+		Language("dasharray") => text == "none" or (!words_of(text).is_empty() and words_of(text).all(|v| MarkupValues.length(v).map_ok(|n| n.value >= 0) == Ok(True)))
+		Language("nonnegative-math-length") => ["thin", "medium", "thick"].contains(text) or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		Language("positive-integer") => U64.from_str(text).map_ok(|v| v > 0) == Ok(True)
 		Language("coordinate-pairs") => MarkupValues.numbers(text).map_ok(|v| v.len() % 2 == 0) == Ok(True)
 		Language("number-list") => MarkupValues.numbers(text).is_ok()
@@ -285,6 +309,32 @@ check_math_children = |parsed, node, name| {
 	}
 	if count != expected {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "${expected.to_str()} child elements" }))
+	}
+	if name == "mmultiscripts" {
+		if count == 0 or $elements.first() == Ok("mprescripts") {
+			return fail(parsed, node, InvalidChildren({ element: name, expected: "base followed by script pairs" }))
+		}
+		var $post = 0
+		var $pre = 0
+		var $prescripts = False
+		for child in $elements.drop_first(1) {
+			if child == "mprescripts" {
+				if $prescripts or $post % 2 != 0 {
+					return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts and at most one mprescripts" }))
+				}
+				$prescripts = True
+			} else if $prescripts {
+				$pre = $pre + 1
+			} else {
+				$post = $post + 1
+			}
+		}
+		if $post % 2 != 0 or $pre % 2 != 0 {
+			return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts" }))
+		}
+	}
+	if name == "semantics" and (count == 0 or !$elements.drop_first(1).all(|e| ["annotation", "annotation-xml"].contains(e))) {
+		return fail(parsed, node, InvalidChildren({ element: name, expected: "one expression followed by annotations" }))
 	}
 	if name == "mtable" and !$elements.all(|e| ["mtr", "mlabeledtr"].contains(e)) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtr or mlabeledtr" }))
@@ -391,3 +441,6 @@ valid_color = |text| {
 color_names = "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split_on(" ")
 
 aria_attributes = "aria-activedescendant aria-atomic aria-autocomplete aria-braillelabel aria-brailleroledescription aria-busy aria-checked aria-colcount aria-colindex aria-colindextext aria-colspan aria-controls aria-current aria-describedby aria-description aria-details aria-disabled aria-dropeffect aria-errormessage aria-expanded aria-flowto aria-grabbed aria-haspopup aria-hidden aria-invalid aria-keyshortcuts aria-label aria-labelledby aria-level aria-live aria-modal aria-multiline aria-multiselectable aria-orientation aria-owns aria-placeholder aria-posinset aria-pressed aria-readonly aria-relevant aria-required aria-roledescription aria-rowcount aria-rowindex aria-rowindextext aria-rowspan aria-selected aria-setsize aria-sort aria-valuemax aria-valuemin aria-valuenow aria-valuetext".split_on(" ")
+
+ascii_lower : Str -> Str
+ascii_lower = |text| Str.from_utf8_lossy(text.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
