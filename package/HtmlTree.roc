@@ -421,10 +421,12 @@ finish_node = |s, id| {
 		|node| {
 			match node.origin {
 				Authored(span) => {
-					explicit = match node.kind {
-						Element(name) => Tok.lower(name.local) == token_name and token_name != ""
-						_ => False
-					}
+					explicit = token_name != "" and (
+						match node.kind {
+							Element(name) => name.local == token_name or Tok.lower(name.local) == token_name
+							_ => False
+						}
+					)
 					end = if (explicit) token_span.end else token_span.start
 					{ ..node, origin: Authored({ start: span.start, end: if (end > span.end) end else span.end }) }
 				}
@@ -669,12 +671,13 @@ process = |initial_state, token, scripting| {
 	}
 	# Raw text is a tokenizer mode and a tree-construction text mode. The
 	# surrounding insertion mode (table/head/body) resumes after its end tag.
-	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and (
-		match content_mode(state) {
-			Data | DataMixed => False
-			_ => True
+	if !state.plaintext and (
+		match current(state) {
+			"title" | "textarea" | "script" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "plaintext" => True
+			"noscript" => state.context.scripting
+			_ => False
 		}
-	) and !state.plaintext and current(state) != "html" {
+	) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace {
 		match token.kind {
 			Characters(text) => return insert_text(state, text, token.span)
 			End(name) if name == current(state) => return pop_current(state)
