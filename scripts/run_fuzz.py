@@ -22,10 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FUZZ_ROOT = ROOT / "fuzz"
 WORK_ROOT = ROOT / ".roc-parser-tmp" / "fuzz"
 ROC_FUZZ_RELEASE = {
-    "version": "0.5.0",
-    "commit": "d8228759b21fef688ecda2fac5d584a12f314e35",
-    "bundle": "9WT86CuwM7ZJBSs8iTd1jLyrUFTTiGp5hcJE63TwswGE.tar.zst",
-    "sha256": "aed4032105af1cc910604949f43636b7bff6aec4a82184631213153b8e2dd23f",
+    "version": "0.6.1",
+    "commit": "583761e2c79231db0d8d486b686c2237b76fc115",
+    "bundle": "GDoZFRDnzMRiVk9nE8wdWn52btGsM1GhcY9VDKqy9f1Y.tar.zst",
+    "sha256": "123e163a5cf3f88c710a919d34f0180a2f22f3ee1c42f3033afab79ea2cf8d5a",
 }
 
 # How reviewed JSON seeds become corpus entries:

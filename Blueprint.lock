@@ -35,19 +35,19 @@
 		(name "blueprint-sbom")
 		(obtained Both)
 		(served ("release-assets.githubusercontent.com"))
-		(sha256 "2feb407a6c5bd0663d49644b9044db6632a85b5a2146064949bcb71e93eab0e1")
-		(size 8796056)
+		(sha256 "c0ef757e3f4c6260939c5cc56a2e8b602b68256dcfb76e36d3c722f3f9e7b213")
+		(size 9299128)
 		(system "x86_64-linux")
-		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.12.0/blueprint-sbom-x86_64-linux"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.12.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/blueprint-sbom-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.13.0")) (
 		(name "blueprint-sbom")
 		(obtained Published)
 		(served ())
-		(sha256 "84162351181658047811ba9453b8775ebc42cb1439083d76f984a17954106b76")
-		(size 6869760)
+		(sha256 "00189b0a7f672a9478cc9c711d4ea49594d6a2a93ebb5b622304e32c6d1990d4")
+		(size 7221392)
 		(system "aarch64-darwin")
-		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.12.0/blueprint-sbom-aarch64-darwin"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.12.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/blueprint-sbom-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-blueprint/releases/tags/0.13.0")) (
 		(name "zig")
 		(obtained Computed)
 		(served ("ziglang.org"))
