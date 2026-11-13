@@ -7,11 +7,6 @@
     }
   },
   "failures": {
-    "decl/version-2": {
-      "signature": "a252ab30b4f596df2b9c7973981f1ba071babbeec0b21dbca53f8d7144ef10b7",
-      "kind": "valid_rejection",
-      "reason": "Oracle limitation: expat does not check VersionNum, but XML 1.0 (5th ed.) [26] requires 1.[0-9]+; rejecting 2.0 is correct."
-    },
     "xmlconf/hst-lhs-007": {
       "signature": "5c67d41085bcac3f6f6408e32cc831b84ecc319b750b82e36d8b444d7807d205",
       "kind": "invalid_acceptance",

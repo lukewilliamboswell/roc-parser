@@ -34,6 +34,7 @@
         "scripts/tests/test_review_json.py",
         "scripts/tests/test_review_markup.py",
         "scripts/tests/test_review_roc_syntax.py",
+        "scripts/tests/test_review_xml.py",
         "scripts/tests/test_review_yaml.py",
         "scripts/tests/test_roc_syntax_coverage.py",
         "scripts/tests/test_roc_syntax_model_cases.py",
