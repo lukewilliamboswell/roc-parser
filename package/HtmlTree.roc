@@ -63,6 +63,12 @@ HtmlTree :: [].{
 				Err(Replay) => {}
 			}
 		}
+		if !fragment and context.namespace == Markup.html_namespace {
+			match direct_document(source, context.namespace, props) {
+				Ok(parsed) => return Ok(parsed)
+				Err(Replay) => {}
+			}
+		}
 		parse_general(source, fragment, context, props)
 	}
 
@@ -73,6 +79,12 @@ HtmlTree :: [].{
 	parse_classified = |source, fragment, context, props| {
 		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
 			match direct_fragment(source, context.namespace, props) {
+				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
+				Err(Replay) => {}
+			}
+		}
+		if !fragment and context.namespace == Markup.html_namespace {
+			match direct_document(source, context.namespace, props) {
 				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
 				Err(Replay) => {}
 			}
@@ -437,6 +449,318 @@ direct_formatting_flag = |name| match name {
 	"em" => 8
 	"strong" => 16
 	_ => 0
+}
+
+# Explicit authored documents use the unchanged tokenization and body grammar.
+# Missing wrappers, table repairs, foster text, foreign/template/raw content and
+# every uncertain resource boundary replay the complete general parser.
+direct_document : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
+direct_document = |source, namespace, props| {
+	if source.count_utf8_bytes() > props.max_source_bytes {
+		return Err(Replay)
+	}
+	var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
+	if !$reader.diagnostics.is_empty() {
+		return Err(Replay)
+	}
+	var $nodes = []
+	var $roots = []
+	var $open = []
+	var $regions = []
+	var $elements = 0.U64
+	var $paragraph = False
+	var $heading = False
+	var $formatting = 0.U8
+	var $active = 0.U64
+	var $form = False
+	var $button = False
+	var $phase = DocDoctype
+	var $work = 0.U64
+	limit = work_limit(props.max_work_per_byte, source.count_utf8_bytes())
+	while True {
+		# Explicit transitions never reprocess a token. Ordinary/adoption body
+		# work is bounded as in fragments. A text-only cell has one formatting
+		# Marker; formatting is forbidden across and within tables, so A<=5.
+		active = $active + if $phase == DocCell {
+			1
+		} else 0
+		overhead = 2 * active + 7
+		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - overhead) // 2 {
+			return Err(Replay)
+		}
+		charge = 2 * $open.len() + overhead
+		if $work > limit or charge > limit - $work {
+			return Err(Replay)
+		}
+		$work = $work + charge
+		mode = if $phase == DocTitle {
+			Rcdata("title")
+		} else if $phase == DocBody or $phase == DocCell {
+			DataMixed
+		} else Data
+		next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+			Tok.next_with_source($reader, source, mode, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		} else {
+			Tok.next_with($reader, mode, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		}
+		if next.limited != NoLimit or !next.reader.diagnostics.is_empty() {
+			return Err(Replay)
+		}
+		$reader = next.reader
+		match source_token(next.token, $reader.bytes) {
+			Ok(region) => {
+				$regions = $regions.append(region)
+			}
+			Err(_) => {}
+		}
+		parent = ($open.last() ?? { id: 0.U64, name: "" }).id
+		if $phase == DocBody {
+			match next.token.kind {
+				Start(tag) => {
+					if tag.name == "table" {
+						if tag.self_closing or $paragraph or $active != 0 {
+							return Err(Replay)
+						}
+						id = $nodes.len()
+						$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+						$open = $open.append({ id, name: "table" })
+						$elements = $elements + 1
+						$phase = DocTable
+					} else {
+						class = direct_tag(tag.name)
+						if class == UnsupportedTag or (tag.self_closing and class != VoidTag) {
+							return Err(Replay)
+						}
+						flag = if class == FormattingTag {
+							direct_formatting_flag(tag.name)
+						} else 0
+						if ($paragraph and (class == BlockTag or class == HeadingTag or class == FormTag or class == ListItemTag or tag.name == "hr")) or ($heading and class == HeadingTag) {
+							return Err(Replay)
+						}
+						if U8.bitwise_and($formatting, flag) != 0 or ($form and class == FormTag) or ($button and class == ButtonTag) {
+							return Err(Replay)
+						}
+						# Require explicit list structure, excluding implied li closes.
+						if class == ListItemTag {
+							owner = ($open.last() ?? { id: 0, name: "html" }).name
+							if owner != "ul" and owner != "ol" {
+								return Err(Replay)
+							}
+						}
+						id = $nodes.len()
+						$nodes = direct_append($nodes, parent, { kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }), children: [], origin: Authored(next.token.span) })
+						$elements = $elements + 1
+						if class != VoidTag {
+							$open = $open.append({ id, name: tag.name })
+							if tag.name == "p" {
+								$paragraph = True
+							}
+							if class == HeadingTag {
+								$heading = True
+							}
+							if flag != 0 {
+								$formatting = U8.bitwise_or($formatting, flag)
+								$active = $active + 1
+							}
+							if class == FormTag {
+								$form = True
+							}
+							if class == ButtonTag {
+								$button = True
+							}
+						}
+					}
+				}
+				End(name) => {
+					if name == "body" {
+						if $open.len() != 2 or ($open.last() ?? { id: 0, name: "" }).name != "body" {
+							return Err(Replay)
+						}
+						$phase = DocAfterBody
+					} else {
+						entry = $open.last() ?? { id: 0, name: "html" }
+						if $open.len() <= 2 or entry.name != name {
+							return Err(Replay)
+						}
+						$open = $open.drop_last(1)
+						# Happy adoption and form-pointer closes leave start-only origins.
+						# Every other accepted close mirrors finish_node's explicit end.
+						class = direct_tag(name)
+						flag = if class == FormattingTag {
+							direct_formatting_flag(name)
+						} else 0
+						if flag == 0 and name != "form" {
+							moved = $nodes.replace(entry.id, empty_node) ?? return Err(Replay)
+							origin = match moved.prev.origin {
+								Authored(span) => Authored({ start: span.start, end: next.token.span.end })
+								other => other
+							}
+							$nodes = moved.list.set(entry.id, { ..moved.prev, origin }) ?? return Err(Replay)
+						}
+						if name == "p" {
+							$paragraph = False
+						}
+						if class == HeadingTag {
+							$heading = False
+						}
+						if flag != 0 {
+							$formatting = U8.bitwise_xor($formatting, flag)
+							$active = $active - 1
+						}
+						if name == "form" {
+							$form = False
+						}
+						if name == "button" {
+							$button = False
+						}
+					}
+				}
+				Characters(text) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				_ => return Err(Replay)
+			}
+		} else {
+			match ($phase, next.token.kind) {
+				(DocDoctype, Characters(text)) | (DocHtml, Characters(text)) | (DocHead, Characters(text)) if whitespace(text) => {}
+				(DocDoctype, Doctype(doctype)) if doctype.name == "html" and !doctype.has_public and !doctype.has_system and !doctype.quirks => {
+					id = $nodes.len()
+					$nodes = $nodes.append({ kind: Doctype({ name: doctype.name, public_id: doctype.public_id, system_id: doctype.system_id }), attributes: [], children: [], origin: Authored(next.token.span) })
+					$roots = $roots.append(id)
+					$phase = DocHtml
+				}
+				(DocHtml, Start(tag)) if tag.name == "html" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = $nodes.append(direct_document_element(tag, namespace, next.token.span))
+					$roots = $roots.append(id)
+					$open = $open.append({ id, name: "html" })
+					$elements = $elements + 1
+					$phase = DocHead
+				}
+				(DocHead, Start(tag)) if tag.name == "head" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "head" })
+					$elements = $elements + 1
+					$phase = DocInHead
+				}
+				(DocInHead, Characters(text)) | (DocBodyStart, Characters(text)) if whitespace(text) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocInHead, Start(tag)) if tag.name == "meta" => {
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$elements = $elements + 1
+				}
+				(DocInHead, Start(tag)) if tag.name == "title" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "title" })
+					$elements = $elements + 1
+					$phase = DocTitle
+				}
+				(DocTitle, Characters(text)) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocTitle, End("title")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocInHead
+				}
+				(DocInHead, End("head")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocBodyStart
+				}
+				(DocBodyStart, Start(tag)) if tag.name == "body" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "body" })
+					$elements = $elements + 1
+					$phase = DocBody
+				}
+				(DocTable, Start(tag)) if tag.name == "tbody" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "tbody" })
+					$elements = $elements + 1
+					$phase = DocSection
+				}
+				(DocSection, Start(tag)) if tag.name == "tr" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "tr" })
+					$elements = $elements + 1
+					$phase = DocRow
+				}
+				(DocRow, Start(tag)) if (tag.name == "td" or tag.name == "th") and !tag.self_closing => {
+					id = $nodes.len()
+					$open = $open.append({ id, name: tag.name })
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$elements = $elements + 1
+					$phase = DocCell
+				}
+				(DocCell, Characters(text)) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocCell, End(name)) if name == ($open.last() ?? { id: 0, name: "" }).name => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocRow
+				}
+				(DocRow, End("tr")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocSection
+				}
+				(DocSection, End("tbody")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocTable
+				}
+				(DocTable, End("table")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocBody
+				}
+				(DocAfterBody, End("html")) => {
+					$phase = DocAfterHtml
+				}
+				(DocAfterHtml, Eof) if next.token.span.start == next.token.span.end and $open.len() == 2 => {
+					# General body/html closes retain both wrappers on the stack.
+					# EOF extends BOTH origins through the complete document bytes.
+					for entry in $open {
+						$nodes = direct_document_finish($nodes, entry.id, next.token.span.start)?
+					}
+					if $nodes.len() > props.max_nodes {
+						return Err(Replay)
+					}
+					return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] })
+				}
+				_ => return Err(Replay)
+			}
+		}
+		if $open.len() > props.max_depth or $elements > props.max_elements or $nodes.len() > props.max_nodes {
+			return Err(Replay)
+		}
+	}
+}
+
+direct_document_element : Tok.Tag, Str, Markup.Span -> Markup.Node
+direct_document_element = |tag, namespace, span| {
+	kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }),
+	attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }),
+	children: [],
+	origin: Authored(span),
+}
+
+direct_document_finish : List(Markup.Node), U64, U64 -> Try(List(Markup.Node), [Replay])
+direct_document_finish = |nodes, id, end| {
+	moved = nodes.replace(id, empty_node) ?? return Err(Replay)
+	origin = match moved.prev.origin {
+		Authored(span) => Authored({ start: span.start, end })
+		other => other
+	}
+	Ok(moved.list.set(id, { ..moved.prev, origin }) ?? return Err(Replay))
 }
 
 # Move the parent out before growing its children, just as edit_node does.
@@ -3755,6 +4079,65 @@ expect {
 			props : Markup.Props
 			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
 			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
+		},
+	)
+}
+
+expect {
+	source = "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>A &amp; B</title></head><body><main><h1>Title</h1><p>Words.</p><table><tbody><tr><th>Item</th><th>Count</th></tr><tr><td>Examples</td><td>12</td></tr></tbody></table></main></body></html>"
+	direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }) and HtmlTree.parse_classified(source, False, {}, {}).map_ok(|result| result.domain) == Ok(PureHtmlNoProjection)
+}
+
+# The authored body remains on the general stack through EOF; its origin includes
+# </html>, unlike the explicit origins on head/title/table/cell elements.
+expect {
+	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
+	p = direct_document(source, Markup.html_namespace, {})?
+	element = |name, children, start, end| { kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: name }), attributes: [], children, origin: Authored({ start, end }) }
+	text = |value, start, end| { kind: Text(value), attributes: [], children: [], origin: Authored({ start, end }) }
+	expected : List(Markup.Node)
+	expected = [
+		{ kind: Doctype({ name: "html", public_id: "", system_id: "" }), attributes: [], children: [], origin: Authored({ start: 0, end: 15 }) },
+		element("html", [2, 6], 15, 157),
+		element("head", [3, 5], 21, 78),
+		element("title", [4], 27, 49),
+		text("A&B", 34, 41),
+		{ kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: "meta" }), attributes: [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "charset" }, value: "utf-8", span: { start: 55, end: 70 } }], children: [], origin: Authored({ start: 49, end: 71 }) },
+		element("body", [7], 78, 157),
+		element("table", [8], 84, 143),
+		element("tbody", [9], 91, 135),
+		element("tr", [10, 12], 98, 127),
+		element("th", [11], 102, 112),
+		text("H", 106, 107),
+		element("td", [13], 112, 122),
+		text("X", 116, 117),
+	]
+	p.tree == { roots: [0, 1], nodes: expected } and p.diagnostics == [] and p.source.bytes == source.to_utf8() and p.source.tokens.len() == 23 and p.source.tokens.first().map_ok(|token| token.kind) == Ok(Declaration) and p.source.tokens.fold([], |bytes, token| bytes.concat(p.source.slice(token.span))) == source.to_utf8()
+}
+expect {
+	accepted = ["<!doctype html><html><head></head><body></body></html>", "\r\n<!DOCTYPE HTML>\t<html>\n<head><title>literal <b> &amp; Ω</title><meta name='x' content='y'/></head> \r\n<body><p><b>hi</b></p><form><input></form><table><tbody></tbody></table></body></html>", "<!doctype html><html><head><title></title><title>x</title></head><body><form><table><tbody><tr><td>A &amp; B</td><th>Ω🙂</th></tr></tbody><tbody><tr></tr></tbody></table></form><p>after</p></body></html>"]
+	accepted.all(|source| direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }))
+}
+expect {
+	bodies = ["<table> <tbody></tbody></table>", "<table><tbody>\n<tr><td>x</td></tr></tbody></table>", "<table><tbody><tr> <td>x</td></tr></tbody></table>", "<table><tr><td>x</td></tr></table>", "<table><tbody><td>x</td></tbody></table>", "<table><tbody><tr><td>x</tr></tbody></table>", "<b><table><tbody><tr><td>x</td></tr></tbody></table></b>", "<table><tbody><tr><td><b>x</b></td></tr></tbody></table>", "<table><tbody><tr><td><table></table></td></tr></tbody></table>", "<table><form></form></table>", "<p><table></table></p>", "<script>x()</script>", "<svg><g/></svg>", "<template><p>x</p></template>", "<!--x--><p>x</p>"]
+	bodies.all(
+		|content| {
+			source = "<!doctype html><html><head><title>x</title></head><body>${content}</body></html>"
+			direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True })
+		},
+	)
+}
+expect {
+	sources = ["<html><head></head><body></body></html>", "<!doctype html><html><body></body></html>", "<!doctype html><html><head></head><p>x</p></html>", "<!doctype html><html><head></head><body></html>", "<!doctype html><html><head></head><body></body>", "<!doctype html><html><head></head><body></body> </html>", "<!doctype html><html><head></head><body></body></html>\n", "<!doctype html PUBLIC 'legacy'><html><head></head><body></body></html>", "<!doctype html><html><head><style>x</style></head><body></body></html>", "<!doctype html><html><head><title>x</head><body></body></html>"]
+	sources.all(|source| direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True }))
+}
+expect {
+	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
+	[0.U64, 1, 2, 3, 4, 5, 6, 9, 10, 13, 14, 15, 16, 156, 157, 256, 0xFFFFFFFFFFFFFFFF].all(
+		|limit| {
+			cases : List(Markup.Props)
+			cases = [{ max_depth: limit }, { max_elements: limit }, { max_nodes: limit }, { max_attributes: limit }, { max_work_per_byte: limit }, { max_source_bytes: limit }, { max_diagnostics: limit }]
+			cases.all(|props| HtmlTree.parse(source, False, {}, { ..props, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { ..props, exact_structure: True }))
 		},
 	)
 }
