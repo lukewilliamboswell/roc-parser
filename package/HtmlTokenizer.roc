@@ -1,5 +1,6 @@
 import MarkdownEntities
 import MarkupHtmlError
+import MarkupScan
 
 ## HTML tokenization primitives. Offsets always address the unmodified input.
 ## Tree construction supplies the content model and foreign-content flag.
@@ -73,22 +74,14 @@ HtmlTokenizer :: [].{
 		}
 		if byte_at(bytes, start) != '<' {
 			if mode == DataMixed {
-				var $end = start
-				var $normalize = False
-				while $end < bytes.len() and byte_at(bytes, $end) != '<' {
-					byte = byte_at(bytes, $end)
-					if byte == '&' or byte == '\r' or byte == 0 {
-						$normalize = True
-					}
-					$end = $end + 1
-				}
-				if $normalize {
-					return characters(reader, $end, True, True)
+				scanned = MarkupScan.html_data(bytes, start)
+				if scanned.normalize {
+					return characters(reader, scanned.end, True, True)
 				}
 				# Ordinary text already has its final bytes. Avoid rebuilding it
 				# one byte at a time through the normalization buffer.
-				text = Str.from_utf8_lossy(bytes.sublist({ start, len: $end - start }))
-				return { token: { kind: Characters(text), span: { start, end: $end } }, reader: { ..reader, pos: $end } }
+				text = Str.from_utf8_lossy(bytes.sublist({ start, len: scanned.end - start }))
+				return { token: { kind: Characters(text), span: { start, end: scanned.end } }, reader: { ..reader, pos: scanned.end } }
 			}
 			return data_characters(reader)
 		}
@@ -304,6 +297,10 @@ HtmlTokenizer :: [].{
 		var $diagnostics = []
 		var $pos = 0
 		while $pos < bytes.len() {
+			$pos = MarkupScan.printable_ascii(bytes, $pos)
+			if $pos >= bytes.len() {
+				break
+			}
 			lead = byte_at(bytes, $pos).to_u64()
 			width = if (lead >= 0xF0) 4 else if (lead >= 0xE0) 3 else if (lead >= 0xC0) 2 else 1
 			var $scalar = if (width == 1) lead else if (width == 2) lead % 32 else if (width == 3) lead % 16 else lead % 8
@@ -1334,6 +1331,12 @@ expect HtmlTokenizer.input_diagnostics("\r\n\t\u(C)\u(0)\u(FEFF)".to_utf8()).is_
 
 expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 0).len() == 1
 expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 1).len() == 2
+
+expect {
+	x = Str.join_with(List.repeat("x", 32), "")
+	y = Str.join_with(List.repeat("y", 33), "")
+	HtmlTokenizer.input_diagnostics("${x}\u(85)${y}\u(FDD0)".to_utf8()) == [{ code: ControlCharacterInInputStream, offset: 32 }, { code: NoncharacterInInputStream, offset: 67 }]
+}
 expect token_kind("\u(FEFF)<p>") == Characters("\u(FEFF)")
 
 expect HtmlTokenizer.next({ bytes: "foo</textarea><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RcdataFragment, False).token.kind == Characters("foo</textarea><b>&")
