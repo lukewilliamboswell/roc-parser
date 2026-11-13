@@ -35,6 +35,7 @@ MarkupValidate :: [].{
 							}
 							offset = match node.origin {
 								Authored(span) => span.start
+								Cloned(copy) => copy.source.start
 								Implied(at) => at
 							}
 							at = Markup.position(parsed.source, offset)
@@ -390,6 +391,7 @@ fail : Markup.Parsed, Markup.Node, Markup.Problem -> Try(a, [InvalidMarkup(Marku
 fail = |parsed, node, problem| {
 	offset = match node.origin {
 		Authored(span) => span.start
+		Cloned(copy) => copy.source.start
 		Implied(at) => at
 	}
 	at = Markup.position(parsed.source, offset)
