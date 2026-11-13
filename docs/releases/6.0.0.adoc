@@ -47,6 +47,8 @@ Applications using basic-cli should use 0.28.0.
   element. Excess input fails at the relevant tag or attribute.
 * `XmlNs` namespace-aware parsing and pull reading, plus `XmlNs.render` for
   namespaced trees with preserved or configured prefixes.
+* `Xml.fold_source` and `XmlNs.fold_source` for validated source events with
+  lexical and attribute ranges, including comments, CDATA and declarations.
 
 See the https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0/docs/markup.adoc[markup guide]
 for syntax differences, validation coverage, extension options and downstream
