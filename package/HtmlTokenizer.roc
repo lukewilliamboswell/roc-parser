@@ -11,7 +11,10 @@ HtmlTokenizer :: [].{
 	Token : { kind : Kind, span : Span }
 	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
-	Mode : [Data, Rcdata(Str), Rawtext(Str), Script, RcdataFragment, RawtextFragment, ScriptFragment, Plaintext]
+	## Data keeps whitespace/null/other runs separate for tree-construction
+	## states that distinguish them. DataMixed combines a normal text run when
+	## the caller can process all three character classes together.
+	Mode : [Data, DataMixed, Rcdata(Str), Rawtext(Str), Script, RcdataFragment, RawtextFragment, ScriptFragment, Plaintext]
 	Reader : { bytes : List(U8), pos : U64, diagnostics : List(Diagnostic) }
 
 	## Read one token. Low-level callers choose allocation ceilings with next_with.
@@ -65,9 +68,27 @@ HtmlTokenizer :: [].{
 					return raw_characters(reader, "script", False, True)
 				}
 			}
-			Data => {}
+			Data | DataMixed => {}
 		}
 		if byte_at(bytes, start) != '<' {
+			if mode == DataMixed {
+				var $end = start
+				var $normalize = False
+				while $end < bytes.len() and byte_at(bytes, $end) != '<' {
+					byte = byte_at(bytes, $end)
+					if byte == '&' or byte == '\r' or byte == 0 {
+						$normalize = True
+					}
+					$end = $end + 1
+				}
+				if $normalize {
+					return characters(reader, $end, True, True)
+				}
+				# Ordinary text already has its final bytes. Avoid rebuilding it
+				# one byte at a time through the normalization buffer.
+				text = Str.from_utf8_lossy(bytes.sublist({ start, len: $end - start }))
+				return { token: { kind: Characters(text), span: { start, end: $end } }, reader: { ..reader, pos: $end } }
+			}
 			return data_characters(reader)
 		}
 
@@ -1360,4 +1381,9 @@ expect {
 expect {
 	result = HtmlTokenizer.next_with({ bytes: "<a x=1 y=2>".to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_attributes: 2, max_diagnostics: 0 })
 	result.limited == NoLimit and result.reader.diagnostics.is_empty()
+}
+
+expect {
+	r = HtmlTokenizer.next({ bytes: "a &#32;b\u(0)c<em>".to_utf8(), pos: 0, diagnostics: [] }, DataMixed, False)
+	r.token.kind == Characters("a  b\u(0)c") and r.token.span == { start: 0, end: 10 } and r.reader.diagnostics == [{ code: UnexpectedNull, offset: 8 }]
 }

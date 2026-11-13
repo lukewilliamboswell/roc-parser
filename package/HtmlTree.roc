@@ -80,7 +80,8 @@ HtmlTree :: [].{
 					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
 				}
 				Diagnostics => {
-					at = Literal.position(source, next.token.span.start)
+					offset = next.reader.diagnostics.last().map_ok(|d| d.offset) ?? next.token.span.start
+					at = Literal.position(source, offset)
 					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
 				}
 			}
@@ -631,7 +632,10 @@ content_mode = |s| {
 		Rawtext(n)
 	}
 	else {
-		Data
+		match s.mode {
+			InBody | InCell | InCaption => DataMixed
+			_ => Data
+		}
 	}
 }
 
@@ -665,7 +669,12 @@ process = |initial_state, token, scripting| {
 	}
 	# Raw text is a tokenizer mode and a tree-construction text mode. The
 	# surrounding insertion mode (table/head/body) resumes after its end tag.
-	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and content_mode(state) != Data and !state.plaintext and current(state) != "html" {
+	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and (
+		match content_mode(state) {
+			Data | DataMixed => False
+			_ => True
+		}
+	) and !state.plaintext and current(state) != "html" {
 		match token.kind {
 			Characters(text) => return insert_text(state, text, token.span)
 			End(name) if name == current(state) => return pop_current(state)
@@ -1158,7 +1167,7 @@ body = |state, token| {
 	var $s = { ..state, work: state.work + state.stack.len() + state.active.len() + 1 }
 	match token.kind {
 		Characters(raw_text) => {
-			text = Str.join_with(raw_text.split_on("\u(0)"), "")
+			text = if (raw_text.contains("\u(0)")) Str.join_with(raw_text.split_on("\u(0)"), "") else raw_text
 			$s = reconstruct($s)
 			$s = insert_text($s, text, token.span)
 			if !whitespace(text) {
@@ -2256,7 +2265,17 @@ svg_tags = [("altglyph", "altGlyph"), ("altglyphdef", "altGlyphDef"), ("altglyph
 
 svg_attributes = [("attributename", "attributeName"), ("attributetype", "attributeType"), ("basefrequency", "baseFrequency"), ("baseprofile", "baseProfile"), ("calcmode", "calcMode"), ("clippathunits", "clipPathUnits"), ("diffuseconstant", "diffuseConstant"), ("edgemode", "edgeMode"), ("filterunits", "filterUnits"), ("glyphref", "glyphRef"), ("gradienttransform", "gradientTransform"), ("gradientunits", "gradientUnits"), ("kernelmatrix", "kernelMatrix"), ("kernelunitlength", "kernelUnitLength"), ("keypoints", "keyPoints"), ("keysplines", "keySplines"), ("keytimes", "keyTimes"), ("lengthadjust", "lengthAdjust"), ("limitingconeangle", "limitingConeAngle"), ("markerheight", "markerHeight"), ("markerunits", "markerUnits"), ("markerwidth", "markerWidth"), ("maskcontentunits", "maskContentUnits"), ("maskunits", "maskUnits"), ("numoctaves", "numOctaves"), ("pathlength", "pathLength"), ("patterncontentunits", "patternContentUnits"), ("patterntransform", "patternTransform"), ("patternunits", "patternUnits"), ("pointsatx", "pointsAtX"), ("pointsaty", "pointsAtY"), ("pointsatz", "pointsAtZ"), ("preservealpha", "preserveAlpha"), ("preserveaspectratio", "preserveAspectRatio"), ("primitiveunits", "primitiveUnits"), ("refx", "refX"), ("refy", "refY"), ("repeatcount", "repeatCount"), ("repeatdur", "repeatDur"), ("requiredextensions", "requiredExtensions"), ("requiredfeatures", "requiredFeatures"), ("specularconstant", "specularConstant"), ("specularexponent", "specularExponent"), ("spreadmethod", "spreadMethod"), ("startoffset", "startOffset"), ("stddeviation", "stdDeviation"), ("stitchtiles", "stitchTiles"), ("surfacescale", "surfaceScale"), ("systemlanguage", "systemLanguage"), ("tablevalues", "tableValues"), ("targetx", "targetX"), ("targety", "targetY"), ("textlength", "textLength"), ("viewbox", "viewBox"), ("viewtarget", "viewTarget"), ("xchannelselector", "xChannelSelector"), ("ychannelselector", "yChannelSelector"), ("zoomandpan", "zoomAndPan")]
 
-whitespace = |text| text.to_utf8().all(Tok.space)
+whitespace = |text| {
+	bytes = text.to_utf8()
+	var $at = 0
+	while $at < bytes.len() {
+		if !Tok.space(bytes.get($at) ?? 0) {
+			return False
+		}
+		$at = $at + 1
+	}
+	True
+}
 
 void = |n| (
 	match n {
@@ -2599,7 +2618,7 @@ source_token = |token, bytes| {
 	}
 	kind = match token.kind {
 		Start(_) | End(_) => Tag
-		Characters(_) => if (Tok.starts(bytes, token.span.start, "<![CDATA[")) CData else Text
+		Characters(_) => if (bytes.get(token.span.start) == Ok('<') and Tok.starts(bytes, token.span.start, "<![CDATA[")) CData else Text
 		Comment(_) => Comment
 		Doctype(_) => Declaration
 		ProcessingInstruction(_) => ProcessingInstruction
@@ -2966,3 +2985,10 @@ expect {
 	p = HtmlTree.parse("<tr>x y<td>z", True, { name: "table" }, { recovery: Browser })?
 	p.tree.roots.len() == 2 and (p.tree.nodes.get(p.tree.roots.get(1)?)?).kind == Text("x y")
 }
+
+expect {
+	p = HtmlTree.parse("<p>a &#32;b\u(0)c</p>", True, {}, { recovery: Browser })?
+	n = p.tree.nodes.get(p.tree.roots.first()?)?
+	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [{ problem: HtmlSyntax(UnexpectedNull), line: 1, column: 12 }]
+}
+expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 2, column: 2 }))
