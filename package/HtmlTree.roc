@@ -696,6 +696,28 @@ process = |initial_state, token, scripting| {
 
 process_html : State, Tok.Token, Bool -> State
 process_html = |state, token, scripting| {
+	# Ordinary body tokens need one insertion-mode step and no reprocessing.
+	# Keep them out of the general mode loop and its large temporary state.
+	ordinary_body = state.mode == InBody and (
+		match token.kind {
+			Start(_) | Characters(_) => True
+			End(name) => name != "template"
+			_ => False
+		}
+	)
+	if ordinary_body {
+		if state.work > state.work_limit {
+			return state
+		}
+		# The general dispatcher charges one entry and one mode step before
+		# body construction. Preserve the same resource accounting here.
+		return body({ ..state, work: state.work + 2 }, token)
+	}
+	process_html_general(state, token, scripting)
+}
+
+process_html_general : State, Tok.Token, Bool -> State
+process_html_general = |state, token, scripting| {
 	if state.work > state.work_limit {
 		return state
 	}
