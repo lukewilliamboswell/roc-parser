@@ -206,7 +206,12 @@ problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, 
 append_node : State, Markup.Node -> State
 append_node = |s, node| {
 	index = s.nodes.len()
-	foster = s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s))
+	foster = s.foster and (
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	)
 	var $parent = s.stack.last().map_err(|_| Missing)
 	var $before = Err(Missing)
 	if foster {
@@ -302,7 +307,12 @@ insert_text = |s, text, span| {
 	}
 	# Adjacent source text shares a DOM text node. Foster parenting can select a
 	# different parent, in which case append_node computes the insertion point.
-	if !s.foster or !["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
+	if !s.foster or !(
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	) {
 		siblings = match s.stack.last() {
 			Ok(p) => (node_at(s, p)).children
 			Err(_) => s.roots
@@ -324,7 +334,12 @@ insert_text = |s, text, span| {
 			Err(_) => {}
 		}
 	}
-	if s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
+	if s.foster and (
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	) {
 		match last_named(s, "table") {
 			Ok(table_id) => {
 				siblings = match find_parent(s, table_id) {
@@ -450,23 +465,46 @@ in_scope = |s, name, kind| {
 			return True
 		}
 		if ns == Markup.html_namespace {
-			if ["html", "table", "template"].contains(n) {
+			if match n {
+				"html" | "table" | "template" => True
+				_ => False
+			} {
 				return False
 			}
-			if kind != TableScope and ["applet", "caption", "td", "th", "marquee", "object", "select"].contains(n) {
+			if kind != TableScope and (
+				match n {
+					"applet" | "caption" | "td" | "th" | "marquee" | "object" | "select" => True
+					_ => False
+				}
+			) {
 				return False
 			}
-			if kind == ListScope and ["ol", "ul"].contains(n) {
+			if kind == ListScope and (
+				match n {
+					"ol" | "ul" => True
+					_ => False
+				}
+			) {
 				return False
 			}
 			if kind == ButtonScope and n == "button" {
 				return False
 			}
 		} else if kind != TableScope {
-			if ns == Markup.mathml_namespace and ["mi", "mo", "mn", "ms", "mtext", "annotation-xml"].contains(n) {
+			if ns == Markup.mathml_namespace and (
+				match n {
+					"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
+					_ => False
+				}
+			) {
 				return False
 			}
-			if ns == Markup.svg_namespace and ["foreignObject", "desc", "title"].contains(n) {
+			if ns == Markup.svg_namespace and (
+				match n {
+					"foreignObject" | "desc" | "title" => True
+					_ => False
+				}
+			) {
 				return False
 			}
 		}
@@ -476,7 +514,12 @@ in_scope = |s, name, kind| {
 
 implied = |s, except| {
 	var $s = s
-	while ["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc"].contains(current($s)) and current($s) != except {
+	while (
+		match current($s) {
+			"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" => True
+			_ => False
+		}
+	) and current($s) != except {
 		$s = pop_current($s)
 	}
 	$s
@@ -508,7 +551,10 @@ reset_mode = |s| {
 	while $i > 0 {
 		$i = $i - 1
 		n = if ($i == 0 and s.fragment) s.context.name else name_at(s, s.stack.get($i) ?? 0)
-		if ["td", "th", "tr", "tbody", "thead", "tfoot", "caption", "colgroup", "table", "template", "head", "frameset"].contains(n) {
+		if match n {
+			"td" | "th" | "tr" | "tbody" | "thead" | "tfoot" | "caption" | "colgroup" | "table" | "template" | "head" | "frameset" => True
+			_ => False
+		} {
 			return { ..s, mode: if (n == "template") (s.modes.last() ?? InTemplate) else if (n == "head") InHead else context_mode(n) }
 		}
 		if n == "body" {
@@ -536,7 +582,12 @@ content_mode = |s| {
 		if n == "plaintext" {
 			return Plaintext
 		}
-		if ["style", "xmp", "iframe", "noembed", "noframes"].contains(n) or (n == "noscript" and s.context.scripting) {
+		if (
+			match n {
+				"style" | "xmp" | "iframe" | "noembed" | "noframes" => True
+				_ => False
+			}
+		) or (n == "noscript" and s.context.scripting) {
 			return RawtextFragment
 		}
 	}
@@ -554,7 +605,12 @@ content_mode = |s| {
 	else if n == "plaintext" {
 		Plaintext
 	}
-	else if ["style", "xmp", "iframe", "noembed", "noframes"].contains(n) or (n == "noscript" and s.context.scripting) {
+	else if (
+		match n {
+			"style" | "xmp" | "iframe" | "noembed" | "noframes" => True
+			_ => False
+		}
+	) or (n == "noscript" and s.context.scripting) {
 		Rawtext(n)
 	}
 	else {
@@ -577,7 +633,12 @@ process = |initial_state, token, scripting| {
 	}
 	state = { ..$prepared, token_span: token.span, token_end_name: end_name }
 	match token.kind {
-		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(state)) => {
+		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and (
+			match current(state) {
+				"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
 			return { ..state, pending_text: state.pending_text.append({ text, span: token.span }) }
 		}
 		_ => {}
@@ -653,7 +714,12 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: BeforeHead }
 			}
-			(BeforeHtml, End(n)) if !["head", "body", "html", "br"].contains(n) => {
+			(BeforeHtml, End(n)) if !(
+				match n {
+					"head" | "body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(BeforeHtml, _) => {
@@ -667,7 +733,12 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, head: Ok(id), mode: InHead }
 			}
-			(BeforeHead, End(n)) if !["head", "body", "html", "br"].contains(n) => {
+			(BeforeHead, End(n)) if !(
+				match n {
+					"head" | "body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(BeforeHead, _) => {
@@ -682,16 +753,31 @@ process_html = |state, token, scripting| {
 			(InHead, Start(t)) if t.name == "html" => {
 				$s = body($s, token)
 			}
-			(InHead, Start(t)) if ["base", "basefont", "bgsound", "link", "meta"].contains(t.name) => {
+			(InHead, Start(t)) if (
+				match t.name {
+					"base" | "basefont" | "bgsound" | "link" | "meta" => True
+					_ => False
+				}
+			) => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
 			}
-			(InHead, Start(t)) if ["title", "style", "script", "noframes"].contains(t.name) or (t.name == "noscript" and scripting) => {
+			(InHead, Start(t)) if (
+				match t.name {
+					"title" | "style" | "script" | "noframes" => True
+					_ => False
+				}
+			) or (t.name == "noscript" and scripting) => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			}
 			(InHead, End("head")) => {
 				$s = pop_mode($s, AfterHead)
 			}
-			(InHead, End(n)) if ["title", "style", "script", "noframes", "noscript"].contains(n) and current($s) == n => {
+			(InHead, End(n)) if (
+				match n {
+					"title" | "style" | "script" | "noframes" | "noscript" => True
+					_ => False
+				}
+			) and current($s) == n => {
 				$s = pop_current($s)
 			}
 			(InHead, Start(t)) if t.name == "noscript" and !scripting => {
@@ -710,7 +796,12 @@ process_html = |state, token, scripting| {
 			(InHead, Characters(t)) if current($s) != "head" => {
 				$s = insert_text($s, t, token.span)
 			}
-			(InHead, End(n)) if !["body", "html", "br"].contains(n) => {
+			(InHead, End(n)) if !(
+				match n {
+					"body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(InHeadNoscript, End("noscript")) => {
@@ -722,7 +813,12 @@ process_html = |state, token, scripting| {
 			(InHeadNoscript, Start(t)) if t.name == "html" => {
 				$s = body($s, token)
 			}
-			(InHeadNoscript, Start(t)) if ["basefont", "bgsound", "link", "meta", "noframes", "style"].contains(t.name) => {
+			(InHeadNoscript, Start(t)) if (
+				match t.name {
+					"basefont" | "bgsound" | "link" | "meta" | "noframes" | "style" => True
+					_ => False
+				}
+			) => {
 				$s = process_html({ ..$s, mode: InHead }, token, scripting)
 				$s = { ..$s, mode: InHeadNoscript }
 			}
@@ -753,7 +849,12 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: InFrameset }
 			}
-			(AfterHead, Start(t)) if ["base", "basefont", "bgsound", "link", "meta", "script", "style", "template", "title"].contains(t.name) => {
+			(AfterHead, Start(t)) if (
+				match t.name {
+					"base" | "basefont" | "bgsound" | "link" | "meta" | "script" | "style" | "template" | "title" => True
+					_ => False
+				}
+			) => {
 				$s = problem($s, HeadContentAfterHead, token.span.start)
 				match $s.head {
 					Ok(h) => {
@@ -765,7 +866,12 @@ process_html = |state, token, scripting| {
 					_ => {}
 				}
 			}
-			(AfterHead, End(n)) if !["body", "html", "br"].contains(n) => {
+			(AfterHead, End(n)) if !(
+				match n {
+					"body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(AfterHead, _) => {
@@ -798,7 +904,12 @@ process_html = |state, token, scripting| {
 			}
 			(InCell, _) => {
 				match token.kind {
-					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
 						$s = problem($s, UnexpectedCellEnd, token.span.start)
 					}
 					End(n) if n == "td" or n == "th" => {
@@ -810,11 +921,21 @@ process_html = |state, token, scripting| {
 							$s = problem($s, UnexpectedCellEnd, token.span.start)
 						}
 					}
-					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) => {
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) => {
 						$s = close_cell($s)
 						$reprocess = True
 					}
-					End(n) if ["table", "tbody", "tfoot", "thead", "tr"].contains(n) and in_scope($s, n, TableScope) => {
+					End(n) if (
+						match n {
+							"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+							_ => False
+						}
+					) and in_scope($s, n, TableScope) => {
 						$s = close_cell($s)
 						$reprocess = True
 					}
@@ -828,7 +949,12 @@ process_html = |state, token, scripting| {
 					End("caption") | End("table") if !in_scope($s, "caption", TableScope) => {
 						$s = problem($s, UnexpectedTableEnd, token.span.start)
 					}
-					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) and !in_scope($s, "caption", TableScope) => {
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) and !in_scope($s, "caption", TableScope) => {
 						$s = problem($s, UnexpectedTableElement, token.span.start)
 					}
 					End("caption") => {
@@ -836,7 +962,12 @@ process_html = |state, token, scripting| {
 						$s = clear_active($s)
 						$s = { ..$s, mode: InTable }
 					}
-					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) => {
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) => {
 						$s = close_to(implied($s, ""), "caption")
 						$s = clear_active($s)
 						$s = { ..$s, mode: InTable }
@@ -889,7 +1020,12 @@ process_html = |state, token, scripting| {
 					Characters(_) => {
 						$s = body($s, token)
 					}
-					Start(t) if ["base", "link", "meta", "script", "style", "template", "title"].contains(t.name) => {
+					Start(t) if (
+						match t.name {
+							"base" | "link" | "meta" | "script" | "style" | "template" | "title" => True
+							_ => False
+						}
+					) => {
 						old = $s.mode
 						$s = { ..$s, mode: InHead }
 						$s = process($s, token, scripting)
@@ -905,7 +1041,14 @@ process_html = |state, token, scripting| {
 						}
 					}
 					Start(t) => {
-						next = if (["caption", "colgroup", "tbody", "tfoot", "thead"].contains(t.name)) InTable else if (t.name == "col") InColgroup else if (t.name == "tr") InTableBody else if (t.name == "td" or t.name == "th") InRow else InBody
+						next = if (
+							(
+								match t.name {
+									"caption" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+									_ => False
+								}
+							)
+						) InTable else if (t.name == "col") InColgroup else if (t.name == "tr") InTableBody else if (t.name == "td" or t.name == "th") InRow else InBody
 						$s = { ..$s, mode: next, modes: $s.modes.drop_last(1).append(next) }
 						$reprocess = True
 					}
@@ -1006,7 +1149,14 @@ body = |state, token| {
 			}
 		}
 		Eof => {
-			if $s.stack.any(|i| !["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html"].contains(name_at($s, i))) {
+			if $s.stack.any(
+				|i| !(
+					match name_at($s, i) {
+						"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" | "body" | "html" => True
+						_ => False
+					}
+				),
+			) {
 				$s = problem($s, EofWithOpenElements, token.span.start)
 			}
 		}
@@ -1044,22 +1194,34 @@ body = |state, token| {
 			} else if name == "head" {
 				$s = problem($s, UnexpectedHeadStart, token.span.start)
 			}
-			else if ["base", "basefont", "bgsound", "link", "meta"].contains(name) {
+			else if match name {
+				"base" | "basefont" | "bgsound" | "link" | "meta" => True
+				_ => False
+			} {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, False)
 			}
 			else if name == "template" {
 				$s = start_template($s, tag, token.span)
 			}
-			else if ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "main", "menu", "nav", "ol", "p", "search", "section", "summary", "ul"].contains(name) {
+			else if match name {
+				"address" | "article" | "aside" | "blockquote" | "center" | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "main" | "menu" | "nav" | "ol" | "p" | "search" | "section" | "summary" | "ul" => True
+				_ => False
+			} {
 				if in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-			} else if ["h1", "h2", "h3", "h4", "h5", "h6"].contains(name) {
+			} else if match name {
+				"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
+				_ => False
+			} {
 				if in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				if ["h1", "h2", "h3", "h4", "h5", "h6"].contains(current($s)) {
+				if match current($s) {
+					"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
+					_ => False
+				} {
 					$s = problem($s, NestedHeading, token.span.start)
 					$s = pop_current($s)
 				}
@@ -1097,7 +1259,12 @@ body = |state, token| {
 						$s = close_to($s, n)
 						break
 					}
-					if special_at($s, $s.stack.get($i) ?? 0) and !["address", "div", "p"].contains(n) {
+					if special_at($s, $s.stack.get($i) ?? 0) and !(
+						match n {
+							"address" | "div" | "p" => True
+							_ => False
+						}
+					) {
 						break
 					}
 				}
@@ -1192,13 +1359,21 @@ body = |state, token| {
 				if name == "hr" and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				if !["param", "source", "track"].contains(name) and (name != "input" or !tag.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden")) {
+				if !(
+					match name {
+						"param" | "source" | "track" => True
+						_ => False
+					}
+				) and (name != "input" or !tag.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden")) {
 					$s = { ..$s, frameset_ok: False }
 				}
 			} else if name == "textarea" {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, skip_lf: True, frameset_ok: False }
-			} else if ["xmp", "iframe", "noembed", "noscript", "script", "style", "title", "noframes"].contains(name) {
+			} else if match name {
+				"xmp" | "iframe" | "noembed" | "noscript" | "script" | "style" | "title" | "noframes" => True
+				_ => False
+			} {
 				if name == "xmp" and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
@@ -1226,7 +1401,10 @@ body = |state, token| {
 				}
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-			} else if ["rb", "rtc", "rp", "rt"].contains(name) {
+			} else if match name {
+				"rb" | "rtc" | "rp" | "rt" => True
+				_ => False
+			} {
 				if in_scope($s, "ruby", DefaultScope) {
 					$s = implied($s, if (name == "rt" or name == "rp") "rtc" else "")
 				}
@@ -1234,7 +1412,10 @@ body = |state, token| {
 			} else if name == "math" or name == "svg" {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, if (name == "svg") Markup.svg_namespace else Markup.mathml_namespace, token.span, !tag.self_closing)
-			} else if ["caption", "col", "colgroup", "frame", "head", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(name) {
+			} else if match name {
+				"caption" | "col" | "colgroup" | "frame" | "head" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+				_ => False
+			} {
 				$s = problem($s, UnexpectedTableElement, token.span.start)
 			} else {
 				$s = reconstruct($s)
@@ -1244,7 +1425,14 @@ body = |state, token| {
 		End(name) => {
 			if name == "body" or name == "html" {
 				if in_scope($s, "body", DefaultScope) {
-					if $s.stack.any(|i| !["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html"].contains(name_at($s, i))) {
+					if $s.stack.any(
+						|i| !(
+							match name_at($s, i) {
+								"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" | "body" | "html" => True
+								_ => False
+							}
+						),
+					) {
 						$s = problem($s, MisnestedEndTag, token.span.start)
 					}
 					if name == "html" and $s.fragment {
@@ -1261,7 +1449,10 @@ body = |state, token| {
 					$s = insert_element($s, "p", Markup.html_namespace, [], Implied(token.span.start), True)
 				}
 				$s = close_p($s)
-			} else if ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "select", "summary", "ul"].contains(name) {
+			} else if match name {
+				"address" | "article" | "aside" | "blockquote" | "center" | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "listing" | "main" | "menu" | "nav" | "ol" | "pre" | "search" | "section" | "select" | "summary" | "ul" => True
+				_ => False
+			} {
 				if !in_scope($s, name, DefaultScope) {
 					$s = problem($s, UnexpectedEndTag, token.span.start)
 				}
@@ -1310,7 +1501,10 @@ body = |state, token| {
 						$s = clear_active($s)
 					}
 				}
-			} else if ["h1", "h2", "h3", "h4", "h5", "h6"].contains(name) {
+			} else if match name {
+				"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
+				_ => False
+			} {
 				var $found = ""
 				for heading in ["h1", "h2", "h3", "h4", "h5", "h6"] {
 					if in_scope($s, heading, DefaultScope) {
@@ -1515,7 +1709,10 @@ adoption = |s, name, offset| {
 								}
 							}
 						}
-						if ["table", "tbody", "tfoot", "thead", "tr"].contains(name_at($s, common)) {
+						if match name_at($s, common) {
+							"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+							_ => False
+						} {
 							moved = node_at($s, $last)
 							$s = detach($s, $last)
 							# append_node allocates a new index, so use a temporary
@@ -1604,12 +1801,22 @@ table = |state, token| {
 			$s = { ..$s, mode: InColgroup }
 			$s = process($s, token, $s.context.scripting)
 		}
-		Start(t) if ["tbody", "tfoot", "thead"].contains(t.name) => {
+		Start(t) if (
+			match t.name {
+				"tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
 			$s = clear_table_stack($s)
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			$s = { ..$s, mode: InTableBody }
 		}
-		Start(t) if ["tr", "td", "th"].contains(t.name) => {
+		Start(t) if (
+			match t.name {
+				"tr" | "td" | "th" => True
+				_ => False
+			}
+		) => {
 			$s = clear_table_stack($s)
 			$s = insert_element($s, "tbody", Markup.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InTableBody }
@@ -1629,7 +1836,12 @@ table = |state, token| {
 				$s = problem($s, UnexpectedTableEnd, token.span.start)
 			}
 		}
-		End(n) if ["body", "caption", "col", "colgroup", "html", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(n) => {
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
 			$s = problem($s, UnexpectedTableEndTag, token.span.start)
 		}
 		Start(t) if t.name == "input" and t.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden") => {
@@ -1644,7 +1856,12 @@ table = |state, token| {
 				$s = { ..$s, form: Ok(id) }
 			}
 		}
-		Start(t) if ["style", "script", "template"].contains(t.name) => {
+		Start(t) if (
+			match t.name {
+				"style" | "script" | "template" => True
+				_ => False
+			}
+		) => {
 			$s = body($s, token)
 		}
 		Eof => {
@@ -1661,7 +1878,12 @@ table = |state, token| {
 
 clear_table_stack = |s| {
 	var $s = s
-	while !$s.stack.is_empty() and !["table", "template", "html"].contains(current($s)) {
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"table" | "template" | "html" => True
+			_ => False
+		}
+	) {
 		$s = pop_current($s)
 	}
 	$s
@@ -1669,7 +1891,12 @@ clear_table_stack = |s| {
 
 clear_section_stack = |s| {
 	var $s = s
-	while !$s.stack.is_empty() and !["tbody", "tfoot", "thead", "template", "html"].contains(current($s)) {
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"tbody" | "tfoot" | "thead" | "template" | "html" => True
+			_ => False
+		}
+	) {
 		$s = pop_current($s)
 	}
 	$s
@@ -1677,7 +1904,12 @@ clear_section_stack = |s| {
 
 clear_row_stack = |s| {
 	var $s = s
-	while !$s.stack.is_empty() and !["tr", "template", "html"].contains(current($s)) {
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"tr" | "template" | "html" => True
+			_ => False
+		}
+	) {
 		$s = pop_current($s)
 	}
 	$s
@@ -1686,7 +1918,12 @@ clear_row_stack = |s| {
 table_body = |state, token| {
 	var $s = state
 	match token.kind {
-		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead"].contains(t.name) and !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) and !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
 			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
 		}
 		End("table") if !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
@@ -1705,7 +1942,12 @@ table_body = |state, token| {
 			$s = { ..$s, mode: InRow }
 			$s = process($s, token, $s.context.scripting)
 		}
-		End(n) if ["tbody", "tfoot", "thead"].contains(n) => {
+		End(n) if (
+			match n {
+				"tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
 			if in_scope($s, n, TableScope) {
 				$s = clear_section_stack($s)
 				$s = pop_mode($s, InTable)
@@ -1713,7 +1955,12 @@ table_body = |state, token| {
 				$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
 			}
 		}
-		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead"].contains(t.name) => {
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
 			$s = clear_section_stack($s)
 			if current($s) != "html" {
 				$s = pop_mode($s, InTable)
@@ -1727,7 +1974,12 @@ table_body = |state, token| {
 				$s = process($s, token, $s.context.scripting)
 			}
 		}
-		End(n) if ["body", "caption", "col", "colgroup", "html", "td", "th", "tr"].contains(n) => {
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "td" | "th" | "tr" => True
+				_ => False
+			}
+		) => {
 			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
 		}
 		_ => {
@@ -1753,7 +2005,12 @@ row = |state, token| {
 				$s = problem($s, UnexpectedRowEnd, token.span.start)
 			}
 		}
-		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead", "tr"].contains(t.name) => {
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
 			if in_scope($s, "tr", TableScope) {
 				$s = clear_row_stack($s)
 				$s = pop_mode($s, InTableBody)
@@ -1762,7 +2019,12 @@ row = |state, token| {
 				$s = problem($s, UnexpectedRowToken, token.span.start)
 			}
 		}
-		End(n) if ["table", "tbody", "tfoot", "thead"].contains(n) => {
+		End(n) if (
+			match n {
+				"table" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
 			if in_scope($s, n, TableScope) {
 				$s = clear_row_stack($s)
 				$s = pop_mode($s, InTableBody)
@@ -1771,7 +2033,12 @@ row = |state, token| {
 				$s = problem($s, UnexpectedRowEnd, token.span.start)
 			}
 		}
-		End(n) if ["body", "caption", "col", "colgroup", "html", "td", "th"].contains(n) => {
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "td" | "th" => True
+				_ => False
+			}
+		) => {
 			$s = problem($s, UnexpectedRowToken, token.span.start)
 		}
 		_ => {
@@ -1797,7 +2064,12 @@ foreign_token = |s, token| {
 		_ => {}
 	}
 	name = adjusted_name(s)
-	if namespace == Markup.mathml_namespace and ["mi", "mo", "mn", "ms", "mtext"].contains(name) {
+	if namespace == Markup.mathml_namespace and (
+		match name {
+			"mi" | "mo" | "mn" | "ms" | "mtext" => True
+			_ => False
+		}
+	) {
 		match token.kind {
 			Characters(_) => return False
 			Start(t) if t.name != "mglyph" and t.name != "malignmark" => return False
@@ -1822,12 +2094,24 @@ foreign_token = |s, token| {
 integration = |s| {
 	ns = adjusted_namespace(s)
 	name = adjusted_name(s)
-	if ns == Markup.svg_namespace and ["foreignObject", "desc", "title"].contains(name) {
+	if ns == Markup.svg_namespace and (
+		match name {
+			"foreignObject" | "desc" | "title" => True
+			_ => False
+		}
+	) {
 		return True
 	}
 	if ns == Markup.mathml_namespace and name == "annotation-xml" {
 		n = node_at(s, s.stack.last() ?? 0)
-		return n.attributes.any(|a| a.name.local == "encoding" and ["text/html", "application/xhtml+xml"].contains(Tok.lower(a.value)))
+		return n.attributes.any(
+			|a| a.name.local == "encoding" and (
+				match Tok.lower(a.value) {
+					"text/html" | "application/xhtml+xml" => True
+					_ => False
+				}
+			),
+		)
 	}
 	False
 }
@@ -1848,7 +2132,21 @@ foreign_process = |state, token| {
 			$s = append_node($s, { kind: Comment(t), attributes: [], children: [], origin: Authored(token.span) })
 		}
 		Start(t) => {
-			breakout = ["b", "big", "blockquote", "body", "br", "center", "code", "dd", "div", "dl", "dt", "em", "embed", "h1", "h2", "h3", "h4", "h5", "h6", "head", "hr", "i", "img", "li", "listing", "menu", "meta", "nobr", "ol", "p", "pre", "ruby", "s", "small", "span", "strong", "strike", "sub", "sup", "table", "tt", "u", "ul", "var"].contains(t.name) or (t.name == "font" and t.attributes.any(|a| ["color", "face", "size"].contains(a.name)))
+			breakout = (
+				match t.name {
+					"b" | "big" | "blockquote" | "body" | "br" | "center" | "code" | "dd" | "div" | "dl" | "dt" | "em" | "embed" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "hr" | "i" | "img" | "li" | "listing" | "menu" | "meta" | "nobr" | "ol" | "p" | "pre" | "ruby" | "s" | "small" | "span" | "strong" | "strike" | "sub" | "sup" | "table" | "tt" | "u" | "ul" | "var" => True
+					_ => False
+				}
+			) or (
+				t.name == "font" and t.attributes.any(
+					|a| (
+						match a.name {
+							"color" | "face" | "size" => True
+							_ => False
+						}
+					),
+				)
+			)
 			if breakout {
 				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
 				while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
@@ -1906,10 +2204,16 @@ attribute_name = |raw, namespace| {
 		if raw == "xmlns:xlink" {
 			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xmlns") }
 		}
-		if ["xlink:actuate", "xlink:arcrole", "xlink:href", "xlink:role", "xlink:show", "xlink:title", "xlink:type"].contains(raw) {
+		if match raw {
+			"xlink:actuate" | "xlink:arcrole" | "xlink:href" | "xlink:role" | "xlink:show" | "xlink:title" | "xlink:type" => True
+			_ => False
+		} {
 			return { namespace: Uri("http://www.w3.org/1999/xlink"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xlink") }
 		}
-		if ["xml:lang", "xml:space"].contains(raw) {
+		if match raw {
+			"xml:lang" | "xml:space" => True
+			_ => False
+		} {
 			return { namespace: Uri("http://www.w3.org/XML/1998/namespace"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(4)), prefix: Prefix("xml") }
 		}
 	}
@@ -1937,11 +2241,26 @@ svg_attributes = [("attributename", "attributeName"), ("attributetype", "attribu
 
 whitespace = |text| text.to_utf8().all(Tok.space)
 
-void = |n| ["area", "base", "basefont", "bgsound", "br", "embed", "hr", "img", "image", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"].contains(n)
+void = |n| (
+	match n {
+		"area" | "base" | "basefont" | "bgsound" | "br" | "embed" | "hr" | "img" | "image" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" => True
+		_ => False
+	}
+)
 
-formatting = |n| ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"].contains(n)
+formatting = |n| (
+	match n {
+		"a" | "b" | "big" | "code" | "em" | "font" | "i" | "nobr" | "s" | "small" | "strike" | "strong" | "tt" | "u" => True
+		_ => False
+	}
+)
 
-special = |n| ["address", "applet", "area", "article", "aside", "base", "basefont", "bgsound", "blockquote", "body", "br", "button", "caption", "center", "col", "colgroup", "dd", "details", "dir", "div", "dl", "dt", "embed", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "iframe", "img", "input", "li", "link", "listing", "main", "marquee", "menu", "meta", "nav", "noembed", "noframes", "noscript", "object", "ol", "p", "param", "plaintext", "pre", "script", "search", "section", "select", "source", "style", "summary", "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "title", "tr", "track", "ul", "wbr", "xmp"].contains(n)
+special = |n| (
+	match n {
+		"address" | "applet" | "area" | "article" | "aside" | "base" | "basefont" | "bgsound" | "blockquote" | "body" | "br" | "button" | "caption" | "center" | "col" | "colgroup" | "dd" | "details" | "dir" | "div" | "dl" | "dt" | "embed" | "fieldset" | "figcaption" | "figure" | "footer" | "form" | "frame" | "frameset" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "header" | "hgroup" | "hr" | "html" | "iframe" | "img" | "input" | "li" | "link" | "listing" | "main" | "marquee" | "menu" | "meta" | "nav" | "noembed" | "noframes" | "noscript" | "object" | "ol" | "p" | "param" | "plaintext" | "pre" | "script" | "search" | "section" | "select" | "source" | "style" | "summary" | "table" | "tbody" | "td" | "template" | "textarea" | "tfoot" | "th" | "thead" | "title" | "tr" | "track" | "ul" | "wbr" | "xmp" => True
+		_ => False
+	}
+)
 
 expect {
 	parsed = HtmlTree.parse("<!doctype html><p>a<div>b</div>", False, {}, {})?
@@ -2099,10 +2418,20 @@ special_at = |s, id| {
 		special(n)
 	}
 	else if ns == Markup.mathml_namespace {
-		["mi", "mo", "mn", "ms", "mtext", "annotation-xml"].contains(n)
+		(
+			match n {
+				"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
+				_ => False
+			}
+		)
 	}
 	else if ns == Markup.svg_namespace {
-		["foreignObject", "desc", "title"].contains(n)
+		(
+			match n {
+				"foreignObject" | "desc" | "title" => True
+				_ => False
+			}
+		)
 	}
 	else {
 		False
@@ -2138,7 +2467,12 @@ expect HtmlTree.parse("<table><script>foo", True, {}, { recovery: Browser }).is_
 doctype_quirks = |d| {
 	public_id = Tok.lower(d.public_id)
 	system_id = Tok.lower(d.system_id)
-	d.quirks or d.name != "html" or ["-//w3o//dtd w3 html strict 3.0//en//", "-/w3c/dtd html 4.0 transitional/en", "html"].contains(public_id) or system_id == "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd" or quirks_public_prefixes.any(|prefix| public_id.starts_with(prefix)) or (d.system_id == "" and ["-//w3c//dtd html 4.01 frameset//", "-//w3c//dtd html 4.01 transitional//"].any(|prefix| public_id.starts_with(prefix)))
+	d.quirks or d.name != "html" or (
+		match public_id {
+			"-//w3o//dtd w3 html strict 3.0//en//" | "-/w3c/dtd html 4.0 transitional/en" | "html" => True
+			_ => False
+		}
+	) or system_id == "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd" or quirks_public_prefixes.any(|prefix| public_id.starts_with(prefix)) or (d.system_id == "" and ["-//w3c//dtd html 4.01 frameset//", "-//w3c//dtd html 4.01 transitional//"].any(|prefix| public_id.starts_with(prefix)))
 }
 
 quirks_public_prefixes = ["+//silmaril//dtd html pro v0r11 19970101//", "-//as//dtd html 3.0 aswedit + extensions//", "-//advasoft ltd//dtd html 3.0 aswedit + extensions//", "-//ietf//dtd html 2.0 level 1//", "-//ietf//dtd html 2.0 level 2//", "-//ietf//dtd html 2.0 strict level 1//", "-//ietf//dtd html 2.0 strict level 2//", "-//ietf//dtd html 2.0 strict//", "-//ietf//dtd html 2.0//", "-//ietf//dtd html 2.1e//", "-//ietf//dtd html 3.0//", "-//ietf//dtd html 3.2 final//", "-//ietf//dtd html 3.2//", "-//ietf//dtd html 3//", "-//ietf//dtd html level 0//", "-//ietf//dtd html level 1//", "-//ietf//dtd html level 2//", "-//ietf//dtd html level 3//", "-//ietf//dtd html strict level 0//", "-//ietf//dtd html strict level 1//", "-//ietf//dtd html strict level 2//", "-//ietf//dtd html strict level 3//", "-//ietf//dtd html strict//", "-//ietf//dtd html//", "-//metrius//dtd metrius presentational//", "-//microsoft//dtd internet explorer 2.0 html strict//", "-//microsoft//dtd internet explorer 2.0 html//", "-//microsoft//dtd internet explorer 2.0 tables//", "-//microsoft//dtd internet explorer 3.0 html strict//", "-//microsoft//dtd internet explorer 3.0 html//", "-//microsoft//dtd internet explorer 3.0 tables//", "-//netscape comm. corp.//dtd html//", "-//netscape comm. corp.//dtd strict html//", "-//o'reilly and associates//dtd html 2.0//", "-//o'reilly and associates//dtd html extended 1.0//", "-//o'reilly and associates//dtd html extended relaxed 1.0//", "-//sq//dtd html 2.0 hotmetal + extensions//", "-//softquad software//dtd hotmetal pro 6.0::19990601::extensions to html 4.0//", "-//softquad//dtd hotmetal pro 4.0::19971010::extensions to html 4.0//", "-//spyglass//dtd html 2.0 extended//", "-//sun microsystems corp.//dtd hotjava html//", "-//sun microsystems corp.//dtd hotjava strict html//", "-//w3c//dtd html 3 1995-03-24//", "-//w3c//dtd html 3.2 draft//", "-//w3c//dtd html 3.2 final//", "-//w3c//dtd html 3.2//", "-//w3c//dtd html 3.2s draft//", "-//w3c//dtd html 4.0 frameset//", "-//w3c//dtd html 4.0 transitional//", "-//w3c//dtd html experimental 19960712//", "-//w3c//dtd html experimental 970421//", "-//w3c//dtd w3 html//", "-//w3o//dtd w3 html 3.0//", "-//webtechs//dtd mozilla html 2.0//", "-//webtechs//dtd mozilla html//"]
@@ -2330,7 +2664,14 @@ project_selectedcontent = |state, props| {
 							# Selectedcontent clones exclude executable and embedded browsing
 							# content, including their descendants, per the HTML clone steps.
 							removed = match original.kind {
-								Element(name) => (name.namespace == Uri(Markup.html_namespace) and ["script", "frame", "iframe", "embed", "object"].contains(name.local)) or (name.namespace == Uri(Markup.svg_namespace) and name.local == "script")
+								Element(name) => (
+									name.namespace == Uri(Markup.html_namespace) and (
+										match name.local {
+											"script" | "frame" | "iframe" | "embed" | "object" => True
+											_ => False
+										}
+									)
+								) or (name.namespace == Uri(Markup.svg_namespace) and name.local == "script")
 								_ => False
 							}
 							if !removed {
@@ -2381,7 +2722,12 @@ selectedcontent_targets = |s, select_id| {
 	var $ancestor = find_parent(s, select_id)
 	while $ancestor.is_ok() {
 		id = $ancestor ?? select_id
-		if namespace_at(s, id) == Markup.html_namespace and ["select", "option", "selectedcontent"].contains(name_at(s, id)) {
+		if namespace_at(s, id) == Markup.html_namespace and (
+			match name_at(s, id) {
+				"select" | "option" | "selectedcontent" => True
+				_ => False
+			}
+		) {
 			return []
 		}
 		$ancestor = find_parent(s, id)
@@ -2395,7 +2741,14 @@ selectedcontent_targets = |s, select_id| {
 		name = name_at(s, id)
 		if html and name == "selectedcontent" {
 			$targets = $targets.append(id)
-		} else if !(html and ["select", "option", "template"].contains(name)) {
+		} else if !(
+			html and (
+				match name {
+					"select" | "option" | "template" => True
+					_ => False
+				}
+			)
+		) {
 			$pending = $pending.concat(reverse_ids((node_at(s, id)).children))
 		}
 	}
@@ -2412,7 +2765,14 @@ select_options = |s, select_id| {
 		name = name_at(s, item.id)
 		if html and name == "option" {
 			$options = $options.append(item.id)
-		} else if !(html and ["select", "template", "datalist", "hr"].contains(name)) {
+		} else if !(
+			html and (
+				match name {
+					"select" | "template" | "datalist" | "hr" => True
+					_ => False
+				}
+			)
+		) {
 			optgroups = item.optgroups + if (html and name == "optgroup") 1 else 0
 			if optgroups <= 1 {
 				$pending = $pending.concat((reverse_ids((node_at(s, item.id)).children)).map(|id| { id, optgroups }))
@@ -2456,7 +2816,10 @@ option_disabled = |s, option| {
 		id = $parent ?? option
 		if namespace_at(s, id) == Markup.html_namespace {
 			name = name_at(s, id)
-			if ["select", "hr", "datalist", "option"].contains(name) {
+			if match name {
+				"select" | "hr" | "datalist" | "option" => True
+				_ => False
+			} {
 				return False
 			}
 			if name == "optgroup" {
