@@ -16,6 +16,7 @@ from pathlib import Path
 import random
 import re
 import selectors
+import shutil
 import subprocess
 import sys
 import time
@@ -127,14 +128,47 @@ def expected(case: dict, node: NodeOracle) -> dict:
     return result
 
 
+def probe_identity(roc: str) -> dict:
+    identity = hashlib.sha256()
+    for path in sorted([*(ROOT / 'package').glob('*.roc'), *DATA.glob('*.roc')]):
+        identity.update(path.relative_to(ROOT).as_posix().encode() + b'\0' + path.read_bytes() + b'\0')
+    compiler = Path(shutil.which(roc) or roc)
+    return {'source_sha256': identity.hexdigest(), 'compiler_sha256': hashlib.sha256(compiler.read_bytes()).hexdigest(), 'flags': ['--no-cache', '--opt=dev']}
+
+
 def build_probe(roc: str, work: Path) -> Path:
-    executable = work / 'bin/probe'
+    executable = work.resolve() / 'bin/probe'
     executable.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run([roc, 'build', str(DATA / 'probe.roc'), '--output=' + str(executable)], cwd=ROOT, capture_output=True, text=True, check=False)
+    manifest = executable.with_suffix('.build.json')
+    identity = probe_identity(roc)
+    if executable.is_file() and manifest.is_file():
+        try:
+            saved = json.loads(manifest.read_text())
+            if saved['identity'] == identity and saved['binary_sha256'] == setup.sha256(executable):
+                return executable
+        except (ValueError, KeyError):
+            pass
+    result = subprocess.run([roc, 'build', '--no-cache', '--opt=dev', str(DATA / 'probe.roc'), '--output=' + str(executable)], cwd=ROOT, capture_output=True, text=True, check=False)
     log = work / 'probe-build.log'
     log.write_text(result.stdout + result.stderr)
     if result.returncode:
         raise RuntimeError(f'markup probe build failed: {log}')
+    if identity != probe_identity(roc):
+        raise RuntimeError('markup sources changed during probe build; rebuild before reviewing')
+    write_json(manifest, {'identity': identity, 'binary_sha256': setup.sha256(executable)})
+    return executable
+
+
+def resolve_probe(args) -> Path:
+    if not args.probe:
+        return build_probe(args.roc, args.work)
+    executable = args.probe.resolve()
+    try:
+        saved = json.loads(executable.with_suffix('.build.json').read_text())
+        if saved['identity'] != probe_identity(args.roc) or saved['binary_sha256'] != setup.sha256(executable):
+            raise ValueError('identity mismatch')
+    except (OSError, ValueError, KeyError) as error:
+        raise RuntimeError('explicit markup probe has missing/stale build identity; rerun without --probe using the intended --roc compiler') from error
     return executable
 
 
@@ -240,7 +274,7 @@ def load_cases(formats: list[str]) -> list[dict]:
 
 
 def run_review(args) -> int:
-    executable = args.probe or build_probe(args.roc, args.work)
+    executable = resolve_probe(args)
     cases = load_cases(args.formats)
     if args.command == 'replay':
         value = json.loads(args.reproducer.read_text())
@@ -273,7 +307,7 @@ def run_review(args) -> int:
 
 def browser_review(args) -> int:
     setup.ensure_browsers(args.engines, args.cache, with_deps=args.with_deps)
-    executable = args.probe or build_probe(args.roc, args.work)
+    executable = resolve_probe(args)
     rows = []
     with NodeOracle(args.cache, timeout=60) as node:
         for case in load_cases(args.formats):
@@ -293,13 +327,16 @@ def browser_review(args) -> int:
 
 def consumer_review(args) -> int:
     setup.ensure_browsers(args.engines, args.cache, with_deps=args.with_deps)
-    executable = args.probe or build_probe(args.roc, args.work)
+    executable = resolve_probe(args)
     cases = [case for case in load_cases(args.formats) if case.get('consumer')]
-    template_process = subprocess.run([str(executable), 'template'], input=b'<path/>', capture_output=True, check=False, timeout=10)
-    if template_process.returncode:
-        raise RuntimeError('template consumer probe failed: ' + template_process.stderr.decode(errors='replace'))
-    template = json.loads(template_process.stdout)
-    validate_tree(template['roots'])
+    templates = []
+    for operation in ['template', 'template-html']:
+        template_process = subprocess.run([str(executable), operation], input=b'<path/>', capture_output=True, check=False, timeout=10)
+        if template_process.returncode:
+            raise RuntimeError(operation + ' consumer probe failed: ' + template_process.stderr.decode(errors='replace'))
+        template = json.loads(template_process.stdout)
+        validate_tree(template['roots'])
+        templates.append((operation, template))
     rows = []
     with NodeOracle(args.cache, timeout=60) as node:
         for case in cases:
@@ -312,20 +349,26 @@ def consumer_review(args) -> int:
                 reference = node.parse({**request(case), 'engine': engine})
                 row = compare({**case, 'id': case['id'] + '/' + engine}, constructed, reference)
                 required = ['linearGradient', 'pathLength', 'foreignObject'] if case['format'] == 'svg' else ['mathml']
-                if not all(constructed.get('checks', {}).get(key) is True for key in required):
+                if not all(constructed.get('checks', {}).get(key) is True for key in required) or constructed.get('interfaces') != reference.get('interfaces'):
                     row['kind'] = 'wrong_dom_interface'
                 row['checks'] = constructed.get('checks', {})
+                row['interfaces'] = constructed.get('interfaces', {})
+                row['browser_version'] = constructed.get('browser_version')
                 rows.append(row)
-        for engine in args.engines:
-            case = {'id': 'consumer-typed-template/' + engine, 'format': 'svg', 'syntax': 'xml',
-                    'input': '<svg xmlns="' + NS['svg'] + '"><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
-            constructed = node.parse({**request(case), 'engine': engine, 'construct': template['roots'], 'bindings': template['bindings']})
-            reference = node.parse({**request(case), 'engine': engine})
-            row = compare(case, constructed, reference)
-            if not all(constructed.get('checks', {}).get(key) is True for key in ['textBinding', 'attributeBinding']):
-                row['kind'] = 'wrong_binding_behavior'
-            row['checks'] = constructed.get('checks', {})
-            rows.append(row)
+        for operation, template in templates:
+            for engine in args.engines:
+                case = {'id': 'consumer-' + operation + '/' + engine, 'format': 'svg', 'syntax': 'xml',
+                        'input': '<svg xmlns="' + NS['svg'] + '"><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
+                if operation == 'template-html':
+                    case.update(syntax='html', fragment=True, format='html', input='<script>if (a < b) x = 1;</script><svg><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>')
+                constructed = node.parse({**request(case), 'engine': engine, 'construct': template['roots'], 'bindings': template['bindings']})
+                reference = node.parse({**request(case), 'engine': engine})
+                row = compare(case, constructed, reference)
+                if not all(constructed.get('checks', {}).get(key) is True for key in ['textBinding', 'attributeBinding']):
+                    row['kind'] = 'wrong_binding_behavior'
+                row['checks'] = constructed.get('checks', {})
+                row['browser_version'] = constructed.get('browser_version')
+                rows.append(row)
     report = {'schema_version': 1, 'engines': args.engines, 'counts': dict(Counter(row['kind'] for row in rows)), 'rows': rows,
               'boundary': 'DOM construction consumes Roc trees and typed bindings using namespace-aware DOM constructors; it never reparses source or dynamic binding text.'}
     write_json(args.work / 'consumer.json', report)
@@ -371,7 +414,7 @@ def normalize_dat(value: str) -> str:
 
 
 def suite_review(args) -> int:
-    executable = args.probe or build_probe(args.roc, args.work)
+    executable = resolve_probe(args)
     inventory = json.loads((DATA / 'tree-suite.json').read_text())
     cases = inventory['cases']
     if args.file:
@@ -403,7 +446,7 @@ def suite_review(args) -> int:
 def semantic_review(args) -> int:
     suppliers = setup.ensure_semantic(args.cache)
     python = setup.ensure_semantic_python(args.cache)
-    executable = args.probe or build_probe(args.roc, args.work)
+    executable = resolve_probe(args)
     rows = []
     for case in load_cases(args.formats):
         if not case.get('semantic_oracle'):

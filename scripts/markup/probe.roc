@@ -26,9 +26,15 @@ main! = |arguments| {
 	namespace = args.get(5) ?? Markup.html_namespace
 	context = args.get(6) ?? "body"
 	bytes = Stdin.read_to_end!()?
-	if format == "template" {
+	if format == "template" or format == "template-html" {
 		caption = Str.from_utf8(bytes) ?? ""
-		plan = Svg.parse_segments(["<svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {}).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
+		plan = (
+			if format == "template-html" {
+				Html.parse_segments(["<script>if (a < b) x = 1;</script><svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {})
+			} else {
+				Svg.parse_segments(["<svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {})
+			}
+		).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
 		bound = MarkupTemplate.bind(plan, ["12", caption].iter()).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
 		roots = Str.join_with(bound.plan.parsed.tree.roots.map(|index| encode_node(bound.plan.parsed.tree, index, False)), ",")
 		bindings = Str.join_with(

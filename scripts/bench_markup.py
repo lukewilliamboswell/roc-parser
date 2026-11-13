@@ -97,15 +97,18 @@ def compile_literals(roc: str, work: Path, sizes: list[int], repetitions: int) -
     records = []
     platform_url = 'https://github.com/roc-lang/basic-cli/releases/download/0.28.0/2yhxoR7cZPSYbyUzPWULFw8AA6QEcdsgFNRmzu7pZbst.tar.zst'
     for size in sizes:
-        document = '<g>' + '<path d="M0 0L10 10Z" pathLength="1"/>' * size + '</g>'
+        document = '<g>' + ''.join(f'<path id="p{i}" d="M0 0L10 10Z" pathLength="1"/>' for i in range(size)) + '</g>'
         for variant in ['literal', 'runtime']:
             folder = work / 'compile' / variant / str(size)
             folder.mkdir(parents=True, exist_ok=True)
-            header = 'app [main!] { cli: platform ' + json.dumps(platform_url) + ', parser: ' + json.dumps(str(ROOT / 'package/main.roc')) + ' }\nimport cli.Stdout\nimport cli.Stdin\nimport parser.Svg\n'
+            header = 'app [main!] { cli: platform ' + json.dumps(platform_url) + ', parser: ' + json.dumps(str(ROOT / 'package/main.roc')) + ' }\nimport cli.Stdout\nimport cli.Stdin\nimport cli.OsStr\nimport parser.Svg\nimport parser.Markup\n'
+            common = 'describe : Markup.Parsed, U64 -> Str\ndescribe = |parsed, index| {\n node = parsed.tree.nodes.get(index) ?? crash "missing node"\n id = node.attributes.find_first(|a| a.name.local == "id").map_ok(|a| a.value) ?? ""\n match node.kind { Element(name) => "${name.local}:${id}", _ => "text" }\n}\n'
+            selection = 'index = U64.from_str(OsStr.display(args.first() ?? OsStr.from_str("0"))) ?? 0\n'
             if variant == 'literal':
-                body = 'drawing : Svg.Fragment\ndrawing = ' + json.dumps(document) + '\nmain! = |_| Stdout.line!(drawing.parsed.tree.nodes.len().to_str())\n'
+                body = 'drawing : Svg.Fragment\ndrawing = ' + json.dumps(document) + '\nmain! = |args| {\n' + selection + 'Stdout.line!(describe(drawing.parsed, index))\n}\n'
             else:
-                body = 'main! = |_| {\n input = Str.from_utf8(Stdin.read_to_end!()?) ?? ""\n match Svg.parse_fragment(input, {}) {\n Ok(drawing) => Stdout.line!(drawing.parsed.tree.nodes.len().to_str())?\n Err(error) => crash Str.inspect(error)\n }\n Ok({})\n}\n'
+                body = 'main! = |args| {\n' + selection + ' input = Str.from_utf8(Stdin.read_to_end!()?) ?? ""\n drawing = Svg.parse_fragment(input, {}).map_err(|error| crash Str.inspect(error))?\n Stdout.line!(describe(drawing.parsed, index))?\n Ok({})\n}\n'
+            header += common
             source = folder / 'main.roc'
             source.write_text(header + body)
             binary = folder / 'main'
@@ -117,8 +120,8 @@ def compile_literals(roc: str, work: Path, sizes: list[int], repetitions: int) -
                 (folder / f'build-{index}.log').write_text(result.stdout + result.stderr)
                 if result.returncode:
                     raise RuntimeError(f'compile-time fixture build failed: {folder}')
-            result = subprocess.run([str(binary)], input=document.encode(), capture_output=True, check=False, timeout=30)
-            if result.returncode or result.stdout.strip() != str(size + 1).encode():
+            result = subprocess.run([str(binary), str(size)], input=document.encode(), capture_output=True, check=False, timeout=30)
+            if result.returncode or result.stdout.strip() != ('path:p' + str(size - 1)).encode():
                 raise RuntimeError(f'compile-time fixture output differs: {folder}: {result.stdout!r}')
             records.append({'variant': variant, 'size': size, 'input_bytes': len(document.encode()), 'input_sha256': hashlib.sha256(document.encode()).hexdigest(),
                             'compile_samples_ns': times, 'median_compile_ns': statistics.median(times), 'artifact_bytes': binary.stat().st_size,
@@ -129,6 +132,7 @@ def compile_literals(roc: str, work: Path, sizes: list[int], repetitions: int) -
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--roc', default=os.environ.get('ROC', 'roc'))
+    parser.add_argument('--compiler-build-mode', choices=['ReleaseFast', 'ReleaseSafe', 'ReleaseSmall', 'Debug', 'unknown'], default='unknown', help='record the verified Zig build mode of the compiler used for compile-cost measurements')
     parser.add_argument('--work', type=Path, default=DEFAULT_WORK)
     parser.add_argument('--sizes', nargs='+', type=int, default=[32, 64, 128, 256])
     parser.add_argument('--repetitions', type=int, default=3)
@@ -175,7 +179,7 @@ def main(argv=None):
     if source_before != source_identity():
         raise RuntimeError('sources changed during measurement; discard observations and rerun')
     report = {'schema_version': 1, 'compiler': subprocess.check_output([args.roc, 'version'], text=True).strip(),
-              'build_flags': ['--no-cache', '--opt=speed'], 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+              'build_flags': ['--no-cache', '--opt=speed'], 'compiler_build_mode': args.compiler_build_mode, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
               'source_sha256': source_before, 'source_stable': True, 'compiler_sha256': hashlib.sha256(Path(shutil.which(args.roc) or args.roc).read_bytes()).hexdigest(), 'compile_records': compile_records, 'machine': platform.platform(),
               'records': records, 'scaling_failures': failures,
               'limits': 'Local wall-clock scaling observations are not a proof of asymptotic bounds. Allocation ceilings are checked by the markup-limits roc-fuzz target.'}

@@ -41,7 +41,7 @@ async function browserOracle(request) {
   const page = await browsers.get(request.engine).newPage();
   await page.route('**/*', route => route.abort());
   try {
-    return await page.evaluate(({input, fragment, format, context, syntax, construct, bindings}) => {
+    const result = await page.evaluate(({input, fragment, format, context, syntax, construct, bindings}) => {
       const namespaces = {html: 'http://www.w3.org/1999/xhtml', svg: 'http://www.w3.org/2000/svg', mathml: 'http://www.w3.org/1998/Math/MathML'};
       function encode(node) {
         if (node.nodeType === 3) return ['text', node.data];
@@ -84,7 +84,7 @@ async function browserOracle(request) {
         const html = parent.querySelector('foreignObject > div');
         if (html) checks.foreignObject = html.namespaceURI === namespaces.html && html instanceof HTMLDivElement;
         const math = parent.querySelector('math');
-        if (math) checks.mathml = math.namespaceURI === namespaces.mathml && math.constructor.name === 'MathMLElement';
+        if (math) checks.mathml = math.namespaceURI === namespaces.mathml;
         if (bindings && bindings.length) {
           const text = parent.querySelector('text');
           checks.textBinding = !!text && text.textContent === '<path/>' && text.children.length === 0;
@@ -102,8 +102,14 @@ async function browserOracle(request) {
         parent.innerHTML = input;
         if (parent.localName === 'template' && parent.namespaceURI === namespaces.html) parent = parent.content;
       } else parent = new DOMParser().parseFromString(input, 'text/html');
-      return {status: 'ok', roots: Array.from(parent.childNodes, encode), diagnostics: [], checks};
+      const interfaces = {};
+      for (const selector of ['linearGradient', 'path', 'foreignObject > div', 'math']) {
+        const element = parent.querySelector(selector);
+        if (element) interfaces[selector] = element.constructor.name;
+      }
+      return {status: 'ok', roots: Array.from(parent.childNodes, encode), diagnostics: [], checks, interfaces};
     }, request);
+    return {...result, browser_version: browsers.get(request.engine).version()};
   } finally { await page.close(); }
 }
 

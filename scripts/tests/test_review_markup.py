@@ -170,3 +170,30 @@ class CoverageManifestTests(unittest.TestCase):
             for path in rule.get('roc_tests', []):
                 self.assertTrue((review.ROOT / path).is_file(), path)
         self.assertEqual({item['language'] for item in manifest['opaque']}, {'CSS', 'JavaScript', 'URLs and cross-document resources', 'Content MathML'})
+
+
+class ProbeIdentityTests(unittest.TestCase):
+    def test_explicit_probe_refuses_missing_or_changed_binary_identity(self):
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'probe'
+            binary.write_bytes(b'first')
+            args = Namespace(probe=binary, roc='roc')
+            with patch.object(review, 'probe_identity', return_value={'source': 'current'}):
+                with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
+                    review.resolve_probe(args)
+                binary.with_suffix('.build.json').write_text(json.dumps({'identity': {'source': 'current'}, 'binary_sha256': hashlib.sha256(b'first').hexdigest()}))
+                self.assertEqual(review.resolve_probe(args), binary)
+                binary.write_bytes(b'changed')
+                with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
+                    review.resolve_probe(args)
+
+    def test_explicit_probe_refuses_stale_source_even_if_binary_matches(self):
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'probe'
+            binary.write_bytes(b'binary')
+            binary.with_suffix('.build.json').write_text(json.dumps({'identity': {'source': 'old'}, 'binary_sha256': hashlib.sha256(b'binary').hexdigest()}))
+            with patch.object(review, 'probe_identity', return_value={'source': 'current'}):
+                with self.assertRaisesRegex(RuntimeError, 'missing/stale'):
+                    review.resolve_probe(Namespace(probe=binary, roc='roc'))
