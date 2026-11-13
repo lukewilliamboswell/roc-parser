@@ -34,7 +34,7 @@ HtmlTree :: [].{
 		if !$candidate {
 			return Ok({ parsed, clones: [] })
 		}
-		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(List.repeat(Err(Missing), parsed.tree.nodes.len()), |entries, pair| pair.0.children.fold(entries, |map, child| set_parent(map, child, Ok(pair.1))))
+		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(parsed.tree.nodes.map(|node| { parent: Err(Missing), namespace: kind_namespace(node.kind) }), |entries, pair| pair.0.children.fold(entries, |map, child| set_parent(map, child, Ok(pair.1))))
 		elements = parsed.tree.nodes.fold(
 			0.U64,
 			|count, node| count + (
@@ -45,7 +45,7 @@ HtmlTree :: [].{
 			),
 		)
 		state : State
-		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, context_class: HtmlNamespace, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
 				at = Markup.position(parsed.source, e.column)
@@ -60,7 +60,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, context_class: namespace_class(context.namespace), diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -71,7 +71,7 @@ HtmlTree :: [].{
 		var $source_regions = []
 		while !$done {
 			mode = content_mode($state)
-			foreign = adjusted_namespace($state) != Markup.html_namespace
+			foreign = adjusted_namespace_class($state) != HtmlNamespace
 			next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
 				Tok.next_with_source($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
 			} else {
@@ -198,9 +198,38 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-# Parent entries share the arena's dense node indices. Detached/root nodes
-# retain an explicit missing entry rather than allocating a hash-table slot.
-State : { nodes : List(Markup.Node), roots : List(U64), parents : List(Try(U64, [Missing])), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
+# Parent links and namespace classes share the arena's dense node indices.
+# Detached/root nodes retain an explicit missing parent entry.
+State : { nodes : List(Markup.Node), roots : List(U64), parents : List(NodeIndexEntry), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, context_class : NamespaceClass, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
+
+NamespaceClass : [HtmlNamespace, SvgNamespace, MathNamespace, OtherNamespace]
+
+NodeIndexEntry : { parent : Try(U64, [Missing]), namespace : NamespaceClass }
+
+empty_index_entry : NodeIndexEntry
+empty_index_entry = { parent: Err(Missing), namespace: OtherNamespace }
+
+namespace_class = |uri| if uri == Markup.html_namespace {
+	HtmlNamespace
+} else if uri == Markup.svg_namespace {
+	SvgNamespace
+} else if uri == Markup.mathml_namespace {
+	MathNamespace
+} else {
+	OtherNamespace
+}
+
+kind_namespace = |kind| match kind {
+	Element({ namespace: Uri(uri), .. }) => namespace_class(uri)
+	_ => OtherNamespace
+}
+
+namespace_class_at = |s, id| (s.parents.get(id) ?? empty_index_entry).namespace
+
+adjusted_namespace_class = |s| if (s.fragment and s.stack.len() == 1) s.context_class else match s.stack.last() {
+	Ok(i) => namespace_class_at(s, i)
+	Err(_) => HtmlNamespace
+}
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -283,7 +312,7 @@ append_node = |s, node| {
 		Element(_) => 1
 		_ => 0
 	}
-	parents = s.parents.append($parent)
+	parents = s.parents.append({ parent: $parent, namespace: kind_namespace(node.kind) })
 	next = { ..s, nodes: s.nodes.append(node), parents, work: s.work + 1, element_count: s.element_count + added_element }
 	match $parent {
 		Ok(parent) => {
@@ -462,7 +491,7 @@ last_named = |s, name| {
 	while $i > 0 {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
-		if namespace_at(s, id) == Markup.html_namespace and name_at(s, id) == name {
+		if namespace_class_at(s, id) == HtmlNamespace and name_at(s, id) == name {
 			return Ok(id)
 		}
 	}
@@ -484,7 +513,7 @@ index_of = |items, value| {
 }
 
 find_parent : State, U64 -> Try(U64, [Missing])
-find_parent = |s, id| s.parents.get(id) ?? Err(Missing)
+find_parent = |s, id| (s.parents.get(id) ?? empty_index_entry).parent
 
 # Check first so the successful update can consume its list. Retaining the
 # original as an error fallback would copy the whole index on every reparent.
@@ -492,7 +521,8 @@ set_parent = |parents, id, parent| {
 	if id >= parents.len() {
 		return parents
 	}
-	parents.set(id, parent) ?? []
+	previous = parents.get(id) ?? empty_index_entry
+	parents.set(id, { ..previous, parent }) ?? []
 }
 
 in_scope = |s, name, kind| {
@@ -501,11 +531,11 @@ in_scope = |s, name, kind| {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
 		n = name_at(s, id)
-		ns = namespace_at(s, id)
-		if ns == Markup.html_namespace and n == name {
+		ns = namespace_class_at(s, id)
+		if ns == HtmlNamespace and n == name {
 			return True
 		}
-		if ns == Markup.html_namespace {
+		if ns == HtmlNamespace {
 			if match n {
 				"html" | "table" | "template" => True
 				_ => False
@@ -532,7 +562,7 @@ in_scope = |s, name, kind| {
 				return False
 			}
 		} else if kind != TableScope {
-			if ns == Markup.mathml_namespace and (
+			if ns == MathNamespace and (
 				match n {
 					"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
 					_ => False
@@ -540,7 +570,7 @@ in_scope = |s, name, kind| {
 			) {
 				return False
 			}
-			if ns == Markup.svg_namespace and (
+			if ns == SvgNamespace and (
 				match n {
 					"foreignObject" | "desc" | "title" => True
 					_ => False
@@ -634,7 +664,7 @@ content_mode = |s| {
 	}
 
 	n = adjusted_name(s)
-	if adjusted_namespace(s) != Markup.html_namespace {
+	if adjusted_namespace_class(s) != HtmlNamespace {
 		return Data
 	}
 	if n == "title" or n == "textarea" {
@@ -677,7 +707,7 @@ process = |initial_state, token, scripting| {
 	}
 	state = { ..$prepared, token_span: token.span, token_end_name: end_name }
 	match token.kind {
-		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and (
+		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_class_at(state, state.stack.last() ?? 0) == HtmlNamespace and (
 			match current(state) {
 				"table" | "tbody" | "tfoot" | "thead" | "tr" => True
 				_ => False
@@ -698,7 +728,7 @@ process = |initial_state, token, scripting| {
 			"noscript" => state.context.scripting
 			_ => False
 		}
-	) and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace {
+	) and namespace_class_at(state, state.stack.last() ?? 0) == HtmlNamespace {
 		match token.kind {
 			Characters(text) => return insert_text(state, text, token.span)
 			End(name) if name == current(state) => return pop_current(state)
@@ -1616,7 +1646,7 @@ generic_end = |s, name, offset| {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
 		n = name_at(s, id)
-		if namespace_at($s, id) == Markup.html_namespace and n == name {
+		if namespace_class_at($s, id) == HtmlNamespace and n == name {
 			$s = implied($s, name)
 			if current($s) != name {
 				$s = problem($s, MisnestedEndTag, offset)
@@ -1772,7 +1802,7 @@ adoption = |s, name, offset| {
 								Ok(active_at) => {
 									original = node_at($s, node_id)
 									new_id = $s.nodes.len()
-									$s = { ..$s, nodes: $s.nodes.append({ ..original, children: [], origin: Implied(offset) }), parents: $s.parents.append(Err(Missing)), stack: $s.stack.set($node_pos, new_id) ?? $s.stack, active: $s.active.set(active_at, Entry(new_id)) ?? $s.active }
+									$s = { ..$s, nodes: $s.nodes.append({ ..original, children: [], origin: Implied(offset) }), parents: $s.parents.append({ parent: Err(Missing), namespace: kind_namespace(original.kind) }), stack: $s.stack.set($node_pos, new_id) ?? $s.stack, active: $s.active.set(active_at, Entry(new_id)) ?? $s.active }
 									if $last == block {
 										$bookmark = active_at + 1
 									}
@@ -1801,7 +1831,7 @@ adoption = |s, name, offset| {
 						new_formatting = $s.nodes.len()
 						block_node = node_at($s, block)
 						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }) }
-						parents = block_node.children.fold($s.parents.append(Ok(block)), |entries, child| set_parent(entries, child, Ok(new_formatting)))
+						parents = block_node.children.fold($s.parents.append({ parent: Ok(block), namespace: kind_namespace(original.kind) }), |entries, child| set_parent(entries, child, Ok(new_formatting)))
 						$s = { ..$s, parents, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
 						active = $s.active.keep_if(|a| a != Entry(formatting_id))
 						bookmark = if ($bookmark > active.len()) active.len() else $bookmark
@@ -2128,8 +2158,8 @@ close_cell = |s| {
 }
 
 foreign_token = |s, token| {
-	namespace = adjusted_namespace(s)
-	if namespace == Markup.html_namespace {
+	namespace = adjusted_namespace_class(s)
+	if namespace == HtmlNamespace {
 		return False
 	}
 	match token.kind {
@@ -2137,7 +2167,7 @@ foreign_token = |s, token| {
 		_ => {}
 	}
 	name = adjusted_name(s)
-	if namespace == Markup.mathml_namespace and (
+	if namespace == MathNamespace and (
 		match name {
 			"mi" | "mo" | "mn" | "ms" | "mtext" => True
 			_ => False
@@ -2149,7 +2179,7 @@ foreign_token = |s, token| {
 			_ => {}
 		}
 	}
-	if namespace == Markup.mathml_namespace and name == "annotation-xml" {
+	if namespace == MathNamespace and name == "annotation-xml" {
 		match token.kind {
 			Start(t) if t.name == "svg" => return False
 			_ => {}
@@ -2165,9 +2195,9 @@ foreign_token = |s, token| {
 }
 
 integration = |s| {
-	ns = adjusted_namespace(s)
+	ns = adjusted_namespace_class(s)
 	name = adjusted_name(s)
-	if ns == Markup.svg_namespace and (
+	if ns == SvgNamespace and (
 		match name {
 			"foreignObject" | "desc" | "title" => True
 			_ => False
@@ -2175,7 +2205,7 @@ integration = |s| {
 	) {
 		return True
 	}
-	if ns == Markup.mathml_namespace and name == "annotation-xml" {
+	if ns == MathNamespace and name == "annotation-xml" {
 		n = node_at(s, s.stack.last() ?? 0)
 		return n.attributes.any(
 			|a| a.name.local == "encoding" and (
@@ -2222,7 +2252,7 @@ foreign_process = |state, token| {
 			)
 			if breakout {
 				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
-				while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
+				while !$s.stack.is_empty() and namespace_class_at($s, $s.stack.last() ?? 0) != HtmlNamespace and !integration($s) {
 					$s = pop_current($s)
 				}
 				$s = process_html($s, token, $s.context.scripting)
@@ -2232,7 +2262,7 @@ foreign_process = |state, token| {
 		}
 		End(n) if n == "p" or n == "br" => {
 			$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
-			while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
+			while !$s.stack.is_empty() and namespace_class_at($s, $s.stack.last() ?? 0) != HtmlNamespace and !integration($s) {
 				$s = pop_current($s)
 			}
 			$s = process_html($s, token, $s.context.scripting)
@@ -2246,7 +2276,7 @@ foreign_process = |state, token| {
 			while $i > 0 {
 				$i = $i - 1
 				id = $s.stack.get($i) ?? 0
-				if namespace_at($s, id) == Markup.html_namespace {
+				if namespace_class_at($s, id) == HtmlNamespace {
 					$s = process_html($s, token, $s.context.scripting)
 					$found = True
 					break
@@ -2446,7 +2476,7 @@ expect {
 	# Charging the dispatcher step can exhaust work before body construction.
 	# Neither route may insert the start tag after crossing that boundary.
 	state : State
-	state = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment: True, context: {}, diagnostics: [], max_diagnostics: 1024, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 1, element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 3 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+	state = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment: True, context: {}, context_class: HtmlNamespace, diagnostics: [], max_diagnostics: 1024, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 1, element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 3 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 	token = { kind: Start({ name: "p", attributes: [], self_closing: False }), span: { start: 0, end: 3 } }
 	direct = process_html(state, token, True)
 	general = process_html_general(state, token, True)
@@ -2506,12 +2536,12 @@ expect {
 }
 
 special_at = |s, id| {
-	ns = namespace_at(s, id)
+	ns = namespace_class_at(s, id)
 	n = name_at(s, id)
-	if ns == Markup.html_namespace {
+	if ns == HtmlNamespace {
 		special(n)
 	}
-	else if ns == Markup.mathml_namespace {
+	else if ns == MathNamespace {
 		(
 			match n {
 				"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
@@ -2519,7 +2549,7 @@ special_at = |s, id| {
 			}
 		)
 	}
-	else if ns == Markup.svg_namespace {
+	else if ns == SvgNamespace {
 		(
 			match n {
 				"foreignObject" | "desc" | "title" => True
@@ -2709,7 +2739,7 @@ project_selectedcontent = |state, props| {
 	original_count = state.nodes.len()
 	var $index = 0
 	while $index < original_count {
-		if namespace_at($s, $index) == Markup.html_namespace and name_at($s, $index) == "select" {
+		if namespace_class_at($s, $index) == HtmlNamespace and name_at($s, $index) == "select" {
 			select_node = node_at($s, $index)
 			if !select_node.attributes.any(|a| a.name.local == "multiple") {
 				destinations = selectedcontent_targets($s, $index)
@@ -2816,7 +2846,7 @@ selectedcontent_targets = |s, select_id| {
 	var $ancestor = find_parent(s, select_id)
 	while $ancestor.is_ok() {
 		id = $ancestor ?? select_id
-		if namespace_at(s, id) == Markup.html_namespace and (
+		if namespace_class_at(s, id) == HtmlNamespace and (
 			match name_at(s, id) {
 				"select" | "option" | "selectedcontent" => True
 				_ => False
@@ -2831,7 +2861,7 @@ selectedcontent_targets = |s, select_id| {
 	while !$pending.is_empty() {
 		id = $pending.last() ?? select_id
 		$pending = $pending.drop_last(1)
-		html = namespace_at(s, id) == Markup.html_namespace
+		html = namespace_class_at(s, id) == HtmlNamespace
 		name = name_at(s, id)
 		if html and name == "selectedcontent" {
 			$targets = $targets.append(id)
@@ -2855,7 +2885,7 @@ select_options = |s, select_id| {
 	while !$pending.is_empty() {
 		item = $pending.last() ?? { id: select_id, optgroups: 0 }
 		$pending = $pending.drop_last(1)
-		html = namespace_at(s, item.id) == Markup.html_namespace
+		html = namespace_class_at(s, item.id) == HtmlNamespace
 		name = name_at(s, item.id)
 		if html and name == "option" {
 			$options = $options.append(item.id)
@@ -2908,7 +2938,7 @@ option_disabled = |s, option| {
 	var $parent = find_parent(s, option)
 	while $parent.is_ok() {
 		id = $parent ?? option
-		if namespace_at(s, id) == Markup.html_namespace {
+		if namespace_class_at(s, id) == HtmlNamespace {
 			name = name_at(s, id)
 			if match name {
 				"select" | "hr" | "datalist" | "option" => True
