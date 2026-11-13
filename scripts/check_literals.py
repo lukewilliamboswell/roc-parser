@@ -24,7 +24,7 @@ except ImportError:
 
 
 FIXTURES = ROOT / "scripts" / "literals" / "cases.json"
-PLATFORM = "https://github.com/roc-lang/basic-cli/releases/download/0.27.0/9yjxqdGTP4xSpSEmDazwTmRsehfRZzA19pwEKkR6fj1g.tar.zst"
+PLATFORM = "https://github.com/roc-lang/basic-cli/releases/download/0.28.0/2yhxoR7cZPSYbyUzPWULFw8AA6QEcdsgFNRmzu7pZbst.tar.zst"
 
 
 def app_source(body: str) -> str:
