@@ -440,85 +440,209 @@ doctype = |reader| {
 	start = reader.pos
 	var $pos = start + 9
 	var $diagnostics = reader.diagnostics
-	if !HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
-		$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
-	}
-	while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
-		$pos = $pos + 1
-	}
-	name_start = $pos
-	while $pos < bytes.len() and !HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) and HtmlTokenizer.byte_at(bytes, $pos) != '>' {
-		$pos = $pos + 1
-	}
-	name = HtmlTokenizer.lower(HtmlTokenizer.text_at(bytes, name_start, $pos))
-	var $quirks = name != "html"
-	if name == "" {
-		$diagnostics = $diagnostics.append({ code: MissingDoctypeName, offset: name_start })
-	}
-	while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
-		$pos = $pos + 1
-	}
-	var $public_id = ""
-	var $system_id = ""
+	var $state = BeforeName
+	var $name = []
+	var $public = []
+	var $system = []
 	var $has_public = False
 	var $has_system = False
-	public = HtmlTokenizer.starts_caseless(bytes, $pos, "public")
-	system = HtmlTokenizer.starts_caseless(bytes, $pos, "system")
-	if public or system {
-		$pos = $pos + 6
-		while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
-			$pos = $pos + 1
-		}
-		id = quoted_identifier(bytes, $pos)
-		$pos = id.end
-		if public {
-			$public_id = id.text
-			$has_public = id.present
-		} else {
-			$system_id = id.text
-			$has_system = id.present
-		}
-		if !id.valid {
-			$quirks = True
-			$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
-		}
-		while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
-			$pos = $pos + 1
-		}
-		if public and ['"', '\''].contains(HtmlTokenizer.byte_at(bytes, $pos)) {
-			second = quoted_identifier(bytes, $pos)
-			$system_id = second.text
-			$has_system = second.present
-			$pos = second.end
-		}
-	}
-	if HtmlTokenizer.byte_at(bytes, $pos) != '>' {
-		$quirks = True
+	var $quirks = False
+	var $quote = 0.U8
+	var $done = False
+	if $pos < bytes.len() and !HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) and HtmlTokenizer.byte_at(bytes, $pos) != '>' {
 		$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
-		while $pos < bytes.len() and HtmlTokenizer.byte_at(bytes, $pos) != '>' {
+	}
+	while !$done {
+		if $pos >= bytes.len() {
+			if $state != Bogus {
+				$diagnostics = $diagnostics.append({ code: EofInDoctype, offset: $pos })
+				$quirks = True
+			}
+			break
+		}
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		var $consume = True
+		match $state {
+			BeforeName => {
+				if (HtmlTokenizer.space(byte)) {}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: MissingDoctypeName, offset: $pos })
+					$quirks = True
+					$done = True
+				}
+				else {
+					$state = Name
+					$consume = False
+				}
+			}
+			Name => {
+				if HtmlTokenizer.space(byte) {
+					$state = AfterName
+				}
+				else if byte == '>' {
+					$done = True
+				}
+				else if byte == 0 {
+					$name = $name.concat([239, 191, 189])
+					$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+				}
+				else {
+					$name = $name.append(if (byte >= 'A' and byte <= 'Z') byte + 32 else byte)
+				}
+			}
+			AfterName => {
+				if (HtmlTokenizer.space(byte)) {}
+				else if byte == '>' {
+					$done = True
+				}
+				else if HtmlTokenizer.starts_caseless(bytes, $pos, "public") {
+					$pos = $pos + 6
+					$state = AfterPublicKeyword
+					$consume = False
+				}
+				else if HtmlTokenizer.starts_caseless(bytes, $pos, "system") {
+					$pos = $pos + 6
+					$state = AfterSystemKeyword
+					$consume = False
+				}
+				else {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$state = Bogus
+					$consume = False
+				}
+			}
+			AfterPublicKeyword | BeforePublicIdentifier => {
+				if HtmlTokenizer.space(byte) {
+					$state = BeforePublicIdentifier
+				}
+				else if byte == '\'' or byte == '"' {
+					if $state == AfterPublicKeyword {
+						$diagnostics = $diagnostics.append({ code: MissingWhitespace, offset: $pos })
+					}
+					$has_public = True
+					$quote = byte
+					$state = PublicIdentifier
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$done = True
+				}
+				else {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$state = Bogus
+					$consume = False
+				}
+			}
+			PublicIdentifier => {
+				if byte == $quote {
+					$state = AfterPublicIdentifier
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$done = True
+				}
+				else if byte == 0 {
+					$public = $public.concat([239, 191, 189])
+					$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+				}
+				else {
+					$public = $public.append(byte)
+				}
+			}
+			AfterPublicIdentifier | BetweenIdentifiers => {
+				if HtmlTokenizer.space(byte) {
+					$state = BetweenIdentifiers
+				}
+				else if byte == '>' {
+					$done = True
+				}
+				else if byte == '\'' or byte == '"' {
+					if $state == AfterPublicIdentifier {
+						$diagnostics = $diagnostics.append({ code: MissingWhitespace, offset: $pos })
+					}
+					$has_system = True
+					$quote = byte
+					$state = SystemIdentifier
+				}
+				else {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$state = Bogus
+					$consume = False
+				}
+			}
+			AfterSystemKeyword | BeforeSystemIdentifier => {
+				if HtmlTokenizer.space(byte) {
+					$state = BeforeSystemIdentifier
+				}
+				else if byte == '\'' or byte == '"' {
+					if $state == AfterSystemKeyword {
+						$diagnostics = $diagnostics.append({ code: MissingWhitespace, offset: $pos })
+					}
+					$has_system = True
+					$quote = byte
+					$state = SystemIdentifier
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$done = True
+				}
+				else {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$state = Bogus
+					$consume = False
+				}
+			}
+			SystemIdentifier => {
+				if byte == $quote {
+					$state = AfterSystemIdentifier
+				}
+				else if byte == '>' {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$quirks = True
+					$done = True
+				}
+				else if byte == 0 {
+					$system = $system.concat([239, 191, 189])
+					$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+				}
+				else {
+					$system = $system.append(byte)
+				}
+			}
+			AfterSystemIdentifier => {
+				if (HtmlTokenizer.space(byte)) {}
+				else if byte == '>' {
+					$done = True
+				}
+				else {
+					$diagnostics = $diagnostics.append({ code: InvalidDoctype, offset: $pos })
+					$state = Bogus
+					$consume = False
+				}
+			}
+			Bogus => {
+				if byte == '>' {
+					$done = True
+				}
+				else if byte == 0 {
+					$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+				}
+			}
+		}
+		if $consume {
 			$pos = $pos + 1
 		}
 	}
-	if $pos == bytes.len() {
-		$diagnostics = $diagnostics.append({ code: EofInDoctype, offset: $pos })
-	}
-	else {
-		$pos = $pos + 1
-	}
-	{ token: { kind: Doctype({ name, public_id: $public_id, system_id: $system_id, has_public: $has_public, has_system: $has_system, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
-}
-
-quoted_identifier = |bytes, start| {
-	quote = HtmlTokenizer.byte_at(bytes, start)
-	if !['"', '\''].contains(quote) {
-		return { text: "", end: start, valid: False, present: False }
-	}
-	var $end = start + 1
-	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != quote and HtmlTokenizer.byte_at(bytes, $end) != '>' {
-		$end = $end + 1
-	}
-	valid = HtmlTokenizer.byte_at(bytes, $end) == quote
-	{ text: HtmlTokenizer.text_at(bytes, start + 1, $end), end: if (valid) $end + 1 else $end, valid, present: True }
+	public_id = HtmlTokenizer.normalized($public, False, False).text
+	system_id = HtmlTokenizer.normalized($system, False, False).text
+	{ token: { kind: Doctype({ name: Str.from_utf8_lossy($name), public_id, system_id, has_public: $has_public, has_system: $has_system, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 }
 
 consume_reference = |bytes, start, attribute| {
@@ -801,4 +925,53 @@ expect {
 expect {
 	decoded = HtmlTokenizer.normalized("&#13;".to_utf8(), True, False)
 	decoded.text == "\r" and decoded.diagnostics == [{ code: InvalidCharacterReference, offset: 0 }]
+}
+
+expect {
+	match token_kind("<!DOCTYPE HTML PUBLIC'public'\"system\">") {
+		Doctype(d) => d.name == "html" and d.public_id == "public" and d.system_id == "system" and d.has_public and d.has_system and !d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html SYSTEM 'closed' trailing>") {
+		Doctype(d) => d.system_id == "closed" and d.has_system and !d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html SYSTEM 'closed' trailing") {
+		Doctype(d) => d.system_id == "closed" and d.has_system and !d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html SYSTEM 'closed'") {
+		Doctype(d) => d.system_id == "closed" and d.has_system and d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html SYSTEM 'a&amp;\r\nb\u(0)'>") {
+		Doctype(d) => d.system_id == "a&amp;\nb�" and d.has_system and !d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE html PUBLIC 'ab>ignored") {
+		Doctype(d) => d.public_id == "ab" and d.has_public and !d.has_system and d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE root-element>") {
+		Doctype(d) => d.name == "root-element" and !d.quirks
+		_ => False
+	}
+}
+expect {
+	match token_kind("<!DOCTYPE h\u(0)tml>") {
+		Doctype(d) => d.name == "h�tml" and !d.quirks
+		_ => False
+	}
 }
