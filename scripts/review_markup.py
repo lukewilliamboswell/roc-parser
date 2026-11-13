@@ -307,6 +307,15 @@ def run_review(args) -> int:
     return int(not rows or any(row['kind'] != 'pass' for row in rows))
 
 
+def native_browser_case(case: dict) -> dict:
+    native = {**case, 'recovery': 'browser', 'validate': False, 'scripting': bool(case.get('fragment'))}
+    # Native parsing compares syntax trees; vocabulary diagnostics belong to
+    # the separately checked authoring fixture. Keep syntax expectations.
+    if native.get('diagnostic_contains') in {'UnknownElement', 'UnknownAttribute'}:
+        native.pop('diagnostic_contains')
+    return native
+
+
 def browser_review(args) -> int:
     setup.ensure_browsers(args.engines, args.cache, with_deps=args.with_deps)
     executable = resolve_probe(args)
@@ -315,7 +324,7 @@ def browser_review(args) -> int:
         for case in load_cases(args.formats):
             if case.get('valid') is False or case.get('syntax', 'html' if case['format'] == 'html' else 'xml') != 'html':
                 continue
-            native_case = {**case, 'recovery': 'browser', 'validate': False, 'scripting': bool(case.get('fragment'))}
+            native_case = native_browser_case(case)
             actual = probe(executable, native_case)
             for engine in args.engines:
                 reference = node.parse({**request(native_case), 'engine': engine})

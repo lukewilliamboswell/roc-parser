@@ -63,6 +63,17 @@ class ComparisonTests(unittest.TestCase):
         oracle.parse.return_value = {'status': 'ok', 'roots': [], 'diagnostics': []}
         self.assertEqual(review.expected({**self.case, 'valid': False}, oracle)['status'], 'error')
 
+    def test_native_tree_case_keeps_syntax_checks_and_separates_authoring_checks(self):
+        authoring = {**self.case, 'validate': True, 'fragment': True, 'diagnostic_contains': 'UnknownAttribute'}
+        native = review.native_browser_case(authoring)
+        parsed = {'status': 'ok', 'roots': [], 'diagnostics': []}
+        self.assertFalse(native['validate'])
+        self.assertTrue(native['scripting'])
+        self.assertEqual(review.compare(native, parsed, parsed)['kind'], 'pass')
+        self.assertEqual(review.compare(authoring, parsed, parsed)['kind'], 'missing_relaxation_diagnostic')
+        syntax = review.native_browser_case({**self.case, 'diagnostic_contains': 'MissingDoctype'})
+        self.assertEqual(review.compare(syntax, parsed, parsed)['kind'], 'missing_relaxation_diagnostic')
+
     def test_protocol_rejects_unknown_nodes_and_malformed_attributes(self):
         for tree in [[['unexpected', 'x']], [['element', '', 'x', [['x']], []]], [['text', 1]]]:
             with self.assertRaises(ValueError):
