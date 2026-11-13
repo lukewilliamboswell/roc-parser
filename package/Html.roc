@@ -43,6 +43,11 @@ Html := { parsed : Markup.Parsed }.{
 		Ok(Fragment.{ parsed: checked })
 	}
 
+	## Syntax-only parsing with all HTML options, including the scripting flag
+	## and fragment context. No scripts are executed by this pure parser.
+	parse_source : Str, Props, Bool -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	parse_source = syntax
+
 	## Syntax-only entrypoint used by mixed-format frontends and independent
 	## tree-construction oracles. This does not perform vocabulary/value checks.
 	parse_syntax : Str, Markup.Props, Bool, Markup.Name -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
