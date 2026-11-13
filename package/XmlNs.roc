@@ -654,11 +654,11 @@ declaration = |attribute| {
 # has at most one colon, and both parts are NCNames
 # (https://www.w3.org/TR/xml-names/#ns-qualnames). The input is already an
 # XML Name, so each part only needs a check of its first character.
-split_qname : Str -> Try({ prefix : Str, local : Str, written : Str }, XmlNs.Problem)
+split_qname : Str -> Try({ prefix : Str, local : Str }, [NotAQName(Str)])
 split_qname = |name| {
 	# Unprefixed inline names need no temporary byte list.
 	if !name.contains(":") {
-		return Ok({ prefix: "", local: name, written: name })
+		return Ok({ prefix: "", local: name })
 	}
 	bytes = name.to_utf8()
 	var $colon = none
@@ -673,14 +673,14 @@ split_qname = |name| {
 		$index = $index + 1
 	}
 	if $colon == none {
-		return Ok({ prefix: "", local: name, written: name })
+		return Ok({ prefix: "", local: name })
 	}
 	if $colon == 0 or $colon + 1 == bytes.len() or !starts_ncname(bytes, $colon + 1) {
 		return Err(NotAQName(name))
 	}
 	prefix = name.drop_last_bytes(bytes.len() - $colon) ?? ""
 	local = name.drop_first_bytes($colon + 1) ?? ""
-	Ok({ prefix, local, written: name })
+	Ok({ prefix, local })
 }
 
 # Whether the name character at `pos` may start an NCName: anything but a
@@ -700,7 +700,7 @@ starts_ncname = |bytes, pos| {
 	}
 }
 
-resolve : { prefix : Str, local : Str, written : Str }, List({ prefix : Str, namespace : XmlNs.Namespace, previous : U64 }), Dict(Str, U64), Bool -> Try(XmlNs.Name, XmlNs.Problem)
+resolve : { prefix : Str, local : Str }, List({ prefix : Str, namespace : XmlNs.Namespace, previous : U64 }), Dict(Str, U64), Bool -> Try(XmlNs.Name, XmlNs.Problem)
 resolve = |qname, entries, active, is_element| {
 	if qname.prefix == "" {
 		namespace =
@@ -1860,3 +1860,10 @@ expect {
 		|input| XmlNs.fold_source(input, {}, {}, |state, _| state) == XmlNs.parse(input, {}).map_ok(|_| {}),
 	)
 }
+
+expect {
+	input = "<é:根 xmlns:é='urn:é' é:属性='值'><é:子/></é:根>"
+	doc = XmlNs.parse_str(input)?
+	doc.root.name() == Ok({ namespace: Uri("urn:é"), local: "根", prefix: Prefix("é") }) and doc.root.attribute(Uri("urn:é"), "属性") == Ok("值") and doc.root.children_named(Uri("urn:é"), "子").len() == 1
+}
+expect problem_of("<a:·x xmlns:a='urn:a'/>") == Ok(NotAQName("a:·x"))
