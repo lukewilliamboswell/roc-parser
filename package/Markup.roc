@@ -515,21 +515,8 @@ source_attributes = |source, span, start| {
 	while $pos < span.end and !space(bytes.get($pos) ?? 0) and !['/', '>'].contains(bytes.get($pos) ?? 0) {
 		$pos = $pos + 1
 	}
-	var $lookup = Dict.empty()
-	for attribute in start.attributes {
-		$lookup = $lookup.insert(qualified_name(attribute.name), { name: attribute.name, value: attribute.value })
-	}
-	for binding in start.bindings {
-		value = match binding.namespace {
-			Uri(uri) => uri
-			NoNamespace => ""
-		}
-		(local, spelling, prefix) = match binding.prefix {
-			Default => ("xmlns", "xmlns", Unprefixed)
-			Prefix(p) => (p, "xmlns:${p}", Prefix("xmlns"))
-		}
-		$lookup = $lookup.insert(spelling, { name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix }, value })
-	}
+	var $attribute_index = 0
+	var $binding_index = 0
 	var $attrs = []
 	while $pos < span.end {
 		while $pos < span.end and space(bytes.get($pos) ?? 0) {
@@ -542,7 +529,8 @@ source_attributes = |source, span, start| {
 		while $pos < span.end and !space(bytes.get($pos) ?? 0) and bytes.get($pos) != Ok('=') {
 			$pos = $pos + 1
 		}
-		spelling = Str.from_utf8_lossy(bytes.drop_first(begin).take_first($pos - begin))
+		name_end = $pos
+		declaration = name_end >= begin + 5 and bytes.get(begin) == Ok('x') and bytes.get(begin + 1) == Ok('m') and bytes.get(begin + 2) == Ok('l') and bytes.get(begin + 3) == Ok('n') and bytes.get(begin + 4) == Ok('s') and (name_end == begin + 5 or bytes.get(begin + 5) == Ok(':'))
 		while $pos < span.end and bytes.get($pos) != Ok('=') {
 			$pos = $pos + 1
 		}
@@ -556,20 +544,33 @@ source_attributes = |source, span, start| {
 			$pos = $pos + 1
 		}
 		$pos = $pos + 1
-		match $lookup.get(spelling) {
-			Ok(attribute) => {
-				$attrs = $attrs.append({ name: attribute.name, value: attribute.value, span: { start: begin, end: $pos } })
+		if declaration {
+			match start.bindings.get($binding_index) {
+				Ok(binding) => {
+					$binding_index = $binding_index + 1
+					value = match binding.namespace {
+						Uri(uri) => uri
+						NoNamespace => ""
+					}
+					(local, prefix) = match binding.prefix {
+						Default => ("xmlns", Unprefixed)
+						Prefix(p) => (p, Prefix("xmlns"))
+					}
+					$attrs = $attrs.append({ name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix }, value, span: { start: begin, end: $pos } })
+				}
+				Err(_) => {}
 			}
-			Err(_) => {}
+		} else {
+			match start.attributes.get($attribute_index) {
+				Ok(attribute) => {
+					$attribute_index = $attribute_index + 1
+					$attrs = $attrs.append({ name: attribute.name, value: attribute.value, span: { start: begin, end: $pos } })
+				}
+				Err(_) => {}
+			}
 		}
 	}
 	$attrs
-}
-
-qualified_name : Markup.Name -> Str
-qualified_name = |name| match name.prefix {
-	Unprefixed => name.local
-	Prefix(prefix) => "${prefix}:${name.local}"
 }
 
 expect {
@@ -644,3 +645,22 @@ expect Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 0, end: 1 
 expect !Markup.Source.from_tokens(['a'], []).partition_valid()
 expect !Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 0, end: 0 } }]).partition_valid()
 expect !Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 1, end: 2 } }]).partition_valid()
+
+expect {
+	input = "<é a='A' xmlns:p='urn:p' p:b='B' xmlns='urn:default' c='C' xmlns:q='urn:q' q:d='D'/>"
+	parsed = Markup.parse_xml(input, {})?
+	attrs = parsed.tree.nodes.first()?.attributes
+	attrs.map(|a| (a.name.local, a.value, Str.from_utf8_lossy(parsed.source.slice(a.span)))) == [
+		("a", "A", "a='A'"),
+		("p", "urn:p", "xmlns:p='urn:p'"),
+		("b", "B", "p:b='B'"),
+		("xmlns", "urn:default", "xmlns='urn:default'"),
+		("c", "C", "c='C'"),
+		("q", "urn:q", "xmlns:q='urn:q'"),
+		("d", "D", "q:d='D'"),
+	]
+}
+expect {
+	parsed = Markup.parse_xml("<x xmlnsfoo='a' xmlns:p='urn:p' p:q='b'/>", {})?
+	parsed.tree.nodes.first()?.attributes.map(|a| (a.name.local, a.name.namespace)) == [("xmlnsfoo", NoNamespace), ("p", Uri("http://www.w3.org/2000/xmlns/")), ("q", Uri("urn:p"))]
+}
