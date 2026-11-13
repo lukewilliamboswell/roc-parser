@@ -7,7 +7,7 @@ HtmlTokenizer :: [].{
 	Span : { start : U64, end : U64 }
 	Attribute : { name : Str, value : Str, span : Span }
 	Tag : { name : Str, attributes : List(Attribute), self_closing : Bool }
-	Kind : [Start(Tag), End(Str), Characters(Str), Comment(Str), Doctype({ name : Str, public_id : Str, system_id : Str, quirks : Bool }), Eof]
+	Kind : [Start(Tag), End(Str), Characters(Str), Comment(Str), ProcessingInstruction({ target : Str, data : Str }), Doctype({ name : Str, public_id : Str, system_id : Str, quirks : Bool }), Eof]
 	Token : { kind : Kind, span : Span }
 	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
@@ -62,7 +62,10 @@ HtmlTokenizer :: [].{
 			end = if ($end < bytes.len()) $end + 3 else $end
 			return { token: { kind: Characters(text.text), span: { start, end } }, reader: { ..reader, pos: end } }
 		}
-		if starts(bytes, start, "<!") or starts(bytes, start, "<?") {
+		if starts(bytes, start, "<?") {
+			return processing_instruction(reader)
+		}
+		if starts(bytes, start, "<!") {
 			var $end = start + 2
 			while $end < bytes.len() and byte_at(bytes, $end) != '>' {
 				$end = $end + 1
@@ -486,3 +489,99 @@ expect {
 		_ => False
 	}
 }
+
+# The HTML processing-instruction states preserve target case and use HTML's
+# target grammar. Disallowed/invalid targets fall back to a bogus comment;
+# unlike XML, either > or ?> closes a valid instruction.
+processing_instruction = |reader| {
+	bytes = reader.bytes
+	start = reader.pos
+	var $pos = start + 2
+	var $diagnostics = reader.diagnostics
+	if $pos >= bytes.len() {
+		return { token: { kind: Eof, span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics.append({ code: EofInProcessingInstruction, offset: $pos }) } }
+	}
+	if !HtmlTokenizer.ascii_alpha(HtmlTokenizer.byte_at(bytes, $pos)) and HtmlTokenizer.byte_at(bytes, $pos) != '_' {
+		return pi_bogus(reader, InvalidFirstCharacterOfProcessingInstructionTarget, $pos)
+	}
+	target_start = $pos
+	while $pos < bytes.len() {
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		if HtmlTokenizer.ascii_alpha(byte) or (byte >= '0' and byte <= '9') or byte == '-' or byte == '_' {
+			$pos = $pos + 1
+		} else {
+			break
+		}
+	}
+	if $pos >= bytes.len() {
+		return { token: { kind: Eof, span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics.append({ code: EofInProcessingInstruction, offset: $pos }) } }
+	}
+	boundary = HtmlTokenizer.byte_at(bytes, $pos)
+	if !HtmlTokenizer.space(boundary) and boundary != '?' and boundary != '>' {
+		return pi_bogus(reader, InvalidProcessingInstructionTarget, $pos)
+	}
+	target = HtmlTokenizer.text_at(bytes, target_start, $pos)
+	if ["xml", "xml-stylesheet"].contains(HtmlTokenizer.lower(target)) {
+		return pi_bogus(reader, DisallowedProcessingInstructionTarget, $pos)
+	}
+	while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
+		$pos = $pos + 1
+	}
+	data_start = $pos
+	while $pos < bytes.len() and HtmlTokenizer.byte_at(bytes, $pos) != '>' {
+		$pos = $pos + 1
+	}
+	if $pos >= bytes.len() {
+		return { token: { kind: Eof, span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics.append({ code: EofInProcessingInstruction, offset: $pos }) } }
+	}
+	data_end = if ($pos > data_start and HtmlTokenizer.byte_at(bytes, $pos - 1) == '?') $pos - 1 else $pos
+	# Input preprocessing normalizes newlines. PI data has no reference or
+	# null-replacement state: all other input characters are appended verbatim.
+	data = HtmlTokenizer.normalized_with_nulls(bytes.sublist({ start: data_start, len: data_end - data_start }), False, False, False)
+	{ token: { kind: ProcessingInstruction({ target, data: data.text }), span: { start, end: $pos + 1 } }, reader: { ..reader, pos: $pos + 1, diagnostics: $diagnostics } }
+}
+
+pi_bogus = |reader, code, offset| {
+	bytes = reader.bytes
+	start = reader.pos
+	var $end = start + 2
+	while $end < bytes.len() and HtmlTokenizer.byte_at(bytes, $end) != '>' {
+		$end = $end + 1
+	}
+	decoded = HtmlTokenizer.normalized(bytes.sublist({ start: start + 1, len: $end - start - 1 }), False, False)
+	{ token: { kind: Comment(decoded.text), span: { start, end: if ($end < bytes.len()) $end + 1 else $end } }, reader: { ..reader, pos: if ($end < bytes.len()) $end + 1 else $end, diagnostics: reader.diagnostics.append({ code, offset }).concat(decoded.diagnostics.map(|d| { ..d, offset: start + 1 + d.offset })) } }
+}
+
+# Processing-instruction targets and data use the current HTML grammar,
+# including invalid-target bogus comments and EOF without an emitted PI.
+expect token_kind("<?something>") == ProcessingInstruction({ target: "something", data: "" })
+expect token_kind("<?something good>") == ProcessingInstruction({ target: "something", data: "good" })
+expect token_kind("<?UPPERCASE   data?>") == ProcessingInstruction({ target: "UPPERCASE", data: "data" })
+expect token_kind("<?_prefix-42 d >") == ProcessingInstruction({ target: "_prefix-42", data: "d " })
+expect token_kind("<?hey?there>") == ProcessingInstruction({ target: "hey", data: "?there" })
+expect token_kind("<?hey??>") == ProcessingInstruction({ target: "hey", data: "?" })
+expect token_kind("<?hey\t\r\n\u(C)there=1?>") == ProcessingInstruction({ target: "hey", data: "there=1" })
+expect token_kind("<?hey a\r\nb\rc>") == ProcessingInstruction({ target: "hey", data: "a\nb\nc" })
+expect token_kind("<?hey &amp;<x>>") == ProcessingInstruction({ target: "hey", data: "&amp;<x" })
+expect token_kind("<?xml?>") == Comment("?xml?")
+expect token_kind("<?XML-stylesheet version='1.0'>") == Comment("?XML-stylesheet version='1.0'")
+expect token_kind("<?1st-place>") == Comment("?1st-place")
+expect token_kind("<?namespace:tag>") == Comment("?namespace:tag")
+expect token_kind("<?user@domain>") == Comment("?user@domain")
+expect token_kind("<? >") == Comment("? ")
+expect token_kind("<? ") == Comment("? ")
+expect token_kind("<?start") == Eof
+expect token_kind("<?start?") == Eof
+expect token_kind("<?start data") == Eof
+expect token_kind("<?") == Eof
+expect {
+	result = HtmlTokenizer.next({ bytes: "<?pi?>tail".to_utf8(), pos: 0, diagnostics: [] }, Data, False)
+	result.reader.pos == 6 and result.token.span == { start: 0, end: 6 } and result.reader.diagnostics.is_empty()
+}
+expect {
+	result = HtmlTokenizer.next({ bytes: "<?xml?>".to_utf8(), pos: 0, diagnostics: [] }, Data, False)
+	result.reader.diagnostics == [{ code: DisallowedProcessingInstructionTarget, offset: 5 }]
+}
+
+token_kind : Str -> HtmlTokenizer.Kind
+token_kind = |input| HtmlTokenizer.next({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False).token.kind
