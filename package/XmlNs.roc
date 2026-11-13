@@ -471,6 +471,16 @@ XmlNs := {
 			}
 			resolve_source_names(scope.bound, written, attributes, spans).map_err(|_| Fallback)
 		}
+		read_tag : StableSourceScope, Str, List(U8), U64, U64, U64 -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute), empty : Bool, pos : U64, name_end : U64 }, [Fallback])
+		read_tag = |scope, source, bytes, start, maximum, prefix| {
+			match Xml.SourceLex.read_head(source, bytes, start)? {
+				Complete(tag) => {
+					resolved_element = source_element_name(scope.bound, tag.name).map_err(|_| Fallback)?
+					Ok({ name: resolved_element, attributes: [], empty: tag.empty, pos: tag.pos, name_end: start + 1 + tag.name.count_utf8_bytes() })
+				}
+				Attributes(written) => stable_read_attributes(scope.bound, source, bytes, start, written, maximum, prefix)
+			}
+		}
 	}
 
 }
@@ -1768,16 +1778,7 @@ resolve_source_start = |bound, written, attributes, spans| {
 
 resolve_source_names : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
 resolve_source_names = |bound, written, attributes, spans| {
-	element_name = split_qname(written)?
-	if element_name.prefix == "xmlns" {
-		return Err(ReservedPrefix("xmlns"))
-	}
-	resolved_name = if element_name.prefix == "" {
-		namespace = if bound.default_index == none {
-			NoNamespace
-		} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
-		{ namespace, local: element_name.local, prefix: Unprefixed }
-	} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?
+	resolved_name = source_element_name(bound, written)?
 	var $resolved = List.with_capacity(attributes.len())
 	var $index = 0
 	var $prefixed = 0
@@ -1785,19 +1786,87 @@ resolve_source_names = |bound, written, attributes, spans| {
 		attribute = attributes.get($index) ?? { name: "", value: "" }
 		span = spans.get($index) ?? { start: 0, end: 0 }
 		$index = $index + 1
-		attribute_name = split_qname(attribute.name)?
-		if attribute_name.prefix != "" {
+		resolved_attribute_name = source_attribute_name(bound, attribute.name)?
+		if resolved_attribute_name.prefix != Unprefixed {
 			$prefixed = $prefixed + 1
 		}
-		resolved_attribute_name = if attribute_name.prefix == "" {
-			{ namespace: NoNamespace, local: attribute_name.local, prefix: Unprefixed }
-		} else resolve(attribute_name, bound.entries, Box.unbox(bound.active), False)?
 		$resolved = $resolved.append({ name: resolved_attribute_name, value: attribute.value, span })
 	}
 	if $prefixed > 1 {
 		check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
 	}
 	Ok({ name: resolved_name, attributes: $resolved })
+}
+
+source_element_name : SourceBound, Str -> Try(XmlNs.Name, XmlNs.Problem)
+source_element_name = |bound, written| {
+	element_name = split_qname(written)?
+	if element_name.prefix == "xmlns" {
+		return Err(ReservedPrefix("xmlns"))
+	}
+	Ok(
+		if element_name.prefix == "" {
+			namespace = if bound.default_index == none {
+				NoNamespace
+			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
+			{ namespace, local: element_name.local, prefix: Unprefixed }
+		} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?,
+	)
+}
+
+source_attribute_name : SourceBound, Str -> Try(XmlNs.Name, XmlNs.Problem)
+source_attribute_name = |bound, written| {
+	qname = split_qname(written)?
+	if qname.prefix == "" {
+		Ok({ namespace: NoNamespace, local: qname.local, prefix: Unprefixed })
+	} else resolve(qname, bound.entries, Box.unbox(bound.active), False)
+}
+
+stable_read_attributes : SourceBound, Str, List(U8), U64, { val : Str, pos : U64 }, U64, U64 -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute), empty : Bool, pos : U64, name_end : U64 }, [Fallback])
+stable_read_attributes = |bound, source, bytes, start, written, maximum, prefix| {
+	parsed = Xml.SourceLex.read_attributes_with(source, bytes, written, maximum, { attributes: [], seen: Set.empty() }, |state, written_attribute, _| stable_attribute_name(bound, state, written_attribute), |state, resolved_attribute, value, span| stable_attribute_append(state, resolved_attribute, value, { start: span.start - prefix, end: span.end - prefix }))?
+	resolved_element = source_element_name(bound, parsed.name).map_err(|_| Fallback)?
+	Ok({ name: resolved_element, attributes: parsed.state.attributes, empty: parsed.empty, pos: parsed.pos, name_end: start + 1 + parsed.name.count_utf8_bytes() })
+}
+
+StableAttributes : { attributes : List(XmlNs.SourceAttribute), seen : Set(Str) }
+
+stable_attribute_name : SourceBound, StableAttributes, Str -> Try(XmlNs.Name, [Fallback])
+stable_attribute_name = |bound, state, written| {
+	if is_declaration(written) {
+		return Err(Fallback)
+	}
+	resolved_attribute = source_attribute_name(bound, written).map_err(|_| Fallback)?
+	if state.attributes.len() <= 16 {
+		var $index = 0.U64
+		while $index < state.attributes.len() {
+			prior = state.attributes.get($index) ?? crash "invalid stable attribute index"
+			if prior.name.local == resolved_attribute.local and prior.name.namespace == resolved_attribute.namespace {
+				return Err(Fallback)
+			}
+			$index = $index + 1
+		}
+	} else if state.seen.contains(stable_attribute_key(resolved_attribute)) {
+		return Err(Fallback)
+	}
+	Ok(resolved_attribute)
+}
+
+stable_attribute_append : StableAttributes, XmlNs.Name, Str, Xml.SourceSpan -> StableAttributes
+stable_attribute_append = |state, resolved_attribute, value, span| {
+	attributes = state.attributes.append({ name: resolved_attribute, value, span })
+	seen = if attributes.len() > 16 {
+		if state.seen.is_empty() {
+			Set.from_list(attributes.map(|attribute| stable_attribute_key(attribute.name)))
+		} else state.seen.insert(stable_attribute_key(resolved_attribute))
+	} else state.seen
+	{ attributes, seen }
+}
+
+stable_attribute_key : XmlNs.Name -> Str
+stable_attribute_key = |resolved_attribute| match resolved_attribute.namespace {
+	Uri(uri) => "${uri}\u(0)${resolved_attribute.local}"
+	NoNamespace => "\u(0)${resolved_attribute.local}"
 }
 
 ordered_source_attributes : List(Xml.Attribute), List(Xml.SourceSpan), List(XmlNs.Attribute), List(XmlNs.Binding) -> List(XmlNs.SourceAttribute)

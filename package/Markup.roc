@@ -965,9 +965,9 @@ parse_xml_direct = |text, input, prefix, maximum_depth, maximum_elements, fragme
 			if following == '!' or following == '?' or !Xml.SourceLex.allows(maximum_depth, maximum_elements, $open.len(), $elements) {
 				return Err(Fallback)
 			}
-			tag = Xml.SourceLex.read_start(input, bytes, start, maximum_attributes)?
-			name_end = start + 1 + tag.name.count_utf8_bytes()
-			resolved = stable_scope.resolve_tag(tag.name, tag.attributes, tag.attribute_spans)?
+			tag = stable_scope.read_tag(input, bytes, start, maximum_attributes, prefix)?
+			name_end = tag.name_end
+			resolved = { name: tag.name, attributes: tag.attributes }
 			$pos = tag.pos
 			$elements = $elements + 1
 			if resolved.attributes.len() > props.max_attributes {
@@ -978,7 +978,7 @@ parse_xml_direct = |text, input, prefix, maximum_depth, maximum_elements, fragme
 				$push = True
 			}
 			$kind = Tag
-			$new_node = Ok({ kind: Element(resolved.name), attributes: shifted_source_attributes(resolved.attributes, prefix), children: [], origin: Authored({ start: start - prefix, end: $pos - prefix }) })
+			$new_node = Ok({ kind: Element(resolved.name), attributes: resolved.attributes, children: [], origin: Authored({ start: start - prefix, end: $pos - prefix }) })
 		} else {
 			parsed_text = Xml.SourceLex.read_text(input, bytes, start)?
 			$pos = parsed_text.pos

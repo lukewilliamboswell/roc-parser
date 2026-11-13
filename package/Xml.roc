@@ -568,6 +568,10 @@ Xml := {
 		StartTag : { name : Str, attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), empty : Bool, pos : U64 }
 		read_start : Str, List(U8), U64, U64 -> Try(StartTag, [Fallback])
 		read_start = |src, bytes, start, maximum| parse_source_start_tag(src, bytes, start, maximum).map_err(|_| Fallback)
+		read_head : Str, List(U8), U64 -> Try([Complete({ name : Str, empty : Bool, pos : U64 }), Attributes({ val : Str, pos : U64 })], [Fallback])
+		read_head = |src, bytes, start| parse_source_start_head(src, bytes, start).map_err(|_| Fallback)
+		read_attributes_with : Str, List(U8), { val : Str, pos : U64 }, U64, state, (state, Str, U64 -> Try(prepared, problem)), (state, prepared, Str, Xml.SourceSpan -> state) -> Try({ name : Str, state : state, empty : Bool, pos : U64 }, [Fallback])
+		read_attributes_with = |src, bytes, name, maximum, initial, on_name, on_attribute| parse_source_attributes_with(src, bytes, name, maximum, initial, on_name, on_attribute).map_err(|_| Fallback)
 		read_text : Str, List(U8), U64 -> Try({ val : Str, pos : U64 }, [Fallback])
 		read_text = |src, bytes, start| read_source_text(src, bytes, start).map_err(|_| Fallback)
 		read_end : Str, List(U8), U64, Xml.SourceSpan -> Try({ name_end : U64, pos : U64 }, [Fallback])
@@ -2386,63 +2390,91 @@ expect {
 
 parse_source_start_tag : Str, List(U8), U64, U64 -> Try({ name : Str, attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), empty : Bool, pos : U64 }, ReadFailure)
 parse_source_start_tag = |src, bytes, start, max_attributes| {
-	name =
-		match parse_name(src, bytes, start + 1) {
-			Ok(parsed) => parsed
-			Err(_) => return fail(start + 1, "expected an element name after '<'")
-		}
-	var $attributes = []
-	var $spans = []
-	# The Unique Att Spec check scans the few attributes most elements have,
-	# and switches to a set once there are many, so it stays linear without
-	# hashing every name of every element.
-	var $seen = Set.empty()
+	name = match parse_source_start_head(src, bytes, start)? {
+		Complete(tag) => return Ok({ name: tag.name, attributes: [], attribute_spans: [], empty: tag.empty, pos: tag.pos })
+		Attributes(parsed) => parsed
+	}
+	parsed = parse_source_attributes_with(src, bytes, name, max_attributes, { attributes: [], spans: [], seen: Set.empty() }, source_attribute_name, source_attribute_append).map_err(
+		|problem| match problem {
+			Failed(failure) => failure
+			Rejected(failure) => failure
+		},
+	)?
+	Ok({ name: parsed.name, attributes: parsed.state.attributes, attribute_spans: parsed.state.spans, empty: parsed.empty, pos: parsed.pos })
+}
+
+parse_source_start_head : Str, List(U8), U64 -> Try([Complete({ name : Str, empty : Bool, pos : U64 }), Attributes({ val : Str, pos : U64 })], ReadFailure)
+parse_source_start_head = |src, bytes, start| {
+	name = match parse_name(src, bytes, start + 1) {
+		Ok(parsed) => parsed
+		Err(_) => return fail(start + 1, "expected an element name after '<'")
+	}
+	if bytes.get(name.pos) == Ok('>') {
+		return Ok(Complete({ name: name.val, empty: False, pos: name.pos + 1 }))
+	}
+	if bytes.get(name.pos) == Ok('/') and bytes.get(name.pos + 1) == Ok('>') {
+		return Ok(Complete({ name: name.val, empty: True, pos: name.pos + 2 }))
+	}
+	Ok(Attributes(name))
+}
+
+SourceAttributes : { attributes : List(Xml.Attribute), spans : List(Xml.SourceSpan), seen : Set(Str) }
+
+source_attribute_name : SourceAttributes, Str, U64 -> Try(Str, ReadFailure)
+source_attribute_name = |state, written, offset| {
+	duplicate = if state.attributes.len() <= small_attribute_count {
+		state.attributes.any(|attribute| attribute.name == written)
+	} else state.seen.contains(written)
+	if duplicate {
+		return fail(offset, "duplicate attribute ${written}")
+	}
+	Ok(written)
+}
+
+source_attribute_append : SourceAttributes, Str, Str, Xml.SourceSpan -> SourceAttributes
+source_attribute_append = |state, written, value, span| {
+	attributes = state.attributes.append({ name: written, value })
+	seen = if attributes.len() > small_attribute_count {
+		if state.seen.is_empty() {
+			Set.from_list(attributes.map(|attribute| attribute.name))
+		} else state.seen.insert(written)
+	} else state.seen
+	{ attributes, spans: state.spans.append(span), seen }
+}
+
+parse_source_attributes_with : Str, List(U8), { val : Str, pos : U64 }, U64, state, (state, Str, U64 -> Try(prepared, problem)), (state, prepared, Str, Xml.SourceSpan -> state) -> Try({ name : Str, state : state, empty : Bool, pos : U64 }, [Failed(ReadFailure), Rejected(problem)])
+parse_source_attributes_with = |src, bytes, name, max_attributes, initial, on_name, on_attribute| {
+	var $state = initial
+	var $count = 0.U64
 	var $pos = name.pos
 	while True {
 		before_space = $pos
 		$pos = skip_space(bytes, $pos)
 		if bytes.get($pos) == Ok('>') {
-			return Ok({ name: name.val, attributes: $attributes, attribute_spans: $spans, empty: False, pos: $pos + 1 })
+			return Ok({ name: name.val, state: $state, empty: False, pos: $pos + 1 })
 		}
 		if bytes.get($pos) == Ok('/') and bytes.get($pos + 1) == Ok('>') {
-			return Ok({ name: name.val, attributes: $attributes, attribute_spans: $spans, empty: True, pos: $pos + 2 })
+			return Ok({ name: name.val, state: $state, empty: True, pos: $pos + 2 })
 		}
 		if $pos >= bytes.len() {
-			return fail($pos, "expected '>' to close the start tag <${name.val}>")
+			return fail($pos, "expected '>' to close the start tag <${name.val}>").map_err(|failure| Failed(failure))
 		}
 		if $pos == before_space {
-			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>")
+			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
 		}
 		attribute_start = $pos
-		attribute_name =
-			match parse_name(src, bytes, $pos) {
-				Ok(parsed) => parsed
-				Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>")
-			}
-		if $attributes.len() >= max_attributes {
-			return Err(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos }))
+		attribute_name = match parse_name(src, bytes, $pos) {
+			Ok(parsed) => parsed
+			Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
 		}
-		duplicate =
-			if $attributes.len() <= small_attribute_count {
-				$attributes.any(|attribute| attribute.name == attribute_name.val)
-			} else {
-				$seen.contains(attribute_name.val)
-			}
-		if duplicate {
-			return fail($pos, "duplicate attribute ${attribute_name.val}")
+		if $count >= max_attributes {
+			return Err(Failed(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos })))
 		}
-		$pos = skip_eq(bytes, attribute_name.pos)?
-		value = parse_attribute_value(src, bytes, $pos)?
-		$attributes = $attributes.append({ name: attribute_name.val, value: value.val })
-		$spans = $spans.append({ start: attribute_start, end: value.pos })
-		if $attributes.len() > small_attribute_count {
-			$seen =
-				if $seen.is_empty() {
-					Set.from_list($attributes.map(|attribute| attribute.name))
-				} else {
-					$seen.insert(attribute_name.val)
-				}
-		}
+		prepared = on_name($state, attribute_name.val, $pos).map_err(|problem| Rejected(problem))?
+		$pos = skip_eq(bytes, attribute_name.pos).map_err(|failure| Failed(failure))?
+		value = parse_attribute_value(src, bytes, $pos).map_err(|failure| Failed(failure))?
+		$state = on_attribute($state, prepared, value.val, { start: attribute_start, end: value.pos })
+		$count = $count + 1
 		$pos = value.pos
 	}
 }
