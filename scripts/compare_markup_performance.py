@@ -2,6 +2,7 @@
 """Local, identity-checked DOM comparison; preparation and timing are separate commands."""
 from __future__ import annotations
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -27,13 +28,31 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def source_paths():
+    return sorted([*(ROOT / 'package').glob('*.roc'), DRIVER, PYTHON_DRIVER, Path(__file__), REQUIREMENTS,
+                   *RUST.glob('Cargo.*'), *RUST.glob('src/*.rs'), *GO.glob('*.go'), *GO.glob('go.*')])
+
+
 def source_identity():
-    paths = [*(ROOT / 'package').glob('*.roc'), DRIVER, PYTHON_DRIVER, Path(__file__), REQUIREMENTS,
-             *RUST.glob('Cargo.*'), *RUST.glob('src/*.rs'), *GO.glob('*.go'), *GO.glob('go.*')]
     identity = hashlib.sha256()
-    for path in sorted(paths):
+    for path in source_paths():
         identity.update(path.relative_to(ROOT).as_posix().encode() + b'\0' + path.read_bytes() + b'\0')
     return identity.hexdigest()
+
+
+def repository_identity():
+    return {'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+            'source_files': {p.relative_to(ROOT).as_posix(): digest(p) for p in source_paths()}}
+
+
+def machine_identity():
+    model = platform.processor()
+    cpuinfo = Path('/proc/cpuinfo')
+    if cpuinfo.exists():
+        model = next((line.split(':', 1)[1].strip() for line in cpuinfo.read_text().splitlines()
+                      if line.startswith('model name')), model)
+    return {'platform': platform.platform(), 'cpu_model': model, 'logical_cpus': os.cpu_count(),
+            'affinity': sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else None}
 
 
 def fixtures():
@@ -83,11 +102,16 @@ def prepare(args):
     if before != source_identity():
         raise RuntimeError('sources changed during preparation; rerun prepare')
     binaries = {'roc': roc, 'rust': work / 'rust-target/release/markup-dom-compare', 'go': go, 'python': python}
-    manifest = {'source_sha256': before, 'binaries': {k: {'path': str(p), 'sha256': digest(p)} for k, p in binaries.items()},
+    manifest = {'source_sha256': before, 'repository': repository_identity(),
+                'prepared_at': datetime.now(timezone.utc).isoformat(),
+                'binaries': {k: {'path': str(p), 'sha256': digest(p),
+                                 'format': subprocess.check_output(['file', '--brief', str(p)], text=True).strip() if shutil.which('file') else None}
+                             for k, p in binaries.items()},
                 'compiler_sha256': digest(shutil.which(args.roc) or args.roc), 'compiler': subprocess.check_output([args.roc, 'version'], text=True).strip(),
                 'rust_version': subprocess.check_output(['rustc', '--version'], text=True).strip(), 'go_version': subprocess.check_output(['go', 'version'], text=True).strip(),
                 'python_versions': json.loads(subprocess.check_output([str(python), '-c', 'import sys,json,importlib.metadata as m;print(json.dumps({"python":sys.version,**{n:m.version(n) for n in ["lxml","html5lib","selectolax"]}}))'], text=True)),
                 'builds': builds, 'roc_flags': ['--no-cache', '--opt=speed', '--debug'], 'compiler_build_mode': args.compiler_build_mode,
+                'roc_platform_runtime': 'basic-cli 0.28: Linux musl; glibc target unsupported' if platform.system() == 'Linux' else 'basic-cli 0.28 native target',
                 'rust_flags': 'release opt-level=3 lto=thin codegen-units=1 debug=2 strip=false', 'go_flags': ['-trimpath'],
                 'locks': {str(p.relative_to(ROOT)): digest(p) for p in [RUST / 'Cargo.lock', GO / 'go.sum', REQUIREMENTS]}}
     (work / 'build.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -256,9 +280,10 @@ def run(args):
     if not comparisons:
         raise RuntimeError('no selected common cases; an empty comparison cannot pass')
     failures = [row for row in comparisons if not row['pass']]
-    report = {'schema_version': 1, 'source_stable': True, 'build': manifest, 'machine': platform.platform(),
+    report = {'schema_version': 1, 'source_stable': True, 'build': manifest, 'machine': machine_identity(),
+              'measured_at': datetime.now(timezone.utc).isoformat(),
               'seed': args.seed, 'repetitions': args.repetitions, 'target_ms': args.target_ms, 'comparisons': comparisons,
-              'records': all_rows, 'failures': failures, 'contract': 'Every adapter builds a DOM and consumes element local names, attribute local names/values and text UTF-8 lengths. Untimed complete canonical trees compare namespace URI, local names, attribute values, exact text and tree shape against independent ElementTree/XML or html5lib/HTML reference models. Namespace-declaration attributes, comments, processing instructions and doctype metadata are excluded consistently; common fixtures contain no comments/PI and HTML documents use the standard doctype. Startup, imports, stdin and decoding precede timing. Allocation/destruction and consumption are timed. Full Roc source tracking and authoring checks remain visible; raw Roc timings are diagnostic and never replace the full gate.'}
+              'records': all_rows, 'failures': failures, 'contract': 'Every adapter builds a DOM and consumes element local names, attribute local names/values and text UTF-8 lengths. Untimed complete canonical trees compare namespace URI, local names, attribute values, exact text and tree shape against independent ElementTree/XML or html5lib/HTML reference models. Namespace-declaration attributes, comments, processing instructions and doctype metadata are excluded consistently; common fixtures contain no comments/PI and HTML documents use the standard doctype. Startup, imports, stdin and decoding precede timing. Allocation and consumption are timed; destruction/garbage collection follows normal runtime behavior without forced per-parse collection. Full Roc source tracking and authoring checks remain visible; raw Roc timings are diagnostic and never replace the full gate.'}
     (work / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({'cases': len(comparisons), 'failures': len(failures), 'report': str(work / 'results.json')}))
     return int(bool(failures))
