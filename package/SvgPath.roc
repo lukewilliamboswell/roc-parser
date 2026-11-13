@@ -29,7 +29,7 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 			start = $pos
 			byte = bytes.get($pos) ?? 0
 			if letter(byte) {
-				if !"MmZzLlHhVvCcSsQqTtAa".to_utf8().contains(byte) {
+				if !command_letter(byte) {
 					return Err(InvalidPath({ problem: UnknownCommand(byte), offset: $pos }))
 				}
 				$command = byte
@@ -37,7 +37,7 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 			} else if $command == 0 {
 				return Err(InvalidPath({ problem: MoveRequired, offset: $pos }))
 			}
-			if $commands.is_empty() and !['M', 'm'].contains($command) {
+			if $commands.is_empty() and $command != 'M' and $command != 'm' {
 				return Err(InvalidPath({ problem: MoveRequired, offset: start }))
 			}
 			count = arity($command)
@@ -59,16 +59,16 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 					if $pos >= bytes.len() or letter(bytes.get($pos) ?? 0) {
 						return Err(InvalidPath({ problem: IncompleteArguments({ command: $command, expected: count, actual: $i }), offset: $pos }))
 					}
-					if ['A', 'a'].contains($command) and ($i == 3 or $i == 4) {
+					if ($command == 'A' or $command == 'a') and ($i == 3 or $i == 4) {
 						flag = bytes.get($pos) ?? 0
-						if !['0', '1'].contains(flag) {
+						if flag != '0' and flag != '1' {
 							return Err(InvalidPath({ problem: ExpectedFlag, offset: $pos }))
 						}
 						$args = $args.append(if (flag == '1') 1 else 0)
 						$pos = $pos + 1
 					} else {
 						parsed = MarkupValues.number(bytes, $pos).map_err(|InvalidNumber(offset)| InvalidPath({ problem: ExpectedNumber, offset }))?
-						if ['A', 'a'].contains($command) and $i < 2 and parsed.value < 0 {
+						if ($command == 'A' or $command == 'a') and $i < 2 and parsed.value < 0 {
 							return Err(InvalidPath({ problem: NegativeRadius, offset: $pos }))
 						}
 						$args = $args.append(parsed.value)
@@ -134,3 +134,9 @@ expect SvgPath.parse_str("M0 0L1").is_err()
 
 expect SvgPath.parse_str("M1. 2").is_err()
 expect SvgPath.parse_str("M1\u(000C)2").is_ok()
+
+command_letter : U8 -> Bool
+command_letter = |byte| match byte {
+	'M' | 'm' | 'Z' | 'z' | 'L' | 'l' | 'H' | 'h' | 'V' | 'v' | 'C' | 'c' | 'S' | 's' | 'Q' | 'q' | 'T' | 't' | 'A' | 'a' => True
+	_ => False
+}

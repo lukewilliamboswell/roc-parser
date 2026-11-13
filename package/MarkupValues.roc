@@ -9,7 +9,7 @@ MarkupValues :: [].{
 	number : List(U8), U64 -> Try(Number, [InvalidNumber(U64)])
 	number = |bytes, start| {
 		var $pos = start
-		if [Ok('+'), Ok('-')].contains(bytes.get($pos)) {
+		if sign(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
 		var $digits = 0
@@ -27,9 +27,9 @@ MarkupValues :: [].{
 		if $digits == 0 {
 			return Err(InvalidNumber(start))
 		}
-		if [Ok('e'), Ok('E')].contains(bytes.get($pos)) and (digit(bytes.get($pos + 1)) or ([Ok('+'), Ok('-')].contains(bytes.get($pos + 1)) and digit(bytes.get($pos + 2)))) {
+		if (bytes.get($pos) == Ok('e') or bytes.get($pos) == Ok('E')) and (digit(bytes.get($pos + 1)) or (sign(bytes.get($pos + 1) ?? 0) and digit(bytes.get($pos + 2)))) {
 			$pos = $pos + 1
-			if [Ok('+'), Ok('-')].contains(bytes.get($pos)) {
+			if sign(bytes.get($pos) ?? 0) {
 				$pos = $pos + 1
 			}
 			exponent = $pos
@@ -51,7 +51,7 @@ MarkupValues :: [].{
 	whitespace : List(U8), U64 -> U64
 	whitespace = |bytes, start| {
 		var $pos = start
-		while [Ok(' '), Ok('\t'), Ok('\r'), Ok('\n'), Ok(12)].contains(bytes.get($pos)) {
+		while space(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
 		$pos
@@ -100,7 +100,7 @@ MarkupValues :: [].{
 		bytes = text.to_utf8()
 		start = whitespace(bytes, 0)
 		var $end = bytes.len()
-		while $end > start and [9, 10, 12, 13, 32].contains(bytes.get($end - 1) ?? 0) {
+		while $end > start and space(bytes.get($end - 1) ?? 0) {
 			$end = $end - 1
 		}
 		Str.from_utf8(bytes.sublist({ start, len: $end - start })) ?? ""
@@ -114,7 +114,7 @@ MarkupValues :: [].{
 		parsed = number(bytes, 0)?
 		unit = Str.from_utf8(bytes.drop_first(parsed.end)) ?? ""
 		lower_unit = Str.from_utf8_lossy(unit.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
-		if !["", "%", "px", "em", "ex", "ch", "rem", "vw", "vh", "vmin", "vmax", "cm", "mm", "q", "in", "pt", "pc"].contains(lower_unit) {
+		if !length_unit(lower_unit) {
 			return Err(InvalidNumber(parsed.end))
 		}
 		Ok({ value: parsed.value, unit })
@@ -197,3 +197,15 @@ expect MarkupValues.length("2PX") == Ok({ value: 2, unit: "PX" })
 expect MarkupValues.scalar("\u(000C)2") == Ok(2)
 
 expect MarkupValues.length("\u(00A0)2px").is_err()
+
+sign : U8 -> Bool
+sign = |byte| byte == '+' or byte == '-'
+
+space : U8 -> Bool
+space = |byte| byte == ' ' or byte == '\t' or byte == '\r' or byte == '\n' or byte == 12
+
+length_unit : Str -> Bool
+length_unit = |unit| match unit {
+	"" | "%" | "px" | "em" | "ex" | "ch" | "rem" | "vw" | "vh" | "vmin" | "vmax" | "cm" | "mm" | "q" | "in" | "pt" | "pc" => True
+	_ => False
+}
