@@ -144,9 +144,9 @@ valid = |text, expected| match expected {
 	_ => True
 }
 
-custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and !["annotation-xml", "color-profile", "font-face", "font-face-src", "font-face-uri", "font-face-format", "font-face-name", "missing-glyph"].contains(name)
+custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and name.to_utf8().all(|b| (b >= 'a' and b <= 'z') or (b >= '0' and b <= '9') or ['-', '.', '_'].contains(b) or b >= 128) and !["annotation-xml", "color-profile", "font-face", "font-face-src", "font-face-uri", "font-face-format", "font-face-name", "missing-glyph"].contains(name)
 
-allowed = |element, attr| global.contains(attr) or attr.starts_with("data-") or aria.contains(attr) or events.contains(attr) or attributes(element).contains(attr)
+allowed = |element, attr| global.contains(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria.contains(attr) or events.contains(attr) or attributes(element).contains(attr)
 
 has_attribute = |node, key| node.attributes.any(|a| a.name.local == key)
 

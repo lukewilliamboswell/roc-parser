@@ -1320,8 +1320,10 @@ adoption = |s, name, offset| {
 							# append_node allocates a new index, so use a temporary
 							# append and transfer its computed insertion position.
 							old_count = $s.nodes.len()
-							temporary = append_node({ ..$s, foster: True }, moved)
-							$s = replace_child_id({ ..temporary, foster: False, nodes: temporary.nodes.take_first(old_count) }, old_count, $last)
+							original_stack = $s.stack
+							target_position = stack_position($s, common) ?? 0
+							temporary = append_node({ ..$s, foster: True, stack: original_stack.take_first(target_position + 1) }, moved)
+							$s = replace_child_id({ ..temporary, stack: original_stack, foster: False, nodes: temporary.nodes.take_first(old_count) }, old_count, $last)
 						} else {
 							$s = reparent($s, $last, common)
 						}
@@ -1942,4 +1944,9 @@ expect {
 expect {
 	p = HtmlTree.parse("<body><template><tr></tr><tbody><tr></tr></template>", False, {}, { recovery: Browser })?
 	names(p.tree).contains("template")
+}
+
+expect {
+	p = HtmlTree.parse("<table><a>1<p>2</a>3</p>", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 3 and Markup.text(p.tree, p.tree.roots.get(1)?) == "23"
 }
