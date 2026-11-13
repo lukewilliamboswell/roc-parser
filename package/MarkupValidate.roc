@@ -23,7 +23,7 @@ MarkupValidate :: [].{
 					mathml = name.namespace == Uri(Markup.mathml_namespace)
 					if !item.extension {
 						known = if (svg) svg_elements.contains(name.local) else if (mathml) math_elements.contains(name.local) else True
-						if !known and !props.allow_unknown_elements {
+						if (!known or (!svg and !mathml and name.namespace != Uri(Markup.html_namespace))) and !props.allow_unknown_elements {
 							return fail(parsed, node, UnknownElement(name.local))
 						}
 						var $attr_index = 0
@@ -41,6 +41,9 @@ MarkupValidate :: [].{
 								}
 							}
 							$attr_index = $attr_index + 1
+						}
+						if svg and known {
+							check_svg_children(parsed, node, name.local)?
 						}
 						if mathml and known {
 							check_math_children(parsed, node, name.local)?
@@ -226,6 +229,7 @@ valid_value = |text, grammar| {
 			align = parts.first() ?? ""
 			parts.len() >= 1 and parts.len() <= 2 and ["none", "xMinYMin", "xMidYMin", "xMaxYMin", "xMinYMid", "xMidYMid", "xMaxYMid", "xMinYMax", "xMidYMax", "xMaxYMax"].contains(align) and (parts.len() == 1 or [Ok("meet"), Ok("slice")].contains(parts.get(1)))
 		}
+		Language("auto-or-nonnegative-length") => text == "auto" or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		Language("positive-integer") => U64.from_str(text).map_ok(|v| v > 0) == Ok(True)
 		Language("coordinate-pairs") => MarkupValues.numbers(text).map_ok(|v| v.len() % 2 == 0) == Ok(True)
 		Language("number-list") => MarkupValues.numbers(text).is_ok()
@@ -288,3 +292,23 @@ attr_fail = |parsed, attr, problem| {
 
 words_of : Str -> List(Str)
 words_of = |text| (Str.from_utf8(text.to_utf8().map(|b| if ([44, 9, 10, 13].contains(b)) 32 else b)) ?? "").split_on(" ").keep_if(|v| !v.is_empty())
+
+check_svg_children : Markup.Parsed, Markup.Node, Str -> Try({}, [InvalidMarkup(Markup.Error)])
+check_svg_children = |parsed, node, name| {
+	for index in node.children {
+		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child index"))
+		match child.kind {
+			Element(n) => {
+				descriptive = ["title", "desc", "metadata"].contains(n.local)
+				animation = ["animate", "animateMotion", "animateTransform", "set", "discard"].contains(n.local)
+				allowed = if (["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "image", "use", "stop"].contains(name)) descriptive or animation else if (["linearGradient", "radialGradient"].contains(name)) descriptive or animation or n.local == "stop" else if (name == "filter") descriptive or animation or n.local.starts_with("fe") else if (name == "feComponentTransfer") descriptive or ["feFuncA", "feFuncB", "feFuncG", "feFuncR"].contains(n.local) else if (name == "feMerge") descriptive or n.local == "feMergeNode" else if (["feDiffuseLighting", "feSpecularLighting"].contains(name)) descriptive or ["feDistantLight", "fePointLight", "feSpotLight"].contains(n.local) else if (["text", "tspan", "textPath"].contains(name)) descriptive or animation or ["a", "tspan", "textPath"].contains(n.local) else True
+				if !allowed {
+					return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
+				}
+			}
+			Text(text) if !text.trim().is_empty() and ["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"].contains(name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
+			_ => {}
+		}
+	}
+	Ok({})
+}
