@@ -274,10 +274,12 @@ XmlNs := {
 		}
 	}
 
-	## Authored events with expanded names and the original attribute ranges.
-	## Raw attributes include namespace declarations in their authored order.
+	## An expanded source attribute, including namespace declarations.
+	SourceAttribute : { name : Name, value : Str, span : Xml.SourceSpan }
+
+	## Authored events with expanded names and ordered attribute source ranges.
 	SourceEvent : [
-		Start({ name : Name, bindings : List(Binding), attributes : List(Attribute), raw_attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), span : Xml.SourceSpan, empty : Bool }),
+		Start({ name : Name, attributes : List(SourceAttribute), span : Xml.SourceSpan, empty : Bool }),
 		End(Xml.SourceSpan),
 		Text({ value : Str, span : Xml.SourceSpan }),
 		CData({ value : Str, span : Xml.SourceSpan }),
@@ -299,8 +301,8 @@ XmlNs := {
 				match event {
 					Start(tag) => {
 						mark = state.bound.entries.len()
-						resolved = resolve_source_start(state.bound, tag.name, tag.attributes)?
-						value = on_event(state.value, Start({ name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes, raw_attributes: tag.attributes, attribute_spans: tag.attribute_spans, span: tag.span, empty: tag.empty }))
+						resolved = resolve_source_start(state.bound, tag.name, tag.attributes, tag.attribute_spans)?
+						value = on_event(state.value, Start({ name: resolved.name, attributes: resolved.attributes, span: tag.span, empty: tag.empty }))
 						bound = if (tag.empty and resolved.bound.entries.len() > mark) unbind_to(resolved.bound, mark) else resolved.bound
 						marks = if (tag.empty) state.marks else state.marks.append(mark)
 						Ok({ bound, marks, value })
@@ -1717,13 +1719,73 @@ expect {
 }
 expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
 
-resolve_source_start : Bound, Str, List(Xml.Attribute) -> Try({ bound : Bound, name : XmlNs.Name, bindings : List(XmlNs.Binding), attributes : List(XmlNs.Attribute) }, XmlNs.Problem)
-resolve_source_start = |bound, written, attributes| {
+resolve_source_start : Bound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ bound : Bound, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
+resolve_source_start = |bound, written, attributes, spans| {
 	if has_declaration(attributes) {
 		resolved = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, written, attributes)?
-		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active }, name: resolved.name, bindings: resolved.bindings, attributes: resolved.attributes })
+		ordered_attributes = ordered_source_attributes(attributes, spans, resolved.attributes, resolved.bindings)
+		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active }, name: resolved.name, attributes: ordered_attributes })
 	} else {
-		resolved = resolve_names(bound.entries, bound.active, written, attributes, False).map_err(problem_of_names)?
-		Ok({ bound, name: resolved.name, bindings: [], attributes: resolved.attributes })
+		element_name = split_qname(written)?
+		if element_name.prefix == "xmlns" {
+			return Err(ReservedPrefix("xmlns"))
+		}
+		resolved_name = resolve(element_name, bound.entries, bound.active, True)?
+		var $resolved = List.with_capacity(attributes.len())
+		var $index = 0
+		var $prefixed = 0
+		while $index < attributes.len() {
+			attribute = attributes.get($index) ?? { name: "", value: "" }
+			span = spans.get($index) ?? { start: 0, end: 0 }
+			$index = $index + 1
+			attribute_name = split_qname(attribute.name)?
+			if attribute_name.prefix != "" {
+				$prefixed = $prefixed + 1
+			}
+			$resolved = $resolved.append({ name: resolve(attribute_name, bound.entries, bound.active, False)?, value: attribute.value, span })
+		}
+		if $prefixed > 1 {
+			check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
+		}
+		Ok({ bound, name: resolved_name, attributes: $resolved })
 	}
+}
+
+ordered_source_attributes : List(Xml.Attribute), List(Xml.SourceSpan), List(XmlNs.Attribute), List(XmlNs.Binding) -> List(XmlNs.SourceAttribute)
+ordered_source_attributes = |raw, spans, attributes, bindings| {
+	var $ordered = List.with_capacity(raw.len())
+	var $index = 0
+	var $attribute_index = 0
+	var $binding_index = 0
+	while $index < raw.len() {
+		attribute = raw.get($index) ?? { name: "", value: "" }
+		span = spans.get($index) ?? { start: 0, end: 0 }
+		$index = $index + 1
+		if is_declaration(attribute.name) {
+			match bindings.get($binding_index) {
+				Ok(binding) => {
+					$binding_index = $binding_index + 1
+					value = match binding.namespace {
+						Uri(uri) => uri
+						NoNamespace => ""
+					}
+					(local, prefix) = match binding.prefix {
+						Default => ("xmlns", Unprefixed)
+						Prefix(p) => (p, Prefix("xmlns"))
+					}
+					$ordered = $ordered.append({ name: { namespace: Uri(XmlNs.xmlns_namespace), local, prefix }, value, span })
+				}
+				Err(_) => {}
+			}
+		} else {
+			match attributes.get($attribute_index) {
+				Ok(resolved) => {
+					$attribute_index = $attribute_index + 1
+					$ordered = $ordered.append({ name: resolved.name, value: resolved.value, span })
+				}
+				Err(_) => {}
+			}
+		}
+	}
+	$ordered
 }

@@ -729,15 +729,15 @@ parse_xml_fold = |text, input, prefix, depth, elements, fragment, props| {
 
 fold_xml_event : SourceBuild, XmlNs.SourceEvent, U64, U64, Markup.Props -> SourceBuild
 fold_xml_event = |state, event, prefix, source_end, props| {
-	(original_span, kind) = match event {
-		Start(tag) => (tag.span, Tag)
-		End(end_span) => (end_span, Tag)
-		Text(text) => (text.span, Text)
-		CData(text) => (text.span, CData)
-		Comment(comment) => (comment.span, Comment)
-		ProcessingInstruction(pi) => (pi.span, ProcessingInstruction)
-		Declaration(span) => (span, ProcessingInstruction)
-		Gap(span) => (span, Text)
+	(original_span, kind, push) = match event {
+		Start(tag) => (tag.span, Tag, !tag.empty)
+		End(end_span) => (end_span, Tag, False)
+		Text(text) => (text.span, Text, False)
+		CData(text) => (text.span, CData, False)
+		Comment(comment) => (comment.span, Comment, False)
+		ProcessingInstruction(pi) => (pi.span, ProcessingInstruction, False)
+		Declaration(span) => (span, ProcessingInstruction, False)
+		Gap(span) => (span, Text, False)
 	}
 	if original_span.start < prefix or original_span.end > source_end {
 		return state
@@ -757,7 +757,7 @@ fold_xml_event = |state, event, prefix, source_end, props| {
 	var $new_node = Err(Missing)
 	match event {
 		Start(tag) => {
-			attrs = authored_attributes(tag.raw_attributes, tag.attribute_spans, { name: tag.name, attributes: tag.attributes, bindings: tag.bindings }, prefix)
+			attrs = shifted_source_attributes(tag.attributes, prefix)
 			if attrs.len() > props.max_attributes {
 				return { ..next, failure: Ok({ offset: span.start, problem: LimitExceeded(Attributes) }) }
 			}
@@ -828,53 +828,10 @@ fold_xml_event = |state, event, prefix, source_end, props| {
 					$roots = $roots.append(index)
 				}
 			}
-			stack = match event {
-				Start(tag) if !tag.empty => next.stack.append(index)
-				_ => next.stack
-			}
+			stack = if (push) next.stack.append(index) else next.stack
 			{ ..next, nodes: $nodes, roots: $roots, stack }
 		}
 	}
-}
-
-authored_attributes : List(Xml.Attribute), List(Xml.SourceSpan), StartInfo, U64 -> List(Markup.Attribute)
-authored_attributes = |raw, spans, start, prefix| {
-	var $attrs = List.with_capacity(raw.len())
-	var $index = 0
-	var $attribute_index = 0
-	var $binding_index = 0
-	while $index < raw.len() {
-		attribute = raw.get($index) ?? { name: "", value: "" }
-		original_span = spans.get($index) ?? { start: prefix, end: prefix }
-		span = { start: original_span.start - prefix, end: original_span.end - prefix }
-		$index = $index + 1
-		if attribute.name == "xmlns" or attribute.name.starts_with("xmlns:") {
-			match start.bindings.get($binding_index) {
-				Ok(binding) => {
-					$binding_index = $binding_index + 1
-					value = match binding.namespace {
-						Uri(uri) => uri
-						NoNamespace => ""
-					}
-					(local, name_prefix) = match binding.prefix {
-						Default => ("xmlns", Unprefixed)
-						Prefix(p) => (p, Prefix("xmlns"))
-					}
-					$attrs = $attrs.append({ name: { namespace: Uri("http://www.w3.org/2000/xmlns/"), local, prefix: name_prefix }, value, span })
-				}
-				Err(_) => {}
-			}
-		} else {
-			match start.attributes.get($attribute_index) {
-				Ok(resolved) => {
-					$attribute_index = $attribute_index + 1
-					$attrs = $attrs.append({ name: resolved.name, value: resolved.value, span })
-				}
-				Err(_) => {}
-			}
-		}
-	}
-	$attrs
 }
 
 expect {
@@ -892,4 +849,18 @@ expect {
 	["", "a", "ab", "&", "<", "</", " ", "\r\n", "é", "<!--c--><x xmlns:p='urn:p' a='1' p:b='2'><![CDATA[&amp;]]></x>"].all(
 		|input| Markup.parse_xml_fragment(input, "urn:context", {}) == Markup.parse_xml_fragment(input, "urn:context", { max_work_per_byte: 15 }),
 	)
+}
+
+shifted_source_attributes : List(XmlNs.SourceAttribute), U64 -> List(Markup.Attribute)
+shifted_source_attributes = |attributes, prefix| {
+	# Keep the fresh indexed output: a same-layout map makes the event
+	# callback borrow its entire arena state on the supported compiler.
+	var $out = List.with_capacity(attributes.len())
+	var $index = 0.U64
+	while $index < attributes.len() {
+		attribute = attributes.get($index) ?? crash "invalid attribute index"
+		$out = $out.append({ name: attribute.name, value: attribute.value, span: { start: attribute.span.start - prefix, end: attribute.span.end - prefix } })
+		$index = $index + 1
+	}
+	$out
 }
