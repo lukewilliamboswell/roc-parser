@@ -988,7 +988,7 @@ body = |state, token| {
 			if name == "html" {
 				$s = problem($s, UnexpectedHtmlStart, token.span.start)
 				if parsing_template($s) {
-					return problem($s, UnexpectedBodyStart, token.span.start)
+					return $s
 				}
 				if !$s.stack.is_empty() {
 					$s = merge_attributes($s, $s.stack.first() ?? 0, tag)
@@ -996,16 +996,14 @@ body = |state, token| {
 			} else if name == "body" {
 				$s = problem($s, UnexpectedBodyStart, token.span.start)
 				if parsing_template($s) {
-					return problem($s, UnexpectedBodyStart, token.span.start)
+					return $s
 				}
 				match last_named($s, "body") {
 					Ok(id) => {
 						$s = merge_attributes($s, id, tag)
 						$s = { ..$s, frameset_ok: False }
 					}
-					_ => {
-						$s = problem($s, UnexpectedBodyStart, token.span.start)
-					}
+					_ => {}
 				}
 			} else if name == "frameset" {
 				$s = problem($s, UnexpectedFramesetContent, token.span.start)
@@ -1015,8 +1013,6 @@ body = |state, token| {
 					$s = { ..$s, stack: $s.stack.take_first(1) }
 					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 					$s = { ..$s, mode: InFrameset }
-				} else {
-					$s = problem($s, UnexpectedFramesetContent, token.span.start)
 				}
 			} else if name == "head" {
 				$s = problem($s, UnexpectedHeadStart, token.span.start)
@@ -2486,3 +2482,6 @@ expect ["<caption><td>", "<col><td>", "<tbody><td>", "<tr><td>", "</table><td>",
 expect HtmlTree.parse("<html>X", True, { namespace: Markup.svg_namespace, name: "desc" }, {}).is_err()
 expect HtmlTree.parse("</html><!--abc-->", True, { name: "html" }, {}).is_err()
 expect HtmlTree.parse("<form><form>", True, { name: "template" }, {}).is_ok()
+
+expect HtmlTree.parse("<body>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
+expect HtmlTree.parse("<frameset>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
