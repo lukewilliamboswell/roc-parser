@@ -85,6 +85,21 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(set(c['format'] for c in a), {'html', 'svg', 'mathml'})
         self.assertEqual(review.mutate(a[0], random.Random(7), 0), review.mutate(a[0], random.Random(7), 0))
 
+    def test_mutation_recomputes_verdict_and_preserves_parsing_context(self):
+        seed = {**self.case, 'valid': False, 'accepted': False, 'problem': 'UnknownElement',
+                'diagnostic_contains': 'UnknownAttribute', 'fragment': True,
+                'context': {'namespace': review.NS['html'], 'local': 'table'}, 'scripting': True}
+        mutation = review.mutate(seed, random.Random(7), 0)
+        for key in ('valid', 'accepted', 'problem', 'diagnostic_contains'):
+            self.assertNotIn(key, mutation)
+            self.assertIn(key, seed)
+        self.assertEqual(mutation['context'], seed['context'])
+        self.assertTrue(mutation['fragment'])
+        self.assertTrue(mutation['scripting'])
+        oracle = unittest.mock.Mock()
+        oracle.parse.return_value = {'status': 'ok', 'roots': [], 'diagnostics': []}
+        self.assertEqual(review.expected(mutation, oracle)['status'], 'ok')
+
     def test_reproducer_keeps_exact_source_and_options(self):
         case = {**self.case, 'input': '\x00é\r\n<broken', 'fragment': True, 'recovery': 'browser'}
         row = review.compare(case, {'status': 'crash'}, {'status': 'ok', 'roots': []})

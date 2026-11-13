@@ -263,7 +263,11 @@ def mutate(case: dict, rng: random.Random, index: int) -> dict:
     at = rng.randrange(len(source) + 1)
     operation = rng.randrange(4)
     source = source[:at] + (rng.choice(['<', '>', '&', '\x00', '/', '"', "'"]) if operation == 0 else source[at:at+1] * 2 if operation == 1 else '</x>' if operation == 2 else '') + source[at + (1 if operation in {1, 3} and at < len(source) else 0):]
-    return {**case, 'id': f'mutation-{index}', 'input': source, 'validate': False, 'recovery': 'browser'}
+    # A source mutation invalidates the seed's authored verdict and specific
+    # diagnostic expectations. Preserve parsing context, then ask the independent
+    # syntax oracle for the mutated source's verdict and tree.
+    context = {key: case[key] for key in ('format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings') if key in case}
+    return {**context, 'id': f'mutation-{index}', 'input': source, 'validate': False, 'recovery': 'browser'}
 
 
 def retain(row: dict, work: Path) -> None:
