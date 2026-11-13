@@ -712,18 +712,19 @@ SourceBuild : {
 	roots : List(U64),
 	stack : List(U64),
 	tokens : List(Markup.Token),
-	failure : Try({ offset : U64, problem : Markup.Problem }, [Missing]),
+	failure : [NoFailure, AttributeFailure(U64), NodeFailure(U64)],
 }
 
 parse_xml_fold : Str, Str, U64, U64, U64, Bool, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 parse_xml_fold = |text, input, prefix, depth, elements, fragment, props| {
-	initial = { nodes: [], roots: [], stack: [], tokens: [], failure: Err(Missing) }
+	initial = { nodes: [], roots: [], stack: [], tokens: [], failure: NoFailure }
 	end = prefix + text.count_utf8_bytes()
 	state = XmlNs.fold_source(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }, initial, |before, event| fold_xml_event(before, event, prefix, end, props)).map_err(|error| located_xml_error(error, text, prefix))?
 	source = Markup.Source.from_tokens(text.to_utf8(), state.tokens)
 	match state.failure {
-		Ok(failure) => Err(error_at(source, failure.offset, failure.problem))
-		Err(_) => Ok({ source, tree: { nodes: state.nodes, roots: state.roots }, diagnostics: [] })
+		AttributeFailure(offset) => Err(error_at(source, offset, LimitExceeded(Attributes)))
+		NodeFailure(offset) => Err(error_at(source, offset, ResourceLimit("nodes")))
+		NoFailure => Ok({ source, tree: { nodes: state.nodes, roots: state.roots }, diagnostics: [] })
 	}
 }
 
@@ -751,7 +752,7 @@ fold_xml_event = |state, event, prefix, source_end, props| {
 		$tokens = $tokens.append({ kind, span })
 	}
 	next = { ..state, tokens: $tokens }
-	if next.failure.is_ok() {
+	if next.failure != NoFailure {
 		return next
 	}
 	var $new_node = Err(Missing)
@@ -759,7 +760,7 @@ fold_xml_event = |state, event, prefix, source_end, props| {
 		Start(tag) => {
 			attrs = shifted_source_attributes(tag.attributes, prefix)
 			if attrs.len() > props.max_attributes {
-				return { ..next, failure: Ok({ offset: span.start, problem: LimitExceeded(Attributes) }) }
+				return { ..next, failure: AttributeFailure(span.start) }
 			}
 			$new_node = Ok({ kind: Element(tag.name), attributes: attrs, children: [], origin: Authored(span) })
 		}
@@ -814,7 +815,7 @@ fold_xml_event = |state, event, prefix, source_end, props| {
 		Ok(node) => {
 			index = next.nodes.len()
 			if index >= props.max_nodes {
-				return { ..next, failure: Ok({ offset: span.start, problem: ResourceLimit("nodes") }) }
+				return { ..next, failure: NodeFailure(span.start) }
 			}
 			var $nodes = next.nodes.append(node)
 			var $roots = next.roots
