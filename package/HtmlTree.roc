@@ -12,8 +12,11 @@ HtmlTree :: [].{
 	## explicit text-hole nodes. This edits the tree and never reparses source.
 	Clone : { original : U64, clone : U64 }
 	project_parsed : Markup.Parsed, Markup.Props -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
-	project_parsed = |parsed, props| {
-		fragment = True
+	project_parsed = |parsed, props| project_parsed_with(parsed, props, True)
+
+	## Preserve document depth and element accounting for complete HTML roots.
+	project_parsed_with : Markup.Parsed, Markup.Props, Bool -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed_with = |parsed, props, fragment| {
 		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(Dict.empty(), |dict, pair| pair.0.children.fold(dict, |map, child| map.insert(child, pair.1)))
 		elements = parsed.tree.nodes.fold(
 			0.U64,
@@ -2396,14 +2399,26 @@ select_options = |s, select_id| {
 }
 
 option_disabled = |s, option| {
-	if (node_at(s, option)).attributes.any(|a| a.name.local == "disabled") {
+	if (node_at(s, option)).attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "disabled") {
 		return True
 	}
-	match find_parent(s, option) {
-		Ok(parent) if name_at(s, parent) == "optgroup" => (node_at(s, parent)).attributes.any(|a| a.name.local == "disabled")
-		_ => False
+	var $parent = find_parent(s, option)
+	while $parent.is_ok() {
+		id = $parent ?? option
+		if namespace_at(s, id) == Markup.html_namespace {
+			name = name_at(s, id)
+			if ["select", "hr", "datalist", "option"].contains(name) {
+				return False
+			}
+			if name == "optgroup" {
+				return (node_at(s, id)).attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "disabled")
+			}
+		}
+		$parent = find_parent(s, id)
 	}
+	False
 }
+
 expect {
 	p = HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><option>X<option selected>Y</select>", True, {}, {})?
 	root = p.tree.nodes.get(p.tree.roots.first()?)?
@@ -2485,3 +2500,15 @@ expect HtmlTree.parse("<form><form>", True, { name: "template" }, {}).is_ok()
 
 expect HtmlTree.parse("<body>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
 expect HtmlTree.parse("<frameset>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
+
+expect {
+	p = HtmlTree.parse("<!doctype html><select><button><selectedcontent></selectedcontent></button><option><span>A</span></option></select>", False, { defer_projection: True }, { max_depth: 5, max_elements: 8 })?
+	HtmlTree.project_parsed_with(p, { max_depth: 5 }, False).is_err() and HtmlTree.project_parsed_with(p, { max_elements: 8 }, False).is_err() and HtmlTree.project_parsed_with(p, { max_depth: 6, max_elements: 9 }, False).is_ok()
+}
+expect {
+	p = HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><optgroup label='g' disabled><div><option>A</option></div></optgroup><option>B</option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	button = p.tree.nodes.get(select.children.first()?)?
+	content = p.tree.nodes.get(button.children.first()?)?
+	Markup.text(p.tree, content.children.first()?) == "B"
+}
