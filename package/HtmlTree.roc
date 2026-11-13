@@ -57,6 +57,17 @@ HtmlTree :: [].{
 	}
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
+		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment(source, context.namespace, props) {
+				Ok(parsed) => return Ok(parsed)
+				Err(Replay) => {}
+			}
+		}
+		parse_general(source, fragment, context, props)
+	}
+
+	parse_general : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	parse_general = |source, fragment, context, props| {
 		if source.count_utf8_bytes() > props.max_source_bytes {
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
@@ -226,6 +237,175 @@ HtmlTree :: [].{
 		} else $state.roots
 		Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
 	}
+}
+
+# A small proof domain over the unchanged context-sensitive tokenizer. Every
+# uncertain token, repair, diagnostic or resource boundary replays the complete
+# general parser, which owns error precedence and all HTML recovery behavior.
+direct_fragment : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
+direct_fragment = |source, namespace, props| {
+	if source.count_utf8_bytes() > props.max_source_bytes {
+		return Err(Replay)
+	}
+	var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
+	if !$reader.diagnostics.is_empty() {
+		return Err(Replay)
+	}
+	root : Markup.Node
+	root = { kind: Element({ local: "html", namespace: Uri(namespace), prefix: Unprefixed }), attributes: [], children: [], origin: Implied(0) }
+	var $nodes = [root]
+	var $open = [{ id: 0.U64, name: "html" }]
+	var $regions = []
+	var $elements = 0.U64
+	var $paragraph = False
+	var $heading = False
+	var $anchor = False
+	var $work = 1.U64
+	limit = work_limit(props.max_work_per_byte, source.count_utf8_bytes())
+	while True {
+		# +2 dispatch, body stack+active+1, append<=1; a's happy close
+		# adds one stack+active+1 adoption step. Active formatting has <=1
+		# entry and is always open, so reconstruction never does any work.
+		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - 7) // 2 {
+			return Err(Replay)
+		}
+		charge = 2 * $open.len() + 7
+		if $work > limit or charge > limit - $work {
+			return Err(Replay)
+		}
+		$work = $work + charge
+		next = if $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+			Tok.next_with_source($reader, source, DataMixed, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		} else {
+			Tok.next_with($reader, DataMixed, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		}
+		if next.limited != NoLimit or !next.reader.diagnostics.is_empty() {
+			return Err(Replay)
+		}
+		$reader = next.reader
+		match source_token(next.token, $reader.bytes) {
+			Ok(region) => {
+				$regions = $regions.append(region)
+			}
+			Err(_) => {}
+		}
+		parent = ($open.last() ?? { id: 0, name: "html" }).id
+		match next.token.kind {
+			Start(tag) => {
+				class = direct_tag(tag.name)
+				if class == UnsupportedTag or (tag.self_closing and class != VoidTag) {
+					return Err(Replay)
+				}
+				if ($paragraph and (class == BlockTag or class == HeadingTag or tag.name == "hr")) or ($heading and class == HeadingTag) or ($anchor and tag.name == "a") {
+					return Err(Replay)
+				}
+				id = $nodes.len()
+				$nodes = direct_append($nodes, parent, { kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }), children: [], origin: Authored(next.token.span) })
+				$elements = $elements + 1
+				if class != VoidTag {
+					$open = $open.append({ id, name: tag.name })
+					if tag.name == "p" {
+						$paragraph = True
+					}
+					if class == HeadingTag {
+						$heading = True
+					}
+					if tag.name == "a" {
+						$anchor = True
+					}
+				}
+			}
+			End(name) => {
+				entry = $open.last() ?? { id: 0, name: "html" }
+				if $open.len() == 1 or entry.name != name {
+					return Err(Replay)
+				}
+				$open = $open.drop_last(1)
+				# Happy adoption closes a without extending its authored origin.
+				# Every other accepted close mirrors finish_node's explicit end.
+				if name != "a" {
+					moved = $nodes.replace(entry.id, empty_node) ?? return Err(Replay)
+					origin = match moved.prev.origin {
+						Authored(span) => Authored({ start: span.start, end: next.token.span.end })
+						other => other
+					}
+					$nodes = moved.list.set(entry.id, { ..moved.prev, origin }) ?? return Err(Replay)
+				}
+				if name == "p" {
+					$paragraph = False
+				}
+				if direct_tag(name) == HeadingTag {
+					$heading = False
+				}
+				if name == "a" {
+					$anchor = False
+				}
+			}
+			Characters(text) => {
+				$nodes = direct_text($nodes, parent, text, next.token.span)
+			}
+			Eof => {
+				if $open.len() != 1 or next.token.span.start != next.token.span.end {
+					return Err(Replay)
+				}
+				if $nodes.len() > props.max_nodes {
+					return Err(Replay)
+				}
+				roots = ($nodes.get(0) ?? root).children
+				# This accepted grammar already proves exact authored structure:
+				# explicit balanced ends, no repairs, and no dropped attributes.
+				# It contains no selectedcontent/template projection candidates.
+				return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] })
+			}
+			_ => return Err(Replay)
+		}
+		if $open.len() - 1 > props.max_depth or $elements > props.max_elements or $nodes.len() > props.max_nodes {
+			return Err(Replay)
+		}
+	}
+}
+
+direct_tag = |name| match name {
+	"div" | "section" | "article" | "p" => BlockTag
+	"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => HeadingTag
+	"span" | "a" => InlineTag
+	"br" | "hr" | "img" => VoidTag
+	_ => UnsupportedTag
+}
+
+# Move the parent out before growing its children, just as edit_node does.
+direct_append : List(Markup.Node), U64, Markup.Node -> List(Markup.Node)
+direct_append = |nodes, parent, node| {
+	id = nodes.len()
+	moved = nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
+	parent_node = { ..moved.prev, children: moved.prev.children.append(id) }
+	(moved.list.set(parent, parent_node) ?? []).append(node)
+}
+
+direct_text : List(Markup.Node), U64, Str, Markup.Span -> List(Markup.Node)
+direct_text = |nodes, parent, text, span| {
+	if text == "" {
+		return nodes
+	}
+	match (nodes.get(parent) ?? empty_node).children.last() {
+		Ok(previous) => match (nodes.get(previous) ?? empty_node).kind {
+			Text(_) => {
+				moved = nodes.replace(previous, empty_node) ?? return []
+				before = match moved.prev.kind {
+					Text(value) => value
+					_ => ""
+				}
+				origin = match moved.prev.origin {
+					Authored(old) => Authored({ start: old.start, end: span.end })
+					_ => Authored(span)
+				}
+				return moved.list.set(previous, { ..moved.prev, kind: Text(Str.concat(before, text)), origin }) ?? []
+			}
+			_ => {}
+		}
+		Err(_) => {}
+	}
+	direct_append(nodes, parent, { kind: Text(text), attributes: [], children: [], origin: Authored(span) })
 }
 
 # This optional pass compares the authored nesting with the constructed arena
@@ -3473,4 +3653,23 @@ expect {
 		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14
 		_ => False
 	}
+}
+
+expect {
+	accepted = ["", "plain &amp; α🙂 prose", "<section><article><h2>Card</h2><p>Hello &amp; <span>welcome</span>.</p><a href='/x'><span>more</span></a></article></section>", "<a><div><p>x<br>y<img src='x'/></p></div></a>", "<p><span>x</span></p><hr>"]
+	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, {}) == HtmlTree.parse_general(source, True, {}, {}))
+}
+expect {
+	replayed = ["<p><div></div></p>", "<h1><span><h2>x</h2></span></h1>", "<a><span><a>x</a></span></a>", "<p>x", "<div/>", "<p>x</p><svg><path/></svg>", "<p>x</p><!-- comment -->", "<p a='1' a='2'>x</p>", "<p>a\u(0)b</p>", "<p>word</p></br>"]
+	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+}
+expect {
+	source = "<section><a href='x'><p>text &amp; more<br></p></a></section>"
+	[0.U64, 1, 2, 4, 16, 256].all(
+		|limit| {
+			props : Markup.Props
+			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
+			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
+		},
+	)
 }
