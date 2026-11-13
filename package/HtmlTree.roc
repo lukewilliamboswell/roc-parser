@@ -113,17 +113,17 @@ HtmlTree :: [].{
 						bytes = text.to_utf8()
 						if bytes.first() == Ok('\n') {
 							trimmed = { ..next.token, kind: Characters(Str.from_utf8_lossy(bytes.drop_first(1))), span: { start: skipped_lf_end($reader.bytes, next.token.span), end: next.token.span.end } }
-							$state = process($state, trimmed, context.scripting)
+							$state = process_with_mode($state, trimmed, mode, context.scripting)
 						} else {
-							$state = process($state, next.token, context.scripting)
+							$state = process_with_mode($state, next.token, mode, context.scripting)
 						}
 					}
 					_ => {
-						$state = process($state, next.token, context.scripting)
+						$state = process_with_mode($state, next.token, mode, context.scripting)
 					}
 				}
 			} else {
-				$state = process($state, next.token, context.scripting)
+				$state = process_with_mode($state, next.token, mode, context.scripting)
 			}
 			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
 				at = Literal.position(source, next.token.span.start)
@@ -690,6 +690,32 @@ content_mode = |s| {
 			_ => Data
 		}
 	}
+}
+
+# DataMixed was selected from the adjusted HTML element before tokenization.
+# Ordinary body tokens can reuse that classification and avoid the raw/foreign
+# dispatcher. Pending table text and reprocessed tokens retain the full route.
+process_with_mode : State, Tok.Token, Tok.Mode, Bool -> State
+process_with_mode = |state, token, mode, scripting| {
+	ordinary = mode == DataMixed and state.mode == InBody and state.pending_text.is_empty() and (
+		match token.kind {
+			Start(_) | Characters(_) => True
+			End(name) => name != "template"
+			_ => False
+		}
+	)
+	if ordinary {
+		end_name = match token.kind {
+			End(name) => name
+			_ => ""
+		}
+		prepared = { ..state, token_span: token.span, token_end_name: end_name }
+		if prepared.work > prepared.work_limit {
+			return prepared
+		}
+		return body({ ..prepared, work: prepared.work + 2 }, token)
+	}
+	process(state, token, scripting)
 }
 
 process : State, Tok.Token, Bool -> State
@@ -2510,7 +2536,10 @@ expect {
 	token = { kind: Start({ name: "p", attributes: [], self_closing: False }), span: { start: 0, end: 3 } }
 	direct = process_html(state, token, True)
 	general = process_html_general(state, token, True)
-	(direct.work, direct.nodes.len(), direct.element_count) == (general.work, general.nodes.len(), general.element_count) and direct.work == 2 and direct.nodes.is_empty() and direct.element_count == 0
+	tokens = [token, { ..token, kind: Characters(" x ") }, { ..token, kind: End("p") }, { ..token, kind: End("template") }, { ..token, kind: Comment("x") }, { ..token, kind: Eof }]
+	snapshot = |s| { nodes: s.nodes, roots: s.roots, parents: s.parents, stack: s.stack, active: s.active, modes: s.modes, mode: s.mode, head: s.head, form: s.form, diagnostics: s.diagnostics, max_diagnostics: s.max_diagnostics, foster: s.foster, frameset_ok: s.frameset_ok, skip_lf: s.skip_lf, work: s.work, work_limit: s.work_limit, element_count: s.element_count, diagnostics_exceeded: s.diagnostics_exceeded, quirks: s.quirks, token_span: s.token_span, token_end_name: s.token_end_name, token_no_nulls: s.token_no_nulls, plaintext: s.plaintext, pending_text: s.pending_text, clones: s.clones }
+	mode_parity = [0, 1, 2, 3, 4, 5].all(|limit| tokens.all(|item| snapshot(process_with_mode({ ..state, work_limit: limit }, item, DataMixed, True)) == snapshot(process({ ..state, work_limit: limit }, item, True))))
+	mode_parity and (direct.work, direct.nodes.len(), direct.element_count) == (general.work, general.nodes.len(), general.element_count) and direct.work == 2 and direct.nodes.is_empty() and direct.element_count == 0
 }
 expect {
 	p = HtmlTree.parse("<table><div>x</div><tr><td>y</table>", True, {}, { recovery: Browser })?
