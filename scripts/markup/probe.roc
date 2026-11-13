@@ -41,10 +41,12 @@ main! = |arguments| {
 	namespace = args.get(5) ?? Markup.html_namespace
 	context = args.get(6) ?? "body"
 	bytes = Stdin.read_to_end!()?
-	if format == "template" or format == "template-html" {
+	if format == "template" or format == "template-html" or format == "template-select" {
 		caption = Str.from_utf8(bytes) ?? ""
 		plan = (
-			if format == "template-html" {
+			if format == "template-select" {
+				Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option selected><span title='", "'>", "</span></option></select>"], {})
+			} else if format == "template-html" {
 				Html.parse_segments(["<script>if (a < b) x = 1;</script><svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {})
 			} else {
 				Svg.parse_segments(["<svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {})
@@ -70,7 +72,7 @@ main! = |arguments| {
 			),
 			",",
 		)
-		Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"bindings\":[${bindings}],\"diagnostics\":[]}")?
+		Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"bindings\":[${bindings}],\"binding_count\":${bound.values.len().to_str()},\"slot_count\":${plan.slots.len().to_str()},\"source_holes\":${(plan.segments.len() - 1).to_str()},\"diagnostics\":[]}")?
 		return Ok({})
 	}
 	match Str.from_utf8(bytes) {

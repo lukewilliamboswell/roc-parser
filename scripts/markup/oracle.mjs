@@ -86,10 +86,17 @@ async function browserOracle(request) {
         const math = parent.querySelector('math');
         if (math) checks.mathml = math.namespaceURI === namespaces.mathml;
         if (bindings && bindings.length) {
-          const text = parent.querySelector('text');
-          checks.textBinding = !!text && text.textContent === '<path/>' && text.children.length === 0;
-          const circle = parent.querySelector('circle');
-          checks.attributeBinding = !!circle && circle.getAttribute('cx') === '12';
+          const selected = parent.querySelector('selectedcontent');
+          if (selected) {
+            const spans = parent.querySelectorAll('selectedcontent span, option span');
+            checks.bindingFanout = spans.length === 2 && Array.from(spans).every(span => span.textContent === '<path/>' && span.children.length === 0 && span.getAttribute('title') === '12');
+          } else {
+            const text = parent.querySelector('text');
+            checks.textBinding = !!text && text.textContent === '<path/>' && text.children.length === 0;
+            const circle = parent.querySelector('circle');
+            checks.attributeBinding = !!circle && circle.getAttribute('cx') === '12';
+          }
+          checks.inertScript = typeof globalThis.x === 'undefined';
         }
       } else if (syntax === 'xml') {
         const doc = new DOMParser().parseFromString(input, 'application/xml');

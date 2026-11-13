@@ -332,7 +332,7 @@ def consumer_review(args) -> int:
     executable = resolve_probe(args)
     cases = [case for case in load_cases(args.formats) if case.get('consumer')]
     templates = []
-    for operation in ['template', 'template-html']:
+    for operation in ['template', 'template-html', 'template-select']:
         template_process = subprocess.run([str(executable), operation], input=b'<path/>', capture_output=True, check=False, timeout=10)
         if template_process.returncode:
             raise RuntimeError(operation + ' consumer probe failed: ' + template_process.stderr.decode(errors='replace'))
@@ -363,11 +363,38 @@ def consumer_review(args) -> int:
                         'input': '<svg xmlns="' + NS['svg'] + '"><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
                 if operation == 'template-html':
                     case.update(syntax='html', fragment=True, format='html', input='<script>if (a < b) x = 1;</script><svg><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>')
+                if operation == 'template-select':
+                    case.update(syntax='html', fragment=True, format='html', input='<select><button><selectedcontent></selectedcontent></button><option selected><span title="12">&lt;path/&gt;</span></option></select>')
                 constructed = node.parse({**request(case), 'engine': engine, 'construct': template['roots'], 'bindings': template['bindings']})
                 reference = node.parse({**request(case), 'engine': engine})
+                native = reference
+                oracle_gap = None
+                if operation == 'template-select':
+                    # A separate normative model keeps projection present even
+                    # when a browser has not implemented selectedcontent cloning.
+                    span = ['element', NS['html'], 'span', [['', 'title', '12']], [['text', '<path/>']]]
+                    model = [['element', NS['html'], 'select', [], [
+                        ['element', NS['html'], 'button', [], [['element', NS['html'], 'selectedcontent', [], [span]]]],
+                        ['element', NS['html'], 'option', [['', 'selected', '']], [span]]]]]
+                    reference = {'status': 'ok', 'roots': model}
+                    if native.get('roots') != model:
+                        import copy
+                        unimplemented = copy.deepcopy(model)
+                        unimplemented[0][4][0][4][0][4] = []
+                        if native.get('roots') == unimplemented:
+                            oracle_gap = {'feature': 'selectedcontent projection', 'kind': 'not_implemented_by_browser', 'native_roots': native['roots']}
+                        else:
+                            oracle_gap = {'feature': 'selectedcontent projection', 'kind': 'unexpected_browser_tree', 'native_roots': native.get('roots')}
                 row = compare(case, constructed, reference)
-                if not all(constructed.get('checks', {}).get(key) is True for key in ['textBinding', 'attributeBinding']):
+                required = ['bindingFanout', 'inertScript'] if operation == 'template-select' else ['textBinding', 'attributeBinding', 'inertScript']
+                if not all(constructed.get('checks', {}).get(key) is True for key in required):
                     row['kind'] = 'wrong_binding_behavior'
+                if operation == 'template-select' and not (template.get('binding_count') == template.get('source_holes') == 2 and template.get('slot_count') == 4):
+                    row['kind'] = 'wrong_binding_fanout'
+                if oracle_gap:
+                    row['oracle_gap'] = oracle_gap
+                    if oracle_gap['kind'] == 'unexpected_browser_tree':
+                        row['kind'] = 'oracle_disagreement'
                 row['checks'] = constructed.get('checks', {})
                 row['browser_version'] = constructed.get('browser_version')
                 rows.append(row)
