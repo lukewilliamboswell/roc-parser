@@ -4,6 +4,7 @@ app [target] {
 }
 import fuzz.Fuzz
 import parser.Markup
+import parser.Html
 import MarkupCheck
 
 ## Shape and limits come from independent byte selectors. A generated document
@@ -42,6 +43,37 @@ test! = |bytes| {
 	ceiling = 8192 + 64 * input.count_utf8_bytes() + 2048 * depth
 	if measured.stats.peak_live_bytes > ceiling {
 		crash "markup allocation ceiling exceeded"
+	}
+	# Independent parse5 trees have these retained element counts. The cases
+	# exercise both adoption clone paths and temporary foster insertion.
+	cases = [
+		{ source: "<b><div>x</b>y", elements: 3.U64 },
+		{ source: "<b><i><div>x</b>y", elements: 5.U64 },
+		{ source: "<b><i><div>x</b>y</i>", elements: 6.U64 },
+		{ source: "<table><b><div>x</b>y", elements: 4.U64 },
+		{ source: "<table><b><i><div>x</b>y</i>", elements: 7.U64 },
+	]
+	case = cases.get(U8.to_u64(bytes.get(5) ?? 0) % cases.len()) ?? { source: "", elements: 0.U64 }
+	html = Fuzz.measure!("html-adoption", || Html.parse_fragment(case.source, { recovery: Browser, max_elements }))
+	match html.value {
+		Ok(fragment) => {
+			if max_elements < case.elements {
+				crash "accepted adoption elements beyond the configured limit"
+			}
+			MarkupCheck.check(fragment.parsed, case.source)
+		}
+		Err(InvalidMarkup(error)) => {
+			if max_elements >= case.elements {
+				crash "rejected adoption elements inside the configured limit: ${Str.inspect(error)}"
+			}
+			match error.problem {
+				LimitExceeded(Elements) => {}
+				_ => crash "adoption element limit was classified incorrectly"
+			}
+		}
+	}
+	if html.stats.peak_live_bytes > 32_768 + 2048 * case.elements {
+		crash "adoption allocation ceiling exceeded"
 	}
 	Fuzz.keep
 }
