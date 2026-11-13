@@ -640,22 +640,76 @@ words_of = |text| (Str.from_utf8(text.to_utf8().map(|b| if ([44, 9, 10, 13].cont
 
 check_svg_children : Markup.Parsed, Markup.Node, Str -> Try({}, [InvalidMarkup(Markup.Error)])
 check_svg_children = |parsed, node, name| {
-	for index in node.children {
-		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child index"))
-		match child.kind {
-			Element(n) => {
-				descriptive = member(["title", "desc", "metadata"], n.local)
-				animation = member(["animate", "animateMotion", "animateTransform", "set", "discard"], n.local)
-				allowed = if (member(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "image", "use", "stop"], name)) descriptive or animation else if (member(["linearGradient", "radialGradient"], name)) descriptive or animation or n.local == "stop" else if (name == "filter") descriptive or animation or n.local.starts_with("fe") else if (name == "feComponentTransfer") descriptive or member(["feFuncA", "feFuncB", "feFuncG", "feFuncR"], n.local) else if (name == "feMerge") descriptive or n.local == "feMergeNode" else if (member(["feDiffuseLighting", "feSpecularLighting"], name)) descriptive or member(["feDistantLight", "fePointLight", "feSpotLight"], n.local) else if (member(["text", "tspan", "textPath"], name)) descriptive or animation or member(["a", "tspan", "textPath"], n.local) else True
-				if !allowed {
-					return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
-				}
+	if node.children.is_empty() {
+		return Ok({})
+	}
+	(model, reject_text) = svg_child_model(name)
+	var $child_index = 0
+	while $child_index < node.children.len() {
+		index = node.children.get($child_index) ?? 0
+		$child_index = $child_index + 1
+		if index >= parsed.tree.nodes.len() {
+			return fail(parsed, node, Unsupported("invalid child index"))
+		}
+		# Unrestricted parents need only the arena-index check. Their children
+		# are validated independently by the outer vocabulary traversal.
+		if model != Any {
+			child = parsed.tree.nodes.get(index) ?? node
+			match child.kind {
+				Element(n) if !svg_child_allowed(model, n.local) => return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
+				Text(text) if reject_text and !Markup.whitespace(text) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
+				_ => {}
 			}
-			Text(text) if !Markup.whitespace(text) and member(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"], name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
-			_ => {}
 		}
 	}
 	Ok({})
+}
+
+svg_child_model = |name| match name {
+	"path" | "rect" | "circle" | "ellipse" | "line" | "polygon" | "polyline" | "stop" => (Shape, True)
+	"image" | "use" => (Shape, False)
+	"linearGradient" | "radialGradient" => (Gradient, True)
+	"filter" => (Filter, True)
+	"feComponentTransfer" => (ComponentTransfer, False)
+	"feMerge" => (Merge, False)
+	"feDiffuseLighting" | "feSpecularLighting" => (Lighting, False)
+	"text" | "tspan" | "textPath" => (Textual, False)
+	_ => (Any, False)
+}
+
+svg_child_allowed = |model, child| {
+	if match child {
+		"title" | "desc" | "metadata" => True
+		_ => False
+	} {
+		return True
+	}
+	match model {
+		Shape => svg_animation_child(child)
+		Gradient => child == "stop" or svg_animation_child(child)
+		Filter => child.starts_with("fe") or svg_animation_child(child)
+		ComponentTransfer => match child {
+			"feFuncA" | "feFuncB" | "feFuncG" | "feFuncR" => True
+			_ => False
+		}
+		Merge => child == "feMergeNode"
+		Lighting => match child {
+			"feDistantLight" | "fePointLight" | "feSpotLight" => True
+			_ => False
+		}
+		Textual => (
+			match child {
+				"a" | "tspan" | "textPath" => True
+				_ => False
+			}
+		) or svg_animation_child(child)
+		Any => True
+	}
+}
+
+svg_animation_child = |child| match child {
+	"animate" | "animateMotion" | "animateTransform" | "set" | "discard" => True
+	_ => False
 }
 
 valid_paint : Str -> Bool
@@ -734,4 +788,25 @@ member = |items, item| {
 		$index = $index + 1
 	}
 	False
+}
+
+expect {
+	var $passed = True
+	for input in ["<g><path/></g>", "<path><title>x</title><animate/></path>", "<linearGradient><stop/></linearGradient>", "<filter><feGaussianBlur/></filter>", "<feComponentTransfer><feFuncA/></feComponentTransfer>", "<feMerge><feMergeNode/></feMerge>", "<feDiffuseLighting><fePointLight/></feDiffuseLighting>", "<text><tspan>x</tspan></text>", "<image>text</image>"] {
+		parsed = Markup.parse_xml_fragment(input, Markup.svg_namespace, {})?
+		$passed = $passed and MarkupValidate.foreign(parsed, {}, []).is_ok()
+	}
+	for input in ["<path><rect/></path>", "<linearGradient><rect/></linearGradient>", "<filter><rect/></filter>", "<feComponentTransfer><animate/></feComponentTransfer>", "<feMerge><animate/></feMerge>", "<feDiffuseLighting><feFuncA/></feDiffuseLighting>", "<text><rect/></text>", "<path>text</path>", "<linearGradient>text</linearGradient>", "<filter>text</filter>"] {
+		parsed = Markup.parse_xml_fragment(input, Markup.svg_namespace, {})?
+		$passed = $passed and MarkupValidate.foreign(parsed, {}, []).is_err()
+	}
+	$passed
+}
+
+expect {
+	parsed = Markup.parse_xml_fragment("<g><path/></g>", Markup.svg_namespace, {})?
+	group = parsed.tree.nodes.first()?
+	nodes = parsed.tree.nodes.set(0, { ..group, children: [999] })?
+	invalid = { ..parsed, tree: { ..parsed.tree, nodes } }
+	MarkupValidate.foreign(invalid, {}, []).map_ok(|_| {}) == Err(InvalidMarkup({ problem: Unsupported("invalid child index"), line: 1, column: 1 }))
 }
