@@ -53,7 +53,7 @@ checksum_node = |tree, index| {
 	node = tree.nodes.get(index) ?? crash "invalid benchmark tree edge"
 	weight = match node.kind {
 		Element(name) => 1 + name.local.count_utf8_bytes() + node.attributes.fold(0, |count, attr| {
-			if attr.name.namespace == Uri("http://www.w3.org/2000/xmlns/") { count }
+			if namespace_declaration(attr.name) { count }
 			else { count + 1 + attr.name.local.count_utf8_bytes() + attr.value.count_utf8_bytes() }
 		})
 		Text(value) => 1 + value.count_utf8_bytes()
@@ -80,6 +80,9 @@ namespace_uri = |namespace| match namespace {
 	NoNamespace => ""
 }
 
+namespace_declaration : Markup.Name -> Bool
+namespace_declaration = |name| name.namespace == Uri("http://www.w3.org/2000/xmlns/") or (name.namespace == NoNamespace and name.local == "xmlns")
+
 encode_node : Markup.Tree, U64, Bool -> Str
 encode_node = |tree, index, bindings| {
 	match tree.nodes.get(index) {
@@ -90,7 +93,7 @@ encode_node = |tree, index, bindings| {
 			Doctype(doctype) => "[\"doctype\",${quote(doctype.name)},${quote(doctype.public_id)},${quote(doctype.system_id)}]"
 			ProcessingInstruction(pi) => "[\"pi\",${quote(pi.target)},${quote(pi.data)}]"
 			Element(name) => {
-				attributes = node.attributes.keep_if(|attribute| bindings or (attribute.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attribute.name.local != "xmlns"))
+				attributes = node.attributes.keep_if(|attribute| bindings or !namespace_declaration(attribute.name))
 				attrs = Str.join_with(attributes.map(|attribute| "[${quote(namespace_uri(attribute.name.namespace))},${quote(attribute.name.local)},${quote(attribute.value)}]"), ",")
 				children = Str.join_with(node.children.map(|child| encode_node(tree, child, bindings)), ",")
 				"[\"element\",${quote(namespace_uri(name.namespace))},${quote(name.local)},[${attrs}],[${children}]]"

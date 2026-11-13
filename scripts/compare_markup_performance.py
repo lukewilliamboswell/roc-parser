@@ -184,7 +184,7 @@ def normalize_tree(roots):
             for attr in node[3]:
                 if len(attr) != 3 or not all(isinstance(x, str) for x in attr):
                     raise ValueError('invalid canonical attribute')
-                if attr[0] != 'http://www.w3.org/2000/xmlns/' and attr[1] != 'xmlns':
+                if attr[0] != 'http://www.w3.org/2000/xmlns/' and not (attr[0] == '' and attr[1] == 'xmlns'):
                     attrs.append(attr)
             result.append([*node[:3], sorted(attrs), normalize_tree(node[4])])
         else:

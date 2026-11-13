@@ -19,12 +19,16 @@ type node struct {
 	children              []*node
 }
 
+func namespaceDeclaration(space, local string) bool {
+	return space == "xmlns" || space == "http://www.w3.org/2000/xmlns/" || (space == "" && local == "xmlns")
+}
+
 func walk(n *node) uint64 {
 	var sum uint64
 	if n.name != "" {
 		sum = uint64(1 + len(n.name))
 		for _, a := range n.attrs {
-			if a.Name.Space != "xmlns" && a.Name.Local != "xmlns" {
+			if !namespaceDeclaration(a.Name.Space, a.Name.Local) {
 				sum += uint64(1 + len(a.Name.Local) + len(a.Value))
 			}
 		}
@@ -73,7 +77,7 @@ func xmlJSON(n *node) interface{} {
 	}
 	attrs := []interface{}{}
 	for _, a := range n.attrs {
-		if a.Name.Space != "xmlns" && a.Name.Local != "xmlns" {
+		if !namespaceDeclaration(a.Name.Space, a.Name.Local) {
 			attrs = append(attrs, []interface{}{a.Name.Space, a.Name.Local, a.Value})
 		}
 	}
@@ -109,7 +113,7 @@ func htmlJSON(n *html.Node) interface{} {
 	}
 	attrs := []interface{}{}
 	for _, a := range n.Attr {
-		if a.Namespace != "xmlns" && a.Key != "xmlns" {
+		if !namespaceDeclaration(a.Namespace, a.Key) {
 			attrs = append(attrs, []interface{}{namespace(a.Namespace, true), a.Key, a.Val})
 		}
 	}
@@ -157,7 +161,7 @@ func htmlWalk(n *html.Node) uint64 {
 	if n.Type == html.ElementNode {
 		sum = uint64(1 + len(n.Data))
 		for _, a := range n.Attr {
-			if a.Namespace != "xmlns" && a.Key != "xmlns" {
+			if !namespaceDeclaration(a.Namespace, a.Key) {
 				sum += uint64(1 + len(a.Key) + len(a.Val))
 			}
 		}

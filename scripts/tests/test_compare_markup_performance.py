@@ -72,6 +72,14 @@ class MarkupComparisonTests(unittest.TestCase):
                     compare.run(args)
                 timing.assert_not_called()
 
+    def test_ordinary_namespaced_xmlns_attribute_is_not_a_declaration(self):
+        tree = [['element', 'urn:svg', 'svg', [
+            ['http://www.w3.org/2000/xmlns/', 'x', 'urn:extension'],
+            ['', 'xmlns', 'urn:svg'],
+            ['urn:extension', 'xmlns', 'metadata'],
+        ], []]]
+        self.assertEqual(compare.normalize_tree(tree)[0][3], [['urn:extension', 'xmlns', 'metadata']])
+
     def test_changed_prepared_sources_cannot_run(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
