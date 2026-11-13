@@ -130,6 +130,7 @@
     "scripts/json/probe.roc",
     "scripts/markdown/blocks/probe.roc",
     "scripts/markdown/probe.roc",
+    "scripts/markup/probe.roc",
     "scripts/roc_syntax/probe.roc",
     "scripts/roc_syntax/repros/var-join.roc",
     "scripts/xml/probe.roc",

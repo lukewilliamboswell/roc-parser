@@ -46,6 +46,8 @@ class TargetConfig:
     # Whether the target declares examples, which `check` runs before
     # exploring; exploration alone only replays the corpus.
     examples: bool = False
+    # New markup investigations are local-only; existing scheduled campaigns stay unchanged.
+    scheduled: bool = True
 
 
 def target(
@@ -56,6 +58,7 @@ def target(
     max_input_size: int = 4096,
     timeout: int = 5,
     examples: bool = False,
+    scheduled: bool = True,
 ) -> tuple[str, TargetConfig]:
     return name, TargetConfig(
         source=FUZZ_ROOT / f"{name}.roc",
@@ -65,6 +68,7 @@ def target(
         max_input_size=max_input_size,
         timeout=timeout,
         examples=examples,
+        scheduled=scheduled,
     )
 
 
@@ -94,6 +98,13 @@ TARGETS = dict(
         target("xml-ceilings", "xml-ceilings", "raw", max_input_size=2, timeout=20, examples=True),
         target("xmlns-raw", "xmlns", "raw", "xmlns", timeout=10),
         target("xmlns-roundtrip", max_input_size=1024, timeout=10),
+        target("svg-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
+        target("mathml-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
+        target("html-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
+        target("markup-source", "markup", "raw", "markup", timeout=10, scheduled=False),
+        target("markup-structured", max_input_size=128, timeout=10, scheduled=False),
+        target("markup-limits", max_input_size=8, timeout=10, scheduled=False),
+        target("markup-segments", max_input_size=256, timeout=10, scheduled=False),
         target("json-raw", "json", "raw", "json", timeout=10),
         # The first two bytes choose the options, so its seeds carry them.
         target("json-options", "json-options", "raw", "json", timeout=10),
@@ -120,6 +131,7 @@ TARGETS = dict(
 )
 
 TARGET_ORDER = tuple(TARGETS)
+SCHEDULED_TARGET_ORDER = tuple(name for name, config in TARGETS.items() if config.scheduled)
 
 
 def encode_fuzz_str(value: str) -> bytes:
@@ -358,6 +370,10 @@ def build_targets(target_names: Sequence[str], roc: str, jobs: int) -> dict[str,
 
 def run_fuzz_mode(args: argparse.Namespace) -> int:
     target_names = resolve_targets(args.targets)
+    if getattr(args, "ci", False):
+        target_names = [name for name in target_names if TARGETS[name].scheduled]
+        if not target_names:
+            raise ValueError("selection contains no CI-enabled targets")
     overall_status = 0
 
     prebuilt: dict[str, int] = {}
@@ -481,6 +497,7 @@ def make_argument_parser() -> argparse.ArgumentParser:
     smoke = subparsers.add_parser("smoke", help="run a bounded iteration smoke test")
     smoke.add_argument("targets", nargs="*", metavar="TARGET", help="target(s), or all")
     smoke.add_argument("--runs", type=positive_int, default=2000)
+    smoke.add_argument("--ci", action="store_true", help="run only targets enabled for existing CI/scheduled campaigns")
     add_limits(smoke)
     add_build_options(smoke)
 
