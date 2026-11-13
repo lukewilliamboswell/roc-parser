@@ -6,12 +6,14 @@ import MarkupHtmlError
 ## HTML tree construction. The open-elements and active-formatting stacks are
 ## separate from the indexed output tree so recovery can reparent existing nodes.
 HtmlTree :: [].{
-	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True }
+	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True, defer_projection : Bool ?? False }
 
 	## Recompute derived selected option content after a template materializes
 	## explicit text-hole nodes. This edits the tree and never reparses source.
-	project_parsed : Markup.Parsed, Markup.Props, Bool -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	project_parsed = |parsed, props, fragment| {
+	Clone : { original : U64, clone : U64 }
+	project_parsed : Markup.Parsed, Markup.Props -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed = |parsed, props| {
+		fragment = True
 		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(Dict.empty(), |dict, pair| pair.0.children.fold(dict, |map, child| map.insert(child, pair.1)))
 		elements = parsed.tree.nodes.fold(
 			0.U64,
@@ -23,14 +25,14 @@ HtmlTree :: [].{
 			),
 		)
 		state : State
-		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", plaintext: False, pending_text: [] }
+		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
 				at = Markup.position(parsed.source, e.column)
 				InvalidMarkup({ ..e, line: at.line, column: at.column })
 			},
 		)?
-		Ok({ ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } })
+		Ok({ parsed: { ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } }, clones: projected.clones })
 	}
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
@@ -38,7 +40,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", plaintext: False, pending_text: [] }
+		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", plaintext: False, pending_text: [], clones: [] }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -136,12 +138,14 @@ HtmlTree :: [].{
 		if props.recovery == Strict and !diagnostics.is_empty() {
 			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
 		}
-		$state = project_selectedcontent($state, props).map_err(
-			|InvalidMarkup(e)| {
-				at = Literal.position(source, e.column)
-				InvalidMarkup({ ..e, line: at.line, column: at.column })
-			},
-		)?
+		if !context.defer_projection {
+			$state = project_selectedcontent($state, props).map_err(
+				|InvalidMarkup(e)| {
+					at = Literal.position(source, e.column)
+					InvalidMarkup({ ..e, line: at.line, column: at.column })
+				},
+			)?
+		}
 		roots = if fragment {
 			(node_at($state, 0)).children
 		} else $state.roots
@@ -153,7 +157,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }) }
+State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -2283,7 +2287,7 @@ project_selectedcontent = |state, props| {
 							}
 							stack = $s.stack
 							$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
-							$s = { ..$s, stack }
+							$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
 							if $s.work > $s.work_limit {
 								return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
 							}
