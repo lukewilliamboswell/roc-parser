@@ -273,7 +273,7 @@ custom_element = |name| DomName.valid_element_local_name(name) and name.contains
 	}
 )
 
-allowed = |element, attr| global(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or (element == "input" and attr == "onsearch") or attributes(element, attr)
+allowed = |element, attr| global(attr) or attributes(element, attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or (element == "input" and attr == "onsearch")
 
 has_attribute = |node, key| node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == key)
 
@@ -506,6 +506,15 @@ check_children = |parsed, node, name, in_datalist| {
 	}
 	nothing = void_elements(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
 	text_only = name == "option" and (has_attribute(node, "label") or in_datalist)
+	if !nothing and !text_only and allowed_children.is_empty() {
+		# Unrestricted content still requires valid arena edges. Its child
+		# kinds, namespaces and text cannot reject this content model.
+		node_count = parsed.tree.nodes.len()
+		if node.children.any(|index| index >= node_count) {
+			return fail(parsed, node, Unsupported("invalid child node"))
+		}
+		return Ok({})
+	}
 	for index in node.children {
 		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
 		derived = match child.origin {
@@ -557,3 +566,14 @@ expect !HtmlValidate.custom_element_name("x-Ab") and !HtmlValidate.custom_elemen
 
 expect HtmlValidate.enumerated_values("td", "scope") == Err(NotEnumerated) and HtmlValidate.enumerated_values("th", "scope") == Ok(["row", "col", "rowgroup", "colgroup"])
 expect HtmlValidate.grammar("iframe", "credentialless") == Language("HTML attribute")
+
+expect {
+	parent : Markup.Node
+	parent = { kind: Element({ local: "p", namespace: Uri(Markup.html_namespace), prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: 8 }) }
+	child : Markup.Node
+	child = { kind: Text("x"), attributes: [], children: [], origin: Authored({ start: 3, end: 4 }) }
+	parsed : Markup.Parsed
+	parsed = { source: Markup.Source.from_bytes("<p>x</p>".to_utf8()), tree: { nodes: [parent, child], roots: [0] }, diagnostics: [] }
+	invalid = { ..parent, children: [1, 2] }
+	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported("invalid child node"), line: 1, column: 1 }))
+}
