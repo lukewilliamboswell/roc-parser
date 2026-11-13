@@ -124,6 +124,7 @@
       "runtime": "Node.js >=20 with the locked parse5 and Playwright dependency graph",
       "contract": "Independent markup tree and browser oracle adapters; no application code execution or external resource loading. Campaigns and browser comparisons are run locally.",
       "paths": [
+        "scripts/markup/consumer_fidelity.mjs",
         "scripts/markup/oracle.mjs"
       ]
     }
