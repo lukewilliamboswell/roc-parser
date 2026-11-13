@@ -8,7 +8,7 @@ CheckPlan := [].{
 		{ name: "package", summary: "check, format and test the package, compile-time literals, roc docs, and a release dry run: bundle, examples archive and its spec run against a loopback bundle", commands: [["scripts/test_package.roc"]] },
 		{ name: "examples", summary: "the repository's examples against the working tree, compared with tests/spec.json", commands: [["release-package", "test-examples"]] },
 		{ name: "docs", summary: "the manual's executable Roc examples", commands: [["scripts/check_doc_examples.roc"]] },
-		{ name: "fuzz", summary: "build every registered fuzz target and run a short smoke campaign from its seeds", commands: [["python3", "scripts/run_fuzz.py", "smoke", "--ci", "all"]] },
+		{ name: "fuzz", summary: "build CI-enabled fuzz targets and run a short smoke campaign from their seeds", commands: [["python3", "scripts/run_fuzz.py", "smoke", "--ci", "all"]] },
 		{ name: "conformance", summary: "the fast conformance checks against each format's pinned reference implementation", commands: [["scripts/check_conformance.roc", "--"]] },
 		{ name: "markup", summary: "deterministic HTML, SVG and MathML conformance against independent oracles", commands: [["python3", "scripts/review_markup.py", "check"]] },
 		{ name: "asciidoc", summary: "AsciiDoc against the pinned Asciidoctor, and the performance harness smoke run", commands: [["scripts/check_asciidoc.roc", "--"]] },
