@@ -492,6 +492,108 @@
       "input": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mfrac><mn>1</mn><mn>2</mn></mfrac></math>",
       "validate": true,
       "consumer": true
+    },
+    {
+      "id": "svg-viewbox-valid",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<svg viewBox=\"0 0 10 20\"/>",
+      "valid": true
+    },
+    {
+      "id": "svg-viewbox-negative-size",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<svg viewBox=\"0 0 -10 20\"/>",
+      "valid": false,
+      "problem": "InvalidValue"
+    },
+    {
+      "id": "svg-transform-valid",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<g transform=\"translate(1 2) rotate(45) scale(2)\"/>",
+      "valid": true
+    },
+    {
+      "id": "svg-transform-arity",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<g transform=\"matrix(1 2)\"/>",
+      "valid": false,
+      "problem": "InvalidValue"
+    },
+    {
+      "id": "svg-filter-number-pair",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<filter><feGaussianBlur stdDeviation=\"2 3\"/></filter>",
+      "valid": true
+    },
+    {
+      "id": "svg-filter-negative-pair",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<filter><feGaussianBlur stdDeviation=\"2 -3\"/></filter>",
+      "valid": false,
+      "problem": "InvalidValue"
+    },
+    {
+      "id": "svg-dasharray-valid",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<path d=\"M0 0\" stroke-dasharray=\"1 2 3\"/>",
+      "valid": true
+    },
+    {
+      "id": "svg-dasharray-negative",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<path d=\"M0 0\" stroke-dasharray=\"1 -2\"/>",
+      "valid": false,
+      "problem": "InvalidValue"
+    },
+    {
+      "id": "svg-paint-valid",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<path d=\"M0 0\" fill=\"url(#g) red\"/>",
+      "valid": true
+    },
+    {
+      "id": "mathml-multiscript-pairs",
+      "format": "mathml",
+      "fragment": true,
+      "validate": true,
+      "input": "<mmultiscripts><mi>x</mi><mn>1</mn><mi>n</mi></mmultiscripts>",
+      "valid": true
+    },
+    {
+      "id": "mathml-multiscript-missing-partner",
+      "format": "mathml",
+      "fragment": true,
+      "validate": true,
+      "input": "<mmultiscripts><mi>x</mi><mn>1</mn></mmultiscripts>",
+      "valid": false,
+      "problem": "InvalidChildren"
+    },
+    {
+      "id": "mathml-semantics-missing-expression",
+      "format": "mathml",
+      "fragment": true,
+      "validate": true,
+      "input": "<semantics><annotation encoding=\"text/plain\">x</annotation></semantics>",
+      "valid": false,
+      "problem": "InvalidChildren"
     }
   ]
 }

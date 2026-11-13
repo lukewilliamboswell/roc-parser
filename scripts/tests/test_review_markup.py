@@ -148,3 +148,25 @@ class TreeSuiteTests(unittest.TestCase):
         for item in inventory['source']['excluded']:
             self.assertIn('/scripted_', item['path'])
             self.assertIn('JavaScript execution', item['reason'])
+
+
+class CoverageManifestTests(unittest.TestCase):
+    def test_claims_reference_real_independent_fixtures_and_compiler_cases(self):
+        manifest = json.loads((review.DATA / 'coverage.json').read_text())
+        fixtures = {case['id'] for case in review.load_cases(list(review.NS))}
+        compiler_cases = json.loads((review.ROOT / 'scripts/literals/cases.json').read_text())
+        compiler_names = {case['name'] for case in compiler_cases}
+        ids = [rule['id'] for rule in manifest['rules']]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertGreaterEqual(len(ids), 12)
+        for rule in manifest['rules']:
+            self.assertTrue(rule['details'])
+            self.assertTrue(rule['level'])
+            self.assertTrue(rule.get('fixtures') or rule.get('roc_tests') or rule.get('compiler_fixtures'))
+            for fixture in rule.get('fixtures', []):
+                self.assertIn(fixture, fixtures, rule['id'])
+            for fixture in rule.get('compiler_fixtures', []):
+                self.assertIn(fixture, compiler_names, rule['id'])
+            for path in rule.get('roc_tests', []):
+                self.assertTrue((review.ROOT / path).is_file(), path)
+        self.assertEqual({item['language'] for item in manifest['opaque']}, {'CSS', 'JavaScript', 'URLs and cross-document resources', 'Content MathML'})

@@ -18,7 +18,7 @@ DEFAULT_WORK = ROOT / '.roc-parser-tmp/markup/bench'
 
 def source_identity() -> str:
     identity = hashlib.sha256()
-    for path in sorted([*(ROOT / 'package').glob('*.roc'), ROOT / 'bench/roc/markup.roc', ROOT / 'fuzz/markup-alloc.roc']):
+    for path in sorted([*(ROOT / 'package').glob('*.roc'), ROOT / 'bench/roc/markup.roc', ROOT / 'fuzz/markup-alloc.roc', ROOT / 'scripts/bench_markup.py']):
         identity.update(path.relative_to(ROOT).as_posix().encode() + b'\0' + path.read_bytes() + b'\0')
     return identity.hexdigest()
 
@@ -138,6 +138,7 @@ def main(argv=None):
     parser.add_argument('--families', nargs='*')
     parser.add_argument('--compile-literals', action='store_true', help='measure checked-literal versus runtime-input compilation and artifact size separately')
     parser.add_argument('--compile-repetitions', type=int, default=1)
+    parser.add_argument('--compile-sizes', nargs='+', type=int, default=[16, 64, 256])
     args = parser.parse_args(argv)
     if any(n <= 0 for n in args.sizes) or args.repetitions <= 0:
         parser.error('sizes and repetitions must be positive')
@@ -170,7 +171,7 @@ def main(argv=None):
         records.append(record)
         print(json.dumps(record), flush=True)
     failures = scaling(records)
-    compile_records = compile_literals(args.roc, args.work, sorted(set(args.sizes)), args.compile_repetitions) if args.compile_literals else []
+    compile_records = compile_literals(args.roc, args.work, sorted(set(args.compile_sizes)), args.compile_repetitions) if args.compile_literals else []
     if source_before != source_identity():
         raise RuntimeError('sources changed during measurement; discard observations and rerun')
     report = {'schema_version': 1, 'compiler': subprocess.check_output([args.roc, 'version'], text=True).strip(),

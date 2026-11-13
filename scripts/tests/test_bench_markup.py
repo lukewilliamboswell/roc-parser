@@ -19,7 +19,7 @@ class WorkloadTests(unittest.TestCase):
     def test_identity_changes_when_a_parser_or_measurement_boundary_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for path in ['package/X.roc', 'bench/roc/markup.roc', 'fuzz/markup-alloc.roc']:
+            for path in ['package/X.roc', 'bench/roc/markup.roc', 'fuzz/markup-alloc.roc', 'scripts/bench_markup.py']:
                 file = root / path
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_text('initial')

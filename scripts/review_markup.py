@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import random
+import re
 import selectors
 import subprocess
 import sys
@@ -156,7 +157,9 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
             validate_tree(actual['roots'])
         else:
             error = actual.get('error', {})
-            if not isinstance(error.get('code'), str) or error.get('line', 0) < 1 or error.get('column', 0) < 1:
+            lines = re.split(r'\r\n|\r|\n', case['input'])
+            line, column = error.get('line', 0), error.get('column', 0)
+            if not isinstance(error.get('code'), str) or not isinstance(line, int) or not isinstance(column, int) or not 1 <= line <= len(lines) or not 1 <= column <= len(lines[line - 1].encode()) + 1:
                 return {'status': 'invalid_diagnostic', 'actual': actual}
         return actual
     except (ValueError, KeyError, TypeError) as error:
