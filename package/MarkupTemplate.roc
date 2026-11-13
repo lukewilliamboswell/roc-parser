@@ -43,6 +43,9 @@ MarkupTemplate :: [].{
 		if segments.len() - 1 > props.max_slots {
 			return Err(InvalidMarkup({ problem: ResourceLimit("template slots"), line: 1, column: 1 }))
 		}
+		if $source_size > Markup.work_budget(props, $source_size) or segments.len() > Markup.work_budget(props, $source_size) {
+			return Err(InvalidMarkup({ problem: ResourceLimit("template work"), line: 1, column: 1 }))
+		}
 		source_text = Str.join_with(segments, "")
 		source = Markup.Source.from_str(source_text)
 		var $holes = []
@@ -232,6 +235,18 @@ whole_attribute = |source, span, hole, syntax| {
 
 build_plan : List(Str), Markup.Parsed, List(Position), Markup.Props, (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 build_plan = |segments, parsed, positions, props, decode| {
+	# Sorting intervals and locating slots is bounded by an explicit structural
+	# progress estimate, in addition to the engine's source-scanning budget.
+	var $levels = 0
+	var $size = parsed.tree.nodes.len() + positions.len() + 1
+	while $size > 1 {
+		$levels = $levels + 1
+		$size = $size // 2
+	}
+	structural_work = (parsed.tree.nodes.len() + positions.len() + 1) * (4 + $levels * 3)
+	if structural_work > Markup.work_budget(props, parsed.source.bytes.len()) {
+		return Err(InvalidMarkup({ problem: ResourceLimit("template work"), line: 1, column: 1 }))
+	}
 	var $nodes = parsed.tree.nodes
 	var $slots = []
 	var $text_groups = Dict.empty()
@@ -352,7 +367,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 					$first = False
 				} else {
 					$pieces = $pieces.append($nodes.len())
-					$nodes = $nodes.append(part)
+					$nodes = append_bounded($nodes, part, props.max_nodes)?
 				}
 			}
 			slot_node = { kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) }
@@ -361,7 +376,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 				$nodes = $nodes.set(index, slot_node) ?? []
 				$first = False
 			} else {
-				$nodes = $nodes.append(slot_node)
+				$nodes = append_bounded($nodes, slot_node, props.max_nodes)?
 			}
 			$pieces = $pieces.append(slot_index)
 			$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: slot_index }), expected: Language("text") })
@@ -370,7 +385,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 		if $start < content_end {
 			value = decode_source_region(parsed.source, $start, content_end, cdata_markup, decode)?
 			$pieces = $pieces.append($nodes.len())
-			$nodes = $nodes.append({ kind: Text(value), attributes: [], children: [], origin: Authored({ start: $start, end: content_end }) })
+			$nodes = append_bounded($nodes, { kind: Text(value), attributes: [], children: [], origin: Authored({ start: $start, end: content_end }) }, props.max_nodes)?
 		}
 		$replacement = $replacement.insert(index, $pieces)
 	}
@@ -379,7 +394,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 	for insertion in $insertions {
 		hole = insertion.hole
 		index = $nodes.len()
-		$nodes = $nodes.append({ kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) })
+		$nodes = append_bounded($nodes, { kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) }, props.max_nodes)?
 		$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: index }), expected: Language("text") })
 		entry = { offset: hole.offset, node: index }
 		match insertion.parent {
@@ -613,4 +628,15 @@ expect {
 	literal =
 		\\<g x="${first}">${second}</g>
 	literal.bound.values == [first, second] and literal.bound.plan.slots.len() == 2
+}
+
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_work_per_byte: 0 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
+
+append_bounded : List(Markup.Node), Markup.Node, U64 -> Try(List(Markup.Node), [InvalidMarkup(Markup.Error)])
+append_bounded = |nodes, node, limit| {
+	if nodes.len() >= limit {
+		Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
+	} else {
+		Ok(nodes.append(node))
+	}
 }

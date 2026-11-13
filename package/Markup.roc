@@ -91,7 +91,13 @@ Markup :: [].{
 
 		## The exact bytes of a source token.
 		slice : Source, Span -> List(U8)
-		slice = |source, span| source.bytes.drop_first(span.start).take_first(span.end - span.start)
+		slice = |source, span| {
+			start = if (span.start < source.bytes.len()) span.start else source.bytes.len()
+			end = if span.end > start {
+				if (span.end < source.bytes.len()) span.end else source.bytes.len()
+			} else start
+			source.bytes.drop_first(start).take_first(end - start)
+		}
 	}
 
 	## Typed attribute grammars shared by validators and interpolation slots.
@@ -105,7 +111,20 @@ Markup :: [].{
 	Error : { problem : Problem, line : U64, column : U64 }
 
 	## Configurable validation and resource limits, strict by default.
+	## XML work counts deterministic source-byte traversals and reader events;
+	## it is a progress ceiling rather than a count of machine instructions.
 	Props := { syntax : Syntax ?? XmlSyntax, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
+
+	## Saturating progress budget proportional to source bytes (one for empty input).
+	work_budget : Props, U64 -> U64
+	work_budget = |props, bytes| {
+		units = if (bytes == 0) 1 else bytes
+		if props.max_work_per_byte > 18_446_744_073_709_551_615 // units {
+			18_446_744_073_709_551_615
+		} else {
+			props.max_work_per_byte * units
+		}
+	}
 
 	## Expanded names share the existing namespace-aware XML contract.
 	Name : XmlNs.Name
@@ -169,7 +188,7 @@ Markup :: [].{
 		roots = tree.roots.keep_if(
 			|index| match tree.nodes.get(index) {
 				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
-				Ok({ kind: Text(text), .. }) => !text.trim().is_empty()
+				Ok({ kind: Text(text), .. }) => !text.to_utf8().all(|byte| space(byte) or byte == 12)
 				Ok(_) => True
 				Err(_) => False
 			},
@@ -250,11 +269,20 @@ parse_xml_source = |text, namespace, fragment, props| {
 	depth = (if (props.max_depth < ceiling) props.max_depth else ceiling) + if (fragment) 1 else 0
 	elements = (if (props.max_elements < ceiling) props.max_elements else ceiling) + if (fragment) 1 else 0
 	opened = XmlNs.reader(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }).map_err(|error| located_xml_error(error, text, prefix.count_utf8_bytes()))?
+	budget = Markup.work_budget(props, text.count_utf8_bytes())
+	var $work = text.count_utf8_bytes()
+	if $work > budget {
+		return Err(InvalidMarkup({ problem: ResourceLimit("parser work"), line: 1, column: 1 }))
+	}
 	var $reader = opened
 	var $starts = []
 	var $done = False
 	var $context = fragment
 	while !$done {
+		if $work >= budget {
+			return Err(InvalidMarkup({ problem: ResourceLimit("parser work"), line: 1, column: 1 }))
+		}
+		$work = $work + 1
 		match $reader.next() {
 			Event(Start(start), rest) => {
 				if $context {
@@ -273,7 +301,7 @@ parse_xml_source = |text, namespace, fragment, props| {
 			Failed(error) => return Err(located_xml_error(error, text, prefix.count_utf8_bytes()))
 		}
 	}
-	construct_xml_tree(Markup.Source.from_str(text), $starts, fragment, props)
+	construct_xml_tree(Markup.Source.from_str(text), $starts, fragment, props, budget - $work)
 }
 
 escape_namespace : Str -> Str
@@ -298,14 +326,20 @@ located_xml_error = |error, text, prefix| {
 	InvalidMarkup({ problem, line: at.line, column: at.column })
 }
 
-construct_xml_tree : Markup.Source, List(StartInfo), Bool, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-construct_xml_tree = |source, starts, fragment, props| {
+construct_xml_tree : Markup.Source, List(StartInfo), Bool, Markup.Props, U64 -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+construct_xml_tree = |source, starts, fragment, props, budget| {
+	var $work = 0
 	var $nodes = []
 	var $roots = []
 	var $stack = []
 	var $start_index = 0
 	for token in source.tokens {
 		bytes = source.slice(token.span)
+		cost = bytes.len() * 2 + 1
+		if cost > budget - $work {
+			return Err(error_at(source, token.span.start, ResourceLimit("parser work")))
+		}
+		$work = $work + cost
 		var $new_node = Err(Missing)
 		match token.kind {
 			Tag => {
@@ -544,3 +578,12 @@ expect {
 	root = parsed.tree.nodes.get(Markup.single_root(parsed.tree)?)?
 	root.children.map(|index| parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a\nb<&")), Ok(Comment(" comment ")), Ok(Text("c"))]
 }
+
+expect Markup.Source.from_str("abc").slice({ start: 9, end: 1 }) == []
+expect Markup.Source.from_str("abc").slice({ start: 1, end: 9 }) == ['b', 'c']
+expect Markup.parse_xml_fragment("<path/>\u(A0)", Markup.svg_namespace, {}).map_ok(|parsed| Markup.single_root(parsed.tree)) == Ok(Err(RootCount(2)))
+
+expect Markup.parse_xml("<a/>", { max_work_per_byte: 0 }).is_err()
+expect Markup.parse_xml_fragment("", "", { max_work_per_byte: 0 }).is_err()
+expect Markup.parse_xml_fragment("<a/>", "", { max_work_per_byte: 8 }).is_ok()
+expect Markup.parse_xml_fragment("<a/>", "", { max_work_per_byte: 18_446_744_073_709_551_615 }).is_ok()
