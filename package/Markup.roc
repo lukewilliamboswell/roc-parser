@@ -86,6 +86,25 @@ Markup :: [].{
 			Source.{ bytes, tokens: $tokens }
 		}
 
+		## Retain token regions produced by a syntax-specific parser. Regions must
+		## partition the supplied bytes; partition_valid checks this invariant.
+		from_tokens : List(U8), List(Token) -> Source
+		from_tokens = |bytes, tokens| Source.{ bytes, tokens }
+
+		## Whether token ranges cover every byte once, in order, without empty
+		## regions. An empty input has an empty token list.
+		partition_valid : Source -> Bool
+		partition_valid = |source| {
+			var $end = 0
+			for token in source.tokens {
+				if token.span.start != $end or token.span.end <= token.span.start or token.span.end > source.bytes.len() {
+					return False
+				}
+				$end = token.span.end
+			}
+			$end == source.bytes.len()
+		}
+
 		## Retain UTF-8 source without normalization.
 		from_str : Str -> Source
 		from_str = |text| from_bytes(text.to_utf8())
@@ -613,3 +632,9 @@ expect Markup.parse_xml_fragment("<a/>", "", { max_work_per_byte: 18_446_744_073
 
 expect Markup.position(Markup.Source.from_bytes([255, 13, 10, 65]), 3) == { line: 2, column: 1 }
 expect Markup.position(Markup.Source.from_bytes([255, 13, 10, 65]), 999) == { line: 2, column: 2 }
+
+expect Markup.Source.from_tokens([], []).partition_valid()
+expect Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 0, end: 1 } }]).partition_valid()
+expect !Markup.Source.from_tokens(['a'], []).partition_valid()
+expect !Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 0, end: 0 } }]).partition_valid()
+expect !Markup.Source.from_tokens(['a'], [{ kind: Text, span: { start: 1, end: 2 } }]).partition_valid()

@@ -47,7 +47,6 @@ MarkupTemplate :: [].{
 			return Err(InvalidMarkup({ problem: ResourceLimit("template work"), line: 1, column: 1 }))
 		}
 		source_text = Str.join_with(segments, "")
-		source = Markup.Source.from_str(source_text)
 		var $holes = []
 		var $offset = 0
 		var $index = 0
@@ -56,15 +55,23 @@ MarkupTemplate :: [].{
 			$holes = $holes.append({ index: $index, offset: $offset })
 			$index = $index + 1
 		}
-		# Classify holes before calling the document parser, so a hole in a
-		# delimiter/name is rejected even when removing it makes valid syntax.
-		positions = classify_holes(source, $holes, props.syntax)?
-		parsed = parse(source_text)?
+		# The actual parser knows raw-text and foreign-content contexts. Its
+		# retained regions distinguish JavaScript '<' characters from tag opens.
+		# On syntax failure, a generic pass still diagnoses structural holes,
+		# including holes whose removal merely happened to produce valid names.
+		parsed = match parse(source_text) {
+			Ok(value) => value
+			Err(error) => {
+				_ = classify_holes(Markup.Source.from_str(source_text), $holes, props.syntax)?
+				return Err(error)
+			}
+		}
+		positions = classify_holes(parsed.source, $holes, props.syntax)?
 		if parsed.tree.nodes.len() > props.max_nodes {
 			return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
 		}
 		if !parsed.diagnostics.is_empty() {
-			return Err(template_error(source, 0, 0, "template structure requires recovery"))
+			return Err(template_error(parsed.source, 0, 0, "template structure requires recovery"))
 		}
 		build_plan(segments, parsed, positions, props, decode)
 	}
@@ -646,3 +653,20 @@ append_bounded = |nodes, node, limit| {
 		Ok(nodes.append(node))
 	}
 }
+
+# A syntax parser can retain '<' inside raw text as a Text region. Generic
+# XML-shaped source splitting cannot provide this context on its own.
+raw_text_parser : Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+raw_text_parser = |source| {
+	# Test callback models HTML's token regions for one fixed script and p.
+	# The production callback is HtmlTree's own tokenizer-backed source.
+	bytes = source.to_utf8()
+	closing = source.split_first("</script>").map_err(|_| InvalidMarkup({ problem: SyntaxError("missing script end"), line: 1, column: 1 }))?
+	end_script_text = closing.before.count_utf8_bytes()
+	p_start = end_script_text + 9
+	p_end = bytes.len()
+	Ok({ source: Markup.Source.from_tokens(bytes, [{ kind: Tag, span: { start: 0, end: 8 } }, { kind: Text, span: { start: 8, end: end_script_text } }, { kind: Tag, span: { start: end_script_text, end: p_start } }, { kind: Tag, span: { start: p_start, end: p_start + 3 } }, { kind: Tag, span: { start: p_start + 3, end: p_end } }]), tree: { nodes: [{ kind: Element({ namespace: Uri(Markup.html_namespace), local: "script", prefix: Unprefixed }), attributes: [], children: [1], origin: Authored({ start: 0, end: p_start }) }, { kind: Text("if(a<b)x()"), attributes: [], children: [], origin: Authored({ start: 8, end: end_script_text }) }, { kind: Element({ namespace: Uri(Markup.html_namespace), local: "p", prefix: Unprefixed }), attributes: [], children: [], origin: Authored({ start: p_start, end: p_end }) }], roots: [0, 2] }, diagnostics: [] })
+}
+
+expect MarkupTemplate.parse_segments_with(["<script>if(a<b)x()</script><p>", "</p>"], { syntax: HtmlSyntax }, raw_text_parser, |text| Ok(text)).is_ok()
+expect MarkupTemplate.parse_segments_with(["<script>if(a<", "b)x()</script><p></p>"], { syntax: HtmlSyntax }, raw_text_parser, |text| Ok(text)).is_err()
