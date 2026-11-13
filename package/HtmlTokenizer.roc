@@ -191,6 +191,32 @@ HtmlTokenizer :: [].{
 		{ token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: $self_closing }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 	}
 
+	## Input-stream parse errors from original UTF-8, before references expand.
+	## Call once when creating a reader. Nulls are handled by individual states;
+	## decoded string input retains U+FEFF rather than repeating byte decoding.
+	input_diagnostics : List(U8) -> List(Diagnostic)
+	input_diagnostics = |bytes| {
+		var $diagnostics = []
+		var $pos = 0
+		while $pos < bytes.len() {
+			lead = byte_at(bytes, $pos).to_u64()
+			width = if (lead >= 0xF0) 4 else if (lead >= 0xE0) 3 else if (lead >= 0xC0) 2 else 1
+			var $scalar = if (width == 1) lead else if (width == 2) lead % 32 else if (width == 3) lead % 16 else lead % 8
+			var $i = 1
+			while $i < width {
+				$scalar = $scalar * 64 + byte_at(bytes, $pos + $i).to_u64() % 64
+				$i = $i + 1
+			}
+			if ($scalar >= 1 and $scalar <= 8) or $scalar == 11 or ($scalar >= 14 and $scalar <= 31) or ($scalar >= 127 and $scalar <= 159) {
+				$diagnostics = $diagnostics.append({ code: ControlCharacterInInputStream, offset: $pos })
+			} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or $scalar % 65536 >= 65534 {
+				$diagnostics = $diagnostics.append({ code: NoncharacterInInputStream, offset: $pos })
+			}
+			$pos = $pos + width
+		}
+		$diagnostics
+	}
+
 	lower : Str -> Str
 	lower = |s| Str.from_utf8_lossy(s.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
 	space : U8 -> Bool
@@ -1132,3 +1158,6 @@ expect {
 	result = HtmlTokenizer.next({ bytes: "<!-->".to_utf8(), pos: 0, diagnostics: [] }, Script, False)
 	result.reader.diagnostics.is_empty()
 }
+
+expect HtmlTokenizer.input_diagnostics("x\u(B)y\u(80)z\u(FDD0)\u(10FFFF)".to_utf8()) == [{ code: ControlCharacterInInputStream, offset: 1 }, { code: ControlCharacterInInputStream, offset: 3 }, { code: NoncharacterInInputStream, offset: 6 }, { code: NoncharacterInInputStream, offset: 9 }]
+expect HtmlTokenizer.input_diagnostics("\r\n\t\u(C)\u(0)\u(FEFF)".to_utf8()).is_empty()
