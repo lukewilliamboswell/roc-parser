@@ -16,6 +16,11 @@
       "kind": "schema_compile_error",
       "message": "libxml2 RelaxNG: Attributes conflicts in group, line 755",
       "coverage": "Use the compiling Core RNG for its overlapping vocabulary/attributes; independent fixtures cover Presentation and arity rules."
+    },
+    {
+      "oracle": "Browser DOM APIs",
+      "kind": "scripting_mode_boundary",
+      "coverage": "DOMParser uses scripting-off document parsing; native innerHTML uses scripting-on fragment parsing. Other scripting modes are tested against WPT/parse5. Explicit browser requests outside these native modes fail as oracle infrastructure/configuration errors instead of silently using the wrong mode."
     }
   ]
 }

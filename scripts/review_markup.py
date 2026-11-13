@@ -315,10 +315,11 @@ def browser_review(args) -> int:
         for case in load_cases(args.formats):
             if case.get('valid') is False or case.get('syntax', 'html' if case['format'] == 'html' else 'xml') != 'html':
                 continue
-            actual = probe(executable, {**case, 'recovery': 'browser', 'validate': False})
+            native_case = {**case, 'recovery': 'browser', 'validate': False, 'scripting': bool(case.get('fragment'))}
+            actual = probe(executable, native_case)
             for engine in args.engines:
-                reference = node.parse({**request(case), 'engine': engine})
-                row = compare({**case, 'id': case['id'] + '/' + engine}, actual, reference)
+                reference = node.parse({**request(native_case), 'engine': engine})
+                row = compare({**native_case, 'id': case['id'] + '/' + engine}, actual, reference)
                 rows.append(row)
                 if row['kind'] != 'pass':
                     retain(row, args.work)

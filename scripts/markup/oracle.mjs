@@ -33,6 +33,9 @@ async function oracle(request) {
 }
 
 async function browserOracle(request) {
+  const nativeScripting = Boolean(request.fragment);
+  if (!request.construct && request.syntax !== 'xml' && request.scripting !== undefined && Boolean(request.scripting) !== nativeScripting)
+    throw new Error('browser adapter uses native DOMParser scripting-off documents and innerHTML scripting-on fragments; use WPT/parse5 for other scripting modes');
   if (!['chromium', 'firefox', 'webkit'].includes(request.engine)) throw new Error('unknown browser engine');
   if (!browsers.has(request.engine)) {
     const playwright = await import(pathToFileURL(join(root, 'node_modules/playwright/index.mjs')));
@@ -116,7 +119,7 @@ async function browserOracle(request) {
       }
       return {status: 'ok', roots: Array.from(parent.childNodes, encode), diagnostics: [], checks, interfaces};
     }, request);
-    return {...result, browser_version: browsers.get(request.engine).version()};
+    return {...result, browser_version: browsers.get(request.engine).version(), native_scripting: request.syntax === 'xml' ? false : nativeScripting};
   } finally { await page.close(); }
 }
 
