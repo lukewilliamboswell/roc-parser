@@ -94,9 +94,12 @@ Markup :: [].{
 		slice = |source, span| source.bytes.drop_first(span.start).take_first(span.end - span.start)
 	}
 
+	## Typed attribute grammars shared by validators and interpolation slots.
+	ValueGrammar : [Number, NonnegativeNumber, Length, NonnegativeLength, NumberList(U64), LengthList, PathData, TransformList, Keyword(List(Str)), TokenList, Color, Paint, AspectRatio, Language(Str)]
+
 	## Structured reason for rejection
 	## Presentation is separate.
-	Problem : [SyntaxError(Str), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : Str }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
+	Problem : [SyntaxError(Str), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
 
 	## One-based lines and UTF-8 byte columns refer to authored source.
 	Error : { problem : Problem, line : U64, column : U64 }
