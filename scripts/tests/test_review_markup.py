@@ -110,6 +110,48 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(saved['input_sha256'], hashlib.sha256(case['input'].encode()).hexdigest())
 
 
+class ConsumerFidelityTests(unittest.TestCase):
+    def test_explicit_name_never_splits_a_colon_local(self):
+        literal = review.consumer_name(review.NS['html'], 'h:div')
+        qualified = review.consumer_name(review.NS['html'], 'div', 'h')
+        self.assertEqual(literal['qualified'], qualified['qualified'])
+        self.assertNotEqual(literal, qualified)
+        review.validate_consumer_tree([['element', literal, [], []]])
+        review.validate_consumer_tree([['element', qualified, [], []]])
+
+    def test_projection_preserves_bindings_and_two_same_spelling_attributes(self):
+        xmlns = review.consumer_name('http://www.w3.org/2000/xmlns/', 'p', 'xmlns')
+        literal = review.consumer_name(None, 'xlink:href')
+        genuine = review.consumer_name('http://www.w3.org/1999/xlink', 'href', 'xlink')
+        tree = [['element', review.consumer_name(review.NS['svg'], 'svg'),
+                 [[xmlns, 'urn:first'], [literal, 'literal'], [genuine, 'genuine']], []]]
+        review.validate_consumer_tree(tree)
+        changed = json.loads(json.dumps(tree))
+        changed[0][2][0][1] = 'urn:second'
+        self.assertEqual(review.compare({'id': 'binding', 'input': ''}, {'status': 'ok', 'roots': tree}, {'status': 'ok', 'roots': changed})['kind'], 'wrong_tree')
+
+    def test_protocol_requires_all_explicit_fields_and_consistent_spelling(self):
+        valid = review.consumer_name('urn:a', 'href', 'a')
+        for name in [{k: v for k, v in valid.items() if k != 'prefix'}, {**valid, 'qualified': 'b:href'}, {**valid, 'namespace': 1}]:
+            with self.assertRaises(ValueError):
+                review.validate_consumer_tree([['element', name, [], []]])
+        # DOM computed names have their own grammar. The wire validator does
+        # not substitute XML NCName checks for browser constructor validation.
+        review.validate_consumer_name(review.consumer_name(review.NS['svg'], 'a=b'))
+
+    def test_request_preserves_fidelity_projection(self):
+        case = {'id': 'x', 'input': '<x/>', 'projection': 'consumer-fidelity'}
+        self.assertEqual(review.request(case), {'input': '<x/>', 'projection': 'consumer-fidelity'})
+
+    def test_regressions_have_distinct_ids_and_complete_pairs(self):
+        data = json.loads((review.DATA / 'consumer-fidelity-cases.json').read_text())
+        ids = [case['id'] for case in data['cases']]
+        self.assertEqual(len(ids), len(set(ids)))
+        for pair in data['pairs']:
+            self.assertEqual(len(pair), 2)
+            self.assertTrue(set(pair) <= set(ids))
+
+
 class SupplierTests(unittest.TestCase):
     def test_digest_mismatch_never_replaces_cached_artifact(self):
         with tempfile.TemporaryDirectory() as directory:

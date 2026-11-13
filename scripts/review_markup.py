@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'scripts/markup'
 DEFAULT_WORK = ROOT / '.roc-parser-tmp/markup'
 NS = {'html': 'http://www.w3.org/1999/xhtml', 'svg': 'http://www.w3.org/2000/svg', 'mathml': 'http://www.w3.org/1998/Math/MathML'}
-FATAL = {'crash', 'timeout', 'protocol_error', 'oracle_error', 'invalid_diagnostic'}
+FATAL = {'crash', 'timeout', 'protocol_error', 'oracle_error', 'invalid_diagnostic', 'consumer_gap'}
 _spec = importlib.util.spec_from_file_location('markup_setup', DATA / 'setup_oracle.py')
 setup = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(setup)
@@ -41,7 +41,7 @@ def write_json(path: Path, value) -> None:
 
 
 def request(case: dict) -> dict:
-    return {key: value for key, value in case.items() if key in {'input', 'format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings'}}
+    return {key: value for key, value in case.items() if key in {'input', 'format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings', 'projection'}}
 
 
 def xml_oracle(case: dict) -> dict:
@@ -179,7 +179,7 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
     arguments = [case['format'], case.get('syntax', 'html' if case['format'] == 'html' else 'xml'),
                  'fragment' if case.get('fragment') else 'document', case.get('recovery', 'strict'),
                  'validate' if case.get('validate', True) else 'structural',
-                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'bindings' if case.get('include_bindings') else 'semantic', *[('on' if case[key] else 'off') if key in case else 'default' for key in ['allow_unknown_elements', 'allow_unknown_attributes', 'check_values']]]
+                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'consumer-fidelity' if case.get('projection') == 'consumer-fidelity' else 'bindings' if case.get('include_bindings') else 'semantic', *[('on' if case[key] else 'off') if key in case else 'default' for key in ['allow_unknown_elements', 'allow_unknown_attributes', 'check_values']]]
     try:
         result = subprocess.run([str(executable), *arguments], input=case['input'].encode(), capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
@@ -191,7 +191,10 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
         if actual['status'] not in {'ok', 'error'}:
             raise ValueError('unknown status')
         if actual['status'] == 'ok':
-            validate_tree(actual['roots'])
+            if case.get('projection') == 'consumer-fidelity':
+                validate_consumer_tree(actual['roots'])
+            else:
+                validate_tree(actual['roots'])
         else:
             error = actual.get('error', {})
             lines = re.split(r'\r\n|\r|\n', case['input'])
@@ -229,6 +232,39 @@ def validate_tree(roots: list) -> None:
         else:
             raise ValueError('unknown node kind')
 
+
+
+def consumer_name(namespace, local, prefix=None):
+    return {'namespace': namespace, 'prefix': prefix, 'local': local,
+            'qualified': local if prefix is None else prefix + ':' + local}
+
+
+def validate_consumer_name(name):
+    if not isinstance(name, dict) or set(name) != {'namespace', 'prefix', 'local', 'qualified'}:
+        raise ValueError('invalid consumer name fields')
+    if any(name[key] is not None and not isinstance(name[key], str) for key in ['namespace', 'prefix']) or not all(isinstance(name[key], str) for key in ['local', 'qualified']):
+        raise ValueError('invalid consumer name values')
+    if name != consumer_name(name['namespace'], name['local'], name['prefix']):
+        raise ValueError('inconsistent qualified consumer name')
+
+
+def validate_consumer_tree(roots):
+    if not isinstance(roots, list):
+        raise ValueError('consumer roots must be a list')
+    pending = list(roots)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, list) and node and node[0] == 'element':
+            if len(node) != 4 or not isinstance(node[2], list) or not isinstance(node[3], list):
+                raise ValueError('invalid consumer element')
+            validate_consumer_name(node[1])
+            for attr in node[2]:
+                if not isinstance(attr, list) or len(attr) != 2 or not isinstance(attr[1], str):
+                    raise ValueError('invalid consumer attribute')
+                validate_consumer_name(attr[0])
+            pending.extend(node[3])
+        else:
+            validate_tree([node])
 
 def compare(case: dict, actual: dict, reference: dict) -> dict:
     if actual['status'] in FATAL:
@@ -269,7 +305,7 @@ def mutate(case: dict, rng: random.Random, index: int) -> dict:
     # A source mutation invalidates the seed's authored verdict and specific
     # diagnostic expectations. Preserve parsing context, then ask the independent
     # syntax oracle for the mutated source's verdict and tree.
-    context = {key: case[key] for key in ('format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings') if key in case}
+    context = {key: case[key] for key in ('format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings', 'projection') if key in case}
     return {**context, 'id': f'mutation-{index}', 'input': source, 'validate': False, 'recovery': 'browser'}
 
 
@@ -347,16 +383,19 @@ def browser_review(args) -> int:
 def consumer_review(args) -> int:
     setup.ensure_browsers(args.engines, args.cache, with_deps=args.with_deps)
     executable = resolve_probe(args)
-    cases = [case for case in load_cases(args.formats) if case.get('consumer')]
+    oracle_paths = [Path(__file__), DATA / 'oracle.mjs', DATA / 'consumer_fidelity.mjs', DATA / 'consumer-fidelity-cases.json']
+    oracle_sources = {path.relative_to(ROOT).as_posix(): setup.sha256(path) for path in oracle_paths}
+    fidelity = json.loads((DATA / 'consumer-fidelity-cases.json').read_text())
+    cases = [{**case, 'projection': 'consumer-fidelity'} for case in [*[case for case in load_cases(args.formats) if case.get('consumer')], *[case for case in fidelity['cases'] if case['format'] in args.formats]]]
     templates = []
     for operation in ['template', 'template-html', 'template-select']:
         template_process = subprocess.run([str(executable), operation], input=b'<path/>', capture_output=True, check=False, timeout=10)
         if template_process.returncode:
             raise RuntimeError(operation + ' consumer probe failed: ' + template_process.stderr.decode(errors='replace'))
         template = json.loads(template_process.stdout)
-        validate_tree(template['roots'])
+        validate_consumer_tree(template['roots'])
         templates.append((operation, template))
-    rows = []
+    rows, observations = [], []
     with NodeOracle(args.cache, timeout=60) as node:
         for case in cases:
             actual = probe(executable, case)
@@ -366,18 +405,25 @@ def consumer_review(args) -> int:
             for engine in args.engines:
                 constructed = node.parse({**request(case), 'engine': engine, 'construct': actual['roots']})
                 reference = node.parse({**request(case), 'engine': engine})
-                row = compare({**case, 'id': case['id'] + '/' + engine}, constructed, reference)
+                row = compare({**case, 'id': case['id'] + '/' + engine}, actual, reference)
+                if row['kind'] == 'pass':
+                    row = compare({**case, 'id': case['id'] + '/' + engine}, constructed, reference)
                 required = ['linearGradient', 'pathLength', 'foreignObject'] if case['format'] == 'svg' else ['mathml']
-                if not all(constructed.get('checks', {}).get(key) is True for key in required) or constructed.get('interfaces') != reference.get('interfaces'):
+                if row['kind'] == 'pass' and case.get('consumer') and (not all(constructed.get('checks', {}).get(key) is True for key in required) or constructed.get('interfaces') != reference.get('interfaces')):
                     row['kind'] = 'wrong_dom_interface'
+                if row['kind'] == 'pass' and (constructed.get('checks', {}).get('adoptionIdentity') is not True or constructed.get('prerender_sha256') != constructed.get('fidelity_sha256')):
+                    row['kind'] = 'changed_adoption_identity'
+                row['prerender_sha256'] = constructed.get('prerender_sha256')
                 row['checks'] = constructed.get('checks', {})
                 row['interfaces'] = constructed.get('interfaces', {})
                 row['browser_version'] = constructed.get('browser_version')
+                row['fidelity_sha256'] = constructed.get('fidelity_sha256')
+                row['reference_sha256'] = reference.get('fidelity_sha256')
                 rows.append(row)
         for operation, template in templates:
             for engine in args.engines:
                 case = {'id': 'consumer-' + operation + '/' + engine, 'format': 'svg', 'syntax': 'xml',
-                        'input': '<svg xmlns="' + NS['svg'] + '"><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
+                        'projection': 'consumer-fidelity', 'fragment': True, 'input': '<svg><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
                 if operation == 'template-html':
                     case.update(syntax='html', fragment=True, format='html', input='<script>if (a < b) x = 1;</script><svg><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>')
                 if operation == 'template-select':
@@ -389,22 +435,22 @@ def consumer_review(args) -> int:
                 if operation == 'template-select':
                     # A separate normative model keeps projection present even
                     # when a browser has not implemented selectedcontent cloning.
-                    span = ['element', NS['html'], 'span', [['', 'title', '12']], [['text', '<path/>']]]
-                    model = [['element', NS['html'], 'select', [], [
-                        ['element', NS['html'], 'button', [], [['element', NS['html'], 'selectedcontent', [], [span]]]],
-                        ['element', NS['html'], 'option', [['', 'selected', '']], [span]]]]]
+                    span = ['element', consumer_name(NS['html'], 'span'), [[consumer_name(None, 'title'), '12']], [['text', '<path/>']]]
+                    model = [['element', consumer_name(NS['html'], 'select'), [], [
+                        ['element', consumer_name(NS['html'], 'button'), [], [['element', consumer_name(NS['html'], 'selectedcontent'), [], [span]]]],
+                        ['element', consumer_name(NS['html'], 'option'), [[consumer_name(None, 'selected'), '']], [span]]]]]
                     reference = {'status': 'ok', 'roots': model}
                     if native.get('roots') != model:
                         import copy
                         unimplemented = copy.deepcopy(model)
-                        unimplemented[0][4][0][4][0][4] = []
+                        unimplemented[0][3][0][3][0][3] = []
                         if native.get('roots') == unimplemented:
                             oracle_gap = {'feature': 'selectedcontent projection', 'kind': 'not_implemented_by_browser', 'native_roots': native['roots']}
                         else:
                             oracle_gap = {'feature': 'selectedcontent projection', 'kind': 'unexpected_browser_tree', 'native_roots': native.get('roots')}
                 row = compare(case, constructed, reference)
                 required = ['bindingFanout', 'inertScript'] if operation == 'template-select' else ['textBinding', 'attributeBinding', 'inertScript']
-                if not all(constructed.get('checks', {}).get(key) is True for key in required):
+                if row['kind'] == 'pass' and not all(constructed.get('checks', {}).get(key) is True for key in required):
                     row['kind'] = 'wrong_binding_behavior'
                 if operation == 'template-select' and not (template.get('binding_count') == template.get('source_holes') == 2 and template.get('slot_count') == 4):
                     row['kind'] = 'wrong_binding_fanout'
@@ -412,14 +458,55 @@ def consumer_review(args) -> int:
                     row['oracle_gap'] = oracle_gap
                     if oracle_gap['kind'] == 'unexpected_browser_tree':
                         row['kind'] = 'oracle_disagreement'
+                if row['kind'] == 'pass' and (constructed.get('checks', {}).get('adoptionIdentity') is not True or constructed.get('prerender_sha256') != constructed.get('fidelity_sha256')):
+                    row['kind'] = 'changed_adoption_identity'
+                row['prerender_sha256'] = constructed.get('prerender_sha256')
+                row['fidelity_sha256'] = constructed.get('fidelity_sha256')
                 row['checks'] = constructed.get('checks', {})
                 row['browser_version'] = constructed.get('browser_version')
                 rows.append(row)
-    report = {'schema_version': 1, 'engines': args.engines, 'counts': dict(Counter(row['kind'] for row in rows)), 'rows': rows,
+
+        for engine in args.engines:
+            result = node.parse({'engine': engine, 'projection': 'consumer-fidelity', 'fidelity_regressions': True})
+            for check, passed in result['checks'].items():
+                rows.append({'id': 'consumer-identity/' + check + '/' + engine, 'kind': 'pass' if passed else 'wrong_consumer_identity', 'browser_version': result['browser_version'], 'actual': result})
+            for constructor in result['constructor_fidelity']:
+                known_gap = (engine == 'chromium' and result['browser_version'] == '158.0.8127.18' and constructor['status'] == 'consumer_gap'
+                             and constructor.get('actual') == consumer_name(NS['svg'], 'a', 'p')
+                             and constructor['expected'] == consumer_name(NS['svg'], 'a:b', 'p'))
+                rows.append({'id': 'consumer-computed-name/' + ('attribute' if constructor['attribute'] else 'element') + '/' + engine,
+                             'kind': 'pass' if constructor['status'] == 'ok' else 'oracle_gap' if known_gap else 'consumer_gap',
+                             'actual': constructor, 'browser_version': result['browser_version'],
+                             **({'oracle_gap': {'feature': 'multi-colon computed name p:a:b', 'kind': 'constructor_changes_local_name', 'engine': engine, 'version': '158.0.8127.18'}} if known_gap else {})})
+            expected_handlers = {'mathml-in-svg-metadata-onclick': True, 'svg-g-oninput': True,
+                                 'customonline': False, 'namespaced-onclick': False, 'literal-colon-onclick': False}
+            for handler in result['handlers']:
+                if handler['id'] in expected_handlers:
+                    matches = handler['executed'] == expected_handlers[handler['id']]
+                    known_gap = engine == 'firefox' and result['browser_version'] == '159.0' and handler['id'] == 'svg-g-oninput' and not handler['executed']
+                    rows.append({'id': 'consumer-handler/' + handler['id'] + '/' + engine,
+                                 'kind': 'pass' if matches else 'oracle_gap' if known_gap else 'browser_handler_disagreement',
+                                 'actual': handler, 'expected_execution': expected_handlers[handler['id']], 'browser_version': result['browser_version'],
+                                 **({'oracle_gap': {'feature': 'SVG g inline oninput', 'kind': 'handler_not_executed_by_browser', 'engine': engine, 'version': '159.0'}} if known_gap else {})})
+            # Auxiliary handler inventory is factual engine evidence, not an
+            # authoring rule inferred from this browser's implementation.
+            observations.append({'engine': engine, 'handlers': result['handlers'], 'name_apis': result['name_apis'], 'browser_version': result['browser_version']})
+        for left, right in fidelity['pairs']:
+            for engine in args.engines:
+                by_id = {row['id']: row for row in rows}
+                a, b = by_id.get(left + '/' + engine), by_id.get(right + '/' + engine)
+                if a and b:
+                    rows.append({'id': 'consumer-distinct/' + left + '/' + right + '/' + engine,
+                                 'kind': 'pass' if a.get('fidelity_sha256') and a['fidelity_sha256'] != b.get('fidelity_sha256') else 'collapsed_consumer_identity'})
+    if oracle_sources != {path.relative_to(ROOT).as_posix(): setup.sha256(path) for path in oracle_paths}:
+        raise RuntimeError('consumer oracle sources changed during review; rerun the frozen sources')
+    report = {'schema_version': 2, 'probe_build': json.loads(executable.with_suffix('.build.json').read_text()),
+              'oracle_sources': oracle_sources,
+              'engines': args.engines, 'counts': dict(Counter(row['kind'] for row in rows)), 'rows': rows, 'browser_observations': observations,
               'boundary': 'DOM construction consumes Roc trees and typed bindings using namespace-aware DOM constructors; it never reparses source or dynamic binding text.'}
     write_json(args.work / 'consumer.json', report)
     print(json.dumps({'total': len(rows), 'counts': report['counts']}))
-    return int(not rows or any(row['kind'] != 'pass' for row in rows))
+    return int(not rows or any(row['kind'] not in {'pass', 'oracle_gap'} for row in rows))
 
 
 def dat_tree(roots: list) -> str:

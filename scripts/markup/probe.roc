@@ -53,7 +53,7 @@ main! = |arguments| {
 			}
 		).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
 		bound = MarkupTemplate.bind(plan, ["12", caption].iter()).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
-		roots = Str.join_with(bound.plan.parsed.tree.roots.map(|index| encode_node(bound.plan.parsed.tree, index, False)), ",")
+		roots = Str.join_with(bound.plan.parsed.tree.roots.map(|index| encode_consumer_node(bound.plan.parsed.tree, index)), ",")
 		bindings = Str.join_with(
 			bound.plan.slots.map(
 				|slot| {
@@ -62,7 +62,7 @@ main! = |arguments| {
 						AttributeSlot(target) => {
 							owner = bound.plan.parsed.tree.nodes.get(target.node) ?? crash "invalid slot node"
 							attr = owner.attributes.get(target.attribute) ?? crash "invalid slot attribute"
-							(target.node, "[${quote(namespace_uri(attr.name.namespace))},${quote(attr.name.local)}]")
+							(target.node, encode_consumer_name(attr.name))
 						}
 					}
 					path = Str.join_with(node_path(bound.plan.parsed.tree, node).map(U64.to_str), ",")
@@ -111,7 +111,16 @@ main! = |arguments| {
 			}
 			match result {
 				Ok(parsed) => {
-					roots = Str.join_with(parsed.tree.roots.map(|index| encode_node(parsed.tree, index, args.get(8) == Ok("bindings"))), ",")
+					roots = Str.join_with(
+						parsed.tree.roots.map(
+							|index| if args.get(8) == Ok("consumer-fidelity") {
+								encode_consumer_node(parsed.tree, index)
+							} else {
+								encode_node(parsed.tree, index, args.get(8) == Ok("bindings"))
+							},
+						),
+						",",
+					)
 					issues = Str.join_with(parsed.diagnostics.map(encode_error), ",")
 					Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"diagnostics\":[${issues}]}")?
 				}
@@ -146,6 +155,36 @@ encode_node = |tree, index, bindings| {
 				children = Str.join_with(node.children.map(|child| encode_node(tree, child, bindings)), ",")
 				"[\"element\",${quote(namespace_uri(name.namespace))},${quote(name.local)},[${attrs}],[${children}]]"
 			}
+		}
+	}
+}
+
+## Consumer projection retains explicit prefix, qualified spelling and all xmlns attributes.
+encode_consumer_name : XmlNs.Name -> Str
+encode_consumer_name = |name| {
+	namespace = match name.namespace {
+		NoNamespace => "null"
+		Uri(uri) => quote(uri)
+	}
+	(prefix, qualified) = match name.prefix {
+		Unprefixed => ("null", name.local)
+		Prefix(value) => (quote(value), "${value}:${name.local}")
+	}
+	"{\"namespace\":${namespace},\"prefix\":${prefix},\"local\":${quote(name.local)},\"qualified\":${quote(qualified)}}"
+}
+
+encode_consumer_node : Markup.Tree, U64 -> Str
+encode_consumer_node = |tree, index| {
+	node = tree.nodes.get(index) ?? crash "invalid tree edge"
+	match node.kind {
+		Text(text) => "[\"text\",${quote(text)}]"
+		Comment(text) => "[\"comment\",${quote(text)}]"
+		Doctype(doctype) => "[\"doctype\",${quote(doctype.name)},${quote(doctype.public_id)},${quote(doctype.system_id)}]"
+		ProcessingInstruction(pi) => "[\"pi\",${quote(pi.target)},${quote(pi.data)}]"
+		Element(name) => {
+			attrs = Str.join_with(node.attributes.map(|attr| "[${encode_consumer_name(attr.name)},${quote(attr.value)}]"), ",")
+			children = Str.join_with(node.children.map(|child| encode_consumer_node(tree, child)), ",")
+			"[\"element\",${encode_consumer_name(name)},[${attrs}],[${children}]]"
 		}
 	}
 }
