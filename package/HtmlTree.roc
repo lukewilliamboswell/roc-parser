@@ -98,7 +98,7 @@ HtmlTree :: [].{
 	}
 }
 
-Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InSelect, InSelectTable, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset]
+Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset]
 
 Active : [Entry(U64), Marker]
 
@@ -141,54 +141,60 @@ problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, 
 append_node : State, Markup.Node -> State
 append_node = |s, node| {
 	index = s.nodes.len()
-	var $s = {
-		..s,
-		nodes: s.nodes.append(node),
-		work: s.work + 1,
-		element_count: s.element_count + (
-			match node.kind {
-				Element(_) => 1
-				_ => 0
-			}
-		),
-	}
-	if s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
-		table = last_named(s, "table")
-		match table {
-			Ok(t) => {
-				parent = find_parent(s, t)
-				match parent {
-					Ok(p) => {
-						pn = node_at($s, p)
-						at = index_of(pn.children, t) ?? pn.children.len()
-						$s = { ..$s, nodes: $s.nodes.set(p, { ..pn, children: pn.children.insert(at, index) ?? pn.children.append(index) }) ?? $s.nodes }
+	foster = s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s))
+	var $parent = s.stack.last().map_err(|_| Missing)
+	var $before = Err(Missing)
+	if foster {
+		match last_named(s, "table") {
+			Ok(table_id) => {
+				match find_parent(s, table_id) {
+					Ok(parent) => {
+						$parent = Ok(parent)
+						$before = index_of((node_at(s, parent)).children, table_id)
 					}
 					Err(_) => {
-						before = stack_position(s, t) ?? 0
-						if before > 0 {
-							p = s.stack.get(before - 1) ?? 0
-							pn = node_at($s, p)
-							$s = { ..$s, nodes: $s.nodes.set(p, { ..pn, children: pn.children.append(index) }) ?? $s.nodes }
-						} else {
-							$s = { ..$s, roots: $s.roots.append(index) }
-						}
+						position = stack_position(s, table_id) ?? 0
+						$parent = if (position > 0) s.stack.get(position - 1).map_err(|_| Missing) else Err(Missing)
 					}
 				}
-				return $s
 			}
-			Err(_) => {}
+			_ => {}
 		}
 	}
-	match s.stack.last() {
+	added_element = match node.kind {
+		Element(_) => 1
+		_ => 0
+	}
+	next = { ..s, nodes: s.nodes.append(node), work: s.work + 1, element_count: s.element_count + added_element }
+	match $parent {
 		Ok(parent) => {
-			pn = node_at($s, parent)
-			$s = { ..$s, nodes: $s.nodes.set(parent, { ..pn, children: pn.children.append(index) }) ?? $s.nodes }
+			before = $before
+			edit_node(
+				next,
+				parent,
+				|previous| {
+					children = match before {
+						Ok(at) => previous.children.insert(at, index) ?? []
+						Err(_) => previous.children.append(index)
+					}
+					{ ..previous, children }
+				},
+			)
 		}
-		Err(_) => {
-			$s = { ..$s, roots: $s.roots.append(index) }
-		}
+		Err(_) => { ..next, roots: next.roots.append(index) }
 	}
-	$s
+}
+
+# Move the old node out before editing its child/attribute lists. Otherwise the
+# node retained in the arena forces every append through copy-on-write.
+edit_node : State, U64, (Markup.Node -> Markup.Node) -> State
+edit_node = |s, index, edit| {
+	if index >= s.nodes.len() {
+		return s
+	}
+	moved = s.nodes.replace(index, empty_node) ?? { list: [], prev: empty_node }
+	replacement = edit(moved.prev)
+	{ ..s, nodes: moved.list.set(index, replacement) ?? [] }
 }
 
 insert_element = |s, name, namespace, attrs, origin, push| {
@@ -219,7 +225,7 @@ insert_text = |s, text, span| {
 							Authored(p) => Authored({ start: p.start, end: span.end })
 							_ => Authored(span)
 						}
-						return { ..s, nodes: s.nodes.set(last, { ..previous, kind: Text(Str.concat(before, text)), origin }) ?? s.nodes }
+						return { ..s, nodes: s.nodes.set(last, { ..previous, kind: Text(Str.concat(before, text)), origin }) ?? [] }
 					}
 					_ => {}
 				}
@@ -239,7 +245,7 @@ insert_text = |s, text, span| {
 					previous_id = siblings.get(at - 1) ?? 0
 					previous = node_at(s, previous_id)
 					match previous.kind {
-						Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? s.nodes }
+						Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? [] }
 						_ => {}
 					}
 				}
@@ -263,7 +269,7 @@ last_named = |s, name| {
 	while $i > 0 {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
-		if name_at(s, id) == name {
+		if namespace_at(s, id) == Markup.html_namespace and name_at(s, id) == name {
 			return Ok(id)
 		}
 	}
@@ -302,25 +308,30 @@ in_scope = |s, name, kind| {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
 		n = name_at(s, id)
-		if n == name {
+		ns = namespace_at(s, id)
+		if ns == Markup.html_namespace and n == name {
 			return True
 		}
-		if kind == SelectScope {
-			if n != "option" and n != "optgroup" {
+		if ns == Markup.html_namespace {
+			if ["html", "table", "template"].contains(n) {
 				return False
 			}
-		}
-		else if n == "html" or n == "table" or n == "template" {
-			return False
-		}
-		else if kind != TableScope and ["applet", "caption", "td", "th", "marquee", "object"].contains(n) {
-			return False
-		}
-		else if kind == ListScope and ["ol", "ul"].contains(n) {
-			return False
-		}
-		else if kind == ButtonScope and n == "button" {
-			return False
+			if kind != TableScope and ["applet", "caption", "td", "th", "marquee", "object", "select"].contains(n) {
+				return False
+			}
+			if kind == ListScope and ["ol", "ul"].contains(n) {
+				return False
+			}
+			if kind == ButtonScope and n == "button" {
+				return False
+			}
+		} else if kind != TableScope {
+			if ns == Markup.mathml_namespace and ["mi", "mo", "mn", "ms", "mtext", "annotation-xml"].contains(n) {
+				return False
+			}
+			if ns == Markup.svg_namespace and ["foreignObject", "desc", "title"].contains(n) {
+				return False
+			}
 		}
 	}
 	False
@@ -337,7 +348,7 @@ implied = |s, except| {
 close_p = |s| close_to(implied(s, "p"), "p")
 
 context_mode = |name| match name {
-	"select" => InSelect
+	"select" => InBody
 	"td" | "th" => InCell
 	"tr" => InRow
 	"tbody" | "thead" | "tfoot" => InTableBody
@@ -346,6 +357,7 @@ context_mode = |name| match name {
 	"table" => InTable
 	"template" => InTemplate
 	"head" => InHead
+	"html" => BeforeHead
 	"frameset" => InFrameset
 	_ => InBody
 }
@@ -355,11 +367,14 @@ reset_mode = |s| {
 	while $i > 0 {
 		$i = $i - 1
 		n = if ($i == 0 and s.fragment) s.context.name else name_at(s, s.stack.get($i) ?? 0)
-		if ["select", "td", "th", "tr", "tbody", "thead", "tfoot", "caption", "colgroup", "table", "template", "head", "frameset"].contains(n) {
+		if ["td", "th", "tr", "tbody", "thead", "tfoot", "caption", "colgroup", "table", "template", "head", "frameset"].contains(n) {
 			return { ..s, mode: context_mode(n) }
 		}
-		if n == "body" or n == "html" {
+		if n == "body" {
 			return { ..s, mode: InBody }
+		}
+		if n == "html" {
+			return { ..s, mode: if (s.fragment) context_mode(s.context.name) else if (s.head.is_ok()) AfterHead else BeforeHead }
 		}
 	}
 	{ ..s, mode: InBody }
@@ -646,9 +661,7 @@ process_html = |state, token, scripting| {
 					}
 				}
 			}
-			(InSelect, _) | (InSelectTable, _) => {
-				$s = select($s, token)
-			}
+
 			(InTemplate, _) => {
 				match token.kind {
 					Characters(_) => {
@@ -818,7 +831,7 @@ body = |state, token| {
 						$s = close_to(implied($s, n), n)
 						break
 					}
-					if special(n) and !["address", "div", "p"].contains(n) {
+					if special_at($s, $s.stack.get($i) ?? 0) and !["address", "div", "p"].contains(n) {
 						break
 					}
 				}
@@ -890,9 +903,18 @@ body = |state, token| {
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: InTable, frameset_ok: False }
+			} else if name == "input" and $s.fragment and $s.context.name == "select" {
+				$s = problem($s, UnexpectedSelectContent, token.span.start)
 			} else if void(name) {
 				if name == "hr" and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
+				}
+				if name == "input" and in_scope($s, "select", DefaultScope) {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+					$s = close_to($s, "select")
+				}
+				if name == "hr" and in_scope($s, "select", DefaultScope) {
+					$s = implied($s, "")
 				}
 				$s = reconstruct($s)
 				adjusted = if (name == "image") { ..tag, name: "img" } else tag
@@ -913,15 +935,23 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, frameset_ok: False }
 			} else if name == "select" {
-				$s = reconstruct($s)
-				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				next = if ([InTable, InCaption, InTableBody, InRow, InCell].contains($s.mode)) InSelectTable else InSelect
-				$s = { ..$s, mode: next, frameset_ok: False }
-			} else if name == "option" or name == "optgroup" {
-				if current($s) == "option" {
-					$s = { ..$s, stack: $s.stack.drop_last(1) }
+				if $s.fragment and $s.context.name == "select" {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+				} else if in_scope($s, "select", DefaultScope) {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+					$s = close_to($s, "select")
+				} else {
+					$s = reconstruct($s)
+					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = { ..$s, frameset_ok: False }
 				}
-				if name == "optgroup" and current($s) == "optgroup" {
+			} else if name == "option" or name == "optgroup" {
+				if in_scope($s, "select", DefaultScope) {
+					$s = implied($s, if (name == "option") "optgroup" else "")
+					if in_scope($s, "option", DefaultScope) or (name == "optgroup" and in_scope($s, "optgroup", DefaultScope)) {
+						$s = problem($s, UnexpectedSelectContent, token.span.start)
+					}
+				} else if current($s) == "option" {
 					$s = { ..$s, stack: $s.stack.drop_last(1) }
 				}
 				$s = reconstruct($s)
@@ -958,7 +988,7 @@ body = |state, token| {
 					$s = insert_element($s, "p", Markup.html_namespace, [], Implied(token.span.start), True)
 				}
 				$s = close_p($s)
-			} else if ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "summary", "ul"].contains(name) {
+			} else if ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "select", "summary", "ul"].contains(name) {
 				if !in_scope($s, name, DefaultScope) {
 					$s = problem($s, UnexpectedEndTag, token.span.start)
 				}
@@ -1031,7 +1061,7 @@ s_in_scope_id = |s, id| s.stack.contains(id) and in_scope(s, name_at(s, id), Def
 merge_attributes = |s, id, tag| {
 	node = node_at(s, id)
 	extra = tag.attributes.keep_if(|a| !node.attributes.any(|b| b.name.local == a.name)).map(|a| { name: attribute_name(a.name, Markup.html_namespace), value: a.value, span: a.span })
-	{ ..s, nodes: s.nodes.set(id, { ..node, attributes: node.attributes.concat(extra) }) ?? s.nodes }
+	{ ..s, nodes: s.nodes.set(id, { ..node, attributes: node.attributes.concat(extra) }) ?? [] }
 }
 
 generic_end = |s, name, offset| {
@@ -1041,14 +1071,14 @@ generic_end = |s, name, offset| {
 		$i = $i - 1
 		id = s.stack.get($i) ?? 0
 		n = name_at(s, id)
-		if n == name {
+		if namespace_at($s, id) == Markup.html_namespace and n == name {
 			$s = implied($s, name)
 			if current($s) != name {
 				$s = problem($s, MisnestedEndTag, offset)
 			}
 			return { ..$s, stack: $s.stack.take_first($i) }
 		}
-		if special(n) {
+		if special_at($s, id) {
 			return problem($s, UnexpectedEndTag, offset)
 		}
 	}
@@ -1164,7 +1194,7 @@ adoption = |s, name, offset| {
 				var $i = at + 1
 				while $i < $s.stack.len() {
 					id = $s.stack.get($i) ?? 0
-					if special(name_at($s, id)) {
+					if special_at($s, id) {
 						$furthest = Ok(id)
 						break
 					}
@@ -1220,7 +1250,7 @@ adoption = |s, name, offset| {
 						new_formatting = $s.nodes.len()
 						block_node = node_at($s, block)
 						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }) }
-						$s = { ..$s, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? $s.nodes }
+						$s = { ..$s, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
 						active = $s.active.keep_if(|a| a != Entry(formatting_id))
 						bookmark = if ($bookmark > active.len()) active.len() else $bookmark
 						$s = { ..$s, active: active.insert(bookmark, Entry(new_formatting)) ?? active.append(Entry(new_formatting)), stack: $s.stack.keep_if(|id| id != formatting_id) }
@@ -1249,8 +1279,7 @@ active_position = |s, id| {
 detach = |s, id| {
 	match find_parent(s, id) {
 		Ok(parent) => {
-			n = node_at(s, parent)
-			{ ..s, nodes: s.nodes.set(parent, { ..n, children: n.children.keep_if(|child| child != id) }) ?? s.nodes }
+			edit_node(s, parent, |previous| { ..previous, children: previous.children.keep_if(|child| child != id) })
 		}
 		Err(_) => { ..s, roots: s.roots.keep_if(|child| child != id) }
 	}
@@ -1258,8 +1287,7 @@ detach = |s, id| {
 
 reparent = |s, id, parent| {
 	detached = detach(s, id)
-	n = node_at(detached, parent)
-	{ ..detached, nodes: detached.nodes.set(parent, { ..n, children: n.children.append(id) }) ?? detached.nodes }
+	edit_node(detached, parent, |previous| { ..previous, children: previous.children.append(id) })
 }
 
 replace_child_id = |s, old, new| { ..s, roots: s.roots.map(|id| if (id == old) new else id), nodes: s.nodes.map(|n| { ..n, children: n.children.map(|id| if (id == old) new else id) }) }
@@ -1456,95 +1484,6 @@ close_cell = |s| {
 	name = if (in_scope(s, "td", TableScope)) "td" else "th"
 	next = clear_active(close_to(implied(s, ""), name))
 	{ ..next, mode: InRow }
-}
-
-select = |state, token| {
-	var $s = state
-	match token.kind {
-		Characters(t) => {
-			$s = insert_text($s, t, token.span)
-		}
-		Start(t) if t.name == "option" => {
-			if current($s) == "option" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
-		}
-		Start(t) if t.name == "optgroup" => {
-			if current($s) == "option" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			if current($s) == "optgroup" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
-		}
-		End("option") => {
-			if current($s) == "option" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			} else {
-				$s = problem($s, UnexpectedOptionEnd, token.span.start)
-			}
-		}
-		End("optgroup") => {
-			if current($s) == "option" and name_at($s, $s.stack.get($s.stack.len() - 2) ?? 0) == "optgroup" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			if current($s) == "optgroup" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			} else {
-				$s = problem($s, UnexpectedOptgroupEnd, token.span.start)
-			}
-		}
-		End("select") => {
-			if in_scope($s, "select", SelectScope) {
-				$s = reset_mode(close_to($s, "select"))
-			} else {
-				$s = problem($s, UnexpectedSelectEnd, token.span.start)
-			}
-		}
-		Start(t) if ["input", "keygen", "textarea", "select"].contains(t.name) => {
-			$s = problem($s, UnexpectedSelectContent, token.span.start)
-			if in_scope($s, "select", SelectScope) {
-				$s = reset_mode(close_to($s, "select"))
-				if t.name != "select" {
-					$s = process($s, token, $s.context.scripting)
-				}
-			}
-		}
-		Start(t) if t.name == "hr" => {
-			if current($s) == "option" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			if current($s) == "optgroup" {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
-			}
-			$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
-		}
-		Start(t) if ["script", "template"].contains(t.name) => {
-			$s = body($s, token)
-		}
-		Eof => {
-			$s = body($s, token)
-		}
-		_ => {
-			if $s.mode == InSelectTable and table_token(token.kind) and in_scope($s, "select", SelectScope) {
-				$s = problem($s, TableContentInSelect, token.span.start)
-				$s = reset_mode(close_to($s, "select"))
-				$s = process($s, token, $s.context.scripting)
-			}
-			else {
-				$s = problem($s, UnexpectedSelectToken, token.span.start)
-			}
-		}
-	}
-	$s
-}
-
-table_token = |kind| match kind {
-	Start(t) => ["caption", "table", "tbody", "tfoot", "thead", "tr", "td", "th"].contains(t.name)
-	End(n) => ["caption", "table", "tbody", "tfoot", "thead", "tr", "td", "th"].contains(n)
-	_ => False
 }
 
 foreign_token = |s, token| {
@@ -1837,4 +1776,30 @@ expect {
 		},
 	)
 	pis == ["a", "b", "c", "d"]
+}
+
+special_at = |s, id| {
+	ns = namespace_at(s, id)
+	n = name_at(s, id)
+	if ns == Markup.html_namespace {
+		special(n)
+	}
+	else if ns == Markup.mathml_namespace {
+		["mi", "mo", "mn", "ms", "mtext", "annotation-xml"].contains(n)
+	}
+	else if ns == Markup.svg_namespace {
+		["foreignObject", "desc", "title"].contains(n)
+	}
+	else {
+		False
+	}
+}
+expect {
+	p = HtmlTree.parse("<select><div><i></div><option>option", True, {}, { recovery: Browser })?
+	names(p.tree).contains("div") and names(p.tree).contains("i")
+}
+expect {
+	p = HtmlTree.parse("<p><math><mi><p><h1>", True, {}, { recovery: Browser })?
+	outer = p.tree.nodes.get(p.tree.roots.first()?)?
+	outer.children.len() == 1 and p.tree.roots.len() == 1
 }
