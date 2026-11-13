@@ -69,15 +69,21 @@ MarkupTemplate :: [].{
 		build_plan(segments, parsed, positions, props, decode)
 	}
 
-	## Fallibly bind a manually supplied iterator, checking its exact arity.
+	## Fallibly bind a manually supplied iterator, checking its arity.
+	## Stop at the first excess value; BindingCount.actual is the observed count.
 	bind : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(Markup.Error)])
 	bind = |plan, values| {
-		bound = capture(plan, values)
-		if bound.values.len() == plan.slots.len() {
-			Ok(bound)
-		} else {
-			Err(InvalidMarkup({ problem: BindingCount({ expected: plan.slots.len(), actual: bound.values.len() }), line: 1, column: 1 }))
+		var $items = []
+		for value in values {
+			if $items.len() == plan.slots.len() {
+				return Err(InvalidMarkup({ problem: BindingCount({ expected: plan.slots.len(), actual: $items.len() + 1 }), line: 1, column: 1 }))
+			}
+			$items = $items.append(value)
 		}
+		if $items.len() != plan.slots.len() {
+			return Err(InvalidMarkup({ problem: BindingCount({ expected: plan.slots.len(), actual: $items.len() }), line: 1, column: 1 }))
+		}
+		Ok(Bound.{ plan, values: $items })
 	}
 
 	## Capture values for a compiler-provided interpolation assembler. The

@@ -204,3 +204,9 @@ expect {
 }
 expect Html.parse_fragment("<button><input></button>", {}).is_err()
 expect Html.parse_fragment("<button><input type='hidden'></button>", {}).is_ok()
+expect Html.parse_segments(["<table>", "</table>"], {}).is_err()
+expect {
+	plan = Html.parse_segments(["<textarea>\nA", "B</textarea>"], {})?
+	Markup.text(plan.parsed.tree, Markup.single_root(plan.parsed.tree)?) == "AB"
+}
+

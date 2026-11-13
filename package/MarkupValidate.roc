@@ -371,7 +371,7 @@ check_math_children = |parsed, node, name| {
 			return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts" }))
 		}
 	}
-	if name == "semantics" and (count == 0 or !$elements.drop_first(1).all(|e| ["annotation", "annotation-xml"].contains(e))) {
+	if name == "semantics" and (count == 0 or [Ok("annotation"), Ok("annotation-xml")].contains($elements.first()) or !$elements.drop_first(1).all(|e| ["annotation", "annotation-xml"].contains(e))) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "one expression followed by annotations" }))
 	}
 	if name == "mtable" and !$elements.all(|e| ["mtr", "mlabeledtr"].contains(e)) {

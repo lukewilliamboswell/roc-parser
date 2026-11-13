@@ -181,7 +181,29 @@ Markup :: [].{
 
 	## Locate a byte offset using the common one-based UTF-8 position convention.
 	position : Source, U64 -> { line : U64, column : U64 }
-	position = |source, offset| Literal.position(Str.from_utf8_lossy(source.bytes), offset)
+	position = |source, offset| {
+		end = if (offset < source.bytes.len()) offset else source.bytes.len()
+		var $index = 0
+		var $line = 1
+		var $column = 1
+		while $index < end {
+			byte = source.bytes.get($index) ?? 0
+			if byte == '\r' {
+				$line = $line + 1
+				$column = 1
+				if $index + 1 < end and source.bytes.get($index + 1) == Ok('\n') {
+					$index = $index + 1
+				}
+			} else if byte == '\n' {
+				$line = $line + 1
+				$column = 1
+			} else {
+				$column = $column + 1
+			}
+			$index = $index + 1
+		}
+		{ line: $line, column: $column }
+	}
 
 	## The only element root, ignoring comments and processing instructions.
 	single_root : Tree -> Try(U64, [RootCount(U64)])
@@ -588,3 +610,6 @@ expect Markup.parse_xml("<a/>", { max_work_per_byte: 0 }).is_err()
 expect Markup.parse_xml_fragment("", "", { max_work_per_byte: 0 }).is_err()
 expect Markup.parse_xml_fragment("<a/>", "", { max_work_per_byte: 8 }).is_ok()
 expect Markup.parse_xml_fragment("<a/>", "", { max_work_per_byte: 18_446_744_073_709_551_615 }).is_ok()
+
+expect Markup.position(Markup.Source.from_bytes([255, 13, 10, 65]), 3) == { line: 2, column: 1 }
+expect Markup.position(Markup.Source.from_bytes([255, 13, 10, 65]), 999) == { line: 2, column: 2 }

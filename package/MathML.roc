@@ -177,3 +177,5 @@ expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mi>i</mi><mn>2</mn><mpre
 expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mprescripts/><mi>i</mi></mmultiscripts>", {}).is_err()
 expect MathML.parse_fragment("<mfrac linethickness='-2px'><mn>1</mn><mn>2</mn></mfrac>", {}).is_err()
 expect MathML.parse_segments(["<mfrac>", "</mfrac>"], {}).is_err()
+
+expect MathML.parse_fragment("<semantics><annotation encoding='text/plain'>x</annotation></semantics>", {}).is_err()
