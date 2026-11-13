@@ -7,6 +7,31 @@ import MarkupHtmlError
 ## separate from the indexed output tree so recovery can reparent existing nodes.
 HtmlTree :: [].{
 	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True }
+
+	## Recompute derived selected option content after a template materializes
+	## explicit text-hole nodes. This edits the tree and never reparses source.
+	project_parsed : Markup.Parsed, Markup.Props, Bool -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	project_parsed = |parsed, props, fragment| {
+		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(Dict.empty(), |dict, pair| pair.0.children.fold(dict, |map, child| map.insert(child, pair.1)))
+		elements = parsed.tree.nodes.fold(
+			0.U64,
+			|count, node| count + (
+				match node.kind {
+					Element(_) => 1
+					_ => 0
+				}
+			),
+		)
+		state : State
+		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", plaintext: False, pending_text: [] }
+		projected = project_selectedcontent(state, props).map_err(
+			|InvalidMarkup(e)| {
+				at = Markup.position(parsed.source, e.column)
+				InvalidMarkup({ ..e, line: at.line, column: at.column })
+			},
+		)?
+		Ok({ ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } })
+	}
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
 		if source.count_utf8_bytes() > props.max_source_bytes {
@@ -25,7 +50,18 @@ HtmlTree :: [].{
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace($state) != Markup.html_namespace
-			next = Tok.next($reader, mode, foreign)
+			next = Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			match next.limited {
+				NoLimit => {}
+				Attributes => {
+					at = Literal.position(source, next.token.span.start)
+					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+				}
+				Diagnostics => {
+					at = Literal.position(source, next.token.span.start)
+					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+				}
+			}
 			$reader = next.reader
 			match source_token(next.token, $reader.bytes) {
 				Ok(region) => {
@@ -2356,3 +2392,7 @@ node_depth = |s, id| {
 	$depth - if (s.fragment) 1 else 0
 }
 expect HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><option><i>x</i></option></select>", True, {}, { max_depth: 3 }).is_err()
+
+expect HtmlTree.parse("<p a='1' b='2'>x</p>", True, {}, { max_attributes: 1 }).is_err()
+expect HtmlTree.parse("<p>x</p a='1' b='2'>", True, {}, { max_attributes: 1, recovery: Browser }).is_err()
+expect HtmlTree.parse("<p>\u(B)\u(B)</p>", True, {}, { max_diagnostics: 1, recovery: Browser }).is_err()
