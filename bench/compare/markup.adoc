@@ -58,3 +58,9 @@ each case, across all three reference languages. A ratio above `1.5` fails the
 command. Faster syntax-only Roc timings never replace that gate, and slower
 references never hide the fastest result. Measurements are evidence for these
 inputs and runtime conditions, rather than a general proof of complexity.
+
+The corpus includes repeated SVG paths, MathML fractions and HTML cards at three
+sizes, a drawing, a formula, a short HTML snippet and a complete HTML document.
+Three additional long paragraphs cover ordinary ASCII prose, Unicode prose and
+entity-bearing prose separately. Inputs are generated locally from these small
+definitions; generated input bytes and canonical trees stay beside the report.

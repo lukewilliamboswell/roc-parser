@@ -72,6 +72,14 @@ def fixtures():
         {'id': 'html-snippet', 'format': 'html', 'mode': 'fragment', 'input': '<main><h1>Parser examples</h1><p>A <strong>typed</strong> tree &amp; reusable values.</p><ul><li>SVG</li><li>MathML</li><li>HTML</li></ul><form action="/search"><label for="q">Search</label><input id="q" name="q" type="search"><button type="submit">Find</button></form></main>'},
         {'id': 'html-document', 'format': 'html', 'mode': 'document', 'input': '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Example page</title></head><body><header><h1>News</h1><nav><a href="/">Home</a></nav></header><main><article><h2>A story</h2><p>Words &amp; more words.</p><table><tbody><tr><th>Item</th><th>Count</th></tr><tr><td>Examples</td><td>12</td></tr></tbody></table></article></main><footer>Copyright 2026</footer></body></html>'},
     ])
+    prose = {
+        'html-prose': 'Ordinary prose gives a page its useful content. Readers follow sentences, punctuation, and spaces through a longer paragraph. ',
+        'html-prose-unicode': 'A café welcomes readers from Montréal, Αθήνα, and 東京. Unicode words and punctuation — including λ — belong in ordinary prose. ',
+        'html-prose-entities': 'Readers enjoy prose &amp; examples. A copyright mark &copy; and a numeric reference &#955; can appear inside ordinary sentences. ',
+    }
+    for name, sentence in prose.items():
+        result.append({'id': name, 'format': 'html', 'mode': 'fragment',
+                       'input': '<article><h1>A longer story</h1><p>' + sentence * 256 + '</p></article>'})
     return result
 
 

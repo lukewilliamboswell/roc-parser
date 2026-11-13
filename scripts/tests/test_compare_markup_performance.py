@@ -42,6 +42,19 @@ class MarkupComparisonTests(unittest.TestCase):
                 self.assertTrue(root.tag.startswith('{http://www.w3.org/'))
                 self.assertGreater(element_weight(root), 100)
 
+    def test_prose_extends_existing_common_cases_with_separate_text_paths(self):
+        cases = {case['id']: case for case in compare.fixtures()}
+        existing = {f'{kind}-{count}' for kind in ['svg-paths', 'mathml-fractions', 'html-cards']
+                    for count in [8, 32, 128]}
+        existing.update(['svg-drawing', 'mathml-formula', 'html-snippet', 'html-document'])
+        self.assertTrue(existing.issubset(cases))
+        for name in ['html-prose', 'html-prose-unicode', 'html-prose-entities']:
+            self.assertGreater(len(cases[name]['input'].encode()), 20000)
+            self.assertEqual(cases[name]['mode'], 'fragment')
+        self.assertTrue(cases['html-prose']['input'].isascii())
+        self.assertFalse(cases['html-prose-unicode']['input'].isascii())
+        self.assertIn('&amp;', cases['html-prose-entities']['input'])
+
     def test_canonical_parity_retains_namespace_text_and_shape(self):
         tree = [['element', 'urn:a', 'g', [['', 'z', 'v'], ['', 'a', 'x']], [['text', '<path/>']]]]
         normalized = compare.normalize_tree(tree)
