@@ -226,7 +226,11 @@ append_node = |s, node| {
 						}
 					}
 				}
-				_ => {}
+				_ => {
+					# Fragment table contexts have no actual table on the stack.
+					# Foster content appends to its first (synthetic html) element.
+					$parent = s.stack.first().map_err(|_| Missing)
+				}
 			}
 		}
 	}
@@ -328,6 +332,19 @@ insert_text = |s, text, span| {
 						Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? [] }
 						_ => {}
 					}
+				}
+			}
+			Err(_) if last_named(s, "template").is_err() => {
+				parent = s.stack.first() ?? 0
+				match (node_at(s, parent)).children.last() {
+					Ok(previous_id) => {
+						previous = node_at(s, previous_id)
+						match previous.kind {
+							Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? [] }
+							_ => {}
+						}
+					}
+					_ => {}
 				}
 			}
 			_ => {}
@@ -2549,3 +2566,16 @@ expect ["2junk", " +2", "000000000000000000000000000000000000002"].all(
 		}
 	)({}) == Ok(True),
 )
+
+expect {
+	p = HtmlTree.parse("<tr><td'>x<td>y", True, { name: "table" }, { recovery: Browser })?
+	tbody = p.tree.nodes.get(p.tree.roots.get(0)?)?
+	tr = p.tree.nodes.get(tbody.children.first()?)?
+	td = p.tree.nodes.get(tr.children.first()?)?
+	fostered = p.tree.nodes.get(p.tree.roots.get(1)?)?
+	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td", prefix: Unprefixed }) and Markup.text(p.tree, td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td'", prefix: Unprefixed }) and Markup.text(p.tree, fostered.children.first()?) == "x"
+}
+expect {
+	p = HtmlTree.parse("<tr>x y<td>z", True, { name: "table" }, { recovery: Browser })?
+	p.tree.roots.len() == 2 and (p.tree.nodes.get(p.tree.roots.get(1)?)?).kind == Text("x y")
+}
