@@ -288,6 +288,48 @@ def browser_review(args) -> int:
     return int(not rows or any(row['kind'] != 'pass' for row in rows))
 
 
+def consumer_review(args) -> int:
+    setup.ensure_browsers(args.engines, args.cache, with_deps=args.with_deps)
+    executable = args.probe or build_probe(args.roc, args.work)
+    cases = [case for case in load_cases(args.formats) if case.get('consumer')]
+    template_process = subprocess.run([str(executable), 'template'], input=b'<path/>', capture_output=True, check=False, timeout=10)
+    if template_process.returncode:
+        raise RuntimeError('template consumer probe failed: ' + template_process.stderr.decode(errors='replace'))
+    template = json.loads(template_process.stdout)
+    validate_tree(template['roots'])
+    rows = []
+    with NodeOracle(args.cache, timeout=60) as node:
+        for case in cases:
+            actual = probe(executable, case)
+            if actual['status'] != 'ok':
+                rows.append({'id': case['id'], 'kind': actual['status'], 'actual': actual})
+                continue
+            for engine in args.engines:
+                constructed = node.parse({**request(case), 'engine': engine, 'construct': actual['roots']})
+                reference = node.parse({**request(case), 'engine': engine})
+                row = compare({**case, 'id': case['id'] + '/' + engine}, constructed, reference)
+                required = ['linearGradient', 'pathLength', 'foreignObject'] if case['format'] == 'svg' else ['mathml']
+                if not all(constructed.get('checks', {}).get(key) is True for key in required):
+                    row['kind'] = 'wrong_dom_interface'
+                row['checks'] = constructed.get('checks', {})
+                rows.append(row)
+        for engine in args.engines:
+            case = {'id': 'consumer-typed-template/' + engine, 'format': 'svg', 'syntax': 'xml',
+                    'input': '<svg xmlns="' + NS['svg'] + '"><circle cx="12" cy="0" r="1"/><text>&lt;path/&gt;</text></svg>'}
+            constructed = node.parse({**request(case), 'engine': engine, 'construct': template['roots'], 'bindings': template['bindings']})
+            reference = node.parse({**request(case), 'engine': engine})
+            row = compare(case, constructed, reference)
+            if not all(constructed.get('checks', {}).get(key) is True for key in ['textBinding', 'attributeBinding']):
+                row['kind'] = 'wrong_binding_behavior'
+            row['checks'] = constructed.get('checks', {})
+            rows.append(row)
+    report = {'schema_version': 1, 'engines': args.engines, 'counts': dict(Counter(row['kind'] for row in rows)), 'rows': rows,
+              'boundary': 'DOM construction consumes Roc trees and typed bindings using namespace-aware DOM constructors; it never reparses source or dynamic binding text.'}
+    write_json(args.work / 'consumer.json', report)
+    print(json.dumps({'total': len(rows), 'counts': report['counts']}))
+    return int(not rows or any(row['kind'] != 'pass' for row in rows))
+
+
 def dat_tree(roots: list) -> str:
     # WPT's fixture representation sorts attributes and flattens template's
     # separate DocumentFragment through a printed `content` marker.
@@ -411,12 +453,13 @@ def main(argv=None) -> int:
     corpus.add_argument('--fragment', action='store_true')
     replay = commands.add_parser('replay')
     replay.add_argument('reproducer', type=Path)
-    browser = commands.add_parser('browser')
-    browser.add_argument('--engines', nargs='+', choices=['chromium', 'firefox', 'webkit'], default=['chromium'])
-    browser.add_argument('--with-deps', action='store_true')
+    for command in ['browser', 'consumer']:
+        browser = commands.add_parser(command)
+        browser.add_argument('--engines', nargs='+', choices=['chromium', 'firefox', 'webkit'], default=['chromium'])
+        browser.add_argument('--with-deps', action='store_true')
     args = parser.parse_args(argv)
     try:
-        return browser_review(args) if args.command == 'browser' else semantic_review(args) if args.command == 'semantic' else suite_review(args) if args.command == 'suite' else run_review(args)
+        return consumer_review(args) if args.command == 'consumer' else browser_review(args) if args.command == 'browser' else semantic_review(args) if args.command == 'semantic' else suite_review(args) if args.command == 'suite' else run_review(args)
     except (OSError, ValueError, RuntimeError, TimeoutError, subprocess.SubprocessError) as error:
         print(f'markup review infrastructure error: {error}', file=sys.stderr)
         return 2

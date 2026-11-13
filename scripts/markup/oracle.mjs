@@ -80,7 +80,7 @@ async function browserOracle(request) {
         const gradient = parent.querySelector('linearGradient');
         if (gradient) checks.linearGradient = gradient.constructor.name === 'SVGLinearGradientElement' && gradient.namespaceURI === namespaces.svg;
         const path = parent.querySelector('path[pathLength]');
-        if (path) checks.pathLength = path instanceof SVGPathElement && path.pathLength.baseVal.value === Number(path.getAttribute('pathLength'));
+        if (path) checks.pathLength = path instanceof SVGPathElement && path.pathLength.baseVal === Number(path.getAttribute('pathLength'));
         const html = parent.querySelector('foreignObject > div');
         if (html) checks.foreignObject = html.namespaceURI === namespaces.html && html instanceof HTMLDivElement;
         const math = parent.querySelector('math');

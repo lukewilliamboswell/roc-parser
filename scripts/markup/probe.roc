@@ -7,6 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Markup
+import parser.MarkupTemplate
 import parser.Html
 import parser.Svg
 import parser.MathML
@@ -25,6 +26,32 @@ main! = |arguments| {
 	namespace = args.get(5) ?? Markup.html_namespace
 	context = args.get(6) ?? "body"
 	bytes = Stdin.read_to_end!()?
+	if format == "template" {
+		caption = Str.from_utf8(bytes) ?? ""
+		plan = Svg.parse_segments(["<svg><circle cx='", "' cy='0' r='1'/><text>", "</text></svg>"], {}).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
+		bound = MarkupTemplate.bind(plan, ["12", caption].iter()).map_err(|InvalidMarkup(error)| crash Str.inspect(error))?
+		roots = Str.join_with(bound.plan.parsed.tree.roots.map(|index| encode_node(bound.plan.parsed.tree, index, False)), ",")
+		bindings = Str.join_with(
+			bound.plan.slots.map(
+				|slot| {
+					(node, attribute) = match slot.target {
+						TextSlot(target) => (target.node, "null")
+						AttributeSlot(target) => {
+							owner = bound.plan.parsed.tree.nodes.get(target.node) ?? crash "invalid slot node"
+							attr = owner.attributes.get(target.attribute) ?? crash "invalid slot attribute"
+							(target.node, "[${quote(namespace_uri(attr.name.namespace))},${quote(attr.name.local)}]")
+						}
+					}
+					path = Str.join_with(node_path(bound.plan.parsed.tree, node).map(U64.to_str), ",")
+					value = bound.values.get(slot.index) ?? crash "missing bound value"
+					"{\"path\":[${path}],\"attribute\":${attribute},\"value\":${quote(value)}}"
+				},
+			),
+			",",
+		)
+		Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"bindings\":[${bindings}],\"diagnostics\":[]}")?
+		return Ok({})
+	}
 	match Str.from_utf8(bytes) {
 		Err(_) => Stdout.line!("{\"status\":\"error\",\"error\":{\"code\":\"InvalidUtf8\",\"line\":1,\"column\":1}}")?
 		Ok(source) => {
@@ -98,4 +125,28 @@ encode_node = |tree, index, bindings| {
 			}
 		}
 	}
+}
+
+node_path : Markup.Tree, U64 -> List(U64)
+node_path = |tree, target| {
+	var $pending = []
+	var $root = 0.U64
+	for index in tree.roots {
+		$pending = $pending.append({ node: index, path: [$root] })
+		$root = $root + 1
+	}
+	while !$pending.is_empty() {
+		item = $pending.last() ?? crash "missing path"
+		$pending = $pending.drop_last(1)
+		if item.node == target {
+			return item.path
+		}
+		node = tree.nodes.get(item.node) ?? crash "invalid tree edge"
+		var $child = 0.U64
+		for index in node.children {
+			$pending = $pending.append({ node: index, path: item.path.append($child) })
+			$child = $child + 1
+		}
+	}
+	crash "slot not reachable from roots"
 }
