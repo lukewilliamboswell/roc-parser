@@ -208,6 +208,10 @@ python3 scripts/review_markup.py browser --engines chromium firefox webkit
 python3 scripts/bench_markup.py --allocations --check-scaling --compile-literals
 ----
 
+For runtime throughput comparisons against Rust, Go and Python, follow
+xref:benchmarks.adoc#markup-runtime-comparison[the markup runtime comparison].
+Those parsing measurements exclude compilation and report bytes per second.
+
 Node/npm supply the pinned HTML and browser adapters. Semantic checks use a
 hash-pinned Nu checker on Java 17 or newer and a pinned MathML schema with lxml.
 All downloaded oracle packages and generated reports live in ignored scratch

@@ -339,6 +339,46 @@ revisions of the YAML parser with `--replace-dep`
 for its allocation counter, `fuzz/yaml-alloc.roc`. Its reports go to
 `.roc-parser-tmp/yaml-bench/<label>/`.
 
+[#markup-runtime-comparison]
+== Markup runtime comparison
+
+Compare HTML, SVG and MathML runtime parsing against the pinned Rust, Go and
+Python DOM libraries with `scripts/compare_markup_performance.py`. Install
+Python with venv support, Cargo and Go, and use a Roc compiler built in
+`ReleaseFast` mode. Preparation installs the hash-pinned Python dependencies
+and builds the drivers; measurement runs separately:
+
+[source,sh]
+----
+python3 scripts/compare_markup_performance.py \
+  --roc /path/to/roc --compiler-build-mode ReleaseFast prepare
+python3 scripts/compare_markup_performance.py run
+----
+
+These are local runs. Reports and dependency caches stay under
+`.roc-parser-tmp/markup/dom-compare/`; pass `--work` before each subcommand to
+use another directory. Keep sources unchanged between preparation and timing:
+the harness checks source and binary hashes and retains the compiler identity,
+dependency locks, inputs, canonical trees and every sample.
+
+The full comparison covers 16 geometric and document inputs. Every adapter must
+first agree with an independent complete-tree model on namespace URI, local
+names, attributes, exact text and child order. The projection consistently omits
+namespace declarations, comments, processing instructions and doctype metadata.
+Seven warmed samples use shuffled
+implementation order. Parsing, DOM allocation, consumption and ordinary result
+destruction or collection are timed; compilation, startup, imports, input reads
+and decoding precede the timer. Roc applications use `--opt=speed --debug`.
+
+`results.json` records `bytes_per_second`; divide by 1,000,000 for MB/s. Higher
+throughput is better. The default gate requires the full Roc parser's median
+elapsed time to be at most 1.5 times the fastest eligible reference on every
+input; use `run --threshold 1.0` to require parity. A failing gate returns a
+nonzero exit and retains the results. The full Roc lane includes source tracking
+and authoring validation; the raw lane is diagnostic and does not replace it.
+Compilation and checked-literal costs from `scripts/bench_markup.py` are separate
+measurements.
+
 == Roc syntax reference runtime comparison
 
 Run `scripts/compare_roc_syntax_performance.py` locally to compare the pure Roc
