@@ -445,7 +445,10 @@ resolve_start = |scope, name, attributes| {
 	var $active = scope.active
 	frames = scope.frames.append($entries.len())
 	var $bindings = []
-	for attribute in attributes {
+	var $attribute_index = 0
+	while $attribute_index < attributes.len() {
+		attribute = attributes.get($attribute_index) ?? { name: "", value: "" }
+		$attribute_index = $attribute_index + 1
 		binding = declaration(attribute)?
 		match binding {
 			Ok(declared) => {
@@ -488,7 +491,10 @@ resolve_names = |entries, active, name, attributes, stop| {
 	}
 	var $resolved = List.with_capacity(attributes.len())
 	var $prefixed = 0
-	for attribute in attributes {
+	var $attribute_index = 0
+	while $attribute_index < attributes.len() {
+		attribute = attributes.get($attribute_index) ?? { name: "", value: "" }
+		$attribute_index = $attribute_index + 1
 		# With `stop` there are none to skip.
 		if stop or !is_declaration(attribute.name) {
 			attribute_name = split_qname(attribute.name).map_err(|problem| Invalid(problem))?

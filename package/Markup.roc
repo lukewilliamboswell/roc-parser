@@ -380,7 +380,10 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 	var $roots = []
 	var $stack = []
 	var $start_index = 0
-	for token in source.tokens {
+	var $token_index = 0
+	while $token_index < source.tokens.len() {
+		token = source.tokens.get($token_index) ?? { kind: Invalid, span: { start: 0, end: 0 } }
+		$token_index = $token_index + 1
 		bytes = source.slice(token.span)
 		cost = bytes.len() * 2 + 1
 		if cost > budget - $work {
@@ -512,7 +515,7 @@ source_attributes : Markup.Source, Markup.Span, StartInfo -> List(Markup.Attribu
 source_attributes = |source, span, start| {
 	bytes = source.bytes
 	var $pos = span.start + 1
-	while $pos < span.end and !space(bytes.get($pos) ?? 0) and !['/', '>'].contains(bytes.get($pos) ?? 0) {
+	while $pos < span.end and !space(bytes.get($pos) ?? 0) and bytes.get($pos) != Ok('/') and bytes.get($pos) != Ok('>') {
 		$pos = $pos + 1
 	}
 	var $attribute_index = 0
@@ -522,7 +525,7 @@ source_attributes = |source, span, start| {
 		while $pos < span.end and space(bytes.get($pos) ?? 0) {
 			$pos = $pos + 1
 		}
-		if ['/', '>'].contains(bytes.get($pos) ?? 0) {
+		if bytes.get($pos) == Ok('/') or bytes.get($pos) == Ok('>') {
 			break
 		}
 		begin = $pos
