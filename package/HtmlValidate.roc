@@ -19,8 +19,9 @@ HtmlValidate :: [].{
 			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
 			match node.kind {
 				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
-					custom = custom_element(name.local)
-					if !elements(name.local) and !custom {
+					known_element = elements(name.local)
+					custom = !known_element and custom_element(name.local)
+					if !known_element and !custom {
 						if !props.allow_unknown_elements {
 							return fail(parsed, node, UnknownElement(name.local))
 						}
