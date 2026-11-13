@@ -3,7 +3,7 @@ import MarkupValidate
 import MarkupTemplate
 import Literal
 import Html
-import HtmlTokenizer
+import HtmlTemplate
 
 ## Strict namespace-aware Svg documents and fragments.
 ## XML syntax is the default; fragments start in the Svg namespace.
@@ -62,7 +62,10 @@ Svg := { parsed : Markup.Parsed }.{
 	## Parse fixed literal segments into an indexed plan without binding values.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments = |segments, props| {
-		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), |text| if (props.syntax == HtmlSyntax) Ok(HtmlTokenizer.normalized(text.to_utf8(), False, False).text) else Markup.decode_xml_text(text))?
+		if props.syntax == HtmlSyntax {
+			return HtmlTemplate.parse_segments(segments, { name: "svg", namespace: Markup.svg_namespace }, props)
+		}
+		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), Markup.decode_xml_text)?
 		_ = MarkupValidate.text_slots(plan)?
 		var $holes = []
 		for slot in plan.slots {
