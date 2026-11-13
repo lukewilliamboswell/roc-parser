@@ -74,6 +74,14 @@ parsers for data formats, web markup and Roc source.
 |Walk shared namespace-aware trees, retain original bytes, and bind parsed plans
 |`Markup.Source`, `Markup.single_root`, `Markup.text`, `MarkupTemplate.bind`
 
+|{api}DomName/[`DomName`]
+|Validate computed DOM names while preserving explicit namespace, prefix and local identity
+|`DomName.validate_and_extract`, `DomName.html_element`, `DomName.qualified`
+
+|{api}MarkupFacts/[`MarkupFacts`]
+|Query vocabulary, expanded attribute kinds, HTML text behavior and handler facts for consumers
+|`MarkupFacts.is_boolean_attribute`, `MarkupFacts.enumerated_values`, `MarkupFacts.text_behavior`, `MarkupFacts.is_event_handler`
+
 |{api}SvgPath/[`SvgPath`]
 |Read SVG path commands with typed syntax errors
 |`SvgPath.parse_str`

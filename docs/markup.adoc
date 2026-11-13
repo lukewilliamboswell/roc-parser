@@ -137,6 +137,7 @@ Strict syntax and validation are the defaults. The options are independent:
 |===
 |Prop |Effect
 |`recovery: Browser` |Use HTML's repaired tree and retain diagnostics. XML remains well-formedness based.
+|`exact_structure: True` |Require authored HTML nesting, explicit non-void ends and no structural repairs, before derived projection.
 |`allow_unknown_elements: True` |Preserve extension elements.
 |`allow_unknown_attributes: True` |Preserve extension attributes.
 |`check_values: False` |Retain values without the implemented attribute-value checks.
@@ -145,6 +146,7 @@ Strict syntax and validation are the defaults. The options are independent:
 Recovery does not disable authoring checks. For example, an unknown element may
 need both browser recovery and the corresponding extension prop. Normal HTML
 optional tags are accepted in strict mode when the standard permits them.
+Use xref:exact-structure.adoc#exact-structure[exact authored structure] for an additional literal or prerender policy; failures include the causing source span.
 Checks run on authored content before selected-option projection, so generated
 copies cannot hide an invalid authored child. Use `Html.parse_source` or
 `Html.parse_syntax` when only HTML syntax and browser tree construction are
@@ -172,6 +174,11 @@ same tree's node list. `Authored(span)` identifies original bytes;
 `Cloned({ source, at })` identifies a generated copy, retaining its authored
 source span and the destination insertion point.
 Use `Markup.text(tree, index)` to join descendant character data.
+
+Keep URI, prefix and local name separately when lowering a tree.
+xref:dom-names.adoc#dom-names[`DomName`] validates computed DOM names without changing XML source grammar;
+xref:markup-facts.adoc#markup-facts[`MarkupFacts`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
+The xref:consumer-fidelity.adoc#consumer-fidelity[consumer-fidelity review] checks prefixes, qualified spellings, namespace declarations, binding identity and adoption.
 
 Read original bytes to reproduce authored source exactly. Reconstructing a tree
 or changing a binding does not promise byte-identical serialization. Source-edit

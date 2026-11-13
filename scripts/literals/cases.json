@@ -485,5 +485,37 @@
       "NoHandlers",
       "inline handler onclick forbidden on mrow"
     ]
+  },
+  {
+    "name": "markup-exact-explicit-and-template",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nfragment : ExactHtml\nfragment = \"<table><tbody><tr><td>x</td></tr></tbody></table>\"\nplan = Literal.require(Html.parse_segments([\"<select><button><selectedcontent></selectedcontent></button><option>\", \"</option></select>\"], { exact_structure: True }).map_err(|InvalidMarkup(error)| Markup.quoted_error(\"HTML\", error)))\nspan_ok = match Html.parse_fragment(\"before<table>outside<tr><td>inside</td></tr></table>\", { exact_structure: True, recovery: Browser }) {\n Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14\n _ => False\n}\nvalue = fragment.parsed.tree.roots.len() == 1 and plan.slots.len() == 2 and span_ok\n"
+  },
+  {
+    "name": "markup-exact-p-close",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<p><div></div></p>\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "ReparentedContent"
+    ]
+  },
+  {
+    "name": "markup-exact-tbody",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<table><tr><td>x</td></tr></table>\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "ImpliedElement",
+      "tbody"
+    ]
+  },
+  {
+    "name": "markup-exact-explicit-end",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<p>x\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "MissingEndTag"
+    ]
   }
 ]

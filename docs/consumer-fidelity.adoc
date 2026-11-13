@@ -1,3 +1,4 @@
+[#consumer-fidelity]
 = Verify DOM consumer fidelity
 
 Use the local consumer review when a downstream renderer constructs DOM nodes

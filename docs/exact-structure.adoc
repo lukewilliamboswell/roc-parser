@@ -1,3 +1,4 @@
+[#exact-structure]
 = Exact authored HTML structure
 
 Set `exact_structure: True` in `Html.Props` when source nesting must match the
@@ -16,9 +17,9 @@ Html.parse_fragment("<table><tbody><tr><td>x</td></tr></tbody></table>", {
 Every non-void element needs an explicit matching end tag. HTML void elements
 such as `br` need none; foreign SVG and MathML elements may use self-closing
 syntax. Implicit elements, implicit closes, ignored tags, reparenting, formatting
-reconstruction and discarded or duplicated attributes are rejected. Documents
-must explicitly author their `html`, `head` and `body` elements. Fragment context
-nodes are synthetic and do not need to appear in the source.
+reconstruction and discarded or duplicated attributes are rejected. Document elements must be authored, including any required `html`, `head` and
+`body` wrappers. Fragment context nodes are synthetic and do not need to appear
+in the source.
 
 Errors use `Markup.Problem.HtmlStructure` with a typed reason and the causing
 half-open UTF-8 byte span. Line and column identify that span's start. For

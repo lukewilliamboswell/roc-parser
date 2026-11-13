@@ -38,6 +38,11 @@ Applications using basic-cli should use 0.28.0.
   bind to indexed text or whole quoted attribute positions without reparsing.
 * Shared `Markup` trees with resolved namespaces, exact source bytes, lexical
   regions, resource limits and authored, implied or cloned node locations.
+* `DomName` validation for computed DOM names, distinct from XML source-name
+  grammar, and `MarkupFacts` for namespace-aware vocabulary, boolean/enumerated
+  attributes, HTML text/void behavior and known handler attributes.
+* Opt-in `exact_structure` for authored HTML nesting without repairs, with typed
+  reasons and causing source spans before selected-content projection.
 * `SvgPath` command parsing, common SVG value grammars, and MathML Core plus
   common Presentation MathML structures and child-count checks. Embedded CSS,
   JavaScript and URL languages remain outside these semantic checks.
@@ -53,6 +58,10 @@ Applications using basic-cli should use 0.28.0.
 See the https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0/docs/markup.adoc[markup guide]
 for syntax differences, validation coverage, extension options and downstream
 consumer examples. Runtime parsing remains pure Roc and platform-independent.
+DOM consumer checks retain prefixes, qualified spellings and namespace-declaration
+attributes, and verify binding/removal by expanded identity and adoption fidelity.
+Handler restrictions remain a consumer policy; ordinary parsers accept valid
+handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
