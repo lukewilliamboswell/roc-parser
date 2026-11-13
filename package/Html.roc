@@ -12,7 +12,8 @@ import Literal
 Html := { parsed : Markup.Parsed }.{
 
 	## HTML defaults and explicit XML/recovery/validation/fragment-context options.
-	Props := { syntax : Markup.Syntax ?? HtmlSyntax, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
+	## exact_structure requires authored nesting without browser repairs.
+	Props := { syntax : Markup.Syntax ?? HtmlSyntax, exact_structure : Bool ?? False, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
 
 	## Source and diagnostics label for checked imported constants.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
@@ -140,7 +141,7 @@ syntax = |text, props, fragment| {
 }
 
 shared : Html.Props -> Markup.Props
-shared = |p| { syntax: p.syntax, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
+shared = |p| { syntax: p.syntax, exact_structure: p.exact_structure, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
 
 expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>").is_ok()
 expect Html.parse_fragment("<input type='CHECKBOX' checked><span aria-pressed='false'>x</span>", {}).is_ok()
@@ -277,4 +278,21 @@ expect {
 		}
 	}
 	$same
+}
+
+expect Html.parse_fragment("<p><b>one</b> &amp; two<br></p>", { exact_structure: True }).is_ok()
+expect Html.parse_fragment("<p><div></div></p>", { exact_structure: True, recovery: Browser }).is_err()
+expect Html.parse_fragment("<table><tbody><tr><td>x</td></tr></tbody></table>", { exact_structure: True }).is_ok()
+expect Html.parse_segments(["<p>", "</p>"], { exact_structure: True }).is_ok()
+expect Html.parse_segments(["<p>", ""], { exact_structure: True }).is_err()
+expect Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option>", "</option></select>"], { exact_structure: True }).is_ok()
+expect Html.parse_fragment("<div/>", { syntax: XmlSyntax, exact_structure: True }).is_ok()
+expect {
+	p = Html.parse_fragment("<select><button><selectedcontent></selectedcontent></button><option>A</option></select>", { exact_structure: True })?
+	p.parsed.tree.nodes.any(
+		|node| match node.origin {
+			Cloned(_) => True
+			_ => False
+		},
+	)
 }

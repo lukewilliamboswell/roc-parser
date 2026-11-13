@@ -2,6 +2,7 @@ import Markup
 import HtmlTokenizer as Tok
 import Literal
 import MarkupHtmlError
+import MarkupVocabulary
 
 ## HTML tree construction. The open-elements and active-formatting stacks are
 ## separate from the indexed output tree so recovery can reparent existing nodes.
@@ -69,6 +70,8 @@ HtmlTree :: [].{
 		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
 		var $done = False
 		var $source_regions = []
+		var $authored_tokens = []
+		var $authored_repairs = []
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace_class($state) != HtmlNamespace
@@ -89,6 +92,9 @@ HtmlTree :: [].{
 					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
 				}
 			}
+			if props.exact_structure {
+				$authored_tokens = $authored_tokens.append(next.token)
+			}
 			# DataMixed retains every literal NUL and reports UnexpectedNull for it.
 			# A successful character token with no new diagnostics has none.
 			no_nulls = mode == DataMixed and next.reader.diagnostics.len() == $reader.diagnostics.len() and (
@@ -106,6 +112,7 @@ HtmlTree :: [].{
 				Err(_) => {}
 			}
 
+			previous_nodes = $state.nodes.len()
 			if $state.skip_lf {
 				$state = { ..$state, skip_lf: False }
 				match next.token.kind {
@@ -124,6 +131,26 @@ HtmlTree :: [].{
 				}
 			} else {
 				$state = process_with_mode($state, next.token, mode, context.scripting)
+			}
+			if props.exact_structure {
+				var $id = previous_nodes
+				while $id < $state.nodes.len() {
+					node = node_at($state, $id)
+					match node.origin {
+						Implied(_) => {
+							reason = match node.kind {
+								Element(name) => ImpliedElement(name.local)
+								_ => ReconstructedContent
+							}
+							$authored_repairs = $authored_repairs.append({ reason, span: next.token.span })
+						}
+						Cloned(_) => {
+							$authored_repairs = $authored_repairs.append({ reason: ReconstructedContent, span: next.token.span })
+						}
+						Authored(_) => {}
+					}
+					$id = $id + 1
+				}
 			}
 			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
 				at = Literal.position(source, next.token.span.start)
@@ -176,6 +203,9 @@ HtmlTree :: [].{
 				}
 			},
 		)
+		if props.exact_structure {
+			exact_structure(source, fragment, $state, $authored_tokens, $reader.diagnostics, $authored_repairs)?
+		}
 		if props.recovery == Strict and !diagnostics.is_empty() {
 			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
 		}
@@ -192,6 +222,228 @@ HtmlTree :: [].{
 		} else $state.roots
 		Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
 	}
+}
+
+# This optional pass compares the authored nesting with the constructed arena
+# before selectedcontent makes legitimate derived copies. Token kinds come from
+# the original context-sensitive scan, including raw text and script states.
+exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : Markup.StructureReason, span : Markup.Span }) -> Try({}, [InvalidMarkup(Markup.Error)])
+exact_structure = |source, fragment, state, tokens, lexical, repairs| {
+	var $failure = repairs.fold(Err(Missing), |best, repair| structure_failure(best, repair.reason, repair.span))
+	var $by_start = Dict.empty()
+	var $texts = []
+	var $reachable = Set.empty()
+	var $pending = if fragment {
+		(node_at(state, 0)).children
+	} else state.roots
+	while !$pending.is_empty() {
+		id = $pending.last() ?? 0
+		$pending = $pending.drop_last(1)
+		if !$reachable.contains(id) {
+			$reachable = $reachable.insert(id)
+			$pending = $pending.concat((node_at(state, id)).children)
+		}
+	}
+	for (node, id) in state.nodes.map_with_index(|node, id| (node, id)) {
+		if !(fragment and id == 0) {
+			match node.origin {
+				Authored(span) => {
+					if !$reachable.contains(id) {
+						$failure = structure_failure($failure, ReconstructedContent, { start: source.count_utf8_bytes(), end: source.count_utf8_bytes() })
+					}
+					match node.kind {
+						Text(_) => {
+							$texts = $texts.append({ span, parent: find_parent(state, id) })
+						}
+						_ => {
+							if $by_start.contains(span.start) {
+								$failure = structure_failure($failure, ReconstructedContent, { start: source.count_utf8_bytes(), end: source.count_utf8_bytes() })
+							}
+							$by_start = $by_start.insert(span.start, id)
+						}
+					}
+				}
+				Implied(_) | Cloned(_) => {}
+			}
+		}
+	}
+	# These lexical repairs discard authored structure even when the surviving
+	# start tag and its resulting element otherwise have matching attributes.
+	for diagnostic in lexical {
+		match diagnostic.code {
+			DuplicateAttribute(_) | EndTagAttributes | InvalidSolidus | InvalidAttributeCharacter | MissingAttributeValue | MissingWhitespace => {
+				$failure = structure_failure($failure, ChangedAttributes, trigger_span(tokens, diagnostic.offset))
+			}
+			UnexpectedNull | EofInTag | InvalidTagOpen | EofInComment | IncorrectComment | BogusComment | EofInDoctype | InvalidDoctype | MissingDoctypeName | EofInProcessingInstruction | InvalidFirstCharacterOfProcessingInstructionTarget | InvalidProcessingInstructionTarget | DisallowedProcessingInstructionTarget => {
+				$failure = structure_failure($failure, IgnoredMarkup, trigger_span(tokens, diagnostic.offset))
+			}
+			_ => {}
+		}
+	}
+	for diagnostic in state.diagnostics {
+		match diagnostic.problem {
+			HtmlSyntax(FosterParentedContent) => {
+				$failure = structure_failure($failure, ReparentedContent, trigger_span(tokens, diagnostic.column))
+			}
+			_ => {}
+		}
+	}
+	texts = $texts.sort_with(
+		|a, b| if a.span.start < b.span.start {
+			Before
+		} else if a.span.start > b.span.start {
+			After
+		} else {
+			Same
+		},
+	)
+	var $text_at = 0
+	var $stack = []
+	var $skip_lf = False
+	for token in tokens {
+		parent = match $stack.last() {
+			Ok(entry) => Ok(entry.id)
+			Err(_) => if fragment {
+				Ok(0)
+			} else {
+				Err(Missing)
+			}
+		}
+		match token.kind {
+			Start(tag) => {
+				$skip_lf = False
+				match $by_start.get(token.span.start) {
+					Err(_) => {
+						$failure = structure_failure($failure, IgnoredMarkup, token.span)
+					}
+					Ok(id) => {
+						node = node_at(state, id)
+						match node.kind {
+							Element(name) => {
+								if find_parent(state, id) != parent {
+									$failure = structure_failure($failure, ReparentedContent, token.span)
+								}
+								namespace = match name.namespace {
+									Uri(uri) => uri
+									NoNamespace => ""
+								}
+								if name.local != adjust_tag(tag.name, namespace) {
+									$failure = structure_failure($failure, IgnoredMarkup, token.span)
+								}
+								expected = tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span })
+								if expected != node.attributes {
+									$failure = structure_failure($failure, ChangedAttributes, token.span)
+								}
+								html = namespace == Markup.html_namespace
+								is_void = html and MarkupVocabulary.html_void(name.local)
+								if html and tag.self_closing and !is_void {
+									$failure = structure_failure($failure, NonVoidSelfClosing(name.local), token.span)
+								}
+								if !is_void and !(tag.self_closing and !html) {
+									$stack = $stack.append({ id, name: Tok.lower(name.local) })
+								}
+								$skip_lf = html and (name.local == "pre" or name.local == "listing" or name.local == "textarea")
+							}
+							_ => {
+								$failure = structure_failure($failure, IgnoredMarkup, token.span)
+							}
+						}
+					}
+				}
+			}
+			End(name) => {
+				$skip_lf = False
+				match $stack.last() {
+					Ok(entry) if entry.name == name => {
+						$stack = $stack.drop_last(1)
+					}
+					_ => {
+						$failure = structure_failure($failure, UnexpectedEndTag(name), token.span)
+					}
+				}
+			}
+			Characters(text) => {
+				while $text_at < texts.len() and (texts.get($text_at) ?? { span: token.span, parent }).span.end <= token.span.start {
+					$text_at = $text_at + 1
+				}
+				var $matched = False
+				var $at = $text_at
+				while $at < texts.len() {
+					entry = texts.get($at) ?? { span: token.span, parent }
+					if entry.span.start >= token.span.end {
+						break
+					}
+					if entry.span.end > token.span.start {
+						$matched = True
+						if entry.parent != parent {
+							$failure = structure_failure($failure, ReparentedContent, token.span)
+						}
+					}
+					$at = $at + 1
+				}
+				if !$matched and !text.to_utf8().all(Tok.space) and !($skip_lf and text == "\n") {
+					$failure = structure_failure($failure, IgnoredMarkup, token.span)
+				}
+				$skip_lf = False
+			}
+			Comment(_) | Doctype(_) | ProcessingInstruction(_) => {
+				$skip_lf = False
+				match $by_start.get(token.span.start) {
+					Ok(id) => {
+						if find_parent(state, id) != parent {
+							$failure = structure_failure($failure, ReparentedContent, token.span)
+						}
+					}
+					Err(_) => {
+						$failure = structure_failure($failure, IgnoredMarkup, token.span)
+					}
+				}
+			}
+			Eof => {
+				if token.span.start != token.span.end {
+					$failure = structure_failure($failure, IgnoredMarkup, token.span)
+				}
+				match $stack.last() {
+					Ok(entry) => {
+						$failure = structure_failure($failure, MissingEndTag(entry.name), token.span)
+					}
+					Err(_) => {}
+				}
+			}
+		}
+	}
+	match $failure {
+		Ok(detail) => {
+			at = Literal.position(source, detail.span.start)
+			Err(InvalidMarkup({ problem: HtmlStructure(detail), line: at.line, column: at.column }))
+		}
+		Err(_) => Ok({})
+	}
+}
+
+structure_failure = |previous, reason, span| match previous {
+	Ok(detail) if detail.span.start <= span.start => previous
+	_ => Ok({ reason, span })
+}
+
+trigger_span = |tokens, offset| {
+	var $lo = 0
+	var $hi = tokens.len()
+	while $lo < $hi {
+		mid = $lo + ($hi - $lo) // 2
+		if (tokens.get(mid) ?? { kind: Eof, span: { start: offset, end: offset } }).span.start <= offset {
+			$lo = mid + 1
+		} else {
+			$hi = mid
+		}
+	}
+	if $lo > 0 {
+		span = (tokens.get($lo - 1) ?? { kind: Eof, span: { start: offset, end: offset } }).span
+		if offset < span.end or span.start == span.end {
+			return span
+		}
+	}
+	{ start: offset, end: offset }
 }
 
 Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset, AfterAfterFrameset]
@@ -643,49 +895,24 @@ content_mode = |s| {
 		return Plaintext
 	}
 	if s.fragment and s.stack.len() == 1 and s.context.namespace == Markup.html_namespace {
-		n = s.context.name
-		if n == "title" or n == "textarea" {
-			return RcdataFragment
-		}
-		if n == "script" {
-			return ScriptFragment
-		}
-		if n == "plaintext" {
-			return Plaintext
-		}
-		if (
-			match n {
-				"style" | "xmp" | "iframe" | "noembed" | "noframes" => True
-				_ => False
-			}
-		) or (n == "noscript" and s.context.scripting) {
-			return RawtextFragment
+		match MarkupVocabulary.text_behavior(s.context.name, s.context.scripting) {
+			Rcdata => return RcdataFragment
+			RawText => return RawtextFragment
+			ScriptData => return ScriptFragment
+			Plaintext => return Plaintext
+			Data => {}
 		}
 	}
-
-	n = adjusted_name(s)
 	if adjusted_namespace_class(s) != HtmlNamespace {
 		return Data
 	}
-	if n == "title" or n == "textarea" {
-		Rcdata(n)
-	}
-	else if n == "script" {
-		Script
-	}
-	else if n == "plaintext" {
-		Plaintext
-	}
-	else if (
-		match n {
-			"style" | "xmp" | "iframe" | "noembed" | "noframes" => True
-			_ => False
-		}
-	) or (n == "noscript" and s.context.scripting) {
-		Rawtext(n)
-	}
-	else {
-		match s.mode {
+	name = adjusted_name(s)
+	match MarkupVocabulary.text_behavior(name, s.context.scripting) {
+		Rcdata => Rcdata(name)
+		RawText => Rawtext(name)
+		ScriptData => Script
+		Plaintext => Plaintext
+		Data => match s.mode {
 			InBody | InCell | InCaption => DataMixed
 			_ => Data
 		}
@@ -2381,12 +2608,8 @@ whitespace = |text| {
 	True
 }
 
-void = |n| (
-	match n {
-		"area" | "base" | "basefont" | "bgsound" | "br" | "embed" | "hr" | "img" | "image" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" => True
-		_ => False
-	}
-)
+# In-body insertion ignores col/frame; image is a source alias for img.
+void = |name| name == "image" or (name != "col" and name != "frame" and MarkupVocabulary.html_void(name))
 
 formatting = |n| (
 	match n {
@@ -3139,3 +3362,65 @@ expect {
 	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [{ problem: HtmlSyntax(UnexpectedNull), line: 1, column: 12 }]
 }
 expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 2, column: 2 }))
+
+# Exact authored structure is separate from WHATWG recovery and precedes
+# selectedcontent projection. The default browser tree remains unchanged.
+expect {
+	valid = ["<p>Hello &amp; <b>world</b></p>", "<table><tbody><tr><td>x</td></tr></tbody></table>", "<template><p>x</p></template>", "<svg><path/></svg>", "<pre>\ntext</pre>", "<textarea>\n&lt;p&gt;</textarea>", "<script>if(a<b)x()</script>", "<select><button><selectedcontent></selectedcontent></button><option>A</option></select>"]
+	valid.all(|source| HtmlTree.parse(source, True, {}, { exact_structure: True }).is_ok())
+}
+expect {
+	invalid = ["<p><div></div></p>", "<table><tr><td>x</td></tr></table>", "<p>x", "<div/>", "<b><i>x</b></i>", "<table>x<tbody></tbody></table>", "<div a='1' a='2'></div>", "<p>x</p></br>", "<head></head>"]
+	invalid.all(|source| HtmlTree.parse(source, True, {}, { recovery: Browser, exact_structure: True }).is_err())
+}
+expect {
+	match HtmlTree.parse("<p>\n<div></div></p>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), line, column })) => span == { start: 4, end: 9 } and line == 2 and column == 1
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<table><tr><td>x</td></tr></table>", True, {}, { exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ImpliedElement("tbody"), span }), .. })) => span == { start: 7, end: 11 }
+		_ => False
+	}
+}
+expect HtmlTree.parse("<!doctype html><html><head></head><body><p>x</p></body></html>", False, {}, { exact_structure: True }).is_ok()
+expect HtmlTree.parse("<!doctype html><p>x</p>", False, {}, { recovery: Browser, exact_structure: True }).is_err()
+expect HtmlTree.parse("<p>x", True, {}, { recovery: Browser }).is_ok()
+
+expect {
+	valid = ["<a><div>x</div></a>", "<b><div>x</div></b>", "<div ID='a'>a\rb&#x20;c</div>", "<svg viewBox='0 0 1 1'><linearGradient id='x'></linearGradient><![CDATA[<x>]]></svg>", "<math><mi>x</mi><mo>+</mo><mi>y</mi></math>", "<noscript><p>x</p></noscript>", "<img>", "<svg><image/></svg>"]
+	valid.all(|source| HtmlTree.parse(source, True, {}, { exact_structure: True }).is_ok())
+}
+expect {
+	invalid = ["<!-- unfinished", "<!bogus>", "<p>a\u(0000)b</p>", "<image>", "<h1><h2></h2></h1>", "<a><a></a></a>", "<form><form></form></form>", "<select><option>x<option>y</option></select>", "<table><col></table>", "<table><tbody><td>x</td></tbody></table>", "before<table>inside<tbody></tbody></table>", "<p><b>x</p><p>y</b></p>"]
+	invalid.all(|source| HtmlTree.parse(source, True, {}, { recovery: Browser, exact_structure: True }).is_err())
+}
+expect HtmlTree.parse("<noscript><p>x</p></noscript>", True, { scripting: False }, { exact_structure: True }).is_ok()
+expect HtmlTree.parse("<p>x</p>", True, { name: "textarea" }, { exact_structure: True }).is_ok()
+expect {
+	match HtmlTree.parse("<p>x", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: MissingEndTag("p"), span }), .. })) => span == { start: 4, end: 4 }
+		_ => False
+	}
+}
+
+expect {
+	match HtmlTree.parse("<p><b>x</p><p>y</b></p>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: UnexpectedEndTag("p"), span }), .. })) => span == { start: 7, end: 11 }
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<DIV/>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: NonVoidSelfClosing("div"), span }), .. })) => span == { start: 0, end: 6 }
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<div>", True, {}, { exact_structure: True, max_elements: 0 }) {
+		Err(InvalidMarkup({ problem: LimitExceeded(Elements), .. })) => True
+		_ => False
+	}
+}
