@@ -180,7 +180,9 @@ allowed_attribute = |svg, element, name| {
 
 svg_attribute : Str, Str -> Bool
 svg_attribute = |element, key| {
-	if key == "requiredExtensions" or key == "systemLanguage" { return True }
+	if key == "requiredExtensions" or key == "systemLanguage" {
+		return True
+	}
 	match element {
 		"svg" => match key {
 			"x" | "y" | "width" | "height" | "viewBox" | "preserveAspectRatio" | "version" | "baseProfile" | "contentScriptType" | "contentStyleType" | "zoomAndPan" => True
@@ -369,6 +371,7 @@ svg_attribute = |element, key| {
 		_ => False
 	}
 }
+
 math_attribute : Str, Str -> Bool
 math_attribute = |element, key| {
 	match element {
@@ -451,6 +454,7 @@ math_attribute = |element, key| {
 		_ => False
 	}
 }
+
 value_grammar : Bool, Str, Str -> Markup.ValueGrammar
 value_grammar = |svg, element, attr| {
 	if svg {
@@ -547,17 +551,26 @@ valid_value = |text, grammar| {
 check_math_children : Markup.Parsed, Markup.Node, Str -> Try({}, [InvalidMarkup(Markup.Error)])
 check_math_children = |parsed, node, name| {
 	var $elements = []
-	for index in node.children {
+	var $count = 0
+	needs_names = name == "mmultiscripts" or name == "semantics" or name == "mtable" or name == "mtr" or name == "mlabeledtr"
+	text_allowed = name == "mi" or name == "mn" or name == "mo" or name == "ms" or name == "mtext" or name == "annotation"
+	var $child_index = 0
+	while $child_index < node.children.len() {
+		index = node.children.get($child_index) ?? 0
+		$child_index = $child_index + 1
 		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child index"))
 		match child.kind {
 			Element(n) => {
-				$elements = $elements.append(n.local)
+				$count = $count + 1
+				if needs_names {
+					$elements = $elements.append(n.local)
+				}
 			}
-			Text(text) if !Markup.whitespace(text) and !member(["mi", "mn", "mo", "ms", "mtext", "annotation"], name) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
+			Text(text) if !text_allowed and !Markup.whitespace(text) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
 			_ => {}
 		}
 	}
-	count = $elements.len()
+	count = $count
 	expected = match name {
 		"mfrac" | "mroot" | "msub" | "msup" | "munder" | "mover" => 2
 		"msubsup" | "munderover" => 3

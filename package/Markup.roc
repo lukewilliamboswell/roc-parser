@@ -227,7 +227,18 @@ Markup :: [].{
 
 	## Markup whitespace is ASCII, including HTML's form feed, not Unicode spaces.
 	whitespace : Str -> Bool
-	whitespace = |text| text.to_utf8().all(|byte| [9, 10, 12, 13, 32].contains(byte))
+	whitespace = |text| {
+		bytes = text.to_utf8()
+		var $index = 0
+		while $index < bytes.len() {
+			byte = bytes.get($index) ?? 0
+			if !space(byte) and byte != 12 {
+				return False
+			}
+			$index = $index + 1
+		}
+		True
+	}
 
 	## The only element root, ignoring comments and processing instructions.
 	single_root : Tree -> Try(U64, [RootCount(U64)])
