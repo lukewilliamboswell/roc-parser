@@ -5,9 +5,9 @@ import Literal
 ## and implicit line-to groups following a move. Relative case is preserved.
 ## This validates syntax and arc flags/radii; it does not calculate geometry.
 SvgPath := { commands : List(SvgPath.Command) }.{
+
 	## Compare parsed commands and their authored offsets.
 	is_eq : _
-
 
 	## One command and its parameters; offset points to its authored command/group.
 	Command : { command : U8, arguments : List(F64), offset : U64 }
@@ -131,3 +131,6 @@ expect SvgPath.parse_str("M,0 0").is_err()
 expect SvgPath.parse_str("M0 0L1e 2").is_err()
 expect SvgPath.parse_str("M0 0Z1 2").is_err()
 expect SvgPath.parse_str("M0 0L1").is_err()
+
+expect SvgPath.parse_str("M1. 2").is_err()
+expect SvgPath.parse_str("M1\u(000C)2").is_ok()

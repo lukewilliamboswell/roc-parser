@@ -17,7 +17,7 @@ MarkupValues :: [].{
 			$digits = $digits + 1
 			$pos = $pos + 1
 		}
-		if bytes.get($pos) == Ok('.') {
+		if bytes.get($pos) == Ok('.') and digit(bytes.get($pos + 1)) {
 			$pos = $pos + 1
 			while digit(bytes.get($pos)) {
 				$digits = $digits + 1
@@ -51,7 +51,7 @@ MarkupValues :: [].{
 	whitespace : List(U8), U64 -> U64
 	whitespace = |bytes, start| {
 		var $pos = start
-		while [Ok(' '), Ok('\t'), Ok('\r'), Ok('\n')].contains(bytes.get($pos)) {
+		while [Ok(' '), Ok('\t'), Ok('\r'), Ok('\n'), Ok(12)].contains(bytes.get($pos)) {
 			$pos = $pos + 1
 		}
 		$pos
@@ -101,7 +101,8 @@ MarkupValues :: [].{
 		bytes = text.trim().to_utf8()
 		parsed = number(bytes, 0)?
 		unit = Str.from_utf8(bytes.drop_first(parsed.end)) ?? ""
-		if !["", "%", "px", "em", "ex", "ch", "rem", "vw", "vh", "vmin", "vmax", "cm", "mm", "Q", "in", "pt", "pc"].contains(unit) {
+		lower_unit = Str.from_utf8_lossy(unit.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+		if !["", "%", "px", "em", "ex", "ch", "rem", "vw", "vh", "vmin", "vmax", "cm", "mm", "q", "in", "pt", "pc"].contains(lower_unit) {
 			return Err(InvalidNumber(parsed.end))
 		}
 		Ok({ value: parsed.value, unit })
@@ -178,3 +179,7 @@ expect MarkupValues.length("2garbage").is_err()
 expect MarkupValues.transforms("translate(10 20) rotate(45,0,0) scale(2)").is_ok()
 expect MarkupValues.transforms("matrix(1 0 0 1 0)").is_err()
 expect MarkupValues.transforms("translate(2),").is_err()
+
+expect MarkupValues.scalar("1.").is_err()
+expect MarkupValues.length("2PX") == Ok({ value: 2, unit: "PX" })
+expect MarkupValues.scalar("\u(000C)2") == Ok(2)
