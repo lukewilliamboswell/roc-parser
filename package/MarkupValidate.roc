@@ -522,7 +522,7 @@ valid_value = |text, grammar| {
 		NonnegativeLength => MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		NumberList(count) => MarkupValues.numbers(text).map_ok(|values| values.len() == count and (count != 4 or ((values.get(2) ?? -1) >= 0 and (values.get(3) ?? -1) >= 0))) == Ok(True)
 		LengthList => !Markup.whitespace(text) and words_of(text).all(|v| MarkupValues.length(v).is_ok())
-		PathData => text == "none" or SvgPath.parse_str(text).is_ok()
+		PathData => text == "none" or SvgPath.validate(text).is_ok()
 		Paint => valid_paint(text)
 		Color => valid_color(text)
 		TransformList => text == "none" or MarkupValues.transforms(text).is_ok()

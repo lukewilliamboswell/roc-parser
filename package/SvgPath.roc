@@ -20,80 +20,11 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 
 	## Parse a complete SVG path, accepting empty path data.
 	parse_str : Str -> Try(SvgPath, [InvalidPath(Error)])
-	parse_str = |text| {
-		bytes = text.to_utf8()
-		var $pos = MarkupValues.whitespace(bytes, 0)
-		var $commands = []
-		var $command = 0.U8
-		while $pos < bytes.len() {
-			start = $pos
-			byte = bytes.get($pos) ?? 0
-			if letter(byte) {
-				if !command_letter(byte) {
-					return Err(InvalidPath({ problem: UnknownCommand(byte), offset: $pos }))
-				}
-				$command = byte
-				$pos = $pos + 1
-			} else if $command == 0 {
-				return Err(InvalidPath({ problem: MoveRequired, offset: $pos }))
-			}
-			if $commands.is_empty() and $command != 'M' and $command != 'm' {
-				return Err(InvalidPath({ problem: MoveRequired, offset: start }))
-			}
-			count = arity($command)
-			if count == 0 {
-				$commands = $commands.append({ command: $command, arguments: [], offset: start })
-				$command = 0
-				$pos = MarkupValues.whitespace(bytes, $pos)
-			} else {
-				var $args = []
-				var $i = 0
-				while $i < count {
-					$pos = MarkupValues.whitespace(bytes, $pos)
-					if $i > 0 and bytes.get($pos) == Ok(',') {
-						$pos = MarkupValues.whitespace(bytes, $pos + 1)
-					}
-					if bytes.get($pos) == Ok(',') {
-						return Err(InvalidPath({ problem: UnexpectedComma, offset: $pos }))
-					}
-					if $pos >= bytes.len() or letter(bytes.get($pos) ?? 0) {
-						return Err(InvalidPath({ problem: IncompleteArguments({ command: $command, expected: count, actual: $i }), offset: $pos }))
-					}
-					if ($command == 'A' or $command == 'a') and ($i == 3 or $i == 4) {
-						flag = bytes.get($pos) ?? 0
-						if flag != '0' and flag != '1' {
-							return Err(InvalidPath({ problem: ExpectedFlag, offset: $pos }))
-						}
-						$args = $args.append(if (flag == '1') 1 else 0)
-						$pos = $pos + 1
-					} else {
-						parsed = MarkupValues.number(bytes, $pos).map_err(|InvalidNumber(offset)| InvalidPath({ problem: ExpectedNumber, offset }))?
-						if ($command == 'A' or $command == 'a') and $i < 2 and parsed.value < 0 {
-							return Err(InvalidPath({ problem: NegativeRadius, offset: $pos }))
-						}
-						$args = $args.append(parsed.value)
-						$pos = parsed.end
-					}
-					$i = $i + 1
-				}
-				$commands = $commands.append({ command: $command, arguments: $args, offset: start })
-				if $command == 'M' {
-					$command = 'L'
-				}
-				if $command == 'm' {
-					$command = 'l'
-				}
-				$pos = MarkupValues.whitespace(bytes, $pos)
-				if bytes.get($pos) == Ok(',') {
-					$pos = MarkupValues.whitespace(bytes, $pos + 1)
-					if $pos >= bytes.len() or letter(bytes.get($pos) ?? 0) {
-						return Err(InvalidPath({ problem: UnexpectedComma, offset: $pos }))
-					}
-				}
-			}
-		}
-		Ok(SvgPath.{ commands: $commands })
-	}
+	parse_str = |text| parse_commands(text, True).map_ok(|commands| SvgPath.{ commands })
+
+	## Check the same grammar without retaining parsed commands or arguments.
+	validate : Str -> Try({}, [InvalidPath(Error)])
+	validate = |text| parse_commands(text, False).map_ok(|_| {})
 
 	## Check path data during quotation conversion.
 	from_quote : Str -> Try(SvgPath, [BadQuotedBytes(Str)])
@@ -103,6 +34,92 @@ SvgPath := { commands : List(SvgPath.Command) }.{
 			Literal.error({ format: "SVG path", message: Str.inspect(error.problem), line: at.line, column: at.column })
 		},
 	)
+}
+
+parse_commands : Str, Bool -> Try(List(SvgPath.Command), [InvalidPath(SvgPath.Error)])
+parse_commands = |text, retain| {
+	bytes = text.to_utf8()
+	var $pos = MarkupValues.whitespace(bytes, 0)
+	var $commands = []
+	var $first = True
+	var $command = 0.U8
+	while $pos < bytes.len() {
+		start = $pos
+		byte = bytes.get($pos) ?? 0
+		if letter(byte) {
+			if !command_letter(byte) {
+				return Err(InvalidPath({ problem: UnknownCommand(byte), offset: $pos }))
+			}
+			$command = byte
+			$pos = $pos + 1
+		} else if $command == 0 {
+			return Err(InvalidPath({ problem: MoveRequired, offset: $pos }))
+		}
+		if $first and $command != 'M' and $command != 'm' {
+			return Err(InvalidPath({ problem: MoveRequired, offset: start }))
+		}
+		$first = False
+		count = arity($command)
+		if count == 0 {
+			if retain {
+				$commands = $commands.append({ command: $command, arguments: [], offset: start })
+			}
+			$command = 0
+			$pos = MarkupValues.whitespace(bytes, $pos)
+		} else {
+			var $args = []
+			var $i = 0
+			while $i < count {
+				$pos = MarkupValues.whitespace(bytes, $pos)
+				if $i > 0 and bytes.get($pos) == Ok(',') {
+					$pos = MarkupValues.whitespace(bytes, $pos + 1)
+				}
+				if bytes.get($pos) == Ok(',') {
+					return Err(InvalidPath({ problem: UnexpectedComma, offset: $pos }))
+				}
+				if $pos >= bytes.len() or letter(bytes.get($pos) ?? 0) {
+					return Err(InvalidPath({ problem: IncompleteArguments({ command: $command, expected: count, actual: $i }), offset: $pos }))
+				}
+				if ($command == 'A' or $command == 'a') and ($i == 3 or $i == 4) {
+					flag = bytes.get($pos) ?? 0
+					if flag != '0' and flag != '1' {
+						return Err(InvalidPath({ problem: ExpectedFlag, offset: $pos }))
+					}
+					if retain {
+						$args = $args.append(if (flag == '1') 1 else 0)
+					}
+					$pos = $pos + 1
+				} else {
+					parsed = MarkupValues.number(bytes, $pos).map_err(|InvalidNumber(offset)| InvalidPath({ problem: ExpectedNumber, offset }))?
+					if ($command == 'A' or $command == 'a') and $i < 2 and parsed.value < 0 {
+						return Err(InvalidPath({ problem: NegativeRadius, offset: $pos }))
+					}
+					$args = if retain {
+						$args.append(parsed.value)
+					} else $args
+					$pos = parsed.end
+				}
+				$i = $i + 1
+			}
+			if retain {
+				$commands = $commands.append({ command: $command, arguments: $args, offset: start })
+			}
+			if $command == 'M' {
+				$command = 'L'
+			}
+			if $command == 'm' {
+				$command = 'l'
+			}
+			$pos = MarkupValues.whitespace(bytes, $pos)
+			if bytes.get($pos) == Ok(',') {
+				$pos = MarkupValues.whitespace(bytes, $pos + 1)
+				if $pos >= bytes.len() or letter(bytes.get($pos) ?? 0) {
+					return Err(InvalidPath({ problem: UnexpectedComma, offset: $pos }))
+				}
+			}
+		}
+	}
+	Ok($commands)
 }
 
 letter : U8 -> Bool
@@ -134,6 +151,28 @@ expect SvgPath.parse_str("M0 0L1").is_err()
 
 expect SvgPath.parse_str("M1. 2").is_err()
 expect SvgPath.parse_str("M1\u(000C)2").is_ok()
+
+expect {
+	[
+		"",
+		"M0 0L10-10.5Z",
+		"m1,2 3,4",
+		"M0 0A5 6 30 0110 20",
+		"L0 0",
+		"M0 0A5 6 0 2 0 1 2",
+		"M0 0A-5 6 0 0 0 1 2",
+		"M0 0,",
+		"M,0 0",
+		"M0 0L1e 2",
+		"M0 0Z1 2",
+		"M0 0L1",
+		"M1. 2",
+		"M1\u(000C)2",
+		"M1e999 2",
+		"M0 0X1 2",
+		"M0 0A1 2 3 0 1",
+	].all(|source| SvgPath.validate(source) == SvgPath.parse_str(source).map_ok(|_| {}))
+}
 
 command_letter : U8 -> Bool
 command_letter = |byte| match byte {
