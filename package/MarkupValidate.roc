@@ -25,7 +25,7 @@ MarkupValidate :: [].{
 					svg = name.namespace == Uri(Markup.svg_namespace)
 					mathml = name.namespace == Uri(Markup.mathml_namespace)
 					if !item.extension {
-						known = if (svg) svg_elements.contains(name.local) else if (mathml) math_elements.contains(name.local) else True
+						known = if (svg) svg_elements(name.local) else if (mathml) math_elements(name.local) else True
 						if !known or (!svg and !mathml and name.namespace != Uri(Markup.html_namespace)) {
 							if !props.allow_unknown_elements {
 								return fail(parsed, node, UnknownElement(name.local))
@@ -58,7 +58,7 @@ MarkupValidate :: [].{
 								}
 								if props.check_values and allowed and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $attr_index)) {
 									grammar = value_grammar(svg, name.local, attr.name.local)
-									if !valid_value(attr.value, grammar) and !(svg and (svg_presentation.contains(attr.name.local) or ["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"].contains(attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
+									if !valid_value(attr.value, grammar) and !(svg and (svg_presentation(attr.name.local) or member(["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"], attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
 										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: grammar }))
 									}
 								}
@@ -106,8 +106,8 @@ MarkupValidate :: [].{
 										Cloned(_) => True
 										_ => False
 									}
-									html_nothing = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr", "selectedcontent"].contains(name.local) or (name.local == "option" and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "label") and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "value"))
-									allowed = copied or if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements.contains(name.local) or ["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"].contains(name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements.contains(name.local) or ["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"].contains(name.local) else if (name.namespace == Uri(Markup.html_namespace)) !html_nothing and !["selectedcontent", "html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"].contains(name.local) else True
+									html_nothing = member(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr", "selectedcontent"], name.local) or (name.local == "option" and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "label") and node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "value"))
+									allowed = copied or if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements(name.local) or member(["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"], name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements(name.local) or member(["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"], name.local) else if (name.namespace == Uri(Markup.html_namespace)) !html_nothing and !member(["selectedcontent", "html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"], name.local) else True
 									if !allowed {
 										at = Markup.position(plan.parsed.source, slot.location.start)
 										return Err(InvalidMarkup({ problem: Interpolation({ index: slot.index, reason: "text holes are not allowed inside ${name.local}" }), line: at.line, column: at.column }))
@@ -134,126 +134,335 @@ MarkupValidate :: [].{
 	}
 }
 
-svg_elements = "a animate animateMotion animateTransform circle clipPath defs desc discard ellipse feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence filter foreignObject g hatch hatchpath image line linearGradient marker mask mesh meshgradient meshpatch meshrow metadata mpath path pattern polygon polyline radialGradient rect script set solidcolor stop style svg switch symbol text textPath title tspan use view".split_on(" ")
+svg_elements = |key| match key {
+	"a" | "animate" | "animateMotion" | "animateTransform" | "circle" | "clipPath" | "defs" | "desc" | "discard" | "ellipse" | "feBlend" | "feColorMatrix" | "feComponentTransfer" | "feComposite" | "feConvolveMatrix" | "feDiffuseLighting" | "feDisplacementMap" | "feDistantLight" | "feDropShadow" | "feFlood" | "feFuncA" | "feFuncB" | "feFuncG" | "feFuncR" | "feGaussianBlur" | "feImage" | "feMerge" | "feMergeNode" | "feMorphology" | "feOffset" | "fePointLight" | "feSpecularLighting" | "feSpotLight" | "feTile" | "feTurbulence" | "filter" | "foreignObject" | "g" | "hatch" | "hatchpath" | "image" | "line" | "linearGradient" | "marker" | "mask" | "mesh" | "meshgradient" | "meshpatch" | "meshrow" | "metadata" | "mpath" | "path" | "pattern" | "polygon" | "polyline" | "radialGradient" | "rect" | "script" | "set" | "solidcolor" | "stop" | "style" | "svg" | "switch" | "symbol" | "text" | "textPath" | "title" | "tspan" | "use" | "view" => True
+	_ => False
+}
 
-math_elements = "annotation annotation-xml maction math menclose merror mfenced mfrac mi mlabeledtr mmultiscripts mn mo mover mpadded mphantom mprescripts mroot mrow ms mspace msqrt mstyle msub msubsup msup mtable mtd mtext mtr munder munderover none semantics".split_on(" ")
+math_elements = |key| match key {
+	"annotation" | "annotation-xml" | "maction" | "math" | "menclose" | "merror" | "mfenced" | "mfrac" | "mi" | "mlabeledtr" | "mmultiscripts" | "mn" | "mo" | "mover" | "mpadded" | "mphantom" | "mprescripts" | "mroot" | "mrow" | "ms" | "mspace" | "msqrt" | "mstyle" | "msub" | "msubsup" | "msup" | "mtable" | "mtd" | "mtext" | "mtr" | "munder" | "munderover" | "none" | "semantics" => True
+	_ => False
+}
 
-global_attributes = "id class style lang tabindex autofocus role title".split_on(" ")
+global_attributes = |key| match key {
+	"id" | "class" | "style" | "lang" | "tabindex" | "autofocus" | "role" | "title" => True
+	_ => False
+}
 
-svg_presentation = "alignment-baseline baseline-shift clip clip-path clip-rule color color-interpolation color-interpolation-filters color-rendering cursor direction display dominant-baseline fill fill-opacity fill-rule filter flood-color flood-opacity font-family font-size font-size-adjust font-stretch font-style font-variant font-weight glyph-orientation-horizontal glyph-orientation-vertical image-rendering isolation letter-spacing lighting-color marker-end marker-mid marker-start mask mix-blend-mode opacity overflow paint-order pointer-events shape-rendering stop-color stop-opacity stroke stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-miterlimit stroke-opacity stroke-width text-anchor text-decoration text-rendering transform transform-box transform-origin unicode-bidi vector-effect visibility white-space word-spacing writing-mode".split_on(" ")
+svg_presentation = |key| match key {
+	"alignment-baseline" | "baseline-shift" | "clip" | "clip-path" | "clip-rule" | "color" | "color-interpolation" | "color-interpolation-filters" | "color-rendering" | "cursor" | "direction" | "display" | "dominant-baseline" | "fill" | "fill-opacity" | "fill-rule" | "filter" | "flood-color" | "flood-opacity" | "font-family" | "font-size" | "font-size-adjust" | "font-stretch" | "font-style" | "font-variant" | "font-weight" | "glyph-orientation-horizontal" | "glyph-orientation-vertical" | "image-rendering" | "isolation" | "letter-spacing" | "lighting-color" | "marker-end" | "marker-mid" | "marker-start" | "mask" | "mix-blend-mode" | "opacity" | "overflow" | "paint-order" | "pointer-events" | "shape-rendering" | "stop-color" | "stop-opacity" | "stroke" | "stroke-dasharray" | "stroke-dashoffset" | "stroke-linecap" | "stroke-linejoin" | "stroke-miterlimit" | "stroke-opacity" | "stroke-width" | "text-anchor" | "text-decoration" | "text-rendering" | "transform" | "transform-box" | "transform-origin" | "unicode-bidi" | "vector-effect" | "visibility" | "white-space" | "word-spacing" | "writing-mode" => True
+	_ => False
+}
 
-svg_events = "onabort onactivate onbegin onclick onend onerror onfocusin onfocusout onload onmousedown onmousemove onmouseout onmouseover onmouseup onrepeat onresize onscroll onunload onzoom onkeydown onkeyup onpointerdown onpointermove onpointerup onpointerenter onpointerleave ontouchstart ontouchend".split_on(" ")
+svg_events = |key| match key {
+	"onabort" | "onactivate" | "onbegin" | "onclick" | "onend" | "onerror" | "onfocusin" | "onfocusout" | "onload" | "onmousedown" | "onmousemove" | "onmouseout" | "onmouseover" | "onmouseup" | "onrepeat" | "onresize" | "onscroll" | "onunload" | "onzoom" | "onkeydown" | "onkeyup" | "onpointerdown" | "onpointermove" | "onpointerup" | "onpointerenter" | "onpointerleave" | "ontouchstart" | "ontouchend" => True
+	_ => False
+}
 
-math_global = "dir displaystyle scriptlevel mathbackground mathcolor mathsize mathvariant href".split_on(" ")
+math_global = |key| match key {
+	"dir" | "displaystyle" | "scriptlevel" | "mathbackground" | "mathcolor" | "mathsize" | "mathvariant" | "href" => True
+	_ => False
+}
 
 allowed_attribute : Bool, Str, Markup.Name -> Bool
 allowed_attribute = |svg, element, name| {
 	match name.namespace {
 		Uri("http://www.w3.org/2000/xmlns/") => True
-		Uri("http://www.w3.org/XML/1998/namespace") => ["lang", "space", "base", "id"].contains(name.local)
-		Uri("http://www.w3.org/1999/xlink") => svg and ["href", "type", "role", "arcrole", "title", "show", "actuate"].contains(name.local)
+		Uri("http://www.w3.org/XML/1998/namespace") => member(["lang", "space", "base", "id"], name.local)
+		Uri("http://www.w3.org/1999/xlink") => svg and member(["href", "type", "role", "arcrole", "title", "show", "actuate"], name.local)
 		NoNamespace => {
 			key = name.local
-			global_attributes.contains(key) or key.starts_with("data-") or aria_attributes.contains(key) or (if (svg) svg_presentation.contains(key) or svg_events.contains(key) or svg_attributes(element).contains(key) else math_global.contains(key) or math_attributes(element).contains(key))
+			(if (svg) svg_attribute(element, key) else math_attribute(element, key)) or global_attributes(key) or key.starts_with("data-") or aria_attributes(key) or (if (svg) svg_presentation(key) or svg_events(key) else math_global(key))
 		}
 		_ => False
 	}
 }
 
-svg_attributes : Str -> List(Str)
-svg_attributes = |element| {
-	text = match element {
-		"svg" => "x y width height viewBox preserveAspectRatio version baseProfile contentScriptType contentStyleType zoomAndPan"
-		"view" => "viewBox preserveAspectRatio viewTarget zoomAndPan"
-		"path" | "hatchpath" => "d pathLength"
-		"rect" => "x y width height rx ry pathLength"
-		"circle" => "cx cy r pathLength"
-		"ellipse" => "cx cy rx ry pathLength"
-		"line" => "x1 y1 x2 y2 pathLength"
-		"polygon" | "polyline" => "points pathLength"
-		"text" | "tspan" => "x y dx dy rotate textLength lengthAdjust"
-		"textPath" => "href startOffset method spacing side textLength lengthAdjust"
-		"use" | "image" | "foreignObject" => "x y width height href preserveAspectRatio crossorigin decoding"
-		"a" => "href target download rel hreflang type referrerpolicy"
-		"linearGradient" => "x1 y1 x2 y2 gradientUnits gradientTransform spreadMethod href"
-		"radialGradient" => "cx cy r fx fy fr gradientUnits gradientTransform spreadMethod href"
-		"stop" => "offset"
-		"pattern" => "x y width height patternUnits patternContentUnits patternTransform viewBox preserveAspectRatio href"
-		"marker" => "markerWidth markerHeight markerUnits refX refY orient viewBox preserveAspectRatio"
-		"mask" => "x y width height maskUnits maskContentUnits mask-type"
-		"clipPath" => "clipPathUnits"
-		"symbol" => "x y width height refX refY viewBox preserveAspectRatio"
-		"filter" => "x y width height filterUnits primitiveUnits href filterRes"
-		"feBlend" => "in in2 mode x y width height result"
-		"feColorMatrix" => "in type values x y width height result"
-		"feComponentTransfer" => "in x y width height result"
-		"feFuncA" | "feFuncB" | "feFuncG" | "feFuncR" => "type tableValues slope intercept amplitude exponent offset"
-		"feComposite" => "in in2 operator k1 k2 k3 k4 x y width height result"
-		"feConvolveMatrix" => "in order kernelMatrix divisor bias targetX targetY edgeMode kernelUnitLength preserveAlpha x y width height result"
-		"feDiffuseLighting" => "in surfaceScale diffuseConstant kernelUnitLength x y width height result"
-		"feSpecularLighting" => "in surfaceScale specularConstant specularExponent kernelUnitLength x y width height result"
-		"feDistantLight" => "azimuth elevation"
-		"fePointLight" => "x y z"
-		"feSpotLight" => "x y z pointsAtX pointsAtY pointsAtZ specularExponent limitingConeAngle"
-		"feDisplacementMap" => "in in2 scale xChannelSelector yChannelSelector x y width height result"
-		"feDropShadow" => "in dx dy stdDeviation x y width height result"
-		"feFlood" | "feMerge" | "feTile" => "in x y width height result"
-		"feGaussianBlur" => "in stdDeviation edgeMode x y width height result"
-		"feImage" => "href preserveAspectRatio crossorigin x y width height result"
-		"feMergeNode" => "in"
-		"feMorphology" => "in operator radius x y width height result"
-		"feOffset" => "in dx dy x y width height result"
-		"feTurbulence" => "baseFrequency numOctaves seed stitchTiles type x y width height result"
-		"animate" | "set" | "animateTransform" | "animateMotion" => "attributeName attributeType begin dur end min max restart repeatCount repeatDur fill calcMode values keyTimes keySplines from to by additive accumulate href type path keyPoints rotate origin"
-		"mpath" => "href"
-		"discard" => "href begin"
-		"script" => "href type crossorigin"
-		"style" => "type media title"
-		"switch" | "g" | "defs" | "desc" | "title" | "metadata" => ""
-		_ => ""
+svg_attribute : Str, Str -> Bool
+svg_attribute = |element, key| {
+	if key == "requiredExtensions" or key == "systemLanguage" { return True }
+	match element {
+		"svg" => match key {
+			"x" | "y" | "width" | "height" | "viewBox" | "preserveAspectRatio" | "version" | "baseProfile" | "contentScriptType" | "contentStyleType" | "zoomAndPan" => True
+			_ => False
+		}
+		"view" => match key {
+			"viewBox" | "preserveAspectRatio" | "viewTarget" | "zoomAndPan" => True
+			_ => False
+		}
+		"path" | "hatchpath" => match key {
+			"d" | "pathLength" => True
+			_ => False
+		}
+		"rect" => match key {
+			"x" | "y" | "width" | "height" | "rx" | "ry" | "pathLength" => True
+			_ => False
+		}
+		"circle" => match key {
+			"cx" | "cy" | "r" | "pathLength" => True
+			_ => False
+		}
+		"ellipse" => match key {
+			"cx" | "cy" | "rx" | "ry" | "pathLength" => True
+			_ => False
+		}
+		"line" => match key {
+			"x1" | "y1" | "x2" | "y2" | "pathLength" => True
+			_ => False
+		}
+		"polygon" | "polyline" => match key {
+			"points" | "pathLength" => True
+			_ => False
+		}
+		"text" | "tspan" => match key {
+			"x" | "y" | "dx" | "dy" | "rotate" | "textLength" | "lengthAdjust" => True
+			_ => False
+		}
+		"textPath" => match key {
+			"href" | "startOffset" | "method" | "spacing" | "side" | "textLength" | "lengthAdjust" => True
+			_ => False
+		}
+		"use" | "image" | "foreignObject" => match key {
+			"x" | "y" | "width" | "height" | "href" | "preserveAspectRatio" | "crossorigin" | "decoding" => True
+			_ => False
+		}
+		"a" => match key {
+			"href" | "target" | "download" | "rel" | "hreflang" | "type" | "referrerpolicy" => True
+			_ => False
+		}
+		"linearGradient" => match key {
+			"x1" | "y1" | "x2" | "y2" | "gradientUnits" | "gradientTransform" | "spreadMethod" | "href" => True
+			_ => False
+		}
+		"radialGradient" => match key {
+			"cx" | "cy" | "r" | "fx" | "fy" | "fr" | "gradientUnits" | "gradientTransform" | "spreadMethod" | "href" => True
+			_ => False
+		}
+		"stop" => match key {
+			"offset" => True
+			_ => False
+		}
+		"pattern" => match key {
+			"x" | "y" | "width" | "height" | "patternUnits" | "patternContentUnits" | "patternTransform" | "viewBox" | "preserveAspectRatio" | "href" => True
+			_ => False
+		}
+		"marker" => match key {
+			"markerWidth" | "markerHeight" | "markerUnits" | "refX" | "refY" | "orient" | "viewBox" | "preserveAspectRatio" => True
+			_ => False
+		}
+		"mask" => match key {
+			"x" | "y" | "width" | "height" | "maskUnits" | "maskContentUnits" | "mask-type" => True
+			_ => False
+		}
+		"clipPath" => match key {
+			"clipPathUnits" => True
+			_ => False
+		}
+		"symbol" => match key {
+			"x" | "y" | "width" | "height" | "refX" | "refY" | "viewBox" | "preserveAspectRatio" => True
+			_ => False
+		}
+		"filter" => match key {
+			"x" | "y" | "width" | "height" | "filterUnits" | "primitiveUnits" | "href" | "filterRes" => True
+			_ => False
+		}
+		"feBlend" => match key {
+			"in" | "in2" | "mode" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feColorMatrix" => match key {
+			"in" | "type" | "values" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feComponentTransfer" => match key {
+			"in" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feFuncA" | "feFuncB" | "feFuncG" | "feFuncR" => match key {
+			"type" | "tableValues" | "slope" | "intercept" | "amplitude" | "exponent" | "offset" => True
+			_ => False
+		}
+		"feComposite" => match key {
+			"in" | "in2" | "operator" | "k1" | "k2" | "k3" | "k4" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feConvolveMatrix" => match key {
+			"in" | "order" | "kernelMatrix" | "divisor" | "bias" | "targetX" | "targetY" | "edgeMode" | "kernelUnitLength" | "preserveAlpha" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feDiffuseLighting" => match key {
+			"in" | "surfaceScale" | "diffuseConstant" | "kernelUnitLength" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feSpecularLighting" => match key {
+			"in" | "surfaceScale" | "specularConstant" | "specularExponent" | "kernelUnitLength" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feDistantLight" => match key {
+			"azimuth" | "elevation" => True
+			_ => False
+		}
+		"fePointLight" => match key {
+			"x" | "y" | "z" => True
+			_ => False
+		}
+		"feSpotLight" => match key {
+			"x" | "y" | "z" | "pointsAtX" | "pointsAtY" | "pointsAtZ" | "specularExponent" | "limitingConeAngle" => True
+			_ => False
+		}
+		"feDisplacementMap" => match key {
+			"in" | "in2" | "scale" | "xChannelSelector" | "yChannelSelector" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feDropShadow" => match key {
+			"in" | "dx" | "dy" | "stdDeviation" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feFlood" | "feMerge" | "feTile" => match key {
+			"in" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feGaussianBlur" => match key {
+			"in" | "stdDeviation" | "edgeMode" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feImage" => match key {
+			"href" | "preserveAspectRatio" | "crossorigin" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feMergeNode" => match key {
+			"in" => True
+			_ => False
+		}
+		"feMorphology" => match key {
+			"in" | "operator" | "radius" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feOffset" => match key {
+			"in" | "dx" | "dy" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"feTurbulence" => match key {
+			"baseFrequency" | "numOctaves" | "seed" | "stitchTiles" | "type" | "x" | "y" | "width" | "height" | "result" => True
+			_ => False
+		}
+		"animate" | "set" | "animateTransform" | "animateMotion" => match key {
+			"attributeName" | "attributeType" | "begin" | "dur" | "end" | "min" | "max" | "restart" | "repeatCount" | "repeatDur" | "fill" | "calcMode" | "values" | "keyTimes" | "keySplines" | "from" | "to" | "by" | "additive" | "accumulate" | "href" | "type" | "path" | "keyPoints" | "rotate" | "origin" => True
+			_ => False
+		}
+		"mpath" => match key {
+			"href" => True
+			_ => False
+		}
+		"discard" => match key {
+			"href" | "begin" => True
+			_ => False
+		}
+		"script" => match key {
+			"href" | "type" | "crossorigin" => True
+			_ => False
+		}
+		"style" => match key {
+			"type" | "media" | "title" => True
+			_ => False
+		}
+		_ => False
 	}
-	text.split_on(" ").concat(["requiredExtensions", "systemLanguage"])
 }
-
-math_attributes : Str -> List(Str)
-math_attributes = |element| {
-	text = match element {
-		"math" => "display overflow altimg altimg-width altimg-height altimg-valign alttext cdgroup"
-		"mo" => "form fence separator stretchy symmetric maxsize minsize largeop movablelimits accent lspace rspace linebreak linebreakstyle lineleading indentalign indentshift"
-		"mi" => "mathvariant"
-		"ms" => "lquote rquote"
-		"mspace" => "width height depth linebreak"
-		"mpadded" => "width height depth lspace voffset"
-		"mfrac" => "linethickness numalign denomalign bevelled"
-		"msub" | "msup" | "msubsup" | "mmultiscripts" => "subscriptshift superscriptshift"
-		"munder" => "accentunder align"
-		"mover" => "accent align"
-		"munderover" => "accent accentunder align"
-		"mtable" => "align rowalign columnalign groupalign alignmentscope columnwidth width rowspacing columnspacing rowlines columnlines frame framespacing equalrows equalcolumns displaystyle side minlabelspacing"
-		"mtr" | "mlabeledtr" => "rowalign columnalign groupalign"
-		"mtd" => "rowspan columnspan rowalign columnalign groupalign"
-		"menclose" => "notation"
-		"mfenced" => "open close separators"
-		"maction" => "actiontype selection"
-		"annotation" | "annotation-xml" => "encoding cd name src definitionURL"
-		"mstyle" => "infixlinebreakstyle decimalpoint scriptsizemultiplier scriptminsize"
-		_ => ""
+math_attribute : Str, Str -> Bool
+math_attribute = |element, key| {
+	match element {
+		"math" => match key {
+			"display" | "overflow" | "altimg" | "altimg-width" | "altimg-height" | "altimg-valign" | "alttext" | "cdgroup" => True
+			_ => False
+		}
+		"mo" => match key {
+			"form" | "fence" | "separator" | "stretchy" | "symmetric" | "maxsize" | "minsize" | "largeop" | "movablelimits" | "accent" | "lspace" | "rspace" | "linebreak" | "linebreakstyle" | "lineleading" | "indentalign" | "indentshift" => True
+			_ => False
+		}
+		"mi" => match key {
+			"mathvariant" => True
+			_ => False
+		}
+		"ms" => match key {
+			"lquote" | "rquote" => True
+			_ => False
+		}
+		"mspace" => match key {
+			"width" | "height" | "depth" | "linebreak" => True
+			_ => False
+		}
+		"mpadded" => match key {
+			"width" | "height" | "depth" | "lspace" | "voffset" => True
+			_ => False
+		}
+		"mfrac" => match key {
+			"linethickness" | "numalign" | "denomalign" | "bevelled" => True
+			_ => False
+		}
+		"msub" | "msup" | "msubsup" | "mmultiscripts" => match key {
+			"subscriptshift" | "superscriptshift" => True
+			_ => False
+		}
+		"munder" => match key {
+			"accentunder" | "align" => True
+			_ => False
+		}
+		"mover" => match key {
+			"accent" | "align" => True
+			_ => False
+		}
+		"munderover" => match key {
+			"accent" | "accentunder" | "align" => True
+			_ => False
+		}
+		"mtable" => match key {
+			"align" | "rowalign" | "columnalign" | "groupalign" | "alignmentscope" | "columnwidth" | "width" | "rowspacing" | "columnspacing" | "rowlines" | "columnlines" | "frame" | "framespacing" | "equalrows" | "equalcolumns" | "displaystyle" | "side" | "minlabelspacing" => True
+			_ => False
+		}
+		"mtr" | "mlabeledtr" => match key {
+			"rowalign" | "columnalign" | "groupalign" => True
+			_ => False
+		}
+		"mtd" => match key {
+			"rowspan" | "columnspan" | "rowalign" | "columnalign" | "groupalign" => True
+			_ => False
+		}
+		"menclose" => match key {
+			"notation" => True
+			_ => False
+		}
+		"mfenced" => match key {
+			"open" | "close" | "separators" => True
+			_ => False
+		}
+		"maction" => match key {
+			"actiontype" | "selection" => True
+			_ => False
+		}
+		"annotation" | "annotation-xml" => match key {
+			"encoding" | "cd" | "name" | "src" | "definitionURL" => True
+			_ => False
+		}
+		"mstyle" => match key {
+			"infixlinebreakstyle" | "decimalpoint" | "scriptsizemultiplier" | "scriptminsize" => True
+			_ => False
+		}
+		_ => False
 	}
-	text.split_on(" ")
 }
-
 value_grammar : Bool, Str, Str -> Markup.ValueGrammar
 value_grammar = |svg, element, attr| {
 	if svg {
 		match attr {
-			"d" | "path" if ["path", "hatchpath", "animateMotion"].contains(element) => PathData
+			"d" | "path" if member(["path", "hatchpath", "animateMotion"], element) => PathData
 			"viewBox" => NumberList(4)
 			"transform" | "gradientTransform" | "patternTransform" => TransformList
 			"preserveAspectRatio" => AspectRatio
 			"pathLength" => NonnegativeNumber
 			"stroke-dasharray" => Language("dasharray")
 			"stroke-miterlimit" => Language("miterlimit")
-			"fill" if ["animate", "set", "animateTransform", "animateMotion"].contains(element) => Keyword(["remove", "freeze"])
+			"fill" if member(["animate", "set", "animateTransform", "animateMotion"], element) => Keyword(["remove", "freeze"])
 			"stdDeviation" | "baseFrequency" | "radius" => Language("nonnegative-number-pair")
 			"numOctaves" | "targetX" | "targetY" => Language("nonnegative-integer")
 			"seed" | "scale" | "bias" | "divisor" | "surfaceScale" | "diffuseConstant" | "specularConstant" | "specularExponent" | "limitingConeAngle" | "azimuth" | "elevation" | "k1" | "k2" | "k3" | "k4" | "amplitude" | "exponent" | "intercept" | "slope" => Number
@@ -264,15 +473,15 @@ value_grammar = |svg, element, attr| {
 			"xChannelSelector" | "yChannelSelector" => Keyword(["R", "G", "B", "A"])
 			"type" if element == "feColorMatrix" => Keyword(["matrix", "saturate", "hueRotate", "luminanceToAlpha"])
 			"type" if element == "feTurbulence" => Keyword(["fractalNoise", "turbulence"])
-			"type" if ["feFuncA", "feFuncR", "feFuncG", "feFuncB"].contains(element) => Keyword(["identity", "table", "discrete", "linear", "gamma"])
+			"type" if member(["feFuncA", "feFuncR", "feFuncG", "feFuncB"], element) => Keyword(["identity", "table", "discrete", "linear", "gamma"])
 			"stitchTiles" => Keyword(["stitch", "noStitch"])
 			"points" => Language("coordinate-pairs")
-			"x" | "y" | "dx" | "dy" if ["text", "tspan"].contains(element) => LengthList
+			"x" | "y" | "dx" | "dy" if member(["text", "tspan"], element) => LengthList
 			"width" | "height" => Language("auto-or-nonnegative-length")
 			"r" | "rx" | "ry" | "markerWidth" | "markerHeight" | "stroke-width" => NonnegativeLength
 			"x" | "y" | "cx" | "cy" | "x1" | "x2" | "y1" | "y2" | "fx" | "fy" | "fr" | "dx" | "dy" | "textLength" | "stroke-dashoffset" => Length
 			"opacity" | "fill-opacity" | "stroke-opacity" | "stop-opacity" | "offset" => Language("number-or-percentage")
-			"rotate" if ["text", "tspan"].contains(element) => Language("number-list")
+			"rotate" if member(["text", "tspan"], element) => Language("number-list")
 			"gradientUnits" | "patternUnits" | "patternContentUnits" | "maskUnits" | "maskContentUnits" | "clipPathUnits" | "filterUnits" | "primitiveUnits" => Keyword(["userSpaceOnUse", "objectBoundingBox"])
 			"spreadMethod" => Keyword(["pad", "reflect", "repeat"])
 			"fill-rule" | "clip-rule" => Keyword(["nonzero", "evenodd", "inherit"])
@@ -280,7 +489,7 @@ value_grammar = |svg, element, attr| {
 			"stroke-linejoin" => Keyword(["miter", "miter-clip", "round", "bevel", "arcs", "inherit"])
 			"lengthAdjust" => Keyword(["spacing", "spacingAndGlyphs"])
 			"text-anchor" => Keyword(["start", "middle", "end", "inherit"])
-			"fill" | "stroke" if !["animate", "set", "animateTransform", "animateMotion"].contains(element) => Paint
+			"fill" | "stroke" if !member(["animate", "set", "animateTransform", "animateMotion"], element) => Paint
 			_ => Language("opaque")
 		}
 	} else {
@@ -313,11 +522,11 @@ valid_value = |text, grammar| {
 		Paint => valid_paint(text)
 		Color => valid_color(text)
 		TransformList => text == "none" or MarkupValues.transforms(text).is_ok()
-		Keyword(values) => values.contains(text)
+		Keyword(values) => member(values, text)
 		AspectRatio => {
 			parts = words_of(text)
 			align = parts.first() ?? ""
-			parts.len() >= 1 and parts.len() <= 2 and ["none", "xMinYMin", "xMidYMin", "xMaxYMin", "xMinYMid", "xMidYMid", "xMaxYMid", "xMinYMax", "xMidYMax", "xMaxYMax"].contains(align) and (parts.len() == 1 or [Ok("meet"), Ok("slice")].contains(parts.get(1)))
+			parts.len() >= 1 and parts.len() <= 2 and member(["none", "xMinYMin", "xMidYMin", "xMaxYMin", "xMinYMid", "xMidYMid", "xMaxYMid", "xMinYMax", "xMidYMax", "xMaxYMax"], align) and (parts.len() == 1 or [Ok("meet"), Ok("slice")].contains(parts.get(1)))
 		}
 		Language("auto-or-nonnegative-length") => text == "auto" or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		Language("integer") => I64.from_str(text).is_ok()
@@ -325,12 +534,12 @@ valid_value = |text, grammar| {
 		Language("nonnegative-number-pair") => MarkupValues.numbers(text).map_ok(|v| v.len() >= 1 and v.len() <= 2 and v.all(|n| n >= 0)) == Ok(True)
 		Language("miterlimit") => MarkupValues.scalar(text).map_ok(|v| v >= 1) == Ok(True)
 		Language("dasharray") => text == "none" or (!words_of(text).is_empty() and words_of(text).all(|v| MarkupValues.length(v).map_ok(|n| n.value >= 0) == Ok(True)))
-		Language("nonnegative-math-length") => ["thin", "medium", "thick"].contains(text) or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
+		Language("nonnegative-math-length") => member(["thin", "medium", "thick"], text) or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		Language("positive-integer") => U64.from_str(text).map_ok(|v| v > 0) == Ok(True)
 		Language("coordinate-pairs") => MarkupValues.numbers(text).map_ok(|v| v.len() % 2 == 0) == Ok(True)
 		Language("number-list") => MarkupValues.numbers(text).is_ok()
 		Language("number-or-percentage") => MarkupValues.scalar(text.drop_suffix("%")).is_ok()
-		Language("math-length") => ["thin", "medium", "thick", "normal", "small", "big", "veryverythinmathspace", "verythinmathspace", "thinmathspace", "mediummathspace", "thickmathspace", "verythickmathspace", "veryverythickmathspace", "infinity"].contains(text) or MarkupValues.length(text).is_ok()
+		Language("math-length") => member(["thin", "medium", "thick", "normal", "small", "big", "veryverythinmathspace", "verythinmathspace", "thinmathspace", "mediummathspace", "thickmathspace", "verythickmathspace", "veryverythickmathspace", "infinity"], text) or MarkupValues.length(text).is_ok()
 		_ => True
 	}
 }
@@ -344,7 +553,7 @@ check_math_children = |parsed, node, name| {
 			Element(n) => {
 				$elements = $elements.append(n.local)
 			}
-			Text(text) if !Markup.whitespace(text) and !["mi", "mn", "mo", "ms", "mtext", "annotation"].contains(name) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
+			Text(text) if !Markup.whitespace(text) and !member(["mi", "mn", "mo", "ms", "mtext", "annotation"], name) => return fail(parsed, node, InvalidChildren({ element: name, expected: "MathML elements" }))
 			_ => {}
 		}
 	}
@@ -381,16 +590,16 @@ check_math_children = |parsed, node, name| {
 			return fail(parsed, node, InvalidChildren({ element: name, expected: "paired scripts" }))
 		}
 	}
-	if name == "semantics" and (count == 0 or [Ok("annotation"), Ok("annotation-xml")].contains($elements.first()) or !$elements.drop_first(1).all(|e| ["annotation", "annotation-xml"].contains(e))) {
+	if name == "semantics" and (count == 0 or [Ok("annotation"), Ok("annotation-xml")].contains($elements.first()) or !$elements.drop_first(1).all(|e| member(["annotation", "annotation-xml"], e))) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "one expression followed by annotations" }))
 	}
-	if name == "mtable" and !$elements.all(|e| ["mtr", "mlabeledtr"].contains(e)) {
+	if name == "mtable" and !$elements.all(|e| member(["mtr", "mlabeledtr"], e)) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtr or mlabeledtr" }))
 	}
-	if ["mtr", "mlabeledtr"].contains(name) and !$elements.all(|e| e == "mtd") {
+	if member(["mtr", "mlabeledtr"], name) and !$elements.all(|e| e == "mtd") {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtd" }))
 	}
-	if ["mi", "mn", "mo", "ms", "mspace", "none", "mprescripts"].contains(name) and count != 0 {
+	if member(["mi", "mn", "mo", "ms", "mspace", "none", "mprescripts"], name) and count != 0 {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "text only" }))
 	}
 	Ok({})
@@ -422,14 +631,14 @@ check_svg_children = |parsed, node, name| {
 		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child index"))
 		match child.kind {
 			Element(n) => {
-				descriptive = ["title", "desc", "metadata"].contains(n.local)
-				animation = ["animate", "animateMotion", "animateTransform", "set", "discard"].contains(n.local)
-				allowed = if (["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "image", "use", "stop"].contains(name)) descriptive or animation else if (["linearGradient", "radialGradient"].contains(name)) descriptive or animation or n.local == "stop" else if (name == "filter") descriptive or animation or n.local.starts_with("fe") else if (name == "feComponentTransfer") descriptive or ["feFuncA", "feFuncB", "feFuncG", "feFuncR"].contains(n.local) else if (name == "feMerge") descriptive or n.local == "feMergeNode" else if (["feDiffuseLighting", "feSpecularLighting"].contains(name)) descriptive or ["feDistantLight", "fePointLight", "feSpotLight"].contains(n.local) else if (["text", "tspan", "textPath"].contains(name)) descriptive or animation or ["a", "tspan", "textPath"].contains(n.local) else True
+				descriptive = member(["title", "desc", "metadata"], n.local)
+				animation = member(["animate", "animateMotion", "animateTransform", "set", "discard"], n.local)
+				allowed = if (member(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "image", "use", "stop"], name)) descriptive or animation else if (member(["linearGradient", "radialGradient"], name)) descriptive or animation or n.local == "stop" else if (name == "filter") descriptive or animation or n.local.starts_with("fe") else if (name == "feComponentTransfer") descriptive or member(["feFuncA", "feFuncB", "feFuncG", "feFuncR"], n.local) else if (name == "feMerge") descriptive or n.local == "feMergeNode" else if (member(["feDiffuseLighting", "feSpecularLighting"], name)) descriptive or member(["feDistantLight", "fePointLight", "feSpotLight"], n.local) else if (member(["text", "tspan", "textPath"], name)) descriptive or animation or member(["a", "tspan", "textPath"], n.local) else True
 				if !allowed {
 					return fail(parsed, child, InvalidChildren({ element: name, expected: "supported SVG content model" }))
 				}
 			}
-			Text(text) if !Markup.whitespace(text) and ["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"].contains(name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
+			Text(text) if !Markup.whitespace(text) and member(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline", "linearGradient", "radialGradient", "stop", "filter"], name) => return fail(parsed, child, InvalidChildren({ element: name, expected: "SVG elements" }))
 			_ => {}
 		}
 	}
@@ -439,7 +648,7 @@ check_svg_children = |parsed, node, name| {
 valid_paint : Str -> Bool
 valid_paint = |text| {
 	value = MarkupValues.trim_space(text)
-	if ["none", "context-fill", "context-stroke"].contains(value) {
+	if member(["none", "context-fill", "context-stroke"], value) {
 		return True
 	}
 	if value.starts_with("url(") {
@@ -455,7 +664,7 @@ valid_paint = |text| {
 valid_color : Str -> Bool
 valid_color = |text| {
 	value = Str.from_utf8_lossy(MarkupValues.trim_space(text).to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
-	if color_names.contains(value) or ["currentcolor", "transparent", "inherit", "initial", "unset", "revert", "revert-layer"].contains(value) {
+	if color_names(value) or member(["currentcolor", "transparent", "inherit", "initial", "unset", "revert", "revert-layer"], value) {
 		return True
 	}
 	if value.starts_with("#") {
@@ -466,7 +675,7 @@ valid_color = |text| {
 	# leaving CSS evaluation and complete CSS syntax validation to consumers.
 	match value.split_first("(") {
 		Ok({ before, after }) => {
-			if !["rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix", "light-dark", "var"].contains(before) or !after.ends_with(")") {
+			if !member(["rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix", "light-dark", "var"], before) or !after.ends_with(")") {
 				return False
 			}
 			var $depth = 1.I64
@@ -487,9 +696,29 @@ valid_color = |text| {
 	}
 }
 
-color_names = "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split_on(" ")
+color_names = |key| match key {
+	"aliceblue" | "antiquewhite" | "aqua" | "aquamarine" | "azure" | "beige" | "bisque" | "black" | "blanchedalmond" | "blue" | "blueviolet" | "brown" | "burlywood" | "cadetblue" | "chartreuse" | "chocolate" | "coral" | "cornflowerblue" | "cornsilk" | "crimson" | "cyan" | "darkblue" | "darkcyan" | "darkgoldenrod" | "darkgray" | "darkgreen" | "darkgrey" | "darkkhaki" | "darkmagenta" | "darkolivegreen" | "darkorange" | "darkorchid" | "darkred" | "darksalmon" | "darkseagreen" | "darkslateblue" | "darkslategray" | "darkslategrey" | "darkturquoise" | "darkviolet" | "deeppink" | "deepskyblue" | "dimgray" | "dimgrey" | "dodgerblue" | "firebrick" | "floralwhite" | "forestgreen" | "fuchsia" | "gainsboro" | "ghostwhite" | "gold" | "goldenrod" | "gray" | "green" | "greenyellow" | "grey" | "honeydew" | "hotpink" | "indianred" | "indigo" | "ivory" | "khaki" | "lavender" | "lavenderblush" | "lawngreen" | "lemonchiffon" | "lightblue" | "lightcoral" | "lightcyan" | "lightgoldenrodyellow" | "lightgray" | "lightgreen" | "lightgrey" | "lightpink" | "lightsalmon" | "lightseagreen" | "lightskyblue" | "lightslategray" | "lightslategrey" | "lightsteelblue" | "lightyellow" | "lime" | "limegreen" | "linen" | "magenta" | "maroon" | "mediumaquamarine" | "mediumblue" | "mediumorchid" | "mediumpurple" | "mediumseagreen" | "mediumslateblue" | "mediumspringgreen" | "mediumturquoise" | "mediumvioletred" | "midnightblue" | "mintcream" | "mistyrose" | "moccasin" | "navajowhite" | "navy" | "oldlace" | "olive" | "olivedrab" | "orange" | "orangered" | "orchid" | "palegoldenrod" | "palegreen" | "paleturquoise" | "palevioletred" | "papayawhip" | "peachpuff" | "peru" | "pink" | "plum" | "powderblue" | "purple" | "rebeccapurple" | "red" | "rosybrown" | "royalblue" | "saddlebrown" | "salmon" | "sandybrown" | "seagreen" | "seashell" | "sienna" | "silver" | "skyblue" | "slateblue" | "slategray" | "slategrey" | "snow" | "springgreen" | "steelblue" | "tan" | "teal" | "thistle" | "tomato" | "turquoise" | "violet" | "wheat" | "white" | "whitesmoke" | "yellow" | "yellowgreen" => True
+	_ => False
+}
 
-aria_attributes = "aria-activedescendant aria-atomic aria-autocomplete aria-braillelabel aria-brailleroledescription aria-busy aria-checked aria-colcount aria-colindex aria-colindextext aria-colspan aria-controls aria-current aria-describedby aria-description aria-details aria-disabled aria-dropeffect aria-errormessage aria-expanded aria-flowto aria-grabbed aria-haspopup aria-hidden aria-invalid aria-keyshortcuts aria-label aria-labelledby aria-level aria-live aria-modal aria-multiline aria-multiselectable aria-orientation aria-owns aria-placeholder aria-posinset aria-pressed aria-readonly aria-relevant aria-required aria-roledescription aria-rowcount aria-rowindex aria-rowindextext aria-rowspan aria-selected aria-setsize aria-sort aria-valuemax aria-valuemin aria-valuenow aria-valuetext".split_on(" ")
+aria_attributes = |key| match key {
+	"aria-activedescendant" | "aria-atomic" | "aria-autocomplete" | "aria-braillelabel" | "aria-brailleroledescription" | "aria-busy" | "aria-checked" | "aria-colcount" | "aria-colindex" | "aria-colindextext" | "aria-colspan" | "aria-controls" | "aria-current" | "aria-describedby" | "aria-description" | "aria-details" | "aria-disabled" | "aria-dropeffect" | "aria-errormessage" | "aria-expanded" | "aria-flowto" | "aria-grabbed" | "aria-haspopup" | "aria-hidden" | "aria-invalid" | "aria-keyshortcuts" | "aria-label" | "aria-labelledby" | "aria-level" | "aria-live" | "aria-modal" | "aria-multiline" | "aria-multiselectable" | "aria-orientation" | "aria-owns" | "aria-placeholder" | "aria-posinset" | "aria-pressed" | "aria-readonly" | "aria-relevant" | "aria-required" | "aria-roledescription" | "aria-rowcount" | "aria-rowindex" | "aria-rowindextext" | "aria-rowspan" | "aria-selected" | "aria-setsize" | "aria-sort" | "aria-valuemax" | "aria-valuemin" | "aria-valuenow" | "aria-valuetext" => True
+	_ => False
+}
 
 ascii_lower : Str -> Str
 ascii_lower = |text| Str.from_utf8_lossy(text.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+
+# Fixed vocabulary scans use an index so a membership check creates no iterator
+# state. Dynamic per-element vocabularies above use direct predicates.
+member : List(Str), Str -> Bool
+member = |items, item| {
+	var $index = 0
+	while $index < items.len() {
+		if items.get($index) == Ok(item) {
+			return True
+		}
+		$index = $index + 1
+	}
+	False
+}
