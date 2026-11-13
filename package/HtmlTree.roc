@@ -72,8 +72,8 @@ HtmlTree :: [].{
 		var $source_regions = []
 		var $authored_tokens = []
 		var $authored_repairs = []
-		var $authored_parents = if props.exact_structure {
-			$state.parents.map(|entry| entry.parent)
+		var $authored_creation = if props.exact_structure {
+			$state.nodes.map_with_index(|node, id| { parent: find_parent($state, id), origin: node.origin })
 		} else []
 		while !$done {
 			mode = content_mode($state)
@@ -139,7 +139,7 @@ HtmlTree :: [].{
 				var $id = previous_nodes
 				while $id < $state.nodes.len() {
 					node = node_at($state, $id)
-					$authored_parents = $authored_parents.append(find_parent($state, $id))
+					$authored_creation = $authored_creation.append({ parent: find_parent($state, $id), origin: node.origin })
 					match node.origin {
 						Implied(_) => {
 							reason = match node.kind {
@@ -208,7 +208,7 @@ HtmlTree :: [].{
 			},
 		)
 		if props.exact_structure {
-			exact_structure(source, fragment, $state, $authored_tokens, $reader.diagnostics, $authored_repairs, $authored_parents)?
+			exact_structure(source, fragment, $state, $authored_tokens, $reader.diagnostics, $authored_repairs, $authored_creation)?
 		}
 		if props.recovery == Strict and !diagnostics.is_empty() {
 			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
@@ -235,8 +235,8 @@ HtmlTree :: [].{
 # Adoption emits implied-node witnesses; frameset detachment emits a diagnostic.
 # Foster insertion is checked at creation, including merged-text diagnostics.
 # Final reachability still rejects authored nodes removed by any of those paths.
-exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : Markup.StructureReason, span : Markup.Span }), List(Try(U64, [Missing])) -> Try({}, [InvalidMarkup(Markup.Error)])
-exact_structure = |source, fragment, state, tokens, lexical, repairs, creation_parents| {
+exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : Markup.StructureReason, span : Markup.Span }), List({ parent : Try(U64, [Missing]), origin : Markup.Origin }) -> Try({}, [InvalidMarkup(Markup.Error)])
+exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| {
 	var $failure = repairs.fold(Err(Missing), |best, repair| structure_failure(best, repair.reason, repair.span))
 	var $by_start = Dict.empty()
 	var $texts = []
@@ -254,14 +254,22 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation_p
 	}
 	for (node, id) in state.nodes.map_with_index(|node, id| (node, id)) {
 		if !(fragment and id == 0) {
-			match node.origin {
+			original = creation.get(id).map_ok(|entry| entry.origin) ?? node.origin
+			origin = match (node.kind, node.origin, original) {
+				# A foster merge marks the combined text Implied. Keep the
+				# earlier text's original interval so it is not blamed for the
+				# later repair. Ordinary Authored merges retain their final span.
+				(Text(_), Implied(_), Authored(span)) => Authored(span)
+				_ => node.origin
+			}
+			match origin {
 				Authored(span) => {
 					if !$reachable.contains(id) {
 						$failure = structure_failure($failure, ReconstructedContent, { start: source.count_utf8_bytes(), end: source.count_utf8_bytes() })
 					}
 					match node.kind {
 						Text(_) => {
-							$texts = $texts.append({ span, parent: creation_parents.get(id) ?? Err(Missing) })
+							$texts = $texts.append({ span, parent: creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing) })
 						}
 						_ => {
 							if $by_start.contains(span.start) {
@@ -320,7 +328,7 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation_p
 						node = node_at(state, id)
 						match node.kind {
 							Element(name) => {
-								if (creation_parents.get(id) ?? Err(Missing)) != parent {
+								if (creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing)) != parent {
 									$failure = structure_failure($failure, ReparentedContent, token.span)
 								}
 								namespace = match name.namespace {
@@ -390,7 +398,7 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation_p
 				$skip_lf = False
 				match $by_start.get(token.span.start) {
 					Ok(id) => {
-						if (creation_parents.get(id) ?? Err(Missing)) != parent {
+						if (creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing)) != parent {
 							$failure = structure_failure($failure, ReparentedContent, token.span)
 						}
 					}
@@ -417,7 +425,11 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation_p
 			HtmlSyntax(code) => match code {
 				MissingDoctype | NonConformingDoctype | EofWithOpenElements | EofInTemplate => {}
 				FosterParentedContent => {
-					$failure = structure_failure($failure, ReparentedContent, trigger_span(tokens, diagnostic.column))
+					span = trigger_span(tokens, diagnostic.column)
+					$failure = match $failure {
+						Ok({ reason: IgnoredMarkup, span: previous }) if previous.start == span.start => Ok({ reason: ReparentedContent, span })
+						_ => structure_failure($failure, ReparentedContent, span)
+					}
 				}
 				_ => {
 					$failure = structure_failure($failure, ReconstructedContent, trigger_span(tokens, diagnostic.column))
@@ -3451,6 +3463,14 @@ expect {
 	source = "<!doctype html><html><head></head><body></body><frameset></frameset></html>"
 	match HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) {
 		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), .. })) => span == { start: 47, end: 57 }
+		_ => False
+	}
+}
+
+# Foster merging must not blame the earlier text whose provenance changes.
+expect {
+	match HtmlTree.parse("before<table>outside<tr><td>inside</td></tr></table>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14
 		_ => False
 	}
 }
