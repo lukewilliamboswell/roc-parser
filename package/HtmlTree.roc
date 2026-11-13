@@ -194,14 +194,14 @@ node_at : State, U64 -> Markup.Node
 node_at = |s, i| s.nodes.get(i) ?? empty_node
 
 name_at : State, U64 -> Str
-name_at = |s, i| match (node_at(s, i)).kind {
-	Element(n) => n.local
+name_at = |s, i| match s.nodes.get(i) {
+	Ok({ kind: Element(n), .. }) => n.local
 	_ => ""
 }
 
 namespace_at : State, U64 -> Str
-namespace_at = |s, i| match (node_at(s, i)).kind {
-	Element({ namespace: Uri(n), .. }) => n
+namespace_at = |s, i| match s.nodes.get(i) {
+	Ok({ kind: Element({ namespace: Uri(n), .. }), .. }) => n
 	_ => ""
 }
 
