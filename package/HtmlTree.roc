@@ -66,6 +66,21 @@ HtmlTree :: [].{
 		parse_general(source, fragment, context, props)
 	}
 
+	## Internal proof carried only from a successful conservative direct parse.
+	Domain : [PureHtmlNoProjection, General]
+	Classified : { parsed : Markup.Parsed, domain : Domain }
+	parse_classified : Str, Bool, Context, Markup.Props -> Try(Classified, [InvalidMarkup(Markup.Error)])
+	parse_classified = |source, fragment, context, props| {
+		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment(source, context.namespace, props) {
+				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
+				Err(Replay) => {}
+			}
+		}
+		parsed = parse_general(source, fragment, context, props)?
+		Ok({ parsed, domain: General })
+	}
+
 	parse_general : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse_general = |source, fragment, context, props| {
 		if source.count_utf8_bytes() > props.max_source_bytes {

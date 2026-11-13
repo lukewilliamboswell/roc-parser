@@ -25,23 +25,23 @@ Html := { parsed : Markup.Parsed }.{
 	## Parse and validate a document, retaining recovery diagnostics when enabled.
 	parse_with : Str, Props -> Try(Html, [InvalidMarkup(Markup.Error)])
 	parse_with = |text, props| {
-		parsed = authored_syntax(text, props, False)?
+		{ parsed, domain } = authored_syntax(text, props, False)?
 		root = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "html", actual: "fragment" }), line: 1, column: 1 }))?
 		node = parsed.tree.nodes.get(root) ?? return Err(InvalidMarkup({ problem: Unsupported("missing document root"), line: 1, column: 1 }))
 		match node.kind {
 			Element(n) if n.namespace == Uri(Markup.html_namespace) and n.local == "html" => {}
 			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "html in the HTML namespace", actual: "other" }), line: 1, column: 1 }))
 		}
-		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Html.{ parsed: project_checked(checked, props, False)? })
+		checked = validate_authored(parsed, shared(props), domain)?
+		Ok(Html.{ parsed: project_authored(checked, props, False, domain)? })
 	}
 
 	## Parse one or more roots in the configured fragment context.
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
 	parse_fragment = |text, props| {
-		parsed = authored_syntax(text, props, True)?
-		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Fragment.{ parsed: project_checked(checked, props, True)? })
+		{ parsed, domain } = authored_syntax(text, props, True)?
+		checked = validate_authored(parsed, shared(props), domain)?
+		Ok(Fragment.{ parsed: project_authored(checked, props, True, domain)? })
 	}
 
 	## Syntax-only parsing with all HTML options, including the scripting flag
@@ -211,9 +211,24 @@ expect {
 }
 
 authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
-	HtmlTree.parse(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting, defer_projection: True }, shared(props))
+	HtmlTree.parse_classified(text, fragment, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting, defer_projection: True }, shared(props))
 } else {
-	syntax(text, props, fragment)
+	parsed = syntax(text, props, fragment)?
+	Ok({ parsed, domain: General })
+}
+
+# Only the parser's internal proof can bypass identity foreign/projection
+# walks. Public validate_tree continues to check arbitrary supplied trees.
+validate_authored = |parsed, props, domain| if domain == PureHtmlNoProjection {
+	HtmlValidate.validate(parsed, props, [])
+} else {
+	Html.validate_tree(parsed, props, [])
+}
+
+project_authored = |parsed, props, fragment, domain| if domain == PureHtmlNoProjection {
+	Ok(parsed)
+} else {
+	project_checked(parsed, props, fragment)
 }
 
 project_checked = |parsed, props, fragment| if props.syntax == HtmlSyntax {
@@ -296,3 +311,27 @@ expect {
 		},
 	)
 }
+
+expect {
+	p = HtmlTree.parse_classified("<section><p>x</p></section>", True, {}, {})?
+	p.domain == PureHtmlNoProjection
+}
+expect {
+	p = HtmlTree.parse_classified("<select><option>x</option></select>", True, {}, {})?
+	p.domain == General
+}
+expect {
+	p = Html.parse_source("<p>x</p>", {}, True)?
+	id = p.tree.roots.first()?
+	node = p.tree.nodes.get(id)?
+	match node.kind {
+		Element(name) => {
+			forged = { ..p, tree: { ..p.tree, nodes: p.tree.nodes.set(id, { ..node, kind: Element({ ..name, namespace: Uri("urn:untrusted") }) })? } }
+			Html.validate_tree(forged, {}, []).is_err()
+		}
+		_ => False
+	}
+}
+expect Html.parse_fragment("<p strange='value'>x</p>", { allow_unknown_attributes: True, max_diagnostics: 0 }).is_err()
+expect Html.parse_fragment("<img>", {}).is_err()
+expect Html.parse_fragment("<p hidden='false'>x</p>", {}).is_err()
