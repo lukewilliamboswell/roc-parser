@@ -2270,7 +2270,7 @@ project_selectedcontent = |state, props| {
 							$selected = Ok(option)
 						}
 					}
-					size = select_node.attributes.find_first(|a| a.name.local == "size").map_ok(|a| U64.from_str(a.value) ?? 0) ?? 0
+					size = select_node.attributes.find_first(|a| a.name.local == "size").map_ok(|a| select_size_class(a.value)) ?? 0
 					if (
 						match $selected {
 							Err(_) => True
@@ -2398,6 +2398,31 @@ select_options = |s, select_id| {
 	$options
 }
 
+# Only the distinction 0/1/>1 affects default selectedness. HTML's IDL integer
+# parser accepts a leading plus and a digit prefix; saturate at two safely.
+select_size_class : Str -> U64
+select_size_class = |text| {
+	bytes = text.to_utf8()
+	var $at = 0
+	while $at < bytes.len() and Tok.space(bytes.get($at) ?? 0) {
+		$at = $at + 1
+	}
+	if bytes.get($at) == Ok('+') {
+		$at = $at + 1
+	}
+	var $size = 0.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < '0' or byte > '9' {
+			break
+		}
+		next = $size * 10 + (byte - '0').to_u64()
+		$size = if (next > 1) 2 else next
+		$at = $at + 1
+	}
+	$size
+}
+
 option_disabled = |s, option| {
 	if (node_at(s, option)).attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "disabled") {
 		return True
@@ -2512,3 +2537,15 @@ expect {
 	content = p.tree.nodes.get(button.children.first()?)?
 	Markup.text(p.tree, content.children.first()?) == "B"
 }
+
+expect ["2junk", " +2", "000000000000000000000000000000000000002"].all(
+	|size| (
+		|_| {
+			p = HtmlTree.parse("<select size='${size}'><button><selectedcontent></selectedcontent></button><option>A</option></select>", True, {}, {})?
+			select = p.tree.nodes.get(p.tree.roots.first()?)?
+			button = p.tree.nodes.get(select.children.first()?)?
+			content = p.tree.nodes.get(button.children.first()?)?
+			Ok(content.children.is_empty())
+		}
+	)({}) == Ok(True),
+)
