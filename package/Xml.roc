@@ -561,6 +561,48 @@ Xml := {
 		bytes = input.to_utf8()
 		open_reader(input, bytes, reader_limits(props)).map_err(|failure| read_error(bytes, failure))
 	}
+	# Internal scanner operations for arena construction. Bytes must come from
+	# src; token prefixes and expected name ranges are verified by the caller.
+	# The root-close predicate selects a route; the full parser checks content.
+	SourceLex :: [].{
+		StartTag : { name : Str, attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), empty : Bool, pos : U64 }
+		read_start : Str, List(U8), U64, U64 -> Try(StartTag, [Fallback])
+		read_start = |src, bytes, start, maximum| parse_source_start_tag(src, bytes, start, maximum).map_err(|_| Fallback)
+		read_text : Str, List(U8), U64 -> Try({ val : Str, pos : U64 }, [Fallback])
+		read_text = |src, bytes, start| read_source_text(src, bytes, start).map_err(|_| Fallback)
+		read_end : Str, List(U8), U64, Xml.SourceSpan -> Try({ name_end : U64, pos : U64 }, [Fallback])
+		read_end = |src, bytes, start, expected| read_end_tag(src, bytes, start, expected).map_err(|_| Fallback)
+		closes_document : Str, U64 -> Bool
+		closes_document = |src, maximum_attributes| {
+			bytes = src.to_utf8()
+			var $start = 0.U64
+			while $start < bytes.len() and is_space(bytes.get($start) ?? 0) {
+				$start = $start + 1
+			}
+			if bytes.get($start) != Ok('<') or bytes.get($start + 1) == Ok('!') or bytes.get($start + 1) == Ok('?') or bytes.get($start + 1) == Ok('/') {
+				return False
+			}
+			root = parse_source_start_tag(src, bytes, $start, maximum_attributes) ?? return False
+			if root.empty {
+				return True
+			}
+			last_tag = src.split_last("<") ?? return False
+			closing_start = last_tag.before.count_utf8_bytes()
+			if bytes.get(closing_start + 1) != Ok('/') {
+				return False
+			}
+			closing = read_end_tag(src, bytes, closing_start, { start: $start + 1, end: $start + 1 + root.name.count_utf8_bytes() }) ?? return False
+			var $trailing = closing.pos
+			while $trailing < bytes.len() and is_space(bytes.get($trailing) ?? 0) {
+				$trailing = $trailing + 1
+			}
+			$trailing == bytes.len()
+		}
+
+		allows : U64, U64, U64, U64 -> Bool
+		allows = |maximum_depth, maximum_elements, depth, elements| check_start({ depth: maximum_depth, elements: maximum_elements, attributes: 0, namespaces: True }, depth, elements, 0).is_ok()
+	}
+
 }
 
 Failure : { offset : U64, message : Str }

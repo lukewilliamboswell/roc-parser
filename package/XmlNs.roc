@@ -456,6 +456,23 @@ XmlNs := {
 	## The namespace of `xmlns` declarations, which no prefix may be bound to.
 	xmlns_namespace : Str
 	xmlns_namespace = "http://www.w3.org/2000/xmlns/"
+	# Internal stable namespace context over already XML-validated start tags
+	# and their authored spans. A later declaration requests the complete fold.
+	StableSourceScope := { bound : SourceBound }.{
+		begin : Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ scope : StableSourceScope, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, [Fallback])
+		begin = |written, attributes, spans| {
+			resolved = resolve_source_start({ entries: [], active: Box.box(Dict.empty()), default_index: none }, written, attributes, spans).map_err(|_| Fallback)?
+			Ok({ scope: StableSourceScope.{ bound: resolved.bound }, name: resolved.name, attributes: resolved.attributes })
+		}
+		resolve_tag : StableSourceScope, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, [Fallback])
+		resolve_tag = |scope, written, attributes, spans| {
+			if has_declaration(attributes) {
+				return Err(Fallback)
+			}
+			resolve_source_names(scope.bound, written, attributes, spans).map_err(|_| Fallback)
+		}
+	}
+
 }
 
 ## The bindings in scope. `entries` holds every binding of the open
@@ -1744,37 +1761,43 @@ resolve_source_start = |bound, written, attributes, spans| {
 		default_index = resolved.scope.active.get("") ?? none
 		Ok({ bound: { entries: resolved.scope.entries, active: Box.box(resolved.scope.active), default_index }, name: resolved.name, attributes: ordered_attributes })
 	} else {
-		element_name = split_qname(written)?
-		if element_name.prefix == "xmlns" {
-			return Err(ReservedPrefix("xmlns"))
-		}
-		resolved_name = if element_name.prefix == "" {
-			namespace = if bound.default_index == none {
-				NoNamespace
-			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
-			{ namespace, local: element_name.local, prefix: Unprefixed }
-		} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?
-		var $resolved = List.with_capacity(attributes.len())
-		var $index = 0
-		var $prefixed = 0
-		while $index < attributes.len() {
-			attribute = attributes.get($index) ?? { name: "", value: "" }
-			span = spans.get($index) ?? { start: 0, end: 0 }
-			$index = $index + 1
-			attribute_name = split_qname(attribute.name)?
-			if attribute_name.prefix != "" {
-				$prefixed = $prefixed + 1
-			}
-			resolved_attribute_name = if attribute_name.prefix == "" {
-				{ namespace: NoNamespace, local: attribute_name.local, prefix: Unprefixed }
-			} else resolve(attribute_name, bound.entries, Box.unbox(bound.active), False)?
-			$resolved = $resolved.append({ name: resolved_attribute_name, value: attribute.value, span })
-		}
-		if $prefixed > 1 {
-			check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
-		}
-		Ok({ bound, name: resolved_name, attributes: $resolved })
+		resolved = resolve_source_names(bound, written, attributes, spans)?
+		Ok({ bound, name: resolved.name, attributes: resolved.attributes })
 	}
+}
+
+resolve_source_names : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
+resolve_source_names = |bound, written, attributes, spans| {
+	element_name = split_qname(written)?
+	if element_name.prefix == "xmlns" {
+		return Err(ReservedPrefix("xmlns"))
+	}
+	resolved_name = if element_name.prefix == "" {
+		namespace = if bound.default_index == none {
+			NoNamespace
+		} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
+		{ namespace, local: element_name.local, prefix: Unprefixed }
+	} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?
+	var $resolved = List.with_capacity(attributes.len())
+	var $index = 0
+	var $prefixed = 0
+	while $index < attributes.len() {
+		attribute = attributes.get($index) ?? { name: "", value: "" }
+		span = spans.get($index) ?? { start: 0, end: 0 }
+		$index = $index + 1
+		attribute_name = split_qname(attribute.name)?
+		if attribute_name.prefix != "" {
+			$prefixed = $prefixed + 1
+		}
+		resolved_attribute_name = if attribute_name.prefix == "" {
+			{ namespace: NoNamespace, local: attribute_name.local, prefix: Unprefixed }
+		} else resolve(attribute_name, bound.entries, Box.unbox(bound.active), False)?
+		$resolved = $resolved.append({ name: resolved_attribute_name, value: attribute.value, span })
+	}
+	if $prefixed > 1 {
+		check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
+	}
+	Ok({ name: resolved_name, attributes: $resolved })
 }
 
 ordered_source_attributes : List(Xml.Attribute), List(Xml.SourceSpan), List(XmlNs.Attribute), List(XmlNs.Binding) -> List(XmlNs.SourceAttribute)

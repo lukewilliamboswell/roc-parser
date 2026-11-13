@@ -330,6 +330,15 @@ parse_xml_source = |text, namespace, fragment, props| {
 	# The conservative fast-path threshold leaves custom small budgets on the
 	# event-counted reader path, preserving their exact failure positions.
 	if props.max_work_per_byte >= 16 {
+		maximum_attributes = if props.max_attributes == 0 and fragment {
+			1
+		} else props.max_attributes
+		if depth > 0 and elements > 0 and Xml.SourceLex.closes_document(input, maximum_attributes) {
+			match parse_xml_direct(text, input, prefix.count_utf8_bytes(), depth, elements, fragment, props) {
+				Ok(parsed) => return Ok(parsed)
+				Err(Fallback) => {}
+			}
+		}
 		return parse_xml_fold(text, input, prefix.count_utf8_bytes(), depth, elements, fragment, props)
 	}
 	opened = XmlNs.reader(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }).map_err(|error| located_xml_error(error, text, prefix.count_utf8_bytes()))?
@@ -864,4 +873,162 @@ shifted_source_attributes = |attributes, prefix| {
 		$index = $index + 1
 	}
 	$out
+}
+
+parse_xml_direct : Str, Str, U64, U64, U64, Bool, Markup.Props -> Try(Markup.Parsed, [Fallback])
+parse_xml_direct = |text, input, prefix, maximum_depth, maximum_elements, fragment, props| {
+	bytes = input.to_utf8()
+	maximum_attributes = if props.max_attributes == 0 and fragment {
+		1
+	} else props.max_attributes
+	source_end = prefix + text.count_utf8_bytes()
+	var $pos = 0.U64
+	while $pos < bytes.len() and space(bytes.get($pos) ?? 0) {
+		$pos = $pos + 1
+	}
+	root_start = $pos
+	if bytes.get(root_start) != Ok('<') or bytes.get(root_start + 1) == Ok('!') or bytes.get(root_start + 1) == Ok('?') or bytes.get(root_start + 1) == Ok('/') or !Xml.SourceLex.allows(maximum_depth, maximum_elements, 0, 0) {
+		return Err(Fallback)
+	}
+	root_tag = Xml.SourceLex.read_start(input, bytes, root_start, maximum_attributes)?
+	root_name_end = root_start + 1 + root_tag.name.count_utf8_bytes()
+
+	# Markers can cause harmless false positives, but make late unsupported
+	# scope/comment/PI constructs fall back before allocating a partial arena.
+	tail = input.drop_first_bytes(root_tag.pos) ?? ""
+	if tail.contains("xmlns") or tail.contains("<!") or tail.contains("<?") {
+		return Err(Fallback)
+	}
+	resolved_root = XmlNs.StableSourceScope.begin(root_tag.name, root_tag.attributes, root_tag.attribute_spans)?
+	stable_scope = resolved_root.scope
+	var $nodes = []
+	var $roots = []
+	var $stack = []
+	var $tokens = []
+	if !fragment {
+		if root_start > 0 {
+			$tokens = $tokens.append({ kind: Text, span: { start: 0, end: root_start } })
+		}
+		if props.max_nodes == 0 or resolved_root.attributes.len() > props.max_attributes {
+			return Err(Fallback)
+		}
+		root_span = { start: root_start, end: root_tag.pos }
+		$tokens = $tokens.append({ kind: Tag, span: root_span })
+		$nodes = $nodes.append({ kind: Element(resolved_root.name), attributes: shifted_source_attributes(resolved_root.attributes, 0), children: [], origin: Authored(root_span) })
+		$roots = $roots.append(0)
+		if !root_tag.empty {
+			$stack = $stack.append(0)
+		}
+	}
+	var $open = if root_tag.empty {
+		[]
+	} else [{ start: root_start + 1, end: root_name_end }]
+	var $elements = 1.U64
+	$pos = root_tag.pos
+	while $pos < bytes.len() {
+		start = $pos
+		leading = bytes.get(start) ?? 0
+		following = bytes.get(start + 1) ?? 0
+		var $new_node = Err(Missing)
+		var $push = False
+		var $kind = Text
+		if $open.is_empty() {
+			if !space(leading) {
+				return Err(Fallback)
+			}
+			while $pos < bytes.len() and space(bytes.get($pos) ?? 0) {
+				$pos = $pos + 1
+			}
+		} else if leading == '<' and following == '/' {
+			closed_tag = Xml.SourceLex.read_end(input, bytes, start, $open.last() ?? { start: 0, end: 0 })?
+			$pos = closed_tag.pos
+			$open = $open.drop_last(1)
+			$kind = Tag
+			if start >= prefix and $pos <= source_end {
+				match $stack.last() {
+					Ok(index) => {
+						node = $nodes.get(index) ?? empty_node
+						begin = match node.origin {
+							Authored(span) => span.start
+							_ => return Err(Fallback)
+						}
+						$nodes = $nodes.set(index, { ..node, origin: Authored({ start: begin, end: $pos - prefix }) }) ?? []
+						$stack = $stack.drop_last(1)
+					}
+					Err(_) => return Err(Fallback)
+				}
+			}
+		} else if leading == '<' {
+			if following == '!' or following == '?' or !Xml.SourceLex.allows(maximum_depth, maximum_elements, $open.len(), $elements) {
+				return Err(Fallback)
+			}
+			tag = Xml.SourceLex.read_start(input, bytes, start, maximum_attributes)?
+			name_end = start + 1 + tag.name.count_utf8_bytes()
+			resolved = stable_scope.resolve_tag(tag.name, tag.attributes, tag.attribute_spans)?
+			$pos = tag.pos
+			$elements = $elements + 1
+			if resolved.attributes.len() > props.max_attributes {
+				return Err(Fallback)
+			}
+			if !tag.empty {
+				$open = $open.append({ start: start + 1, end: name_end })
+				$push = True
+			}
+			$kind = Tag
+			$new_node = Ok({ kind: Element(resolved.name), attributes: shifted_source_attributes(resolved.attributes, prefix), children: [], origin: Authored({ start: start - prefix, end: $pos - prefix }) })
+		} else {
+			parsed_text = Xml.SourceLex.read_text(input, bytes, start)?
+			$pos = parsed_text.pos
+			if parsed_text.val != "" {
+				$new_node = Ok({ kind: Text(parsed_text.val), attributes: [], children: [], origin: Authored({ start: start - prefix, end: $pos - prefix }) })
+			}
+		}
+		if start >= prefix and $pos <= source_end {
+			span = { start: start - prefix, end: $pos - prefix }
+			previous = $tokens.last() ?? { kind: Invalid, span: { start: 0, end: 0 } }
+			if $kind == Text and previous.kind == Text and previous.span.end == span.start {
+				$tokens = $tokens.set($tokens.len() - 1, { kind: Text, span: { start: previous.span.start, end: span.end } }) ?? []
+			} else {
+				$tokens = $tokens.append({ kind: $kind, span })
+			}
+			match $new_node {
+				Err(_) => {}
+				Ok(node) => {
+					index = $nodes.len()
+					if index >= props.max_nodes {
+						return Err(Fallback)
+					}
+					$nodes = $nodes.append(node)
+					match $stack.last() {
+						Ok(parent) => {
+							moved = $nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
+							previous_node = moved.prev
+							$nodes = moved.list.set(parent, { ..previous_node, children: previous_node.children.append(index) }) ?? []
+						}
+						Err(_) => {
+							$roots = $roots.append(index)
+						}
+					}
+					if $push {
+						$stack = $stack.append(index)
+					}
+				}
+			}
+		}
+	}
+	if !$open.is_empty() {
+		return Err(Fallback)
+	}
+	Ok({ source: Markup.Source.from_tokens(text.to_utf8(), $tokens), tree: { nodes: $nodes, roots: $roots }, diagnostics: [] })
+}
+
+expect {
+	["<r><n/></bad>", "<r><n></bad></r>", "<r><n a='bad></r>", "<r><n>&#0;</n></r>", "<r><n>\u(0001)</n></r>", "<é:r xmlns:é='urn:é'><é:n/></é:r   > \r\n", "<r><r></r>"].all(
+		|input| Markup.parse_xml(input, {}) == Markup.parse_xml(input, { max_work_per_byte: 15 }),
+	)
+}
+expect {
+	["<n></bad>", "<n a='bad>", "<n>&#0;</n>", "text<n/>tail"].all(
+		|input| Markup.parse_xml_fragment(input, "urn:context", {}) == Markup.parse_xml_fragment(input, "urn:context", { max_work_per_byte: 15 }),
+	)
 }
