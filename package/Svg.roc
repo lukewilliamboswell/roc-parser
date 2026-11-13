@@ -63,6 +63,7 @@ Svg := { parsed : Markup.Parsed }.{
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments = |segments, props| {
 		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), |text| if (props.syntax == HtmlSyntax) Ok(HtmlTokenizer.normalized(text.to_utf8(), False, False).text) else Markup.decode_xml_text(text))?
+		_ = MarkupValidate.text_slots(plan)?
 		var $holes = []
 		for slot in plan.slots {
 			match slot.target {
@@ -202,3 +203,4 @@ expect Svg.parse_fragment("<path stroke-dasharray='1em,2px'/>", {}).is_ok()
 expect Svg.parse_fragment("<filter><feGaussianBlur stdDeviation='-2'/></filter>", {}).is_err()
 expect Svg.parse_fragment("<filter><feGaussianBlur stdDeviation='2 3'/></filter>", {}).is_ok()
 expect Svg.parse_fragment("<filter><feComposite operator='bogus'/></filter>", {}).is_err()
+expect Svg.parse_segments(["<circle>", "</circle>"], {}).is_err()

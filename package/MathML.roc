@@ -63,6 +63,7 @@ MathML := { parsed : Markup.Parsed }.{
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments = |segments, props| {
 		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), |text| if (props.syntax == HtmlSyntax) Ok(HtmlTokenizer.normalized(text.to_utf8(), False, False).text) else Markup.decode_xml_text(text))?
+		_ = MarkupValidate.text_slots(plan)?
 		var $holes = []
 		for slot in plan.slots {
 			match slot.target {
@@ -175,3 +176,4 @@ expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mi>i</mi></mmultiscripts
 expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mi>i</mi><mn>2</mn><mprescripts/><mi>j</mi><mn>3</mn></mmultiscripts>", {}).is_ok()
 expect MathML.parse_fragment("<mmultiscripts><mi>x</mi><mprescripts/><mi>i</mi></mmultiscripts>", {}).is_err()
 expect MathML.parse_fragment("<mfrac linethickness='-2px'><mn>1</mn><mn>2</mn></mfrac>", {}).is_err()
+expect MathML.parse_segments(["<mfrac>", "</mfrac>"], {}).is_err()

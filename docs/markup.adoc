@@ -62,8 +62,8 @@ source bytes remain available regardless of the selected syntax.
 
 For HTML fragments, `context_namespace` and `context_element` select the parent
 context. A table row fragment uses `context_element: "tbody"`; SVG children use
-the SVG namespace and `context_element: "svg"`. The `scripting` prop controls
-HTML parsing of `noscript`; it does not execute scripts.
+the SVG namespace and `context_element: "svg"`. The `scripting` prop defaults to `True` for browser parsing of `noscript`;
+set it to `False` to model a scripting-disabled document. It does not execute scripts.
 
 == Bind typed holes without reparsing
 
@@ -183,6 +183,7 @@ Fuzz campaigns and markup benchmarks are local work, with no scheduled runs:
 python3 scripts/run_fuzz.py smoke html-raw svg-raw mathml-raw markup-source markup-structured markup-limits markup-segments
 python3 scripts/review_markup.py campaign --smoke
 python3 scripts/review_markup.py browser --engines chromium firefox webkit
+python3 scripts/bench_markup.py --allocations --check-scaling --compile-literals
 ----
 
 Node/npm supply the pinned HTML and browser adapters. Semantic checks use a

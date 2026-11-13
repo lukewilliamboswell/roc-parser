@@ -1,4 +1,5 @@
 import Markup
+import MarkupTemplate
 import MarkupValues
 import SvgPath
 
@@ -79,6 +80,43 @@ MarkupValidate :: [].{
 			}
 		}
 		Ok({ ..parsed, diagnostics: $diagnostics })
+	}
+
+	## Reject text holes where a format permits only element/whitespace content.
+	text_slots : MarkupTemplate.Plan -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+	text_slots = |plan| {
+		var $parents = Dict.empty()
+		var $index = 0
+		for node in plan.parsed.tree.nodes {
+			for child in node.children {
+				$parents = $parents.insert(child, $index)
+			}
+			$index = $index + 1
+		}
+		for slot in plan.slots {
+			match slot.target {
+				TextSlot(target) => {
+					match $parents.get(target.node) {
+						Ok(parent) => {
+							node = plan.parsed.tree.nodes.get(parent) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid text slot parent"), line: 1, column: 1 }))
+							match node.kind {
+								Element(name) => {
+									allowed = if (name.namespace == Uri(Markup.svg_namespace)) !svg_elements.contains(name.local) or ["text", "tspan", "textPath", "title", "desc", "metadata", "foreignObject", "script", "style"].contains(name.local) else if (name.namespace == Uri(Markup.mathml_namespace)) !math_elements.contains(name.local) or ["mi", "mn", "mo", "ms", "mtext", "annotation", "annotation-xml"].contains(name.local) else if (name.namespace == Uri(Markup.html_namespace)) !["html", "head", "table", "thead", "tbody", "tfoot", "tr", "colgroup", "ul", "ol", "menu", "dl", "select", "optgroup", "picture"].contains(name.local) else True
+									if !allowed {
+										at = Markup.position(plan.parsed.source, slot.location.start)
+										return Err(InvalidMarkup({ problem: Interpolation({ index: slot.index, reason: "text holes are not allowed inside ${name.local}" }), line: at.line, column: at.column }))
+									}
+								}
+								_ => {}
+							}
+						}
+						Err(_) => {}
+					}
+				}
+				_ => {}
+			}
+		}
+		Ok(plan)
 	}
 
 	## The typed value grammar applied to a known attribute.

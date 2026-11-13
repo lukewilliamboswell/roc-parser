@@ -98,6 +98,7 @@ Html := { parsed : Markup.Parsed }.{
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments = |segments, props| {
 		plan = MarkupTemplate.parse_segments_with(segments, shared(props), |text| syntax(text, props, True), |text| Ok(HtmlTokenizer.normalized(text.to_utf8(), True, False).text))?
+		_ = MarkupValidate.text_slots(plan)?
 		holes = plan.slots.keep_oks(
 			|slot| match slot.target {
 				AttributeSlot(target) => Ok(target)
