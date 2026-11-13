@@ -127,6 +127,9 @@ export function consumerFidelity(request) {
     for (const local of ['svg', 'g']) for (const event of ['beforeunload', 'unload']) handler('svg-' + local + '-on' + event, NS.svg, local, 'on' + event, event);
     for (const local of ['g', 'animate']) for (const [attribute, event] of [['onbegin', 'beginEvent'], ['onend', 'endEvent'], ['onrepeat', 'repeatEvent']]) handler('svg-' + local + '-' + attribute, NS.svg, local, attribute, event);
     handler('svg-g-onactivate', NS.svg, 'g', 'onactivate', 'DOMActivate');
+    for (const local of ['svg', 'g']) handler('svg-' + local + '-onzoom', NS.svg, local, 'onzoom', 'zoom');
+    for (const event of ['bounce', 'finish', 'start']) handler('html-marquee-on' + event, NS.html, 'marquee', 'on' + event, event);
+    handler('html-input-onsearch', NS.html, 'input', 'onsearch', 'search');
     for (const [namespace, local, label] of [[NS.html, 'div', 'html-div'], [NS.svg, 'g', 'svg-g'], [NS.mathml, 'mrow', 'mathml-mrow']]) {
       for (const event of ['focusin', 'focusout']) handler(label + '-on' + event, namespace, local, 'on' + event, event);
     }
