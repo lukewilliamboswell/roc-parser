@@ -98,7 +98,7 @@ HtmlTree :: [].{
 	}
 }
 
-Mode : [Initial, BeforeHtml, BeforeHead, InHead, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InSelect, InSelectTable, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset]
+Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InSelect, InSelectTable, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset]
 
 Active : [Entry(U64), Marker]
 
@@ -416,7 +416,7 @@ process_html = |state, token, scripting| {
 		mode = $s.mode
 		match (mode, token.kind) {
 			(_, Comment(text)) => {
-				$s = append_node($s, { kind: Comment(text), attributes: [], children: [], origin: Authored(token.span) })
+				$s = append_misc($s, { kind: Comment(text), attributes: [], children: [], origin: Authored(token.span) })
 			}
 			(Initial, Characters(text)) if whitespace(text) => {}
 			(Initial, Doctype(d)) => {
@@ -439,6 +439,9 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: BeforeHead }
 			}
+			(BeforeHtml, End(n)) if !["head", "body", "html", "br"].contains(n) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
 			(BeforeHtml, _) => {
 				$s = insert_element($s, "html", Markup.html_namespace, [], Implied(token.span.start), True)
 				$s = { ..$s, mode: BeforeHead }
@@ -449,6 +452,9 @@ process_html = |state, token, scripting| {
 				id = $s.nodes.len()
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 				$s = { ..$s, head: Ok(id), mode: InHead }
+			}
+			(BeforeHead, End(n)) if !["head", "body", "html", "br"].contains(n) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(BeforeHead, _) => {
 				id = $s.nodes.len()
@@ -474,6 +480,13 @@ process_html = |state, token, scripting| {
 			(InHead, End(n)) if ["title", "style", "script", "noframes", "noscript"].contains(n) and current($s) == n => {
 				$s = { ..$s, stack: $s.stack.drop_last(1) }
 			}
+			(InHead, Start(t)) if t.name == "noscript" and !scripting => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: InHeadNoscript }
+			}
+			(InHead, Start(t)) if t.name == "head" => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+			}
 			(InHead, Start(t)) if t.name == "template" => {
 				$s = start_template($s, t, token.span)
 			}
@@ -482,6 +495,33 @@ process_html = |state, token, scripting| {
 			}
 			(InHead, Characters(t)) if current($s) != "head" => {
 				$s = insert_text($s, t, token.span)
+			}
+			(InHead, End(n)) if !["body", "html", "br"].contains(n) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(InHeadNoscript, End("noscript")) => {
+				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InHead }
+			}
+			(InHeadNoscript, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InHeadNoscript, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(InHeadNoscript, Start(t)) if ["basefont", "bgsound", "link", "meta", "noframes", "style"].contains(t.name) => {
+				$s = process_html({ ..$s, mode: InHead }, token, scripting)
+				$s = { ..$s, mode: InHeadNoscript }
+			}
+			(InHeadNoscript, Start(t)) if t.name == "head" or t.name == "noscript" => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+			}
+			(InHeadNoscript, End(n)) if n != "br" => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(InHeadNoscript, _) => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InHead }
+				$reprocess = True
 			}
 			(InHead, _) => {
 				$s = close_to($s, "head")
@@ -510,6 +550,9 @@ process_html = |state, token, scripting| {
 					}
 					_ => {}
 				}
+			}
+			(AfterHead, End(n)) if !["body", "html", "br"].contains(n) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(AfterHead, _) => {
 				$s = insert_element($s, "body", Markup.html_namespace, [], Implied(token.span.start), True)
@@ -578,6 +621,9 @@ process_html = |state, token, scripting| {
 			}
 			(InColgroup, _) => {
 				match token.kind {
+					Start(t) if t.name == "template" => {
+						$s = start_template($s, t, token.span)
+					}
 					Characters(t) if whitespace(t) => {
 						$s = insert_text($s, t, token.span)
 					}
@@ -706,6 +752,16 @@ body = |state, token| {
 					_ => {
 						$s = problem($s, UnexpectedBodyStart, token.span.start)
 					}
+				}
+			} else if name == "frameset" {
+				if $s.frameset_ok and last_named($s, "body").is_ok() and last_named($s, "template").is_err() {
+					body_id = last_named($s, "body") ?? 0
+					$s = detach($s, body_id)
+					$s = { ..$s, stack: $s.stack.take_first(1) }
+					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = { ..$s, mode: InFrameset }
+				} else {
+					$s = problem($s, UnexpectedFramesetContent, token.span.start)
 				}
 			} else if name == "head" {
 				$s = problem($s, UnexpectedHeadStart, token.span.start)
@@ -1737,3 +1793,31 @@ expect {
 expect HtmlTree.parse("</path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
 expect HtmlTree.parse("</foreignObject>X", True, { namespace: Markup.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
 expect HtmlTree.parse("</math>X", True, { namespace: Markup.mathml_namespace, name: "math" }, { recovery: Browser }).is_ok()
+
+append_misc : State, Markup.Node -> State
+append_misc = |s, node| {
+	stack = s.stack
+	if s.mode == AfterBody {
+		n = append_node({ ..s, stack: s.stack.take_first(1) }, node)
+		{ ..n, stack }
+	} else if s.mode == AfterAfterBody {
+		n = append_node({ ..s, stack: [] }, node)
+		{ ..n, stack }
+	} else {
+		append_node(s, node)
+	}
+}
+expect {
+	p = HtmlTree.parse("<head><noscript><!--foo--></noscript></head>", False, {}, { recovery: Browser })?
+	head = p.tree.nodes.get(1)?
+	head.children.len() == 1
+}
+expect {
+	p = HtmlTree.parse("<!doctype html><html></p><!--foo-->", False, {}, { recovery: Browser })?
+	names(p.tree) == ["html", "head", "body"]
+}
+expect {
+	p = HtmlTree.parse("<!doctype html><div></body><!--foo-->", False, {}, { recovery: Browser })?
+	html = p.tree.nodes.get(1)?
+	html.children.len() == 3
+}

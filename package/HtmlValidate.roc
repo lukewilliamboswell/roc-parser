@@ -8,6 +8,8 @@ import Literal
 HtmlValidate :: [].{
 	validate : Markup.Parsed, Markup.Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	validate = |parsed, props, holes| {
+		var $diagnostics = parsed.diagnostics
+		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
 		var $pending = parsed.tree.roots.map(|index| { index, parent: "", interactive: False, anchor: False })
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False }
@@ -16,8 +18,19 @@ HtmlValidate :: [].{
 			match node.kind {
 				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
 					custom = custom_element(name.local)
-					if !elements.contains(name.local) and !custom and !props.allow_unknown_elements {
-						return fail(parsed, node, UnknownElement(name.local))
+					if !elements.contains(name.local) and !custom {
+						if !props.allow_unknown_elements {
+							return fail(parsed, node, UnknownElement(name.local))
+						}
+						offset = match node.origin {
+							Authored(span) => span.start
+							Implied(at) => at
+						}
+						at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
+						if $diagnostics.len() >= props.max_diagnostics {
+							return fail(parsed, node, ResourceLimit("max_diagnostics"))
+						}
+						$diagnostics = $diagnostics.append({ problem: UnknownElement(name.local), line: at.line, column: at.column })
 					}
 					var $at = 0
 					for attr in node.attributes {
@@ -25,10 +38,17 @@ HtmlValidate :: [].{
 						if attr.name.namespace != NoNamespace and attr.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attr.name.namespace != Uri("http://www.w3.org/XML/1998/namespace") and !props.allow_unknown_attributes {
 							return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
 						}
-						if !known and !props.allow_unknown_attributes {
-							return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
+						if !known {
+							if !props.allow_unknown_attributes {
+								return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
+							}
+							at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), attr.span.start)
+							if $diagnostics.len() >= props.max_diagnostics {
+								return attr_fail(parsed, attr, ResourceLimit("max_diagnostics"))
+							}
+							$diagnostics = $diagnostics.append({ problem: UnknownAttribute({ element: name.local, attribute: attr.name.local }), line: at.line, column: at.column })
 						}
-						if props.check_values and known and !holes.contains({ node: item.index, attribute: $at }) {
+						if props.check_values and known and !hole_positions.contains((item.index, $at)) {
 							expected = grammar(name.local, attr.name.local)
 							if !valid(attr.value, expected) {
 								return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected }))
@@ -39,7 +59,7 @@ HtmlValidate :: [].{
 					if name.local == "a" and item.anchor {
 						return fail(parsed, node, InvalidChildren({ element: "a", expected: "no descendant a element" }))
 					}
-					if name.local == "button" and item.interactive {
+					if item.interactive and interactive(node, name.local) {
 						return fail(parsed, node, InvalidChildren({ element: "button", expected: "no nested interactive content" }))
 					}
 					allowed_parent = match name.local {
@@ -81,7 +101,7 @@ HtmlValidate :: [].{
 				_ => {}
 			}
 		}
-		Ok(parsed)
+		Ok({ ..parsed, diagnostics: $diagnostics })
 	}
 	grammar : Str, Str -> Markup.ValueGrammar
 	grammar = |element, attr| {
@@ -201,3 +221,5 @@ attributes = |element| {
 		_ => ""
 	}.split_on(" ")
 }
+
+interactive = |node, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (["audio", "video"].contains(name) and has_attribute(node, "controls")) or (name == "img" and has_attribute(node, "usemap"))

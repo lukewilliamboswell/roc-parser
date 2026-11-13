@@ -196,3 +196,10 @@ expect {
 }
 expect Html.parse_segments(["<span>", "</span>"], { max_slots: 0 }).is_err()
 expect Html.parse_with("<html/>", { max_diagnostics: 0 }).is_err()
+
+expect {
+	f = Html.parse_fragment("<unknown thing='x'></unknown>", { allow_unknown_elements: True, allow_unknown_attributes: True })?
+	f.parsed.diagnostics.len() == 2
+}
+expect Html.parse_fragment("<button><input></button>", {}).is_err()
+expect Html.parse_fragment("<button><input type='hidden'></button>", {}).is_ok()
