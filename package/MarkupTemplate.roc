@@ -80,15 +80,19 @@ MarkupTemplate :: [].{
 	## Stop at the first excess value; BindingCount.actual is the observed count.
 	bind : Plan, Iter(a) -> Try(Bound(a), [InvalidMarkup(Markup.Error)])
 	bind = |plan, values| {
+		if plan.segments.is_empty() {
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "a template requires at least one static segment" }), line: 1, column: 1 }))
+		}
+		expected = plan.segments.len() - 1
 		var $items = []
 		for value in values {
-			if $items.len() == plan.slots.len() {
-				return Err(InvalidMarkup({ problem: BindingCount({ expected: plan.slots.len(), actual: $items.len() + 1 }), line: 1, column: 1 }))
+			if $items.len() == expected {
+				return Err(InvalidMarkup({ problem: BindingCount({ expected: expected, actual: $items.len() + 1 }), line: 1, column: 1 }))
 			}
 			$items = $items.append(value)
 		}
-		if $items.len() != plan.slots.len() {
-			return Err(InvalidMarkup({ problem: BindingCount({ expected: plan.slots.len(), actual: $items.len() }), line: 1, column: 1 }))
+		if $items.len() != expected {
+			return Err(InvalidMarkup({ problem: BindingCount({ expected: expected, actual: $items.len() }), line: 1, column: 1 }))
 		}
 		Ok(Bound.{ plan, values: $items })
 	}
@@ -103,6 +107,66 @@ MarkupTemplate :: [].{
 			$values = $values.append(value)
 		}
 		Bound.{ plan, values: $values }
+	}
+
+	## Apply exact clone provenance after a format-specific tree projection.
+	## Projection edges identify newly appended copies in creation order. One
+	## logical binding can drive several rendered slots without being re-read.
+	fanout : Plan, Markup.Parsed, List({ original : U64, clone : U64 }), Markup.Props -> Try(Plan, [InvalidMarkup(Markup.Error)])
+	fanout = |plan, projected, clones, props| {
+		if plan.segments.is_empty() {
+			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "a template requires at least one static segment" }), line: 1, column: 1 }))
+		}
+		if projected.tree.nodes.len() > props.max_nodes {
+			return Err(projection_error(ResourceLimit("nodes")))
+		}
+		if projected.source.bytes != plan.parsed.source.bytes {
+			return Err(projection_error(Unsupported("projection changed template source")))
+		}
+		reachable = reachable_nodes(projected.tree)?
+		var $by_node = Dict.empty()
+		var $slots = []
+		for slot in plan.slots {
+			index = slot_node_index(slot)
+			if slot.index >= plan.segments.len() - 1 or index >= plan.parsed.tree.nodes.len() {
+				return Err(projection_error(Unsupported("invalid original template slot")))
+			}
+			$by_node = $by_node.insert(index, ($by_node.get(index) ?? []).append(slot))
+			if reachable.contains(index) {
+				if $slots.len() >= props.max_slots {
+					return Err(projection_error(ResourceLimit("template slots")))
+				}
+				$slots = $slots.append(slot)
+			}
+		}
+		var $seen = Set.empty()
+		for edge in clones {
+			if edge.original >= edge.clone or edge.clone < plan.parsed.tree.nodes.len() or edge.clone >= projected.tree.nodes.len() or $seen.contains(edge.clone) {
+				return Err(projection_error(Unsupported("invalid template clone mapping")))
+			}
+			$seen = $seen.insert(edge.clone)
+			match $by_node.get(edge.original) {
+				Ok(base_slots) => {
+					# Share descriptors through clone chains. Only reachable rendered
+					# references allocate slots, avoiding attribute_count * orphan_copies.
+					$by_node = $by_node.insert(edge.clone, base_slots)
+					if reachable.contains(edge.clone) {
+						for base in base_slots {
+							if $slots.len() >= props.max_slots {
+								return Err(projection_error(ResourceLimit("template slots")))
+							}
+							target = match base.target {
+								TextSlot(_) => TextSlot({ node: edge.clone })
+								AttributeSlot(attribute) => AttributeSlot({ node: edge.clone, attribute: attribute.attribute })
+							}
+							$slots = $slots.append({ ..base, target })
+						}
+					}
+				}
+				Err(_) => {}
+			}
+		}
+		Ok({ ..plan, parsed: projected, slots: $slots.sort_with(|a, b| if (a.index == b.index) order(slot_node_index(a), slot_node_index(b)) else order(a.index, b.index)) })
 	}
 
 	## Format a structural hole error for Roc's interpolation conversion hook.
@@ -283,6 +347,11 @@ build_plan = |segments, parsed, positions, props, decode| {
 				_ => {}
 			}
 			Implied(_) => {}
+			Cloned(_) => {
+				if !positions.is_empty() {
+					return Err(projection_error(Unsupported("template syntax callback must defer projections")))
+				}
+			}
 		}
 		match node.kind {
 			Element(name) => {
@@ -364,6 +433,7 @@ build_plan = |segments, parsed, positions, props, decode| {
 		span = match node.origin {
 			Authored(value) => value
 			Implied(at) => { start: at, end: at }
+			Cloned(copy) => copy.source
 		}
 		cdata_markup = props.syntax == XmlSyntax or ($text_namespaces.get(index) ?? NoNamespace) != Uri(Markup.html_namespace)
 		content_end = span.end
@@ -463,6 +533,7 @@ merge_insertions = |nodes, children, insertions| {
 		at = match nodes.get(child) {
 			Ok({ origin: Authored(span), .. }) => span.start
 			Ok({ origin: Implied(pos), .. }) => pos
+			Ok({ origin: Cloned(copy), .. }) => copy.source.start
 			Err(_) => 0
 		}
 		while $cursor < insertions.len() {
@@ -670,3 +741,99 @@ raw_text_parser = |source| {
 
 expect MarkupTemplate.parse_segments_with(["<script>if(a<b)x()</script><p>", "</p>"], { syntax: HtmlSyntax }, raw_text_parser, |text| Ok(text)).is_ok()
 expect MarkupTemplate.parse_segments_with(["<script>if(a<", "b)x()</script><p></p>"], { syntax: HtmlSyntax }, raw_text_parser, |text| Ok(text)).is_err()
+
+slot_node_index : MarkupTemplate.Slot -> U64
+slot_node_index = |slot| match slot.target {
+	TextSlot(target) => target.node
+	AttributeSlot(target) => target.node
+}
+
+projection_error : Markup.Problem -> [InvalidMarkup(Markup.Error)]
+projection_error = |problem| InvalidMarkup({ problem, line: 1, column: 1 })
+
+reachable_nodes : Markup.Tree -> Try(Set(U64), [InvalidMarkup(Markup.Error)])
+reachable_nodes = |tree| {
+	var $seen = Set.empty()
+	var $pending = tree.roots
+	while !$pending.is_empty() {
+		index = $pending.last() ?? 0
+		$pending = $pending.drop_last(1)
+		if $seen.contains(index) {
+			return Err(projection_error(Unsupported("projected structure is not a tree")))
+		}
+		$seen = $seen.insert(index)
+		match tree.nodes.get(index) {
+			Ok(node) => {
+				$pending = $pending.concat(node.children)
+			}
+			Err(_) => return Err(projection_error(Unsupported("invalid projected node index")))
+		}
+	}
+	Ok($seen)
+}
+
+# Independent test projection copies the already-parsed arena with exact IDs.
+# Coincident zero-width source ranges deliberately cannot identify the holes.
+clone_plan_roots : MarkupTemplate.Plan -> { projected : Markup.Parsed, clones : List({ original : U64, clone : U64 }) }
+clone_plan_roots = |plan| {
+	count = plan.parsed.tree.nodes.len()
+	copies = plan.parsed.tree.nodes.map(
+		|node| {
+			span = match node.origin {
+				Authored(value) => value
+				Implied(at) => { start: at, end: at }
+				Cloned(copy) => copy.source
+			}
+			{ ..node, children: node.children.map(|child| count + child), origin: Cloned({ source: span, at: 0 }) }
+		},
+	)
+	var $clones = []
+	var $index = 0
+	while $index < count {
+		$clones = $clones.append({ original: $index, clone: count + $index })
+		$index = $index + 1
+	}
+	{ projected: { ..plan.parsed, tree: { nodes: plan.parsed.tree.nodes.concat(copies), roots: plan.parsed.tree.roots.concat(plan.parsed.tree.roots.map(|root| count + root)) } }, clones: $clones }
+}
+
+expect {
+	plan = xml_plan(["<g>", "", "</g>"])?
+	projection = clone_plan_roots(plan)
+	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
+	fanned.slots.map(|slot| (slot.index, slot_node_index(slot))) == [(0, 1), (0, 4), (1, 2), (1, 5)] and MarkupTemplate.bind(fanned, [42, 43].iter())?.values == [42, 43]
+}
+expect {
+	plan = xml_plan(["<g title='", "'>", "</g>"])?
+	projection = clone_plan_roots(plan)
+	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
+	fanned.slots.map(|slot| (slot.index, slot.target)) == [(0, AttributeSlot({ node: 0, attribute: 0 })), (0, AttributeSlot({ node: 2, attribute: 0 })), (1, TextSlot({ node: 1 })), (1, TextSlot({ node: 3 }))]
+}
+expect {
+	plan = xml_plan(["<g>", "</g>"])?
+	projection = clone_plan_roots(plan)
+	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, {})?
+	MarkupTemplate.bind(fanned, [42, 43].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup({ problem: BindingCount({ expected: 1, actual: 2 }), line: 1, column: 1 }))
+}
+expect {
+	plan = xml_plan(["<g title='", "'>", "</g>"])?
+	projection = clone_plan_roots(plan)
+	MarkupTemplate.fanout(plan, projection.projected, projection.clones, { max_slots: 3 }).is_err() and MarkupTemplate.fanout(plan, projection.projected, projection.clones, { max_slots: 4 }).is_ok()
+}
+expect {
+	plan = xml_plan(["<g/>"])?
+	projection = clone_plan_roots(plan)
+	fanned = MarkupTemplate.fanout(plan, projection.projected, projection.clones, { max_slots: 0 })?
+	fanned.slots.is_empty() and MarkupTemplate.bind(fanned, [].iter()).is_ok()
+}
+expect {
+	plan = xml_plan(["<g>", "</g>"])?
+	projection = clone_plan_roots(plan)
+	projected = { ..projection.projected, tree: { ..projection.projected.tree, roots: [2] } }
+	fanned = MarkupTemplate.fanout(plan, projected, projection.clones, { max_slots: 1 })?
+	fanned.slots.map(slot_node_index) == [3]
+}
+expect {
+	plan : MarkupTemplate.Plan
+	plan = { segments: [], parsed: { source: Markup.Source.from_str(""), tree: { nodes: [], roots: [] }, diagnostics: [] }, slots: [] }
+	MarkupTemplate.bind(plan, [].iter()).is_err() and MarkupTemplate.fanout(plan, plan.parsed, [], { max_slots: 0 }).is_err()
+}
