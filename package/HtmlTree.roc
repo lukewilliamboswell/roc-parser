@@ -9,20 +9,17 @@ HtmlTree :: [].{
 	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True }
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
-		if props.max_diagnostics == 0 {
-			return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 1, column: 1 }))
-		}
 		if source.count_utf8_bytes() > props.max_source_bytes {
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False }
+		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "" }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
 			$state = { ..$state, mode: context_mode(context.name) }
 		}
-		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: [] }
+		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics(source.to_utf8()) }
 		var $done = False
 		while !$done {
 			mode = content_mode($state)
@@ -35,7 +32,7 @@ HtmlTree :: [].{
 					Characters(text) => {
 						bytes = text.to_utf8()
 						if bytes.first() == Ok('\n') {
-							trimmed = { ..next.token, kind: Characters(Str.from_utf8_lossy(bytes.drop_first(1))) }
+							trimmed = { ..next.token, kind: Characters(Str.from_utf8_lossy(bytes.drop_first(1))), span: { start: skipped_lf_end($reader.bytes, next.token.span), end: next.token.span.end } }
 							$state = process($state, trimmed, context.scripting)
 						} else {
 							$state = process($state, next.token, context.scripting)
@@ -72,6 +69,10 @@ HtmlTree :: [].{
 				_ => {}
 			}
 		}
+		remaining_open = $state.stack
+		for id in remaining_open {
+			$state = finish_node($state, id)
+		}
 		var $diagnostics = $state.diagnostics
 		for d in $reader.diagnostics {
 			if $diagnostics.len() < props.max_diagnostics {
@@ -102,7 +103,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool }
+State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -280,9 +281,51 @@ insert_text = |s, text, span| {
 
 close_to = |s, name| {
 	match last_named(s, name) {
-		Ok(id) => { ..s, stack: s.stack.take_first(stack_position(s, id) ?? 0) }
+		Ok(id) => close_from(s, stack_position(s, id) ?? 0)
 		Err(_) => s
 	}
+}
+
+close_from : State, U64 -> State
+close_from = |s, position| {
+	closing = s.stack.drop_first(position)
+	remaining = s.stack.take_first(position)
+	var $next = { ..s, stack: remaining }
+	for id in closing {
+		$next = finish_node($next, id)
+	}
+	$next
+}
+
+finish_node : State, U64 -> State
+finish_node = |s, id| {
+	token_span = s.token_span
+	token_name = s.token_end_name
+	edit_node(
+		s,
+		id,
+		|node| {
+			match node.origin {
+				Authored(span) => {
+					explicit = match node.kind {
+						Element(name) => Tok.lower(name.local) == token_name and token_name != ""
+						_ => False
+					}
+					end = if (explicit) token_span.end else token_span.start
+					{ ..node, origin: Authored({ start: span.start, end: if (end > span.end) end else span.end }) }
+				}
+				_ => node
+			}
+		},
+	)
+}
+
+pop_current : State -> State
+pop_current = |s| if (s.stack.is_empty()) s else close_from(s, s.stack.len() - 1)
+
+pop_mode = |s, mode| {
+	popped = pop_current(s)
+	{ ..popped, mode }
 }
 
 last_named : State, Str -> Try(U64, [Missing])
@@ -353,7 +396,7 @@ in_scope = |s, name, kind| {
 implied = |s, except| {
 	var $s = s
 	while ["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc"].contains(current($s)) and current($s) != except {
-		$s = { ..$s, stack: $s.stack.drop_last(1) }
+		$s = pop_current($s)
 	}
 	$s
 }
@@ -416,7 +459,12 @@ content_mode = |s| {
 }
 
 process : State, Tok.Token, Bool -> State
-process = |state, token, scripting| {
+process = |initial_state, token, scripting| {
+	end_name = match token.kind {
+		End(name) => name
+		_ => ""
+	}
+	state = { ..initial_state, token_span: token.span, token_end_name: end_name }
 	if state.work > state.work_limit {
 		return state
 	}
@@ -425,10 +473,10 @@ process = |state, token, scripting| {
 	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and content_mode(state) != Data and current(state) != "html" {
 		match token.kind {
 			Characters(text) => return insert_text(state, text, token.span)
-			End(name) if name == current(state) => return { ..state, stack: state.stack.drop_last(1) }
+			End(name) if name == current(state) => return pop_current(state)
 			Eof => {
 				next = problem(state, EofWithOpenElements, token.span.start)
-				return process_html({ ..next, stack: next.stack.drop_last(1) }, token, scripting)
+				return process_html(pop_current(next), token, scripting)
 			}
 			_ => {}
 		}
@@ -524,10 +572,10 @@ process_html = |state, token, scripting| {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			}
 			(InHead, End("head")) => {
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: AfterHead }
+				$s = pop_mode($s, AfterHead)
 			}
 			(InHead, End(n)) if ["title", "style", "script", "noframes", "noscript"].contains(n) and current($s) == n => {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
+				$s = pop_current($s)
 			}
 			(InHead, Start(t)) if t.name == "noscript" and !scripting => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
@@ -549,7 +597,7 @@ process_html = |state, token, scripting| {
 				$s = problem($s, UnexpectedEndTag, token.span.start)
 			}
 			(InHeadNoscript, End("noscript")) => {
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InHead }
+				$s = pop_mode($s, InHead)
 			}
 			(InHeadNoscript, Characters(t)) if whitespace(t) => {
 				$s = insert_text($s, t, token.span)
@@ -569,7 +617,7 @@ process_html = |state, token, scripting| {
 			}
 			(InHeadNoscript, _) => {
 				$s = problem($s, UnexpectedHeadStart, token.span.start)
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InHead }
+				$s = pop_mode($s, InHead)
 				$reprocess = True
 			}
 			(InHead, _) => {
@@ -697,7 +745,7 @@ process_html = |state, token, scripting| {
 						$s = problem($s, UnexpectedColEnd, token.span.start)
 					}
 					End("colgroup") => {
-						$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
+						$s = pop_mode($s, InTable)
 					}
 					End("col") => {
 						$s = problem($s, UnexpectedColEnd, token.span.start)
@@ -707,7 +755,7 @@ process_html = |state, token, scripting| {
 						$s = problem($s, UnexpectedTableElement, token.span.start)
 					}
 					_ => {
-						$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
+						$s = pop_mode($s, InTable)
 						$reprocess = True
 					}
 				}
@@ -774,7 +822,7 @@ process_html = |state, token, scripting| {
 				$s = problem($s, UnexpectedFramesetContent, token.span.start)
 			}
 			(InFrameset, End("frameset")) => {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
+				$s = pop_current($s)
 				if current($s) != "frameset" {
 					$s = { ..$s, mode: AfterFrameset }
 				}
@@ -881,7 +929,7 @@ body = |state, token| {
 				}
 				if ["h1", "h2", "h3", "h4", "h5", "h6"].contains(current($s)) {
 					$s = problem($s, NestedHeading, token.span.start)
-					$s = { ..$s, stack: $s.stack.drop_last(1) }
+					$s = pop_current($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 			} else if name == "pre" or name == "listing" {
@@ -1034,7 +1082,7 @@ body = |state, token| {
 						$s = problem($s, UnexpectedSelectContent, token.span.start)
 					}
 				} else if current($s) == "option" {
-					$s = { ..$s, stack: $s.stack.drop_last(1) }
+					$s = pop_current($s)
 				}
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -1155,7 +1203,7 @@ generic_end = |s, name, offset| {
 			if current($s) != name {
 				$s = problem($s, MisnestedEndTag, offset)
 			}
-			return { ..$s, stack: $s.stack.take_first($i) }
+			return close_from($s, $i)
 		}
 		if special_at($s, id) {
 			return problem($s, UnexpectedEndTag, offset)
@@ -1461,7 +1509,7 @@ table = |state, token| {
 clear_table_stack = |s| {
 	var $s = s
 	while !$s.stack.is_empty() and !["table", "template", "html"].contains(current($s)) {
-		$s = { ..$s, stack: $s.stack.drop_last(1) }
+		$s = pop_current($s)
 	}
 	$s
 }
@@ -1469,7 +1517,7 @@ clear_table_stack = |s| {
 clear_section_stack = |s| {
 	var $s = s
 	while !$s.stack.is_empty() and !["tbody", "tfoot", "thead", "template", "html"].contains(current($s)) {
-		$s = { ..$s, stack: $s.stack.drop_last(1) }
+		$s = pop_current($s)
 	}
 	$s
 }
@@ -1477,7 +1525,7 @@ clear_section_stack = |s| {
 clear_row_stack = |s| {
 	var $s = s
 	while !$s.stack.is_empty() and !["tr", "template", "html"].contains(current($s)) {
-		$s = { ..$s, stack: $s.stack.drop_last(1) }
+		$s = pop_current($s)
 	}
 	$s
 }
@@ -1507,7 +1555,7 @@ table_body = |state, token| {
 		End(n) if ["tbody", "tfoot", "thead"].contains(n) => {
 			if in_scope($s, n, TableScope) {
 				$s = clear_section_stack($s)
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
+				$s = pop_mode($s, InTable)
 			} else {
 				$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
 			}
@@ -1515,14 +1563,14 @@ table_body = |state, token| {
 		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead"].contains(t.name) => {
 			$s = clear_section_stack($s)
 			if current($s) != "html" {
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
+				$s = pop_mode($s, InTable)
 				$s = process($s, token, $s.context.scripting)
 			}
 		}
 		End("table") => {
 			$s = clear_section_stack($s)
 			if current($s) != "html" {
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
+				$s = pop_mode($s, InTable)
 				$s = process($s, token, $s.context.scripting)
 			}
 		}
@@ -1547,7 +1595,7 @@ row = |state, token| {
 		End("tr") => {
 			if in_scope($s, "tr", TableScope) {
 				$s = clear_row_stack($s)
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTableBody }
+				$s = pop_mode($s, InTableBody)
 			} else {
 				$s = problem($s, UnexpectedRowEnd, token.span.start)
 			}
@@ -1555,14 +1603,14 @@ row = |state, token| {
 		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead", "tr"].contains(t.name) => {
 			if in_scope($s, "tr", TableScope) {
 				$s = clear_row_stack($s)
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTableBody }
+				$s = pop_mode($s, InTableBody)
 				$s = process($s, token, $s.context.scripting)
 			}
 		}
 		End(n) if ["table", "tbody", "tfoot", "thead"].contains(n) => {
 			if in_scope($s, n, TableScope) {
 				$s = clear_row_stack($s)
-				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTableBody }
+				$s = pop_mode($s, InTableBody)
 				$s = process($s, token, $s.context.scripting)
 			}
 		}
@@ -1647,7 +1695,7 @@ foreign_process = |state, token| {
 			if breakout {
 				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
 				while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
-					$s = { ..$s, stack: $s.stack.drop_last(1) }
+					$s = pop_current($s)
 				}
 				$s = process_html($s, token, $s.context.scripting)
 			} else {
@@ -1657,7 +1705,7 @@ foreign_process = |state, token| {
 		End(n) if n == "p" or n == "br" => {
 			$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
 			while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
-				$s = { ..$s, stack: $s.stack.drop_last(1) }
+				$s = pop_current($s)
 			}
 			$s = process_html($s, token, $s.context.scripting)
 		}
@@ -1668,7 +1716,7 @@ foreign_process = |state, token| {
 				$i = $i - 1
 				id = $s.stack.get($i) ?? 0
 				if Tok.lower(name_at($s, id)) == n {
-					$s = { ..$s, stack: $s.stack.take_first($i) }
+					$s = close_from($s, $i)
 					$found = True
 					break
 				}
@@ -1950,3 +1998,48 @@ expect {
 	p = HtmlTree.parse("<table><a>1<p>2</a>3</p>", True, {}, { recovery: Browser })?
 	p.tree.roots.len() == 3 and Markup.text(p.tree, p.tree.roots.get(1)?) == "23"
 }
+
+expect {
+	p = HtmlTree.parse("<div><span>x</span></div>", True, {}, {})?
+	div = p.tree.nodes.get(p.tree.roots.first()?)?
+	span = p.tree.nodes.get(div.children.first()?)?
+	div.origin == Authored({ start: 0, end: 25 }) and span.origin == Authored({ start: 5, end: 19 })
+}
+expect {
+	p = HtmlTree.parse("<p>a<div>b</div>", True, {}, {})?
+	pnode = p.tree.nodes.get(p.tree.roots.first()?)?
+	pnode.origin == Authored({ start: 0, end: 4 })
+}
+expect HtmlTree.parse("<p>\u(B)</p>", True, {}, {}).is_err()
+expect HtmlTree.parse("<p>\u(FDD0)</p>", True, {}, {}).is_err()
+
+skipped_lf_end : List(U8), Markup.Span -> U64
+skipped_lf_end = |bytes, span| {
+	first = bytes.get(span.start) ?? 0
+	if first == '\r' {
+		span.start + if (bytes.get(span.start + 1) == Ok('\n')) 2 else 1
+	}
+	else if first == '&' {
+		var $end = span.start + 1
+		while $end < span.end and bytes.get($end) != Ok(';') {
+			$end = $end + 1
+		}
+		if ($end < span.end) $end + 1 else $end
+	} else {
+		span.start + 1
+	}
+}
+expect {
+	p = HtmlTree.parse("<textarea>\r\nAB</textarea>", True, {}, {})?
+	root = p.tree.nodes.get(p.tree.roots.first()?)?
+	text = p.tree.nodes.get(root.children.first()?)?
+	text.origin == Authored({ start: 12, end: 14 })
+}
+expect {
+	p = HtmlTree.parse("<textarea>&#10;AB</textarea>", True, {}, {})?
+	root = p.tree.nodes.get(p.tree.roots.first()?)?
+	text = p.tree.nodes.get(root.children.first()?)?
+	text.origin == Authored({ start: 15, end: 17 })
+}
+
+expect HtmlTree.parse("<p>x</p>", True, {}, { max_diagnostics: 0 }).is_ok()
