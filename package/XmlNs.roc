@@ -296,20 +296,20 @@ XmlNs := {
 		folded = Xml.fold_source(
 			input,
 			namespaced,
-			{ bound: { entries: [], active: Dict.empty() }, marks: [], value: initial },
+			{ bound: { entries: [], active: Dict.empty(), default_index: none }, marks: [], value: initial },
 			|state, event| {
 				match event {
 					Start(tag) => {
 						mark = state.bound.entries.len()
 						resolved = resolve_source_start(state.bound, tag.name, tag.attributes, tag.attribute_spans)?
 						value = on_event(state.value, Start({ name: resolved.name, attributes: resolved.attributes, span: tag.span, empty: tag.empty }))
-						bound = if (tag.empty and resolved.bound.entries.len() > mark) unbind_to(resolved.bound, mark) else resolved.bound
+						bound = if (tag.empty and resolved.bound.entries.len() > mark) source_unbind_to(resolved.bound, mark) else resolved.bound
 						marks = if (tag.empty) state.marks else state.marks.append(mark)
 						Ok({ bound, marks, value })
 					}
 					End(span) => {
 						mark = state.marks.last() ?? 0
-						bound = if (state.bound.entries.len() > mark) unbind_to(state.bound, mark) else state.bound
+						bound = if (state.bound.entries.len() > mark) source_unbind_to(state.bound, mark) else state.bound
 						Ok({ bound, marks: state.marks.drop_last(1), value: on_event(state.value, End(span)) })
 					}
 					Text(text) => Ok({ ..state, value: on_event(state.value, Text(text)) })
@@ -1723,18 +1723,35 @@ expect {
 }
 expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
 
-resolve_source_start : Bound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ bound : Bound, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
+SourceBound : { entries : List(Entry), active : Dict(Str, U64), default_index : U64 }
+
+# The default binding changes only at namespace declarations and their ends.
+# Keep its entry index so ordinary element names need no dictionary lookup.
+source_unbind_to : SourceBound, U64 -> SourceBound
+source_unbind_to = |bound, mark| {
+	unbound = unbind_to({ entries: bound.entries, active: bound.active }, mark)
+	default_index = unbound.active.get("") ?? none
+	{ entries: unbound.entries, active: unbound.active, default_index }
+}
+
+resolve_source_start : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ bound : SourceBound, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
 resolve_source_start = |bound, written, attributes, spans| {
 	if has_declaration(attributes) {
 		resolved = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, written, attributes)?
 		ordered_attributes = ordered_source_attributes(attributes, spans, resolved.attributes, resolved.bindings)
-		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active }, name: resolved.name, attributes: ordered_attributes })
+		default_index = resolved.scope.active.get("") ?? none
+		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active, default_index }, name: resolved.name, attributes: ordered_attributes })
 	} else {
 		element_name = split_qname(written)?
 		if element_name.prefix == "xmlns" {
 			return Err(ReservedPrefix("xmlns"))
 		}
-		resolved_name = resolve(element_name, bound.entries, bound.active, True)?
+		resolved_name = if element_name.prefix == "" {
+			namespace = if bound.default_index == none {
+				NoNamespace
+			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
+			{ namespace, local: element_name.local, prefix: Unprefixed }
+		} else resolve(element_name, bound.entries, bound.active, True)?
 		var $resolved = List.with_capacity(attributes.len())
 		var $index = 0
 		var $prefixed = 0
@@ -1792,4 +1809,30 @@ ordered_source_attributes = |raw, spans, attributes, bindings| {
 		}
 	}
 	$ordered
+}
+
+expect {
+	names = XmlNs.fold_source(
+		"<a xmlns:p='urn:p' xmlns='urn:a' xmlns:q='urn:q'><b xmlns:p='urn:innerp' xmlns='urn:b'><p:c/><d xmlns=''><e xmlns='urn:e'/><f/></d><g/></b><p:h/><i/><q:j/></a>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append((tag.name.local, tag.name.namespace))
+			_ => collected
+		},
+	)?
+	names == [("a", Uri("urn:a")), ("b", Uri("urn:b")), ("c", Uri("urn:innerp")), ("d", NoNamespace), ("e", Uri("urn:e")), ("f", NoNamespace), ("g", Uri("urn:b")), ("h", Uri("urn:p")), ("i", Uri("urn:a")), ("j", Uri("urn:q"))]
+}
+
+expect {
+	names = XmlNs.fold_source(
+		"<p:a xmlns:p='urn:p'><b/><p:c xmlns:p='urn:q'/><p:d/></p:a>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append((tag.name.local, tag.name.namespace))
+			_ => collected
+		},
+	)?
+	names == [("a", Uri("urn:p")), ("b", NoNamespace), ("c", Uri("urn:q")), ("d", Uri("urn:p"))]
 }
