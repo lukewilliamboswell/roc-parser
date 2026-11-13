@@ -78,7 +78,7 @@ These change only through a pull request a maintainer reviews:
   workflow names another. Dependabot proposes new revisions; move every
   reference together, and update the Actions allowlist in
   <<maintaining-settings>> with them.
-* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.12.0, by its
+* *Blueprint.* `Blueprint.roc` names its roc-blueprint release, 0.13.0, by its
   platform URL, and `actions/setup-blueprint` installs the binary of that
   release after checking its SHA-256. To upgrade, follow
   {roc-automation}/docs/maintenance.adoc[Manual maintenance tasks].

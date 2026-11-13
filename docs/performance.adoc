@@ -38,6 +38,9 @@ work; a bounded search does not prove a complexity bound for every input.
   Nested flow collections can rescan their contents, so depth matters as well as
   byte length.
 * XML uses an explicit element stack rather than native call-stack recursion.
+* HTML, SVG and MathML expose source, depth, element/node, attribute, diagnostic,
+  slot and progress limits. HTML recovery has a proportional work budget. Markup
+  campaigns and scaling benchmarks run locally; see xref:markup.adoc#markup[web markup].
 * JSON uses an explicit stack and rejects nesting deeper than 128 levels by
   default. `JsonValue.Options` also limits items, string bytes and number length.
   Large objects use a hash table to detect repeated keys.

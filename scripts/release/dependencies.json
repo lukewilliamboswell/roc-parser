@@ -734,6 +734,16 @@
       "input": "task:docs-path",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:markup",
+      "component": "",
+      "reason": "Development-only independent markup checks and local campaigns; neither harness nor oracle suppliers are included in the source bundle."
+    },
+    {
+      "input": "task:markup-campaign",
+      "component": "",
+      "reason": "Development-only independent markup checks and local campaigns; neither harness nor oracle suppliers are included in the source bundle."
     }
   ]
 }

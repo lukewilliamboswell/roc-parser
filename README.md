@@ -16,6 +16,9 @@ compilation, with configurable validation checks.
 | CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) |
 | YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
 | XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
+| HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) |
+| SVG | SVG vocabulary and common value grammars in XML or HTML syntax | [Reading markup](docs/markup.adoc) |
+| MathML | Core and common Presentation MathML | [Reading markup](docs/markup.adoc) |
 | JSON | RFC 8259, with opt-in relaxations and checks; reads and writes | [Reading JSON](https://lukewilliamboswell.github.io/roc-parser/#json) |
 | Markdown | CommonMark 0.31.2 with GFM extensions | [Reading Markdown](https://lukewilliamboswell.github.io/roc-parser/#markdown) |
 | AsciiDoc | Block parsing, preprocessing and embedded HTML | [Reading AsciiDoc](docs/asciidoc.adoc) |
@@ -23,8 +26,8 @@ compilation, with configurable validation checks.
 | Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
 | Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |
 
-It reads complete inputs held in memory and does not stream. JSON is the only
-format it also writes back out, with `JsonValue.to_str`.
+It reads complete inputs held in memory and does not stream. JSON and namespace-aware XML can also be written back out, with
+`JsonValue.to_str` and `XmlNs.render`.
 
 ## Try it
 

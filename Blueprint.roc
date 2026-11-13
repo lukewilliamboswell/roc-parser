@@ -44,16 +44,19 @@ config = [
 	Systems(["x86_64-linux", "aarch64-darwin"]),
 	Packages("nix", From(NixPackages("github:NixOS/nixpkgs/nixos-unstable"))),
 	# The package and its release artifacts, built with the machine's nightly.
-	Environment("tooling", [
-		Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
-		RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
-	]),
+	Environment(
+		"tooling",
+		[
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
+			RocPackages(["https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst"]),
+		],
+	),
 	Environment("package", [Extend("tooling"), Programs([Fetch("release-package", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/release-package-{system}"))]), Expect(["roc", "python3", "git", "rm", "mkdir", "cp", "tar", "unzip", "zip", "chmod", "touch", "env"])]),
 	Environment("inventory", [Extend("package"), Programs([Fetch("blueprint-sbom", Recipes.file("https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/blueprint-sbom-{system}"))]), Expect(["blueprint", "openssl"])]),
 	# The reference implementations the checks compare with. The Python
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
-	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem"])]),
+	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem", "node", "npm", "java"])]),
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
 	Environment("docs", [Extend("release"), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/roc-docs-{system}"))])]),
@@ -69,6 +72,8 @@ config = [
 	Task("doc-examples", [Use("package"), Run(["scripts/check_doc_examples.roc", "--"])]),
 	Task("conformance", [Use("package"), Run(["scripts/check_conformance.roc", "--"])]),
 	Task("asciidoc", [Use("oracles"), Run(["scripts/check_asciidoc.roc", "--"])]),
+	Task("markup", [Use("oracles"), Run(["python3", "scripts/review_markup.py", "check"])]),
+	Task("markup-campaign", [Use("oracles"), Run(["python3", "scripts/review_markup.py", "campaign"])]),
 	Task("roc-syntax", [Use("oracles"), Run(["python3", "scripts/check_roc_syntax.py"])]),
 	Task("bench", [Use("bench"), Run(["python3", "scripts/bench.py", "--allocations", "--blueprint"])]),
 	Task("bench-quick", [Use("bench"), Run(["python3", "scripts/bench.py", "--quick", "--blueprint"])]),

@@ -12,6 +12,8 @@ MarkupValidate :: [].{
 	## Validate foreign vocabularies throughout a mixed-namespace tree.
 	foreign : Markup.Parsed, Markup.Props, List(Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	foreign = |parsed, props, holes| {
+		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
+		var $diagnostics = parsed.diagnostics
 		var $pending = parsed.tree.roots.map(|index| { index, extension: False })
 		while !$pending.is_empty() {
 			item = $pending.last() ?? { index: 0, extension: False }
@@ -23,17 +25,36 @@ MarkupValidate :: [].{
 					mathml = name.namespace == Uri(Markup.mathml_namespace)
 					if !item.extension {
 						known = if (svg) svg_elements.contains(name.local) else if (mathml) math_elements.contains(name.local) else True
-						if (!known or (!svg and !mathml and name.namespace != Uri(Markup.html_namespace))) and !props.allow_unknown_elements {
-							return fail(parsed, node, UnknownElement(name.local))
+						if !known or (!svg and !mathml and name.namespace != Uri(Markup.html_namespace)) {
+							if !props.allow_unknown_elements {
+								return fail(parsed, node, UnknownElement(name.local))
+							}
+							if $diagnostics.len() >= props.max_diagnostics {
+								return fail(parsed, node, ResourceLimit("diagnostics"))
+							}
+							offset = match node.origin {
+								Authored(span) => span.start
+								Implied(at) => at
+							}
+							at = Markup.position(parsed.source, offset)
+							$diagnostics = $diagnostics.append({ problem: UnknownElement(name.local), line: at.line, column: at.column })
 						}
 						var $attr_index = 0
 						for attr in node.attributes {
 							if svg or mathml {
 								allowed = allowed_attribute(svg, name.local, attr.name)
-								if !allowed and !props.allow_unknown_attributes {
-									return attr_fail(parsed, attr, UnknownAttribute({ element: name.local, attribute: attr.name.local }))
+								if !allowed {
+									problem = UnknownAttribute({ element: name.local, attribute: attr.name.local })
+									if !props.allow_unknown_attributes {
+										return attr_fail(parsed, attr, problem)
+									}
+									if $diagnostics.len() >= props.max_diagnostics {
+										return fail(parsed, node, ResourceLimit("diagnostics"))
+									}
+									at = Markup.position(parsed.source, attr.span.start)
+									$diagnostics = $diagnostics.append({ problem, line: at.line, column: at.column })
 								}
-								if props.check_values and allowed and !holes.contains({ node: item.index, attribute: $attr_index }) {
+								if props.check_values and allowed and !hole_positions.contains((item.index, $attr_index)) {
 									grammar = value_grammar(svg, name.local, attr.name.local)
 									if !valid_value(attr.value, grammar) {
 										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: grammar }))
@@ -57,7 +78,7 @@ MarkupValidate :: [].{
 				_ => {}
 			}
 		}
-		Ok(parsed)
+		Ok({ ..parsed, diagnostics: $diagnostics })
 	}
 
 	## The typed value grammar applied to a known attribute.
@@ -85,7 +106,7 @@ allowed_attribute = |svg, element, name| {
 		Uri("http://www.w3.org/1999/xlink") => svg and ["href", "type", "role", "arcrole", "title", "show", "actuate"].contains(name.local)
 		NoNamespace => {
 			key = name.local
-			global_attributes.contains(key) or key.starts_with("data-") or key.starts_with("aria-") or (if (svg) svg_presentation.contains(key) or svg_events.contains(key) or svg_attributes(element).contains(key) else math_global.contains(key) or math_attributes(element).contains(key))
+			global_attributes.contains(key) or key.starts_with("data-") or aria_attributes.contains(key) or (if (svg) svg_presentation.contains(key) or svg_events.contains(key) or svg_attributes(element).contains(key) else math_global.contains(key) or math_attributes(element).contains(key))
 		}
 		_ => False
 	}
@@ -368,3 +389,5 @@ valid_color = |text| {
 }
 
 color_names = "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen".split_on(" ")
+
+aria_attributes = "aria-activedescendant aria-atomic aria-autocomplete aria-braillelabel aria-brailleroledescription aria-busy aria-checked aria-colcount aria-colindex aria-colindextext aria-colspan aria-controls aria-current aria-describedby aria-description aria-details aria-disabled aria-dropeffect aria-errormessage aria-expanded aria-flowto aria-grabbed aria-haspopup aria-hidden aria-invalid aria-keyshortcuts aria-label aria-labelledby aria-level aria-live aria-modal aria-multiline aria-multiselectable aria-orientation aria-owns aria-placeholder aria-posinset aria-pressed aria-readonly aria-relevant aria-required aria-roledescription aria-rowcount aria-rowindex aria-rowindextext aria-rowspan aria-selected aria-setsize aria-sort aria-valuemax aria-valuemin aria-valuenow aria-valuetext".split_on(" ")

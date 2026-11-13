@@ -44,6 +44,23 @@ cases. Reports retain original inputs, source hashes and failing reproducers.
 The separate local performance harness compares optimized native parsing and
 rendering with the same oracle and checks geometric scaling.
 
+== HTML, SVG and MathML
+
+`scripts/review_markup.py check` compares deterministic mixed-markup fixtures
+against a pinned parse5 HTML parser and a namespace-aware Expat XML parser.
+The local `suite` command checks a vendored WPT tree-construction corpus, with
+its revision, source hashes and license retained. Script-executing tests are
+excluded because these pure parsers do not execute JavaScript; scripting-mode
+parser tests are included. Upstream expected trees take precedence when parse5
+lags the selected standard, and those disagreements remain visible in reports.
+
+Semantic checks have separate evidence: a pinned Nu checker, a W3C MathML Core
+schema with pinned lxml, and independently authored value/structure fixtures.
+`scripts/markup/oracle-limitations.json` records validator and schema gaps.
+Neither a browser accepting malformed markup nor an oracle's limited validation
+establishes complete authoring conformance. Local fuzz and browser campaigns
+are described in xref:markup.adoc#markup[Parse HTML, SVG and MathML].
+
 == Results
 
 Run the reviews below for the source and compiler you intend to use. Reports

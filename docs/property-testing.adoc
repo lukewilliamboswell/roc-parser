@@ -36,7 +36,9 @@ The fuzzer is https://github.com/lukewilliamboswell/roc-fuzz[roc-fuzz], a Roc
 platform that embeds libFuzzer. It is coverage guided: it keeps inputs that
 reach new code and mutates them further, so it finds deep paths far faster than
 random input would. The targets are library quality tests, not a security
-programme, and they run on every pull request and nightly in CI.
+programme. The established targets run on pull requests and nightly in CI.
+The HTML/SVG/MathML targets are local-only: `smoke all` includes them, while
+CI uses `smoke --ci all` and the scheduled matrix excludes them.
 
 A failing property is a bug in the parser, or occasionally in the property.
 Either way the outcome is a fix: see <<property-testing-fix-the-cause>>.
@@ -382,3 +384,12 @@ commit it.
 The OpenSSF Scorecard _Fuzzing_ check detects OSS-Fuzz, ClusterFuzzLite and a
 few language-specific frameworks, but not Roc targets. A low Fuzzing score is a
 detection gap, not evidence that these campaigns did not run.
+
+== Local web-markup campaigns
+
+The `html-raw`, `svg-raw`, `mathml-raw`, `markup-source`, `markup-structured`,
+`markup-limits` and `markup-segments` targets exercise malformed input,
+independently generated structure, source partitioning, bounds and typed holes.
+They are registered with `scheduled: False`. Run them locally using the commands
+in xref:markup.adoc#markup[Parse HTML, SVG and MathML]. Their seeds and dictionaries
+are reviewable source; corpus/report output remains in ignored scratch storage.

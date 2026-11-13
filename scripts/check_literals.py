@@ -44,6 +44,11 @@ import parser.AsciiDoc
 import parser.HTTP
 import parser.RocSyntax
 import parser.JsonValue
+import parser.Html
+import parser.Svg
+import parser.MathML
+import parser.SvgPath
+import parser.Markup
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''

@@ -115,6 +115,10 @@ Svg := { parsed : Markup.Parsed }.{
 	## A fragment retains every authored root and its exact source.
 	Fragment := { parsed : Markup.Parsed }.{
 
+		## Check imported fragment text with explicit options and a diagnostic name.
+		validate : Svg.ValidationProps -> Try(Fragment, [BadQuotedBytes(Str)])
+		validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+
 		## Check a fragment literal with strict defaults.
 		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
 		from_quote = |source| Svg.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))

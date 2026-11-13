@@ -363,5 +363,88 @@
   {
     "name": "commented-includes",
     "body": "document : AsciiDoc\ndocument = \"/////\\ninclude::missing.adoc[]\\n/////\\n\\nText\"\nvalue = document.blocks == [Paragraph(\"Text\")]\n"
+  },
+  {
+    "name": "markup-documents",
+    "body": "svg : Svg\nsvg = \"<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0L1 1'/></svg>\"\nmath : MathML\nmath = \"<math xmlns='http://www.w3.org/1998/Math/MathML'><mi>x</mi></math>\"\nhtml : Html\nhtml = \"<!doctype html><html><head><title>Example</title></head><body><p>hello</p></body></html>\"\nvalue = svg.parsed.tree.roots.len() == 1 and math.parsed.tree.roots.len() == 1 and html.parsed.tree.roots.len() == 2\n"
+  },
+  {
+    "name": "markup-fragments",
+    "body": "svg : Svg.Fragment\nsvg = \"<path d='M0 0' pathLength='1'/>\"\nmath : MathML.Fragment\nmath = \"<mfrac><mn>1</mn><mn>2</mn></mfrac>\"\nhtml : Html.Fragment\nhtml = \"<div hidden='until-found'><button disabled>Button</button></div>\"\npath : SvgPath\npath = \"M0 0L1 1z\"\nvalue = svg.single_element().is_ok() and math.single_element().is_ok() and html.single_element().is_ok() and path.commands.len() == 3\n"
+  },
+  {
+    "name": "markup-interpolation",
+    "body": "coordinate = 42.U64\nsvg : Svg.Template(U64)\nsvg = \"<circle cx='${coordinate}' r='2'/>\"\nmath : MathML.Template(Str)\nmath = \"<mi>${\"<markup stays text>\"}</mi>\"\nhtml : Html.Template(Str)\nhtml = \"<p title='${\"caption\"}'>${\"<b>text</b>\"}</p>\"\nvalue = svg.bound.values == [42] and math.bound.values == [\"<markup stays text>\"] and html.bound.values == [\"caption\", \"<b>text</b>\"]\n"
+  },
+  {
+    "name": "markup-invalid-svg-case",
+    "body": "value : Svg.Fragment\nvalue = \"<path pathlength='2'/>\"\n",
+    "errors": [
+      "invalid string",
+      "UnknownAttribute",
+      "pathlength"
+    ]
+  },
+  {
+    "name": "markup-invalid-viewbox",
+    "body": "value : Svg.Fragment\nvalue = \"<svg viewBox='0 0 10'/>\"\n",
+    "errors": [
+      "invalid string",
+      "viewBox",
+      "NumberList"
+    ]
+  },
+  {
+    "name": "markup-invalid-math-arity",
+    "body": "value : MathML.Fragment\nvalue = \"<mfrac><mn>1</mn></mfrac>\"\n",
+    "errors": [
+      "invalid string",
+      "InvalidChildren",
+      "mfrac"
+    ]
+  },
+  {
+    "name": "markup-invalid-html-boolean",
+    "body": "value : Html.Fragment\nvalue = \"<button disabled='false'>Button</button>\"\n",
+    "errors": [
+      "invalid string",
+      "InvalidValue",
+      "disabled"
+    ]
+  },
+  {
+    "name": "markup-invalid-hole-position",
+    "body": "x = \"path\"\nvalue : Svg.Template(Str)\nvalue = \"<${x}/>\"\n",
+    "errors": [
+      "invalid string",
+      "Interpolation"
+    ]
+  },
+  {
+    "name": "markup-invalid-hole-type",
+    "body": "x = \"text\"\nvalue : Svg.Template(U64)\nvalue = \"<text>${x}</text>\"\n",
+    "errors": [
+      "type mismatch",
+      "U64"
+    ]
+  },
+  {
+    "name": "markup-imported",
+    "assets": {
+      "drawing.svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><circle r='2'/></svg>"
+    },
+    "body": "import \"drawing.svg\" as text : Str\nsvg = Literal.require(Svg.validate({source: text,name: \"drawing.svg\"}))\nvalue = svg.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-imported-invalid",
+    "assets": {
+      "drawing.svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20'/>"
+    },
+    "body": "import \"drawing.svg\" as text : Str\nvalue = Literal.require(Svg.validate({source: text,name: \"drawing.svg\"}))\n",
+    "errors": [
+      "compile time crash",
+      "drawing.svg",
+      "viewBox"
+    ]
   }
 ]
