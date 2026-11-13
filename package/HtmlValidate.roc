@@ -18,7 +18,7 @@ HtmlValidate :: [].{
 			match node.kind {
 				Element(name) if name.namespace == Uri(Markup.html_namespace) => {
 					custom = custom_element(name.local)
-					if !elements.contains(name.local) and !custom {
+					if !elements(name.local) and !custom {
 						if !props.allow_unknown_elements {
 							return fail(parsed, node, UnknownElement(name.local))
 						}
@@ -38,7 +38,12 @@ HtmlValidate :: [].{
 						known = match attr.name.namespace {
 							NoNamespace => allowed(name.local, attr.name.local) or custom
 							Uri("http://www.w3.org/2000/xmlns/") => True
-							Uri("http://www.w3.org/XML/1998/namespace") => ["lang", "space", "base", "id"].contains(attr.name.local)
+							Uri("http://www.w3.org/XML/1998/namespace") => (
+								match attr.name.local {
+									"lang" | "space" | "base" | "id" => True
+									_ => False
+								}
+							)
 							_ => False
 						}
 						if !known {
@@ -65,7 +70,14 @@ HtmlValidate :: [].{
 					if item.interactive and (interactive(node, name.local) or has_attribute(node, "tabindex")) {
 						return fail(parsed, node, InvalidChildren({ element: "button", expected: "no nested interactive content" }))
 					}
-					if item.in_option and (interactive(node, name.local) or ["datalist", "object"].contains(name.local) or has_attribute(node, "tabindex")) {
+					if item.in_option and (
+						interactive(node, name.local) or (
+							match name.local {
+								"datalist" | "object" => True
+								_ => False
+							}
+						) or has_attribute(node, "tabindex")
+					) {
 						return fail(parsed, node, InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
 					}
 					if name.local == "selectedcontent" and !item.selected_context {
@@ -73,18 +85,43 @@ HtmlValidate :: [].{
 					}
 					check_children(parsed, node, name.local, item.in_datalist)?
 					allowed_parent = match name.local {
-						"li" => ["ul", "ol", "menu"].contains(item.parent)
+						"li" => (
+							match item.parent {
+								"ul" | "ol" | "menu" => True
+								_ => False
+							}
+						)
 						"dt" | "dd" => item.parent == "dl" or item.parent == "div"
-						"tr" => ["table", "thead", "tbody", "tfoot"].contains(item.parent)
+						"tr" => (
+							match item.parent {
+								"table" | "thead" | "tbody" | "tfoot" => True
+								_ => False
+							}
+						)
 						"td" | "th" => item.parent == "tr"
 						"thead" | "tbody" | "tfoot" | "caption" | "colgroup" => item.parent == "table"
 						"col" => item.parent == "colgroup"
 						"option" => item.option_context
 						"optgroup" => item.option_context
 						"summary" => item.parent == "details"
-						"legend" => ["fieldset", "optgroup"].contains(item.parent)
-						"source" => ["audio", "video", "picture"].contains(item.parent)
-						"track" => ["audio", "video"].contains(item.parent)
+						"legend" => (
+							match item.parent {
+								"fieldset" | "optgroup" => True
+								_ => False
+							}
+						)
+						"source" => (
+							match item.parent {
+								"audio" | "video" | "picture" => True
+								_ => False
+							}
+						)
+						"track" => (
+							match item.parent {
+								"audio" | "video" => True
+								_ => False
+							}
+						)
 						_ => True
 					}
 					# A fragment has a declared context, and standalone row/option
@@ -93,14 +130,33 @@ HtmlValidate :: [].{
 					if item.parent != "" and !allowed_parent {
 						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: "allowed parent for ${name.local}" }))
 					}
-					if name.local == "img" and !has_attribute(node, "alt") and !["presentation", "none"].contains(value(node, "role")) {
+					if name.local == "img" and !has_attribute(node, "alt") and !(
+						match value(node, "role") {
+							"presentation" | "none" => True
+							_ => False
+						}
+					) {
 						return fail(parsed, node, InvalidChildren({ element: "img", expected: "alt attribute (or explicit presentation role)" }))
 					}
 					if name.local == "input" and HtmlTokenizer.lower(value(node, "type")) == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
 						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
 					}
 					for child in node.children {
-						$pending = $pending.append({ index: child, parent: name.local, interactive: item.interactive or name.local == "button", anchor: item.anchor or name.local == "a", option_context: item.option_context or ["select", "optgroup", "datalist"].contains(name.local), in_option: item.in_option or name.local == "option", in_datalist: item.in_datalist or name.local == "datalist", selected_context: item.selected_context or (name.local == "button" and item.parent == "select") })
+						$pending = $pending.append({
+							index: child,
+							parent: name.local,
+							interactive: item.interactive or name.local == "button",
+							anchor: item.anchor or name.local == "a",
+							option_context: item.option_context or (
+								match name.local {
+									"select" | "optgroup" | "datalist" => True
+									_ => False
+								}
+							),
+							in_option: item.in_option or name.local == "option",
+							in_datalist: item.in_datalist or name.local == "datalist",
+							selected_context: item.selected_context or (name.local == "button" and item.parent == "select"),
+						})
 					}
 				}
 				Element(_) => {
@@ -118,7 +174,7 @@ HtmlValidate :: [].{
 		if !allowed(element, attr) {
 			return Language("extension attribute")
 		}
-		if booleans.contains(attr) {
+		if booleans(attr) {
 			return Keyword(["", attr])
 		}
 		match attr {
@@ -157,9 +213,14 @@ valid = |text, expected| match expected {
 	_ => True
 }
 
-custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and name.to_utf8().all(|b| (b >= 'a' and b <= 'z') or (b >= '0' and b <= '9') or ['-', '.', '_'].contains(b) or b >= 128) and !["annotation-xml", "color-profile", "font-face", "font-face-src", "font-face-uri", "font-face-format", "font-face-name", "missing-glyph"].contains(name)
+custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and name.to_utf8().all(|b| (b >= 'a' and b <= 'z') or (b >= '0' and b <= '9') or ['-', '.', '_'].contains(b) or b >= 128) and !(
+	match name {
+		"annotation-xml" | "color-profile" | "font-face" | "font-face-src" | "font-face-uri" | "font-face-format" | "font-face-name" | "missing-glyph" => True
+		_ => False
+	}
+)
 
-allowed = |element, attr| global.contains(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria.contains(attr) or events.contains(attr) or attributes(element).contains(attr)
+allowed = |element, attr| global(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or attributes(element, attr)
 
 has_attribute = |node, key| node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == key)
 
@@ -180,63 +241,208 @@ attr_fail = |parsed, attr, problem| {
 	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
 }
 
-elements = "a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu meta meter nav noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp script search section select selectedcontent slot small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track u ul var video wbr".split_on(" ")
-
-global = "accesskey autocapitalize autocorrect autofocus class contenteditable dir draggable enterkeyhint exportparts hidden id inert inputmode is itemid itemprop itemref itemscope itemtype lang nonce part popover role slot spellcheck style tabindex title translate virtualkeyboardpolicy writingsuggestions xmlns".split_on(" ")
-
-booleans = "allowfullscreen async autofocus autoplay checked controls default defer disabled disablepictureinpicture disableremoteplayback formnovalidate inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected shadowrootclonable shadowrootdelegatesfocus shadowrootserializable".split_on(" ")
-
-aria = "aria-activedescendant aria-atomic aria-autocomplete aria-braillelabel aria-brailleroledescription aria-busy aria-checked aria-colcount aria-colindex aria-colindextext aria-colspan aria-controls aria-current aria-describedby aria-description aria-details aria-disabled aria-dropeffect aria-errormessage aria-expanded aria-flowto aria-grabbed aria-haspopup aria-hidden aria-invalid aria-keyshortcuts aria-label aria-labelledby aria-level aria-live aria-modal aria-multiline aria-multiselectable aria-orientation aria-owns aria-placeholder aria-posinset aria-pressed aria-readonly aria-relevant aria-required aria-roledescription aria-rowcount aria-rowindex aria-rowindextext aria-rowspan aria-selected aria-setsize aria-sort aria-valuemax aria-valuemin aria-valuenow aria-valuetext".split_on(" ")
-
-events = "onabort onafterprint onanimationcancel onanimationend onanimationiteration onanimationstart onauxclick onbeforeinput onbeforematch onbeforeprint onbeforetoggle onbeforeunload onblur oncancel oncanplay oncanplaythrough onchange onclick onclose oncontextlost oncontextmenu oncontextrestored oncopy oncuechange oncut ondblclick ondrag ondragend ondragenter ondragleave ondragover ondragstart ondrop ondurationchange onemptied onended onerror onfocus onfocusin onfocusout onformdata ongotpointercapture onhashchange oninput oninvalid onkeydown onkeypress onkeyup onlanguagechange onload onloadeddata onloadedmetadata onloadstart onlostpointercapture onmessage onmessageerror onmousedown onmouseenter onmouseleave onmousemove onmouseout onmouseover onmouseup onoffline ononline onpagehide onpageshow onpaste onpause onplay onplaying onpointercancel onpointerdown onpointerenter onpointerleave onpointermove onpointerout onpointerover onpointerrawupdate onpointerup onpopstate onprogress onratechange onrejectionhandled onreset onresize onscroll onscrollend onsecuritypolicyviolation onseeked onseeking onselect onselectionchange onselectstart onslotchange onstalled onstorage onsubmit onsuspend ontimeupdate ontoggle ontouchcancel ontouchend ontouchmove ontouchstart ontransitioncancel ontransitionend ontransitionrun ontransitionstart onunhandledrejection onunload onvolumechange onwaiting onwheel".split_on(" ")
-
-attributes = |element| {
-	match element {
-		"a" | "area" => "alt coords shape download href hreflang ping referrerpolicy rel target type"
-		"audio" | "video" => "autoplay controls controlslist crossorigin disableremoteplayback disablepictureinpicture height loop muted playsinline poster preload src width"
-		"base" => "href target"
-		"blockquote" | "q" => "cite"
-		"button" => "command commandfor disabled form formaction formenctype formmethod formnovalidate formtarget name popovertarget popovertargetaction type value"
-		"canvas" => "height width"
-		"col" | "colgroup" => "span"
-		"data" => "value"
-		"del" | "ins" => "cite datetime"
-		"details" => "name open"
-		"dialog" => "closedby open"
-		"embed" => "height src type width"
-		"fieldset" => "disabled form name"
-		"form" => "accept-charset action autocomplete enctype method name novalidate rel target"
-		"html" => "xmlns"
-		"iframe" => "allow allowfullscreen credentialless csp height loading name referrerpolicy sandbox src srcdoc width"
-		"img" => "alt attributionsrc crossorigin decoding elementtiming fetchpriority height ismap loading referrerpolicy sizes src srcset usemap width"
-		"input" => "accept alt autocomplete capture checked dirname disabled form formaction formenctype formmethod formnovalidate formtarget height list max maxlength min minlength multiple name pattern placeholder popovertarget popovertargetaction readonly required size src step type value width"
-		"label" => "for form"
-		"li" => "value"
-		"link" => "as blocking color crossorigin disabled fetchpriority href hreflang imagesizes imagesrcset integrity media referrerpolicy rel sizes type"
-		"map" => "name"
-		"meta" => "charset content http-equiv media name"
-		"meter" => "form high low max min optimum value"
-		"object" => "data form height name type usemap width"
-		"ol" => "reversed start type"
-		"optgroup" => "disabled label"
-		"option" => "disabled label selected value"
-		"output" => "for form name"
-		"progress" => "max value"
-		"script" => "async attributionsrc blocking crossorigin defer fetchpriority integrity nomodule nonce referrerpolicy src type"
-		"select" => "autocomplete disabled form multiple name required size"
-		"slot" => "name"
-		"source" => "height media sizes src srcset type width"
-		"style" => "blocking media nonce title"
-		"td" | "th" => "abbr colspan headers rowspan scope"
-		"template" => "shadowrootclonable shadowrootdelegatesfocus shadowrootmode shadowrootserializable"
-		"textarea" => "autocomplete cols dirname disabled form maxlength minlength name placeholder readonly required rows wrap"
-		"time" => "datetime"
-		"track" => "default kind label src srclang"
-		_ => ""
-	}.split_on(" ")
+elements = |name| match name {
+	"a" | "abbr" | "address" | "area" | "article" | "aside" | "audio" | "b" | "base" | "bdi" | "bdo" | "blockquote" | "body" | "br" | "button" | "canvas" | "caption" | "cite" | "code" | "col" | "colgroup" | "data" | "datalist" | "dd" | "del" | "details" | "dfn" | "dialog" | "div" | "dl" | "dt" | "em" | "embed" | "fieldset" | "figcaption" | "figure" | "footer" | "form" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "header" | "hgroup" | "hr" | "html" | "i" | "iframe" | "img" | "input" | "ins" | "kbd" | "label" | "legend" | "li" | "link" | "main" | "map" | "mark" | "menu" | "meta" | "meter" | "nav" | "noscript" | "object" | "ol" | "optgroup" | "option" | "output" | "p" | "picture" | "pre" | "progress" | "q" | "rp" | "rt" | "ruby" | "s" | "samp" | "script" | "search" | "section" | "select" | "selectedcontent" | "slot" | "small" | "source" | "span" | "strong" | "style" | "sub" | "summary" | "sup" | "table" | "tbody" | "td" | "template" | "textarea" | "tfoot" | "th" | "thead" | "time" | "title" | "tr" | "track" | "u" | "ul" | "var" | "video" | "wbr" => True
+	_ => False
 }
 
-interactive = |node, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (["audio", "video"].contains(name) and has_attribute(node, "controls")) or (name == "img" and has_attribute(node, "usemap"))
+global = |name| match name {
+	"accesskey" | "autocapitalize" | "autocorrect" | "autofocus" | "class" | "contenteditable" | "dir" | "draggable" | "enterkeyhint" | "exportparts" | "hidden" | "id" | "inert" | "inputmode" | "is" | "itemid" | "itemprop" | "itemref" | "itemscope" | "itemtype" | "lang" | "nonce" | "part" | "popover" | "role" | "slot" | "spellcheck" | "style" | "tabindex" | "title" | "translate" | "virtualkeyboardpolicy" | "writingsuggestions" | "xmlns" => True
+	_ => False
+}
+
+booleans = |name| match name {
+	"allowfullscreen" | "async" | "autofocus" | "autoplay" | "checked" | "controls" | "default" | "defer" | "disabled" | "disablepictureinpicture" | "disableremoteplayback" | "formnovalidate" | "inert" | "ismap" | "itemscope" | "loop" | "multiple" | "muted" | "nomodule" | "novalidate" | "open" | "playsinline" | "readonly" | "required" | "reversed" | "selected" | "shadowrootclonable" | "shadowrootdelegatesfocus" | "shadowrootserializable" => True
+	_ => False
+}
+
+aria = |name| match name {
+	"aria-activedescendant" | "aria-atomic" | "aria-autocomplete" | "aria-braillelabel" | "aria-brailleroledescription" | "aria-busy" | "aria-checked" | "aria-colcount" | "aria-colindex" | "aria-colindextext" | "aria-colspan" | "aria-controls" | "aria-current" | "aria-describedby" | "aria-description" | "aria-details" | "aria-disabled" | "aria-dropeffect" | "aria-errormessage" | "aria-expanded" | "aria-flowto" | "aria-grabbed" | "aria-haspopup" | "aria-hidden" | "aria-invalid" | "aria-keyshortcuts" | "aria-label" | "aria-labelledby" | "aria-level" | "aria-live" | "aria-modal" | "aria-multiline" | "aria-multiselectable" | "aria-orientation" | "aria-owns" | "aria-placeholder" | "aria-posinset" | "aria-pressed" | "aria-readonly" | "aria-relevant" | "aria-required" | "aria-roledescription" | "aria-rowcount" | "aria-rowindex" | "aria-rowindextext" | "aria-rowspan" | "aria-selected" | "aria-setsize" | "aria-sort" | "aria-valuemax" | "aria-valuemin" | "aria-valuenow" | "aria-valuetext" => True
+	_ => False
+}
+
+events = |name| match name {
+	"onabort" | "onafterprint" | "onanimationcancel" | "onanimationend" | "onanimationiteration" | "onanimationstart" | "onauxclick" | "onbeforeinput" | "onbeforematch" | "onbeforeprint" | "onbeforetoggle" | "onbeforeunload" | "onblur" | "oncancel" | "oncanplay" | "oncanplaythrough" | "onchange" | "onclick" | "onclose" | "oncontextlost" | "oncontextmenu" | "oncontextrestored" | "oncopy" | "oncuechange" | "oncut" | "ondblclick" | "ondrag" | "ondragend" | "ondragenter" | "ondragleave" | "ondragover" | "ondragstart" | "ondrop" | "ondurationchange" | "onemptied" | "onended" | "onerror" | "onfocus" | "onfocusin" | "onfocusout" | "onformdata" | "ongotpointercapture" | "onhashchange" | "oninput" | "oninvalid" | "onkeydown" | "onkeypress" | "onkeyup" | "onlanguagechange" | "onload" | "onloadeddata" | "onloadedmetadata" | "onloadstart" | "onlostpointercapture" | "onmessage" | "onmessageerror" | "onmousedown" | "onmouseenter" | "onmouseleave" | "onmousemove" | "onmouseout" | "onmouseover" | "onmouseup" | "onoffline" | "ononline" | "onpagehide" | "onpageshow" | "onpaste" | "onpause" | "onplay" | "onplaying" | "onpointercancel" | "onpointerdown" | "onpointerenter" | "onpointerleave" | "onpointermove" | "onpointerout" | "onpointerover" | "onpointerrawupdate" | "onpointerup" | "onpopstate" | "onprogress" | "onratechange" | "onrejectionhandled" | "onreset" | "onresize" | "onscroll" | "onscrollend" | "onsecuritypolicyviolation" | "onseeked" | "onseeking" | "onselect" | "onselectionchange" | "onselectstart" | "onslotchange" | "onstalled" | "onstorage" | "onsubmit" | "onsuspend" | "ontimeupdate" | "ontoggle" | "ontouchcancel" | "ontouchend" | "ontouchmove" | "ontouchstart" | "ontransitioncancel" | "ontransitionend" | "ontransitionrun" | "ontransitionstart" | "onunhandledrejection" | "onunload" | "onvolumechange" | "onwaiting" | "onwheel" => True
+	_ => False
+}
+
+attributes = |element, attr| match element {
+	"a" | "area" => match attr {
+		"alt" | "coords" | "shape" | "download" | "href" | "hreflang" | "ping" | "referrerpolicy" | "rel" | "target" | "type" => True
+		_ => False
+	}
+	"audio" | "video" => match attr {
+		"autoplay" | "controls" | "controlslist" | "crossorigin" | "disableremoteplayback" | "disablepictureinpicture" | "height" | "loop" | "muted" | "playsinline" | "poster" | "preload" | "src" | "width" => True
+		_ => False
+	}
+	"base" => match attr {
+		"href" | "target" => True
+		_ => False
+	}
+	"blockquote" | "q" => match attr {
+		"cite" => True
+		_ => False
+	}
+	"button" => match attr {
+		"command" | "commandfor" | "disabled" | "form" | "formaction" | "formenctype" | "formmethod" | "formnovalidate" | "formtarget" | "name" | "popovertarget" | "popovertargetaction" | "type" | "value" => True
+		_ => False
+	}
+	"canvas" => match attr {
+		"height" | "width" => True
+		_ => False
+	}
+	"col" | "colgroup" => match attr {
+		"span" => True
+		_ => False
+	}
+	"data" => match attr {
+		"value" => True
+		_ => False
+	}
+	"del" | "ins" => match attr {
+		"cite" | "datetime" => True
+		_ => False
+	}
+	"details" => match attr {
+		"name" | "open" => True
+		_ => False
+	}
+	"dialog" => match attr {
+		"closedby" | "open" => True
+		_ => False
+	}
+	"embed" => match attr {
+		"height" | "src" | "type" | "width" => True
+		_ => False
+	}
+	"fieldset" => match attr {
+		"disabled" | "form" | "name" => True
+		_ => False
+	}
+	"form" => match attr {
+		"accept-charset" | "action" | "autocomplete" | "enctype" | "method" | "name" | "novalidate" | "rel" | "target" => True
+		_ => False
+	}
+	"html" => match attr {
+		"xmlns" => True
+		_ => False
+	}
+	"iframe" => match attr {
+		"allow" | "allowfullscreen" | "credentialless" | "csp" | "height" | "loading" | "name" | "referrerpolicy" | "sandbox" | "src" | "srcdoc" | "width" => True
+		_ => False
+	}
+	"img" => match attr {
+		"alt" | "attributionsrc" | "crossorigin" | "decoding" | "elementtiming" | "fetchpriority" | "height" | "ismap" | "loading" | "referrerpolicy" | "sizes" | "src" | "srcset" | "usemap" | "width" => True
+		_ => False
+	}
+	"input" => match attr {
+		"accept" | "alt" | "autocomplete" | "capture" | "checked" | "dirname" | "disabled" | "form" | "formaction" | "formenctype" | "formmethod" | "formnovalidate" | "formtarget" | "height" | "list" | "max" | "maxlength" | "min" | "minlength" | "multiple" | "name" | "pattern" | "placeholder" | "popovertarget" | "popovertargetaction" | "readonly" | "required" | "size" | "src" | "step" | "type" | "value" | "width" => True
+		_ => False
+	}
+	"label" => match attr {
+		"for" | "form" => True
+		_ => False
+	}
+	"li" => match attr {
+		"value" => True
+		_ => False
+	}
+	"link" => match attr {
+		"as" | "blocking" | "color" | "crossorigin" | "disabled" | "fetchpriority" | "href" | "hreflang" | "imagesizes" | "imagesrcset" | "integrity" | "media" | "referrerpolicy" | "rel" | "sizes" | "type" => True
+		_ => False
+	}
+	"map" => match attr {
+		"name" => True
+		_ => False
+	}
+	"meta" => match attr {
+		"charset" | "content" | "http-equiv" | "media" | "name" => True
+		_ => False
+	}
+	"meter" => match attr {
+		"form" | "high" | "low" | "max" | "min" | "optimum" | "value" => True
+		_ => False
+	}
+	"object" => match attr {
+		"data" | "form" | "height" | "name" | "type" | "usemap" | "width" => True
+		_ => False
+	}
+	"ol" => match attr {
+		"reversed" | "start" | "type" => True
+		_ => False
+	}
+	"optgroup" => match attr {
+		"disabled" | "label" => True
+		_ => False
+	}
+	"option" => match attr {
+		"disabled" | "label" | "selected" | "value" => True
+		_ => False
+	}
+	"output" => match attr {
+		"for" | "form" | "name" => True
+		_ => False
+	}
+	"progress" => match attr {
+		"max" | "value" => True
+		_ => False
+	}
+	"script" => match attr {
+		"async" | "attributionsrc" | "blocking" | "crossorigin" | "defer" | "fetchpriority" | "integrity" | "nomodule" | "nonce" | "referrerpolicy" | "src" | "type" => True
+		_ => False
+	}
+	"select" => match attr {
+		"autocomplete" | "disabled" | "form" | "multiple" | "name" | "required" | "size" => True
+		_ => False
+	}
+	"slot" => match attr {
+		"name" => True
+		_ => False
+	}
+	"source" => match attr {
+		"height" | "media" | "sizes" | "src" | "srcset" | "type" | "width" => True
+		_ => False
+	}
+	"style" => match attr {
+		"blocking" | "media" | "nonce" | "title" => True
+		_ => False
+	}
+	"td" | "th" => match attr {
+		"abbr" | "colspan" | "headers" | "rowspan" | "scope" => True
+		_ => False
+	}
+	"template" => match attr {
+		"shadowrootclonable" | "shadowrootdelegatesfocus" | "shadowrootmode" | "shadowrootserializable" => True
+		_ => False
+	}
+	"textarea" => match attr {
+		"autocomplete" | "cols" | "dirname" | "disabled" | "form" | "maxlength" | "minlength" | "name" | "placeholder" | "readonly" | "required" | "rows" | "wrap" => True
+		_ => False
+	}
+	"time" => match attr {
+		"datetime" => True
+		_ => False
+	}
+	"track" => match attr {
+		"default" | "kind" | "label" | "src" | "srclang" => True
+		_ => False
+	}
+	_ => False
+}
+
+interactive = |node, name| (
+	match name {
+		"button" | "details" | "embed" | "iframe" | "label" | "select" | "textarea" => True
+		_ => False
+	}
+) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (
+	(
+		match name {
+			"audio" | "video" => True
+			_ => False
+		}
+	) and has_attribute(node, "controls")
+) or (name == "img" and has_attribute(node, "usemap"))
 
 check_children : Markup.Parsed, Markup.Node, Str, Bool -> Try({}, [InvalidMarkup(Markup.Error)])
 check_children = |parsed, node, name, in_datalist| {
@@ -251,7 +457,7 @@ check_children = |parsed, node, name, in_datalist| {
 		"optgroup" => ["legend", "option", "div", "script", "template", "noscript"]
 		_ => []
 	}
-	nothing = void_elements.contains(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
+	nothing = void_elements(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
 	text_only = name == "option" and (has_attribute(node, "label") or in_datalist)
 	for index in node.children {
 		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
@@ -276,4 +482,7 @@ check_children = |parsed, node, name, in_datalist| {
 	Ok({})
 }
 
-void_elements = "area base br col embed hr img input link meta param source track wbr".split_on(" ")
+void_elements = |name| match name {
+	"area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input" | "link" | "meta" | "param" | "source" | "track" | "wbr" => True
+	_ => False
+}

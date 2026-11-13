@@ -17,6 +17,23 @@ HtmlTree :: [].{
 	## Preserve document depth and element accounting for complete HTML roots.
 	project_parsed_with : Markup.Parsed, Markup.Props, Bool -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
 	project_parsed_with = |parsed, props, fragment| {
+		# Most fragments have no selected option projection. Keep their arena
+		# untouched and avoid rebuilding a parent index for the derived phase.
+		var $candidate = False
+		var $at = 0
+		while $at < parsed.tree.nodes.len() {
+			match (parsed.tree.nodes.get($at) ?? empty_node).kind {
+				Element(name) if name.namespace == Uri(Markup.html_namespace) and name.local == "selectedcontent" => {
+					$candidate = True
+					break
+				}
+				_ => {}
+			}
+			$at = $at + 1
+		}
+		if !$candidate {
+			return Ok({ parsed, clones: [] })
+		}
 		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(Dict.empty(), |dict, pair| pair.0.children.fold(dict, |map, child| map.insert(child, pair.1)))
 		elements = parsed.tree.nodes.fold(
 			0.U64,
