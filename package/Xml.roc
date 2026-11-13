@@ -2420,14 +2420,16 @@ fold_source_impl = |src, bytes, limits, initial, on_event| {
 	}
 	while True {
 		start = $pos
-		if $open.is_empty() and is_space_at(bytes, start) {
+		leading = bytes.get(start) ?? 0
+		following = bytes.get(start + 1) ?? 0
+		if $open.is_empty() and is_space(leading) {
 			$pos = skip_space(bytes, start)
 			$state = on_event($state, Gap({ start, end: $pos })).map_err(|problem| Rejected(problem, start))?
-		} else if starts_with_at(bytes, start, "<!--".to_utf8()) {
+		} else if leading == '<' and following == '!' and starts_with_at(bytes, start, "<!--".to_utf8()) {
 			$pos = skip_comment(bytes, start).map_err(|failure| Failed(failure))?
 			value = source_lines(slice_str(src, bytes, start + 4, $pos - 3))
 			$state = on_event($state, Comment({ value, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
-		} else if starts_with_at(bytes, start, "<?".to_utf8()) {
+		} else if leading == '<' and following == '?' {
 			$pos = skip_processing_instruction(bytes, start, limits.namespaces).map_err(|failure| Failed(failure))?
 			target = parse_name(src, bytes, start + 2) ?? { val: "", pos: start + 2 }
 			data_start = skip_space(bytes, target.pos)
@@ -2438,26 +2440,26 @@ fold_source_impl = |src, bytes, limits, initial, on_event| {
 				return Ok($state)
 			}
 			return Err(Failed(XmlFail({ offset: start, message: "unexpected content after the root element" })))
-		} else if $open.is_empty() and starts_with_at(bytes, start, "<!DOCTYPE".to_utf8()) {
+		} else if $open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<!DOCTYPE".to_utf8()) {
 			return Err(Failed(XmlFail({ offset: start, message: "document type declarations are not supported" })))
 		} else if start >= bytes.len() {
 			if $open.is_empty() {
 				return Err(Failed(XmlFail({ offset: start, message: "expected a root element" })))
 			}
 			return Err(Failed(XmlFail({ offset: start, message: "expected </${open_name(src, bytes, $open)}> before the end of the document" })))
-		} else if $open.is_empty() and bytes.get(start) != Ok('<') {
+		} else if $open.is_empty() and leading != '<' {
 			return Err(Failed(XmlFail({ offset: start, message: "expected a root element, but found text" })))
-		} else if !$open.is_empty() and starts_with_at(bytes, start, "<![CDATA[".to_utf8()) {
+		} else if !$open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<![CDATA[".to_utf8()) {
 			parsed = read_source_cdata(src, bytes, start).map_err(|failure| Failed(failure))?
 			$pos = parsed.pos
 			$state = on_event($state, CData({ value: parsed.val, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
-		} else if !$open.is_empty() and bytes.get(start) != Ok('<') {
+		} else if !$open.is_empty() and leading != '<' {
 			parsed = read_source_text(src, bytes, start).map_err(|failure| Failed(failure))?
 			$pos = parsed.pos
 			$state = on_event($state, Text({ value: parsed.val, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
-		} else if !$open.is_empty() and bytes.get(start + 1) == Ok('!') {
+		} else if !$open.is_empty() and following == '!' {
 			return Err(Failed(XmlFail({ offset: start, message: "expected a comment or CDATA section after '<!'" })))
-		} else if bytes.get(start + 1) == Ok('/') {
+		} else if following == '/' {
 			end_tag = read_end_tag(src, bytes, start, $open.last() ?? { start: 0, end: 0 }).map_err(|failure| Failed(failure))?
 			$pos = end_tag.pos
 			$open = $open.drop_last(1)
