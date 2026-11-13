@@ -195,7 +195,12 @@ HtmlTokenizer :: [].{
 	## Call once when creating a reader. Nulls are handled by individual states;
 	## decoded string input retains U+FEFF rather than repeating byte decoding.
 	input_diagnostics : List(U8) -> List(Diagnostic)
-	input_diagnostics = |bytes| {
+	input_diagnostics = |bytes| input_diagnostics_with(bytes, 1024)
+
+	## Stop after the first diagnostic past the budget. That extra witness lets
+	## the tree reader reject exhaustion without silently accepting truncation.
+	input_diagnostics_with : List(U8), U64 -> List(Diagnostic)
+	input_diagnostics_with = |bytes, limit| {
 		var $diagnostics = []
 		var $pos = 0
 		while $pos < bytes.len() {
@@ -211,6 +216,9 @@ HtmlTokenizer :: [].{
 				$diagnostics = $diagnostics.append({ code: ControlCharacterInInputStream, offset: $pos })
 			} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or $scalar % 65536 >= 65534 {
 				$diagnostics = $diagnostics.append({ code: NoncharacterInInputStream, offset: $pos })
+			}
+			if $diagnostics.len() > limit {
+				break
 			}
 			$pos = $pos + width
 		}
@@ -1161,3 +1169,7 @@ expect {
 
 expect HtmlTokenizer.input_diagnostics("x\u(B)y\u(80)z\u(FDD0)\u(10FFFF)".to_utf8()) == [{ code: ControlCharacterInInputStream, offset: 1 }, { code: ControlCharacterInInputStream, offset: 3 }, { code: NoncharacterInInputStream, offset: 6 }, { code: NoncharacterInInputStream, offset: 9 }]
 expect HtmlTokenizer.input_diagnostics("\r\n\t\u(C)\u(0)\u(FEFF)".to_utf8()).is_empty()
+
+expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 0).len() == 1
+expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 1).len() == 2
+expect token_kind("\u(FEFF)<p>") == Characters("\u(FEFF)")
