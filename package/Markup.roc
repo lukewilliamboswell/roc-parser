@@ -153,8 +153,9 @@ Markup :: [].{
 	## are represented in the XMLNS namespace, preserving declaration order.
 	Attribute : { name : Name, value : Str, span : Span }
 
-	## Authored bytes, or the insertion point of a node implied by tree construction.
-	Origin : [Authored(Span), Implied(U64)]
+	## Authored bytes, an implied insertion point, or a projected copy whose
+	## source still identifies the original authored span.
+	Origin : [Authored(Span), Implied(U64), Cloned({ source : Span, at : U64 })]
 
 	## A flat tree node. Child indices refer to the containing tree's node list.
 	Node : {
@@ -393,6 +394,7 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 							start = match node.origin {
 								Authored(span) => span.start
 								Implied(at) => at
+								Cloned(copy) => copy.source.start
 							}
 							$nodes = $nodes.set(index, { ..node, origin: Authored({ start, end: token.span.end }) }) ?? []
 						}
