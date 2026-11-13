@@ -98,7 +98,7 @@ HtmlTree :: [].{
 	}
 }
 
-Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset]
+Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset, AfterAfterFrameset]
 
 Active : [Entry(U64), Marker]
 
@@ -145,20 +145,31 @@ append_node = |s, node| {
 	var $parent = s.stack.last().map_err(|_| Missing)
 	var $before = Err(Missing)
 	if foster {
-		match last_named(s, "table") {
-			Ok(table_id) => {
-				match find_parent(s, table_id) {
-					Ok(parent) => {
-						$parent = Ok(parent)
-						$before = index_of((node_at(s, parent)).children, table_id)
-					}
-					Err(_) => {
-						position = stack_position(s, table_id) ?? 0
-						$parent = if (position > 0) s.stack.get(position - 1).map_err(|_| Missing) else Err(Missing)
+		template_result = last_named(s, "template")
+		table_result = last_named(s, "table")
+		use_template = match (template_result, table_result) {
+			(Ok(template_id), Ok(table_id)) => (stack_position(s, template_id) ?? 0) > (stack_position(s, table_id) ?? 0)
+			(Ok(_), Err(_)) => True
+			_ => False
+		}
+		if use_template {
+			$parent = template_result
+		} else {
+			match table_result {
+				Ok(table_id) => {
+					match find_parent(s, table_id) {
+						Ok(parent) => {
+							$parent = Ok(parent)
+							$before = index_of((node_at(s, parent)).children, table_id)
+						}
+						Err(_) => {
+							position = stack_position(s, table_id) ?? 0
+							$parent = if (position > 0) s.stack.get(position - 1).map_err(|_| Missing) else Err(Missing)
+						}
 					}
 				}
+				_ => {}
 			}
-			_ => {}
 		}
 	}
 	added_element = match node.kind {
@@ -436,7 +447,7 @@ process_html = |state, token, scripting| {
 	var $s = { ..state, work: state.work + 1 }
 	var $reprocess = True
 	var $count = 0.U64
-	while $reprocess and $count < 32 {
+	while $reprocess {
 		$count = $count + 1
 		$s = { ..$s, work: $s.work + 1 }
 		if $s.work > $s.work_limit {
@@ -445,6 +456,11 @@ process_html = |state, token, scripting| {
 		$reprocess = False
 		mode = $s.mode
 		match (mode, token.kind) {
+			(_, Eof) if last_named($s, "template").is_ok() => {
+				$s = problem($s, EofInTemplate, token.span.start)
+				$s = end_template($s, token.span.start)
+				$reprocess = True
+			}
 			(_, ProcessingInstruction(pi)) => {
 				$s = append_misc($s, { kind: ProcessingInstruction(pi), attributes: [], children: [], origin: Authored(token.span) })
 			}
@@ -454,10 +470,10 @@ process_html = |state, token, scripting| {
 			(Initial, Characters(text)) if whitespace(text) => {}
 			(Initial, Doctype(d)) => {
 				$s = append_node($s, { kind: Doctype({ name: d.name, public_id: d.public_id, system_id: d.system_id }), attributes: [], children: [], origin: Authored(token.span) })
-				if d.quirks {
+				if d.name != "html" or d.has_public or (d.has_system and d.system_id != "about:legacy-compat") {
 					$s = problem($s, NonConformingDoctype, token.span.start)
 				}
-				$s = { ..$s, mode: BeforeHtml, quirks: d.quirks }
+				$s = { ..$s, mode: BeforeHtml, quirks: doctype_quirks(d) }
 			}
 			(Initial, _) => {
 				$s = problem($s, MissingDoctype, token.span.start)
@@ -566,7 +582,7 @@ process_html = |state, token, scripting| {
 			}
 			(AfterHead, Start(t)) if t.name == "body" => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
-				$s = { ..$s, mode: InBody }
+				$s = { ..$s, mode: InBody, frameset_ok: False }
 			}
 			(AfterHead, Start(t)) if t.name == "frameset" => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
@@ -589,7 +605,12 @@ process_html = |state, token, scripting| {
 			}
 			(AfterHead, _) => {
 				$s = insert_element($s, "body", Markup.html_namespace, [], Implied(token.span.start), True)
-				$s = { ..$s, mode: InBody }
+				$s = { ..$s, mode: InBody, frameset_ok: True }
+				$reprocess = True
+			}
+			(InBody, Eof) if last_named($s, "template").is_ok() => {
+				$s = problem($s, EofInTemplate, token.span.start)
+				$s = end_template($s, token.span.start)
 				$reprocess = True
 			}
 			(InBody, _) => {
@@ -606,6 +627,9 @@ process_html = |state, token, scripting| {
 			}
 			(InCell, _) => {
 				match token.kind {
+					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
+						$s = problem($s, UnexpectedCellEnd, token.span.start)
+					}
 					End(n) if n == "td" or n == "th" => {
 						if in_scope($s, n, TableScope) {
 							$s = close_to(implied($s, ""), n)
@@ -630,6 +654,12 @@ process_html = |state, token, scripting| {
 			}
 			(InCaption, _) => {
 				match token.kind {
+					End("caption") | End("table") if !in_scope($s, "caption", TableScope) => {
+						$s = problem($s, UnexpectedTableEnd, token.span.start)
+					}
+					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) and !in_scope($s, "caption", TableScope) => {
+						$s = problem($s, UnexpectedTableElement, token.span.start)
+					}
 					End("caption") => {
 						$s = close_to(implied($s, ""), "caption")
 						$s = clear_active($s)
@@ -663,6 +693,9 @@ process_html = |state, token, scripting| {
 					Start(t) if t.name == "col" => {
 						$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
 					}
+					End("colgroup") if current($s) != "colgroup" => {
+						$s = problem($s, UnexpectedColEnd, token.span.start)
+					}
 					End("colgroup") => {
 						$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
 					}
@@ -670,6 +703,9 @@ process_html = |state, token, scripting| {
 						$s = problem($s, UnexpectedColEnd, token.span.start)
 					}
 					Eof => {}
+					_ if current($s) == "html" => {
+						$s = problem($s, UnexpectedTableElement, token.span.start)
+					}
 					_ => {
 						$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
 						$reprocess = True
@@ -707,6 +743,9 @@ process_html = |state, token, scripting| {
 					}
 				}
 			}
+			(AfterBody, Start(t)) | (AfterAfterBody, Start(t)) | (InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
 			(AfterBody, Characters(t)) if whitespace(t) => {
 				$s = body($s, token)
 			}
@@ -731,6 +770,9 @@ process_html = |state, token, scripting| {
 			(InFrameset, Start(t)) if t.name == "frame" => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
 			}
+			(InFrameset, End("frameset")) if current($s) == "html" => {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
+			}
 			(InFrameset, End("frameset")) => {
 				$s = { ..$s, stack: $s.stack.drop_last(1) }
 				if current($s) != "frameset" {
@@ -745,7 +787,20 @@ process_html = |state, token, scripting| {
 			}
 			(InFrameset, Eof) | (AfterFrameset, Eof) => {}
 			(AfterFrameset, End("html")) => {
-				$s = { ..$s, mode: AfterAfterBody }
+				$s = { ..$s, mode: AfterAfterFrameset }
+			}
+			(AfterAfterFrameset, Eof) => {}
+			(AfterAfterFrameset, Characters(t)) if whitespace(t) => {
+				$s = body($s, token)
+			}
+			(AfterAfterFrameset, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(AfterAfterFrameset, Start(t)) if t.name == "noframes" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
+			(AfterAfterFrameset, _) => {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
 			}
 			(InFrameset, _) | (AfterFrameset, _) => {
 				$s = problem($s, UnexpectedFramesetContent, token.span.start)
@@ -782,7 +837,7 @@ body = |state, token| {
 					return problem($s, UnexpectedBodyStart, token.span.start)
 				}
 				if !$s.stack.is_empty() {
-					$s = merge_attributes($s, 0, tag)
+					$s = merge_attributes($s, $s.stack.first() ?? 0, tag)
 				}
 			} else if name == "body" {
 				if last_named($s, "template").is_ok() {
@@ -949,7 +1004,7 @@ body = |state, token| {
 				if name == "hr" and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				if name != "input" or !tag.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden") {
+				if !["param", "source", "track"].contains(name) and (name != "input" or !tag.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden")) {
 					$s = { ..$s, frameset_ok: False }
 				}
 			} else if name == "textarea" {
@@ -1428,6 +1483,13 @@ clear_row_stack = |s| {
 table_body = |state, token| {
 	var $s = state
 	match token.kind {
+		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead"].contains(t.name) and !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
+		}
+		End("table") if !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+			$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
+		}
+
 		Start(t) if t.name == "tr" => {
 			$s = clear_section_stack($s)
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
@@ -1567,6 +1629,9 @@ foreign_process = |state, token| {
 	var $s = state
 	match token.kind {
 		Characters(t) => {
+			if !whitespace(t) {
+				$s = { ..$s, frameset_ok: False }
+			}
 			$s = insert_text($s, Str.join_with(t.split_on("\u(0)"), "\u(FFFD)"), token.span)
 		}
 		ProcessingInstruction(pi) => {
@@ -1784,7 +1849,7 @@ append_misc = |s, node| {
 	if s.mode == AfterBody {
 		n = append_node({ ..s, stack: s.stack.take_first(1) }, node)
 		{ ..n, stack }
-	} else if s.mode == AfterAfterBody {
+	} else if s.mode == AfterAfterBody or s.mode == AfterAfterFrameset {
 		n = append_node({ ..s, stack: [] }, node)
 		{ ..n, stack }
 	} else {
@@ -1859,3 +1924,22 @@ expect {
 }
 expect HtmlTree.parse("<script/>", True, {}, {}).is_err()
 expect HtmlTree.parse("<table><script>foo", True, {}, { recovery: Browser }).is_ok()
+
+doctype_quirks = |d| {
+	public_id = Tok.lower(d.public_id)
+	system_id = Tok.lower(d.system_id)
+	d.quirks or d.name != "html" or ["-//w3o//dtd w3 html strict 3.0//en//", "-/w3c/dtd html 4.0 transitional/en", "html"].contains(public_id) or system_id == "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd" or quirks_public_prefixes.any(|prefix| public_id.starts_with(prefix)) or (d.system_id == "" and ["-//w3c//dtd html 4.01 frameset//", "-//w3c//dtd html 4.01 transitional//"].any(|prefix| public_id.starts_with(prefix)))
+}
+
+quirks_public_prefixes = ["+//silmaril//dtd html pro v0r11 19970101//", "-//as//dtd html 3.0 aswedit + extensions//", "-//advasoft ltd//dtd html 3.0 aswedit + extensions//", "-//ietf//dtd html 2.0 level 1//", "-//ietf//dtd html 2.0 level 2//", "-//ietf//dtd html 2.0 strict level 1//", "-//ietf//dtd html 2.0 strict level 2//", "-//ietf//dtd html 2.0 strict//", "-//ietf//dtd html 2.0//", "-//ietf//dtd html 2.1e//", "-//ietf//dtd html 3.0//", "-//ietf//dtd html 3.2 final//", "-//ietf//dtd html 3.2//", "-//ietf//dtd html 3//", "-//ietf//dtd html level 0//", "-//ietf//dtd html level 1//", "-//ietf//dtd html level 2//", "-//ietf//dtd html level 3//", "-//ietf//dtd html strict level 0//", "-//ietf//dtd html strict level 1//", "-//ietf//dtd html strict level 2//", "-//ietf//dtd html strict level 3//", "-//ietf//dtd html strict//", "-//ietf//dtd html//", "-//metrius//dtd metrius presentational//", "-//microsoft//dtd internet explorer 2.0 html strict//", "-//microsoft//dtd internet explorer 2.0 html//", "-//microsoft//dtd internet explorer 2.0 tables//", "-//microsoft//dtd internet explorer 3.0 html strict//", "-//microsoft//dtd internet explorer 3.0 html//", "-//microsoft//dtd internet explorer 3.0 tables//", "-//netscape comm. corp.//dtd html//", "-//netscape comm. corp.//dtd strict html//", "-//o'reilly and associates//dtd html 2.0//", "-//o'reilly and associates//dtd html extended 1.0//", "-//o'reilly and associates//dtd html extended relaxed 1.0//", "-//sq//dtd html 2.0 hotmetal + extensions//", "-//softquad software//dtd hotmetal pro 6.0::19990601::extensions to html 4.0//", "-//softquad//dtd hotmetal pro 4.0::19971010::extensions to html 4.0//", "-//spyglass//dtd html 2.0 extended//", "-//sun microsystems corp.//dtd hotjava html//", "-//sun microsystems corp.//dtd hotjava strict html//", "-//w3c//dtd html 3 1995-03-24//", "-//w3c//dtd html 3.2 draft//", "-//w3c//dtd html 3.2 final//", "-//w3c//dtd html 3.2//", "-//w3c//dtd html 3.2s draft//", "-//w3c//dtd html 4.0 frameset//", "-//w3c//dtd html 4.0 transitional//", "-//w3c//dtd html experimental 19960712//", "-//w3c//dtd html experimental 970421//", "-//w3c//dtd w3 html//", "-//w3o//dtd w3 html 3.0//", "-//webtechs//dtd mozilla html 2.0//", "-//webtechs//dtd mozilla html//"]
+
+expect {
+	p = HtmlTree.parse("<table><template><tr><div>x</div></tr></template></table>", True, {}, { recovery: Browser })?
+	table_node = p.tree.nodes.get(p.tree.roots.first()?)?
+	template = p.tree.nodes.get(table_node.children.first()?)?
+	template.children.len() == 2
+}
+expect {
+	p = HtmlTree.parse("<body><template><tr></tr><tbody><tr></tr></template>", False, {}, { recovery: Browser })?
+	names(p.tree).contains("template")
+}
