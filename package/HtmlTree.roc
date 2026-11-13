@@ -2266,35 +2266,43 @@ project_selectedcontent = |state, props| {
 							item = $pending.last() ?? { source: 0, parent: target, depth: 1 }
 							$pending = $pending.drop_last(1)
 							original = node_at($s, item.source)
-							if $s.nodes.len() >= props.max_nodes {
-								return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: 0, column: insertion_at }))
-							}
-							is_element = match original.kind {
-								Element(_) => True
+							# Selectedcontent clones exclude executable and embedded browsing
+							# content, including their descendants, per the HTML clone steps.
+							removed = match original.kind {
+								Element(name) => (name.namespace == Uri(Markup.html_namespace) and ["script", "frame", "iframe", "embed", "object"].contains(name.local)) or (name.namespace == Uri(Markup.svg_namespace) and name.local == "script")
 								_ => False
 							}
-							if is_element and ($s.element_count - if ($s.fragment) 1 else 0) >= props.max_elements {
-								return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 0, column: insertion_at }))
-							}
-							if is_element and item.depth > props.max_depth {
-								return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: 0, column: insertion_at }))
-							}
-							new_id = $s.nodes.len()
-							source_span = match original.origin {
-								Authored(span) => span
-								Cloned(info) => info.source
-								Implied(at) => { start: at, end: at }
-							}
-							stack = $s.stack
-							$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
-							$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
-							if $s.work > $s.work_limit {
-								return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
-							}
-							var $i = original.children.len()
-							while $i > 0 {
-								$i = $i - 1
-								$pending = $pending.append({ source: original.children.get($i) ?? 0, parent: new_id, depth: item.depth + 1 })
+							if !removed {
+								if $s.nodes.len() >= props.max_nodes {
+									return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: 0, column: insertion_at }))
+								}
+								is_element = match original.kind {
+									Element(_) => True
+									_ => False
+								}
+								if is_element and ($s.element_count - if ($s.fragment) 1 else 0) >= props.max_elements {
+									return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 0, column: insertion_at }))
+								}
+								if is_element and item.depth > props.max_depth {
+									return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: 0, column: insertion_at }))
+								}
+								new_id = $s.nodes.len()
+								source_span = match original.origin {
+									Authored(span) => span
+									Cloned(info) => info.source
+									Implied(at) => { start: at, end: at }
+								}
+								stack = $s.stack
+								$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
+								$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
+								if $s.work > $s.work_limit {
+									return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
+								}
+								var $i = original.children.len()
+								while $i > 0 {
+									$i = $i - 1
+									$pending = $pending.append({ source: original.children.get($i) ?? 0, parent: new_id, depth: item.depth + 1 })
+								}
 							}
 						}
 					}
@@ -2307,44 +2315,47 @@ project_selectedcontent = |state, props| {
 }
 
 selectedcontent_targets = |s, select_id| {
-	children = (node_at(s, select_id)).children
-	first_element = children.find_first(
-		|id| match (node_at(s, id)).kind {
-			Element(_) => True
-			_ => False
-		},
-	)
-	match first_element {
-		Ok(button) if namespace_at(s, button) == Markup.html_namespace and name_at(s, button) == "button" => {
-			var $targets = []
-			var $pending = [button]
-			while !$pending.is_empty() {
-				id = $pending.last() ?? button
-				$pending = $pending.drop_last(1)
-				if namespace_at(s, id) == Markup.html_namespace and name_at(s, id) == "selectedcontent" {
-					$targets = $targets.append(id)
-				}
-				else if id == button or name_at(s, id) != "template" {
-					$pending = $pending.concat((node_at(s, id)).children)
-				}
-			}
-			$targets
+	# A second ancestor select disables the descendant selectedcontent, even
+	# when it belongs to the innermost select's option list.
+	var $ancestor = find_parent(s, select_id)
+	while $ancestor.is_ok() {
+		id = $ancestor ?? select_id
+		if namespace_at(s, id) == Markup.html_namespace and ["select", "option", "selectedcontent"].contains(name_at(s, id)) {
+			return []
 		}
-		_ => []
+		$ancestor = find_parent(s, id)
 	}
-}
-
-select_options = |s, select_id| {
-	var $options = []
+	var $targets = []
 	var $pending = reverse_ids((node_at(s, select_id)).children)
 	while !$pending.is_empty() {
 		id = $pending.last() ?? select_id
 		$pending = $pending.drop_last(1)
-		if !(namespace_at(s, id) == Markup.html_namespace and ["select", "template"].contains(name_at(s, id))) {
-			if namespace_at(s, id) == Markup.html_namespace and name_at(s, id) == "option" {
-				$options = $options.append(id)
-			}
+		html = namespace_at(s, id) == Markup.html_namespace
+		name = name_at(s, id)
+		if html and name == "selectedcontent" {
+			$targets = $targets.append(id)
+		} else if !(html and ["select", "option", "template"].contains(name)) {
 			$pending = $pending.concat(reverse_ids((node_at(s, id)).children))
+		}
+	}
+	$targets
+}
+
+select_options = |s, select_id| {
+	var $options = []
+	var $pending = (reverse_ids((node_at(s, select_id)).children)).map(|id| { id, optgroups: 0.U64 })
+	while !$pending.is_empty() {
+		item = $pending.last() ?? { id: select_id, optgroups: 0 }
+		$pending = $pending.drop_last(1)
+		html = namespace_at(s, item.id) == Markup.html_namespace
+		name = name_at(s, item.id)
+		if html and name == "option" {
+			$options = $options.append(item.id)
+		} else if !(html and ["select", "template", "datalist", "hr"].contains(name)) {
+			optgroups = item.optgroups + if (html and name == "optgroup") 1 else 0
+			if optgroups <= 1 {
+				$pending = $pending.concat((reverse_ids((node_at(s, item.id)).children)).map(|id| { id, optgroups }))
+			}
 		}
 	}
 	$options
@@ -2400,3 +2411,24 @@ expect HtmlTree.parse("<select><button><selectedcontent></selectedcontent></butt
 expect HtmlTree.parse("<p a='1' b='2'>x</p>", True, {}, { max_attributes: 1 }).is_err()
 expect HtmlTree.parse("<p>x</p a='1' b='2'>", True, {}, { max_attributes: 1, recovery: Browser }).is_err()
 expect HtmlTree.parse("<p>\u(B)\u(B)</p>", True, {}, { max_diagnostics: 1, recovery: Browser }).is_err()
+
+expect {
+	p = HtmlTree.parse("<select><div><selectedcontent></selectedcontent></div><option>A</option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	div = p.tree.nodes.get(select.children.first()?)?
+	content = p.tree.nodes.get(div.children.first()?)?
+	Markup.text(p.tree, content.children.first()?) == "A"
+}
+expect {
+	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<script>x</script><object>y</object><svg><script>z</script><text>B</text></svg></option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	content = p.tree.nodes.get(select.children.first()?)?
+	content.children.len() == 2 and Markup.text(p.tree, content.children.get(0)?) == "A" and Markup.text(p.tree, content.children.get(1)?) == "B"
+}
+expect {
+	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<selectedcontent>original</selectedcontent></option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	option = p.tree.nodes.get(select.children.get(1)?)?
+	inside = p.tree.nodes.get(option.children.get(1)?)?
+	Markup.text(p.tree, inside.children.first()?) == "original"
+}

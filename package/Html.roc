@@ -3,7 +3,7 @@ import MarkupTemplate
 import MarkupValidate
 import HtmlValidate
 import HtmlTree
-import HtmlTokenizer
+import HtmlTemplate
 import Literal
 
 ## HTML documents, fragments and typed literal templates. Strict HTML syntax and
@@ -96,35 +96,7 @@ Html := { parsed : Markup.Parsed }.{
 	## Parse fixed segments and explicit text/whole-attribute holes. No textual
 	## sentinels are inserted, and structural positions cannot contain holes.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
-	parse_segments = |segments, props| {
-		plan = MarkupTemplate.parse_segments_with(segments, shared(props), |text| syntax(text, props, True), |text| Ok(HtmlTokenizer.normalized(text.to_utf8(), True, False).text))?
-		_ = MarkupValidate.text_slots(plan)?
-		holes = plan.slots.keep_oks(
-			|slot| match slot.target {
-				AttributeSlot(target) => Ok(target)
-				_ => Err(Skip)
-			},
-		)
-		checked = validate_tree(plan.parsed, shared(props), holes)?
-		slots = plan.slots.map(
-			|slot| match slot.target {
-				AttributeSlot(target) => {
-					node = checked.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
-					attr = node.attributes.get(target.attribute)
-					element = match node.kind {
-						Element(n) => n
-						_ => { local: "", namespace: NoNamespace, prefix: Unprefixed }
-					}
-					match attr {
-						Ok(a) => { ..slot, expected: if (element.namespace == Uri(Markup.svg_namespace)) MarkupValidate.grammar(True, element.local, a.name.local) else if (element.namespace == Uri(Markup.mathml_namespace)) MarkupValidate.grammar(False, element.local, a.name.local) else HtmlValidate.grammar(element.local, a.name.local) }
-						_ => slot
-					}
-				}
-				_ => slot
-			},
-		)
-		Ok({ ..plan, parsed: checked, slots })
-	}
+	parse_segments = |segments, props| HtmlTemplate.parse_segments(segments, { name: props.context_element, namespace: props.context_namespace, scripting: props.scripting }, shared(props))
 
 	## A parsed template and its typed bindings
 	## Binding performs no source parse.
@@ -213,3 +185,18 @@ expect {
 expect Html.parse_segments(["<script>if(a<b)x()</script><p>", "</p>"], {}).is_ok()
 expect Html.parse_segments(["<style>p::before{content:'<';}</style><p>", "</p>"], {}).is_ok()
 expect Html.parse_segments(["<script>if(a<b)", "</script>"], {}).is_err()
+
+expect Html.parse_segments(["<style>a>b { color:red }</style><p>", "</p>"], {}).is_ok()
+expect Html.parse_segments(["", ""], { context_element: "script" }).is_err()
+expect {
+	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option>", "</option></select>"], {})?
+	p.slots.len() == 2 and p.slots.all(|slot| slot.index == 0) and MarkupTemplate.bind(p, [42.U64].iter()).is_ok()
+}
+expect {
+	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option>", "", "</option></select>"], {})?
+	p.slots.len() == 4 and p.slots.keep_if(|slot| slot.index == 0).len() == 2 and p.slots.keep_if(|slot| slot.index == 1).len() == 2
+}
+expect {
+	p = Html.parse_segments(["<select><button><selectedcontent></selectedcontent></button><option><span title='", "'>x</span></option></select>"], {})?
+	p.slots.len() == 2 and p.slots.all(|slot| slot.index == 0)
+}
