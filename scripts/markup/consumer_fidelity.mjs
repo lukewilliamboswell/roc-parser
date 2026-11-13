@@ -121,13 +121,16 @@ export function consumerFidelity(request) {
     mrow.setAttribute('onclick', 'globalThis.__fidelityHandler += 1'); globalThis.__fidelityHandler = 0; mrow.dispatchEvent(new Event('click'));
     handlerRows.push({id: 'mathml-in-svg-metadata-onclick', executed: globalThis.__fidelityHandler === 1}); metadata.remove();
     handler('svg-g-oninput', NS.svg, 'g', 'oninput', 'input');
-    handler('customonline', NS.svg, 'g', 'customonline', 'line');
+    handler('online', NS.svg, 'g', 'online', 'line');
     handler('namespaced-onclick', NS.svg, 'g', 'onclick', 'click', 'urn:events', 'e');
     handler('literal-colon-onclick', NS.svg, 'g', 'e:onclick', 'click');
     for (const local of ['svg', 'g']) for (const event of ['beforeunload', 'unload']) handler('svg-' + local + '-on' + event, NS.svg, local, 'on' + event, event);
     for (const local of ['g', 'animate']) for (const [attribute, event] of [['onbegin', 'beginEvent'], ['onend', 'endEvent'], ['onrepeat', 'repeatEvent']]) handler('svg-' + local + '-' + attribute, NS.svg, local, attribute, event);
     handler('svg-g-onactivate', NS.svg, 'g', 'onactivate', 'DOMActivate');
-    for (const event of ['focusin', 'animationend']) handler('mathml-mrow-on' + event, NS.mathml, 'mrow', 'on' + event, event);
+    for (const [namespace, local, label] of [[NS.html, 'div', 'html-div'], [NS.svg, 'g', 'svg-g'], [NS.mathml, 'mrow', 'mathml-mrow']]) {
+      for (const event of ['focusin', 'focusout']) handler(label + '-on' + event, namespace, local, 'on' + event, event);
+    }
+    handler('mathml-mrow-onanimationend', NS.mathml, 'mrow', 'onanimationend', 'animationend');
     const nameApis = [];
     for (const qualified of ['a=b', 'p:a:b', '=p:x', ':a', 'a\u0001', '_a', 'a b', 'a\u0000']) for (const attribute of [false, true]) {
       try {

@@ -479,7 +479,7 @@ def consumer_review(args) -> int:
                              'actual': constructor, 'browser_version': result['browser_version'],
                              **({'oracle_gap': {'feature': 'multi-colon computed name p:a:b', 'kind': 'constructor_changes_local_name', 'engine': engine, 'version': '158.0.8127.18'}} if known_gap else {})})
             expected_handlers = {'mathml-in-svg-metadata-onclick': True, 'svg-g-oninput': True,
-                                 'customonline': False, 'namespaced-onclick': False, 'literal-colon-onclick': False}
+                                 'online': False, 'namespaced-onclick': False, 'literal-colon-onclick': False}
             for handler in result['handlers']:
                 if handler['id'] in expected_handlers:
                     matches = handler['executed'] == expected_handlers[handler['id']]

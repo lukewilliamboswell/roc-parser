@@ -27,7 +27,8 @@ original source spelling.
 The report separates implementation gaps from mismatches. The pinned Firefox
 159.0 browser does not execute an unnamespaced `oninput` handler on an SVG `g`;
 Chromium and WebKit do. That exact engine/version observation is reported as
-`oracle_gap`. Other handler disagreements fail the review. The report also
+`oracle_gap`. The negative `online` attribute probe dispatches `line` and must not execute.
+Other handler disagreements fail the review. The report also
 records auxiliary event and computed-name observations without treating browser
 acceptance as an authoring rule. A constructor that cannot preserve an explicit
 name returns `consumer_gap` and fails the consumer comparison.
