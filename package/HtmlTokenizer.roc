@@ -11,6 +11,7 @@ HtmlTokenizer :: [].{
 	Token : { kind : Kind, span : Span }
 	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
+
 	## Data keeps whitespace/null/other runs separate for tree-construction
 	## states that distinguish them. DataMixed combines a normal text run when
 	## the caller can process all three character classes together.

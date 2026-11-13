@@ -52,10 +52,17 @@ checksum_node : Markup.Tree, U64 -> U64
 checksum_node = |tree, index| {
 	node = tree.nodes.get(index) ?? crash "invalid benchmark tree edge"
 	weight = match node.kind {
-		Element(name) => 1 + name.local.count_utf8_bytes() + node.attributes.fold(0, |count, attr| {
-			if namespace_declaration(attr.name) { count }
-			else { count + 1 + attr.name.local.count_utf8_bytes() + attr.value.count_utf8_bytes() }
-		})
+		Element(name) => 1 + name.local.count_utf8_bytes() + node.attributes.fold(
+			0,
+			|count, attr| {
+				if namespace_declaration(attr.name) {
+					count
+				}
+				else {
+					count + 1 + attr.name.local.count_utf8_bytes() + attr.value.count_utf8_bytes()
+				}
+			},
+		)
 		Text(value) => 1 + value.count_utf8_bytes()
 		_ => 0
 	}
@@ -101,4 +108,3 @@ encode_node = |tree, index, bindings| {
 		}
 	}
 }
-
