@@ -423,7 +423,15 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 			}
 			Text | CData => {
 				if fragment or !$stack.is_empty() {
-					value = Markup.decode_xml_text(Str.from_utf8_lossy(bytes))?
+					# The reader has already checked this region. Plain character
+					# data and CDATA only need line-ending normalization.
+					value = if token.kind == CData {
+						normalize_lines(Str.from_utf8_lossy(bytes.drop_first(9).drop_last(3)))
+					} else if bytes.contains('&') {
+						Markup.decode_xml_text(Str.from_utf8_lossy(bytes))?
+					} else {
+						normalize_lines(Str.from_utf8_lossy(bytes))
+					}
 					if value != "" {
 						$new_node = Ok({ kind: Text(value), attributes: [], children: [], origin: Authored(token.span) })
 					}
@@ -480,8 +488,10 @@ construct_xml_tree = |source, starts, fragment, props, budget| {
 				$nodes = $nodes.append(new_node)
 				match $stack.last() {
 					Ok(parent) => {
-						node = $nodes.get(parent) ?? empty_node
-						$nodes = $nodes.set(parent, { ..node, children: node.children.append(index) }) ?? []
+						# Move the parent out so appending a child can reuse its list.
+						moved = $nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
+						node = moved.prev
+						$nodes = moved.list.set(parent, { ..node, children: node.children.append(index) }) ?? []
 					}
 					Err(_) => {
 						$roots = $roots.append(index)
@@ -507,7 +517,11 @@ error_at = |source, offset, problem| {
 }
 
 normalize_lines : Str -> Str
-normalize_lines = |text| Str.join_with(Str.join_with(text.split_on("\r\n"), "\n").split_on("\r"), "\n")
+normalize_lines = |text| {
+	if text.contains("\r") {
+		Str.join_with(Str.join_with(text.split_on("\r\n"), "\n").split_on("\r"), "\n")
+	} else text
+}
 
 # Attribute ranges come from the source, while values and expanded names come
 # from the independently validated reader event. This retains declaration order.
@@ -629,6 +643,14 @@ expect {
 	parsed = Markup.parse_xml_fragment("<text a=\"x\t y\">a\r\nb<![CDATA[<&]]><!-- comment -->c</text>", Markup.svg_namespace, {})?
 	root = parsed.tree.nodes.get(Markup.single_root(parsed.tree)?)?
 	root.children.map(|index| parsed.tree.nodes.get(index).map_ok(|node| node.kind)) == [Ok(Text("a\nb<&")), Ok(Comment(" comment ")), Ok(Text("c"))]
+}
+
+expect {
+	input = "<x>é\rα<![CDATA[&amp;\r\nβ]]>&#13;&amp;</x>"
+	parsed = Markup.parse_xml(input, {})?
+	root = parsed.tree.nodes.get(Markup.single_root(parsed.tree)?)?
+	child = parsed.tree.nodes.get(root.children.first()?)?
+	child.kind == Text("é\nα&amp;\nβ\r&") and child.origin == Authored({ start: 3, end: input.count_utf8_bytes() - 4 })
 }
 
 expect Markup.Source.from_str("abc").slice({ start: 9, end: 1 }) == []
