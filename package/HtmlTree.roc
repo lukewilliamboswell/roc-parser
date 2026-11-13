@@ -54,10 +54,10 @@ HtmlTree :: [].{
 				$state = process($state, next.token, context.scripting)
 			}
 			at = Literal.position(source, next.token.span.start)
-			if $state.stack.len() > props.max_depth {
+			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
 				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: at.line, column: at.column }))
 			}
-			if $state.element_count > props.max_elements {
+			if ($state.element_count - if (fragment) 1 else 0) > props.max_elements {
 				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: at.line, column: at.column }))
 			}
 			if $state.nodes.len() > props.max_nodes {
@@ -683,7 +683,7 @@ process_html = |state, token, scripting| {
 						old = $s.stack
 						$s = { ..$s, stack: old.append(h), mode: InHead }
 						$s = process($s, token, scripting)
-						$s = { ..$s, stack: $s.stack.keep_if(|i| i != h), mode: AfterHead }
+						$s = { ..$s, stack: $s.stack.keep_if(|i| i != h), mode: if ($s.mode == InHead) AfterHead else $s.mode }
 					}
 					_ => {}
 				}
@@ -838,7 +838,11 @@ process_html = |state, token, scripting| {
 				$s = body($s, token)
 			}
 			(AfterBody, End("html")) => {
-				$s = { ..$s, mode: AfterAfterBody }
+				if $s.fragment {
+					$s = problem($s, UnexpectedEndTag, token.span.start)
+				} else {
+					$s = { ..$s, mode: AfterAfterBody }
+				}
 			}
 			(AfterBody, Eof) | (AfterAfterBody, Eof) => {}
 			(AfterAfterBody, Characters(t)) if whitespace(t) => {
@@ -1146,7 +1150,7 @@ body = |state, token| {
 		End(name) => {
 			if name == "body" or name == "html" {
 				if in_scope($s, "body", DefaultScope) {
-					$s = { ..$s, mode: if (name == "html") AfterAfterBody else AfterBody }
+					$s = { ..$s, mode: if (name == "html" and !$s.fragment) AfterAfterBody else AfterBody }
 				}
 				else {
 					$s = problem($s, UnexpectedBodyEnd, token.span.start)
@@ -1186,6 +1190,12 @@ body = |state, token| {
 					}
 				}
 				$s = { ..$s, form: Err(Missing) }
+			} else if name == "form" {
+				if in_scope($s, "form", DefaultScope) {
+					$s = close_to(implied($s, ""), "form")
+				} else {
+					$s = problem($s, UnexpectedFormEnd, token.span.start)
+				}
 			} else if name == "br" {
 				$s = problem($s, EndTagBr, token.span.start)
 				$s = body($s, { ..token, kind: Start({ name: "br", attributes: [], self_closing: False }) })
@@ -1757,13 +1767,13 @@ foreign_process = |state, token| {
 			while $i > 0 {
 				$i = $i - 1
 				id = $s.stack.get($i) ?? 0
-				if Tok.lower(name_at($s, id)) == n {
-					$s = close_from($s, $i)
+				if namespace_at($s, id) == Markup.html_namespace {
+					$s = process_html($s, token, $s.context.scripting)
 					$found = True
 					break
 				}
-				if namespace_at($s, id) == Markup.html_namespace {
-					$s = process_html($s, token, $s.context.scripting)
+				if Tok.lower(name_at($s, id)) == n {
+					$s = close_from($s, $i)
 					$found = True
 					break
 				}
@@ -1876,7 +1886,7 @@ expect {
 	names(parsed.tree) == ["html", "template", "table", "tbody", "tr", "td"]
 }
 expect HtmlTree.parse("<div/>", True, {}, {}).is_err()
-expect HtmlTree.parse("<div>x</div>", True, {}, { max_depth: 1 }).is_err()
+expect HtmlTree.parse("<div><span>x</span></div>", True, {}, { max_depth: 1 }).is_err()
 expect HtmlTree.parse("abc", True, {}, { max_source_bytes: 2 }).is_err()
 
 names = |tree| tree.nodes.keep_if(
@@ -1904,7 +1914,7 @@ texts = |tree| tree.nodes.keep_if(
 )
 
 expect HtmlTree.parse("<span/>x", True, {}, { max_diagnostics: 0 }).is_err()
-expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 2 }).map_err(|InvalidMarkup(e)| (e.line, e.column)) == Err((2, 1))
+expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 1 }).map_err(|InvalidMarkup(e)| (e.line, e.column)) == Err((2, 1))
 expect {
 	p = HtmlTree.parse("a\u(0)b", True, {}, { recovery: Browser })?
 	texts(p.tree) == ["ab"] and !p.diagnostics.is_empty()
@@ -2141,4 +2151,16 @@ source_token = |token, bytes| {
 expect {
 	p = HtmlTree.parse("<script>if(a<b)x()</script><p>text</p>", True, {}, {})?
 	p.source.tokens.map(|t| t.kind) == [Tag, Text, Tag, Tag, Text, Tag] and p.source.tokens.fold([], |out, t| out.concat(p.source.slice(t.span))) == p.source.bytes
+}
+
+expect HtmlTree.parse("<div>x</div>", True, {}, { max_depth: 1, max_elements: 1 }).is_ok()
+expect HtmlTree.parse("", True, {}, { max_depth: 0, max_elements: 0 }).is_ok()
+expect HtmlTree.parse("<div/>", True, {}, { recovery: Browser, max_depth: 0 }).is_err()
+expect {
+	p = HtmlTree.parse("<head></head><template>Foo</template>", False, {}, { recovery: Browser })?
+	names(p.tree) == ["html", "head", "template", "body"]
+}
+expect {
+	p = HtmlTree.parse("<div><svg><path><foreignObject><math></div>a", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "a"
 }
