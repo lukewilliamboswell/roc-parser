@@ -71,29 +71,31 @@ HtmlTokenizer :: [].{
 			return data_characters(reader)
 		}
 
-		if starts(bytes, start, "<!--") {
-			return comment(reader)
-		}
-		if starts_caseless(bytes, start, "<!doctype") {
-			return doctype(reader)
-		}
-		if starts(bytes, start, "<![CDATA[") and foreign {
-			var $end = start + 9
-			while $end < bytes.len() and !starts(bytes, $end, "]]>") {
-				$end = $end + 1
+		next_byte = byte_at(bytes, start + 1)
+		if next_byte == '!' {
+			if starts(bytes, start, "<!--") {
+				return comment(reader)
 			}
-			text = preprocessed_text(bytes.sublist({ start: start + 9, len: $end - start - 9 }))
-			end = if ($end < bytes.len()) $end + 3 else $end
-			return { token: { kind: Characters(text), span: { start, end } }, reader: { ..reader, pos: end } }
-		}
-		if starts(bytes, start, "<?") {
-			return processing_instruction(reader)
-		}
-		if starts(bytes, start, "<!") {
+			if starts_caseless(bytes, start, "<!doctype") {
+				return doctype(reader)
+			}
+			if starts(bytes, start, "<![CDATA[") and foreign {
+				var $end = start + 9
+				while $end < bytes.len() and !starts(bytes, $end, "]]>") {
+					$end = $end + 1
+				}
+				text = preprocessed_text(bytes.sublist({ start: start + 9, len: $end - start - 9 }))
+				end = if ($end < bytes.len()) $end + 3 else $end
+				return { token: { kind: Characters(text), span: { start, end } }, reader: { ..reader, pos: end } }
+			}
 			return bogus_comment(reader, start + 2, BogusComment, start)
 		}
+		if next_byte == '?' {
+			return processing_instruction(reader)
+		}
 
-		closing = byte_at(bytes, start + 1) == '/'
+		closing = next_byte == '/'
+
 		name_start = start + if (closing) 2 else 1
 		if closing and !ascii_alpha(byte_at(bytes, name_start)) {
 			if byte_at(bytes, name_start) == '>' {
@@ -108,7 +110,12 @@ HtmlTokenizer :: [].{
 			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
 		}
 		var $pos = name_start
-		while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['/', '>'].contains(byte_at(bytes, $pos)) {
+		while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !(
+			match byte_at(bytes, $pos) {
+				'/' | '>' => True
+				_ => False
+			}
+		) {
 			$pos = $pos + 1
 		}
 		normalized_name = normalized_limited(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False, True, diagnostic_budget(reader))
@@ -149,11 +156,19 @@ HtmlTokenizer :: [].{
 					$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					$pos = $pos + 1
 				}
-				while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !['=', '/', '>'].contains(byte_at(bytes, $pos)) {
+				while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !(
+					match byte_at(bytes, $pos) {
+						'=' | '/' | '>' => True
+						_ => False
+					}
+				) {
 					if $diagnostics.len() > reader.max_diagnostics {
 						return exhausted(reader, $pos, $diagnostics)
 					}
-					if ['"', '\'', '<'].contains(byte_at(bytes, $pos)) {
+					if match byte_at(bytes, $pos) {
+						'"' | '\'' | '<' => True
+						_ => False
+					} {
 						$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					}
 					$pos = $pos + 1
@@ -181,7 +196,12 @@ HtmlTokenizer :: [].{
 					}
 					value_start = $pos
 					while $pos < bytes.len() and (if (quoted) byte_at(bytes, $pos) != quote else !space(byte_at(bytes, $pos)) and byte_at(bytes, $pos) != '>') {
-						if !quoted and ['"', '\'', '<', '=', '`'].contains(byte_at(bytes, $pos)) {
+						if !quoted and (
+							match byte_at(bytes, $pos) {
+								'"' | '\'' | '<' | '=' | '`' => True
+								_ => False
+							}
+						) {
 							$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 						}
 						$pos = $pos + 1
@@ -262,9 +282,25 @@ HtmlTokenizer :: [].{
 	}
 
 	lower : Str -> Str
-	lower = |s| Str.from_utf8_lossy(s.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))
+	lower = |s| {
+		var $bytes = s.to_utf8()
+		var $changed = False
+		var $at = 0
+		while $at < $bytes.len() {
+			byte = $bytes.get($at) ?? 0
+			if byte >= 'A' and byte <= 'Z' {
+				$bytes = $bytes.set($at, byte + 32) ?? []
+				$changed = True
+			}
+			$at = $at + 1
+		}
+		if ($changed) Str.from_utf8_lossy($bytes) else s
+	}
 	space : U8 -> Bool
-	space = |c| [' ', '\t', '\n', '\r', 12].contains(c)
+	space = |c| match c {
+		' ' | '\t' | '\n' | '\r' | 12 => True
+		_ => False
+	}
 	ascii_alpha : U8 -> Bool
 	ascii_alpha = |c| (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
 	text_at : List(U8), U64, U64 -> Str
@@ -276,7 +312,14 @@ HtmlTokenizer :: [].{
 	starts_caseless : List(U8), U64, Str -> Bool
 	starts_caseless = |bytes, at, value| lower(text_at(bytes, at, at + value.count_utf8_bytes())) == value
 	end_tag_at : List(U8), U64, Str -> Bool
-	end_tag_at = |bytes, at, name| starts(bytes, at, "</") and starts_caseless(bytes, at + 2, name) and (space(byte_at(bytes, at + 2 + name.count_utf8_bytes())) or ['/', '>'].contains(byte_at(bytes, at + 2 + name.count_utf8_bytes())))
+	end_tag_at = |bytes, at, name| starts(bytes, at, "</") and starts_caseless(bytes, at + 2, name) and (
+		space(byte_at(bytes, at + 2 + name.count_utf8_bytes())) or (
+			match byte_at(bytes, at + 2 + name.count_utf8_bytes()) {
+				'/' | '>' => True
+				_ => False
+			}
+		)
+	)
 
 	## HTML input preprocessing and character-reference consumption.
 	normalized : List(U8), Bool, Bool -> { text : Str, diagnostics : List(Diagnostic) }
@@ -869,7 +912,12 @@ doctype = |reader| {
 
 consume_reference = |bytes, start, attribute| {
 	if HtmlTokenizer.byte_at(bytes, start + 1) == '#' {
-		hex = ['x', 'X'].contains(HtmlTokenizer.byte_at(bytes, start + 2))
+		hex = (
+			match HtmlTokenizer.byte_at(bytes, start + 2) {
+				'x' | 'X' => True
+				_ => False
+			}
+		)
 		first = start + if (hex) 3 else 2
 		var $pos = first
 		var $number = 0.U64
@@ -899,7 +947,14 @@ consume_reference = |bytes, start, attribute| {
 		} else if $scalar >= 0x80 and $scalar <= 0x9F {
 			$scalar = c1.get($scalar - 0x80) ?? $scalar
 			$diagnostics = $diagnostics.append({ code: InvalidCharacterReference, offset: start })
-		} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or ($scalar % 65536 >= 65534) or $scalar == 13 or ($scalar < 32 and ![9, 10, 12, 13].contains($scalar)) or $scalar == 127 {
+		} else if ($scalar >= 0xFDD0 and $scalar <= 0xFDEF) or ($scalar % 65536 >= 65534) or $scalar == 13 or (
+			$scalar < 32 and !(
+				match $scalar {
+					9 | 10 | 12 | 13 => True
+					_ => False
+				}
+			)
+		) or $scalar == 127 {
 			$diagnostics = $diagnostics.append({ code: InvalidCharacterReference, offset: start })
 		}
 		return { bytes: encode_scalar($scalar), end: $pos, diagnostics: $diagnostics }
@@ -992,7 +1047,10 @@ processing_instruction = |reader| {
 		return pi_bogus(reader, InvalidProcessingInstructionTarget, $pos)
 	}
 	target = HtmlTokenizer.text_at(bytes, target_start, $pos)
-	if ["xml", "xml-stylesheet"].contains(HtmlTokenizer.lower(target)) {
+	if match HtmlTokenizer.lower(target) {
+		"xml" | "xml-stylesheet" => True
+		_ => False
+	} {
 		return pi_bogus(reader, DisallowedProcessingInstructionTarget, $pos)
 	}
 	while $pos < bytes.len() and HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $pos)) {
@@ -1061,15 +1119,29 @@ data_characters = |reader| {
 		if $diagnostics.len() > reader.max_diagnostics {
 			return exhausted(reader, $pos, $diagnostics)
 		}
-		unit = data_unit(bytes, $pos)
-		next_class = if (unit.bytes == [0]) Null else if (unit.bytes.all(HtmlTokenizer.space)) Whitespace else Other
-		if $class != Unset and $class != next_class {
-			break
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		if byte != '&' and byte != '\r' {
+			next_class = if (byte == 0) Null else if (HtmlTokenizer.space(byte)) Whitespace else Other
+			if $class != Unset and $class != next_class {
+				break
+			}
+			$class = next_class
+			$out = $out.append(byte)
+			if byte == 0 {
+				$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
+			}
+			$pos = $pos + 1
+		} else {
+			unit = data_unit(bytes, $pos)
+			next_class = if (unit.bytes.len() == 1 and unit.bytes.first() == Ok(0)) Null else if (unit.bytes.all(HtmlTokenizer.space)) Whitespace else Other
+			if $class != Unset and $class != next_class {
+				break
+			}
+			$class = next_class
+			$out = $out.concat(unit.bytes)
+			$diagnostics = $diagnostics.concat(unit.diagnostics)
+			$pos = unit.end
 		}
-		$class = next_class
-		$out = $out.concat(unit.bytes)
-		$diagnostics = $diagnostics.concat(unit.diagnostics)
-		$pos = unit.end
 	}
 	{ token: { kind: Characters(Str.from_utf8_lossy($out)), span: { start: reader.pos, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 }
