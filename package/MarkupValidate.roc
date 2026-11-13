@@ -184,7 +184,8 @@ value_grammar = |svg, element, attr| {
 			"pathLength" => NonnegativeNumber
 			"points" => Language("coordinate-pairs")
 			"x" | "y" | "dx" | "dy" if ["text", "tspan"].contains(element) => LengthList
-			"r" | "rx" | "ry" | "width" | "height" | "markerWidth" | "markerHeight" => NonnegativeLength
+			"width" | "height" => Language("auto-or-nonnegative-length")
+			"r" | "rx" | "ry" | "markerWidth" | "markerHeight" => NonnegativeLength
 			"x" | "y" | "cx" | "cy" | "x1" | "x2" | "y1" | "y2" | "fx" | "fy" | "fr" | "dx" | "dy" | "textLength" | "stroke-width" | "stroke-dashoffset" => Length
 			"opacity" | "fill-opacity" | "stroke-opacity" | "stop-opacity" | "offset" => Language("number-or-percentage")
 			"rotate" if ["text", "tspan"].contains(element) => Language("number-list")
@@ -218,10 +219,12 @@ valid_value = |text, grammar| {
 		Number => MarkupValues.scalar(text).is_ok()
 		NonnegativeNumber => MarkupValues.scalar(text).map_ok(|v| v >= 0) == Ok(True)
 		Length => MarkupValues.length(text).is_ok()
-		NonnegativeLength => text == "auto" or MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
+		NonnegativeLength => MarkupValues.length(text).map_ok(|v| v.value >= 0) == Ok(True)
 		NumberList(count) => MarkupValues.numbers(text).map_ok(|values| values.len() == count and (count != 4 or ((values.get(2) ?? -1) >= 0 and (values.get(3) ?? -1) >= 0))) == Ok(True)
 		LengthList => !text.trim().is_empty() and words_of(text).all(|v| MarkupValues.length(v).is_ok())
 		PathData => SvgPath.parse_str(text).is_ok()
+		Paint => valid_paint(text)
+		Color => valid_color(text)
 		TransformList => text == "none" or MarkupValues.transforms(text).is_ok()
 		Keyword(values) => values.contains(text)
 		AspectRatio => {

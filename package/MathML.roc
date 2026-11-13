@@ -2,6 +2,8 @@ import Markup
 import MarkupValidate
 import MarkupTemplate
 import Literal
+import Html
+import HtmlTokenizer
 
 ## Strict namespace-aware MathML documents and fragments.
 ## XML syntax is the default; fragments start in the MathML namespace.
@@ -21,7 +23,11 @@ MathML := { parsed : Markup.Parsed }.{
 	## Parse a complete document with the requested syntax and checks.
 	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(Markup.Error)])
 	parse_with = |source, props| {
-		parsed = Markup.parse_xml(source, props)?
+		parsed = if props.syntax == HtmlSyntax {
+			Html.parse_syntax(source, props, True, { namespace: Uri(Markup.html_namespace), local: "body", prefix: Unprefixed })?
+		} else {
+			Markup.parse_xml(source, props)?
+		}
 		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "fragment" }), line: 1, column: 1 }))?
 		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported("missing root"), line: 1, column: 1 }))
 		match node.kind {
@@ -36,14 +42,14 @@ MathML := { parsed : Markup.Parsed }.{
 	## Parse any number of fragment roots in the format's default namespace.
 	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
 	parse_fragment = |source, props| {
-		parsed = Markup.parse_xml_fragment(source, Markup.mathml_namespace, props)?
+		parsed = fragment_syntax(source, props)?
 		validated = validate_tree(parsed, props, [])?
 		Ok(Fragment.{ parsed: validated })
 	}
 
 	## Validate fixed markup, skipping unavailable whole attribute holes.
 	validate_tree : Markup.Parsed, Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
-	validate_tree = MarkupValidate.foreign
+	validate_tree = Html.validate_tree
 
 	## Check a document for quotation or an explicitly asserted imported file.
 	validate : ValidationProps -> Try(MathML, [BadQuotedBytes(Str)])
@@ -56,7 +62,7 @@ MathML := { parsed : Markup.Parsed }.{
 	## Parse fixed literal segments into an indexed plan without binding values.
 	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
 	parse_segments = |segments, props| {
-		plan = MarkupTemplate.parse_segments(segments, |source| Markup.parse_xml_fragment(source, Markup.mathml_namespace, props), Markup.decode_xml_text)?
+		plan = MarkupTemplate.parse_segments_with(segments, props, |source| fragment_syntax(source, props), |text| if (props.syntax == HtmlSyntax) Ok(HtmlTokenizer.normalized(text.to_utf8(), False, False).text) else Markup.decode_xml_text(text))?
 		var $holes = []
 		for slot in plan.slots {
 			match slot.target {
@@ -150,3 +156,12 @@ expect {
 	value.bound.values == [x] and value.bound.plan.slots.len() == 1
 }
 expect MathML.parse_segments(["<mo stretchy='", "'>+</mo>"], {}).is_ok()
+
+fragment_syntax : Str, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+fragment_syntax = |source, props| if props.syntax == HtmlSyntax {
+	Html.parse_syntax(source, props, True, { namespace: Uri(Markup.mathml_namespace), local: "math", prefix: Unprefixed })
+} else {
+	Markup.parse_xml_fragment(source, Markup.mathml_namespace, props)
+}
+expect MathML.parse_with("<math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>", { syntax: HtmlSyntax }).is_ok()
+expect MathML.parse_fragment("<mtext><span>HTML</span></mtext>", { syntax: HtmlSyntax }).is_ok()

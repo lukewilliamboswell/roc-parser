@@ -16,6 +16,7 @@ package
 		AsciiDoc,
 		CSV,
 		HTTP,
+		Html,
 		JsonValue,
 		Literal,
 		Markdown,
