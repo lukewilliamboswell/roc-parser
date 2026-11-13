@@ -10,9 +10,9 @@ HtmlValidate :: [].{
 	validate = |parsed, props, holes| {
 		var $diagnostics = parsed.diagnostics
 		hole_positions = holes.fold(Dict.empty(), |dict, hole| dict.insert((hole.node, hole.attribute), True))
-		var $pending = parsed.tree.roots.map(|index| { index, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, selected_context: False })
+		var $pending = parsed.tree.roots.map(|index| { index, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False })
 		while !$pending.is_empty() {
-			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, selected_context: False }
+			item = $pending.last() ?? { index: 0, parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False }
 			$pending = $pending.drop_last(1)
 			node = parsed.tree.nodes.get(item.index) ?? return Err(InvalidMarkup({ problem: Unsupported("invalid tree index"), line: 1, column: 1 }))
 			match node.kind {
@@ -62,20 +62,20 @@ HtmlValidate :: [].{
 					if name.local == "a" and item.anchor {
 						return fail(parsed, node, InvalidChildren({ element: "a", expected: "no descendant a element" }))
 					}
-					if item.interactive and interactive(node, name.local) {
+					if item.interactive and (interactive(node, name.local) or has_attribute(node, "tabindex")) {
 						return fail(parsed, node, InvalidChildren({ element: "button", expected: "no nested interactive content" }))
 					}
-					if item.in_option and (interactive(node, name.local) or has_attribute(node, "tabindex")) {
+					if item.in_option and (interactive(node, name.local) or ["datalist", "object"].contains(name.local) or has_attribute(node, "tabindex")) {
 						return fail(parsed, node, InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
 					}
 					if name.local == "selectedcontent" and !item.selected_context {
 						return fail(parsed, node, InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
 					}
-					check_children(parsed, node, name.local)?
+					check_children(parsed, node, name.local, item.in_datalist)?
 					allowed_parent = match name.local {
 						"li" => ["ul", "ol", "menu"].contains(item.parent)
 						"dt" | "dd" => item.parent == "dl" or item.parent == "div"
-						"tr" => ["thead", "tbody", "tfoot"].contains(item.parent)
+						"tr" => ["table", "thead", "tbody", "tfoot"].contains(item.parent)
 						"td" | "th" => item.parent == "tr"
 						"thead" | "tbody" | "tfoot" | "caption" | "colgroup" => item.parent == "table"
 						"col" => item.parent == "colgroup"
@@ -100,7 +100,7 @@ HtmlValidate :: [].{
 						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
 					}
 					for child in node.children {
-						$pending = $pending.append({ index: child, parent: name.local, interactive: item.interactive or name.local == "button", anchor: item.anchor or name.local == "a", option_context: item.option_context or ["select", "optgroup", "datalist"].contains(name.local), in_option: item.in_option or name.local == "option", selected_context: item.selected_context or (name.local == "button" and item.parent == "select") })
+						$pending = $pending.append({ index: child, parent: name.local, interactive: item.interactive or name.local == "button", anchor: item.anchor or name.local == "a", option_context: item.option_context or ["select", "optgroup", "datalist"].contains(name.local), in_option: item.in_option or name.local == "option", in_datalist: item.in_datalist or name.local == "datalist", selected_context: item.selected_context or (name.local == "button" and item.parent == "select") })
 					}
 				}
 				Element(_) => {
@@ -235,8 +235,8 @@ attributes = |element| {
 
 interactive = |node, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (["audio", "video"].contains(name) and has_attribute(node, "controls")) or (name == "img" and has_attribute(node, "usemap"))
 
-check_children : Markup.Parsed, Markup.Node, Str -> Try({}, [InvalidMarkup(Markup.Error)])
-check_children = |parsed, node, name| {
+check_children : Markup.Parsed, Markup.Node, Str, Bool -> Try({}, [InvalidMarkup(Markup.Error)])
+check_children = |parsed, node, name, in_datalist| {
 	allowed_children = match name {
 		"ul" | "ol" | "menu" => ["li", "script", "template"]
 		"dl" => ["dt", "dd", "div", "script", "template"]
@@ -249,6 +249,7 @@ check_children = |parsed, node, name| {
 		_ => []
 	}
 	nothing = void_elements.contains(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
+	text_only = name == "option" and (has_attribute(node, "label") or in_datalist)
 	for index in node.children {
 		child = parsed.tree.nodes.get(index) ?? return fail(parsed, node, Unsupported("invalid child node"))
 		derived = match child.origin {
@@ -257,7 +258,7 @@ check_children = |parsed, node, name| {
 		}
 		match child.kind {
 			Element(n) => {
-				if !(name == "selectedcontent" and derived) and (nothing or (!allowed_children.is_empty() and (n.namespace != Uri(Markup.html_namespace) or !allowed_children.contains(n.local)))) {
+				if !(name == "selectedcontent" and derived) and (nothing or text_only or (!allowed_children.is_empty() and (n.namespace != Uri(Markup.html_namespace) or !allowed_children.contains(n.local)))) {
 					return fail(parsed, child, InvalidChildren({ element: name, expected: if (nothing) "no authored child content" else Str.join_with(allowed_children, ", ") }))
 				}
 			}

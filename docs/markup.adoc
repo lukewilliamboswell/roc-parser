@@ -92,6 +92,10 @@ value is appropriate for every syntactic position.
 
 `parse_segments(segments, props)` builds a plan explicitly. Use
 `MarkupTemplate.bind(plan, values.iter())` to check a manual binding count.
+There is one logical binding per segment boundary. Multiple slots can share
+that binding index when HTML construction copies selected option content into
+`selectedcontent`; apply the value to every matching slot. Binding reports the
+first excess value without exhausting an unbounded iterator.
 Compiler-provided assemblers capture the values directly. Neither operation
 parses the values as markup or reparses the fixed source.
 
@@ -141,11 +145,15 @@ Strict syntax and validation are the defaults. The options are independent:
 Recovery does not disable authoring checks. For example, an unknown element may
 need both browser recovery and the corresponding extension prop. Normal HTML
 optional tags are accepted in strict mode when the standard permits them.
+Checks run on authored content before selected-option projection, so generated
+copies cannot hide an invalid authored child. Use `Html.parse_source` or
+`Html.parse_syntax` when only HTML syntax and browser tree construction are
+needed, without the format's authoring checks.
 
 Resource props bound source bytes, depth, elements, all nodes, attributes per
 element, diagnostics, slots and parser work. Defaults are 16 MiB of source,
 depth 1,024, 4,194,304 elements/nodes, 1,024 attributes per element and diagnostics,
-and 65,536 holes. Work is bounded relative to input length. Exceeding a limit
+and 65,536 physical slot targets, including generated copies. Work is bounded relative to input length. Exceeding a limit
 returns a classified error. XML rejects DTDs and never resolves external data.
 
 == Retain source and inspect the tree
@@ -161,6 +169,8 @@ The tree contains resolved element names, attribute lists, text, comments,
 processing instructions and HTML document types. Child indices refer to the
 same tree's node list. `Authored(span)` identifies original bytes;
 `Implied(offset)` identifies an insertion point chosen by tree construction.
+`Cloned({ source, at })` identifies a generated copy, retaining its authored
+source span and the destination insertion point.
 Use `Markup.text(tree, index)` to join descendant character data.
 
 Read original bytes to reproduce authored source exactly. Reconstructing a tree

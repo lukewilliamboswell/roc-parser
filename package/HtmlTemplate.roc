@@ -51,7 +51,9 @@ HtmlTemplate :: [].{
 					node = checked.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 					match (node.kind, node.attributes.get(target.attribute)) {
 						(Element(name), Ok(attribute)) => {
-							expected = if name.namespace == Uri(Markup.svg_namespace) {
+							expected = if attribute.name.namespace != NoNamespace {
+								Language("namespaced attribute")
+							} else if name.namespace == Uri(Markup.svg_namespace) {
 								MarkupValidate.grammar(True, name.local, attribute.name.local)
 							} else if name.namespace == Uri(Markup.mathml_namespace) {
 								MarkupValidate.grammar(False, name.local, attribute.name.local)

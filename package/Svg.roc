@@ -85,7 +85,7 @@ Svg := { parsed : Markup.Parsed }.{
 					AttributeSlot(target) => {
 						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
 						match (node.kind, node.attributes.get(target.attribute)) {
-							(Element(name), Ok(attr)) => { ..slot, expected: if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							(Element(name), Ok(attr)) => { ..slot, expected: if (attr.name.namespace != NoNamespace) Language("namespaced attribute") else if (name.namespace == Uri(Markup.html_namespace)) HtmlValidate.grammar(name.local, attr.name.local) else MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
 							_ => slot
 						}
 					}
@@ -217,3 +217,8 @@ project_checked = |parsed, props| if props.syntax == HtmlSyntax {
 }
 
 expect Svg.parse_fragment("<svg xmlns:x='urn:x' xmlns:r='urn:r'><path d='M0 0'/></svg>", {}).is_ok()
+
+expect {
+	p = Svg.parse_segments(["<circle xmlns:x='urn:extension' x:r='", "'></circle>"], { allow_unknown_attributes: True })?
+	p.slots.first()?.expected == Language("namespaced attribute")
+}

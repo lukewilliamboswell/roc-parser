@@ -32,7 +32,7 @@ Html := { parsed : Markup.Parsed }.{
 			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "html in the HTML namespace", actual: "other" }), line: 1, column: 1 }))
 		}
 		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Html.{ parsed: project_checked(checked, props)? })
+		Ok(Html.{ parsed: project_checked(checked, props, False)? })
 	}
 
 	## Parse one or more roots in the configured fragment context.
@@ -40,7 +40,7 @@ Html := { parsed : Markup.Parsed }.{
 	parse_fragment = |text, props| {
 		parsed = authored_syntax(text, props, True)?
 		checked = validate_tree(parsed, shared(props), [])?
-		Ok(Fragment.{ parsed: project_checked(checked, props)? })
+		Ok(Fragment.{ parsed: project_checked(checked, props, True)? })
 	}
 
 	## Syntax-only parsing with all HTML options, including the scripting flag
@@ -211,8 +211,8 @@ authored_syntax = |text, props, fragment| if props.syntax == HtmlSyntax {
 	syntax(text, props, fragment)
 }
 
-project_checked = |parsed, props| if props.syntax == HtmlSyntax {
-	HtmlTree.project_parsed(parsed, shared(props)).map_ok(|projection| projection.parsed)
+project_checked = |parsed, props, fragment| if props.syntax == HtmlSyntax {
+	HtmlTree.project_parsed_with(parsed, shared(props), fragment).map_ok(|projection| projection.parsed)
 } else {
 	Ok(parsed)
 }
@@ -229,3 +229,13 @@ expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml'><ul>\u(00A
 
 expect Html.parse_fragment("<div xmlns='http://www.w3.org/1999/xhtml' xmlns:hidden='urn:example'/>", { syntax: XmlSyntax }).is_ok()
 expect Html.parse_fragment("<img xmlns='http://www.w3.org/1999/xhtml' src='x' xml:alt='fake'/>", { syntax: XmlSyntax }).is_err()
+
+expect Html.parse_fragment("<datalist><option><span>x</span></option></datalist>", {}).is_err()
+expect Html.parse_fragment("<select><option label='Label'><span>x</span></option></select>", {}).is_err()
+expect Html.parse_fragment("<select><option><object></object></option></select>", {}).is_err()
+expect Html.parse_fragment("<button><span tabindex='0'>x</span></button>", {}).is_err()
+expect Html.parse_fragment("<table xmlns='http://www.w3.org/1999/xhtml'><tr><td/></tr></table>", { syntax: XmlSyntax }).is_ok()
+
+expect Html.parse_fragment("<datalist><div><option><span>x</span></option></div></datalist>", {}).is_err()
+expect Html.parse_segments(["<select><option label='x' value='v'>", "</option></select>"], {}).is_err()
+expect Html.parse_segments(["<br xmlns='http://www.w3.org/1999/xhtml'>", "</br>"], { syntax: XmlSyntax }).is_err()
