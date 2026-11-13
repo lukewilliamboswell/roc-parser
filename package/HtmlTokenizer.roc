@@ -11,7 +11,7 @@ HtmlTokenizer :: [].{
 	Token : { kind : Kind, span : Span }
 	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
-	Mode : [Data, Rcdata(Str), Rawtext(Str), Script, Plaintext]
+	Mode : [Data, Rcdata(Str), Rawtext(Str), Script, RcdataFragment, RawtextFragment, ScriptFragment, Plaintext]
 	Reader : { bytes : List(U8), pos : U64, diagnostics : List(Diagnostic) }
 
 	next : Reader, Mode, Bool -> { token : Token, reader : Reader }
@@ -22,7 +22,9 @@ HtmlTokenizer :: [].{
 			return { token: { kind: Eof, span: { start, end: start } }, reader }
 		}
 		match mode {
-			Plaintext => return characters(reader, bytes.len(), False, False)
+			Plaintext | RawtextFragment => return characters(reader, bytes.len(), False, False)
+			RcdataFragment => return characters(reader, bytes.len(), True, False)
+			ScriptFragment => return script_characters_with(reader, False)
 			Rawtext(name) => {
 				if !end_tag_at(bytes, start, name) {
 					return raw_characters(reader, name, False, False)
@@ -281,11 +283,7 @@ characters = |reader, end, references, data| {
 
 raw_characters = |reader, name, references, script| {
 	if script {
-		scanned = script_end(reader.bytes, reader.pos)
-		result = characters(reader, scanned.end, False, False)
-		if scanned.escaped_eof {
-			{ ..result, reader: { ..result.reader, diagnostics: result.reader.diagnostics.append({ code: EofInScriptCommentLikeText, offset: scanned.end }) } }
-		} else result
+		script_characters_with(reader, True)
 	} else {
 		var $end = reader.pos
 		while $end < reader.bytes.len() and !HtmlTokenizer.end_tag_at(reader.bytes, $end, name) {
@@ -295,10 +293,18 @@ raw_characters = |reader, name, references, script| {
 	}
 }
 
+script_characters_with = |reader, recognize_end_tags| {
+	scanned = script_end(reader.bytes, reader.pos, recognize_end_tags)
+	result = characters(reader, scanned.end, False, False)
+	if scanned.escaped_eof {
+		{ ..result, reader: { ..result.reader, diagnostics: result.reader.diagnostics.append({ code: EofInScriptCommentLikeText, offset: scanned.end }) } }
+	} else result
+}
+
 # Script data's escaped/double-escaped states cannot be modelled as a search
 # for comment delimiters: the dash/dash-dash and temporary-buffer states alter
 # which </script> is an appropriate end tag. Scan them explicitly once.
-script_end = |bytes, start| {
+script_end = |bytes, start, recognize_end_tags| {
 	var $pos = start
 	var $state = ScriptData
 	var $buffer_len = 0
@@ -309,7 +315,7 @@ script_end = |bytes, start| {
 		match $state {
 			ScriptData => {
 				if byte == '<' {
-					if HtmlTokenizer.end_tag_at(bytes, $pos, "script") {
+					if recognize_end_tags and HtmlTokenizer.end_tag_at(bytes, $pos, "script") {
 						break
 					}
 					if HtmlTokenizer.byte_at(bytes, $pos + 1) == '!' {
@@ -365,7 +371,7 @@ script_end = |bytes, start| {
 				}
 			}
 			EscapedLessThan => {
-				if byte == '/' and HtmlTokenizer.end_tag_at(bytes, $pos - 1, "script") {
+				if recognize_end_tags and byte == '/' and HtmlTokenizer.end_tag_at(bytes, $pos - 1, "script") {
 					$pos = $pos - 1
 					break
 				}
@@ -1173,3 +1179,8 @@ expect HtmlTokenizer.input_diagnostics("\r\n\t\u(C)\u(0)\u(FEFF)".to_utf8()).is_
 expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 0).len() == 1
 expect HtmlTokenizer.input_diagnostics_with("\u(B)\u(B)\u(B)".to_utf8(), 1).len() == 2
 expect token_kind("\u(FEFF)<p>") == Characters("\u(FEFF)")
+
+expect HtmlTokenizer.next({ bytes: "foo</textarea><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RcdataFragment, False).token.kind == Characters("foo</textarea><b>&")
+expect HtmlTokenizer.next({ bytes: "foo</style><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RawtextFragment, False).token.kind == Characters("foo</style><b>&amp;")
+expect HtmlTokenizer.next({ bytes: "<!-- inside </script> -->".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("<!-- inside </script> -->")
+expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("</script><b>&amp;")
