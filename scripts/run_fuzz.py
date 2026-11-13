@@ -98,6 +98,7 @@ TARGETS = dict(
         target("xml-ceilings", "xml-ceilings", "raw", max_input_size=2, timeout=20, examples=True),
         target("xmlns-raw", "xmlns", "raw", "xmlns", timeout=10),
         target("xmlns-roundtrip", max_input_size=1024, timeout=10),
+        target("svg-path", max_input_size=64, timeout=10, scheduled=False),
         target("svg-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
         target("mathml-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
         target("html-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
@@ -223,7 +224,7 @@ def run_directory(target_name: str) -> Path:
 def build_identity(target_name: str, roc: str) -> dict:
     config = TARGETS[target_name]
     digest = hashlib.sha256()
-    for path in [config.source, *sorted((ROOT / "package").glob("*.roc"))]:
+    for path in sorted({config.source, *FUZZ_ROOT.glob("*.roc"), *(ROOT / "package").glob("*.roc")}):
         digest.update(str(path.relative_to(ROOT)).encode())
         digest.update(path.read_bytes())
     compiler_path = Path(shutil.which(roc) or roc)
@@ -242,7 +243,7 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
     output = binary_path(target_name)
 
     manifest_path = output.with_suffix(".build.json")
-    syntax_target = target_name.startswith("roc-syntax-")
+    syntax_target = target_name.startswith(("roc-syntax-", "markup-", "svg-", "mathml-", "html-"))
     identity = build_identity(target_name, roc) if syntax_target else None
     if no_build:
         if not output.is_file():
