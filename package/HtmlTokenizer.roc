@@ -1,4 +1,5 @@
 import MarkdownEntities
+import MarkupHtmlError
 
 ## HTML tokenization primitives. Offsets always address the unmodified input.
 ## Tree construction supplies the content model and foreign-content flag.
@@ -8,7 +9,7 @@ HtmlTokenizer :: [].{
 	Tag : { name : Str, attributes : List(Attribute), self_closing : Bool }
 	Kind : [Start(Tag), End(Str), Characters(Str), Comment(Str), Doctype({ name : Str, public_id : Str, system_id : Str, quirks : Bool }), Eof]
 	Token : { kind : Kind, span : Span }
-	Code : [UnexpectedNull, EofInTag, EofInComment, IncorrectComment, BogusComment, InvalidTagOpen, DuplicateAttribute(Str), MissingAttributeValue, MissingWhitespace, InvalidAttributeCharacter, EndTagAttributes, InvalidSolidus, MissingSemicolon, UnknownReference, InvalidCharacterReference, MissingDoctypeName, InvalidDoctype, EofInDoctype]
+	Code : MarkupHtmlError.Code
 	Diagnostic : { code : Code, offset : U64 }
 	Mode : [Data, Rcdata(Str), Rawtext(Str), Script, Plaintext]
 	Reader : { bytes : List(U8), pos : U64, diagnostics : List(Diagnostic) }
@@ -67,10 +68,23 @@ HtmlTokenizer :: [].{
 				$end = $end + 1
 			}
 			end = if ($end < bytes.len()) $end + 1 else $end
-			return { token: { kind: Comment(text_at(bytes, start + 2, $end)), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code: BogusComment, offset: start }) } }
+			return { token: { kind: Comment(text_at(bytes, if (byte_at(bytes, start + 1) == '?') start + 1 else start + 2, $end)), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code: BogusComment, offset: start }) } }
 		}
 		closing = byte_at(bytes, start + 1) == '/'
 		name_start = start + if (closing) 2 else 1
+		if closing and !ascii_alpha(byte_at(bytes, name_start)) {
+			if byte_at(bytes, name_start) == '>' {
+				return { token: { kind: Characters(""), span: { start, end: name_start + 1 } }, reader: { ..reader, pos: name_start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
+			}
+			if name_start < bytes.len() {
+				var $end = name_start
+				while $end < bytes.len() and byte_at(bytes, $end) != '>' {
+					$end = $end + 1
+				}
+				end = if ($end < bytes.len()) $end + 1 else $end
+				return { token: { kind: Comment(text_at(bytes, name_start, $end)), span: { start, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.append({ code: BogusComment, offset: start }) } }
+			}
+		}
 		if !ascii_alpha(byte_at(bytes, name_start)) {
 			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
 		}
@@ -271,6 +285,9 @@ comment = |reader| {
 	start = reader.pos
 	var $end = start + 4
 	var $diagnostics = reader.diagnostics
+	if HtmlTokenizer.byte_at(bytes, $end) == '-' and HtmlTokenizer.byte_at(bytes, $end + 1) == '>' {
+		return { token: { kind: Comment(""), span: { start, end: $end + 2 } }, reader: { ..reader, pos: $end + 2, diagnostics: $diagnostics.append({ code: IncorrectComment, offset: start }) } }
+	}
 	if HtmlTokenizer.byte_at(bytes, $end) == '>' {
 		return { token: { kind: Comment(""), span: { start, end: $end + 1 } }, reader: { ..reader, pos: $end + 1, diagnostics: $diagnostics.append({ code: IncorrectComment, offset: start }) } }
 	}

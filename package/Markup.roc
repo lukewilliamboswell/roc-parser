@@ -1,6 +1,7 @@
 import Xml
 import XmlNs
 import Literal
+import MarkupHtmlError
 
 ## Shared source, namespace trees and diagnostics for HTML, SVG and MathML.
 ## Trees use XML expanded names. Source retains the exact original bytes;
@@ -105,7 +106,7 @@ Markup :: [].{
 
 	## Structured reason for rejection
 	## Presentation is separate.
-	Problem : [SyntaxError(Str), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
+	Problem : [SyntaxError(Str), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
 
 	## One-based lines and UTF-8 byte columns refer to authored source.
 	Error : { problem : Problem, line : U64, column : U64 }

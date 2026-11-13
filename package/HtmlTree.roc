@@ -1,6 +1,7 @@
 import Markup
 import HtmlTokenizer as Tok
 import Literal
+import MarkupHtmlError
 
 ## HTML tree construction. The open-elements and active-formatting stacks are
 ## separate from the indexed output tree so recovery can reparent existing nodes.
@@ -15,7 +16,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 4096 + props.max_work_per_byte * (source.count_utf8_bytes() + 1), element_count: 0, diagnostics_exceeded: False }
+		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -74,7 +75,7 @@ HtmlTree :: [].{
 		var $diagnostics = $state.diagnostics
 		for d in $reader.diagnostics {
 			if $diagnostics.len() < props.max_diagnostics {
-				$diagnostics = $diagnostics.append({ problem: SyntaxError(Str.inspect(d.code)), line: 0, column: d.offset })
+				$diagnostics = $diagnostics.append({ problem: HtmlSyntax(d.code), line: 0, column: d.offset })
 			}
 		}
 		diagnostics = $diagnostics.map(
@@ -88,7 +89,7 @@ HtmlTree :: [].{
 			},
 		)
 		if props.recovery == Strict and !diagnostics.is_empty() {
-			return Err(InvalidMarkup(diagnostics.first() ?? { problem: SyntaxError("invalid HTML"), line: 1, column: 1 }))
+			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
 		}
 		roots = if fragment {
 			(node_at($state, 0)).children
@@ -134,8 +135,8 @@ adjusted_namespace = |s| if (s.fragment and s.stack.len() == 1) s.context.namesp
 
 adjusted_name = |s| if (s.fragment and s.stack.len() == 1) s.context.name else current(s)
 
-problem : State, Str, U64 -> State
-problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: SyntaxError(code), line: 0, column: offset }) } else { ..s, diagnostics_exceeded: True }
+problem : State, MarkupHtmlError.Code, U64 -> State
+problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: HtmlSyntax(code), line: 0, column: offset }) } else { ..s, diagnostics_exceeded: True }
 
 append_node : State, Markup.Node -> State
 append_node = |s, node| {
@@ -151,7 +152,7 @@ append_node = |s, node| {
 			}
 		),
 	}
-	if s.foster {
+	if s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
 		table = last_named(s, "table")
 		match table {
 			Ok(t) => {
@@ -204,7 +205,7 @@ insert_text = |s, text, span| {
 	}
 	# Adjacent source text shares a DOM text node. Foster parenting can select a
 	# different parent, in which case append_node computes the insertion point.
-	if !s.foster {
+	if !s.foster or !["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
 		siblings = match s.stack.last() {
 			Ok(p) => (node_at(s, p)).children
 			Err(_) => s.roots
@@ -224,6 +225,26 @@ insert_text = |s, text, span| {
 				}
 			}
 			Err(_) => {}
+		}
+	}
+	if s.foster and ["table", "tbody", "tfoot", "thead", "tr"].contains(current(s)) {
+		match last_named(s, "table") {
+			Ok(table_id) => {
+				siblings = match find_parent(s, table_id) {
+					Ok(p) => (node_at(s, p)).children
+					_ => s.roots
+				}
+				at = index_of(siblings, table_id) ?? 0
+				if at > 0 {
+					previous_id = siblings.get(at - 1) ?? 0
+					previous = node_at(s, previous_id)
+					match previous.kind {
+						Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? s.nodes }
+						_ => {}
+					}
+				}
+			}
+			_ => {}
 		}
 	}
 	append_node(s, { kind: Text(text), attributes: [], children: [], origin: Authored(span) })
@@ -374,6 +395,14 @@ process = |state, token, scripting| {
 	if foreign_token(state, token) {
 		return foreign_process(state, token)
 	}
+	process_html(state, token, scripting)
+}
+
+process_html : State, Tok.Token, Bool -> State
+process_html = |state, token, scripting| {
+	if state.work > state.work_limit {
+		return state
+	}
 	var $s = { ..state, work: state.work + 1 }
 	var $reprocess = True
 	var $count = 0.U64
@@ -393,17 +422,17 @@ process = |state, token, scripting| {
 			(Initial, Doctype(d)) => {
 				$s = append_node($s, { kind: Doctype({ name: d.name, public_id: d.public_id, system_id: d.system_id }), attributes: [], children: [], origin: Authored(token.span) })
 				if d.quirks {
-					$s = problem($s, "non-conforming-doctype", token.span.start)
+					$s = problem($s, NonConformingDoctype, token.span.start)
 				}
 				$s = { ..$s, mode: BeforeHtml }
 			}
 			(Initial, _) => {
-				$s = problem($s, "missing-doctype", token.span.start)
+				$s = problem($s, MissingDoctype, token.span.start)
 				$s = { ..$s, mode: BeforeHtml }
 				$reprocess = True
 			}
 			(_, Doctype(_)) => {
-				$s = problem($s, "unexpected-doctype", token.span.start)
+				$s = problem($s, UnexpectedDoctype, token.span.start)
 			}
 			(BeforeHtml, Characters(t)) if whitespace(t) => {}
 			(BeforeHtml, Start(t)) if t.name == "html" => {
@@ -471,7 +500,7 @@ process = |state, token, scripting| {
 				$s = { ..$s, mode: InFrameset }
 			}
 			(AfterHead, Start(t)) if ["base", "link", "meta", "script", "style", "template", "title"].contains(t.name) => {
-				$s = problem($s, "head-content-after-head", token.span.start)
+				$s = problem($s, HeadContentAfterHead, token.span.start)
 				match $s.head {
 					Ok(h) => {
 						old = $s.stack
@@ -507,7 +536,7 @@ process = |state, token, scripting| {
 							$s = clear_active($s)
 							$s = { ..$s, mode: InRow }
 						} else {
-							$s = problem($s, "unexpected-cell-end", token.span.start)
+							$s = problem($s, UnexpectedCellEnd, token.span.start)
 						}
 					}
 					Start(t) if ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(t.name) => {
@@ -559,7 +588,7 @@ process = |state, token, scripting| {
 						$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
 					}
 					End("col") => {
-						$s = problem($s, "unexpected-col-end", token.span.start)
+						$s = problem($s, UnexpectedColEnd, token.span.start)
 					}
 					Eof => {}
 					_ => {
@@ -586,7 +615,7 @@ process = |state, token, scripting| {
 					}
 					Eof => {
 						if last_named($s, "template").is_ok() {
-							$s = problem($s, "eof-in-template", token.span.start)
+							$s = problem($s, EofInTemplate, token.span.start)
 							$s = end_template($s, token.span.start)
 							$reprocess = True
 						}
@@ -597,7 +626,7 @@ process = |state, token, scripting| {
 						$reprocess = True
 					}
 					_ => {
-						$s = problem($s, "unexpected-template-token", token.span.start)
+						$s = problem($s, UnexpectedTemplateToken, token.span.start)
 					}
 				}
 			}
@@ -612,7 +641,7 @@ process = |state, token, scripting| {
 				$s = body($s, token)
 			}
 			(AfterBody, _) | (AfterAfterBody, _) => {
-				$s = problem($s, "content-after-body", token.span.start)
+				$s = problem($s, ContentAfterBody, token.span.start)
 				$s = { ..$s, mode: InBody }
 				$reprocess = True
 			}
@@ -636,7 +665,7 @@ process = |state, token, scripting| {
 				$s = { ..$s, mode: AfterAfterBody }
 			}
 			(InFrameset, _) | (AfterFrameset, _) => {
-				$s = problem($s, "unexpected-frameset-content", token.span.start)
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
 			}
 		}
 	}
@@ -660,7 +689,7 @@ body = |state, token| {
 		}
 		Eof => {
 			if $s.stack.any(|i| !["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html"].contains(name_at($s, i))) {
-				$s = problem($s, "eof-with-open-elements", token.span.start)
+				$s = problem($s, EofWithOpenElements, token.span.start)
 			}
 		}
 		Start(tag) => {
@@ -675,11 +704,11 @@ body = |state, token| {
 						$s = merge_attributes($s, id, tag)
 					}
 					_ => {
-						$s = problem($s, "unexpected-body-start", token.span.start)
+						$s = problem($s, UnexpectedBodyStart, token.span.start)
 					}
 				}
 			} else if name == "head" {
-				$s = problem($s, "unexpected-head-start", token.span.start)
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
 			}
 			else if ["base", "basefont", "bgsound", "link", "meta"].contains(name) {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, False)
@@ -697,7 +726,7 @@ body = |state, token| {
 					$s = close_p($s)
 				}
 				if ["h1", "h2", "h3", "h4", "h5", "h6"].contains(current($s)) {
-					$s = problem($s, "nested-heading", token.span.start)
+					$s = problem($s, NestedHeading, token.span.start)
 					$s = { ..$s, stack: $s.stack.drop_last(1) }
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -709,7 +738,7 @@ body = |state, token| {
 				$s = { ..$s, skip_lf: True, frameset_ok: False }
 			} else if name == "form" {
 				if $s.form.is_ok() and last_named($s, "template").is_err() {
-					$s = problem($s, "nested-form", token.span.start)
+					$s = problem($s, NestedForm, token.span.start)
 				}
 				else {
 					if in_scope($s, "p", ButtonScope) {
@@ -746,7 +775,7 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 			} else if name == "button" {
 				if in_scope($s, "button", DefaultScope) {
-					$s = problem($s, "nested-button", token.span.start)
+					$s = problem($s, NestedButton, token.span.start)
 					$s = close_to(implied($s, ""), "button")
 				}
 				$s = reconstruct($s)
@@ -756,7 +785,7 @@ body = |state, token| {
 				if name == "a" {
 					match active_named($s, "a") {
 						Ok(id) => {
-							$s = problem($s, "nested-anchor", token.span.start)
+							$s = problem($s, NestedAnchor, token.span.start)
 							$s = adoption($s, "a", token.span.start)
 							$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(id)), stack: $s.stack.keep_if(|i| i != id) }
 						}
@@ -764,12 +793,33 @@ body = |state, token| {
 					}
 				}
 				if name == "nobr" and in_scope($s, "nobr", DefaultScope) {
-					$s = problem($s, "nested-nobr", token.span.start)
+					$s = problem($s, NestedNobr, token.span.start)
 					$s = adoption($s, "nobr", token.span.start)
 				}
 				$s = reconstruct($s)
 				id = $s.nodes.len()
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				# Noah's Ark clause: retain at most three equivalent entries after
+				# the last marker, even while older elements remain open.
+				var $same = []
+				var $active_at = $s.active.len()
+				fresh = node_at($s, id)
+				while $active_at > 0 {
+					$active_at = $active_at - 1
+					match $s.active.get($active_at) ?? Marker {
+						Marker => break
+						Entry(previous_id) => {
+							previous = node_at($s, previous_id)
+							if previous.kind == fresh.kind and previous.attributes.map(|a| (a.name, a.value)) == fresh.attributes.map(|a| (a.name, a.value)) {
+								$same = $same.append(previous_id)
+							}
+						}
+					}
+				}
+				if $same.len() >= 3 {
+					oldest = $same.last() ?? id
+					$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(oldest)) }
+				}
 				$s = { ..$s, active: $s.active.append(Entry(id)) }
 			} else if name == "applet" or name == "marquee" or name == "object" {
 				$s = reconstruct($s)
@@ -826,12 +876,12 @@ body = |state, token| {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, if (name == "svg") Markup.svg_namespace else Markup.mathml_namespace, token.span, !tag.self_closing)
 			} else if ["caption", "col", "colgroup", "frame", "head", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(name) {
-				$s = problem($s, "unexpected-table-element", token.span.start)
+				$s = problem($s, UnexpectedTableElement, token.span.start)
 			} else {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				if tag.self_closing {
-					$s = problem($s, "non-void-html-element-start-tag-with-trailing-solidus", token.span.start)
+					$s = problem($s, NonVoidHtmlElementStartTagWithTrailingSolidus, token.span.start)
 				}
 			}
 		}
@@ -841,22 +891,22 @@ body = |state, token| {
 					$s = { ..$s, mode: if (name == "html") AfterAfterBody else AfterBody }
 				}
 				else {
-					$s = problem($s, "unexpected-body-end", token.span.start)
+					$s = problem($s, UnexpectedBodyEnd, token.span.start)
 				}
 			} else if name == "p" {
 				if !in_scope($s, "p", ButtonScope) {
-					$s = problem($s, "unexpected-p-end", token.span.start)
+					$s = problem($s, UnexpectedPEnd, token.span.start)
 					$s = insert_element($s, "p", Markup.html_namespace, [], Implied(token.span.start), True)
 				}
 				$s = close_p($s)
 			} else if ["address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "summary", "ul"].contains(name) {
 				if !in_scope($s, name, DefaultScope) {
-					$s = problem($s, "unexpected-end-tag", token.span.start)
+					$s = problem($s, UnexpectedEndTag, token.span.start)
 				}
 				else {
 					$s = implied($s, "")
 					if current($s) != name {
-						$s = problem($s, "misnested-end-tag", token.span.start)
+						$s = problem($s, MisnestedEndTag, token.span.start)
 					}
 					$s = close_to($s, name)
 				}
@@ -867,24 +917,24 @@ body = |state, token| {
 				match $s.form {
 					Ok(id) => {
 						if !s_in_scope_id($s, id) {
-							$s = problem($s, "unexpected-form-end", token.span.start)
+							$s = problem($s, UnexpectedFormEnd, token.span.start)
 						} else {
 							$s = implied($s, "")
 							$s = { ..$s, stack: $s.stack.keep_if(|i| i != id) }
 						}
 					}
 					_ => {
-						$s = problem($s, "unexpected-form-end", token.span.start)
+						$s = problem($s, UnexpectedFormEnd, token.span.start)
 					}
 				}
 				$s = { ..$s, form: Err(Missing) }
 			} else if name == "br" {
-				$s = problem($s, "end-tag-br", token.span.start)
+				$s = problem($s, EndTagBr, token.span.start)
 				$s = body($s, { ..token, kind: Start({ name: "br", attributes: [], self_closing: False }) })
 			} else if name == "li" or name == "dd" or name == "dt" or name == "button" or name == "applet" or name == "marquee" or name == "object" {
 				scope = if (name == "li") ListScope else DefaultScope
 				if !in_scope($s, name, scope) {
-					$s = problem($s, "unexpected-end-tag", token.span.start)
+					$s = problem($s, UnexpectedEndTag, token.span.start)
 				}
 				else {
 					$s = close_to(implied($s, name), name)
@@ -900,11 +950,11 @@ body = |state, token| {
 					}
 				}
 				if $found == "" {
-					$s = problem($s, "unexpected-heading-end", token.span.start)
+					$s = problem($s, UnexpectedHeadingEnd, token.span.start)
 				}
 				else {
 					if $found != name {
-						$s = problem($s, "mismatched-heading-end", token.span.start)
+						$s = problem($s, MismatchedHeadingEnd, token.span.start)
 					}
 					$s = close_to(implied($s, ""), $found)
 				}
@@ -935,15 +985,15 @@ generic_end = |s, name, offset| {
 		if n == name {
 			$s = implied($s, name)
 			if current($s) != name {
-				$s = problem($s, "misnested-end-tag", offset)
+				$s = problem($s, MisnestedEndTag, offset)
 			}
 			return { ..$s, stack: $s.stack.take_first($i) }
 		}
 		if special(n) {
-			return problem($s, "unexpected-end-tag", offset)
+			return problem($s, UnexpectedEndTag, offset)
 		}
 	}
-	problem($s, "unexpected-end-tag", offset)
+	problem($s, UnexpectedEndTag, offset)
 }
 
 start_template = |s, tag, span| {
@@ -953,7 +1003,7 @@ start_template = |s, tag, span| {
 
 end_template = |s, offset| {
 	if last_named(s, "template").is_err() {
-		return problem(s, "unexpected-template-end", offset)
+		return problem(s, UnexpectedTemplateEnd, offset)
 	}
 	next = clear_active(close_to(implied(s, ""), "template"))
 	reset_mode({ ..next, modes: next.modes.drop_last(1) })
@@ -1042,13 +1092,13 @@ adoption = |s, name, offset| {
 			Err(_) => return generic_end($s, name, offset)
 			Ok(formatting_id) => {
 				if !$s.stack.contains(formatting_id) {
-					return { ..problem($s, "formatting-element-not-open", offset), active: $s.active.keep_if(|a| a != Entry(formatting_id)) }
+					return { ..problem($s, FormattingElementNotOpen, offset), active: $s.active.keep_if(|a| a != Entry(formatting_id)) }
 				}
 				if !s_in_scope_id($s, formatting_id) {
-					return problem($s, "formatting-element-out-of-scope", offset)
+					return problem($s, FormattingElementOutOfScope, offset)
 				}
 				if ($s.stack.last() ?? 0) != formatting_id {
-					$s = problem($s, "misnested-formatting", offset)
+					$s = problem($s, MisnestedFormatting, offset)
 				}
 				at = stack_position($s, formatting_id) ?? 0
 				var $furthest = Err(Missing)
@@ -1189,7 +1239,7 @@ table = |state, token| {
 			$s = process($s, token, $s.context.scripting)
 		}
 		Start(t) if t.name == "table" => {
-			$s = problem($s, "nested-table", token.span.start)
+			$s = problem($s, NestedTable, token.span.start)
 			if in_scope($s, "table", TableScope) {
 				$s = reset_mode(close_to($s, "table"))
 				$s = process($s, token, $s.context.scripting)
@@ -1199,18 +1249,18 @@ table = |state, token| {
 			if in_scope($s, "table", TableScope) {
 				$s = reset_mode(close_to($s, "table"))
 			} else {
-				$s = problem($s, "unexpected-table-end", token.span.start)
+				$s = problem($s, UnexpectedTableEnd, token.span.start)
 			}
 		}
 		End(n) if ["body", "caption", "col", "colgroup", "html", "tbody", "td", "tfoot", "th", "thead", "tr"].contains(n) => {
-			$s = problem($s, "unexpected-table-end-tag", token.span.start)
+			$s = problem($s, UnexpectedTableEndTag, token.span.start)
 		}
 		Start(t) if t.name == "input" and t.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden") => {
-			$s = problem($s, "hidden-input-in-table", token.span.start)
+			$s = problem($s, HiddenInputInTable, token.span.start)
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
 		}
 		Start(t) if t.name == "form" => {
-			$s = problem($s, "form-in-table", token.span.start)
+			$s = problem($s, FormInTable, token.span.start)
 			if $s.form.is_err() {
 				id = $s.nodes.len()
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
@@ -1224,7 +1274,7 @@ table = |state, token| {
 			$s = body($s, token)
 		}
 		_ => {
-			$s = problem($s, "foster-parented-content", token.span.start)
+			$s = problem($s, FosterParentedContent, token.span.start)
 			$s = body({ ..$s, foster: True }, token)
 			$s = { ..$s, foster: False }
 		}
@@ -1265,7 +1315,7 @@ table_body = |state, token| {
 			$s = { ..$s, mode: InRow }
 		}
 		Start(t) if t.name == "td" or t.name == "th" => {
-			$s = problem($s, "cell-without-row", token.span.start)
+			$s = problem($s, CellWithoutRow, token.span.start)
 			$s = clear_section_stack($s)
 			$s = insert_element($s, "tr", Markup.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InRow }
@@ -1276,7 +1326,7 @@ table_body = |state, token| {
 				$s = clear_section_stack($s)
 				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTable }
 			} else {
-				$s = problem($s, "unexpected-table-section-end", token.span.start)
+				$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
 			}
 		}
 		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead"].contains(t.name) => {
@@ -1294,7 +1344,7 @@ table_body = |state, token| {
 			}
 		}
 		End(n) if ["body", "caption", "col", "colgroup", "html", "td", "th", "tr"].contains(n) => {
-			$s = problem($s, "unexpected-table-section-token", token.span.start)
+			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
 		}
 		_ => {
 			$s = table($s, token)
@@ -1316,7 +1366,7 @@ row = |state, token| {
 				$s = clear_row_stack($s)
 				$s = { ..$s, stack: $s.stack.drop_last(1), mode: InTableBody }
 			} else {
-				$s = problem($s, "unexpected-row-end", token.span.start)
+				$s = problem($s, UnexpectedRowEnd, token.span.start)
 			}
 		}
 		Start(t) if ["caption", "col", "colgroup", "tbody", "tfoot", "thead", "tr"].contains(t.name) => {
@@ -1334,7 +1384,7 @@ row = |state, token| {
 			}
 		}
 		End(n) if ["body", "caption", "col", "colgroup", "html", "td", "th"].contains(n) => {
-			$s = problem($s, "unexpected-row-token", token.span.start)
+			$s = problem($s, UnexpectedRowToken, token.span.start)
 		}
 		_ => {
 			$s = table($s, token)
@@ -1374,7 +1424,7 @@ select = |state, token| {
 			if current($s) == "option" {
 				$s = { ..$s, stack: $s.stack.drop_last(1) }
 			} else {
-				$s = problem($s, "unexpected-option-end", token.span.start)
+				$s = problem($s, UnexpectedOptionEnd, token.span.start)
 			}
 		}
 		End("optgroup") => {
@@ -1384,18 +1434,18 @@ select = |state, token| {
 			if current($s) == "optgroup" {
 				$s = { ..$s, stack: $s.stack.drop_last(1) }
 			} else {
-				$s = problem($s, "unexpected-optgroup-end", token.span.start)
+				$s = problem($s, UnexpectedOptgroupEnd, token.span.start)
 			}
 		}
 		End("select") => {
 			if in_scope($s, "select", SelectScope) {
 				$s = reset_mode(close_to($s, "select"))
 			} else {
-				$s = problem($s, "unexpected-select-end", token.span.start)
+				$s = problem($s, UnexpectedSelectEnd, token.span.start)
 			}
 		}
 		Start(t) if ["input", "keygen", "textarea", "select"].contains(t.name) => {
-			$s = problem($s, "unexpected-select-content", token.span.start)
+			$s = problem($s, UnexpectedSelectContent, token.span.start)
 			if in_scope($s, "select", SelectScope) {
 				$s = reset_mode(close_to($s, "select"))
 				if t.name != "select" {
@@ -1420,12 +1470,12 @@ select = |state, token| {
 		}
 		_ => {
 			if $s.mode == InSelectTable and table_token(token.kind) and in_scope($s, "select", SelectScope) {
-				$s = problem($s, "table-content-in-select", token.span.start)
+				$s = problem($s, TableContentInSelect, token.span.start)
 				$s = reset_mode(close_to($s, "select"))
 				$s = process($s, token, $s.context.scripting)
 			}
 			else {
-				$s = problem($s, "unexpected-select-token", token.span.start)
+				$s = problem($s, UnexpectedSelectToken, token.span.start)
 			}
 		}
 	}
@@ -1495,11 +1545,11 @@ foreign_process = |state, token| {
 		Start(t) => {
 			breakout = ["b", "big", "blockquote", "body", "br", "center", "code", "dd", "div", "dl", "dt", "em", "embed", "h1", "h2", "h3", "h4", "h5", "h6", "head", "hr", "i", "img", "li", "listing", "menu", "meta", "nobr", "ol", "p", "pre", "ruby", "s", "small", "span", "strong", "strike", "sub", "sup", "table", "tt", "u", "ul", "var"].contains(t.name) or (t.name == "font" and t.attributes.any(|a| ["color", "face", "size"].contains(a.name)))
 			if breakout {
-				$s = problem($s, "html-start-tag-in-foreign-content", token.span.start)
-				while !$s.stack.is_empty() and adjusted_namespace($s) != Markup.html_namespace and !integration($s) {
+				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
+				while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
 					$s = { ..$s, stack: $s.stack.drop_last(1) }
 				}
-				$s = process($s, token, $s.context.scripting)
+				$s = process_html($s, token, $s.context.scripting)
 			} else {
 				$s = insert_tag($s, t, adjusted_namespace($s), token.span, !t.self_closing)
 			}
@@ -1516,17 +1566,17 @@ foreign_process = |state, token| {
 					break
 				}
 				if namespace_at($s, id) == Markup.html_namespace {
-					$s = process($s, token, $s.context.scripting)
+					$s = process_html($s, token, $s.context.scripting)
 					$found = True
 					break
 				}
 			}
 			if !$found {
-				$s = problem($s, "unexpected-foreign-end-tag", token.span.start)
+				$s = problem($s, UnexpectedForeignEndTag, token.span.start)
 			}
 		}
 		Doctype(_) => {
-			$s = problem($s, "doctype-in-foreign-content", token.span.start)
+			$s = problem($s, DoctypeInForeignContent, token.span.start)
 		}
 		Eof => {}
 	}
@@ -1667,3 +1717,23 @@ expect {
 	texts(p.tree) == ["a\u(FFFD)b"]
 }
 expect HtmlTree.parse("<!--x--><!--y-->", True, {}, { max_nodes: 2 }).is_err()
+
+work_limit : U64, U64 -> U64
+work_limit = |per_byte, size| {
+	maximum = 0xFFFFFFFFFFFFFFFF.U64
+	if (per_byte > (maximum - 4096) // (size + 1)) maximum else 4096 + per_byte * (size + 1)
+}
+expect HtmlTree.parse("<p>x</p>", True, {}, { max_work_per_byte: 0xFFFFFFFFFFFFFFFF }).is_ok()
+expect {
+	p = HtmlTree.parse("<table><div>x</div><tr><td>y</table>", True, {}, { recovery: Browser })?
+	div = p.tree.nodes.get(p.tree.roots.first()?)?
+	div.children.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "x"
+}
+
+expect {
+	p = HtmlTree.parse("<g></path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser })?
+	Markup.text(p.tree, p.tree.roots.first()?) == "X"
+}
+expect HtmlTree.parse("</path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</foreignObject>X", True, { namespace: Markup.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</math>X", True, { namespace: Markup.mathml_namespace, name: "math" }, { recovery: Browser }).is_ok()
