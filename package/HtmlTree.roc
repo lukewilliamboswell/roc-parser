@@ -415,6 +415,9 @@ process_html = |state, token, scripting| {
 		$reprocess = False
 		mode = $s.mode
 		match (mode, token.kind) {
+			(_, ProcessingInstruction(pi)) => {
+				$s = append_misc($s, { kind: ProcessingInstruction(pi), attributes: [], children: [], origin: Authored(token.span) })
+			}
 			(_, Comment(text)) => {
 				$s = append_misc($s, { kind: Comment(text), attributes: [], children: [], origin: Authored(token.span) })
 			}
@@ -1595,6 +1598,9 @@ foreign_process = |state, token| {
 		Characters(t) => {
 			$s = insert_text($s, Str.join_with(t.split_on("\u(0)"), "\u(FFFD)"), token.span)
 		}
+		ProcessingInstruction(pi) => {
+			$s = append_node($s, { kind: ProcessingInstruction(pi), attributes: [], children: [], origin: Authored(token.span) })
+		}
 		Comment(t) => {
 			$s = append_node($s, { kind: Comment(t), attributes: [], children: [], origin: Authored(token.span) })
 		}
@@ -1820,4 +1826,15 @@ expect {
 	p = HtmlTree.parse("<!doctype html><div></body><!--foo-->", False, {}, { recovery: Browser })?
 	html = p.tree.nodes.get(1)?
 	html.children.len() == 3
+}
+
+expect {
+	p = HtmlTree.parse("<!doctype html><?a first?><html><body><?b second></body><?c third?></html><?d?>", False, {}, {})?
+	pis = p.tree.nodes.keep_oks(
+		|n| match n.kind {
+			ProcessingInstruction(pi) => Ok(pi.target)
+			_ => Err(Skip)
+		},
+	)
+	pis == ["a", "b", "c", "d"]
 }
