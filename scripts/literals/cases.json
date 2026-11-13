@@ -5,7 +5,7 @@
   },
   {
     "name": "typed-and-multiline",
-    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"😀\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
+    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"\ud83d\ude00\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
   },
   {
     "name": "imported-formats",
@@ -445,6 +445,45 @@
       "compile time crash",
       "drawing.svg",
       "viewBox"
+    ]
+  },
+  {
+    "name": "markup-policy-ordinary-handlers",
+    "body": "svg : Svg.Fragment\nsvg = \"<metadata><math xmlns='http://www.w3.org/1998/Math/MathML'><mrow onclick='go()'><mi>x</mi></mrow></math></metadata><g oninput='go()'/>\"\nmath : MathML.Fragment\nmath = \"<mrow onclick='go()'><mi>x</mi></mrow>\"\nsegments = Literal.require(Svg.parse_segments([\"<metadata><m:mrow xmlns:m='http://www.w3.org/1998/Math/MathML' onclick='go()'/></metadata>\"], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error(\"SVG\", error)))\nvalue = segments.parsed.tree.roots.len() == 1 and svg.parsed.tree.roots.len() == 2 and math.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-custom-attributes",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\naccepted : NoHandlers\naccepted = \"<metadata><extension online='custom' customonline='also custom'/></metadata>\"\nvalue = accepted.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-namespaced-onclick",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\naccepted : NoHandlers\naccepted = \"<g xmlns:e='urn:extension' e:onclick='data'/>\"\nvalue = accepted.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-mixed-math-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nvalue : NoHandlers\nvalue = \"<metadata><m:mrow xmlns:m='http://www.w3.org/1998/Math/MathML' onclick='go()'/></metadata>\"\n",
+    "errors": [
+      "invalid string",
+      "NoHandlers",
+      "inline handler onclick forbidden on mrow"
+    ]
+  },
+  {
+    "name": "markup-policy-svg-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nvalue : NoHandlers\nvalue = \"<g oninput='go()'/>\"\n",
+    "errors": [
+      "invalid string",
+      "NoHandlers",
+      "inline handler oninput forbidden on g"
+    ]
+  },
+  {
+    "name": "markup-policy-math-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nmath : MathML.Fragment\nmath = \"<mrow onclick='go()'><mi>x</mi></mrow>\"\nvalue = Literal.require(NoHandlers.check(math.parsed))\n",
+    "errors": [
+      "compile time crash",
+      "NoHandlers",
+      "inline handler onclick forbidden on mrow"
     ]
   }
 ]

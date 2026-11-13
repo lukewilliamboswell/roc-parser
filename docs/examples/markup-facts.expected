@@ -1,0 +1,6 @@
+Ordinary SVG accepts handlers: True
+Ordinary MathML accepts handlers: True
+Consumer rejects mixed MathML onclick: True
+Consumer rejects MathML onclick: True
+Consumer accepts custom attributes: True
+Consumer accepts namespaced onclick: True

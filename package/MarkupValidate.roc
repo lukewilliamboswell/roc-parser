@@ -2,6 +2,7 @@ import Markup
 import MarkupTemplate
 import MarkupValues
 import SvgPath
+import MarkupVocabulary
 
 ## SVG and Presentation MathML authoring checks shared by the three frontends.
 ## These checks do not execute or validate embedded CSS and JavaScript.
@@ -131,6 +132,11 @@ MarkupValidate :: [].{
 		Ok(plan)
 	}
 
+	element_known : Bool, Str -> Bool
+	element_known = |svg, local| if (svg) svg_elements(local) else math_elements(local)
+	attribute_known : Bool, Str, Markup.Name -> Bool
+	attribute_known = allowed_attribute
+
 	## The typed value grammar applied to a known attribute.
 	grammar : Bool, Str, Str -> Markup.ValueGrammar
 	grammar = |svg, element, attr| if allowed_attribute(svg, element, { namespace: NoNamespace, local: attr, prefix: Unprefixed }) {
@@ -160,10 +166,7 @@ svg_presentation = |key| match key {
 	_ => False
 }
 
-svg_events = |key| match key {
-	"onabort" | "onactivate" | "onbegin" | "onclick" | "onend" | "onerror" | "onfocusin" | "onfocusout" | "onload" | "onmousedown" | "onmousemove" | "onmouseout" | "onmouseover" | "onmouseup" | "onrepeat" | "onresize" | "onscroll" | "onunload" | "onzoom" | "onkeydown" | "onkeyup" | "onpointerdown" | "onpointermove" | "onpointerup" | "onpointerenter" | "onpointerleave" | "ontouchstart" | "ontouchend" => True
-	_ => False
-}
+svg_events = MarkupVocabulary.svg_event_name
 
 math_global = |key| match key {
 	"dir" | "displaystyle" | "scriptlevel" | "mathbackground" | "mathcolor" | "mathsize" | "mathvariant" | "href" => True
@@ -178,7 +181,7 @@ allowed_attribute = |svg, element, name| {
 		Uri("http://www.w3.org/1999/xlink") => svg and member(["href", "type", "role", "arcrole", "title", "show", "actuate"], name.local)
 		NoNamespace => {
 			key = name.local
-			(if (svg) svg_attribute(element, key) else math_attribute(element, key)) or global_attributes(key) or key.starts_with("data-") or aria_attributes(key) or (if (svg) svg_presentation(key) or svg_events(key) else math_global(key))
+			(if (svg) svg_attribute(element, key) else math_attribute(element, key)) or global_attributes(key) or key.starts_with("data-") or aria_attributes(key) or (if (svg) svg_presentation(key) or svg_events(key) else math_global(key) or MarkupVocabulary.global_event_name(key))
 		}
 		_ => False
 	}
@@ -774,10 +777,7 @@ color_names = |key| match key {
 	_ => False
 }
 
-aria_attributes = |key| match key {
-	"aria-activedescendant" | "aria-atomic" | "aria-autocomplete" | "aria-braillelabel" | "aria-brailleroledescription" | "aria-busy" | "aria-checked" | "aria-colcount" | "aria-colindex" | "aria-colindextext" | "aria-colspan" | "aria-controls" | "aria-current" | "aria-describedby" | "aria-description" | "aria-details" | "aria-disabled" | "aria-dropeffect" | "aria-errormessage" | "aria-expanded" | "aria-flowto" | "aria-grabbed" | "aria-haspopup" | "aria-hidden" | "aria-invalid" | "aria-keyshortcuts" | "aria-label" | "aria-labelledby" | "aria-level" | "aria-live" | "aria-modal" | "aria-multiline" | "aria-multiselectable" | "aria-orientation" | "aria-owns" | "aria-placeholder" | "aria-posinset" | "aria-pressed" | "aria-readonly" | "aria-relevant" | "aria-required" | "aria-roledescription" | "aria-rowcount" | "aria-rowindex" | "aria-rowindextext" | "aria-rowspan" | "aria-selected" | "aria-setsize" | "aria-sort" | "aria-valuemax" | "aria-valuemin" | "aria-valuenow" | "aria-valuetext" => True
-	_ => False
-}
+aria_attributes = MarkupVocabulary.aria_name
 
 ascii_lower : Str -> Str
 ascii_lower = |text| Str.from_utf8_lossy(text.to_utf8().map(|b| if (b >= 'A' and b <= 'Z') b + 32 else b))

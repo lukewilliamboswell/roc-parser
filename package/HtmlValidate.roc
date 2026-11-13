@@ -1,6 +1,8 @@
 import Markup
 import MarkupValidate
 import HtmlTokenizer
+import DomName
+import MarkupVocabulary
 import Literal
 
 ## HTML authoring checks, separate from browser tree recovery. Embedded CSS and
@@ -169,6 +171,57 @@ HtmlValidate :: [].{
 		}
 		Ok({ ..parsed, diagnostics: $diagnostics })
 	}
+	element_known : Str -> Bool
+	element_known = elements
+	custom_element_name : Str -> Bool
+	custom_element_name = custom_element
+	boolean_attribute : Str, Str -> Bool
+	boolean_attribute = |element, attr| allowed(element, attr) and (booleans(attr) or (element == "iframe" and attr == "credentialless")) and ((attr != "playsinline" and attr != "disablepictureinpicture") or element == "video")
+	attribute_known : Str, Markup.Name -> Bool
+	attribute_known = |element, name| match name.namespace {
+		NoNamespace => allowed(element, name.local)
+		Uri("http://www.w3.org/2000/xmlns/") => True
+		Uri("http://www.w3.org/XML/1998/namespace") => ["lang", "space", "base", "id"].contains(name.local)
+		_ => False
+	}
+
+	## Known finite keyword values for an applicable HTML attribute. Metadata
+	## does not change the ordinary author's value validation or supply defaults.
+	enumerated_values : Str, Str -> Try(List(Str), [NotEnumerated])
+	enumerated_values = |element, attr| {
+		if !allowed(element, attr) or boolean_attribute(element, attr) or booleans(attr) or (attr == "scope" and element != "th") {
+			return Err(NotEnumerated)
+		}
+		match MarkupVocabulary.aria_enumerated_values(attr) {
+			Ok(values) => return Ok(values)
+			Err(_) => {}
+		}
+		extra = match attr {
+			"autocapitalize" => Ok(["off", "none", "on", "sentences", "words", "characters"])
+			"autocorrect" => Ok(["", "on", "off"])
+			"enterkeyhint" => Ok(["enter", "done", "go", "next", "previous", "search", "send"])
+			"inputmode" => Ok(["none", "text", "tel", "url", "email", "numeric", "decimal", "search"])
+			"popover" => Ok(["", "auto", "manual", "hint"])
+			"spellcheck" | "writingsuggestions" => Ok(["", "true", "false"])
+			"virtualkeyboardpolicy" => Ok(["auto", "manual"])
+			"referrerpolicy" => Ok(["", "no-referrer", "no-referrer-when-downgrade", "same-origin", "origin", "strict-origin", "origin-when-cross-origin", "strict-origin-when-cross-origin", "unsafe-url"])
+			"shadowrootmode" if element == "template" => Ok(["open", "closed"])
+			"closedby" if element == "dialog" => Ok(["any", "closerequest", "none"])
+			"popovertargetaction" if element == "button" or element == "input" => Ok(["toggle", "show", "hide"])
+			"autocomplete" if element == "form" => Ok(["on", "off"])
+			"capture" if element == "input" => Ok(["user", "environment"])
+			"shape" if element == "area" => Ok(["default", "rect", "circle", "poly"])
+			_ => Err(NotEnumerated)
+		}
+		match extra {
+			Ok(values) => Ok(values)
+			Err(_) => match grammar(element, attr) {
+				Keyword(values) => Ok(values)
+				_ => Err(NotEnumerated)
+			}
+		}
+	}
+
 	grammar : Str, Str -> Markup.ValueGrammar
 	grammar = |element, attr| {
 		if !allowed(element, attr) {
@@ -213,14 +266,14 @@ valid = |text, expected| match expected {
 	_ => True
 }
 
-custom_element = |name| name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and name.to_utf8().all(|b| (b >= 'a' and b <= 'z') or (b >= '0' and b <= '9') or ['-', '.', '_'].contains(b) or b >= 128) and !(
+custom_element = |name| DomName.valid_element_local_name(name) and name.contains("-") and name.to_utf8().first().map_ok(|b| b >= 'a' and b <= 'z') == Ok(True) and !name.to_utf8().any(|b| b >= 'A' and b <= 'Z') and !(
 	match name {
 		"annotation-xml" | "color-profile" | "font-face" | "font-face-src" | "font-face-uri" | "font-face-format" | "font-face-name" | "missing-glyph" => True
 		_ => False
 	}
 )
 
-allowed = |element, attr| global(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or attributes(element, attr)
+allowed = |element, attr| global(attr) or (attr.starts_with("data-") and attr.count_utf8_bytes() > 5 and !attr.contains(":")) or aria(attr) or events(attr) or (element == "input" and attr == "onsearch") or attributes(element, attr)
 
 has_attribute = |node, key| node.attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == key)
 
@@ -256,15 +309,9 @@ booleans = |name| match name {
 	_ => False
 }
 
-aria = |name| match name {
-	"aria-activedescendant" | "aria-atomic" | "aria-autocomplete" | "aria-braillelabel" | "aria-brailleroledescription" | "aria-busy" | "aria-checked" | "aria-colcount" | "aria-colindex" | "aria-colindextext" | "aria-colspan" | "aria-controls" | "aria-current" | "aria-describedby" | "aria-description" | "aria-details" | "aria-disabled" | "aria-dropeffect" | "aria-errormessage" | "aria-expanded" | "aria-flowto" | "aria-grabbed" | "aria-haspopup" | "aria-hidden" | "aria-invalid" | "aria-keyshortcuts" | "aria-label" | "aria-labelledby" | "aria-level" | "aria-live" | "aria-modal" | "aria-multiline" | "aria-multiselectable" | "aria-orientation" | "aria-owns" | "aria-placeholder" | "aria-posinset" | "aria-pressed" | "aria-readonly" | "aria-relevant" | "aria-required" | "aria-roledescription" | "aria-rowcount" | "aria-rowindex" | "aria-rowindextext" | "aria-rowspan" | "aria-selected" | "aria-setsize" | "aria-sort" | "aria-valuemax" | "aria-valuemin" | "aria-valuenow" | "aria-valuetext" => True
-	_ => False
-}
+aria = MarkupVocabulary.aria_name
 
-events = |name| match name {
-	"onabort" | "onafterprint" | "onanimationcancel" | "onanimationend" | "onanimationiteration" | "onanimationstart" | "onauxclick" | "onbeforeinput" | "onbeforematch" | "onbeforeprint" | "onbeforetoggle" | "onbeforeunload" | "onblur" | "oncancel" | "oncanplay" | "oncanplaythrough" | "onchange" | "onclick" | "onclose" | "oncontextlost" | "oncontextmenu" | "oncontextrestored" | "oncopy" | "oncuechange" | "oncut" | "ondblclick" | "ondrag" | "ondragend" | "ondragenter" | "ondragleave" | "ondragover" | "ondragstart" | "ondrop" | "ondurationchange" | "onemptied" | "onended" | "onerror" | "onfocus" | "onfocusin" | "onfocusout" | "onformdata" | "ongotpointercapture" | "onhashchange" | "oninput" | "oninvalid" | "onkeydown" | "onkeypress" | "onkeyup" | "onlanguagechange" | "onload" | "onloadeddata" | "onloadedmetadata" | "onloadstart" | "onlostpointercapture" | "onmessage" | "onmessageerror" | "onmousedown" | "onmouseenter" | "onmouseleave" | "onmousemove" | "onmouseout" | "onmouseover" | "onmouseup" | "onoffline" | "ononline" | "onpagehide" | "onpageshow" | "onpaste" | "onpause" | "onplay" | "onplaying" | "onpointercancel" | "onpointerdown" | "onpointerenter" | "onpointerleave" | "onpointermove" | "onpointerout" | "onpointerover" | "onpointerrawupdate" | "onpointerup" | "onpopstate" | "onprogress" | "onratechange" | "onrejectionhandled" | "onreset" | "onresize" | "onscroll" | "onscrollend" | "onsecuritypolicyviolation" | "onseeked" | "onseeking" | "onselect" | "onselectionchange" | "onselectstart" | "onslotchange" | "onstalled" | "onstorage" | "onsubmit" | "onsuspend" | "ontimeupdate" | "ontoggle" | "ontouchcancel" | "ontouchend" | "ontouchmove" | "ontouchstart" | "ontransitioncancel" | "ontransitionend" | "ontransitionrun" | "ontransitionstart" | "onunhandledrejection" | "onunload" | "onvolumechange" | "onwaiting" | "onwheel" => True
-	_ => False
-}
+events = MarkupVocabulary.html_event_name
 
 attributes = |element, attr| match element {
 	"a" | "area" => match attr {
@@ -486,3 +533,27 @@ void_elements = |name| match name {
 	"area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input" | "link" | "meta" | "param" | "source" | "track" | "wbr" => True
 	_ => False
 }
+
+# Metadata covers current names without tightening the ordinary value grammar.
+expect HtmlValidate.boolean_attribute("iframe", "credentialless")
+expect !HtmlValidate.boolean_attribute("div", "credentialless")
+expect HtmlValidate.boolean_attribute("video", "playsinline") and HtmlValidate.boolean_attribute("video", "disablepictureinpicture")
+expect !HtmlValidate.boolean_attribute("audio", "playsinline") and !HtmlValidate.boolean_attribute("audio", "disablepictureinpicture")
+expect HtmlValidate.enumerated_values("audio", "playsinline") == Err(NotEnumerated)
+expect HtmlValidate.enumerated_values("div", "popover") == Ok(["", "auto", "manual", "hint"])
+expect HtmlValidate.enumerated_values("div", "inputmode").map_ok(|values| values.contains("decimal")) == Ok(True)
+expect HtmlValidate.enumerated_values("template", "shadowrootmode") == Ok(["open", "closed"])
+expect HtmlValidate.enumerated_values("div", "shadowrootmode") == Err(NotEnumerated)
+expect HtmlValidate.enumerated_values("form", "autocomplete") == Ok(["on", "off"])
+expect HtmlValidate.enumerated_values("input", "autocomplete") == Err(NotEnumerated)
+expect HtmlValidate.enumerated_values("input", "capture") == Ok(["user", "environment"])
+expect HtmlValidate.enumerated_values("dialog", "closedby") == Ok(["any", "closerequest", "none"])
+expect HtmlValidate.enumerated_values("div", "aria-hidden") == Ok(["true", "false", "undefined"])
+expect HtmlValidate.grammar("div", "inputmode") == Language("HTML attribute")
+expect HtmlValidate.custom_element_name("x-a=b") and HtmlValidate.custom_element_name("x:a-b") and HtmlValidate.custom_element_name("x-<")
+expect HtmlValidate.custom_element_name("x-\u(80)") and HtmlValidate.custom_element_name("x-\u(F0000)")
+expect !HtmlValidate.custom_element_name("x-a>b") and !HtmlValidate.custom_element_name("x-a b") and !HtmlValidate.custom_element_name("x-\u(0)")
+expect !HtmlValidate.custom_element_name("x-Ab") and !HtmlValidate.custom_element_name("font-face") and !HtmlValidate.custom_element_name("nohyphen")
+
+expect HtmlValidate.enumerated_values("td", "scope") == Err(NotEnumerated) and HtmlValidate.enumerated_values("th", "scope") == Ok(["row", "col", "rowgroup", "colgroup"])
+expect HtmlValidate.grammar("iframe", "credentialless") == Language("HTML attribute")

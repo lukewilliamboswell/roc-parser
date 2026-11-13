@@ -1,0 +1,75 @@
+[#markup-facts]
+= Query markup facts for a consumer
+:idprefix: _
+:idseparator: _
+
+Use `MarkupFacts` when compiling a parsed tree into another representation or
+choosing how to bind an attribute value. The facts share the parser's vocabulary
+and preserve the element namespace and the attribute's expanded identity.
+Consumers do not need a second table of element, ARIA or handler names.
+
+`is_known_element` tests the built-in HTML, SVG and MathML vocabulary.
+`is_custom_element_name` tests current HTML custom-element names; it does not
+infer a namespace. Unknown names can still be constructed with `DomName`, and
+parser extension options remain available independently of these predicates.
+
+== Attribute values
+
+`is_boolean_attribute(element, attribute)` identifies HTML presence/absence
+booleans on their relevant elements. It does not turn SVG or MathML `true`/`false`
+values, or ARIA states, into HTML booleans. Namespaced attributes are distinct
+from unnamespaced attributes with the same local spelling.
+
+`enumerated_values` returns known single-value keywords, including shared ARIA
+states for HTML, SVG and MathML. For example, `hidden` has empty, `hidden` and
+`until-found` keywords; it is not a presence/absence boolean. `NotEnumerated`
+means no keyword fact is provided: numbers, token lists and unknown metadata
+also return it. The result does not model browser missing-value or invalid-value
+defaults. Preserve the original value rather than lowercasing it indiscriminately.
+
+`attribute_grammar` exposes the grammar used by the current parser checks.
+Consumer metadata can be more detailed than those checks: an attribute whose
+parser grammar is a generic language can still have boolean or enumerated facts.
+The coverage manifest describes the parser's validation boundaries.
+
+== HTML text and void behavior
+
+`is_void_element` uses the HTML namespace and local name. An SVG element named
+`br` is not an HTML void element. `text_behavior(element, scripting)` preserves
+`Data`, `Rcdata`, `RawText`, `ScriptData` and `Plaintext`; it does not collapse
+script and plaintext into a generic raw-text mode. HTML `noscript` uses
+`RawText` when scripting is enabled and `Data` otherwise. Foreign content uses
+`Data`, and XML source keeps its separate grammar.
+
+== A consumer policy for handler attributes
+
+`is_event_handler(element, attribute)` checks the element namespace and the
+attribute namespace/local name. It recognizes MathML `onclick` even inside an
+SVG metadata extension subtree, and SVG `oninput`. An attribute named `online`
+is not a handler. A namespaced attribute with local `onclick`, or an
+unnamespaced attribute with local `e:onclick`, is also distinct from the
+unnamespaced handler.
+
+Ordinary parsers accept valid handler attributes. A consumer can choose an
+additional literal policy, as this executable example does:
+
+[source,roc]
+----
+include::examples/markup-facts.roc[tag=policy]
+----
+
+The wrapper rejects handler attributes while retaining ordinary parsing and
+the public facts for other consumers:
+
+[source,roc]
+----
+include::examples/markup-facts.roc[tag=literal]
+----
+
+These facts describe recognized names, not a promise that every browser fires
+an event on every element. The local consumer-fidelity review records exact
+engine differences and verifies the reported MathML and SVG handler cases.
+The https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers-on-elements-document-objects-and-window-objects[HTML event-handler rules],
+https://svgwg.org/svg2-draft/types.html#InterfaceSVGElement[SVG interfaces] and
+https://w3c.github.io/mathml-core/#dom-and-javascript[MathML interfaces] define
+the namespace boundaries.

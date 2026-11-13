@@ -22,6 +22,7 @@ package
 		Literal,
 		Markdown,
 		Markup,
+		MarkupFacts,
 		MarkupTemplate,
 		MathML,
 		Parser,
