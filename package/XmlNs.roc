@@ -656,6 +656,10 @@ declaration = |attribute| {
 # XML Name, so each part only needs a check of its first character.
 split_qname : Str -> Try({ prefix : Str, local : Str, written : Str }, XmlNs.Problem)
 split_qname = |name| {
+	# Unprefixed inline names need no temporary byte list.
+	if !name.contains(":") {
+		return Ok({ prefix: "", local: name, written: name })
+	}
 	bytes = name.to_utf8()
 	var $colon = none
 	var $index = 0

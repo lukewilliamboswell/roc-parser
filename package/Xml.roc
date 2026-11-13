@@ -1190,7 +1190,7 @@ materialize = |bytes, text, start, end| {
 # UTF-8 elsewhere in the input) the bytes are validated.
 slice_str : Str, List(U8), U64, U64 -> Str
 slice_str = |src, bytes, start, end| {
-	if src.is_empty() {
+	value = if src.is_empty() {
 		Str.from_utf8(bytes.sublist({ start, len: end - start })) ?? ""
 	} else {
 		match src.drop_first_bytes(start) {
@@ -1198,6 +1198,11 @@ slice_str = |src, bytes, start, end| {
 			Err(_) => ""
 		}
 	}
+	# Eleven bytes fit inline on both 32-bit and 64-bit targets. Short names
+	# and values then avoid shared-string reference counts during tree building.
+	if value.count_utf8_bytes() <= 11 {
+		value.release_excess_capacity()
+	} else value
 }
 
 # `build_element` for a tree of the caller's type: `start` and `end` make
