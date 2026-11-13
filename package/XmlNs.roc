@@ -296,7 +296,7 @@ XmlNs := {
 		folded = Xml.fold_source(
 			input,
 			namespaced,
-			{ bound: { entries: [], active: Dict.empty(), default_index: none }, marks: [], value: initial },
+			{ bound: { entries: [], active: Box.box(Dict.empty()), default_index: none }, marks: [], value: initial },
 			|state, event| {
 				match event {
 					Start(tag) => {
@@ -1723,24 +1723,26 @@ expect {
 }
 expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
 
-SourceBound : { entries : List(Entry), active : Dict(Str, U64), default_index : U64 }
+# Keep the namespace dictionary behind one pointer in the event-fold state.
+# Unprefixed names use the cached default and never open it.
+SourceBound : { entries : List(Entry), active : Box(Dict(Str, U64)), default_index : U64 }
 
 # The default binding changes only at namespace declarations and their ends.
 # Keep its entry index so ordinary element names need no dictionary lookup.
 source_unbind_to : SourceBound, U64 -> SourceBound
 source_unbind_to = |bound, mark| {
-	unbound = unbind_to({ entries: bound.entries, active: bound.active }, mark)
+	unbound = unbind_to({ entries: bound.entries, active: Box.unbox(bound.active) }, mark)
 	default_index = unbound.active.get("") ?? none
-	{ entries: unbound.entries, active: unbound.active, default_index }
+	{ entries: unbound.entries, active: Box.box(unbound.active), default_index }
 }
 
 resolve_source_start : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ bound : SourceBound, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
 resolve_source_start = |bound, written, attributes, spans| {
 	if has_declaration(attributes) {
-		resolved = resolve_start({ entries: bound.entries, active: bound.active, frames: [], names: [] }, written, attributes)?
+		resolved = resolve_start({ entries: bound.entries, active: Box.unbox(bound.active), frames: [], names: [] }, written, attributes)?
 		ordered_attributes = ordered_source_attributes(attributes, spans, resolved.attributes, resolved.bindings)
 		default_index = resolved.scope.active.get("") ?? none
-		Ok({ bound: { entries: resolved.scope.entries, active: resolved.scope.active, default_index }, name: resolved.name, attributes: ordered_attributes })
+		Ok({ bound: { entries: resolved.scope.entries, active: Box.box(resolved.scope.active), default_index }, name: resolved.name, attributes: ordered_attributes })
 	} else {
 		element_name = split_qname(written)?
 		if element_name.prefix == "xmlns" {
@@ -1751,7 +1753,7 @@ resolve_source_start = |bound, written, attributes, spans| {
 				NoNamespace
 			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
 			{ namespace, local: element_name.local, prefix: Unprefixed }
-		} else resolve(element_name, bound.entries, bound.active, True)?
+		} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?
 		var $resolved = List.with_capacity(attributes.len())
 		var $index = 0
 		var $prefixed = 0
@@ -1763,7 +1765,10 @@ resolve_source_start = |bound, written, attributes, spans| {
 			if attribute_name.prefix != "" {
 				$prefixed = $prefixed + 1
 			}
-			$resolved = $resolved.append({ name: resolve(attribute_name, bound.entries, bound.active, False)?, value: attribute.value, span })
+			resolved_attribute_name = if attribute_name.prefix == "" {
+				{ namespace: NoNamespace, local: attribute_name.local, prefix: Unprefixed }
+			} else resolve(attribute_name, bound.entries, Box.unbox(bound.active), False)?
+			$resolved = $resolved.append({ name: resolved_attribute_name, value: attribute.value, span })
 		}
 		if $prefixed > 1 {
 			check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
@@ -1835,4 +1840,23 @@ expect {
 		},
 	)?
 	names == [("a", Uri("urn:p")), ("b", NoNamespace), ("c", Uri("urn:q")), ("d", Uri("urn:p"))]
+}
+
+expect {
+	attributes = XmlNs.fold_source(
+		"<r xmlns='urn:d' xmlns:p='urn:p' plain='a' p:x='b' xml:lang='en'><p:s xmlns:p='urn:q' p:x='c'/><p:t p:x='d' plain='e'/></r>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append(tag.attributes.keep_if(|attribute| attribute.name.namespace != Uri(XmlNs.xmlns_namespace)).map(|attribute| (attribute.name.local, attribute.name.namespace, attribute.value)))
+			_ => collected
+		},
+	)?
+	attributes == [[("plain", NoNamespace, "a"), ("x", Uri("urn:p"), "b"), ("lang", Uri(XmlNs.xml_namespace), "en")], [("x", Uri("urn:q"), "c")], [("x", Uri("urn:p"), "d"), ("plain", NoNamespace, "e")]]
+}
+
+expect {
+	["<p:r/>", "<r p:x='1'/>", "<r xmlns:p='urn:p'><a xmlns:q='urn:q'/><q:b/></r>", "<r xmlns:p='urn:p' xmlns:q='urn:p' p:x='1' q:x='2'/>", "<r xmlns:xml='urn:bad'/>", "<r xmlns='urn:r'><a xmlns=''/><b/></r>"].all(
+		|input| XmlNs.fold_source(input, {}, {}, |state, _| state) == XmlNs.parse(input, {}).map_ok(|_| {}),
+	)
 }
