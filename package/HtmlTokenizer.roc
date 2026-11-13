@@ -131,16 +131,23 @@ HtmlTokenizer :: [].{
 			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
 		}
 		var $pos = name_start
+		var $name_null = False
+		var $name_upper = False
 		while $pos < bytes.len() and !space(byte_at(bytes, $pos)) and !(
 			match byte_at(bytes, $pos) {
 				'/' | '>' => True
 				_ => False
 			}
 		) {
+			byte = byte_at(bytes, $pos)
+			$name_null = $name_null or byte == 0
+			$name_upper = $name_upper or (byte >= 'A' and byte <= 'Z')
 			$pos = $pos + 1
 		}
-		normalized_name = normalized_limited(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False, True, diagnostic_budget(reader))
-		name = lower(normalized_name.text)
+		normalized_name = if $name_null {
+			normalized_limited(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False, True, diagnostic_budget(reader))
+		} else { text: text_at(bytes, name_start, $pos), diagnostics: [] }
+		name = if ($name_upper) lower(normalized_name.text) else normalized_name.text
 		var $attributes = []
 		var $diagnostics = reader.diagnostics.concat(normalized_name.diagnostics.map(|d| { ..d, offset: name_start + d.offset }))
 		var $self_closing = False
@@ -173,6 +180,8 @@ HtmlTokenizer :: [].{
 					$diagnostics = $diagnostics.append({ code: MissingWhitespace, offset: $pos })
 				}
 				attr_start = $pos
+				var $attr_null = False
+				var $attr_upper = False
 				if byte_at(bytes, $pos) == '=' {
 					$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					$pos = $pos + 1
@@ -192,13 +201,18 @@ HtmlTokenizer :: [].{
 					} {
 						$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 					}
+					byte = byte_at(bytes, $pos)
+					$attr_null = $attr_null or byte == 0
+					$attr_upper = $attr_upper or (byte >= 'A' and byte <= 'Z')
 					$pos = $pos + 1
 				}
 				if $pos == attr_start {
 					$pos = $pos + 1
 				}
-				normalized_attr = normalized_limited(bytes.sublist({ start: attr_start, len: $pos - attr_start }), False, False, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
-				attr_name = lower(normalized_attr.text)
+				normalized_attr = if $attr_null {
+					normalized_limited(bytes.sublist({ start: attr_start, len: $pos - attr_start }), False, False, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
+				} else { text: text_at(bytes, attr_start, $pos), diagnostics: [] }
+				attr_name = if ($attr_upper) lower(normalized_attr.text) else normalized_attr.text
 				$diagnostics = $diagnostics.concat(normalized_attr.diagnostics.map(|d| { ..d, offset: attr_start + d.offset }))
 				after_name = $pos
 				while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
@@ -216,7 +230,11 @@ HtmlTokenizer :: [].{
 						$pos = $pos + 1
 					}
 					value_start = $pos
+					var $normalize_value = False
 					while $pos < bytes.len() and (if (quoted) byte_at(bytes, $pos) != quote else !space(byte_at(bytes, $pos)) and byte_at(bytes, $pos) != '>') {
+						if $diagnostics.len() > reader.max_diagnostics {
+							return exhausted(reader, $pos, $diagnostics)
+						}
 						if !quoted and (
 							match byte_at(bytes, $pos) {
 								'"' | '\'' | '<' | '=' | '`' => True
@@ -225,9 +243,13 @@ HtmlTokenizer :: [].{
 						) {
 							$diagnostics = $diagnostics.append({ code: InvalidAttributeCharacter, offset: $pos })
 						}
+						byte = byte_at(bytes, $pos)
+						$normalize_value = $normalize_value or byte == '&' or byte == '\r' or byte == 0
 						$pos = $pos + 1
 					}
-					decoded = normalized_limited(bytes.sublist({ start: value_start, len: $pos - value_start }), True, True, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
+					decoded = if $normalize_value {
+						normalized_limited(bytes.sublist({ start: value_start, len: $pos - value_start }), True, True, True, remaining_diagnostics(reader.max_diagnostics, $diagnostics.len()))
+					} else { text: text_at(bytes, value_start, $pos), diagnostics: [] }
 					$value = decoded.text
 					$diagnostics = $diagnostics.concat(decoded.diagnostics.map(|d| { ..d, offset: value_start + d.offset }))
 					if quoted and $pos < bytes.len() {
@@ -1386,4 +1408,10 @@ expect {
 expect {
 	r = HtmlTokenizer.next({ bytes: "a &#32;b\u(0)c<em>".to_utf8(), pos: 0, diagnostics: [] }, DataMixed, False)
 	r.token.kind == Characters("a  b\u(0)c") and r.token.span == { start: 0, end: 10 } and r.reader.diagnostics == [{ code: UnexpectedNull, offset: 8 }]
+}
+
+expect {
+	input = "<a x=v${Str.join_with(List.repeat("\"", 4096), "")}>"
+	r = HtmlTokenizer.next_with({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Data, False, { max_diagnostics: 0 })
+	r.limited == Diagnostics and r.reader.pos == 7 and r.reader.diagnostics == [{ code: InvalidAttributeCharacter, offset: 6 }]
 }
