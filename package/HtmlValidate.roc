@@ -25,6 +25,7 @@ HtmlValidate :: [].{
 						offset = match node.origin {
 							Authored(span) => span.start
 							Implied(at) => at
+							Cloned(info) => info.source.start
 						}
 						at = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
 						if $diagnostics.len() >= props.max_diagnostics {
@@ -156,6 +157,7 @@ fail = |parsed, node, problem| {
 	offset = match node.origin {
 		Authored(s) => s.start
 		Implied(o) => o
+		Cloned(info) => info.source.start
 	}
 	p = Literal.position(Str.from_utf8_lossy(parsed.source.bytes), offset)
 	Err(InvalidMarkup({ problem, line: p.line, column: p.column }))
