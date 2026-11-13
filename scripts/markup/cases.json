@@ -662,6 +662,19 @@
       "recovery": "browser",
       "valid": false,
       "problem": "UnknownElement"
+    },
+    {
+      "id": "html-table-context-foster-unknown-tag",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "validate": false,
+      "recovery": "browser",
+      "context": {
+        "namespace": "http://www.w3.org/1999/xhtml",
+        "local": "table"
+      },
+      "input": "<tr><td'>x<td>y"
     }
   ]
 }

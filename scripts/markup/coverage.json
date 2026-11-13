@@ -47,7 +47,8 @@
         "html-select-context",
         "html-template",
         "html-adoption-agency",
-        "html-foster-parenting"
+        "html-foster-parenting",
+        "html-table-context-foster-unknown-tag"
       ],
       "upstream_suite": "tree-suite.json",
       "acceptance_gate": "Every selected parser-only upstream expectation is compared, including both scripting modes when required; crashes and mismatches fail."
