@@ -45,7 +45,7 @@ HtmlTree :: [].{
 			),
 		)
 		state : State
-		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", plaintext: False, pending_text: [], clones: [] }
+		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		projected = project_selectedcontent(state, props).map_err(
 			|InvalidMarkup(e)| {
 				at = Markup.position(parsed.source, e.column)
@@ -60,7 +60,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", plaintext: False, pending_text: [], clones: [] }
+		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -89,7 +89,16 @@ HtmlTree :: [].{
 					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
 				}
 			}
+			# DataMixed retains every literal NUL and reports UnexpectedNull for it.
+			# A successful character token with no new diagnostics has none.
+			no_nulls = mode == DataMixed and next.reader.diagnostics.len() == $reader.diagnostics.len() and (
+				match next.token.kind {
+					Characters(_) => True
+					_ => False
+				}
+			)
 			$reader = next.reader
+			$state = { ..$state, token_no_nulls: no_nulls }
 			match source_token(next.token, $reader.bytes) {
 				Ok(region) => {
 					$source_regions = $source_regions.append(region)
@@ -191,7 +200,7 @@ Active : [Entry(U64), Marker]
 
 # Parent entries share the arena's dense node indices. Detached/root nodes
 # retain an explicit missing entry rather than allocating a hash-table slot.
-State : { nodes : List(Markup.Node), roots : List(U64), parents : List(Try(U64, [Missing])), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
+State : { nodes : List(Markup.Node), roots : List(U64), parents : List(Try(U64, [Missing])), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -1204,7 +1213,7 @@ body = |state, token| {
 	var $s = { ..state, work: state.work + state.stack.len() + state.active.len() + 1 }
 	match token.kind {
 		Characters(raw_text) => {
-			text = if (raw_text.contains("\u(0)")) Str.join_with(raw_text.split_on("\u(0)"), "") else raw_text
+			text = if (!state.token_no_nulls and raw_text.contains("\u(0)")) Str.join_with(raw_text.split_on("\u(0)"), "") else raw_text
 			$s = reconstruct($s)
 			$s = insert_text($s, text, token.span)
 			if !whitespace(text) {
@@ -2437,7 +2446,7 @@ expect {
 	# Charging the dispatcher step can exhaust work before body construction.
 	# Neither route may insert the start tag after crossing that boundary.
 	state : State
-	state = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment: True, context: {}, diagnostics: [], max_diagnostics: 1024, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 1, element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 3 }, token_end_name: "", plaintext: False, pending_text: [], clones: [] }
+	state = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment: True, context: {}, diagnostics: [], max_diagnostics: 1024, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 1, element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 3 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
 	token = { kind: Start({ name: "p", attributes: [], self_closing: False }), span: { start: 0, end: 3 } }
 	direct = process_html(state, token, True)
 	general = process_html_general(state, token, True)
