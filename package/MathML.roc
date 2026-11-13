@@ -1,0 +1,89 @@
+import Markup
+import MarkupValidate
+
+## Strict namespace-aware MathML documents and fragments.
+## XML syntax is the default; fragments start in the MathML namespace.
+## Original bytes and source spans remain available beside the decoded tree.
+MathML := { parsed : Markup.Parsed }.{
+
+	## Common parsing, validation and resource-limit options.
+	Props : Markup.Props
+
+	## Source, diagnostic name, and explicit parsing/validation options.
+	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
+
+	## Parse a complete namespaced document with strict defaults.
+	parse_str : Str -> Try(MathML, [InvalidMarkup(Markup.Error)])
+	parse_str = |source| parse_with(source, {})
+
+	## Parse a complete document with the requested syntax and checks.
+	parse_with : Str, Props -> Try(MathML, [InvalidMarkup(Markup.Error)])
+	parse_with = |source, props| {
+		parsed = Markup.parse_xml(source, props)?
+		index = Markup.single_root(parsed.tree).map_err(|_| InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "fragment" }), line: 1, column: 1 }))?
+		node = parsed.tree.nodes.get(index) ?? return Err(InvalidMarkup({ problem: Unsupported("missing root"), line: 1, column: 1 }))
+		match node.kind {
+			Element(name) if name.namespace == Uri(Markup.mathml_namespace) and name.local == "math" => {}
+			Element(name) => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "math in the MathML namespace", actual: name.local }), line: 1, column: 1 }))
+			_ => return Err(InvalidMarkup({ problem: WrongRoot({ expected: "math", actual: "text" }), line: 1, column: 1 }))
+		}
+		validated = validate_tree(parsed, props, [])?
+		Ok(MathML.{ parsed: validated })
+	}
+
+	## Parse any number of fragment roots in the format's default namespace.
+	parse_fragment : Str, Props -> Try(Fragment, [InvalidMarkup(Markup.Error)])
+	parse_fragment = |source, props| {
+		parsed = Markup.parse_xml_fragment(source, Markup.mathml_namespace, props)?
+		validated = validate_tree(parsed, props, [])?
+		Ok(Fragment.{ parsed: validated })
+	}
+
+	## Validate fixed markup, skipping unavailable whole attribute holes.
+	validate_tree : Markup.Parsed, Props, List(MarkupValidate.Hole) -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	validate_tree = MarkupValidate.foreign
+
+	## Check a document for quotation or an explicitly asserted imported file.
+	validate : ValidationProps -> Try(MathML, [BadQuotedBytes(Str)])
+	validate = |props| parse_with(props.source, props.options).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))
+
+	## Convert a checked complete document literal.
+	from_quote : Str -> Try(MathML, [BadQuotedBytes(Str)])
+	from_quote = |source| validate({ source: source })
+
+	## A fragment retains every authored root and its exact source.
+	Fragment := { parsed : Markup.Parsed }.{
+
+		## Check a fragment literal with strict defaults.
+		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
+		from_quote = |source| MathML.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))
+
+		## Require a single element root for downstream row/component templates.
+		single_element : Fragment -> Try(Markup.Node, [RootCount(U64)])
+		single_element = |fragment| {
+			index = Markup.single_root(fragment.parsed.tree)?
+			Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
+		}
+	}
+}
+
+expect MathML.parse_str("<math xmlns='http://www.w3.org/1998/Math/MathML'><mi>x</mi></math>").is_ok()
+expect MathML.parse_str("<math/>").is_err()
+expect MathML.parse_fragment("<mfrac><mn>1</mn><mn>2</mn></mfrac>", {}).is_ok()
+expect MathML.parse_fragment("<mfrac><mn>1</mn></mfrac>", {}).is_err()
+expect MathML.parse_fragment("<mfrac>x<mn>1</mn><mn>2</mn></mfrac>", {}).is_err()
+expect MathML.parse_fragment("<mroot><mi>x</mi><mn>3</mn></mroot>", {}).is_ok()
+expect MathML.parse_fragment("<msubsup><mi>x</mi><mi>i</mi></msubsup>", {}).is_err()
+expect MathML.parse_fragment("<msup><mi>x</mi><mn>2</mn></msup>", {}).is_ok()
+expect MathML.parse_fragment("<mi><mn>2</mn></mi>", {}).is_err()
+expect MathML.parse_fragment("<mtable><mtr><mtd><mi>x</mi></mtd></mtr></mtable>", {}).is_ok()
+expect MathML.parse_fragment("<mtable><mi>x</mi></mtable>", {}).is_err()
+expect MathML.parse_fragment("<mo stretchy='false'>+</mo>", {}).is_ok()
+expect MathML.parse_fragment("<mo stretchy='yes'>+</mo>", {}).is_err()
+expect MathML.parse_fragment("<math display='fullscreen'/>", {}).is_err()
+expect MathML.parse_fragment("<apply><plus/><ci>x</ci></apply>", { allow_unknown_elements: True }).is_ok()
+expect MathML.parse_fragment("<apply/>", {}).is_err()
+expect MathML.parse_fragment("<mspace width='2em' height='3px'/>", {}).is_ok()
+expect MathML.parse_fragment("<mtd rowspan='0'/>", {}).is_err()
+expect MathML.parse_fragment("<mi>α</mi><mo>+</mo><mi>β</mi>", {}).is_ok()
+expect MathML.parse_fragment("<semantics><mi>x</mi><annotation encoding='application/x-tex'>x</annotation></semantics>", {}).is_ok()
