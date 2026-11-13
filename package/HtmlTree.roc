@@ -1802,7 +1802,7 @@ adoption = |s, name, offset| {
 								Ok(active_at) => {
 									original = node_at($s, node_id)
 									new_id = $s.nodes.len()
-									$s = { ..$s, nodes: $s.nodes.append({ ..original, children: [], origin: Implied(offset) }), parents: $s.parents.append({ parent: Err(Missing), namespace: kind_namespace(original.kind) }), stack: $s.stack.set($node_pos, new_id) ?? $s.stack, active: $s.active.set(active_at, Entry(new_id)) ?? $s.active }
+									$s = { ..$s, nodes: $s.nodes.append({ ..original, children: [], origin: Implied(offset) }), parents: $s.parents.append({ parent: Err(Missing), namespace: kind_namespace(original.kind) }), element_count: $s.element_count + 1, stack: $s.stack.set($node_pos, new_id) ?? $s.stack, active: $s.active.set(active_at, Entry(new_id)) ?? $s.active }
 									if $last == block {
 										$bookmark = active_at + 1
 									}
@@ -1820,17 +1820,18 @@ adoption = |s, name, offset| {
 							# append_node allocates a new index, so use a temporary
 							# append and transfer its computed insertion position.
 							old_count = $s.nodes.len()
+							old_elements = $s.element_count
 							original_stack = $s.stack
 							target_position = stack_position($s, common) ?? 0
 							temporary = append_node({ ..$s, foster: True, stack: original_stack.take_first(target_position + 1) }, moved)
-							$s = replace_child_id({ ..temporary, stack: original_stack, foster: False, nodes: temporary.nodes.take_first(old_count) }, old_count, $last)
+							$s = replace_child_id({ ..temporary, stack: original_stack, foster: False, nodes: temporary.nodes.take_first(old_count), element_count: old_elements }, old_count, $last)
 						} else {
 							$s = reparent($s, $last, common)
 						}
 						original = node_at($s, formatting_id)
 						new_formatting = $s.nodes.len()
 						block_node = node_at($s, block)
-						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }) }
+						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }), element_count: $s.element_count + 1 }
 						parents = block_node.children.fold($s.parents.append({ parent: Ok(block), namespace: kind_namespace(original.kind) }), |entries, child| set_parent(entries, child, Ok(new_formatting)))
 						$s = { ..$s, parents, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
 						active = $s.active.keep_if(|a| a != Entry(formatting_id))
@@ -2471,6 +2472,35 @@ work_limit = |per_byte, size| {
 	if (per_byte > (maximum - 4096) // (size + 1)) maximum else 4096 + per_byte * (size + 1)
 }
 expect HtmlTree.parse("<p>x</p>", True, {}, { max_work_per_byte: 0xFFFFFFFFFFFFFFFF }).is_ok()
+expect HtmlTree.parse("<b><div>x</b>y", True, {}, { recovery: Browser, max_elements: 2 }) == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 10 }))
+
+expect {
+	source = "<b><i><div>x</b>y"
+	limited = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 4 })
+	parsed = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 5 })?
+	elements = parsed.tree.nodes.fold(
+		0.U64,
+		|sum, node| sum + match node.kind {
+			Element(_) => 1
+			_ => 0
+		},
+	) - 1
+	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 13 })) and elements == 5
+}
+
+expect {
+	source = "<table><b><div>x</b>y"
+	limited = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 3 })
+	parsed = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 4 })?
+	elements = parsed.tree.nodes.fold(
+		0.U64,
+		|sum, node| sum + match node.kind {
+			Element(_) => 1
+			_ => 0
+		},
+	) - 1
+	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 17 })) and elements == 4
+}
 
 expect {
 	# Charging the dispatcher step can exhaust work before body construction.
