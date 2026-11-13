@@ -25,9 +25,23 @@ MarkupTemplate :: [].{
 	## callbacks let HTML and XML use their own normalization rules. Structural
 	## recovery is rejected because repaired positions cannot promise fixed slots.
 	parse_segments : List(Str), (Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Plan, [InvalidMarkup(Markup.Error)])
-	parse_segments = |segments, parse, decode| {
+	parse_segments = |segments, parse, decode| parse_segments_with(segments, {}, parse, decode)
+
+	## Parse a plan with the same source, node, and slot ceilings as runtime parsing.
+	parse_segments_with : List(Str), Markup.Props, (Str -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments_with = |segments, props, parse, decode| {
 		if segments.is_empty() {
 			return Err(InvalidMarkup({ problem: Interpolation({ index: 0, reason: "an interpolation requires at least one static segment" }), line: 1, column: 1 }))
+		}
+		var $source_size = 0
+		for segment in segments {
+			if segment.count_utf8_bytes() > props.max_source_bytes - $source_size {
+				return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
+			}
+			$source_size = $source_size + segment.count_utf8_bytes()
+		}
+		if segments.len() - 1 > props.max_slots {
+			return Err(InvalidMarkup({ problem: ResourceLimit("template slots"), line: 1, column: 1 }))
 		}
 		source_text = Str.join_with(segments, "")
 		source = Markup.Source.from_str(source_text)
@@ -43,10 +57,13 @@ MarkupTemplate :: [].{
 		# delimiter/name is rejected even when removing it makes valid syntax.
 		positions = classify_holes(source, $holes)?
 		parsed = parse(source_text)?
+		if parsed.tree.nodes.len() > props.max_nodes {
+			return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
+		}
 		if !parsed.diagnostics.is_empty() {
 			return Err(template_error(source, 0, 0, "template structure requires recovery"))
 		}
-		build_plan(segments, parsed, positions, decode)
+		build_plan(segments, parsed, positions, props, decode)
 	}
 
 	## Fallibly bind a manually supplied iterator, checking its exact arity.
@@ -86,6 +103,9 @@ classify_holes = |source, holes| {
 	var $positions = []
 	var $token_index = 0
 	var $raw = ""
+	var $reference_cursor = 0
+	var $reference_open = False
+	var $last_attribute = Err(Missing)
 	for hole in holes {
 		while $token_index < source.tokens.len() {
 			token = source.tokens.get($token_index) ?? { kind: Text, span: { start: 0, end: 0 } }
@@ -99,7 +119,7 @@ classify_holes = |source, holes| {
 					if name == $raw {
 						$raw = ""
 					}
-				} else if ["script", "style", "xmp", "iframe", "noembed", "noframes", "plaintext"].contains(name) {
+				} else if bytes.get(bytes.len() - 2) != Ok('/') and ["script", "style", "xmp", "iframe", "noembed", "noframes", "plaintext"].contains(name) {
 					$raw = name
 				}
 			}
@@ -112,7 +132,20 @@ classify_holes = |source, holes| {
 			Ok(token) if token.span.start < hole.offset => {
 				match token.kind {
 					Text => {
-						if unfinished_reference(source.bytes, token.span.start, hole.offset) {
+						if $reference_cursor < token.span.start {
+							$reference_cursor = token.span.start
+							$reference_open = False
+						}
+						while $reference_cursor < hole.offset {
+							byte = source.bytes.get($reference_cursor) ?? 0
+							if byte == '&' {
+								$reference_open = True
+							} else if !reference_char(byte) {
+								$reference_open = False
+							}
+							$reference_cursor = $reference_cursor + 1
+						}
+						if $reference_open {
 							return Err(template_error(source, hole.offset, hole.index, "a hole cannot split a character reference"))
 						}
 						$positions = $positions.append({ hole, kind: Data })
@@ -121,9 +154,10 @@ classify_holes = |source, holes| {
 						if !whole_attribute(source, token.span, hole.offset) {
 							return Err(template_error(source, hole.offset, hole.index, "expected character data or an entire quoted attribute value"))
 						}
-						if $positions.any(|position| position.kind == Attribute and position.hole.offset == hole.offset) {
+						if $last_attribute == Ok(hole.offset) {
 							return Err(template_error(source, hole.offset, hole.index, "one attribute value accepts exactly one hole"))
 						}
+						$last_attribute = Ok(hole.offset)
 						$positions = $positions.append({ hole, kind: Attribute })
 					}
 					_ => return Err(template_error(source, hole.offset, hole.index, "holes are not allowed in comments, declarations or markup delimiters"))
@@ -191,66 +225,94 @@ whole_attribute = |source, span, hole| {
 	False
 }
 
-build_plan : List(Str), Markup.Parsed, List(Position), (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
-build_plan = |segments, parsed, positions, decode| {
+build_plan : List(Str), Markup.Parsed, List(Position), Markup.Props, (Str -> Try(Str, [InvalidMarkup(Markup.Error)])) -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+build_plan = |segments, parsed, positions, props, decode| {
 	var $nodes = parsed.tree.nodes
 	var $slots = []
 	var $text_groups = Dict.empty()
 	var $insertions = []
-	# Attribute targets and source text intervals are explicit, not recognized
-	# by marker spelling, so arbitrary authored text can never impersonate slots.
+	var $texts = []
+	var $attributes = []
+	var $elements = []
+	var $index = 0
+	# Source intervals are sorted once. Holes already arrive in authored order,
+	# so locating every target is a bounded sweep instead of holes * nodes work.
+	for node in $nodes {
+		match node.origin {
+			Authored(span) => match node.kind {
+				Text(_) => {
+					$texts = $texts.append({ span, node: $index })
+				}
+				Element(_) => {
+					$elements = $elements.append({ span, node: $index })
+				}
+				_ => {}
+			}
+			Implied(_) => {}
+		}
+		var $attr_index = 0
+		for attribute in node.attributes {
+			$attributes = $attributes.append({ span: attribute.span, node: $index, attribute: $attr_index })
+			$attr_index = $attr_index + 1
+		}
+		$index = $index + 1
+	}
+	text_intervals = $texts.sort_with(|a, b| order(a.span.start, b.span.start))
+	attribute_intervals = $attributes.sort_with(|a, b| order(a.span.start, b.span.start))
+	element_intervals = $elements.sort_with(|a, b| if (a.span.start == b.span.start) order(b.span.end, a.span.end) else order(a.span.start, b.span.start))
+	var $text_cursor = 0
+	var $attribute_cursor = 0
+	var $element_cursor = 0
+	var $active = []
 	for position in positions {
 		hole = position.hole
 		if position.kind == Attribute {
-			var $found = False
-			var $node_index = 0
-			for node in $nodes {
-				var $attribute_index = 0
-				for attribute in node.attributes {
-					if attribute.span.start < hole.offset and attribute.span.end > hole.offset {
-						$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: AttributeSlot({ node: $node_index, attribute: $attribute_index }), expected: Language("attribute") })
-						$found = True
-					}
-					$attribute_index = $attribute_index + 1
+			while $attribute_cursor < attribute_intervals.len() {
+				entry = attribute_intervals.get($attribute_cursor) ?? empty_attribute_interval
+				if entry.span.end > hole.offset {
+					break
 				}
-				$node_index = $node_index + 1
+				$attribute_cursor = $attribute_cursor + 1
 			}
-			if !$found {
-				return Err(template_error(parsed.source, hole.offset, hole.index, "attribute hole lost during tree construction"))
+			match attribute_intervals.get($attribute_cursor) {
+				Ok(entry) if entry.span.start < hole.offset and entry.span.end > hole.offset => {
+					$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: AttributeSlot({ node: entry.node, attribute: entry.attribute }), expected: Language("attribute") })
+				}
+				_ => return Err(template_error(parsed.source, hole.offset, hole.index, "attribute hole lost during tree construction"))
 			}
 		} else {
-			var $text_node = Err(Missing)
-			var $parent = Err(Missing)
-			var $parent_span = parsed.source.bytes.len() + 1
-			var $node_index = 0
-			for node in $nodes {
-				match node.origin {
-					Authored(span) => {
-						match node.kind {
-							Text(_) if span.start <= hole.offset and span.end >= hole.offset => {
-								$text_node = Ok($node_index)
-							}
-							Element(_) if span.start < hole.offset and span.end > hole.offset and span.end - span.start < $parent_span => {
-								$parent = Ok($node_index)
-								$parent_span = span.end - span.start
-							}
-							_ => {}
-						}
-					}
-					Implied(_) => {}
+			while $text_cursor < text_intervals.len() {
+				entry = text_intervals.get($text_cursor) ?? empty_interval
+				if entry.span.end >= hole.offset {
+					break
 				}
-				$node_index = $node_index + 1
+				$text_cursor = $text_cursor + 1
 			}
-			match $text_node {
-				Ok(index) => {
-					$text_groups = $text_groups.insert(index, ($text_groups.get(index) ?? []).append(hole))
+			match text_intervals.get($text_cursor) {
+				Ok(entry) if entry.span.start <= hole.offset and entry.span.end >= hole.offset => {
+					$text_groups = $text_groups.insert(entry.node, ($text_groups.get(entry.node) ?? []).append(hole))
 				}
-				Err(_) => {
-					$insertions = $insertions.append({ hole, parent: $parent })
+				_ => {
+					while $element_cursor < element_intervals.len() {
+						entry = element_intervals.get($element_cursor) ?? empty_interval
+						if entry.span.start >= hole.offset {
+							break
+						}
+						while !$active.is_empty() and ($active.last() ?? empty_interval).span.end <= entry.span.start {
+							$active = $active.drop_last(1)
+						}
+						$active = $active.append(entry)
+						$element_cursor = $element_cursor + 1
+					}
+					while !$active.is_empty() and ($active.last() ?? empty_interval).span.end <= hole.offset {
+						$active = $active.drop_last(1)
+					}
+					$insertions = $insertions.append({ hole, parent: $active.last().map_ok(|entry| entry.node).map_err(|_| Missing) })
 				}
 			}
 		}
 	}
+
 	var $replacement = Dict.empty()
 	for (index, holes) in $text_groups.to_list() {
 		node = $nodes.get(index) ?? empty_node
@@ -293,78 +355,88 @@ build_plan = |segments, parsed, positions, decode| {
 		}
 		$replacement = $replacement.insert(index, $pieces)
 	}
-	var $index = 0
-	for node in $nodes {
+	var $by_parent = Dict.empty()
+	var $at_roots = []
+	for insertion in $insertions {
+		hole = insertion.hole
+		index = $nodes.len()
+		$nodes = $nodes.append({ kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) })
+		$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: index }), expected: Language("text") })
+		entry = { offset: hole.offset, node: index }
+		match insertion.parent {
+			Ok(parent) => {
+				$by_parent = $by_parent.insert(parent, ($by_parent.get(parent) ?? []).append(entry))
+			}
+			Err(_) => {
+				$at_roots = $at_roots.append(entry)
+			}
+		}
+	}
+	# A while cursor preserves unique ownership while updating the arena;
+	# iterating over the same list while modifying it would copy each update.
+	$index = 0
+	while $index < $nodes.len() {
+		node = $nodes.get($index) ?? empty_node
 		var $children = []
 		for child in node.children {
 			$children = $children.concat($replacement.get(child) ?? [child])
 		}
-		$nodes = $nodes.set($index, { ..node, children: $children }) ?? []
+		children = merge_insertions($nodes, $children, $by_parent.get($index) ?? [])
+		$nodes = $nodes.set($index, { ..node, children }) ?? []
 		$index = $index + 1
 	}
 	var $roots = []
 	for root in parsed.tree.roots {
 		$roots = $roots.concat($replacement.get(root) ?? [root])
 	}
-	for insertion in $insertions {
-		hole = insertion.hole
-		index = $nodes.len()
-		$nodes = $nodes.append({ kind: Text(""), attributes: [], children: [], origin: Authored({ start: hole.offset, end: hole.offset }) })
-		$slots = $slots.append({ index: hole.index, location: { start: hole.offset, end: hole.offset }, target: TextSlot({ node: index }), expected: Language("text") })
-		match insertion.parent {
-			Ok(parent) => {
-				node = $nodes.get(parent) ?? empty_node
-				$nodes = $nodes.set(parent, { ..node, children: insert_in_source_order($nodes, node.children, index, hole.offset) }) ?? []
-			}
-			Err(_) => {
-				$roots = insert_in_source_order($nodes, $roots, index, hole.offset)
-			}
-		}
+	roots = merge_insertions($nodes, $roots, $at_roots)
+
+	if $nodes.len() > props.max_nodes {
+		return Err(InvalidMarkup({ problem: ResourceLimit("nodes"), line: 1, column: 1 }))
 	}
-	Ok({ segments, parsed: { ..parsed, tree: { nodes: $nodes, roots: $roots } }, slots: $slots.sort_with(|a, b| if (a.index < b.index) Before else if (a.index > b.index) After else Same) })
+	Ok({ segments, parsed: { ..parsed, tree: { nodes: $nodes, roots } }, slots: $slots.sort_with(|a, b| if (a.index < b.index) Before else if (a.index > b.index) After else Same) })
 }
 
-insert_in_source_order : List(Markup.Node), List(U64), U64, U64 -> List(U64)
-insert_in_source_order = |nodes, children, index, offset| {
+Interval : { span : Markup.Span, node : U64 }
+
+empty_interval : Interval
+empty_interval = { span: { start: 0, end: 0 }, node: 0 }
+
+empty_attribute_interval : { span : Markup.Span, node : U64, attribute : U64 }
+empty_attribute_interval = { span: { start: 0, end: 0 }, node: 0, attribute: 0 }
+
+order : U64, U64 -> [Before, Same, After]
+order = |a, b| if (a < b) Before else if (a > b) After else Same
+
+merge_insertions : List(Markup.Node), List(U64), List({ offset : U64, node : U64 }) -> List(U64)
+merge_insertions = |nodes, children, insertions| {
 	var $out = []
-	var $inserted = False
+	var $cursor = 0
 	for child in children {
 		at = match nodes.get(child) {
 			Ok({ origin: Authored(span), .. }) => span.start
 			Ok({ origin: Implied(pos), .. }) => pos
 			Err(_) => 0
 		}
-		zero_width = match nodes.get(child) {
-			Ok({ origin: Authored(span), .. }) => span.start == span.end and span.start == offset
-			_ => False
-		}
-		if !$inserted and at >= offset and !zero_width {
-			$out = $out.append(index)
-			$inserted = True
+		while $cursor < insertions.len() {
+			entry = insertions.get($cursor) ?? { offset: 0, node: 0 }
+			if entry.offset > at {
+				break
+			}
+			$out = $out.append(entry.node)
+			$cursor = $cursor + 1
 		}
 		$out = $out.append(child)
 	}
-	if !$inserted {
-		$out = $out.append(index)
+	while $cursor < insertions.len() {
+		$out = $out.append((insertions.get($cursor) ?? { offset: 0, node: 0 }).node)
+		$cursor = $cursor + 1
 	}
 	$out
 }
 
-unfinished_reference : List(U8), U64, U64 -> Bool
-unfinished_reference = |bytes, start, end| {
-	var $entity = False
-	var $i = start
-	while $i < end {
-		byte = bytes.get($i) ?? 0
-		if byte == '&' {
-			$entity = True
-		} else if !((byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '#') {
-			$entity = False
-		}
-		$i = $i + 1
-	}
-	$entity
-}
+reference_char : U8 -> Bool
+reference_char = |byte| (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '#'
 
 space : U8 -> Bool
 space = |byte| [' ', '\t', '\r', '\n', 12].contains(byte)
@@ -437,3 +509,20 @@ expect {
 	plan = xml_plan(["<g>", "</g>"])?
 	MarkupTemplate.bind(plan, [].iter()).map_ok(|bound| bound.values) == Err(InvalidMarkup({ problem: BindingCount({ expected: 1, actual: 0 }), line: 1, column: 1 }))
 }
+
+expect {
+	segments = ["<g>"].concat(List.repeat("</g><g>", 1023)).concat(["</g>"])
+	plan = xml_plan(segments)?
+	plan.slots.len() == 1024 and plan.parsed.tree.roots.len() == 1024 and plan.slots.all(
+		|slot| match slot.target {
+			TextSlot(target) => plan.parsed.tree.nodes.get(target.node).map_ok(|node| node.kind) == Ok(Text(""))
+			_ => False
+		},
+	)
+}
+expect xml_plan(["<script/>", "<g/>"]).is_ok()
+
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_slots: 0 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_source_bytes: 6 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 1 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_err()
+expect MarkupTemplate.parse_segments_with(["<g>", "</g>"], { max_nodes: 2 }, |text| Markup.parse_xml_fragment(text, "", {}), Markup.decode_xml_text).is_ok()

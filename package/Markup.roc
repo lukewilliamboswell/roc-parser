@@ -105,7 +105,7 @@ Markup :: [].{
 	Error : { problem : Problem, line : U64, column : U64 }
 
 	## Configurable validation and resource limits, strict by default.
-	Props := { syntax : Syntax ?? XmlSyntax, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
+	Props := { syntax : Syntax ?? XmlSyntax, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
 
 	## Expanded names share the existing namespace-aware XML contract.
 	Name : XmlNs.Name
@@ -168,7 +168,7 @@ Markup :: [].{
 	single_root = |tree| {
 		roots = tree.roots.keep_if(
 			|index| match tree.nodes.get(index) {
-				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) => False
+				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
 				Ok({ kind: Text(text), .. }) => !text.trim().is_empty()
 				Ok(_) => True
 				Err(_) => False
@@ -246,8 +246,9 @@ parse_xml_source = |text, namespace, fragment, props| {
 	input = if fragment {
 		"${prefix}${text}</_markup_fragment>"
 	} else text
-	depth = props.max_depth + if (fragment) 1 else 0
-	elements = props.max_elements + if (fragment) 1 else 0
+	ceiling = text.count_utf8_bytes() + 1
+	depth = (if (props.max_depth < ceiling) props.max_depth else ceiling) + if (fragment) 1 else 0
+	elements = (if (props.max_elements < ceiling) props.max_elements else ceiling) + if (fragment) 1 else 0
 	opened = XmlNs.reader(input, { max_depth: depth, max_elements: elements, max_attributes: if (props.max_attributes == 0 and fragment) 1 else props.max_attributes }).map_err(|error| located_xml_error(error, text, prefix.count_utf8_bytes()))?
 	var $reader = opened
 	var $starts = []
@@ -366,6 +367,9 @@ construct_xml_tree = |source, starts, fragment, props| {
 		match $new_node {
 			Ok(new_node) => {
 				index = $nodes.len()
+				if index >= props.max_nodes {
+					return Err(error_at(source, token.span.start, ResourceLimit("nodes")))
+				}
 				$nodes = $nodes.append(new_node)
 				match $stack.last() {
 					Ok(parent) => {
@@ -513,3 +517,9 @@ expect {
 
 expect Markup.parse_xml_fragment("<path/>oops", Markup.svg_namespace, {}).map_ok(|parsed| Markup.single_root(parsed.tree)) == Ok(Err(RootCount(2)))
 expect Markup.parse_xml_fragment(" <!--c--><path/><?p q?> ", Markup.svg_namespace, {}).map_ok(|parsed| Markup.single_root(parsed.tree).is_ok()) == Ok(True)
+
+expect Markup.parse_xml("<a><!--c-->text<?p q?></a>", { max_nodes: 3 }).is_err()
+expect Markup.parse_xml("<a><!--c-->text<?p q?></a>", { max_nodes: 4 }).is_ok()
+expect Markup.parse_xml_fragment("", "", { max_nodes: 0 }).is_ok()
+expect Markup.parse_xml_fragment("<!--c-->", "", { max_nodes: 0 }).is_err()
+expect Markup.parse_xml_fragment("<a/>", "", { max_depth: 18_446_744_073_709_551_615, max_elements: 18_446_744_073_709_551_615 }).is_ok()
