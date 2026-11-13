@@ -455,7 +455,11 @@ implied = |s, except| {
 	$s
 }
 
-close_p = |s| close_to(implied(s, "p"), "p")
+close_p = |s| {
+	next = implied(s, "p")
+	checked = if (current(next) != "p") problem(next, MisnestedEndTag, s.token_span.start) else next
+	close_to(checked, "p")
+}
 
 context_mode = |name| match name {
 	"select" => InBody
@@ -747,6 +751,12 @@ process_html = |state, token, scripting| {
 				$s = end_template($s, token.span.start)
 				$reprocess = True
 			}
+			(InBody, Eof) if !$s.modes.is_empty() => {
+				# A template fragment context has a template insertion mode even
+				# though no authored template element is on the open stack.
+				$s = { ..$s, mode: InTemplate }
+				$reprocess = True
+			}
 			(InBody, _) => {
 				$s = body($s, token)
 			}
@@ -923,7 +933,12 @@ process_html = |state, token, scripting| {
 			(InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "noframes" => {
 				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			}
-			(InFrameset, Eof) | (AfterFrameset, Eof) => {}
+			(InFrameset, Eof) => {
+				if current($s) != "html" {
+					$s = problem($s, EofWithOpenElements, token.span.start)
+				}
+			}
+			(AfterFrameset, Eof) => {}
 			(AfterFrameset, End("html")) => {
 				$s = { ..$s, mode: AfterAfterFrameset }
 			}
@@ -971,6 +986,7 @@ body = |state, token| {
 		Start(tag) => {
 			name = tag.name
 			if name == "html" {
+				$s = problem($s, UnexpectedHtmlStart, token.span.start)
 				if parsing_template($s) {
 					return problem($s, UnexpectedBodyStart, token.span.start)
 				}
@@ -978,6 +994,7 @@ body = |state, token| {
 					$s = merge_attributes($s, $s.stack.first() ?? 0, tag)
 				}
 			} else if name == "body" {
+				$s = problem($s, UnexpectedBodyStart, token.span.start)
 				if parsing_template($s) {
 					return problem($s, UnexpectedBodyStart, token.span.start)
 				}
@@ -991,6 +1008,7 @@ body = |state, token| {
 					}
 				}
 			} else if name == "frameset" {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
 				if $s.frameset_ok and last_named($s, "body").is_ok() and !parsing_template($s) {
 					body_id = last_named($s, "body") ?? 0
 					$s = detach($s, body_id)
@@ -1049,7 +1067,11 @@ body = |state, token| {
 					$i = $i - 1
 					n = name_at($s, $s.stack.get($i) ?? 0)
 					if n == name or (name != "li" and (n == "dd" or n == "dt")) {
-						$s = close_to(implied($s, n), n)
+						$s = implied($s, n)
+						if current($s) != n {
+							$s = problem($s, MisnestedEndTag, token.span.start)
+						}
+						$s = close_to($s, n)
 						break
 					}
 					if special_at($s, $s.stack.get($i) ?? 0) and !["address", "div", "p"].contains(n) {
@@ -1139,6 +1161,9 @@ body = |state, token| {
 					$s = implied($s, "")
 				}
 				$s = reconstruct($s)
+				if name == "image" {
+					$s = problem($s, ImageStartTag, token.span.start)
+				}
 				adjusted = if (name == "image") { ..tag, name: "img" } else tag
 				$s = insert_tag($s, adjusted, Markup.html_namespace, token.span, False)
 				if name == "hr" and in_scope($s, "p", ButtonScope) {
@@ -1196,6 +1221,12 @@ body = |state, token| {
 		End(name) => {
 			if name == "body" or name == "html" {
 				if in_scope($s, "body", DefaultScope) {
+					if $s.stack.any(|i| !["dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html"].contains(name_at($s, i))) {
+						$s = problem($s, MisnestedEndTag, token.span.start)
+					}
+					if name == "html" and $s.fragment {
+						$s = problem($s, UnexpectedEndTag, token.span.start)
+					}
 					$s = { ..$s, mode: if (name == "html" and !$s.fragment) AfterAfterBody else AfterBody }
 				}
 				else {
@@ -1704,6 +1735,8 @@ row = |state, token| {
 				$s = clear_row_stack($s)
 				$s = pop_mode($s, InTableBody)
 				$s = process($s, token, $s.context.scripting)
+			} else {
+				$s = problem($s, UnexpectedRowToken, token.span.start)
 			}
 		}
 		End(n) if ["table", "tbody", "tfoot", "thead"].contains(n) => {
@@ -1711,6 +1744,8 @@ row = |state, token| {
 				$s = clear_row_stack($s)
 				$s = pop_mode($s, InTableBody)
 				$s = process($s, token, $s.context.scripting)
+			} else {
+				$s = problem($s, UnexpectedRowEnd, token.span.start)
 			}
 		}
 		End(n) if ["body", "caption", "col", "colgroup", "html", "td", "th"].contains(n) => {
@@ -1809,6 +1844,9 @@ foreign_process = |state, token| {
 			$s = process_html($s, token, $s.context.scripting)
 		}
 		End(n) => {
+			if Tok.lower(adjusted_name($s)) != n {
+				$s = problem($s, UnexpectedForeignEndTag, token.span.start)
+			}
 			var $i = $s.stack.len()
 			var $found = False
 			while $i > 0 {
@@ -2432,3 +2470,19 @@ expect {
 	inside = p.tree.nodes.get(option.children.get(1)?)?
 	Markup.text(p.tree, inside.children.first()?) == "original"
 }
+
+expect [
+	"<!doctype html><div></body>",
+	"<!doctype html><html><html>",
+	"<!doctype html><body><body>",
+	"<!doctype html><p><frameset><frame>",
+	"<!doctype html><basefont><frameset>",
+	"<!doctype html><image/>",
+	"<!doctype html><dt><div><dd>",
+	"<!doctype html><title>x</title><div><p>x<u></p></div></body>",
+	"<!doctype html><table><caption><svg>foo</table>bar",
+].all(|source| HtmlTree.parse(source, False, {}, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser }).map_ok(|p| !p.diagnostics.is_empty()) == Ok(True))
+expect ["<caption><td>", "<col><td>", "<tbody><td>", "<tr><td>", "</table><td>", "</tbody></tfoot></thead><td>"].all(|source| HtmlTree.parse(source, True, { name: "tr" }, {}).is_err())
+expect HtmlTree.parse("<html>X", True, { namespace: Markup.svg_namespace, name: "desc" }, {}).is_err()
+expect HtmlTree.parse("</html><!--abc-->", True, { name: "html" }, {}).is_err()
+expect HtmlTree.parse("<form><form>", True, { name: "template" }, {}).is_ok()
