@@ -18,7 +18,7 @@ def validate(case: dict, jar: Path, schemas: Path) -> dict:
             document = etree.fromstring(source.encode(), parser)
             if document.getroottree().docinfo.doctype:
                 return {'valid': False, 'violations': ['DOCTYPE unsupported by profile']}
-            schema = etree.RelaxNG(etree.parse(str(schemas / 'mathml4-presentation.rng'), parser))
+            schema = etree.RelaxNG(etree.parse(str(schemas / 'mathml4-core.rng'), parser))
             valid = schema.validate(document)
             return {'valid': valid, 'violations': [str(item) for item in schema.error_log]}
         except etree.XMLSyntaxError as error:

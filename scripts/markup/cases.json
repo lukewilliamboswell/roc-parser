@@ -380,7 +380,11 @@
       "validate": true,
       "valid": false,
       "problem": "InvalidValue",
-      "semantic_oracle": "nu"
+      "oracle_gap": {
+        "oracle": "Nu26.11.9",
+        "kind": "invalid_acceptance",
+        "reason": "Nu accepts this value; the SVG grammar fixture remains authoritative."
+      }
     },
     {
       "id": "svg-bad-arc-flag",
@@ -400,7 +404,11 @@
       "validate": true,
       "valid": false,
       "problem": "InvalidValue",
-      "semantic_oracle": "nu"
+      "oracle_gap": {
+        "oracle": "Nu26.11.9",
+        "kind": "invalid_acceptance",
+        "reason": "Nu accepts this value; the SVG grammar fixture remains authoritative."
+      }
     },
     {
       "id": "svg-bad-case-attribute",
@@ -468,6 +476,22 @@
       "validate": true,
       "valid": true,
       "semantic_oracle": "nu"
+    },
+    {
+      "id": "consumer-svg-dom",
+      "format": "svg",
+      "syntax": "xml",
+      "input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"g\"/></defs><path pathLength=\"3\" d=\"M0 0L1 1\"/><foreignObject><div xmlns=\"http://www.w3.org/1999/xhtml\">HTML</div></foreignObject></svg>",
+      "validate": true,
+      "consumer": true
+    },
+    {
+      "id": "consumer-mathml-dom",
+      "format": "mathml",
+      "syntax": "xml",
+      "input": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mfrac><mn>1</mn><mn>2</mn></mfrac></math>",
+      "validate": true,
+      "consumer": true
     }
   ]
 }

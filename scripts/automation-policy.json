@@ -74,6 +74,7 @@
         "scripts/import_roc_syntax_snapshots.py",
         "scripts/markdown/gen_entities.py",
         "scripts/markdown/import_specs.py",
+        "scripts/markup/import_tree_suite.py",
         "scripts/markup/semantic_oracle.py",
         "scripts/mutate_roc_syntax.py",
         "scripts/review_asciidoc.py",

@@ -110,3 +110,41 @@ class SupplierTests(unittest.TestCase):
         for case in cases:
             if case.get('valid') is False:
                 self.assertTrue(case.get('problem'), case['id'])
+
+
+class TreeSuiteTests(unittest.TestCase):
+    def test_serializer_preserves_templates_namespaces_and_attribute_order_contract(self):
+        tree = [['element', review.NS['html'], 'template', [], [
+            ['element', review.NS['svg'], 'svg', [['http://www.w3.org/1999/xlink', 'href', '#a'], ['', 'id', 'x']], []]
+        ]]]
+        self.assertEqual(review.dat_tree(tree), '| <template>\n|   content\n|     <svg svg>\n|       id="x"\n|       xlink href="#a"')
+        self.assertEqual(review.dat_tree([['pi', 'target', '']]), '| <?target ?>')
+
+    def test_importer_retains_authored_newlines_and_context(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('markup_import_suite', review.DATA / 'import_tree_suite.py')
+        importer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(importer)
+        value = '#data\n<p>\n\ntext\n#errors\nerror\n#document-fragment\nsvg path\n#script-on\n#document\n| "value"\n\n'
+        case = importer.parse_dat('x.dat', value)[0]
+        self.assertEqual(case['input'], '<p>\n\ntext')
+        self.assertEqual(case['context'], {'namespace': review.NS['svg'], 'local': 'path'})
+        self.assertEqual(case['scripting_modes'], [True])
+        self.assertEqual(case['expected_dat'], '| "value"')
+
+    def test_default_suite_runs_both_scripting_modes(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('markup_import_suite_modes', review.DATA / 'import_tree_suite.py')
+        importer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(importer)
+        case = importer.parse_dat('x.dat', '#data\nx\n#errors\n#document\n| "x"\n')[0]
+        self.assertEqual(case['scripting_modes'], [False, True])
+
+    def test_suite_excludes_only_cases_requiring_javascript_execution(self):
+        inventory = json.loads((review.DATA / 'tree-suite.json').read_text())
+        self.assertEqual(len(inventory['source']['revision']), 40)
+        self.assertGreater(len(inventory['cases']), 1900)
+        self.assertEqual(len(inventory['source']['excluded']), 4)
+        for item in inventory['source']['excluded']:
+            self.assertIn('/scripted_', item['path'])
+            self.assertIn('JavaScript execution', item['reason'])

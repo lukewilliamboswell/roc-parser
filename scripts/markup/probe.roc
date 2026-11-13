@@ -32,9 +32,9 @@ main! = |arguments| {
 			props = { syntax, recovery, allow_unknown_elements: !validate, allow_unknown_attributes: !validate, check_values: validate }
 			result = if format == "html" {
 				html_props : Html.Props
-				html_props = { syntax, recovery, allow_unknown_elements: !validate, allow_unknown_attributes: !validate, check_values: validate, context_namespace: namespace, context_element: context }
+				html_props = { syntax, recovery, allow_unknown_elements: !validate, allow_unknown_attributes: !validate, check_values: validate, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
 				if !validate {
-					Html.parse_syntax(source, props, fragment, { namespace: Uri(namespace), local: context, prefix: Unprefixed })
+					Html.parse_source(source, html_props, fragment)
 				} else if fragment {
 					Html.parse_fragment(source, html_props).map_ok(|value| value.parsed)
 				} else {
@@ -61,7 +61,7 @@ main! = |arguments| {
 			}
 			match result {
 				Ok(parsed) => {
-					roots = Str.join_with(parsed.tree.roots.map(|index| encode_node(parsed.tree, index)), ",")
+					roots = Str.join_with(parsed.tree.roots.map(|index| encode_node(parsed.tree, index, args.get(8) == Ok("bindings"))), ",")
 					issues = Str.join_with(parsed.diagnostics.map(encode_error), ",")
 					Stdout.line!("{\"status\":\"ok\",\"roots\":[${roots}],\"diagnostics\":[${issues}]}")?
 				}
@@ -81,8 +81,8 @@ namespace_uri = |namespace| match namespace {
 
 encode_error = |error| "{\"code\":${quote(Str.inspect(error.problem))},\"line\":${error.line.to_str()},\"column\":${error.column.to_str()}}"
 
-encode_node : Markup.Tree, U64 -> Str
-encode_node = |tree, index| {
+encode_node : Markup.Tree, U64, Bool -> Str
+encode_node = |tree, index, bindings| {
 	match tree.nodes.get(index) {
 		Err(_) => "null"
 		Ok(node) => match node.kind {
@@ -91,9 +91,9 @@ encode_node = |tree, index| {
 			Doctype(doctype) => "[\"doctype\",${quote(doctype.name)},${quote(doctype.public_id)},${quote(doctype.system_id)}]"
 			ProcessingInstruction(pi) => "[\"pi\",${quote(pi.target)},${quote(pi.data)}]"
 			Element(name) => {
-				attributes = node.attributes.keep_if(|attribute| attribute.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attribute.name.local != "xmlns")
+				attributes = node.attributes.keep_if(|attribute| bindings or (attribute.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attribute.name.local != "xmlns"))
 				attrs = Str.join_with(attributes.map(|attribute| "[${quote(namespace_uri(attribute.name.namespace))},${quote(attribute.name.local)},${quote(attribute.value)}]"), ",")
-				children = Str.join_with(node.children.map(|child| encode_node(tree, child)), ",")
+				children = Str.join_with(node.children.map(|child| encode_node(tree, child, bindings)), ",")
 				"[\"element\",${quote(namespace_uri(name.namespace))},${quote(name.local)},[${attrs}],[${children}]]"
 			}
 		}

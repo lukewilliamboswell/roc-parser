@@ -36,7 +36,7 @@ def write_json(path: Path, value) -> None:
 
 
 def request(case: dict) -> dict:
-    return {key: value for key, value in case.items() if key in {'input', 'format', 'syntax', 'fragment', 'context'}}
+    return {key: value for key, value in case.items() if key in {'input', 'format', 'syntax', 'fragment', 'context', 'scripting', 'include_bindings'}}
 
 
 def xml_oracle(case: dict) -> dict:
@@ -141,7 +141,7 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
     arguments = [case['format'], case.get('syntax', 'html' if case['format'] == 'html' else 'xml'),
                  'fragment' if case.get('fragment') else 'document', case.get('recovery', 'strict'),
                  'validate' if case.get('validate', True) else 'structural',
-                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math')]
+                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'bindings' if case.get('include_bindings') else 'semantic']
     try:
         result = subprocess.run([str(executable), *arguments], input=case['input'].encode(), capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
@@ -288,6 +288,73 @@ def browser_review(args) -> int:
     return int(not rows or any(row['kind'] != 'pass' for row in rows))
 
 
+def dat_tree(roots: list) -> str:
+    # WPT's fixture representation sorts attributes and flattens template's
+    # separate DocumentFragment through a printed `content` marker.
+    namespaces = {NS['svg']: 'svg ', NS['mathml']: 'math ', NS['html']: '', '': ''}
+    attr_namespaces = {'http://www.w3.org/XML/1998/namespace': 'xml ', 'http://www.w3.org/1999/xlink': 'xlink ', 'http://www.w3.org/2000/xmlns/': 'xmlns '}
+    lines = []
+    def visit(node, depth):
+        prefix = '| ' + '  ' * depth
+        if node[0] == 'element':
+            lines.append(prefix + '<' + namespaces.get(node[1], node[1] + ' ') + node[2] + '>')
+            for uri, name, value in sorted(node[3], key=lambda attribute: (attr_namespaces.get(attribute[0], '') + attribute[1]).encode('utf-16-be', errors='surrogatepass')):
+                lines.append(prefix + '  ' + attr_namespaces.get(uri, '') + name + '="' + value + '"')
+            child_depth = depth + 1
+            if node[1] == NS['html'] and node[2] == 'template':
+                lines.append(prefix + '  content')
+                child_depth += 1
+            for child in node[4]:
+                visit(child, child_depth)
+        elif node[0] == 'text':
+            lines.append(prefix + '"' + node[1] + '"')
+        elif node[0] == 'comment':
+            lines.append(prefix + '<!-- ' + node[1] + ' -->')
+        elif node[0] == 'doctype':
+            identifiers = (' "' + node[2] + '" "' + node[3] + '"') if node[2] or node[3] else ''
+            lines.append(prefix + '<!DOCTYPE ' + node[1] + identifiers + '>')
+        elif node[0] == 'pi':
+            lines.append(prefix + '<?' + node[1] + (' ' + node[2]) + '?>')
+    for root in roots:
+        visit(root, 0)
+    return '\n'.join(lines)
+
+
+def normalize_dat(value: str) -> str:
+    import re
+    return '\n'.join(line for line in value.split('\n') if not re.match(r'^\|\s+(?:xmlns )?xmlns(?:[: ][^=]+)?="', line))
+
+
+def suite_review(args) -> int:
+    executable = args.probe or build_probe(args.roc, args.work)
+    inventory = json.loads((DATA / 'tree-suite.json').read_text())
+    cases = inventory['cases']
+    if args.file:
+        cases = [case for case in cases if args.file in case['id']]
+    cases = [{**case, 'id': case['id'] + ('/script-on' if scripting else '/script-off'), 'scripting': scripting} for case in cases for scripting in case.get('scripting_modes', [case.get('scripting', False)])]
+    if args.limit:
+        cases = cases[:args.limit]
+    rows = []
+    with NodeOracle(args.cache) as node:
+        for case in cases:
+            actual = probe(executable, case)
+            reference = node.parse(request(case))
+            expected_dat = case['expected_dat'] if case.get('include_bindings') else normalize_dat(case['expected_dat'])
+            actual_dat = dat_tree(actual['roots']) if actual['status'] == 'ok' else None
+            oracle_dat = dat_tree(reference['roots'])
+            kind = actual['status'] if actual['status'] in FATAL else 'wrong_tree' if actual_dat != expected_dat else 'pass'
+            row = {'id': case['id'], 'kind': kind, 'case': case, 'actual': actual, 'actual_dat': actual_dat,
+                   'expected_dat': expected_dat, 'parse5_dat': oracle_dat, 'oracle_disagreement': oracle_dat != expected_dat}
+            rows.append(row)
+            if kind != 'pass':
+                retain(row, args.work)
+    report = {'source': inventory['source'], 'counts': dict(Counter(row['kind'] for row in rows)),
+              'oracle_disagreements': sum(row['oracle_disagreement'] for row in rows), 'total': len(rows), 'rows': rows}
+    write_json(args.work / 'suite.json', report)
+    print(json.dumps({key: report[key] for key in ['total', 'counts', 'oracle_disagreements']}))
+    return int(not rows or any(row['kind'] != 'pass' for row in rows))
+
+
 def semantic_review(args) -> int:
     suppliers = setup.ensure_semantic(args.cache)
     python = setup.ensure_semantic_python(args.cache)
@@ -329,6 +396,9 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('check')
     commands.add_parser('semantic')
+    suite = commands.add_parser('suite')
+    suite.add_argument('--limit', type=int)
+    suite.add_argument('--file', help='select upstream source filename substring')
     campaign = commands.add_parser('campaign')
     campaign.add_argument('--smoke', action='store_true')
     campaign.add_argument('--seed', type=int, default=1)
@@ -346,7 +416,7 @@ def main(argv=None) -> int:
     browser.add_argument('--with-deps', action='store_true')
     args = parser.parse_args(argv)
     try:
-        return browser_review(args) if args.command == 'browser' else semantic_review(args) if args.command == 'semantic' else run_review(args)
+        return browser_review(args) if args.command == 'browser' else semantic_review(args) if args.command == 'semantic' else suite_review(args) if args.command == 'suite' else run_review(args)
     except (OSError, ValueError, RuntimeError, TimeoutError, subprocess.SubprocessError) as error:
         print(f'markup review infrastructure error: {error}', file=sys.stderr)
         return 2
