@@ -168,12 +168,18 @@ Markup :: [].{
 	single_root = |tree| {
 		roots = tree.roots.keep_if(
 			|index| match tree.nodes.get(index) {
-				Ok({ kind: Element(_), .. }) => True
-				_ => False
+				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) => False
+				Ok({ kind: Text(text), .. }) => !text.trim().is_empty()
+				Ok(_) => True
+				Err(_) => False
 			},
 		)
 		if roots.len() == 1 {
-			Ok(roots.first() ?? 0)
+			index = roots.first() ?? 0
+			match tree.nodes.get(index) {
+				Ok({ kind: Element(_), .. }) => Ok(index)
+				_ => Err(RootCount(1))
+			}
 		} else {
 			Err(RootCount(roots.len()))
 		}
@@ -504,3 +510,6 @@ expect {
 	root = parsed.tree.nodes.get(Markup.single_root(parsed.tree)?)?
 	root.attributes.map(|a| a.name.local) == ["p", "a", "a"] and root.attributes.map(|a| Str.from_utf8_lossy(parsed.source.slice(a.span))) == ["xmlns:p='urn:p'", "a='v'", "p:a='w'"]
 }
+
+expect Markup.parse_xml_fragment("<path/>oops", Markup.svg_namespace, {}).map_ok(|parsed| Markup.single_root(parsed.tree)) == Ok(Err(RootCount(2)))
+expect Markup.parse_xml_fragment(" <!--c--><path/><?p q?> ", Markup.svg_namespace, {}).map_ok(|parsed| Markup.single_root(parsed.tree).is_ok()) == Ok(True)
