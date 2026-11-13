@@ -442,6 +442,23 @@ def normalize_dat(value: str) -> str:
     return '\n'.join(line for line in value.split('\n') if not re.match(r'^\|\s+(?:xmlns )?xmlns(?:[: ][^=]+)?="', line))
 
 
+def diagnostic_verdict(case: dict, reference: dict) -> dict:
+    raw = case['expected_error_count']
+    result = {'has_error': raw > 0, 'raw_expected_error_count': raw,
+              'raw_sections_present': case.get('errors_section_present', True),
+              'verdict_source': 'WPT raw error inventory'}
+    # The WPT runtime explicitly ignores the error inventories, and newer
+    # tree-only fixtures omit even document-level MissingDoctype. Correct this
+    # one independently established rule without borrowing production output.
+    if raw == 0 and not case.get('fragment') and any(issue.get('code') == 'missing-doctype' for issue in reference.get('diagnostics', [])):
+        result.update(has_error=True, verdict_source='HTML initial insertion mode: MissingDoctype', oracle_gap={
+            'kind': 'omitted_wpt_parse_errors', 'rule': 'missing-doctype',
+            'specification': 'https://html.spec.whatwg.org/multipage/parsing.html#the-initial-insertion-mode',
+            'upstream_harness': 'https://github.com/web-platform-tests/wpt/blob/4aa56d3beafc5655fa55491169eb14845b44eab3/html/syntax/parsing/resources/test.js#L149',
+            'evidence': 'Independent parse5 reports missing-doctype for this document; the standard initial insertion mode requires the error. WPT tree harness ignores raw #errors inventories.'})
+    return result
+
+
 def suite_review(args) -> int:
     executable = resolve_probe(args)
     inventory = json.loads((DATA / 'tree-suite.json').read_text())
@@ -464,7 +481,10 @@ def suite_review(args) -> int:
                 findings.append(actual['status'])
             elif actual_dat != expected_dat:
                 findings.append('wrong_tree')
-            has_errors = case['expected_error_count'] > 0
+            verdict = diagnostic_verdict(case, reference)
+            has_errors = verdict['has_error']
+            if not verdict['raw_sections_present'] and not verdict.get('oracle_gap'):
+                findings.append('unverified_diagnostic_oracle')
             if actual['status'] == 'ok' and bool(actual.get('diagnostics')) != has_errors:
                 findings.append('wrong_diagnostic_presence')
             strict = None
@@ -477,14 +497,14 @@ def suite_review(args) -> int:
                     findings.append('wrong_strict_verdict')
             kind = findings[0] if findings else 'pass'
             row = {'id': case['id'], 'kind': kind, 'findings': findings, 'case': case, 'actual': actual, 'strict': strict, 'actual_dat': actual_dat,
-                   'expected_dat': expected_dat, 'parse5_dat': oracle_dat, 'oracle_disagreement': oracle_dat != expected_dat}
+                   'expected_dat': expected_dat, 'parse5_dat': oracle_dat, 'parse5_diagnostics': reference.get('diagnostics', []), 'diagnostic_verdict': verdict, 'oracle_disagreement': oracle_dat != expected_dat}
             rows.append(row)
             if kind != 'pass':
                 retain(row, args.work)
     report = {'source': inventory['source'], 'counts': dict(Counter(row['kind'] for row in rows)),
-              'oracle_disagreements': sum(row['oracle_disagreement'] for row in rows), 'finding_counts': dict(Counter(finding for row in rows for finding in row['findings'])), 'strict_checked': not args.trees_only, 'total': len(rows), 'rows': rows}
+              'oracle_disagreements': sum(row['oracle_disagreement'] for row in rows), 'finding_counts': dict(Counter(finding for row in rows for finding in row['findings'])), 'strict_checked': not args.trees_only, 'diagnostic_oracle_gaps': sum(bool(row['diagnostic_verdict'].get('oracle_gap')) for row in rows), 'total': len(rows), 'rows': rows}
     write_json(args.work / 'suite.json', report)
-    print(json.dumps({key: report[key] for key in ['total', 'counts', 'finding_counts', 'strict_checked', 'oracle_disagreements']}))
+    print(json.dumps({key: report[key] for key in ['total', 'counts', 'finding_counts', 'strict_checked', 'oracle_disagreements', 'diagnostic_oracle_gaps']}))
     return int(not rows or any(row['kind'] != 'pass' for row in rows))
 
 

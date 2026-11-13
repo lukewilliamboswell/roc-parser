@@ -232,3 +232,26 @@ class StrictSuiteGateTests(unittest.TestCase):
         status, report = self.review(0, False, 'ok')
         self.assertEqual(status, 0)
         self.assertEqual(report['counts'], {'pass': 1})
+
+
+class DiagnosticOracleGapTests(unittest.TestCase):
+    def test_missing_doctype_override_is_independent_of_production_diagnostics(self):
+        case = {'input': '<body><?target>', 'expected_error_count': 0, 'errors_section_present': True}
+        verdict = review.diagnostic_verdict(case, {'diagnostics': [{'code': 'missing-doctype'}]})
+        self.assertTrue(verdict['has_error'])
+        self.assertEqual(verdict['raw_expected_error_count'], 0)
+        self.assertEqual(verdict['oracle_gap']['kind'], 'omitted_wpt_parse_errors')
+
+    def test_new_processing_instruction_oracle_gap_does_not_invent_strict_errors(self):
+        case = {'input': '<!doctype html><?target>', 'expected_error_count': 0, 'errors_section_present': True}
+        verdict = review.diagnostic_verdict(case, {'diagnostics': [{'code': 'unexpected-question-mark-instead-of-tag-name'}]})
+        self.assertFalse(verdict['has_error'])
+        self.assertNotIn('oracle_gap', verdict)
+
+    def test_missing_wpt_error_remains_failure_even_when_parse5_does_not_report_it(self):
+        case = {'input': '<!doctype html><html><html>', 'expected_error_count': 1, 'errors_section_present': True}
+        self.assertTrue(review.diagnostic_verdict(case, {'diagnostics': []})['has_error'])
+
+    def test_fragments_do_not_acquire_document_doctype_requirements(self):
+        case = {'input': '<p>x</p>', 'fragment': True, 'expected_error_count': 0}
+        self.assertFalse(review.diagnostic_verdict(case, {'diagnostics': [{'code': 'missing-doctype'}]})['has_error'])

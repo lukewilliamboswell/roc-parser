@@ -11,7 +11,7 @@ REVISION = '4aa56d3beafc5655fa55491169eb14845b44eab3'
 PREFIX = 'html/syntax/parsing/resources/'
 BASE = f'https://raw.githubusercontent.com/web-platform-tests/wpt/{REVISION}/'
 DATA = Path(__file__).resolve().parent
-SECTIONS = {'#description', '#data', '#errors', '#new-errors', '#document-fragment', '#script-on', '#script-off', '#document'}
+SECTIONS = {'#description', '#data', '#errors', '#new-errors', '#errors-new', '#document-fragment', '#script-on', '#script-off', '#document'}
 
 
 def download(url: str) -> bytes:
@@ -30,8 +30,8 @@ def parse_dat(name: str, raw: str) -> list[dict]:
         context = ''.join(current.get('#document-fragment', [])).strip()
         case = {'id': f'wpt/{name}/{len(cases)}', 'format': 'html', 'syntax': 'html', 'validate': False, 'recovery': 'browser',
                 'input': ''.join(current['#data']).removesuffix('\n'), 'expected_dat': ''.join(current['#document']).rstrip('\n'),
-                'expected_error_count': len([line for line in current.get('#errors', []) + current.get('#new-errors', []) if line.strip()]),
-                'scripting': '#script-on' in current, 'scripting_modes': [True] if '#script-on' in current else [False] if '#script-off' in current else [False, True], 'include_bindings': True}
+                'expected_error_count': len([line for section in ['#errors', '#new-errors', '#errors-new'] for line in current.get(section, []) if line.strip()]),
+                'raw_error_sections': {section: ''.join(current[section]).rstrip('\n') for section in ['#errors', '#new-errors', '#errors-new'] if section in current}, 'errors_section_present': any(section in current for section in ['#errors', '#new-errors', '#errors-new']), 'scripting': '#script-on' in current, 'scripting_modes': [True] if '#script-on' in current else [False] if '#script-off' in current else [False, True], 'include_bindings': True}
         if context:
             namespace, local = ('svg', context[4:]) if context.startswith('svg ') else ('mathml', context[5:]) if context.startswith('math ') else ('html', context)
             case.update(fragment=True, context={'namespace': {'html':'http://www.w3.org/1999/xhtml','svg':'http://www.w3.org/2000/svg','mathml':'http://www.w3.org/1998/Math/MathML'}[namespace], 'local': local})
