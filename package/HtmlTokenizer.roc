@@ -246,37 +246,173 @@ characters = |reader, end, references, data| {
 }
 
 raw_characters = |reader, name, references, script| {
-	bytes = reader.bytes
-	var $end = reader.pos
-	var $escaped = False
-	var $double = False
-	while $end < bytes.len() {
-		if script and HtmlTokenizer.starts(bytes, $end, "<!--") {
-			$escaped = True
-			$end = $end + 4
-		}
-		else if script and $escaped and HtmlTokenizer.starts(bytes, $end, "-->") {
-			$escaped = False
-			$double = False
-			$end = $end + 3
-		}
-		else if script and $escaped and !$double and HtmlTokenizer.starts_caseless(bytes, $end, "<script") and (HtmlTokenizer.space(HtmlTokenizer.byte_at(bytes, $end + 7)) or ['/', '>'].contains(HtmlTokenizer.byte_at(bytes, $end + 7))) {
-			$double = True
-			$end = $end + 7
-		}
-		else if HtmlTokenizer.end_tag_at(bytes, $end, name) {
-			if $double {
-				$double = False
-				$end = $end + 2 + name.count_utf8_bytes()
-			}
-			else {
-				break
-			}
-		} else {
+	if script {
+		scanned = script_end(reader.bytes, reader.pos)
+		result = characters(reader, scanned.end, False, False)
+		if scanned.escaped_eof {
+			{ ..result, reader: { ..result.reader, diagnostics: result.reader.diagnostics.append({ code: EofInScriptCommentLikeText, offset: scanned.end }) } }
+		} else result
+	} else {
+		var $end = reader.pos
+		while $end < reader.bytes.len() and !HtmlTokenizer.end_tag_at(reader.bytes, $end, name) {
 			$end = $end + 1
 		}
+		characters(reader, $end, references, False)
 	}
-	characters(reader, $end, references, False)
+}
+
+# Script data's escaped/double-escaped states cannot be modelled as a search
+# for comment delimiters: the dash/dash-dash and temporary-buffer states alter
+# which </script> is an appropriate end tag. Scan them explicitly once.
+script_end = |bytes, start| {
+	var $pos = start
+	var $state = ScriptData
+	var $buffer_len = 0
+	var $buffer_matches = True
+	while $pos < bytes.len() {
+		byte = HtmlTokenizer.byte_at(bytes, $pos)
+		var $consume = True
+		match $state {
+			ScriptData => {
+				if byte == '<' {
+					if HtmlTokenizer.end_tag_at(bytes, $pos, "script") {
+						break
+					}
+					if HtmlTokenizer.byte_at(bytes, $pos + 1) == '!' {
+						$pos = $pos + 1
+						$state = EscapeStart
+					}
+				}
+			}
+			EscapeStart => {
+				if byte == '-' {
+					$state = EscapeStartDash
+				} else {
+					$state = ScriptData
+					$consume = False
+				}
+			}
+			EscapeStartDash => {
+				if byte == '-' {
+					$state = EscapedDashDash
+				} else {
+					$state = ScriptData
+					$consume = False
+				}
+			}
+			Escaped => {
+				if byte == '-' {
+					$state = EscapedDash
+				}
+				else if byte == '<' {
+					$state = EscapedLessThan
+				}
+			}
+			EscapedDash => {
+				if byte == '-' {
+					$state = EscapedDashDash
+				}
+				else if byte == '<' {
+					$state = EscapedLessThan
+				}
+				else {
+					$state = Escaped
+				}
+			}
+			EscapedDashDash => {
+				if byte == '<' {
+					$state = EscapedLessThan
+				}
+				else if byte == '>' {
+					$state = ScriptData
+				}
+				else if byte != '-' {
+					$state = Escaped
+				}
+			}
+			EscapedLessThan => {
+				if byte == '/' and HtmlTokenizer.end_tag_at(bytes, $pos - 1, "script") {
+					$pos = $pos - 1
+					break
+				}
+				if HtmlTokenizer.ascii_alpha(byte) {
+					$buffer_len = 0
+					$buffer_matches = True
+					$state = DoubleEscapeStart
+					$consume = False
+				}
+				else {
+					$state = Escaped
+					$consume = False
+				}
+			}
+			DoubleEscapeStart | DoubleEscapeEnd => {
+				if HtmlTokenizer.ascii_alpha(byte) {
+					if (if (byte >= 'A' and byte <= 'Z') byte + 32 else byte) != HtmlTokenizer.byte_at("script".to_utf8(), $buffer_len) {
+						$buffer_matches = False
+					}
+					$buffer_len = $buffer_len + 1
+				}
+				else if HtmlTokenizer.space(byte) or byte == '/' or byte == '>' {
+					exact = $buffer_matches and $buffer_len == 6
+					$state = if $state == DoubleEscapeStart {
+						if (exact) DoubleEscaped else Escaped
+					} else {
+						if (exact) Escaped else DoubleEscaped
+					}
+				}
+				else {
+					$state = if ($state == DoubleEscapeStart) Escaped else DoubleEscaped
+					$consume = False
+				}
+			}
+			DoubleEscaped => {
+				if byte == '-' {
+					$state = DoubleEscapedDash
+				}
+				else if byte == '<' {
+					$state = DoubleEscapedLessThan
+				}
+			}
+			DoubleEscapedDash => {
+				if byte == '-' {
+					$state = DoubleEscapedDashDash
+				}
+				else if byte == '<' {
+					$state = DoubleEscapedLessThan
+				}
+				else {
+					$state = DoubleEscaped
+				}
+			}
+			DoubleEscapedDashDash => {
+				if byte == '<' {
+					$state = DoubleEscapedLessThan
+				}
+				else if byte == '>' {
+					$state = ScriptData
+				}
+				else if byte != '-' {
+					$state = DoubleEscaped
+				}
+			}
+			DoubleEscapedLessThan => {
+				if byte == '/' {
+					$buffer_len = 0
+					$buffer_matches = True
+					$state = DoubleEscapeEnd
+				}
+				else {
+					$state = DoubleEscaped
+					$consume = False
+				}
+			}
+		}
+		if $consume {
+			$pos = $pos + 1
+		}
+	}
+	{ end: $pos, escaped_eof: $pos >= bytes.len() and $state != ScriptData and $state != EscapeStart and $state != EscapeStartDash }
 }
 
 comment = |reader| {
@@ -974,4 +1110,25 @@ expect {
 		Doctype(d) => d.name == "h�tml" and !d.quirks
 		_ => False
 	}
+}
+
+script_characters : Str -> HtmlTokenizer.Kind
+script_characters = |input| HtmlTokenizer.next({ bytes: input.to_utf8(), pos: 0, diagnostics: [] }, Script, False).token.kind
+
+expect script_characters("<!--><script></script>tail") == Characters("<!--><script>")
+expect script_characters("<!--<script></script>--></script>tail") == Characters("<!--<script></script>-->")
+expect script_characters("<!--<script></script></script>tail") == Characters("<!--<script></script>")
+expect script_characters("<!--<script>--></script>tail") == Characters("<!--<script>-->")
+expect script_characters("<!--<ScRiPtX></script>tail") == Characters("<!--<ScRiPtX>")
+expect script_characters("<!--<script!></script>tail") == Characters("<!--<script!>")
+expect script_characters("<!--<<script></script>--></script>tail") == Characters("<!--<<script></script>-->")
+expect script_characters("<x</scriptfoo></script>tail") == Characters("<x</scriptfoo>")
+expect script_characters("<!--<script/></script>tail") == Characters("<!--<script/></script>tail")
+expect {
+	result = HtmlTokenizer.next({ bytes: "<!--".to_utf8(), pos: 0, diagnostics: [] }, Script, False)
+	result.reader.diagnostics == [{ code: EofInScriptCommentLikeText, offset: 4 }]
+}
+expect {
+	result = HtmlTokenizer.next({ bytes: "<!-->".to_utf8(), pos: 0, diagnostics: [] }, Script, False)
+	result.reader.diagnostics.is_empty()
 }
