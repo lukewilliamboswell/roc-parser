@@ -71,7 +71,7 @@ describe_contact = |{ name, email, age, status }| {
 # end::optional[]
 
 # tag::headerless[]
-points : Str -> Try(List((Str, F64, F64)), [InvalidCsv(CSV.Error)])
+points : Str -> Try(List((Str, F64, F64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 points = |text| CSV.parse_headerless(text)
 
 # end::headerless[]

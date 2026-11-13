@@ -13,11 +13,11 @@ import parser.Yaml
 # (a) Type-directed decoding: the record type is the whole specification.
 Service : { name : Str, port : U64 }
 
-decode_service : Str -> Try(Service, [InvalidJson(Str), MissingRequiredField(Str)])
+decode_service : Str -> Try(Service, [InvalidJson(Str)])
 decode_service = |json| Json.parse(json)
 
 expect decode_service("{\"name\": \"web\", \"port\": 8080}") == Ok({ name: "web", port: 8080 })
-expect decode_service("{\"name\": \"web\"}") == Err(MissingRequiredField("port"))
+expect decode_service("{\"name\": \"web\"}") == Err(InvalidJson("Missing field: port"))
 # end::decode[]
 
 # tag::decode-formats[]
