@@ -8,11 +8,14 @@ HtmlTree :: [].{
 	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? False }
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
+		if props.max_diagnostics == 0 {
+			return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 1, column: 1 }))
+		}
 		if source.count_utf8_bytes() > props.max_source_bytes {
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False }
+		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 4096 + props.max_work_per_byte * (source.count_utf8_bytes() + 1), element_count: 0, diagnostics_exceeded: False }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -20,8 +23,6 @@ HtmlTree :: [].{
 		}
 		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: [] }
 		var $done = False
-		var $work = 0.U64
-		limit = 4096 + props.max_work_per_byte * (source.count_utf8_bytes() + 1)
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace($state) != Markup.html_namespace
@@ -46,18 +47,24 @@ HtmlTree :: [].{
 			} else {
 				$state = process($state, next.token, context.scripting)
 			}
-			$work = $work + 1
+			at = Literal.position(source, next.token.span.start)
 			if $state.stack.len() > props.max_depth {
-				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: 1, column: next.token.span.start + 1 }))
+				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: at.line, column: at.column }))
 			}
-			if $state.nodes.len() > props.max_elements {
-				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: next.token.span.start + 1 }))
+			if $state.element_count > props.max_elements {
+				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: at.line, column: at.column }))
 			}
-			if $work > limit {
-				return Err(InvalidMarkup({ problem: Unsupported("HTML parser work limit"), line: 1, column: next.token.span.start + 1 }))
+			if $state.nodes.len() > props.max_nodes {
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: at.line, column: at.column }))
+			}
+			if $state.diagnostics_exceeded or $reader.diagnostics.len() + $state.diagnostics.len() > props.max_diagnostics {
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+			}
+			if $state.work > $state.work_limit {
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: at.line, column: at.column }))
 			}
 			match next.token.kind {
-				Start(tag) if tag.attributes.len() > props.max_attributes => return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: 1, column: next.token.span.start + 1 }))
+				Start(tag) if tag.attributes.len() > props.max_attributes => return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
 				Eof => {
 					$done = True
 				}
@@ -94,7 +101,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, AfterHead, InBody, InTable, InC
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool }
+State : { nodes : List(Markup.Node), roots : List(U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -128,12 +135,22 @@ adjusted_namespace = |s| if (s.fragment and s.stack.len() == 1) s.context.namesp
 adjusted_name = |s| if (s.fragment and s.stack.len() == 1) s.context.name else current(s)
 
 problem : State, Str, U64 -> State
-problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: SyntaxError(code), line: 0, column: offset }) } else s
+problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: SyntaxError(code), line: 0, column: offset }) } else { ..s, diagnostics_exceeded: True }
 
 append_node : State, Markup.Node -> State
 append_node = |s, node| {
 	index = s.nodes.len()
-	var $s = { ..s, nodes: s.nodes.append(node) }
+	var $s = {
+		..s,
+		nodes: s.nodes.append(node),
+		work: s.work + 1,
+		element_count: s.element_count + (
+			match node.kind {
+				Element(_) => 1
+				_ => 0
+			}
+		),
+	}
 	if s.foster {
 		table = last_named(s, "table")
 		match table {
@@ -351,14 +368,21 @@ content_mode = |s| {
 
 process : State, Tok.Token, Bool -> State
 process = |state, token, scripting| {
+	if state.work > state.work_limit {
+		return state
+	}
 	if foreign_token(state, token) {
 		return foreign_process(state, token)
 	}
-	var $s = state
+	var $s = { ..state, work: state.work + 1 }
 	var $reprocess = True
 	var $count = 0.U64
 	while $reprocess and $count < 32 {
 		$count = $count + 1
+		$s = { ..$s, work: $s.work + 1 }
+		if $s.work > $s.work_limit {
+			return $s
+		}
 		$reprocess = False
 		mode = $s.mode
 		match (mode, token.kind) {
@@ -621,9 +645,13 @@ process = |state, token, scripting| {
 
 body : State, Tok.Token -> State
 body = |state, token| {
-	var $s = state
+	if state.work > state.work_limit {
+		return state
+	}
+	var $s = { ..state, work: state.work + state.stack.len() + state.active.len() + 1 }
 	match token.kind {
-		Characters(text) => {
+		Characters(raw_text) => {
+			text = Str.join_with(raw_text.split_on("\u(0)"), "")
 			$s = reconstruct($s)
 			$s = insert_text($s, text, token.span)
 			if !whitespace(text) {
@@ -754,6 +782,9 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, mode: InTable, frameset_ok: False }
 			} else if void(name) {
+				if name == "hr" and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
 				$s = reconstruct($s)
 				adjusted = if (name == "image") { ..tag, name: "img" } else tag
 				$s = insert_tag($s, adjusted, Markup.html_namespace, token.span, False)
@@ -1003,6 +1034,10 @@ adoption = |s, name, offset| {
 	var $outer = 0.U64
 	while $outer < 8 {
 		$outer = $outer + 1
+		$s = { ..$s, work: $s.work + $s.stack.len() + $s.active.len() + 1 }
+		if $s.work > $s.work_limit {
+			return $s
+		}
 		match active_named($s, name) {
 			Err(_) => return generic_end($s, name, offset)
 			Ok(formatting_id) => {
@@ -1036,6 +1071,10 @@ adoption = |s, name, offset| {
 						var $inner = 0.U64
 						while $node_pos > at + 1 {
 							$inner = $inner + 1
+							$s = { ..$s, work: $s.work + $s.nodes.len() + 1 }
+							if $s.work > $s.work_limit {
+								return $s
+							}
 							$node_pos = $node_pos - 1
 							node_id = $s.stack.get($node_pos) ?? 0
 							if $inner > 3 {
@@ -1448,7 +1487,7 @@ foreign_process = |state, token| {
 	var $s = state
 	match token.kind {
 		Characters(t) => {
-			$s = insert_text($s, t, token.span)
+			$s = insert_text($s, Str.join_with(t.split_on("\u(0)"), "\u(FFFD)"), token.span)
 		}
 		Comment(t) => {
 			$s = append_node($s, { kind: Comment(t), attributes: [], children: [], origin: Authored(token.span) })
@@ -1616,3 +1655,15 @@ texts = |tree| tree.nodes.keep_if(
 		_ => ""
 	},
 )
+
+expect HtmlTree.parse("<span/>x", True, {}, { max_diagnostics: 0 }).is_err()
+expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 2 }).map_err(|InvalidMarkup(e)| (e.line, e.column)) == Err((2, 1))
+expect {
+	p = HtmlTree.parse("a\u(0)b", True, {}, { recovery: Browser })?
+	texts(p.tree) == ["ab"] and !p.diagnostics.is_empty()
+}
+expect {
+	p = HtmlTree.parse("<svg>a\u(0)b</svg>", True, {}, { recovery: Browser })?
+	texts(p.tree) == ["a\u(FFFD)b"]
+}
+expect HtmlTree.parse("<!--x--><!--y-->", True, {}, { max_nodes: 2 }).is_err()

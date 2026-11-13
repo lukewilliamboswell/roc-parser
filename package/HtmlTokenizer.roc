@@ -21,7 +21,7 @@ HtmlTokenizer :: [].{
 			return { token: { kind: Eof, span: { start, end: start } }, reader }
 		}
 		match mode {
-			Plaintext => return characters(reader, bytes.len(), False)
+			Plaintext => return characters(reader, bytes.len(), False, False)
 			Rawtext(name) => {
 				if !end_tag_at(bytes, start, name) {
 					return raw_characters(reader, name, False, False)
@@ -44,7 +44,7 @@ HtmlTokenizer :: [].{
 			while $end < bytes.len() and byte_at(bytes, $end) != '<' {
 				$end = $end + 1
 			}
-			return characters(reader, $end, True)
+			return characters(reader, $end, True, True)
 		}
 		if starts(bytes, start, "<!--") {
 			return comment(reader)
@@ -118,6 +118,7 @@ HtmlTokenizer :: [].{
 					$pos = $pos + 1
 				}
 				attr_name = lower(text_at(bytes, attr_start, $pos))
+				after_name = $pos
 				while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
 					$pos = $pos + 1
 				}
@@ -147,6 +148,16 @@ HtmlTokenizer :: [].{
 					}
 					if !quoted and value_start == $pos {
 						$diagnostics = $diagnostics.append({ code: MissingAttributeValue, offset: value_start })
+					}
+				}
+				if byte_at(bytes, after_name) != '=' and $value == "" {
+					lookahead = after_name
+					var $scan = lookahead
+					while $scan < bytes.len() and space(byte_at(bytes, $scan)) {
+						$scan = $scan + 1
+					}
+					if byte_at(bytes, $scan) != '=' {
+						$pos = after_name
 					}
 				}
 				if $attributes.any(|a| a.name == attr_name) {
@@ -186,7 +197,10 @@ HtmlTokenizer :: [].{
 
 	## HTML input preprocessing and character-reference consumption.
 	normalized : List(U8), Bool, Bool -> { text : Str, diagnostics : List(Diagnostic) }
-	normalized = |bytes, references, attribute| {
+	normalized = |bytes, references, attribute| normalized_with_nulls(bytes, references, attribute, True)
+
+	normalized_with_nulls : List(U8), Bool, Bool, Bool -> { text : Str, diagnostics : List(Diagnostic) }
+	normalized_with_nulls = |bytes, references, attribute, replace_nulls| {
 		var $out = []
 		var $diagnostics = []
 		var $pos = 0
@@ -197,7 +211,7 @@ HtmlTokenizer :: [].{
 				$pos = $pos + if (byte_at(bytes, $pos + 1) == '\n') 2 else 1
 			} else if c == 0 {
 				$diagnostics = $diagnostics.append({ code: UnexpectedNull, offset: $pos })
-				$out = $out.concat([239, 191, 189])
+				$out = if (replace_nulls) $out.concat([239, 191, 189]) else $out.append(0)
 				$pos = $pos + 1
 			} else if c == '&' and references {
 				reference = consume_reference(bytes, $pos, attribute)
@@ -213,8 +227,8 @@ HtmlTokenizer :: [].{
 	}
 }
 
-characters = |reader, end, references| {
-	decoded = HtmlTokenizer.normalized(reader.bytes.sublist({ start: reader.pos, len: end - reader.pos }), references, False)
+characters = |reader, end, references, data| {
+	decoded = HtmlTokenizer.normalized_with_nulls(reader.bytes.sublist({ start: reader.pos, len: end - reader.pos }), references, False, !data)
 	{ token: { kind: Characters(decoded.text), span: { start: reader.pos, end } }, reader: { ..reader, pos: end, diagnostics: reader.diagnostics.concat(decoded.diagnostics.map(|d| { ..d, offset: reader.pos + d.offset })) } }
 }
 
@@ -249,7 +263,7 @@ raw_characters = |reader, name, references, script| {
 			$end = $end + 1
 		}
 	}
-	characters(reader, $end, references)
+	characters(reader, $end, references, False)
 }
 
 comment = |reader| {
