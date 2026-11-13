@@ -19,6 +19,14 @@ test = |bytes| {
 	if reconstructed != bytes {
 		crash "lossless regions reconstruct different bytes"
 	}
+	match Str.from_utf8(bytes) {
+		Ok(input) => {
+			if Markup.parse_xml(input, {}) != Markup.parse_xml(input, { max_work_per_byte: 15 }) {
+				crash "XML document parser routes disagree on the tree, source, or error"
+			}
+		}
+		Err(_) => {}
+	}
 	Fuzz.keep
 }
 

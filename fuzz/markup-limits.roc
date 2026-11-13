@@ -18,6 +18,10 @@ test! = |bytes| {
 	max_source_bytes = if ((bytes.get(4) ?? 0) % 2 == 0) input.count_utf8_bytes() else input.count_utf8_bytes() - 1
 	within = depth <= max_depth and depth <= max_elements and max_attributes >= 1 and input.count_utf8_bytes() <= max_source_bytes
 	measured = Fuzz.measure!("parse", || Markup.parse_xml(input, { max_depth, max_elements, max_attributes, max_source_bytes }))
+	legacy = Markup.parse_xml(input, { max_depth, max_elements, max_attributes, max_source_bytes, max_work_per_byte: 15 })
+	if measured.value != legacy {
+		crash "XML parser routes disagree on the configured resource limits"
+	}
 	match measured.value {
 		Ok(value) => {
 			if !within {

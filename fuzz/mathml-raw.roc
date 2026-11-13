@@ -17,6 +17,10 @@ test! = |bytes| {
 		Err(_) => return Fuzz.reject
 	}
 	measured = Fuzz.measure!("parse", || MathML.parse_fragment(input, { allow_unknown_elements: True, allow_unknown_attributes: True, check_values: False }))
+	legacy = MathML.parse_fragment(input, { allow_unknown_elements: True, allow_unknown_attributes: True, check_values: False, max_work_per_byte: 15 })
+	if measured.value.map_ok(|value| value.parsed) != legacy.map_ok(|value| value.parsed) {
+		crash "MathML parser routes disagree on the tree, source, or error"
+	}
 	match measured.value {
 		Ok(value) => MarkupCheck.check(value.parsed, input)
 		Err(InvalidMarkup(error)) => {
