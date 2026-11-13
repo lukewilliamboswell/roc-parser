@@ -950,12 +950,12 @@ parse_xml_direct = |text, input, prefix, maximum_depth, maximum_elements, fragme
 			if start >= prefix and $pos <= source_end {
 				match $stack.last() {
 					Ok(index) => {
-						node = $nodes.get(index) ?? empty_node
-						begin = match node.origin {
+						moved = $nodes.replace(index, empty_node) ?? { list: [], prev: empty_node }
+						begin = match moved.prev.origin {
 							Authored(span) => span.start
 							_ => return Err(Fallback)
 						}
-						$nodes = $nodes.set(index, { ..node, origin: Authored({ start: begin, end: $pos - prefix }) }) ?? []
+						$nodes = moved.list.set(index, { ..moved.prev, origin: Authored({ start: begin, end: $pos - prefix }) }) ?? []
 						$stack = $stack.drop_last(1)
 					}
 					Err(_) => return Err(Fallback)
