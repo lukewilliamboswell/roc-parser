@@ -30,6 +30,9 @@ FATAL = {'crash', 'timeout', 'protocol_error', 'oracle_error', 'invalid_diagnost
 _spec = importlib.util.spec_from_file_location('markup_setup', DATA / 'setup_oracle.py')
 setup = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(setup)
+_suite_spec = importlib.util.spec_from_file_location('markup_tree_suite', DATA / 'import_tree_suite.py')
+tree_suite = importlib.util.module_from_spec(_suite_spec)
+_suite_spec.loader.exec_module(tree_suite)
 
 
 def write_json(path: Path, value) -> None:
@@ -475,7 +478,7 @@ def diagnostic_verdict(case: dict, reference: dict) -> dict:
 
 def suite_review(args) -> int:
     executable = resolve_probe(args)
-    inventory = json.loads((DATA / 'tree-suite.json').read_text())
+    inventory = json.loads(tree_suite.ensure_suite(args.cache / 'tree-suite').read_text(encoding='utf-8'))
     cases = inventory['cases']
     if args.file:
         cases = [case for case in cases if args.file in case['id']]

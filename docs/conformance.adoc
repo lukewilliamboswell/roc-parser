@@ -48,8 +48,9 @@ rendering with the same oracle and checks geometric scaling.
 
 `scripts/review_markup.py check` compares deterministic mixed-markup fixtures
 against a pinned parse5 HTML parser and a namespace-aware Expat XML parser.
-The local `suite` command checks a vendored WPT tree-construction corpus, with
-its revision, source hashes and license retained. Script-executing tests are
+The local `suite` command downloads hash-verified WPT inputs and generates its
+full tree-construction corpus in ignored storage. Git retains the curated cases,
+upstream revision, source hashes and license. Script-executing tests are
 excluded because these pure parsers do not execute JavaScript; scripting-mode
 parser tests are included. Upstream expected trees take precedence when parse5
 lags the selected standard, and those disagreements remain visible in reports.

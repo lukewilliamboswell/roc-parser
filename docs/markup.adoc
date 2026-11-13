@@ -186,6 +186,18 @@ The deterministic conformance check runs against pinned independent parsers:
 blueprint run markup
 ----
 
+The repository keeps 82 curated cases and an upstream manifest with a revision
+and file hashes. Run the full upstream tree and strict-syntax checks locally:
+
+[source,sh]
+----
+python3 scripts/review_markup.py suite
+----
+
+This downloads verified upstream inputs and generates the 1,967-case corpus in
+ignored scratch storage. Both scripting modes produce 3,898 executions; cached
+inputs support subsequent offline runs. Generated test data stays out of Git.
+
 Fuzz campaigns and markup benchmarks are local work, with no scheduled runs:
 
 [source,sh]

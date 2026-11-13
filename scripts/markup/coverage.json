@@ -50,7 +50,7 @@
         "html-foster-parenting",
         "html-table-context-foster-unknown-tag"
       ],
-      "upstream_suite": "tree-suite.json",
+      "upstream_suite": "tree-suite-manifest.json",
       "acceptance_gate": "Every selected parser-only upstream expectation is compared, including both scripting modes when required; crashes and mismatches fail."
     },
     {
@@ -69,7 +69,7 @@
         "html-strict-duplicate-attribute",
         "html-strict-self-closing"
       ],
-      "upstream_suite": "tree-suite.json"
+      "upstream_suite": "tree-suite-manifest.json"
     },
     {
       "id": "foreign-content-boundaries",

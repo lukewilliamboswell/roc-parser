@@ -167,13 +167,74 @@ class TreeSuiteTests(unittest.TestCase):
         self.assertEqual(case['scripting_modes'], [False, True])
 
     def test_suite_excludes_only_cases_requiring_javascript_execution(self):
-        inventory = json.loads((review.DATA / 'tree-suite.json').read_text())
+        inventory = json.loads((review.DATA / 'tree-suite-manifest.json').read_text())
         self.assertEqual(len(inventory['source']['revision']), 40)
-        self.assertGreater(len(inventory['cases']), 1900)
+        self.assertEqual(inventory['cases']['count'], 1967)
+        self.assertEqual(inventory['cases']['executions'], 3898)
+        self.assertEqual(len(inventory['cases']['sha256']), 64)
+        self.assertEqual(len(inventory['source']['files']), 62)
         self.assertEqual(len(inventory['source']['excluded']), 4)
         for item in inventory['source']['excluded']:
             self.assertIn('/scripted_', item['path'])
             self.assertIn('JavaScript execution', item['reason'])
+
+
+class TreeSuiteCacheTests(unittest.TestCase):
+    def fixture(self, root):
+        importer = review.tree_suite
+        raw = b'#data\n<p>x\n#errors\n#document-fragment\nbody\n#document\n| <p>\n|   "x"\n'
+        scripted = b'JavaScript-dependent fixture'
+        files = {importer.PREFIX + 'tiny.dat': raw, importer.PREFIX + 'scripted_tiny.dat': scripted}
+        cases = importer.parse_dat('tiny.dat', raw.decode())
+        source = {'revision': 'a' * 40, 'files': [{'path': name, 'sha256': hashlib.sha256(data).hexdigest()} for name, data in files.items()],
+                  'excluded': [{'path': importer.PREFIX + 'scripted_tiny.dat', 'reason': 'JavaScript execution'}],
+                  'license': {'sha256': hashlib.sha256(b'license').hexdigest()}}
+        manifest = {'source': source, 'cases': {'count': 1, 'executions': 2, 'sha256': importer.cases_digest(cases)}}
+        path = root / 'manifest.json'
+        path.write_text(json.dumps(manifest))
+        (root / 'WPT-LICENSE.md').write_bytes(b'license')
+        return path, files, cases
+
+    def test_full_corpus_is_generated_and_reused_offline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, files, cases = self.fixture(root)
+            with patch.object(review.tree_suite, 'download', side_effect=lambda url: files[url.split('/' + 'a' * 40 + '/')[1]]) as fetch:
+                output = review.tree_suite.ensure_suite(root / 'cache', manifest)
+                self.assertEqual(fetch.call_count, 2)
+            self.assertEqual(json.loads(output.read_text())['cases'], cases)
+            with patch.object(review.tree_suite, 'download', side_effect=AssertionError('offline')):
+                self.assertEqual(review.tree_suite.ensure_suite(root / 'cache', manifest), output)
+                damaged = json.loads(output.read_text())
+                damaged['cases'][0]['input'] = 'changed'
+                output.write_text(json.dumps(damaged))
+                review.tree_suite.ensure_suite(root / 'cache', manifest)
+                self.assertEqual(json.loads(output.read_text())['cases'], cases)
+
+    def test_changed_upstream_bytes_fail_before_publishing_a_corpus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, _, _ = self.fixture(root)
+            with patch.object(review.tree_suite, 'download', return_value=b'changed upstream'):
+                with self.assertRaisesRegex(ValueError, 'source hash mismatch'):
+                    review.tree_suite.ensure_suite(root / 'cache', manifest)
+            self.assertFalse((root / 'cache/tree-suite.json').exists())
+
+    def test_license_and_generated_inventory_hashes_are_enforced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, files, _ = self.fixture(root)
+            (root / 'WPT-LICENSE.md').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'license'):
+                review.tree_suite.ensure_suite(root / 'cache', manifest)
+            (root / 'WPT-LICENSE.md').write_bytes(b'license')
+            value = json.loads(manifest.read_text())
+            value['cases']['sha256'] = '0' * 64
+            manifest.write_text(json.dumps(value))
+            with patch.object(review.tree_suite, 'download', side_effect=lambda url: files[url.split('/' + 'a' * 40 + '/')[1]]):
+                with self.assertRaisesRegex(ValueError, 'pinned manifest'):
+                    review.tree_suite.ensure_suite(root / 'cache', manifest)
+            self.assertFalse((root / 'cache/tree-suite.json').exists())
 
 
 class CoverageManifestTests(unittest.TestCase):
@@ -231,7 +292,8 @@ class StrictSuiteGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             case = {'id': 'upstream/strict', 'format': 'html', 'input': 'x', 'validate': False, 'recovery': 'browser', 'expected_dat': '| "x"', 'expected_error_count': expected_errors, 'scripting_modes': [False]}
-            (root / 'tree-suite.json').write_text(json.dumps({'source': {'revision': '0' * 40}, 'cases': [case]}))
+            inventory = root / 'local-suite.json'
+            inventory.write_text(json.dumps({'source': {'revision': '0' * 40}, 'cases': [case]}))
             recovered = {'status': 'ok', 'roots': [['text', 'x']], 'diagnostics': [{'code': 'issue'}] if diagnostic else []}
             strict = {'status': strict_status, 'roots': [['text', 'x']], 'diagnostics': []}
             args = Namespace(probe=Path('/fake'), roc='roc', work=root / 'results', cache=root, file=None, limit=None, trees_only=False)
@@ -239,7 +301,7 @@ class StrictSuiteGateTests(unittest.TestCase):
             node.parse.return_value = {'status': 'ok', 'roots': [['text', 'x']]}
             context = unittest.mock.MagicMock()
             context.__enter__.return_value = node
-            with patch.object(review, 'DATA', root), patch.object(review, 'resolve_probe', return_value=Path('/fake')), patch.object(review, 'NodeOracle', return_value=context), patch.object(review, 'probe', side_effect=[recovered, strict]):
+            with patch.object(review.tree_suite, 'ensure_suite', return_value=inventory), patch.object(review, 'resolve_probe', return_value=Path('/fake')), patch.object(review, 'NodeOracle', return_value=context), patch.object(review, 'probe', side_effect=[recovered, strict]):
                 status = review.suite_review(args)
             return status, json.loads((root / 'results/suite.json').read_text())
 

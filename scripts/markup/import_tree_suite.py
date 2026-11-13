@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Vendor the pinned WPT/html5lib parser-only tree construction corpus."""
+"""Fetch and generate the pinned WPT tree corpus into ignored local storage."""
 from __future__ import annotations
+import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
+import tempfile
 import urllib.request
 
-REVISION = '4aa56d3beafc5655fa55491169eb14845b44eab3'
 PREFIX = 'html/syntax/parsing/resources/'
-BASE = f'https://raw.githubusercontent.com/web-platform-tests/wpt/{REVISION}/'
 DATA = Path(__file__).resolve().parent
+MANIFEST = DATA / 'tree-suite-manifest.json'
+DEFAULT_CACHE = DATA.parents[1] / '.roc-parser-tmp/markup/oracles/tree-suite'
 SECTIONS = {'#description', '#data', '#errors', '#new-errors', '#errors-new', '#document-fragment', '#script-on', '#script-off', '#document'}
 
 
@@ -54,25 +56,72 @@ def parse_dat(name: str, raw: str) -> list[dict]:
     return cases
 
 
+def cases_digest(cases: list[dict]) -> str:
+    return hashlib.sha256(json.dumps(cases, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+
+
+def validate_inventory(value: dict, manifest: dict) -> None:
+    cases = value['cases']
+    if (value['source'] != manifest['source'] or len(cases) != manifest['cases']['count']
+            or cases_digest(cases) != manifest['cases']['sha256']
+            or sum(len(case['scripting_modes']) for case in cases) != manifest['cases']['executions']):
+        raise ValueError('generated WPT corpus does not match its pinned manifest')
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write(data)
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def ensure_suite(cache: Path = DEFAULT_CACHE, manifest_path: Path = MANIFEST) -> Path:
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    source = manifest['source']
+    license_bytes = (manifest_path.parent / 'WPT-LICENSE.md').read_bytes()
+    if hashlib.sha256(license_bytes).hexdigest() != source['license']['sha256']:
+        raise ValueError('WPT license does not match its pinned hash')
+    output = cache / 'tree-suite.json'
+    if output.is_file():
+        try:
+            validate_inventory(json.loads(output.read_text(encoding='utf-8')), manifest)
+            return output
+        except (KeyError, TypeError, ValueError):
+            pass  # Regenerate stale or damaged cache entries from verified inputs.
+
+    base = f"https://raw.githubusercontent.com/web-platform-tests/wpt/{source['revision']}/"
+    excluded = {item['path'] for item in source['excluded']}
+    def fetch(item):
+        name = item['path'].removeprefix(PREFIX)
+        if not item['path'].startswith(PREFIX) or Path(name).name != name or not name.endswith('.dat'):
+            raise ValueError('WPT manifest contains an invalid source path')
+        path = cache / 'sources' / (item['sha256'] + '.dat')
+        raw = path.read_bytes() if path.is_file() else None
+        if raw is None or hashlib.sha256(raw).hexdigest() != item['sha256']:
+            raw = download(base + item['path'])
+            if hashlib.sha256(raw).hexdigest() != item['sha256']:
+                raise ValueError(f"WPT source hash mismatch: {item['path']}")
+            write_atomic(path, raw)
+        return [] if item['path'] in excluded else parse_dat(name, raw.decode('utf-8'))
+
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        cases = [case for group in workers.map(fetch, source['files']) for case in group]
+    value = {'source': source, 'cases': cases}
+    validate_inventory(value, manifest)
+    write_atomic(output, (json.dumps(value, ensure_ascii=False, indent=2) + '\n').encode())
+    return output
+
+
 def main() -> int:
-    listing = json.loads(download(f'https://api.github.com/repos/web-platform-tests/wpt/contents/{PREFIX}?ref={REVISION}'))
-    names = sorted(item['name'] for item in listing if item['name'].endswith('.dat'))
-    sources, cases, excluded = [], [], []
-    def fetch(name):
-        return name, download(BASE + PREFIX + name)
-    for name, raw in ThreadPoolExecutor(max_workers=8).map(fetch, names):
-        sources.append({'path': PREFIX + name, 'sha256': hashlib.sha256(raw).hexdigest()})
-        if name.startswith('scripted_'):
-            excluded.append({'path': PREFIX + name, 'reason': 'Expected output requires JavaScript execution and DOM mutation during parsing; embedded JavaScript execution is outside this pure parser contract.'})
-            continue
-        cases.extend(parse_dat(name, raw.decode('utf-8')))
-    license_bytes = download(BASE + 'LICENSE.md')
-    (DATA / 'WPT-LICENSE.md').write_bytes(license_bytes)
-    value = {'source': {'repository': 'https://github.com/web-platform-tests/wpt', 'revision': REVISION,
-                        'upstream_format': BASE + PREFIX + 'README.md', 'files': sources,
-                        'license': {'path': 'LICENSE.md', 'sha256': hashlib.sha256(license_bytes).hexdigest()}, 'excluded': excluded}, 'cases': cases}
-    (DATA / 'tree-suite.json').write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
-    print(f'vendored {len(cases)} parser-only fixtures from {len(sources)} source files; {len(excluded)} JavaScript-executing files recorded separately')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cache', type=Path, default=DEFAULT_CACHE)
+    args = parser.parse_args()
+    path = ensure_suite(args.cache)
+    print(f'Pinned WPT corpus ready: {path}')
     return 0
 
 

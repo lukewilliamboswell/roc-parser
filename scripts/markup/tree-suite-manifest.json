@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/web-platform-tests/wpt",
+    "revision": "4aa56d3beafc5655fa55491169eb14845b44eab3",
+    "upstream_format": "https://raw.githubusercontent.com/web-platform-tests/wpt/4aa56d3beafc5655fa55491169eb14845b44eab3/html/syntax/parsing/resources/README.md",
+    "files": [
+      {
+        "path": "html/syntax/parsing/resources/adoption01.dat",
+        "sha256": "b2aba05bd1d832f73a0c6103b3c8b151b283bab7c56887274d81f3a062c4963e"
+      },
+      {
+        "path": "html/syntax/parsing/resources/adoption02.dat",
+        "sha256": "e091e6976f861ae616fe56c527a78e7247ee7562bcafec996d4e4bda657bd9b7"
+      },
+      {
+        "path": "html/syntax/parsing/resources/blocks.dat",
+        "sha256": "e3b7da1b57a4ec6991443dfc7ab3270f41d0f5959092a49be3e0edca0dae2104"
+      },
+      {
+        "path": "html/syntax/parsing/resources/comments01.dat",
+        "sha256": "c2f3a5ab4baf24f360ee14272aad18c33deffb9a56c2d5964777b1b6e0b8e3c1"
+      },
+      {
+        "path": "html/syntax/parsing/resources/doctype01.dat",
+        "sha256": "f3a286c09d729eeed9aa63e0aec13ab12336af04590c169543e6d1e1ef4723b2"
+      },
+      {
+        "path": "html/syntax/parsing/resources/domjs-unsafe.dat",
+        "sha256": "eef4fb719e027ffaadfb854787d172893850fc561c29efe72d90c5bfa3c8b7ac"
+      },
+      {
+        "path": "html/syntax/parsing/resources/entities01.dat",
+        "sha256": "b73605caac5aed5656184ab8db3f08edff5457ac3186cb04afa28384bca955e3"
+      },
+      {
+        "path": "html/syntax/parsing/resources/entities02.dat",
+        "sha256": "f4e0cd461204b0184709be040c00811b776fbde1a6d002bb1c75d02056d9e54a"
+      },
+      {
+        "path": "html/syntax/parsing/resources/foreign-fragment.dat",
+        "sha256": "73e1785753c66420c067e5b29f89b17e7ebe1079687a512040ef19c6d42ac2c2"
+      },
+      {
+        "path": "html/syntax/parsing/resources/html5test-com.dat",
+        "sha256": "bc8b465fe4a3ef199142d7f7e8bc6bf7ba10327d3dd795d7abef993bcfb352d0"
+      },
+      {
+        "path": "html/syntax/parsing/resources/inbody01.dat",
+        "sha256": "cb722f2853ec9613b71ea68e8bb26f474cc450b64612930591ab2656406222fe"
+      },
+      {
+        "path": "html/syntax/parsing/resources/isindex.dat",
+        "sha256": "d152de773e276a07a1cfc91e93f01f3ce52c447c110192f2828dab51be2721b6"
+      },
+      {
+        "path": "html/syntax/parsing/resources/main-element.dat",
+        "sha256": "d56e382994e1a5228ddb2ea49a5ff51ab68487f9a8f79ad34bcad05d40dc1e8f"
+      },
+      {
+        "path": "html/syntax/parsing/resources/math.dat",
+        "sha256": "3c2ecc07272c175676ecfafa0cf6e18e74c3293075703702a4b7929fcb0d07bd"
+      },
+      {
+        "path": "html/syntax/parsing/resources/menuitem-element.dat",
+        "sha256": "08e5e25f38bbc181c840ce5c5203b2566dc03129aeaf105ca2311645d40aae4d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/namespace-sensitivity.dat",
+        "sha256": "318fbc9926eddf5863524f1503c711ddaea93b55bcbd1eaab71b7e354ddfeb09"
+      },
+      {
+        "path": "html/syntax/parsing/resources/noscript01.dat",
+        "sha256": "e82449304a6371c14ed490384b6d814b7b1eeb1022dbc5caa2045fc8400655d7"
+      },
+      {
+        "path": "html/syntax/parsing/resources/pending-spec-changes-plain-text-unsafe.dat",
+        "sha256": "f45151f8dc7a4fe1a4b36710cf33606ff43cc98a42f1d2f085a77680683b0c99"
+      },
+      {
+        "path": "html/syntax/parsing/resources/pending-spec-changes.dat",
+        "sha256": "a6b7c4ecccabe70de2f24184245e4a73a8d12ed44ee658c3d5d25cce04c9d27f"
+      },
+      {
+        "path": "html/syntax/parsing/resources/plain-text-unsafe.dat",
+        "sha256": "016ec8acc054e4e8d7f5c156687b0ed563f271b3ac928dad9a9f1566f6c5f8f5"
+      },
+      {
+        "path": "html/syntax/parsing/resources/processing-instructions.dat",
+        "sha256": "3d4c6e67b59fda8fa0eb798106a42d244c69a84d7e3a385f9845bfc40071b4f1"
+      },
+      {
+        "path": "html/syntax/parsing/resources/quirks01.dat",
+        "sha256": "b6717cc15d4ed573ccf6755bc9d52073e675b4d09f23bde07961e27592b9717c"
+      },
+      {
+        "path": "html/syntax/parsing/resources/ruby.dat",
+        "sha256": "5ae76ac4570d40e6648066798dd3ff729231bec98d3e010fdd67e0257f23a742"
+      },
+      {
+        "path": "html/syntax/parsing/resources/scriptdata01.dat",
+        "sha256": "e32ea3adc3d68c90e62ea50b3a41bf80369d1491958532bf00787b3509667322"
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_adoption01.dat",
+        "sha256": "1203be63238a6effc9cc47e3c9b1fa9a0c7e0126a2f78916514afed2d46f42d8"
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_ark.dat",
+        "sha256": "93365261fd9ea7dd9242613b57c23dba94e66bfd837a5d928f725bed81012dd0"
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_foster01.dat",
+        "sha256": "4bc2c004bfd5efe3ca1b49f3b03de0b31d69347440c97ee1ed83b34ee16ad158"
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_webkit01.dat",
+        "sha256": "9d84f68ffd6e8b7b3924c9211280a70a888576b49074654cc9708236834afc58"
+      },
+      {
+        "path": "html/syntax/parsing/resources/search-element.dat",
+        "sha256": "625ba3dcc1b8cf8688c0ee4ebd22308554a134b916f692bf64cbb54b8b705cae"
+      },
+      {
+        "path": "html/syntax/parsing/resources/svg.dat",
+        "sha256": "4c819b8dbdfbd98cfbce9a535a304b0a16597eb29ccc04077131a62810f309cd"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tables01.dat",
+        "sha256": "bfd4a53246e3acc527c8bb214cc743082e19260e72365001aad3f1d8f4bd08dc"
+      },
+      {
+        "path": "html/syntax/parsing/resources/template.dat",
+        "sha256": "72667fae7be5d2020b679409e45fed7b6923a3e9394da11a02c5bd9650323264"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests1.dat",
+        "sha256": "aada6e3d12d624051bc978694475bd6a12bcedd7758781ba62425314684d23f3"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests10.dat",
+        "sha256": "2d2624a819c323661e396d864ac23440053127b5ea7adb44a5904f5ceee5fa64"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests11.dat",
+        "sha256": "276190e2a7b97e8fcf3bd863a4b4b5346b555a8336c00143cb1d0e8956b94a07"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests12.dat",
+        "sha256": "e6c506cea74979a0d6ca47f6b175c7b6177d6e57db708920a89694e31dfd8a42"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests14.dat",
+        "sha256": "d151b2426f38de40a5d4ae726e2a56dbc7742a9b1c95299d60c1e2e0fdad1f98"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests15.dat",
+        "sha256": "ef784ece74cbd760da3a6947aaf4478810246b73c753f25a04be4d11dd806b2d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests16.dat",
+        "sha256": "3350be682713afc1f6dad37059f2551709497a3643c38c26e1fe36fd07d23745"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests17.dat",
+        "sha256": "0567680775f58a5b2ad24e234f41d53f68fb2fc3ef7809bebaec0920e2f13c89"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests18.dat",
+        "sha256": "5d0019ae43bb4e0b0da9f2e1d57ac0618a607bd8a1324b163ec7a23a1dc120f3"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests19.dat",
+        "sha256": "cb2f0875d14da9d96f939b7d549953f8f26e70ea14861935d07d828ab04e0e1d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests2.dat",
+        "sha256": "9cf76b5f4890065c04fc82ae828379a55b85cbe76f584fb1ef23dcef0a77b86b"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests20.dat",
+        "sha256": "07f7661690c4cd7cc0bbb0f1b9c1e1d65135e07c4dde8bbf106692f687e7d33d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests21.dat",
+        "sha256": "b1a67420c79a5131002fefc987084ffb6b6094a3a74b272c6f545a47df06452c"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests22.dat",
+        "sha256": "78488328181d0f82f34b1a5e9e456ff7c713b3ff86dab6ace1530f6f07d5370d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests23.dat",
+        "sha256": "2e4752ff4ef898e4a0cf9a450e481440095163d45075a662846a062552afe148"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests24.dat",
+        "sha256": "fdd5c21f60f42235ded224a03e7182d289088328f460525adaf3c14e772a24ac"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests25.dat",
+        "sha256": "f2e08fda6d15a08faf9ff0001ec38560d942069cee6b4e264aeedbbacde7da8d"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests26.dat",
+        "sha256": "d55d24dfca2444fba759d59346cbab21f7e70340dbb14e2c7af8da3d44abd4ab"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests3.dat",
+        "sha256": "c4b4d8e0ea3d978c49d1e6a985d427164858b71ec980153c4526ed0c398f43b9"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests4.dat",
+        "sha256": "792f9bb43b2b233a43b126d456550d17beb533ce0af4a4d24e34f09a68fd44e5"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests5.dat",
+        "sha256": "bf80b927082290541781844906abdcb72f091488f7a11e8b7d9ac00076dd4fce"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests6.dat",
+        "sha256": "be16c74d2a9862283262968439c95b9bfce6182ea61055a3c886c28d14f3e01a"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests7.dat",
+        "sha256": "aeb9569589c809b1a563c0b163173e8cf980a6a4028cb7c210f19c181b56999a"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests8.dat",
+        "sha256": "f3c8b1baece162e7e8c394540cdf9057266bb738bb0ad539a9d9b2f9d365f162"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests9.dat",
+        "sha256": "857820f088506a6d20ea6acefbf19c0a6c4de87a39b24988878066397516b36f"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tests_innerHTML_1.dat",
+        "sha256": "acb9f835119e302d33204f437d54637a84ae26608ccb7bc961c6f7f44202a44c"
+      },
+      {
+        "path": "html/syntax/parsing/resources/tricky01.dat",
+        "sha256": "3fb6d24c5e371860d096ef07f5fff38be3ceaa85f1239bee35cce548b596198a"
+      },
+      {
+        "path": "html/syntax/parsing/resources/void-in-phrasing.dat",
+        "sha256": "c8855173aca8ecbd218abc26db34a631393ce0285fffebffdaf69b8bdd6224e9"
+      },
+      {
+        "path": "html/syntax/parsing/resources/webkit01.dat",
+        "sha256": "063ca232535a792fa238ae769eeb0ddcc9bd2ee961d3da327ca134612d35d93c"
+      },
+      {
+        "path": "html/syntax/parsing/resources/webkit02.dat",
+        "sha256": "03b215350d352faf110df2cc6eac23a44a7f70945b4ea962f0b17bed103459f7"
+      }
+    ],
+    "license": {
+      "path": "LICENSE.md",
+      "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570"
+    },
+    "excluded": [
+      {
+        "path": "html/syntax/parsing/resources/scripted_adoption01.dat",
+        "reason": "Expected output requires JavaScript execution and DOM mutation during parsing; embedded JavaScript execution is outside this pure parser contract."
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_ark.dat",
+        "reason": "Expected output requires JavaScript execution and DOM mutation during parsing; embedded JavaScript execution is outside this pure parser contract."
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_foster01.dat",
+        "reason": "Expected output requires JavaScript execution and DOM mutation during parsing; embedded JavaScript execution is outside this pure parser contract."
+      },
+      {
+        "path": "html/syntax/parsing/resources/scripted_webkit01.dat",
+        "reason": "Expected output requires JavaScript execution and DOM mutation during parsing; embedded JavaScript execution is outside this pure parser contract."
+      }
+    ]
+  },
+  "cases": {
+    "count": 1967,
+    "executions": 3898,
+    "sha256": "f71c6fc70b72cfc1c8ef00a3922b059d1f4252c9fd734a165404194853142b75"
+  }
+}
