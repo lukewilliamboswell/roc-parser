@@ -53,7 +53,7 @@ HtmlTokenizer :: [].{
 			scanned = MarkupScan.html_data(reader.bytes, reader.pos)
 			if !scanned.normalize {
 				# Short runs fit inline and need no retained source slice.
-				if scanned.end - reader.pos <= 23 {
+				if scanned.end - reader.pos <= 11 {
 					text = text_at(reader.bytes, reader.pos, scanned.end)
 					return { token: { kind: Characters(text), span: { start: reader.pos, end: scanned.end } }, reader: { ..reader, pos: scanned.end }, limited: NoLimit }
 				}
@@ -107,7 +107,7 @@ HtmlTokenizer :: [].{
 				}
 				# Ordinary text already has its final bytes. Avoid rebuilding it
 				# one byte at a time through the normalization buffer.
-				text = Str.from_utf8_lossy(bytes.sublist({ start, len: scanned.end - start }))
+				text = decoded_text(bytes.sublist({ start, len: scanned.end - start }))
 				return { token: { kind: Characters(text), span: { start, end: scanned.end } }, reader: { ..reader, pos: scanned.end } }
 			}
 			return data_characters(reader)
@@ -340,7 +340,7 @@ HtmlTokenizer :: [].{
 			}
 			$at = $at + 1
 		}
-		if ($changed) Str.from_utf8_lossy($bytes) else s
+		if ($changed) decoded_text($bytes) else s
 	}
 	space : U8 -> Bool
 	space = |c| match c {
@@ -350,7 +350,7 @@ HtmlTokenizer :: [].{
 	ascii_alpha : U8 -> Bool
 	ascii_alpha = |c| (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
 	text_at : List(U8), U64, U64 -> Str
-	text_at = |bytes, start, end| Str.from_utf8_lossy(bytes.sublist({ start, len: end - start }))
+	text_at = |bytes, start, end| decoded_text(bytes.sublist({ start, len: end - start }))
 	byte_at : List(U8), U64 -> U8
 	byte_at = |bytes, at| bytes.get(at) ?? 0
 	starts : List(U8), U64, Str -> Bool
@@ -401,7 +401,7 @@ HtmlTokenizer :: [].{
 				$pos = $pos + 1
 			}
 		}
-		{ text: Str.from_utf8_lossy($out), diagnostics: $diagnostics.take_first(if (limit < 18_446_744_073_709_551_615) limit + 1 else limit) }
+		{ text: decoded_text($out), diagnostics: $diagnostics.take_first(if (limit < 18_446_744_073_709_551_615) limit + 1 else limit) }
 	}
 }
 
@@ -953,7 +953,7 @@ doctype = |reader| {
 	}
 	public_id = HtmlTokenizer.normalized($public, False, False).text
 	system_id = HtmlTokenizer.normalized($system, False, False).text
-	{ token: { kind: Doctype({ name: Str.from_utf8_lossy($name), public_id, system_id, has_public: $has_public, has_system: $has_system, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+	{ token: { kind: Doctype({ name: decoded_text($name), public_id, system_id, has_public: $has_public, has_system: $has_system, quirks: $quirks }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 }
 
 consume_reference = |bytes, start, attribute| {
@@ -1189,7 +1189,7 @@ data_characters = |reader| {
 			$pos = unit.end
 		}
 	}
-	{ token: { kind: Characters(Str.from_utf8_lossy($out)), span: { start: reader.pos, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+	{ token: { kind: Characters(decoded_text($out)), span: { start: reader.pos, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
 }
 
 data_unit = |bytes, pos| {
@@ -1356,6 +1356,15 @@ expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagno
 
 ScanReader : { bytes : List(U8), pos : U64, diagnostics : List(HtmlTokenizer.Diagnostic), max_diagnostics : U64, max_attributes : U64, attribute_limit : Bool }
 
+# A borrowed byte slice stays heap-backed after UTF-8 conversion, even when
+# short. Compact strings that fit inline on every supported target so ordinary
+# tag names and values do not keep sharing the input allocation's refcount.
+decoded_text : List(U8) -> Str
+decoded_text = |bytes| {
+	text = Str.from_utf8_lossy(bytes)
+	if (text.count_utf8_bytes() <= 11) text.release_excess_capacity() else text
+}
+
 input_diagnostics_scan : List(U8), U64, Bool -> List(HtmlTokenizer.Diagnostic)
 input_diagnostics_scan = |bytes, limit, valid_utf8| {
 	var $diagnostics = []
@@ -1412,7 +1421,7 @@ preprocessed_text = |bytes| {
 			$pos = $pos + 1
 		}
 	}
-	Str.from_utf8_lossy($out)
+	decoded_text($out)
 }
 
 expect {
