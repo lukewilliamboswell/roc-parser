@@ -274,17 +274,22 @@ direct_fragment = |source, namespace, props| {
 	var $elements = 0.U64
 	var $paragraph = False
 	var $heading = False
-	var $anchor = False
+	var $formatting = 0.U8
+	var $active = 0.U64
+	var $form = False
+	var $button = False
 	var $work = 1.U64
 	limit = work_limit(props.max_work_per_byte, source.count_utf8_bytes())
 	while True {
-		# +2 dispatch, body stack+active+1, append<=1; a's happy close
-		# adds one stack+active+1 adoption step. Active formatting has <=1
-		# entry and is always open, so reconstruction never does any work.
-		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - 7) // 2 {
+		# +2 dispatch, body stack+active+1, append<=1; a happy formatting
+		# close adds one stack+active+1 adoption step. Distinct formatting
+		# names give <=5 active entries, all open: reconstruction is a no-op
+		# and Noah's Ark cannot remove an entry. Uncertain limits replay.
+		overhead = 2 * $active + 7
+		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - overhead) // 2 {
 			return Err(Replay)
 		}
-		charge = 2 * $open.len() + 7
+		charge = 2 * $open.len() + overhead
 		if $work > limit or charge > limit - $work {
 			return Err(Replay)
 		}
@@ -311,8 +316,21 @@ direct_fragment = |source, namespace, props| {
 				if class == UnsupportedTag or (tag.self_closing and class != VoidTag) {
 					return Err(Replay)
 				}
-				if ($paragraph and (class == BlockTag or class == HeadingTag or tag.name == "hr")) or ($heading and class == HeadingTag) or ($anchor and tag.name == "a") {
+				flag = if class == FormattingTag {
+					direct_formatting_flag(tag.name)
+				} else 0
+				if ($paragraph and (class == BlockTag or class == HeadingTag or class == FormTag or class == ListItemTag or tag.name == "hr")) or ($heading and class == HeadingTag) {
 					return Err(Replay)
+				}
+				if U8.bitwise_and($formatting, flag) != 0 or ($form and class == FormTag) or ($button and class == ButtonTag) {
+					return Err(Replay)
+				}
+				# Require explicit list structure, excluding implied li closes.
+				if class == ListItemTag {
+					owner = ($open.last() ?? { id: 0, name: "html" }).name
+					if owner != "ul" and owner != "ol" {
+						return Err(Replay)
+					}
 				}
 				id = $nodes.len()
 				$nodes = direct_append($nodes, parent, { kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }), children: [], origin: Authored(next.token.span) })
@@ -325,8 +343,15 @@ direct_fragment = |source, namespace, props| {
 					if class == HeadingTag {
 						$heading = True
 					}
-					if tag.name == "a" {
-						$anchor = True
+					if flag != 0 {
+						$formatting = U8.bitwise_or($formatting, flag)
+						$active = $active + 1
+					}
+					if class == FormTag {
+						$form = True
+					}
+					if class == ButtonTag {
+						$button = True
 					}
 				}
 			}
@@ -336,9 +361,13 @@ direct_fragment = |source, namespace, props| {
 					return Err(Replay)
 				}
 				$open = $open.drop_last(1)
-				# Happy adoption closes a without extending its authored origin.
+				# Happy adoption and form-pointer closes leave start-only origins.
 				# Every other accepted close mirrors finish_node's explicit end.
-				if name != "a" {
+				class = direct_tag(name)
+				flag = if class == FormattingTag {
+					direct_formatting_flag(name)
+				} else 0
+				if flag == 0 and name != "form" {
 					moved = $nodes.replace(entry.id, empty_node) ?? return Err(Replay)
 					origin = match moved.prev.origin {
 						Authored(span) => Authored({ start: span.start, end: next.token.span.end })
@@ -349,11 +378,18 @@ direct_fragment = |source, namespace, props| {
 				if name == "p" {
 					$paragraph = False
 				}
-				if direct_tag(name) == HeadingTag {
+				if class == HeadingTag {
 					$heading = False
 				}
-				if name == "a" {
-					$anchor = False
+				if flag != 0 {
+					$formatting = U8.bitwise_xor($formatting, flag)
+					$active = $active - 1
+				}
+				if name == "form" {
+					$form = False
+				}
+				if name == "button" {
+					$button = False
 				}
 			}
 			Characters(text) => {
@@ -381,11 +417,26 @@ direct_fragment = |source, namespace, props| {
 }
 
 direct_tag = |name| match name {
-	"div" | "section" | "article" | "p" => BlockTag
+	"div" | "section" | "article" | "main" | "header" | "nav" | "footer" | "ul" | "ol" | "p" => BlockTag
 	"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => HeadingTag
-	"span" | "a" => InlineTag
-	"br" | "hr" | "img" => VoidTag
+	"span" | "label" => InlineTag
+	"a" | "b" | "i" | "em" | "strong" => FormattingTag
+	"form" => FormTag
+	"button" => ButtonTag
+	"li" => ListItemTag
+	"br" | "hr" | "img" | "input" => VoidTag
 	_ => UnsupportedTag
+}
+
+# Distinct open formatting names exclude Noah's Ark entry removal.
+direct_formatting_flag : Str -> U8
+direct_formatting_flag = |name| match name {
+	"a" => 1
+	"b" => 2
+	"i" => 4
+	"em" => 8
+	"strong" => 16
+	_ => 0
 }
 
 # Move the parent out before growing its children, just as edit_node does.
@@ -3681,6 +3732,25 @@ expect {
 expect {
 	source = "<section><a href='x'><p>text &amp; more<br></p></a></section>"
 	[0.U64, 1, 2, 4, 16, 256].all(
+		|limit| {
+			props : Markup.Props
+			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
+			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
+		},
+	)
+}
+
+expect {
+	accepted = ["<main><header><h1>Title</h1><nav><a href='/x'>next</a></nav></header><p>A <strong><em><b><i>typed</i></b></em></strong> tree.</p><ul><li>one<ol><li>nested</li></ol></li><li>two</li></ul><form action='/search'><label for='q'>Search</label><input id='q' name='q' type='search'><button type='submit'>Find</button></form><footer>done</footer></main>", "<form><p><button><span>ok</span></button></p></form><form><input type='hidden'></form>", "<strong><main><form><button><em>x</em></button></form></main></strong>", "<p><button>ok</button><label>label<input></label></p>"]
+	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, { exact_structure: True }) == HtmlTree.parse_general(source, True, {}, { exact_structure: True }))
+}
+expect {
+	replayed = ["<strong><strong>x</strong></strong>", "<b><i>x</b>y</i>", "<form><form></form></form>", "<button><span><button>x</button></span></button>", "<ul><li>one<li>two</ul>", "<li>x</li>", "<ul><div><li>x</li></div></ul>", "<p><form></form></p>", "<p><ul><li>x</li></ul></p>", "<form><p>x</form></p>", "<p><strong>x</p>y</strong>"]
+	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+}
+expect {
+	source = "<main><form><label><strong><em><b><i><a>x</a></i></b></em></strong><input></label><button>ok</button></form><ul><li>x</li></ul></main>"
+	[0.U64, 1, 2, 4, 8, 16, 256].all(
 		|limit| {
 			props : Markup.Props
 			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
