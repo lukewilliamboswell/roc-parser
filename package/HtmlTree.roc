@@ -94,24 +94,31 @@ HtmlTree :: [].{
 			} else {
 				$state = process($state, next.token, context.scripting)
 			}
-			at = Literal.position(source, next.token.span.start)
 			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
+				at = Literal.position(source, next.token.span.start)
 				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: at.line, column: at.column }))
 			}
 			if ($state.element_count - if (fragment) 1 else 0) > props.max_elements {
+				at = Literal.position(source, next.token.span.start)
 				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: at.line, column: at.column }))
 			}
 			if $state.nodes.len() > props.max_nodes {
+				at = Literal.position(source, next.token.span.start)
 				return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: at.line, column: at.column }))
 			}
 			if $state.diagnostics_exceeded or $reader.diagnostics.len() + $state.diagnostics.len() > props.max_diagnostics {
+				at = Literal.position(source, next.token.span.start)
 				return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
 			}
 			if $state.work > $state.work_limit {
+				at = Literal.position(source, next.token.span.start)
 				return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: at.line, column: at.column }))
 			}
 			match next.token.kind {
-				Start(tag) if tag.attributes.len() > props.max_attributes => return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+				Start(tag) if tag.attributes.len() > props.max_attributes => {
+					at = Literal.position(source, next.token.span.start)
+					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+				}
 				Eof => {
 					$done = True
 				}
