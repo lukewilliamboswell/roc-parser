@@ -99,6 +99,29 @@ MarkupScan :: [].{
 		}
 		$pos
 	}
+
+	## Find a possible HTML input-stream diagnostic in bytes from a valid Str.
+	## The caller applies the full scalar diagnostic rules at the returned offset.
+	valid_utf8_diagnostic_candidate : List(U8), U64 -> U64
+	valid_utf8_diagnostic_candidate = |bytes, start| {
+		var $pos = start
+		while $pos < bytes.len().minus_saturated(15) {
+			word = U8x16.load(bytes, $pos) ?? crash "guarded vector load"
+			mask = word.lt_lanes(U8x16.splat(32)).bitwise_or(word.eq_lanes(U8x16.splat(127))).bitwise_or(word.eq_lanes(U8x16.splat(0xC2))).bitwise_or(word.eq_lanes(U8x16.splat(0xEF))).bitwise_or(word.gte_lanes(U8x16.splat(0xF0))).to_bitmask()
+			if mask != 0 {
+				return $pos + mask.count_trailing_zero_bits().to_u64()
+			}
+			$pos = $pos + 16
+		}
+		while $pos < bytes.len() {
+			byte = bytes.get($pos) ?? 0
+			if byte < 32 or byte == 127 or byte == 0xC2 or byte == 0xEF or byte >= 0xF0 {
+				break
+			}
+			$pos = $pos + 1
+		}
+		$pos
+	}
 }
 
 model_html : List(U8), U64 -> MarkupScan.HtmlData
@@ -137,11 +160,25 @@ model_end = |bytes, start, mode| {
 	$end
 }
 
+model_candidate : List(U8), U64 -> U64
+model_candidate = |bytes, start| {
+	var $end = start
+	while $end < bytes.len() {
+		byte = bytes.get($end) ?? 0
+		if byte < 32 or byte == 127 or byte == 0xC2 or byte == 0xEF or byte >= 0xF0 {
+			break
+		}
+		$end = $end + 1
+	}
+	$end
+}
+
 models_agree = |bytes, start| {
 	MarkupScan.html_data(bytes, start) == model_html(bytes, start)
 		and MarkupScan.printable_ascii(bytes, start) == model_end(bytes, start, Ascii)
 		and MarkupScan.xml_text(bytes, start) == model_end(bytes, start, Xml)
 		and MarkupScan.cdata_text(bytes, start) == model_end(bytes, start, Cdata)
+		and MarkupScan.valid_utf8_diagnostic_candidate(bytes, start) == model_candidate(bytes, start)
 }
 
 # Every byte value, including invalid UTF-8, at every vector lane and tail.
@@ -219,5 +256,7 @@ expect {
 	after = "ordinary prose < after &amp; more text ]]> \u(0)"
 	unicode : CheckedScan
 	unicode = "a café welcomes λ and 東京 < after text"
-	before.passed() and after.passed() and unicode.passed()
+	diagnostics : CheckedScan
+	diagnostics = "ordinary text \u(80) \u(FDD0) \u(FFFE) \u(1FFFE) \u(10FFFF) \u(FEFF) \u(1F600)"
+	before.passed() and after.passed() and unicode.passed() and diagnostics.passed()
 }
