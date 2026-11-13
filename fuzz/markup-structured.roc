@@ -21,20 +21,24 @@ test = |bytes| {
 	namespace = if (format == 0) Markup.svg_namespace else if (format == 1) Markup.mathml_namespace else Markup.html_namespace
 	root_name = if (format == 0) "g" else if (format == 1) "mrow" else "div"
 	child_name = if (format == 0) "text" else if (format == 1) "mi" else "span"
-	var $source = "<${root_name}>"
+	extended = format < 2 and (bytes.get(3) ?? 0) % 2 == 1
+	binding = if (extended) " xmlns:x='urn:extension'" else ""
+	attribute = if (extended) " x:xmlns='v'" else ""
+	var $source = "<${root_name}${binding}>"
 	var $expected = []
 	var $index = 0
 	while $index < count {
 		value = $index.to_str()
-		$source = "${$source}<${child_name} id='x${value}'>${escaped}</${child_name}>"
-		$expected = $expected.append(Element({ namespace, local: child_name, attributes: [("", "id", "x${value}")], children: [Text(text)] }))
+		$source = "${$source}<${child_name} id='x${value}'${attribute}>${escaped}</${child_name}>"
+		attributes = if (extended) [("", "id", "x${value}"), ("urn:extension", "xmlns", "v")] else [("", "id", "x${value}")]
+		$expected = $expected.append(Element({ namespace, local: child_name, attributes, children: [Text(text)] }))
 		$index = $index + 1
 	}
 	$source = "${$source}</${root_name}>"
 	parsed = if format == 0 {
-		Svg.parse_fragment($source, {}).map_ok(|value| value.parsed)
+		Svg.parse_fragment($source, { allow_unknown_attributes: extended }).map_ok(|value| value.parsed)
 	} else if format == 1 {
-		MathML.parse_fragment($source, {}).map_ok(|value| value.parsed)
+		MathML.parse_fragment($source, { allow_unknown_attributes: extended }).map_ok(|value| value.parsed)
 	} else {
 		Html.parse_fragment($source, {}).map_ok(|value| value.parsed)
 	}

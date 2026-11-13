@@ -66,7 +66,7 @@ MarkupCheck :: [].{
 					Uri(uri) => uri
 					NoNamespace => ""
 				}
-				Element({ namespace: ns(name.namespace), local: name.local, attributes: node.attributes.keep_if(|attribute| attribute.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and attribute.name.local != "xmlns").map(|attribute| (ns(attribute.name.namespace), attribute.name.local, attribute.value)), children: node.children.map(|child| model(tree, child)) })
+				Element({ namespace: ns(name.namespace), local: name.local, attributes: node.attributes.keep_if(|attribute| attribute.name.namespace != Uri("http://www.w3.org/2000/xmlns/") and !(attribute.name.namespace == NoNamespace and attribute.name.local == "xmlns")).map(|attribute| (ns(attribute.name.namespace), attribute.name.local, attribute.value)), children: node.children.map(|child| model(tree, child)) })
 			}
 			Text(text) => Text(text)
 			Comment(text) => Comment(text)
