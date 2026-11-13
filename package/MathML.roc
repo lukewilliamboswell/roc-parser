@@ -1,5 +1,6 @@
 import Markup
 import MarkupValidate
+import MarkupTemplate
 
 ## Strict namespace-aware MathML documents and fragments.
 ## XML syntax is the default; fragments start in the MathML namespace.
@@ -51,6 +52,59 @@ MathML := { parsed : Markup.Parsed }.{
 	from_quote : Str -> Try(MathML, [BadQuotedBytes(Str)])
 	from_quote = |source| validate({ source: source })
 
+	## Parse fixed literal segments into an indexed plan without binding values.
+	parse_segments : List(Str), Props -> Try(MarkupTemplate.Plan, [InvalidMarkup(Markup.Error)])
+	parse_segments = |segments, props| {
+		plan = MarkupTemplate.parse_segments(segments, |source| Markup.parse_xml_fragment(source, Markup.mathml_namespace, props), Markup.decode_xml_text)?
+		var $holes = []
+		for slot in plan.slots {
+			match slot.target {
+				AttributeSlot(target) => {
+					$holes = $holes.append(target)
+				}
+				_ => {}
+			}
+		}
+		parsed = validate_tree(plan.parsed, props, $holes)?
+		slots = plan.slots.map(
+			|slot| {
+				match slot.target {
+					AttributeSlot(target) => {
+						node = parsed.tree.nodes.get(target.node) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
+						match (node.kind, node.attributes.get(target.attribute)) {
+							(Element(name), Ok(attr)) => { ..slot, expected: MarkupValidate.grammar(name.namespace == Uri(Markup.svg_namespace), name.local, attr.name.local) }
+							_ => slot
+						}
+					}
+					_ => slot
+				}
+			},
+		)
+		Ok({ ..plan, parsed, slots })
+	}
+
+	## A parsed fragment bound to homogeneous downstream values, including signals.
+	Template(a) := { bound : MarkupTemplate.Bound(a) }.{
+
+		## Parse the fixed segments during compilation; bind without reparsing.
+		from_interpolation : List(Str) -> Try((Iter(a) -> Template(a)), [InvalidInterpolation(Str)])
+		from_interpolation = |segments| {
+			plan = MathML.parse_segments(segments, {}).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
+			Ok(|values| Template.{ bound: MarkupTemplate.capture(plan, values) })
+		}
+
+		## A static fragment can use the same template type.
+		from_quote : Str -> Try(Template(a), [BadQuotedBytes(Str)])
+		from_quote = |source| {
+			plan = MathML.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))?
+			Ok(Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
+		}
+
+		## Fallibly bind an explicitly parsed plan, checking the binding count.
+		bind : MarkupTemplate.Plan, Iter(a) -> Try(Template(a), [InvalidMarkup(Markup.Error)])
+		bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Template.{ bound })
+	}
+
 	## A fragment retains every authored root and its exact source.
 	Fragment := { parsed : Markup.Parsed }.{
 
@@ -87,3 +141,11 @@ expect MathML.parse_fragment("<mspace width='2em' height='3px'/>", {}).is_ok()
 expect MathML.parse_fragment("<mtd rowspan='0'/>", {}).is_err()
 expect MathML.parse_fragment("<mi>α</mi><mo>+</mo><mi>β</mi>", {}).is_ok()
 expect MathML.parse_fragment("<semantics><mi>x</mi><annotation encoding='application/x-tex'>x</annotation></semantics>", {}).is_ok()
+
+expect {
+	x = "<mi>markup stays text</mi>"
+	value : MathML.Template(Str)
+	value = "<mrow><mi>${x}</mi><mo>+</mo><mn>1</mn></mrow>"
+	value.bound.values == [x] and value.bound.plan.slots.len() == 1
+}
+expect MathML.parse_segments(["<mo stretchy='", "'>+</mo>"], {}).is_ok()
