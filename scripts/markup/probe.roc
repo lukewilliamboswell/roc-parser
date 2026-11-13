@@ -23,6 +23,21 @@ main! = |arguments| {
 	fragment = args.get(2) == Ok("fragment")
 	recovery = if (args.get(3) == Ok("browser")) Browser else Strict
 	validate = args.get(4) != Ok("structural")
+	allow_elements = match args.get(9) {
+		Ok("on") => True
+		Ok("off") => False
+		_ => !validate
+	}
+	allow_attributes = match args.get(10) {
+		Ok("on") => True
+		Ok("off") => False
+		_ => !validate
+	}
+	check_values = match args.get(11) {
+		Ok("on") => True
+		Ok("off") => False
+		_ => validate
+	}
 	namespace = args.get(5) ?? Markup.html_namespace
 	context = args.get(6) ?? "body"
 	bytes = Stdin.read_to_end!()?
@@ -62,10 +77,10 @@ main! = |arguments| {
 		Err(_) => Stdout.line!("{\"status\":\"error\",\"error\":{\"code\":\"InvalidUtf8\",\"line\":1,\"column\":1}}")?
 		Ok(source) => {
 			props : Markup.Props
-			props = { syntax, recovery, allow_unknown_elements: !validate, allow_unknown_attributes: !validate, check_values: validate }
+			props = { syntax, recovery, allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values }
 			result = if format == "html" {
 				html_props : Html.Props
-				html_props = { syntax, recovery, allow_unknown_elements: !validate, allow_unknown_attributes: !validate, check_values: validate, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
+				html_props = { syntax, recovery, allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
 				if !validate {
 					Html.parse_source(source, html_props, fragment)
 				} else if fragment {

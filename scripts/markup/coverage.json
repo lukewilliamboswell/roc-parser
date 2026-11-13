@@ -218,7 +218,14 @@
       "fixtures": [
         "html-duplicate-attribute",
         "html-null-recovery",
-        "html-strict-duplicate-attribute"
+        "html-strict-duplicate-attribute",
+        "svg-preserve-extension-element",
+        "svg-preserve-extension-attribute",
+        "svg-disable-value-checks",
+        "mathml-preserve-content-extension",
+        "html-preserve-extension-attribute",
+        "html-standard-custom-element",
+        "html-recovery-keeps-authoring-validation"
       ],
       "roc_tests": [
         "package/Html.roc",

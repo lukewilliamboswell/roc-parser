@@ -123,7 +123,7 @@ def expected(case: dict, node: NodeOracle) -> dict:
         if case.get('recovery', 'strict') == 'strict' and result['diagnostics']:
             result = {**result, 'status': 'error'}
     # Spec-derived authoring verdicts are independent of syntax-tree acceptance.
-    if case.get('valid') is False:
+    if case.get('accepted') is False or (case.get('valid') is False and case.get('accepted') is not True):
         result = {**result, 'status': 'error'}
     return result
 
@@ -176,7 +176,7 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
     arguments = [case['format'], case.get('syntax', 'html' if case['format'] == 'html' else 'xml'),
                  'fragment' if case.get('fragment') else 'document', case.get('recovery', 'strict'),
                  'validate' if case.get('validate', True) else 'structural',
-                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'bindings' if case.get('include_bindings') else 'semantic']
+                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'bindings' if case.get('include_bindings') else 'semantic', *[('on' if case[key] else 'off') if key in case else 'default' for key in ['allow_unknown_elements', 'allow_unknown_attributes', 'check_values']]]
     try:
         result = subprocess.run([str(executable), *arguments], input=case['input'].encode(), capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
@@ -236,6 +236,8 @@ def compare(case: dict, actual: dict, reference: dict) -> dict:
         kind = 'wrong_tree'
     elif reference['status'] == 'error' and case.get('problem') and case['problem'] not in actual.get('error', {}).get('code', ''):
         kind = 'wrong_diagnostic'
+    elif reference['status'] == 'ok' and case.get('diagnostic_contains') and not any(case['diagnostic_contains'] in issue.get('code', '') for issue in actual.get('diagnostics', [])):
+        kind = 'missing_relaxation_diagnostic'
     else:
         kind = 'pass'
     return {'id': case['id'], 'kind': kind, 'case': case, 'actual': actual, 'expected': reference,

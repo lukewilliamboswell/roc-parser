@@ -594,6 +594,74 @@
       "input": "<semantics><annotation encoding=\"text/plain\">x</annotation></semantics>",
       "valid": false,
       "problem": "InvalidChildren"
+    },
+    {
+      "id": "svg-preserve-extension-element",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<customWidget data-key=\"x\">hello</customWidget>",
+      "allow_unknown_elements": true,
+      "accepted": true,
+      "diagnostic_contains": "UnknownElement"
+    },
+    {
+      "id": "svg-preserve-extension-attribute",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<path vendorThing=\"x\"/>",
+      "allow_unknown_attributes": true,
+      "accepted": true,
+      "diagnostic_contains": "UnknownAttribute"
+    },
+    {
+      "id": "svg-disable-value-checks",
+      "format": "svg",
+      "fragment": true,
+      "validate": true,
+      "input": "<svg viewBox=\"nonsense\"/>",
+      "check_values": false,
+      "accepted": true,
+      "spec_valid": false
+    },
+    {
+      "id": "mathml-preserve-content-extension",
+      "format": "mathml",
+      "fragment": true,
+      "validate": true,
+      "input": "<apply><plus/><ci>x</ci></apply>",
+      "allow_unknown_elements": true,
+      "accepted": true,
+      "diagnostic_contains": "UnknownElement"
+    },
+    {
+      "id": "html-preserve-extension-attribute",
+      "format": "html",
+      "fragment": true,
+      "validate": true,
+      "input": "<div vendor=\"x\">text</div>",
+      "allow_unknown_attributes": true,
+      "accepted": true,
+      "diagnostic_contains": "UnknownAttribute"
+    },
+    {
+      "id": "html-standard-custom-element",
+      "format": "html",
+      "fragment": true,
+      "validate": true,
+      "input": "<my-widget data-key=\"x\">text</my-widget>",
+      "accepted": true
+    },
+    {
+      "id": "html-recovery-keeps-authoring-validation",
+      "format": "html",
+      "fragment": true,
+      "validate": true,
+      "input": "<nothtml>text</nothtml>",
+      "recovery": "browser",
+      "valid": false,
+      "problem": "UnknownElement"
     }
   ]
 }
