@@ -5,13 +5,14 @@ app [target] {
 import fuzz.Fuzz
 import parser.Markup
 import parser.MarkupTemplate
+import parser.Html
 import MarkupCheck
 
 ## Explicit holes cannot alter names/delimiters or split a reference. Bound byte
 ## values remain bytes; inspecting bindings must never interpret their contents.
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
-	kind = (bytes.first() ?? 0) % 8
+	kind = (bytes.first() ?? 0) % 10
 	segments = match kind {
 		0 => ["<g>", "</g>"]
 		1 => ["<path d='", "'/>"]
@@ -20,27 +21,35 @@ test = |bytes| {
 		4 => ["<g xmlns='", "'/>"]
 		5 => ["<g>&am", "p;</g>"]
 		6 => ["<g><!--", "--></g>"]
-		_ => ["<script>", "</script>"]
+		7 => ["<script>", "</script>"]
+		8 => ["<select><button><selectedcontent></selectedcontent></button><option selected><span title='", "'>", "</span></option></select>"]
+		_ => ["<script>if(a<b)x()</script><p>", "</p>"]
 	}
-	valid = kind < 3
-	result = MarkupTemplate.parse_segments(segments, |text| Markup.parse_xml_fragment(text, Markup.svg_namespace, {}), Markup.decode_xml_text)
+	valid = kind < 3 or kind >= 8
+	result = if kind >= 8 {
+		Html.parse_segments(segments, {})
+	} else {
+		MarkupTemplate.parse_segments(segments, |text| Markup.parse_xml_fragment(text, Markup.svg_namespace, {}), Markup.decode_xml_text)
+	}
 	match result {
 		Ok(plan) => {
-			if !valid or plan.slots.len() + 1 != segments.len() {
+			expected = segments.len() - 1
+			physical = if (kind == 8) 4 else expected
+			if !valid or plan.slots.len() != physical or Set.from_list(plan.slots.map(|slot| slot.index)).len() != expected or plan.slots.any(|slot| slot.index >= expected) {
 				crash "illegal interpolation structure was accepted"
 			}
 			MarkupCheck.check(plan.parsed, Str.join_with(segments, ""))
 			values = bytes.drop_first(1)
 			match MarkupTemplate.bind(plan, values.iter()) {
-				Ok(bound) => if values.len() != plan.slots.len() or bound.values != values {
+				Ok(bound) => if values.len() != expected or bound.values != values {
 					crash "binding changed typed hole values or arity"
 				}
 				Err(InvalidMarkup(error)) => {
-					if values.len() == plan.slots.len() {
+					if values.len() == expected {
 						crash "valid binding arity was rejected"
 					}
 					match error.problem {
-						BindingCount(count) => if count.expected != plan.slots.len() or count.actual != values.len() {
+						BindingCount(count) => if count.expected != expected or count.actual != (if (values.len() > expected) expected + 1 else values.len()) {
 							crash "incorrect arity diagnostic"
 						}
 						_ => crash "binding arity has wrong diagnostic type"
