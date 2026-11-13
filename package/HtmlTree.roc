@@ -16,7 +16,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False }
+		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -102,7 +102,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool }
+State : { nodes : List(Markup.Node), roots : List(U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -203,7 +203,14 @@ insert_element = |s, name, namespace, attrs, origin, push| {
 	if (push) { ..next, stack: next.stack.append(index) } else next
 }
 
-insert_tag = |s, tag, namespace, span, push| insert_element(s, adjust_tag(tag.name, namespace), namespace, tag.attributes.map(|a| { name: attribute_name(a.name, namespace), value: a.value, span: a.span }), Authored(span), push)
+insert_tag = |s, tag, namespace, span, push| {
+	next = insert_element(s, adjust_tag(tag.name, namespace), namespace, tag.attributes.map(|a| { name: attribute_name(a.name, namespace), value: a.value, span: a.span }), Authored(span), push)
+	if namespace == Markup.html_namespace and tag.self_closing and push {
+		problem(next, NonVoidHtmlElementStartTagWithTrailingSolidus, span.start)
+	} else {
+		next
+	}
+}
 
 insert_text = |s, text, span| {
 	if text == "" {
@@ -407,6 +414,19 @@ process = |state, token, scripting| {
 	if state.work > state.work_limit {
 		return state
 	}
+	# Raw text is a tokenizer mode and a tree-construction text mode. The
+	# surrounding insertion mode (table/head/body) resumes after its end tag.
+	if !state.stack.is_empty() and namespace_at(state, state.stack.last() ?? 0) == Markup.html_namespace and content_mode(state) != Data and current(state) != "html" {
+		match token.kind {
+			Characters(text) => return insert_text(state, text, token.span)
+			End(name) if name == current(state) => return { ..state, stack: state.stack.drop_last(1) }
+			Eof => {
+				next = problem(state, EofWithOpenElements, token.span.start)
+				return process_html({ ..next, stack: next.stack.drop_last(1) }, token, scripting)
+			}
+			_ => {}
+		}
+	}
 	if foreign_token(state, token) {
 		return foreign_process(state, token)
 	}
@@ -442,11 +462,11 @@ process_html = |state, token, scripting| {
 				if d.quirks {
 					$s = problem($s, NonConformingDoctype, token.span.start)
 				}
-				$s = { ..$s, mode: BeforeHtml }
+				$s = { ..$s, mode: BeforeHtml, quirks: d.quirks }
 			}
 			(Initial, _) => {
 				$s = problem($s, MissingDoctype, token.span.start)
-				$s = { ..$s, mode: BeforeHtml }
+				$s = { ..$s, mode: BeforeHtml, quirks: True }
 				$reprocess = True
 			}
 			(_, Doctype(_)) => {
@@ -722,6 +742,12 @@ process_html = |state, token, scripting| {
 					$s = { ..$s, mode: AfterFrameset }
 				}
 			}
+			(AfterFrameset, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "noframes" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
 			(InFrameset, Eof) | (AfterFrameset, Eof) => {}
 			(AfterFrameset, End("html")) => {
 				$s = { ..$s, mode: AfterAfterBody }
@@ -757,10 +783,16 @@ body = |state, token| {
 		Start(tag) => {
 			name = tag.name
 			if name == "html" {
+				if last_named($s, "template").is_ok() {
+					return problem($s, UnexpectedBodyStart, token.span.start)
+				}
 				if !$s.stack.is_empty() {
 					$s = merge_attributes($s, 0, tag)
 				}
 			} else if name == "body" {
+				if last_named($s, "template").is_ok() {
+					return problem($s, UnexpectedBodyStart, token.span.start)
+				}
 				match last_named($s, "body") {
 					Ok(id) => {
 						$s = merge_attributes($s, id, tag)
@@ -898,7 +930,7 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, active: $s.active.append(Marker), frameset_ok: False }
 			} else if name == "table" {
-				if in_scope($s, "p", ButtonScope) {
+				if !$s.quirks and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -969,9 +1001,6 @@ body = |state, token| {
 			} else {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				if tag.self_closing {
-					$s = problem($s, NonVoidHtmlElementStartTagWithTrailingSolidus, token.span.start)
-				}
 			}
 		}
 		End(name) => {
@@ -1555,6 +1584,13 @@ foreign_process = |state, token| {
 				$s = insert_tag($s, t, adjusted_namespace($s), token.span, !t.self_closing)
 			}
 		}
+		End(n) if n == "p" or n == "br" => {
+			$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
+			while !$s.stack.is_empty() and namespace_at($s, $s.stack.last() ?? 0) != Markup.html_namespace and !integration($s) {
+				$s = { ..$s, stack: $s.stack.drop_last(1) }
+			}
+			$s = process_html($s, token, $s.context.scripting)
+		}
 		End(n) => {
 			var $i = $s.stack.len()
 			var $found = False
@@ -1589,13 +1625,13 @@ attribute_name = |raw, namespace| {
 		if raw == "xmlns" {
 			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: "xmlns", prefix: Unprefixed }
 		}
-		if raw.starts_with("xmlns:") {
+		if raw == "xmlns:xlink" {
 			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xmlns") }
 		}
-		if raw.starts_with("xlink:") {
+		if ["xlink:actuate", "xlink:arcrole", "xlink:href", "xlink:role", "xlink:show", "xlink:title", "xlink:type"].contains(raw) {
 			return { namespace: Uri("http://www.w3.org/1999/xlink"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xlink") }
 		}
-		if raw.starts_with("xml:") {
+		if ["xml:lang", "xml:space"].contains(raw) {
 			return { namespace: Uri("http://www.w3.org/XML/1998/namespace"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(4)), prefix: Prefix("xml") }
 		}
 	}
@@ -1803,3 +1839,20 @@ expect {
 	outer = p.tree.nodes.get(p.tree.roots.first()?)?
 	outer.children.len() == 1 and p.tree.roots.len() == 1
 }
+
+expect {
+	p = HtmlTree.parse("<p><table>", False, {}, { recovery: Browser })?
+	root = p.tree.nodes.get(3)?
+	root.children.len() == 1
+}
+expect {
+	p = HtmlTree.parse("<svg></p><foo>", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 3
+}
+
+expect {
+	p = HtmlTree.parse("<table><script>foo</script><tr><td>x</table>", True, {}, {})?
+	texts(p.tree) == ["foo", "x"] and p.tree.roots.len() == 1
+}
+expect HtmlTree.parse("<script/>", True, {}, {}).is_err()
+expect HtmlTree.parse("<table><script>foo", True, {}, { recovery: Browser }).is_ok()
