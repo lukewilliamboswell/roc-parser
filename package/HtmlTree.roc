@@ -6,7 +6,7 @@ import MarkupHtmlError
 ## HTML tree construction. The open-elements and active-formatting stacks are
 ## separate from the indexed output tree so recovery can reparent existing nodes.
 HtmlTree :: [].{
-	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? False }
+	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True }
 	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
 	parse = |source, fragment, context, props| {
 		if props.max_diagnostics == 0 {
@@ -16,7 +16,7 @@ HtmlTree :: [].{
 			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
 		}
 		initial : State
-		initial = { nodes: [], roots: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False }
+		initial = { nodes: [], roots: [], parents: Dict.empty(), stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False }
 		var $state = initial
 		if fragment {
 			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
@@ -102,7 +102,7 @@ Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBo
 
 Active : [Entry(U64), Marker]
 
-State : { nodes : List(Markup.Node), roots : List(U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool }
+State : { nodes : List(Markup.Node), roots : List(U64), parents : Dict(U64, U64), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool }
 
 empty_node : Markup.Node
 empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
@@ -165,7 +165,11 @@ append_node = |s, node| {
 		Element(_) => 1
 		_ => 0
 	}
-	next = { ..s, nodes: s.nodes.append(node), work: s.work + 1, element_count: s.element_count + added_element }
+	parents = match $parent {
+		Ok(parent) => s.parents.insert(index, parent)
+		Err(_) => s.parents
+	}
+	next = { ..s, nodes: s.nodes.append(node), parents, work: s.work + 1, element_count: s.element_count + added_element }
 	match $parent {
 		Ok(parent) => {
 			before = $before
@@ -298,16 +302,7 @@ index_of = |items, value| {
 }
 
 find_parent : State, U64 -> Try(U64, [Missing])
-find_parent = |s, id| {
-	var $i = 0
-	while $i < s.nodes.len() {
-		if (node_at(s, $i)).children.contains(id) {
-			return Ok($i)
-		}
-		$i = $i + 1
-	}
-	Err(Missing)
-}
+find_parent = |s, id| s.parents.get(id).map_err(|_| Missing)
 
 in_scope = |s, name, kind| {
 	var $i = s.stack.len()
@@ -1279,7 +1274,8 @@ adoption = |s, name, offset| {
 						new_formatting = $s.nodes.len()
 						block_node = node_at($s, block)
 						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }) }
-						$s = { ..$s, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
+						parents = block_node.children.fold($s.parents, |dict, child| dict.insert(child, new_formatting)).insert(new_formatting, block)
+						$s = { ..$s, parents, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
 						active = $s.active.keep_if(|a| a != Entry(formatting_id))
 						bookmark = if ($bookmark > active.len()) active.len() else $bookmark
 						$s = { ..$s, active: active.insert(bookmark, Entry(new_formatting)) ?? active.append(Entry(new_formatting)), stack: $s.stack.keep_if(|id| id != formatting_id) }
@@ -1306,20 +1302,27 @@ active_position = |s, id| {
 }
 
 detach = |s, id| {
-	match find_parent(s, id) {
-		Ok(parent) => {
-			edit_node(s, parent, |previous| { ..previous, children: previous.children.keep_if(|child| child != id) })
-		}
-		Err(_) => { ..s, roots: s.roots.keep_if(|child| child != id) }
+	previous_parent = find_parent(s, id)
+	removed = { ..s, parents: s.parents.remove(id) }
+	match previous_parent {
+		Ok(parent) => edit_node(removed, parent, |previous| { ..previous, children: previous.children.keep_if(|child| child != id) })
+		Err(_) => { ..removed, roots: removed.roots.keep_if(|child| child != id) }
 	}
 }
 
 reparent = |s, id, parent| {
 	detached = detach(s, id)
-	edit_node(detached, parent, |previous| { ..previous, children: previous.children.append(id) })
+	edit_node({ ..detached, parents: detached.parents.insert(id, parent) }, parent, |previous| { ..previous, children: previous.children.append(id) })
 }
 
-replace_child_id = |s, old, new| { ..s, roots: s.roots.map(|id| if (id == old) new else id), nodes: s.nodes.map(|n| { ..n, children: n.children.map(|id| if (id == old) new else id) }) }
+replace_child_id = |s, old, new| {
+	parent = s.parents.get(old)
+	parents = match parent {
+		Ok(p) => s.parents.remove(old).insert(new, p)
+		_ => s.parents.remove(old)
+	}
+	{ ..s, parents, roots: s.roots.map(|id| if (id == old) new else id), nodes: s.nodes.map(|n| { ..n, children: n.children.map(|id| if (id == old) new else id) }) }
+}
 
 table = |state, token| {
 	var $s = state
@@ -1789,7 +1792,7 @@ append_misc = |s, node| {
 	}
 }
 expect {
-	p = HtmlTree.parse("<head><noscript><!--foo--></noscript></head>", False, {}, { recovery: Browser })?
+	p = HtmlTree.parse("<head><noscript><!--foo--></noscript></head>", False, { scripting: False }, { recovery: Browser })?
 	head = p.tree.nodes.get(1)?
 	head.children.len() == 1
 }
