@@ -115,6 +115,9 @@ HtmlValidate :: [].{
 	}
 	grammar : Str, Str -> Markup.ValueGrammar
 	grammar = |element, attr| {
+		if !allowed(element, attr) {
+			return Language("extension attribute")
+		}
 		if booleans.contains(attr) {
 			return Keyword(["", attr])
 		}

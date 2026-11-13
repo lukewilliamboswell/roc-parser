@@ -127,7 +127,11 @@ MarkupValidate :: [].{
 
 	## The typed value grammar applied to a known attribute.
 	grammar : Bool, Str, Str -> Markup.ValueGrammar
-	grammar = value_grammar
+	grammar = |svg, element, attr| if allowed_attribute(svg, element, { namespace: NoNamespace, local: attr, prefix: Unprefixed }) {
+		value_grammar(svg, element, attr)
+	} else {
+		Language("extension attribute")
+	}
 }
 
 svg_elements = "a animate animateMotion animateTransform circle clipPath defs desc discard ellipse feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence filter foreignObject g hatch hatchpath image line linearGradient marker mask mesh meshgradient meshpatch meshrow metadata mpath path pattern polygon polyline radialGradient rect script set solidcolor stop style svg switch symbol text textPath title tspan use view".split_on(" ")

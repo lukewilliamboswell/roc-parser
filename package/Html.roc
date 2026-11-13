@@ -239,3 +239,6 @@ expect Html.parse_fragment("<table xmlns='http://www.w3.org/1999/xhtml'><tr><td/
 expect Html.parse_fragment("<datalist><div><option><span>x</span></option></div></datalist>", {}).is_err()
 expect Html.parse_segments(["<select><option label='x' value='v'>", "</option></select>"], {}).is_err()
 expect Html.parse_segments(["<br xmlns='http://www.w3.org/1999/xhtml'>", "</br>"], { syntax: XmlSyntax }).is_err()
+
+expect Html.parse_fragment("<my-widget width='wide' loading='custom' disabled='false'></my-widget>", {}).is_ok()
+expect Html.parse_fragment("<my-widget hidden='false'></my-widget>", {}).is_err()

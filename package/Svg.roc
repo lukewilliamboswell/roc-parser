@@ -222,3 +222,8 @@ expect {
 	p = Svg.parse_segments(["<circle xmlns:x='urn:extension' x:r='", "'></circle>"], { allow_unknown_attributes: True })?
 	p.slots.first()?.expected == Language("namespaced attribute")
 }
+
+expect {
+	p = Svg.parse_segments(["<g r='", "'/>"], { allow_unknown_attributes: True })?
+	p.slots.first()?.expected == Language("extension attribute")
+}
