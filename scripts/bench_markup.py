@@ -95,7 +95,7 @@ def allocations(binary: Path, operation: str, data: bytes, work: Path) -> dict:
 
 def compile_literals(roc: str, work: Path, sizes: list[int], repetitions: int) -> list[dict]:
     records = []
-    platform_url = 'https://github.com/roc-lang/basic-cli/releases/download/0.28.0/2yhxoR7cZPSYbyUzPWULFw8AA6QEcdsgFNRmzu7pZbst.tar.zst'
+    platform_url = 'https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst'
     for size in sizes:
         document = '<g>' + ''.join(f'<path id="p{i}" d="M0 0L10 10Z" pathLength="1"/>' for i in range(size)) + '</g>'
         for variant in ['literal', 'runtime']:
