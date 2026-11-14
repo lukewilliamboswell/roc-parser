@@ -97,11 +97,9 @@ XmlGen := {}.{
 	}
 }
 
-pick = XmlGen.pick
-
 choose : Cur, List(Str) -> { s : Str, cur : Cur }
 choose = |cur, options| {
-	chosen = pick(cur, options.len())
+	chosen = XmlGen.pick(cur, options.len())
 	{ s: options.get(chosen.n) ?? "", cur: chosen.cur }
 }
 
@@ -143,15 +141,15 @@ attribute_names = ["id", "class", "x:y", "b", "é", "data-1", "_", "xml:lang", "
 
 gen_declaration : Cur -> { pieces : List(Piece), value : Try(Xml.Declaration, [Missing]), cur : Cur }
 gen_declaration = |start| {
-	kind = pick(start, 4)
-	bom = pick(kind.cur, 4)
+	kind = XmlGen.pick(start, 4)
+	bom = XmlGen.pick(kind.cur, 4)
 	bom_text = if (bom.n == 0) "\u(FEFF)" else ""
 	if kind.n == 0 {
 		{ pieces: [Lit(bom_text)], value: Err(Missing), cur: bom.cur }
 	} else {
 		quote = choose(bom.cur, ["\"", "'"])
 		eq = choose(quote.cur, ["=", " = ", "\t=\n"])
-		version = pick(eq.cur, 4)
+		version = XmlGen.pick(eq.cur, 4)
 		minor = [0, 1, 9, 10].get(version.n) ?? 0
 		encoding = choose(version.cur, ["", "UTF-8", "utf-8", "Utf-8", "ISO-8859-1", "x_y.z-1"])
 		standalone = choose(encoding.cur, ["", "yes", "no"])
@@ -182,12 +180,12 @@ ascii_lower = |text| Str.from_utf8(text.to_utf8().map(|b| if (b >= 'A' and b <= 
 ## Whitespace, comments, and processing instructions outside the root.
 gen_misc : Cur -> { pieces : List(Piece), cur : Cur }
 gen_misc = |start| {
-	count = pick(start, 4)
+	count = XmlGen.pick(start, 4)
 	var $cur = count.cur
 	var $pieces = []
 	var $index = 0
 	while $index < count.n {
-		kind = pick($cur, 3)
+		kind = XmlGen.pick($cur, 3)
 		item =
 			match kind.n {
 				0 => {
@@ -216,7 +214,7 @@ gen_comment = |start| {
 gen_pi : Cur -> { pieces : List(Piece), cur : Cur }
 gen_pi = |start| {
 	target = choose(start, ["pi", "x-y", "xml-stylesheet", "a1", "xmlfoo", "é"])
-	form = pick(target.cur, 3)
+	form = XmlGen.pick(target.cur, 3)
 	match form.n {
 		0 => { pieces: [Lit("<?${target.s}?>")], cur: form.cur }
 		_ => {
@@ -231,12 +229,12 @@ gen_pi = |start| {
 ## "--" and no trailing '-'; '?' only before a letter, so no "?>".
 gen_raw : Cur, Bool -> { s : Str, cur : Cur }
 gen_raw = |start, _comment| {
-	count = pick(start, 6)
+	count = XmlGen.pick(start, 6)
 	var $cur = count.cur
 	var $text = ""
 	var $index = 0
 	while $index < count.n {
-		chosen = pick($cur, text_alphabet.len())
+		chosen = XmlGen.pick($cur, text_alphabet.len())
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [] }
 		$text =
 			if char.text == "-" or char.text == "?" {
@@ -311,15 +309,15 @@ after_literal = |raw, text| {
 ## reference, or a character reference. Returns the text and its value.
 gen_char_data : Cur, Raw -> { text : Str, value : Str, raw : Raw, cur : Cur }
 gen_char_data = |start, raw_start| {
-	count = pick(start, 7)
+	count = XmlGen.pick(start, 7)
 	var $cur = count.cur
 	var $text = ""
 	var $value = ""
 	var $raw = raw_start
 	var $index = 0
 	while $index < count.n {
-		chosen = pick($cur, text_alphabet.len())
-		style = pick(chosen.cur, 6)
+		chosen = XmlGen.pick($cur, text_alphabet.len())
+		style = XmlGen.pick(chosen.cur, 6)
 		$cur = style.cur
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [0x61] }
 		forbidden =
@@ -352,13 +350,13 @@ normalize_line_ends = |text| text |> Str.replace_each("\r\n", "\n") |> Str.repla
 ## CDATA content is literal; "]]>" is avoided and line ends are normalised.
 gen_cdata : Cur -> { text : Str, value : Str, cur : Cur }
 gen_cdata = |start| {
-	count = pick(start, 6)
+	count = XmlGen.pick(start, 6)
 	var $cur = count.cur
 	var $text = ""
 	var $raw = fresh_raw
 	var $index = 0
 	while $index < count.n {
-		chosen = pick($cur, text_alphabet.len())
+		chosen = XmlGen.pick($cur, text_alphabet.len())
 		$cur = chosen.cur
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [] }
 		ok = !(char.text == ">" and $raw.brackets >= 2) and !($raw.cr and Str.starts_with(char.text, "\n"))
@@ -375,15 +373,15 @@ gen_cdata = |start| {
 ## Attribute values per XML 1.0 3.3.3 for CDATA attributes.
 gen_attribute_value : Cur, Str -> { text : Str, value : Str, cur : Cur }
 gen_attribute_value = |start, quote| {
-	count = pick(start, 6)
+	count = XmlGen.pick(start, 6)
 	var $cur = count.cur
 	var $text = ""
 	var $value = ""
 	var $cr = False
 	var $index = 0
 	while $index < count.n {
-		chosen = pick($cur, text_alphabet.len())
-		style = pick(chosen.cur, 6)
+		chosen = XmlGen.pick($cur, text_alphabet.len())
+		style = XmlGen.pick(chosen.cur, 6)
 		$cur = style.cur
 		char = text_alphabet.get(chosen.n) ?? { text: "a", codes: [0x61] }
 		forbidden = char.text == "<" or char.text == "&" or char.text == quote or ($cr and Str.starts_with(char.text, "\n"))
@@ -429,7 +427,7 @@ max_depth = 4
 gen_element : Cur, U64 -> { pieces : List(Piece), node : Xml.Node, cur : Cur }
 gen_element = |start, depth| {
 	name = choose(start, element_names)
-	attribute_count = pick(name.cur, 4)
+	attribute_count = XmlGen.pick(name.cur, 4)
 	var $cur = attribute_count.cur
 	var $pieces = [Lit("<${name.s}")]
 	var $attributes = []
@@ -449,10 +447,10 @@ gen_element = |start, depth| {
 	}
 	trailing = choose($cur, ["", "", " ", "\n"])
 	$pieces = $pieces.append(Mark(TagSlot)).append(Lit(trailing.s))
-	child_count = pick(trailing.cur, if (depth >= max_depth) 4 else 7)
+	child_count = XmlGen.pick(trailing.cur, if (depth >= max_depth) 4 else 7)
 	$cur = child_count.cur
 	if child_count.n == 0 {
-		form = pick($cur, 2)
+		form = XmlGen.pick($cur, 2)
 		if form.n == 0 {
 			return { pieces: $pieces.append(Lit("/>")), node: Element({ name: name.s, attributes: $attributes, children: [] }), cur: form.cur }
 		}
@@ -463,7 +461,7 @@ gen_element = |start, depth| {
 	var $raw = fresh_raw
 	$index = 0
 	while $index < child_count.n {
-		kind = pick($cur, if (depth >= max_depth) 4 else 6)
+		kind = XmlGen.pick($cur, if (depth >= max_depth) 4 else 6)
 		$cur = kind.cur
 		match kind.n {
 			0 | 1 => {
@@ -481,7 +479,7 @@ gen_element = |start, depth| {
 				$cur = cdata.cur
 			}
 			3 => {
-				misc = pick($cur, 2)
+				misc = XmlGen.pick($cur, 2)
 				item = if (misc.n == 0) gen_comment(misc.cur) else gen_pi(misc.cur)
 				$pieces = $pieces.concat(item.pieces)
 				$raw = fresh_raw
