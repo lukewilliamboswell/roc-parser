@@ -3,8 +3,9 @@
 == Upgrade impact
 
 This preview adds `DomConstruction`, which checks a bounded set of HTML repairs
-for explicitly named DOM nodes. Existing parser and authoring-check APIs are
-unchanged. Use the official Roc nightly named in the release record and
+for explicitly named DOM nodes. It also moves the XML node backing declarations
+into separate modules to work around current compiler warnings. Use the official
+Roc nightly named in the release record and
 basic-cli 0.28.1. Unicode remains 4.3.3 and repository fuzz apps use roc-fuzz 0.6.2.
 
 Add this dependency to your application header:
@@ -17,6 +18,23 @@ parser: "{package-url}",
 Keep the package and examples archive together. The release record names the
 exact compiler used to build and test the delivered bundle. CI and release
 checks use the latest official nightly with warnings enabled.
+
+== XML node compatibility
+
+`Xml.Node` and `XmlNs.Node` are now public aliases for backing node types in
+separate modules. Their constructors, pattern matching, helper methods,
+equality and hashing remain available through the existing public names.
+`Xml.Attribute` and the namespace/name/binding/attribute aliases in `XmlNs`
+continue to describe the same record and tag shapes.
+
+The compiler's API comparison expands some of these structural aliases inline
+and reports this as a breaking change from rc.2. Consumers should recompile and
+check any explicit node/type annotations against this preview. The source
+contains restoration TODOs linked to
+https://github.com/roc-lang/roc/issues/13077[roc#13077] and
+https://github.com/roc-lang/roc/issues/13023[roc#13023]. Parser results and
+runtime checks are unchanged. The official nightly passes the normal warning
+checks with this layout; no diagnostics or release checks are suppressed.
 
 == Explicit DOM construction
 

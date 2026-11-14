@@ -29,6 +29,12 @@ parser: "{package-url}",
 
 Applications using basic-cli should use 0.28.1.
 
+The rc.3 preview moves XML node backing types into separate modules to avoid
+compiler warnings. `Xml.Node` and `XmlNs.Node` remain the public aliases, with
+constructors, helpers, equality and hashing available. API comparison expands
+some structural aliases inline and reports a breaking change from rc.2; see the
+{src}/docs/releases/6.0.0-rc.3.adoc[rc.3 notes] before upgrading a preview client.
+
 == Added
 
 * `Html`, `Svg` and `MathML` document and fragment parsers, with strict defaults,

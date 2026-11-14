@@ -38,6 +38,7 @@ import parser.Utf8
 import parser.Parser
 import parser.Yaml
 import parser.Xml
+import parser.XmlNs
 import parser.CSV
 import parser.Markdown
 import parser.AsciiDoc
