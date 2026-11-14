@@ -13,6 +13,22 @@ Consumers do not need a second table of element, ARIA or handler names.
 infer a namespace. Unknown names can still be constructed with `DomName`, and
 parser extension options remain available independently of these predicates.
 
+`element_names(namespace)` supplies the canonical local spellings for that
+namespace's built-in authoring vocabulary. `aria_attribute_names` supplies known
+unnamespaced ARIA spellings, including retained deprecated names. Both lists
+are unique and sorted by ASCII spelling. SVG case is preserved, so a consumer
+can suggest `linearGradient` without maintaining a second spelling table:
+
+[source,roc]
+----
+include::examples/markup-vocabulary.roc[tag=names]
+----
+
+An absent or unknown namespace has an empty element list. Custom and extension
+names are not finite candidate sets. These lists describe the current supported
+vocabulary, rather than every name that DOM constructors or browser recovery
+can retain. Enumeration and membership use the same parser-owned vocabulary.
+
 == Attribute values
 
 `is_boolean_attribute(element, attribute)` identifies HTML presence/absence
@@ -40,6 +56,44 @@ The coverage manifest describes the parser's validation boundaries.
 script and plaintext into a generic raw-text mode. HTML `noscript` uses
 `RawText` when scripting is enabled and `Data` otherwise. Foreign content uses
 `Data`, and XML source keeps its separate grammar.
+
+=== Initial newlines when emitting HTML
+
+`drops_initial_newline(element)` identifies HTML `pre`, `listing` and `textarea`.
+After their emitted HTML start tag, the parser can consume one immediately
+following LF character token. This describes HTML parsing, independently of
+whether an authoring vocabulary accepts a historical name. XML parsing and
+ordinary DOM text mutation do not have this rule. Merely choosing a `textarea`
+fragment context does not process a start tag or activate the rule.
+
+For a serializer producing several bindings, `initial_newline(element)` seeds
+`Pending` or `Preserve`. Pass actual emitted token events through
+`initial_newline_step`; it returns the next state, adjusted token and `skipped`
+flag. An empty text binding emits no token, so it retains `Pending`. A comment
+consumes the pending position, so the next text's LF is retained. Nonempty text
+also consumes it, removing at most one initial LF.
+
+The events contain decoded text after HTML input newline preprocessing and
+character-reference decoding. A numeric reference to CR is still CR; literal
+source CR/CRLF has already become LF. In RCDATA, serialized comment spelling is
+text beginning with `<`, rather than a comment token, and that character consumes
+the pending position. Escaping and the element's text behavior remain separate
+serializer responsibilities. These facts do not suppress syntax diagnostics;
+choose recovery independently, as described in
+xref:exact-structure.adoc#exact-structure[the recovery and authored-structure controls].
+
+This executable example protects a desired initial LF under `pre` and
+`textarea`, but emits no extra LF after an actual `pre` comment:
+
+[source,roc]
+----
+include::examples/markup-vocabulary.roc[tag=newline]
+----
+
+The example also parses the emitted strings and checks that their text values
+round-trip. The HTML Standard specifies the
+https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody[next-token rule]
+and https://html.spec.whatwg.org/multipage/syntax.html#newlines[initial-newline authoring convention].
 
 == A consumer policy for handler attributes
 

@@ -1,0 +1,8 @@
+SVG candidate: linearGradient
+HTML candidates include selectedcontent: True
+ARIA candidates include aria-label: True
+pre LF protected: True
+textarea LF protected: True
+pre comment keeps LF: True
+Empty binding keeps LF pending: True
+RCDATA comment spelling is text: True

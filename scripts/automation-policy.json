@@ -29,6 +29,7 @@
         "scripts/tests/test_examples_contract.py",
         "scripts/tests/test_harness_drivers.py",
         "scripts/tests/test_import_roc_syntax_snapshots.py",
+        "scripts/tests/test_markup_vocabulary.py",
         "scripts/tests/test_mutate_roc_syntax.py",
         "scripts/tests/test_package_driver.py",
         "scripts/tests/test_repository_policy.py",
@@ -126,6 +127,13 @@
       "paths": [
         "scripts/markup/consumer_fidelity.mjs",
         "scripts/markup/oracle.mjs"
+      ]
+    },
+    {
+      "runtime": "Python 3",
+      "contract": "Generate fast markup membership matches and enumerable names from one reviewed canonical inventory; deterministic offline regeneration and freshness checks do not add a runtime dependency to the Roc package.",
+      "paths": [
+        "scripts/markup/generate_vocabulary.py"
       ]
     }
   ],

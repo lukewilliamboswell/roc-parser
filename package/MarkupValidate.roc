@@ -146,15 +146,9 @@ MarkupValidate :: [].{
 	}
 }
 
-svg_elements = |key| match key {
-	"a" | "animate" | "animateMotion" | "animateTransform" | "circle" | "clipPath" | "defs" | "desc" | "discard" | "ellipse" | "feBlend" | "feColorMatrix" | "feComponentTransfer" | "feComposite" | "feConvolveMatrix" | "feDiffuseLighting" | "feDisplacementMap" | "feDistantLight" | "feDropShadow" | "feFlood" | "feFuncA" | "feFuncB" | "feFuncG" | "feFuncR" | "feGaussianBlur" | "feImage" | "feMerge" | "feMergeNode" | "feMorphology" | "feOffset" | "fePointLight" | "feSpecularLighting" | "feSpotLight" | "feTile" | "feTurbulence" | "filter" | "foreignObject" | "g" | "hatch" | "hatchpath" | "image" | "line" | "linearGradient" | "marker" | "mask" | "mesh" | "meshgradient" | "meshpatch" | "meshrow" | "metadata" | "mpath" | "path" | "pattern" | "polygon" | "polyline" | "radialGradient" | "rect" | "script" | "set" | "solidcolor" | "stop" | "style" | "svg" | "switch" | "symbol" | "text" | "textPath" | "title" | "tspan" | "use" | "view" => True
-	_ => False
-}
+svg_elements = MarkupVocabulary.svg_element_name
 
-math_elements = |key| match key {
-	"annotation" | "annotation-xml" | "maction" | "math" | "menclose" | "merror" | "mfenced" | "mfrac" | "mi" | "mlabeledtr" | "mmultiscripts" | "mn" | "mo" | "mover" | "mpadded" | "mphantom" | "mprescripts" | "mroot" | "mrow" | "ms" | "mspace" | "msqrt" | "mstyle" | "msub" | "msubsup" | "msup" | "mtable" | "mtd" | "mtext" | "mtr" | "munder" | "munderover" | "none" | "semantics" => True
-	_ => False
-}
+math_elements = MarkupVocabulary.mathml_element_name
 
 global_attributes = |key| match key {
 	"id" | "class" | "style" | "lang" | "tabindex" | "autofocus" | "role" | "title" => True

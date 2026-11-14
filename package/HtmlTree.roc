@@ -920,7 +920,7 @@ exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| 
 								if !is_void and !(tag.self_closing and !html) {
 									$stack = $stack.append({ id, name: Tok.lower(name.local) })
 								}
-								$skip_lf = html and (name.local == "pre" or name.local == "listing" or name.local == "textarea")
+								$skip_lf = MarkupVocabulary.drops_initial_newline(namespace, name.local)
 							}
 							_ => {
 								$failure = structure_failure($failure, IgnoredMarkup, token.span)
@@ -2182,7 +2182,7 @@ body = |state, token| {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				$s = { ..$s, skip_lf: True, frameset_ok: False }
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
 			} else if name == "form" {
 				if $s.form.is_ok() and !parsing_template($s) {
 					$s = problem($s, NestedForm, token.span.start)
@@ -2320,7 +2320,7 @@ body = |state, token| {
 				}
 			} else if name == "textarea" {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-				$s = { ..$s, skip_lf: True, frameset_ok: False }
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
 			} else if match name {
 				"xmp" | "iframe" | "noembed" | "noscript" | "script" | "style" | "title" | "noframes" => True
 				_ => False

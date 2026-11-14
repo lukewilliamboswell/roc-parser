@@ -1,4 +1,5 @@
 import Markup
+import MarkupNameTables
 
 # Shared names used by authoring checks and public consumer facts.
 MarkupVocabulary :: [].{
@@ -17,11 +18,28 @@ MarkupVocabulary :: [].{
 		"area" | "base" | "basefont" | "bgsound" | "br" | "col" | "embed" | "frame" | "hr" | "img" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" => True
 		_ => False
 	}
+	# Canonical authoring vocabularies and their generated membership matches.
+	html_element_names : List(Str)
+	html_element_names = MarkupNameTables.html_names
+	svg_element_names : List(Str)
+	svg_element_names = MarkupNameTables.svg_names
+	mathml_element_names : List(Str)
+	mathml_element_names = MarkupNameTables.mathml_names
+	aria_attribute_names : List(Str)
+	aria_attribute_names = MarkupNameTables.aria_names
+	html_element_name : Str -> Bool
+	html_element_name = MarkupNameTables.html_name
+	svg_element_name : Str -> Bool
+	svg_element_name = MarkupNameTables.svg_name
+	mathml_element_name : Str -> Bool
+	mathml_element_name = MarkupNameTables.mathml_name
 	aria_name : Str -> Bool
-	aria_name = |name| match name {
-		"aria-activedescendant" | "aria-atomic" | "aria-autocomplete" | "aria-braillelabel" | "aria-brailleroledescription" | "aria-busy" | "aria-checked" | "aria-colcount" | "aria-colindex" | "aria-colindextext" | "aria-colspan" | "aria-controls" | "aria-current" | "aria-describedby" | "aria-description" | "aria-details" | "aria-disabled" | "aria-dropeffect" | "aria-errormessage" | "aria-expanded" | "aria-flowto" | "aria-grabbed" | "aria-haspopup" | "aria-hidden" | "aria-invalid" | "aria-keyshortcuts" | "aria-label" | "aria-labelledby" | "aria-level" | "aria-live" | "aria-modal" | "aria-multiline" | "aria-multiselectable" | "aria-orientation" | "aria-owns" | "aria-placeholder" | "aria-posinset" | "aria-pressed" | "aria-readonly" | "aria-relevant" | "aria-required" | "aria-roledescription" | "aria-rowcount" | "aria-rowindex" | "aria-rowindextext" | "aria-rowspan" | "aria-selected" | "aria-setsize" | "aria-sort" | "aria-valuemax" | "aria-valuemin" | "aria-valuenow" | "aria-valuetext" => True
-		_ => False
-	}
+	aria_name = MarkupNameTables.aria_name
+
+	# Only the token immediately after an emitted HTML start tag is eligible.
+	drops_initial_newline : Str, Str -> Bool
+	drops_initial_newline = |namespace, local| namespace == Markup.html_namespace and (local == "pre" or local == "listing" or local == "textarea")
+
 	# Finite single-value ARIA states, shared across HTML, SVG and MathML.
 	# Token-list values such as aria-relevant and aria-dropeffect are not enums.
 	aria_enumerated_values : Str -> Try(List(Str), [NotEnumerated])

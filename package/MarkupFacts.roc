@@ -2,6 +2,7 @@ import Markup
 import MarkupVocabulary
 import HtmlValidate
 import MarkupValidate
+import XmlNs
 
 ## Namespace-aware vocabulary and HTML syntax facts for tree consumers.
 ## Names use their explicit expanded identity; a colon never supplies a namespace.
@@ -9,6 +10,26 @@ MarkupFacts :: [].{
 
 	## HTML tokenization behavior. ScriptData and Plaintext retain their distinct rules.
 	TextBehavior : MarkupVocabulary.TextBehavior
+
+	## An explicit namespace identity. Empty and unknown namespaces have no
+	## built-in vocabulary; a prefix does not supply a namespace.
+	Namespace : XmlNs.Namespace
+
+	## Canonical spellings accepted by the current namespace's built-in
+	## authoring vocabulary, unique and sorted by ASCII spelling. This includes
+	## retained compatibility names, and excludes arbitrary custom/extension names.
+	element_names : Namespace -> List(Str)
+	element_names = |namespace| match namespace {
+		Uri("http://www.w3.org/1999/xhtml") => MarkupVocabulary.html_element_names
+		Uri("http://www.w3.org/2000/svg") => MarkupVocabulary.svg_element_names
+		Uri("http://www.w3.org/1998/Math/MathML") => MarkupVocabulary.mathml_element_names
+		_ => []
+	}
+
+	## Known unnamespaced ARIA attribute spellings, including retained
+	## deprecated names. The list is unique and sorted by ASCII spelling.
+	aria_attribute_names : List(Str)
+	aria_attribute_names = MarkupVocabulary.aria_attribute_names
 
 	## Test the built-in element vocabulary used by the current authoring checks.
 	## Valid custom HTML names can be queried separately with is_custom_element_name.
@@ -96,6 +117,37 @@ MarkupFacts :: [].{
 	text_behavior = |element, scripting| if element.namespace == Uri(Markup.html_namespace) {
 		MarkupVocabulary.text_behavior(element.local, scripting)
 	} else Data
+
+	## Whether HTML parsing ignores one LF character token immediately after
+	## this element's emitted start tag. This is not an XML or DOM mutation rule,
+	## and does not activate merely by seeding an HTML fragment context.
+	drops_initial_newline : Markup.Name -> Bool
+	drops_initial_newline = |element| match element.namespace {
+		Uri(namespace) => MarkupVocabulary.drops_initial_newline(namespace, element.local)
+		NoNamespace => False
+	}
+
+	## Pending means no token has yet followed an eligible HTML start tag.
+	## An empty text binding emits no token and leaves this state unchanged.
+	InitialNewlineState : [Pending, Preserve]
+
+	## Decoded HTML token events, after input newline preprocessing and
+	## character-reference decoding. RCDATA comment spelling is Characters,
+	## rather than Comment; Other covers every other emitted token.
+	InitialNewlineToken : [Characters(Str), Comment, Other]
+
+	## Seed the next-token rule after emitting this element's HTML start tag.
+	initial_newline : Markup.Name -> InitialNewlineState
+	initial_newline = |element| if (drops_initial_newline(element)) Pending else Preserve
+
+	## Model the first-token LF rule. Comments and other emitted tokens consume
+	## Pending; later text is preserved. Exactly one leading LF can be removed.
+	initial_newline_step : InitialNewlineState, InitialNewlineToken -> { state : InitialNewlineState, token : InitialNewlineToken, skipped : Bool }
+	initial_newline_step = |state, token| match token {
+		Characters(text) if text.is_empty() => { state, token, skipped: False }
+		Characters(text) if state == Pending and text.starts_with("\n") => { state: Preserve, token: Characters(text.drop_prefix("\n")), skipped: True }
+		_ => { state: Preserve, token, skipped: False }
+	}
 
 	## Recognize known handler content attributes by element namespace and expanded name.
 	## Consumers may forbid these in literals; ordinary parsers continue accepting them.
@@ -189,3 +241,38 @@ expect MarkupFacts.enumerated_values(svg_name("g"), { namespace: Uri("urn:custom
 expect MarkupFacts.is_event_handler(html_name("input"), plain_attribute("onsearch"))
 expect !MarkupFacts.is_event_handler(html_name("div"), plain_attribute("onsearch"))
 expect !MarkupFacts.is_event_handler(svg_name("input"), plain_attribute("onsearch"))
+
+expect [Markup.html_namespace, Markup.svg_namespace, Markup.mathml_namespace].all(
+	|namespace| {
+		names = MarkupFacts.element_names(Uri(namespace))
+		!names.is_empty() and names.all(|local| MarkupFacts.is_known_element({ namespace: Uri(namespace), prefix: Unprefixed, local })) and names.map_with_index(|name, index| !names.take_first(index).contains(name)).all(|unique| unique)
+	},
+)
+expect MarkupFacts.element_names(Uri(Markup.html_namespace)).contains("selectedcontent")
+expect MarkupFacts.element_names(Uri(Markup.svg_namespace)).contains("linearGradient") and !MarkupFacts.element_names(Uri(Markup.svg_namespace)).contains("lineargradient")
+expect MarkupFacts.element_names(Uri(Markup.mathml_namespace)).contains("annotation-xml")
+expect MarkupFacts.element_names(NoNamespace) == [] and MarkupFacts.element_names(Uri("")) == [] and MarkupFacts.element_names(Uri("urn:extension")) == []
+expect MarkupFacts.aria_attribute_names.all(|local| MarkupFacts.is_aria_attribute(plain_attribute(local)))
+expect MarkupFacts.aria_attribute_names.contains("aria-grabbed") and !MarkupFacts.aria_attribute_names.contains("aria-invented")
+expect MarkupFacts.aria_attribute_names.map_with_index(|name, index| !MarkupFacts.aria_attribute_names.take_first(index).contains(name)).all(|unique| unique)
+
+expect ["pre", "listing", "textarea"].all(|local| MarkupFacts.drops_initial_newline(html_name(local)))
+expect !MarkupFacts.drops_initial_newline(html_name("div")) and !MarkupFacts.drops_initial_newline(html_name("PRE"))
+expect !MarkupFacts.drops_initial_newline(svg_name("pre")) and !MarkupFacts.drops_initial_newline(math_name("textarea"))
+expect !MarkupFacts.drops_initial_newline({ namespace: NoNamespace, prefix: Unprefixed, local: "pre" })
+expect MarkupFacts.initial_newline(html_name("pre")) == Pending and MarkupFacts.initial_newline(svg_name("pre")) == Preserve
+expect MarkupFacts.initial_newline_step(Pending, Characters("\n\nvalue")) == { state: Preserve, token: Characters("\nvalue"), skipped: True }
+expect MarkupFacts.initial_newline_step(Preserve, Characters("\nvalue")) == { state: Preserve, token: Characters("\nvalue"), skipped: False }
+expect MarkupFacts.initial_newline_step(Pending, Characters("")) == { state: Pending, token: Characters(""), skipped: False }
+expect MarkupFacts.initial_newline_step(Pending, Characters("value\n")) == { state: Preserve, token: Characters("value\n"), skipped: False }
+expect MarkupFacts.initial_newline_step(Pending, Characters("\rvalue")) == { state: Preserve, token: Characters("\rvalue"), skipped: False }
+expect MarkupFacts.initial_newline_step(Pending, Comment) == { state: Preserve, token: Comment, skipped: False }
+expect MarkupFacts.initial_newline_step(Pending, Other) == { state: Preserve, token: Other, skipped: False }
+expect {
+	comment = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("pre")), Comment)
+	MarkupFacts.initial_newline_step(comment.state, Characters("\nvalue")).skipped == False
+}
+expect {
+	comment_text = MarkupFacts.initial_newline_step(MarkupFacts.initial_newline(html_name("textarea")), Characters("<!-- comment -->"))
+	MarkupFacts.initial_newline_step(comment_text.state, Characters("\nvalue")).token == Characters("\nvalue")
+}

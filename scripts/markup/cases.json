@@ -76,6 +76,45 @@
       "validate": false
     },
     {
+      "id": "html-leading-newline-comment",
+      "format": "html",
+      "input": "<pre><!-- marker -->\nvalue</pre>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-leading-newline-rcdata-comment",
+      "format": "html",
+      "input": "<textarea><!-- marker -->\nvalue</textarea>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-leading-newline-double",
+      "format": "html",
+      "input": "<pre>\n\nvalue</pre><textarea>\n\nvalue</textarea><listing>\n\nvalue</listing>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-leading-newline-reference",
+      "format": "html",
+      "input": "<pre>&#10;value</pre><textarea>&#10;value</textarea>",
+      "fragment": true,
+      "validate": false
+    },
+    {
+      "id": "html-newline-fragment-context",
+      "format": "html",
+      "input": "\nvalue",
+      "fragment": true,
+      "validate": false,
+      "context": {
+        "namespace": "http://www.w3.org/1999/xhtml",
+        "local": "textarea"
+      }
+    },
+    {
       "id": "html-table-insertion",
       "format": "html",
       "input": "<table><tr><td>x</td></tr></table>",
