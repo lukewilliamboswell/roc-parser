@@ -156,7 +156,9 @@ Yaml := [
 	validate_as = |props| {
 		node = validation_tree(props.source, props.name, props.lints)?
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: props.keys, unknown_keys: props.unknown_keys })
+		# TODO: Restore Yaml.Format in these derivation calls and the Parseable
+		# requirement after https://github.com/roc-lang/roc/issues/13022 is fixed.
+		parse_value = A.parser_for(YamlFormat.{ keys: props.keys, unknown_keys: props.unknown_keys })
 		match decode_node(parse_value, node) {
 			Ok(value) => Ok(value)
 			Err(InvalidYaml(problem)) => Err(checked_error(props.name, problem))
@@ -359,7 +361,7 @@ Yaml := [
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
 	decode = |input| {
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: SnakeCase, unknown_keys: Skip })
+		parse_value = A.parser_for(YamlFormat.{ keys: SnakeCase, unknown_keys: Skip })
 		decode_with(parse_value, input)
 	}
 
@@ -387,7 +389,7 @@ Yaml := [
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
 	decoder = |options| {
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: options.keys, unknown_keys: options.unknown_keys })
+		parse_value = A.parser_for(YamlFormat.{ keys: options.keys, unknown_keys: options.unknown_keys })
 		|input| decode_with(parse_value, input)
 	}
 
@@ -404,7 +406,7 @@ Yaml := [
 	## ```
 	a.Parseable(errs) :
 		where [
-			a.parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, errs)),
+			a.parser_for : YamlFormat -> (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, errs)),
 		]
 
 	## The decoding format that [Yaml.decode] passes to a type's `parser_for`.

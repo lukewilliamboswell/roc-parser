@@ -554,5 +554,9 @@
       "lineargradient",
       "linearGradient"
     ]
+  },
+  {
+    "name": "yaml-decoder-public-api",
+    "body": "load : Str -> Try(a, [InvalidYaml(Yaml.Error), ..errs]) where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]\nload = |source| Yaml.decode(source)\nCustom := [Value(Str)].{\n    is_eq : _\n    parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : Custom, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]))\n    parser_for = |format| |cursor| Yaml.Format.parse_str(format, cursor).map_ok(|parsed| { value: Value(parsed.value), rest: parsed.rest })\n}\nrecord : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nrecord = load(\"app_name: demo\")\ncustom : Try(Custom, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\ncustom = Yaml.decode(\"custom\")\nkebab : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nkebab = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })(\"app-name: demo\")\nquoted : Yaml.Decoded({ port : U16 })\nquoted = \"port: 8080\"\nchecked : { user_id : U64 }\nchecked = Literal.require(Yaml.validate_as({ source: \"userId: 12\", keys: CamelCase, unknown_keys: Reject }))\nvalue = record == Ok({ app_name: \"demo\" }) and custom == Ok(Value(\"custom\")) and kebab == Ok({ app_name: \"demo\" }) and quoted.value == { port: 8080 } and checked == { user_id: 12 }\n"
   }
 ]
