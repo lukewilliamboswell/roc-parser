@@ -84,23 +84,7 @@ Html := { parsed : Markup.Parsed }.{
 	from_quote = |source| validate({ source: source })
 
 	## A fragment preserves all authored roots and source bytes.
-	Fragment := { parsed : Markup.Parsed }.{
-
-		## Validate imported fragment text with named diagnostics and options.
-		validate : Html.ValidationProps -> Try(Fragment, [BadQuotedBytes(Str)])
-		validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(e)| Literal.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: e.line, column: e.column }))
-
-		## Check a fragment literal in the default body context.
-		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
-		from_quote = |text| Html.parse_fragment(text, {}).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
-
-		## Require exactly one element root, ignoring comments/whitespace.
-		single_element : Fragment -> Try(Markup.Node, [RootCount(U64)])
-		single_element = |fragment| {
-			root = Markup.single_root(fragment.parsed.tree)?
-			Ok(fragment.parsed.tree.nodes.get(root) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
-		}
-	}
+	Fragment : HtmlFragment
 
 	## Parse fixed segments and explicit text/whole-attribute holes. No textual
 	## sentinels are inserted, and structural positions cannot contain holes.
@@ -109,20 +93,40 @@ Html := { parsed : Markup.Parsed }.{
 
 	## A parsed template and its typed bindings
 	## Binding performs no source parse.
-	Template(a) := { bound : MarkupTemplate.Bound(a) }.{
+	Template(a) : HtmlTemplateValue(a)
+}
 
-		## Bind an explicit iterator to an existing plan without reparsing.
-		bind : MarkupTemplate.Plan, Iter(a) -> Try(Template(a), [InvalidMarkup(Markup.Error)])
-		bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Template.{ bound })
+HtmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 
-		## Parse a static fragment as a template with no holes.
-		from_quote : Str -> Try(Template(a), [BadQuotedBytes(Str)])
-		from_quote = |source| Html.parse_segments([source], {}).map_ok(|plan| Template.{ bound: MarkupTemplate.capture(plan, [].iter()) }).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
+	## Bind an explicit iterator to an existing plan without reparsing.
+	bind : MarkupTemplate.Plan, Iter(a) -> Try(Html.Template(a), [InvalidMarkup(Markup.Error)])
+	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Html.Template.{ bound })
 
-		## Validate fixed segments at compile time and capture arbitrary typed
-		## bindings through the compiler's Iter-based interpolation assembler.
-		from_interpolation : List(Str) -> Try((Iter(a) -> Template(a)), [InvalidInterpolation(Str)])
-		from_interpolation = |segments| Html.parse_segments(segments, {}).map_ok(|plan| |values| Template.{ bound: MarkupTemplate.capture(plan, values) }).map_err(|InvalidMarkup(e)| MarkupTemplate.interpolation_error(e))
+	## Parse a static fragment as a template with no holes.
+	from_quote : Str -> Try(Html.Template(a), [BadQuotedBytes(Str)])
+	from_quote = |source| Html.parse_segments([source], {}).map_ok(|plan| Html.Template.{ bound: MarkupTemplate.capture(plan, [].iter()) }).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
+
+	## Validate fixed segments at compile time and capture arbitrary typed
+	## bindings through the compiler's Iter-based interpolation assembler.
+	from_interpolation : List(Str) -> Try((Iter(a) -> Html.Template(a)), [InvalidInterpolation(Str)])
+	from_interpolation = |segments| Html.parse_segments(segments, {}).map_ok(|plan| |values| Html.Template.{ bound: MarkupTemplate.capture(plan, values) }).map_err(|InvalidMarkup(e)| MarkupTemplate.interpolation_error(e))
+}
+
+HtmlFragment := { parsed : Markup.Parsed }.{
+
+	## Validate imported fragment text with named diagnostics and options.
+	validate : Html.ValidationProps -> Try(Html.Fragment, [BadQuotedBytes(Str)])
+	validate = |props| Html.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(e)| Literal.error({ name: props.name, format: "HTML", message: Str.inspect(e.problem), line: e.line, column: e.column }))
+
+	## Check a fragment literal in the default body context.
+	from_quote : Str -> Try(Html.Fragment, [BadQuotedBytes(Str)])
+	from_quote = |text| Html.parse_fragment(text, {}).map_err(|InvalidMarkup(e)| Markup.quoted_error("HTML", e))
+
+	## Require exactly one element root, ignoring comments/whitespace.
+	single_element : Html.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element = |fragment| {
+		root = Markup.single_root(fragment.parsed.tree)?
+		Ok(fragment.parsed.tree.nodes.get(root) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
 

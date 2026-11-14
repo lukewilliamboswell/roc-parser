@@ -80,13 +80,7 @@ CSV := { records : List(CSV.Record) }.{
 	from_quote = |source| CSV.validate({ source: source }).map_ok(|records| CSV.{ records })
 
 	## A quotation of typed CSV rows. Access the rows with `.value`.
-	Decoded(row) := { value : List(row) }.{
-
-		## Decode quoted CSV using exact header names and enabled header checks.
-		from_quote : Str -> Try(Decoded(row), [BadQuotedBytes(Str)])
-			where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
-		from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| Decoded.{ value })
-	}
+	Decoded(row) : CsvDecoded(row)
 
 	## Validate raw CSV records, rejecting selected header checks as well as
 	## malformed CSV. Header checks compare normalized names in `Normalized`
@@ -577,6 +571,14 @@ CSV := { records : List(CSV.Record) }.{
 	## and indices into them. Used through [CSV.parse]; you do not need to name
 	## it.
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
+}
+
+CsvDecoded(row) := { value : List(row) }.{
+
+	## Decode quoted CSV using exact header names and enabled header checks.
+	from_quote : Str -> Try(CSV.Decoded(row), [BadQuotedBytes(Str)])
+		where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
+	from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| CSV.Decoded.{ value })
 }
 
 ## Decode every data record of `text` with a row parser built by `parser_for`.

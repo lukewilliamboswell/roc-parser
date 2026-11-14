@@ -73,104 +73,16 @@ Markdown := [
 	}
 
 	## Heading levels from one through six.
-	Level := [One, Two, Three, Four, Five, Six].{
-
-		## Render a heading level for inspection.
-		to_inspect : Level -> Str
-		to_inspect = |level| {
-			inspect_level(level)
-		}
-
-		## Convert a heading level to its decimal representation.
-		to_str : Level -> Str
-		to_str = |level| {
-			level_to_str(level)
-		}
-
-		## Compare two heading levels.
-		is_eq : _
-
-		## Hash this value, so that it can be a `Dict` key or `Set` element.
-		to_hash : _
-	}
+	Level : HeadingLevel
 
 	## The marker and starting number of a Markdown list.
-	ListKind := [
-		Unordered,
-		Ordered({ start : U64 }),
-	].{
-
-		## Render a list kind for inspection.
-		to_inspect : ListKind -> Str
-		to_inspect = |kind| {
-			inspect_list_kind(kind)
-		}
-
-		## Convert a list kind to a compact string.
-		to_str : ListKind -> Str
-		to_str = |kind| {
-			list_kind_to_str(kind)
-		}
-
-		## Compare two list kinds structurally.
-		is_eq : _
-
-		## Hash this value, so that it can be a `Dict` key or `Set` element.
-		to_hash : _
-	}
+	ListKind : MarkdownListKind
 
 	## Whether a list item is a task and, if so, whether it is checked.
-	TaskState := [
-		NoTask,
-		Unchecked,
-		Checked,
-	].{
-
-		## Render a task state for inspection.
-		to_inspect : TaskState -> Str
-		to_inspect = |task| {
-			inspect_task_state(task)
-		}
-
-		## Convert a task state to a compact string.
-		to_str : TaskState -> Str
-		to_str = |task| {
-			task_state_to_str(task)
-		}
-
-		## Compare two task states.
-		is_eq : _
-
-		## Hash this value, so that it can be a `Dict` key or `Set` element.
-		to_hash : _
-	}
+	TaskState : MarkdownTaskState
 
 	## Column alignment declared by a Markdown table delimiter row.
-	Alignment := [
-		Default,
-		Left,
-		Center,
-		Right,
-	].{
-
-		## Render a table alignment for inspection.
-		to_inspect : Alignment -> Str
-		to_inspect = |alignment| {
-			inspect_alignment(alignment)
-		}
-
-		## Convert a table alignment to a compact string.
-		to_str : Alignment -> Str
-		to_str = |alignment| {
-			alignment_to_str(alignment)
-		}
-
-		## Compare two table alignments.
-		is_eq : _
-
-		## Hash this value, so that it can be a `Dict` key or `Set` element.
-		to_hash : _
-	}
+	Alignment : TableAlignment
 
 	## Destination and optional title of a link or image.
 	LinkTarget : {
@@ -179,30 +91,7 @@ Markdown := [
 	}
 
 	## Inline Markdown syntax nodes.
-	Inline := [
-		Text(Str),
-		Strong(List(Inline)),
-		Emphasis(List(Inline)),
-		Strikethrough(List(Inline)),
-		InlineCode(Str),
-		Link({ label : List(Inline), target : LinkTarget }),
-		Image({ alt : List(Inline), target : LinkTarget }),
-		HardBreak,
-		HtmlInline(Str),
-	].{
-
-		## Render an inline node in Roc source-like notation for inspection.
-		to_inspect : Inline -> Str
-		to_inspect = |inline| {
-			inspect_inline(inline)
-		}
-
-		## Compare two inline syntax trees structurally.
-		is_eq : _
-
-		## Hash this value, so that it can be a `Dict` key or `Set` element.
-		to_hash : _
-	}
+	Inline : MarkdownInline
 
 	## Hash a Markdown syntax tree, so that it can be a `Dict` key or `Set` element.
 	to_hash : _
@@ -260,6 +149,127 @@ Markdown := [
 		}
 	}
 
+}
+
+MarkdownInline := [
+	Text(Str),
+	Strong(List(Markdown.Inline)),
+	Emphasis(List(Markdown.Inline)),
+	Strikethrough(List(Markdown.Inline)),
+	InlineCode(Str),
+	Link({ label : List(Markdown.Inline), target : Markdown.LinkTarget }),
+	Image({ alt : List(Markdown.Inline), target : Markdown.LinkTarget }),
+	HardBreak,
+	HtmlInline(Str),
+].{
+
+	## Render an inline node in Roc source-like notation for inspection.
+	to_inspect : Markdown.Inline -> Str
+	to_inspect = |inline| {
+		inspect_inline(inline)
+	}
+
+	## Compare two inline syntax trees structurally.
+	is_eq : _
+
+	## Hash this value, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
+}
+
+TableAlignment := [
+	Default,
+	Left,
+	Center,
+	Right,
+].{
+
+	## Render a table alignment for inspection.
+	to_inspect : Markdown.Alignment -> Str
+	to_inspect = |alignment| {
+		inspect_alignment(alignment)
+	}
+
+	## Convert a table alignment to a compact string.
+	to_str : Markdown.Alignment -> Str
+	to_str = |alignment| {
+		alignment_to_str(alignment)
+	}
+
+	## Compare two table alignments.
+	is_eq : _
+
+	## Hash this value, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
+}
+
+MarkdownTaskState := [
+	NoTask,
+	Unchecked,
+	Checked,
+].{
+
+	## Render a task state for inspection.
+	to_inspect : Markdown.TaskState -> Str
+	to_inspect = |task| {
+		inspect_task_state(task)
+	}
+
+	## Convert a task state to a compact string.
+	to_str : Markdown.TaskState -> Str
+	to_str = |task| {
+		task_state_to_str(task)
+	}
+
+	## Compare two task states.
+	is_eq : _
+
+	## Hash this value, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
+}
+
+MarkdownListKind := [
+	Unordered,
+	Ordered({ start : U64 }),
+].{
+
+	## Render a list kind for inspection.
+	to_inspect : Markdown.ListKind -> Str
+	to_inspect = |kind| {
+		inspect_list_kind(kind)
+	}
+
+	## Convert a list kind to a compact string.
+	to_str : Markdown.ListKind -> Str
+	to_str = |kind| {
+		list_kind_to_str(kind)
+	}
+
+	## Compare two list kinds structurally.
+	is_eq : _
+
+	## Hash this value, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
+}
+
+HeadingLevel := [One, Two, Three, Four, Five, Six].{
+
+	## Render a heading level for inspection.
+	to_inspect : Markdown.Level -> Str
+	to_inspect = |level| {
+		inspect_level(level)
+	}
+
+	## Convert a heading level to its decimal representation.
+	to_str : Markdown.Level -> Str
+	to_str = |level| {
+		level_to_str(level)
+	}
+
+	## Compare two heading levels.
+	is_eq : _
+
+	## Hash this value, so that it can be a `Dict` key or `Set` element.
+	to_hash : _
 }
 
 inspect_markdown : Markdown -> Str

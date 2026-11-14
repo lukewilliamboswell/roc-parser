@@ -64,9 +64,9 @@ MarkupValidate :: [].{
 									$diagnostics = $diagnostics.append({ problem, line: at.line, column: at.column })
 								}
 								if props.check_values and allowed and attr.name.namespace == NoNamespace and !hole_positions.contains((item.index, $attr_index)) {
-									grammar = value_grammar(svg, name.local, attr.name.local)
-									if !valid_value(attr.value, grammar) and !(svg and (svg_presentation(attr.name.local) or member(["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"], attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
-										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: grammar }))
+									expected_grammar = value_grammar(svg, name.local, attr.name.local)
+									if !valid_value(attr.value, expected_grammar) and !(svg and (svg_presentation(attr.name.local) or member(["x", "y", "cx", "cy", "r", "rx", "ry", "width", "height"], attr.name.local)) and ["inherit", "initial", "unset", "revert", "revert-layer"].contains(ascii_lower(attr.value))) {
+										return attr_fail(parsed, attr, InvalidValue({ attribute: attr.name.local, value: attr.value, expected: expected_grammar }))
 									}
 								}
 							}

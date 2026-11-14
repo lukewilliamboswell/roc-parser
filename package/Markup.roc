@@ -107,7 +107,7 @@ Markup :: [].{
 
 		## Retain UTF-8 source without normalization.
 		from_str : Str -> Source
-		from_str = |text| from_bytes(text.to_utf8())
+		from_str = |source_text| from_bytes(source_text.to_utf8())
 
 		## The exact bytes of a source token.
 		slice : Source, Span -> List(U8)
@@ -185,18 +185,18 @@ Markup :: [].{
 
 	## Parse XML without changing the existing XmlNs API.
 	parse_xml : Str, Props -> Try(Parsed, [InvalidMarkup(Error)])
-	parse_xml = |text, props| parse_xml_source(text, "", False, props)
+	parse_xml = |source_text, props| parse_xml_source(source_text, "", False, props)
 
 	## Parse multiple XML fragment roots in an implicit default namespace.
 	## Explicit xmlns declarations override this context normally. Locations
 	## refer to authored bytes, excluding the internal fragment context.
 	parse_xml_fragment : Str, Str, Props -> Try(Parsed, [InvalidMarkup(Error)])
-	parse_xml_fragment = |text, namespace, props| parse_xml_source(text, namespace, True, props)
+	parse_xml_fragment = |source_text, namespace, props| parse_xml_source(source_text, namespace, True, props)
 
 	## Decode one XML character-data region, including references and CDATA.
 	decode_xml_text : Str -> Try(Str, [InvalidMarkup(Error)])
-	decode_xml_text = |text| {
-		match Xml.parse_str("<_>${text}</_>") {
+	decode_xml_text = |source_text| {
+		match Xml.parse_str("<_>${source_text}</_>") {
 			Ok(document) => Ok(document.root.text())
 			Err(InvalidXml(error)) => Err(InvalidMarkup({ problem: SyntaxError(error.message), line: error.line, column: error.column }))
 		}
@@ -230,8 +230,8 @@ Markup :: [].{
 
 	## Markup whitespace is ASCII, including HTML's form feed, not Unicode spaces.
 	whitespace : Str -> Bool
-	whitespace = |text| {
-		bytes = text.to_utf8()
+	whitespace = |source_text| {
+		bytes = source_text.to_utf8()
 		var $index = 0
 		while $index < bytes.len() {
 			byte = bytes.get($index) ?? 0
@@ -249,7 +249,7 @@ Markup :: [].{
 		roots = tree.roots.keep_if(
 			|index| match tree.nodes.get(index) {
 				Ok({ kind: Comment(_), .. }) | Ok({ kind: ProcessingInstruction(_), .. }) | Ok({ kind: Doctype(_), .. }) => False
-				Ok({ kind: Text(text), .. }) => !whitespace(text)
+				Ok({ kind: Text(node_text), .. }) => !whitespace(node_text)
 				Ok(_) => True
 				Err(_) => False
 			},

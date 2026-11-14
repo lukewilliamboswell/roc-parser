@@ -216,9 +216,9 @@ XmlNs := {
 
 		## The next event, `Done` at the end of the document, or `Failed`.
 		next : Reader -> [Event(XmlNs.Event, Reader), Done, Failed(XmlNs.ReadError)]
-		next = |reader| {
-			inner = reader.inner
-			scope = reader.scope
+		next = |input_reader| {
+			inner = input_reader.inner
+			scope = input_reader.scope
 			match inner.next() {
 				Event(Start(tag), rest) =>
 					match resolve_start(scope, tag.name, tag.attributes) {
@@ -247,20 +247,20 @@ XmlNs := {
 		## Directly after a `Start` event, that element and its subtree, and
 		## the reader after its end tag. `NotAfterStart` otherwise.
 		element : Reader -> [Element(XmlNs.Node, Reader), Failed(XmlNs.ReadError), NotAfterStart]
-		element = |reader| {
-			match reader.last_start {
+		element = |input_reader| {
+			match input_reader.last_start {
 				NotStarted => NotAfterStart
-				Started(start) => build_element(reader, start)
+				Started(start) => build_element(input_reader, start)
 			}
 		}
 
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
-		declaration = |reader| reader.inner.declaration()
+		declaration = |input_reader| input_reader.inner.declaration()
 
 		## Where the most recent event starts, as [Xml.Reader] reports it.
 		location : Reader -> { line : U64, column : U64 }
-		location = |reader| reader.inner.location()
+		location = |input_reader| input_reader.inner.location()
 	}
 
 	## A [XmlNs.Reader] positioned before the root element. The limits of
@@ -530,7 +530,7 @@ resolve_start = |scope, name, attributes| {
 	while $attribute_index < attributes.len() {
 		attribute = attributes.get($attribute_index) ?? { name: "", value: "" }
 		$attribute_index = $attribute_index + 1
-		binding = declaration(attribute)?
+		binding = namespace_declaration(attribute)?
 		match binding {
 			Ok(declared) => {
 				key = match declared.prefix {
@@ -650,8 +650,8 @@ is_declaration = |name| name.starts_with("xmlns") and (name.count_utf8_bytes() =
 
 # The binding an attribute declares, with the rules for reserved prefixes
 # and namespaces (https://www.w3.org/TR/xml-names/#xmlReserved).
-declaration : Xml.Attribute -> Try(Try(XmlNs.Binding, [NotADeclaration]), XmlNs.Problem)
-declaration = |attribute| {
+namespace_declaration : Xml.Attribute -> Try(Try(XmlNs.Binding, [NotADeclaration]), XmlNs.Problem)
+namespace_declaration = |attribute| {
 	value = attribute.value
 	if attribute.name == "xmlns" {
 		if value == XmlNs.xml_namespace or value == XmlNs.xmlns_namespace {
@@ -1428,8 +1428,8 @@ problem_of = |input| {
 root_of : Str -> Try(XmlNs.Node, [InvalidXml(Xml.Error), InvalidNamespace(XmlNs.NamespaceProblem)])
 root_of = |input| XmlNs.parse_str(input).map_ok(|doc| doc.root)
 
-name : Str, Str -> XmlNs.Name
-name = |uri, local| { namespace: Uri(uri), local, prefix: Unprefixed }
+example_name : Str, Str -> XmlNs.Name
+example_name = |uri, local| { namespace: Uri(uri), local, prefix: Unprefixed }
 
 # Scope: a binding covers its element and descendants, an inner binding
 # shadows an outer one, and xmlns="" removes the default namespace.
@@ -1440,13 +1440,13 @@ expect {
 				[Element(b), Element(e)] =>
 					match b.children {
 						[Element(c), Element(d)] =>
-							a.name == name("urn:1", "a")
+							a.name == example_name("urn:1", "a")
 								and a.bindings == [{ prefix: Default, namespace: Uri("urn:1") }, { prefix: Prefix("p"), namespace: Uri("urn:p") }]
-								and b.name == name("urn:2", "b")
+								and b.name == example_name("urn:2", "b")
 								and c.name == { namespace: Uri("urn:p"), local: "c", prefix: Prefix("p") }
 								and d.name == { namespace: NoNamespace, local: "d", prefix: Unprefixed }
 								and d.bindings == [{ prefix: Default, namespace: NoNamespace }]
-								and e.name == name("urn:1", "e")
+								and e.name == example_name("urn:1", "e")
 
 						_ => False
 					}
@@ -1532,12 +1532,12 @@ expect {
 						Event(Start(b), after_b) =>
 							match after_b.element() {
 								Element(Element(subtree), rest) =>
-									a.name == name("urn:a", "a")
-										and b.name == name("urn:a", "b")
-										and subtree.children == [Element({ name: name("urn:a", "c"), bindings: [], attributes: [], children: [] })]
+									a.name == example_name("urn:a", "a")
+										and b.name == example_name("urn:a", "b")
+										and subtree.children == [Element({ name: example_name("urn:a", "c"), bindings: [], attributes: [], children: [] })]
 										and (
 											match rest.next() {
-												Event(End(end), done) => end == name("urn:a", "a") and (
+												Event(End(end), done) => end == example_name("urn:a", "a") and (
 													match done.next() {
 														Done => True
 														_ => False
@@ -1600,8 +1600,8 @@ render_omitted = |input| {
 	}
 }
 
-element : XmlNs.Name, List(XmlNs.Binding), List(XmlNs.Attribute), List(XmlNs.Node) -> XmlNs.Node
-element = |element_name, bindings, attributes, children| Element({ name: element_name, bindings, attributes, children })
+example_element : XmlNs.Name, List(XmlNs.Binding), List(XmlNs.Attribute), List(XmlNs.Node) -> XmlNs.Node
+example_element = |element_name, bindings, attributes, children| Element({ name: element_name, bindings, attributes, children })
 
 plain : Str -> XmlNs.Name
 plain = |local| { namespace: NoNamespace, local, prefix: Unprefixed }
@@ -1611,32 +1611,32 @@ render_tree = |root, props| XmlNs.render({ declaration: Err(Missing), root }, pr
 
 # Escaping: `&` and `<` everywhere, `>` after `]]`, `"` and whitespace in
 # attribute values, and a carriage return in text.
-expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "<&\"'>\t\n\r" }], [Text("a<b&c]]>d>\r]>")]), { declaration: Omitted }) == Ok("<a k=\"&lt;&amp;&quot;'>&#x9;&#xA;&#xD;\">a&lt;b&amp;c]]&gt;d>&#xD;]></a>")
+expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "<&\"'>\t\n\r" }], [Text("a<b&c]]>d>\r]>")]), { declaration: Omitted }) == Ok("<a k=\"&lt;&amp;&quot;'>&#x9;&#xA;&#xD;\">a&lt;b&amp;c]]&gt;d>&#xD;]></a>")
 expect render_omitted("<a k='x&#9;y&#10;z'>&#13;é&#x1F600;</a>") == Ok("<a k=\"x&#x9;y&#xA;z\">&#xD;é😀</a>")
 
 # Declarations.
-expect render_tree(element(plain("a"), [], [], []), {}) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<a/>")
-expect render_tree(element(plain("a"), [], [], []), { declaration: Standalone }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<a/>")
+expect render_tree(example_element(plain("a"), [], [], []), {}) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<a/>")
+expect render_tree(example_element(plain("a"), [], [], []), { declaration: Standalone }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<a/>")
 
 # AsRead writes the tree's own prefixes and bindings.
 expect render_omitted("<r xmlns='urn:d' xmlns:p='urn:p'><p:a p:k='1' k='2'/><b xmlns=''/>t</r>") == Ok("<r xmlns=\"urn:d\" xmlns:p=\"urn:p\"><p:a p:k=\"1\" k=\"2\"/><b xmlns=\"\"/>t</r>")
 
 # Characters and names XML 1.0 does not allow are refused, with a path.
-expect render_tree(element(plain("a"), [], [], [element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
-expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
-expect render_tree(element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
-expect render_tree(element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
-expect render_tree(element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [], [], [example_element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
+expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
+expect render_tree(example_element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
+expect render_tree(example_element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
 
 # A prefix must be bound to its name's namespace where it is used.
-expect render_tree(element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
-expect render_tree(element(plain("a"), [], [{ name: { namespace: Uri(XmlNs.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
+expect render_tree(example_element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [], [{ name: { namespace: Uri(XmlNs.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
 
 # Duplicate expanded attribute names are refused.
-expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
 
 # A table names every namespace once, on the root, in table order, with no
 # unused declarations, and switches the default where needed.
@@ -1716,7 +1716,7 @@ expect {
 
 # With a table, a root in no namespace leaves the default to the first
 # element in it.
-expect render_tree(element(plain("r"), [], [], [element(name("urn:a", "a"), [], [], [element(name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
+expect render_tree(example_element(plain("r"), [], [], [example_element(example_name("urn:a", "a"), [], [], [example_element(example_name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
 
 # Many bindings shadow and restore like a few do.
 expect {

@@ -97,44 +97,48 @@ MathML := { parsed : Markup.Parsed }.{
 	}
 
 	## A parsed fragment bound to homogeneous downstream values, including signals.
-	Template(a) := { bound : MarkupTemplate.Bound(a) }.{
-
-		## Parse the fixed segments during compilation; bind without reparsing.
-		from_interpolation : List(Str) -> Try((Iter(a) -> Template(a)), [InvalidInterpolation(Str)])
-		from_interpolation = |segments| {
-			plan = MathML.parse_segments(segments, {}).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
-			Ok(|values| Template.{ bound: MarkupTemplate.capture(plan, values) })
-		}
-
-		## A static fragment can use the same template type.
-		from_quote : Str -> Try(Template(a), [BadQuotedBytes(Str)])
-		from_quote = |source| {
-			plan = MathML.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))?
-			Ok(Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
-		}
-
-		## Fallibly bind an explicitly parsed plan, checking the binding count.
-		bind : MarkupTemplate.Plan, Iter(a) -> Try(Template(a), [InvalidMarkup(Markup.Error)])
-		bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Template.{ bound })
-	}
+	Template(a) : MathmlTemplateValue(a)
 
 	## A fragment retains every authored root and its exact source.
-	Fragment := { parsed : Markup.Parsed }.{
+	Fragment : MathmlFragment
+}
 
-		## Check imported fragment text with explicit options and a diagnostic name.
-		validate : MathML.ValidationProps -> Try(Fragment, [BadQuotedBytes(Str)])
-		validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+MathmlTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 
-		## Check a fragment literal with strict defaults.
-		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
-		from_quote = |source| MathML.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))
+	## Parse the fixed segments during compilation; bind without reparsing.
+	from_interpolation : List(Str) -> Try((Iter(a) -> MathML.Template(a)), [InvalidInterpolation(Str)])
+	from_interpolation = |segments| {
+		plan = MathML.parse_segments(segments, {}).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
+		Ok(|values| MathML.Template.{ bound: MarkupTemplate.capture(plan, values) })
+	}
 
-		## Require a single element root for downstream row/component templates.
-		single_element : Fragment -> Try(Markup.Node, [RootCount(U64)])
-		single_element = |fragment| {
-			index = Markup.single_root(fragment.parsed.tree)?
-			Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
-		}
+	## A static fragment can use the same template type.
+	from_quote : Str -> Try(MathML.Template(a), [BadQuotedBytes(Str)])
+	from_quote = |source| {
+		plan = MathML.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))?
+		Ok(MathML.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
+	}
+
+	## Fallibly bind an explicitly parsed plan, checking the binding count.
+	bind : MarkupTemplate.Plan, Iter(a) -> Try(MathML.Template(a), [InvalidMarkup(Markup.Error)])
+	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| MathML.Template.{ bound })
+}
+
+MathmlFragment := { parsed : Markup.Parsed }.{
+
+	## Check imported fragment text with explicit options and a diagnostic name.
+	validate : MathML.ValidationProps -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
+	validate = |props| MathML.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "MathML", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+
+	## Check a fragment literal with strict defaults.
+	from_quote : Str -> Try(MathML.Fragment, [BadQuotedBytes(Str)])
+	from_quote = |source| MathML.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("MathML", error))
+
+	## Require a single element root for downstream row/component templates.
+	single_element : MathML.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element = |fragment| {
+		index = Markup.single_root(fragment.parsed.tree)?
+		Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
 

@@ -436,10 +436,10 @@ Xml := {
 		## }
 		## ```
 		next : Reader -> [Event(Xml.Event, Reader), Done, Failed(Xml.ReadError)]
-		next = |reader| {
-			bytes = reader.bytes
-			match step(reader.src, bytes, reader.limits, reader.cursor) {
-				Ok(Ev(event, cursor)) => Event(event, { ..reader, cursor })
+		next = |input_reader| {
+			bytes = input_reader.bytes
+			match step(input_reader.src, bytes, input_reader.limits, input_reader.cursor) {
+				Ok(Ev(event, cursor)) => Event(event, { ..input_reader, cursor })
 				Ok(Finished(pos)) =>
 					if pos == bytes.len() {
 						Done
@@ -475,18 +475,18 @@ Xml := {
 		## }
 		## ```
 		element : Reader -> [Element(Xml.Node, Reader), Failed(Xml.ReadError), NotAfterStart]
-		element = |reader| {
-			if reader.cursor.start == no_start {
+		element = |input_reader| {
+			if input_reader.cursor.start == no_start {
 				return NotAfterStart
 			}
-			bytes = reader.bytes
+			bytes = input_reader.bytes
 			tag =
-				match parse_start_tag(reader.src, bytes, reader.cursor.start, reader.limits.attributes) {
+				match parse_start_tag(input_reader.src, bytes, input_reader.cursor.start, input_reader.limits.attributes) {
 					Ok(parsed) => parsed
 					Err(failure) => return Failed(read_error(bytes, failure))
 				}
-			match build_element(reader.src, bytes, reader.limits, reader.cursor, tag.name, tag.attributes) {
-				Ok(built) => Element(built.node, { ..reader, cursor: built.cursor })
+			match build_element(input_reader.src, bytes, input_reader.limits, input_reader.cursor, tag.name, tag.attributes) {
+				Ok(built) => Element(built.node, { ..input_reader, cursor: built.cursor })
 				Err(failure) => Failed(read_error(bytes, failure))
 			}
 		}
@@ -519,13 +519,13 @@ Xml := {
 		## }
 		## ```
 		element_with : Reader, { context : ctx, first : open, start : ctx, Str, List(Xml.Attribute) -> Try({ context : ctx, open : open }, err), text : Str -> node, end : ctx, open, List(node) -> { context : ctx, node : node } } -> [Element(node, ctx, Reader), Failed(Xml.ReadError), Rejected(err, { line : U64, column : U64 }), NotAfterStart]
-		element_with = |reader, builder| {
-			if reader.cursor.start == no_start {
+		element_with = |input_reader, builder| {
+			if input_reader.cursor.start == no_start {
 				return NotAfterStart
 			}
-			bytes = reader.bytes
-			match build_with(reader.src, bytes, reader.limits, reader.cursor, builder.context, builder.first, builder.start, builder.text, builder.end) {
-				Built(built) => Element(built.node, built.context, { ..reader, cursor: built.cursor })
+			bytes = input_reader.bytes
+			match build_with(input_reader.src, bytes, input_reader.limits, input_reader.cursor, builder.context, builder.first, builder.start, builder.text, builder.end) {
+				Built(built) => Element(built.node, built.context, { ..input_reader, cursor: built.cursor })
 				Unread(failure) => Failed(read_error(bytes, failure))
 				Rejected(error, offset) => {
 					at = locate(bytes, offset, "")
@@ -536,14 +536,14 @@ Xml := {
 
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
-		declaration = |reader| Box.unbox(reader.declaration)
+		declaration = |input_reader| Box.unbox(input_reader.declaration)
 
 		## Where the most recent event starts: the `<` of its tag, or the
 		## first byte of its text. Before the first event, the root's start
 		## tag. Lines and columns count as in [Xml.Error].
 		location : Reader -> { line : U64, column : U64 }
-		location = |reader| {
-			at = locate(reader.bytes, reader.cursor.at, "")
+		location = |input_reader| {
+			at = locate(input_reader.bytes, input_reader.cursor.at, "")
 			{ line: at.line, column: at.column }
 		}
 	}
@@ -1775,8 +1775,8 @@ ascii_lowercase = |bytes| bytes.map(|c| if (c >= 'A' and c <= 'Z') c + 32 else c
 v1_0 : Xml.Version
 v1_0 = { major: 1, minor: 0 }
 
-element : Str, List(Xml.Attribute), List(Xml.Node) -> Xml.Node
-element = |name, attributes, children| Element({ name, attributes, children })
+example_element : Str, List(Xml.Attribute), List(Xml.Node) -> Xml.Node
+example_element = |name, attributes, children| Element({ name, attributes, children })
 
 root_of : Str -> Try(Xml.Node, [InvalidXml(Xml.Error)])
 root_of = |input| Xml.parse_str(input).map_ok(|xml| xml.root)
@@ -1805,12 +1805,12 @@ expect {
 				version: v1_0,
 				encoding: Ok(Utf8Encoding),
 			}),
-			root: element(
+			root: example_element(
 				"root",
 				[],
 				[
 					Text("\n    "),
-					element("element", [{ name: "arg", value: "value" }], []),
+					example_element("element", [{ name: "arg", value: "value" }], []),
 					Text("\n"),
 				],
 			),
@@ -1820,7 +1820,7 @@ expect {
 # XML parsing accepts documents without a prolog.
 expect {
 	result = Utf8.parse_str(Xml.parser, "<element />")?
-	result == { declaration: Err(Missing), root: element("element", [], []) }
+	result == { declaration: Err(Missing), root: example_element("element", [], []) }
 }
 
 # A declaration without an encoding reports it as missing, and versions
@@ -1830,20 +1830,20 @@ expect Xml.parse_str("<?xml version='1.0' encoding='latin1'?><a/>").map_ok(|xml|
 expect error_at("<?xml version='1.99999999999999999999'?><a/>") == Ok({ line: 1, column: 1 })
 
 # Empty elements can omit whitespace before the self-closing marker.
-expect root_of("<element/>") == Ok(element("element", [], []))
+expect root_of("<element/>") == Ok(example_element("element", [], []))
 
 # Empty elements can carry attributes.
-expect root_of("<element arg=\"value\"/>") == Ok(element("element", [{ name: "arg", value: "value" }], []))
+expect root_of("<element arg=\"value\"/>") == Ok(example_element("element", [{ name: "arg", value: "value" }], []))
 
 # Explicit start and end tags can represent an empty element.
-expect root_of("<element></element>") == Ok(element("element", [], []))
+expect root_of("<element></element>") == Ok(example_element("element", [], []))
 
 # Elements can parse multiple attributes and text content.
 expect {
 	result = root_of("<element firstArg=\"one\" secondArg='two'>text content</element>")
 	result
 		== Ok(
-			element(
+			example_element(
 				"element",
 				[
 					{ name: "firstArg", value: "one" },
@@ -1855,22 +1855,22 @@ expect {
 }
 
 # CDATA sections parse into text nodes.
-expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(element("element", [], [Text("<literal />")]))
+expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(example_element("element", [], [Text("<literal />")]))
 
 # Partial CDATA closing text is preserved until the real close marker.
-expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(element("element", [], [Text("this is ]] not ]> the end")]))
+expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(example_element("element", [], [Text("this is ]] not ]> the end")]))
 
 # Nested elements preserve attributes on parent and child nodes.
 expect {
 	result = root_of("<parent argParent=\"outer\"><child argChild=\"inner\" /></parent>")
-	result == Ok(element("parent", [{ name: "argParent", value: "outer" }], [element("child", [{ name: "argChild", value: "inner" }], [])]))
+	result == Ok(example_element("parent", [{ name: "argParent", value: "outer" }], [example_element("child", [{ name: "argChild", value: "inner" }], [])]))
 }
 
 # Nested element parsing preserves whitespace text nodes.
-expect root_of("<parent>\n    <child />\n</parent>") == Ok(element("parent", [], [Text("\n    "), element("child", [], []), Text("\n")]))
+expect root_of("<parent>\n    <child />\n</parent>") == Ok(example_element("parent", [], [Text("\n    "), example_element("child", [], []), Text("\n")]))
 
 # Siblings and nested children end up under the right parents.
-expect root_of("<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>") == Ok(element("a", [], [Text("1"), element("b", [], [Text("2"), element("c", [], []), Text("3")]), Text("4"), element("d", [], [element("e", [], [Text("5")])]), Text("6")]))
+expect root_of("<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>") == Ok(example_element("a", [], [Text("1"), example_element("b", [], [Text("2"), example_element("c", [], []), Text("3")]), Text("4"), example_element("d", [], [example_element("e", [], [Text("5")])]), Text("6")]))
 
 # Elements can parse a diverse set of child nodes.
 expect {
@@ -1884,14 +1884,14 @@ expect {
 
 	result
 		== Ok(
-			element(
+			example_element(
 				"feed",
 				[{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
 				[
 					Text("\n    "),
-					element("title", [], [Text("Atom Feed")]),
+					example_element("title", [], [Text("Atom Feed")]),
 					Text("\n    "),
-					element(
+					example_element(
 						"link",
 						[
 							{ name: "rel", value: "self" },
@@ -1901,7 +1901,7 @@ expect {
 						[],
 					),
 					Text("\n    "),
-					element("updated", [], [Text("2024-02-23T20:38:24Z")]),
+					example_element("updated", [], [Text("2024-02-23T20:38:24Z")]),
 					Text("\n"),
 				],
 			),
@@ -1915,7 +1915,7 @@ expect {
 	result
 		== Ok({
 			declaration: Ok({ version: v1_0, encoding: Ok(Utf8Encoding) }),
-			root: element("root", [], [element("Example", [], [])]),
+			root: example_element("root", [], [example_element("Example", [], [])]),
 		})
 }
 
@@ -1927,10 +1927,10 @@ expect Utf8.parse_str(Xml.parser, "<ӿ").is_err()
 expect error_at("<a><b></a></b>") == Ok({ line: 1, column: 7 })
 
 # Names may contain digits and non-ASCII letters.
-expect root_of("<h1 données-2='x'>é</h1>") == Ok(element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
+expect root_of("<h1 données-2='x'>é</h1>") == Ok(example_element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
 
 # Predefined entity and character references are replaced in text and attributes.
-expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
+expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(example_element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
 
 # Undeclared entities, bare ampersands, and references to illegal characters are errors.
 expect error_at("<a>&nbsp;</a>") == Ok({ line: 1, column: 4 })
@@ -1948,16 +1948,16 @@ expect error_at("<a b='1' b='2'/>") == Ok({ line: 1, column: 10 })
 
 # Attribute values are normalised: literal whitespace becomes a space, while
 # character references keep the character they name.
-expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(element("a", [{ name: "b", value: "x y z \n\t" }], []))
+expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(example_element("a", [{ name: "b", value: "x y z \n\t" }], []))
 
 # Line endings in content are normalised to LF (XML 1.0 section 2.11).
-expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(element("a", [], [Text("1\n2\n3\n")]))
+expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(example_element("a", [], [Text("1\n2\n3\n")]))
 
 # Comments and processing instructions are accepted everywhere Misc is
 # allowed, and text on both sides of them is merged.
 expect {
 	result = Xml.parse_str("<!-- c --><?pi data?>\n<a>x<!-- y -->z<?p?><![CDATA[w]]>&amp;</a><!---->\n<?q ?>")
-	result.map_ok(|xml| xml.root) == Ok(element("a", [], [Text("xzw&")]))
+	result.map_ok(|xml| xml.root) == Ok(example_element("a", [], [Text("xzw&")]))
 }
 
 # Comments may not contain '--', and PI targets may not be 'xml'.

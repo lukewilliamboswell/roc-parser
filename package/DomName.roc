@@ -31,16 +31,16 @@ DomName :: [].{
 	## expect DomName.validate_and_extract(Uri("http://www.w3.org/2000/svg"), "s:a=b", Element) == Ok({ namespace: Uri("http://www.w3.org/2000/svg"), prefix: Prefix("s"), local: "a=b" })
 	## ```
 	validate_and_extract : Namespace, Str, Context -> Try(Name, Problem)
-	validate_and_extract = |namespace, qualified, context| {
+	validate_and_extract = |namespace, qualified_name, context| {
 		ns = if (namespace == Uri("")) NoNamespace else namespace
-		parts = match qualified.split_first(":") {
+		parts = match qualified_name.split_first(":") {
 			Ok(split) => {
 				if !valid_namespace_prefix(split.before) {
 					return Err(InvalidCharacterError)
 				}
 				{ prefix: Prefix(split.before), local: split.after }
 			}
-			Err(_) => { prefix: Unprefixed, local: qualified }
+			Err(_) => { prefix: Unprefixed, local: qualified_name }
 		}
 		valid = match context {
 			Element => valid_element_local_name(parts.local)
@@ -55,7 +55,7 @@ DomName :: [].{
 		if parts.prefix == Prefix("xml") and ns != Uri(XmlNs.xml_namespace) {
 			return Err(NamespaceError)
 		}
-		xmlns = qualified == "xmlns" or parts.prefix == Prefix("xmlns")
+		xmlns = qualified_name == "xmlns" or parts.prefix == Prefix("xmlns")
 		if xmlns and ns != Uri(XmlNs.xmlns_namespace) {
 			return Err(NamespaceError)
 		}

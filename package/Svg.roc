@@ -97,44 +97,48 @@ Svg := { parsed : Markup.Parsed }.{
 	}
 
 	## A parsed fragment bound to homogeneous downstream values, including signals.
-	Template(a) := { bound : MarkupTemplate.Bound(a) }.{
-
-		## Parse the fixed segments during compilation; bind without reparsing.
-		from_interpolation : List(Str) -> Try((Iter(a) -> Template(a)), [InvalidInterpolation(Str)])
-		from_interpolation = |segments| {
-			plan = Svg.parse_segments(segments, {}).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
-			Ok(|values| Template.{ bound: MarkupTemplate.capture(plan, values) })
-		}
-
-		## A static fragment can use the same template type.
-		from_quote : Str -> Try(Template(a), [BadQuotedBytes(Str)])
-		from_quote = |source| {
-			plan = Svg.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))?
-			Ok(Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
-		}
-
-		## Fallibly bind an explicitly parsed plan, checking the binding count.
-		bind : MarkupTemplate.Plan, Iter(a) -> Try(Template(a), [InvalidMarkup(Markup.Error)])
-		bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Template.{ bound })
-	}
+	Template(a) : SvgTemplateValue(a)
 
 	## A fragment retains every authored root and its exact source.
-	Fragment := { parsed : Markup.Parsed }.{
+	Fragment : SvgFragment
+}
 
-		## Check imported fragment text with explicit options and a diagnostic name.
-		validate : Svg.ValidationProps -> Try(Fragment, [BadQuotedBytes(Str)])
-		validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+SvgTemplateValue(a) := { bound : MarkupTemplate.Bound(a) }.{
 
-		## Check a fragment literal with strict defaults.
-		from_quote : Str -> Try(Fragment, [BadQuotedBytes(Str)])
-		from_quote = |source| Svg.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))
+	## Parse the fixed segments during compilation; bind without reparsing.
+	from_interpolation : List(Str) -> Try((Iter(a) -> Svg.Template(a)), [InvalidInterpolation(Str)])
+	from_interpolation = |segments| {
+		plan = Svg.parse_segments(segments, {}).map_err(|InvalidMarkup(error)| MarkupTemplate.interpolation_error(error))?
+		Ok(|values| Svg.Template.{ bound: MarkupTemplate.capture(plan, values) })
+	}
 
-		## Require a single element root for downstream row/component templates.
-		single_element : Fragment -> Try(Markup.Node, [RootCount(U64)])
-		single_element = |fragment| {
-			index = Markup.single_root(fragment.parsed.tree)?
-			Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
-		}
+	## A static fragment can use the same template type.
+	from_quote : Str -> Try(Svg.Template(a), [BadQuotedBytes(Str)])
+	from_quote = |source| {
+		plan = Svg.parse_segments([source], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))?
+		Ok(Svg.Template.{ bound: MarkupTemplate.capture(plan, List.iter([])) })
+	}
+
+	## Fallibly bind an explicitly parsed plan, checking the binding count.
+	bind : MarkupTemplate.Plan, Iter(a) -> Try(Svg.Template(a), [InvalidMarkup(Markup.Error)])
+	bind = |plan, values| MarkupTemplate.bind(plan, values).map_ok(|bound| Svg.Template.{ bound })
+}
+
+SvgFragment := { parsed : Markup.Parsed }.{
+
+	## Check imported fragment text with explicit options and a diagnostic name.
+	validate : Svg.ValidationProps -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
+	validate = |props| Svg.parse_fragment(props.source, props.options).map_err(|InvalidMarkup(error)| Literal.error({ name: props.name, format: "Svg", message: Str.inspect(error.problem), line: error.line, column: error.column }))
+
+	## Check a fragment literal with strict defaults.
+	from_quote : Str -> Try(Svg.Fragment, [BadQuotedBytes(Str)])
+	from_quote = |source| Svg.parse_fragment(source, {}).map_err(|InvalidMarkup(error)| Markup.quoted_error("Svg", error))
+
+	## Require a single element root for downstream row/component templates.
+	single_element : Svg.Fragment -> Try(Markup.Node, [RootCount(U64)])
+	single_element = |fragment| {
+		index = Markup.single_root(fragment.parsed.tree)?
+		Ok(fragment.parsed.tree.nodes.get(index) ?? { kind: Text(""), attributes: [], children: [], origin: Implied(0) })
 	}
 }
 
