@@ -231,3 +231,16 @@ expect {
 	p = Svg.parse_segments(["<g r='", "'/>"], { allow_unknown_attributes: True })?
 	p.slots.first()?.expected == Language("extension attribute")
 }
+
+expect match Svg.parse_with("<svg viewbox='0 0 1 1'></svg>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		NonCanonicalName(detail) => detail.authored == "viewbox" and detail.expected == "viewBox"
+		_ => False
+	}
+	_ => False
+}
+expect Svg.parse_fragment("<linearGradient id='g'/>", { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
+expect Svg.parse_fragment("<lineargradient id='g'/>", { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
+expect Svg.parse_segments(["<lineargradient id='", "'/>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
+expect Svg.parse_segments(["<linearGradient id='", "'/>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
+expect Svg.parse_with("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0 1 1'/>", { strict_foreign_spelling: True, allow_unknown_attributes: True }).is_ok()

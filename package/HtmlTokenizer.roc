@@ -35,13 +35,29 @@ HtmlTokenizer :: [].{
 	## attribute exhaustion emits a partial start tag with max_attributes+1 attrs.
 	next_with : Reader, Mode, Bool, Limits -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics] }
 	next_with = |reader, mode, foreign, limits| {
-		result = scan_next({ bytes: reader.bytes, pos: reader.pos, diagnostics: reader.diagnostics, max_diagnostics: limits.max_diagnostics, max_attributes: limits.max_attributes, attribute_limit: False }, mode, foreign)
+		result = next_collect(reader, mode, foreign, limits, {}, ignore_name)
+		{ token: result.token, reader: result.reader, limited: result.limited }
+	}
+
+	# Internal authored-spelling evidence; public token/reader shapes stay fixed.
+	NameKind : [StartName, EndName, AttributeName]
+	NameEvent : { kind : NameKind, normalized : Str, span : Span }
+
+	next_with_names : Reader, Mode, Bool, Limits -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics], names : List(NameEvent) }
+	next_with_names = |reader, mode, foreign, limits| {
+		result = next_collect(reader, mode, foreign, limits, [], collect_name)
+		{ token: result.token, reader: result.reader, limited: result.limited, names: result.metadata }
+	}
+
+	next_collect : Reader, Mode, Bool, Limits, meta, (meta, NameKind, Str, Span -> meta) -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics], metadata : meta }
+	next_collect = |reader, mode, foreign, limits, initial_metadata, record_name| {
+		result = scan_collect({ bytes: reader.bytes, pos: reader.pos, diagnostics: reader.diagnostics, max_diagnostics: limits.max_diagnostics, max_attributes: limits.max_attributes, attribute_limit: False }, mode, foreign, initial_metadata, record_name)
 		token = if result.reader.diagnostics.len() > limits.max_diagnostics {
 			{ ..result.token, kind: Eof }
 		} else result.token
 		limited = if (result.reader.diagnostics.len() > limits.max_diagnostics) Diagnostics else if (result.reader.attribute_limit) Attributes else NoLimit
 		diagnostics = result.reader.diagnostics.take_first(if (limits.max_diagnostics < 18_446_744_073_709_551_615) limits.max_diagnostics + 1 else limits.max_diagnostics)
-		{ token, reader: { bytes: result.reader.bytes, pos: result.reader.pos, diagnostics }, limited }
+		{ token, reader: { bytes: result.reader.bytes, pos: result.reader.pos, diagnostics }, limited, metadata: result.metadata }
 	}
 
 	## Tokenize a reader derived from this original source string. The source
@@ -71,30 +87,45 @@ HtmlTokenizer :: [].{
 		next_with(reader, mode, foreign, limits)
 	}
 
+	next_with_source_names : Reader, Str, Mode, Bool, Limits -> { token : Token, reader : Reader, limited : [NoLimit, Attributes, Diagnostics], names : List(NameEvent) }
+	next_with_source_names = |reader, source, mode, foreign, limits| {
+		if mode == DataMixed and reader.pos < reader.bytes.len() and byte_at(reader.bytes, reader.pos) != '<' {
+			result = next_with_source(reader, source, mode, foreign, limits)
+			{ token: result.token, reader: result.reader, limited: result.limited, names: [] }
+		} else next_with_names(reader, mode, foreign, limits)
+	}
+
 	scan_next : ScanReader, Mode, Bool -> { token : Token, reader : ScanReader }
 	scan_next = |reader, mode, foreign| {
+		result = scan_collect(reader, mode, foreign, {}, ignore_name)
+		{ token: result.token, reader: result.reader }
+	}
+
+	scan_collect : ScanReader, Mode, Bool, meta, (meta, NameKind, Str, Span -> meta) -> { token : Token, reader : ScanReader, metadata : meta }
+	scan_collect = |reader, mode, foreign, initial_metadata, record_name| {
+		var $metadata = initial_metadata
 		bytes = reader.bytes
 		start = reader.pos
 		if start >= bytes.len() or reader.diagnostics.len() > reader.max_diagnostics {
-			return { token: { kind: Eof, span: { start, end: start } }, reader }
+			return { token: { kind: Eof, span: { start, end: start } }, reader, metadata: $metadata }
 		}
 		match mode {
-			Plaintext | RawtextFragment => return characters(reader, bytes.len(), False, False)
-			RcdataFragment => return characters(reader, bytes.len(), True, False)
-			ScriptFragment => return script_characters_with(reader, False)
+			Plaintext | RawtextFragment => return with_metadata(characters(reader, bytes.len(), False, False), $metadata)
+			RcdataFragment => return with_metadata(characters(reader, bytes.len(), True, False), $metadata)
+			ScriptFragment => return with_metadata(script_characters_with(reader, False), $metadata)
 			Rawtext(name) => {
 				if !end_tag_at(bytes, start, name) {
-					return raw_characters(reader, name, False, False)
+					return with_metadata(raw_characters(reader, name, False, False), $metadata)
 				}
 			}
 			Rcdata(name) => {
 				if !end_tag_at(bytes, start, name) {
-					return raw_characters(reader, name, True, False)
+					return with_metadata(raw_characters(reader, name, True, False), $metadata)
 				}
 			}
 			Script => {
 				if !end_tag_at(bytes, start, "script") {
-					return raw_characters(reader, "script", False, True)
+					return with_metadata(raw_characters(reader, "script", False, True), $metadata)
 				}
 			}
 			Data | DataMixed => {}
@@ -103,23 +134,23 @@ HtmlTokenizer :: [].{
 			if mode == DataMixed {
 				scanned = MarkupScan.html_data(bytes, start)
 				if scanned.normalize {
-					return characters(reader, scanned.end, True, True)
+					return with_metadata(characters(reader, scanned.end, True, True), $metadata)
 				}
 				# Ordinary text already has its final bytes. Avoid rebuilding it
 				# one byte at a time through the normalization buffer.
 				text = decoded_text(bytes.sublist({ start, len: scanned.end - start }))
-				return { token: { kind: Characters(text), span: { start, end: scanned.end } }, reader: { ..reader, pos: scanned.end } }
+				return { token: { kind: Characters(text), span: { start, end: scanned.end } }, reader: { ..reader, pos: scanned.end }, metadata: $metadata }
 			}
-			return data_characters(reader)
+			return with_metadata(data_characters(reader), $metadata)
 		}
 
 		next_byte = byte_at(bytes, start + 1)
 		if next_byte == '!' {
 			if starts(bytes, start, "<!--") {
-				return comment(reader)
+				return with_metadata(comment(reader), $metadata)
 			}
 			if starts_caseless(bytes, start, "<!doctype") {
-				return doctype(reader)
+				return with_metadata(doctype(reader), $metadata)
 			}
 			if starts(bytes, start, "<![CDATA[") and foreign {
 				var $end = start + 9
@@ -128,12 +159,12 @@ HtmlTokenizer :: [].{
 				}
 				text = preprocessed_text(bytes.sublist({ start: start + 9, len: $end - start - 9 }))
 				end = if ($end < bytes.len()) $end + 3 else $end
-				return { token: { kind: Characters(text), span: { start, end } }, reader: { ..reader, pos: end } }
+				return { token: { kind: Characters(text), span: { start, end } }, reader: { ..reader, pos: end }, metadata: $metadata }
 			}
-			return bogus_comment(reader, start + 2, BogusComment, start)
+			return with_metadata(bogus_comment(reader, start + 2, BogusComment, start), $metadata)
 		}
 		if next_byte == '?' {
-			return processing_instruction(reader)
+			return with_metadata(processing_instruction(reader), $metadata)
 		}
 
 		closing = next_byte == '/'
@@ -141,15 +172,15 @@ HtmlTokenizer :: [].{
 		name_start = start + if (closing) 2 else 1
 		if closing and !ascii_alpha(byte_at(bytes, name_start)) {
 			if byte_at(bytes, name_start) == '>' {
-				return { token: { kind: Characters(""), span: { start, end: name_start + 1 } }, reader: { ..reader, pos: name_start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
+				return { token: { kind: Characters(""), span: { start, end: name_start + 1 } }, reader: { ..reader, pos: name_start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) }, metadata: $metadata }
 			}
 			if name_start < bytes.len() {
-				return bogus_comment(reader, name_start, BogusComment, start)
+				return with_metadata(bogus_comment(reader, name_start, BogusComment, start), $metadata)
 			}
-			return { token: { kind: Characters("</"), span: { start, end: name_start } }, reader: { ..reader, pos: name_start, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
+			return { token: { kind: Characters("</"), span: { start, end: name_start } }, reader: { ..reader, pos: name_start, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) }, metadata: $metadata }
 		}
 		if !ascii_alpha(byte_at(bytes, name_start)) {
-			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) } }
+			return { token: { kind: Characters("<"), span: { start, end: start + 1 } }, reader: { ..reader, pos: start + 1, diagnostics: reader.diagnostics.append({ code: InvalidTagOpen, offset: start }) }, metadata: $metadata }
 		}
 		var $pos = name_start
 		var $name_null = False
@@ -169,13 +200,14 @@ HtmlTokenizer :: [].{
 			normalized_limited(bytes.sublist({ start: name_start, len: $pos - name_start }), False, False, True, diagnostic_budget(reader))
 		} else { text: text_at(bytes, name_start, $pos), diagnostics: [] }
 		name = if ($name_upper) lower(normalized_name.text) else normalized_name.text
+		$metadata = record_name($metadata, if (closing) EndName else StartName, name, { start: name_start, end: $pos })
 		var $attributes = []
 		var $diagnostics = reader.diagnostics.concat(normalized_name.diagnostics.map(|d| { ..d, offset: name_start + d.offset }))
 		var $self_closing = False
 		var $done = False
 		while $pos < bytes.len() and !$done {
 			if $diagnostics.len() > reader.max_diagnostics {
-				return exhausted(reader, $pos, $diagnostics)
+				return with_metadata(exhausted(reader, $pos, $diagnostics), $metadata)
 			}
 			before = $pos
 			while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
@@ -214,7 +246,7 @@ HtmlTokenizer :: [].{
 					}
 				) {
 					if $diagnostics.len() > reader.max_diagnostics {
-						return exhausted(reader, $pos, $diagnostics)
+						return with_metadata(exhausted(reader, $pos, $diagnostics), $metadata)
 					}
 					if match byte_at(bytes, $pos) {
 						'"' | '\'' | '<' => True
@@ -236,6 +268,7 @@ HtmlTokenizer :: [].{
 				attr_name = if ($attr_upper) lower(normalized_attr.text) else normalized_attr.text
 				$diagnostics = $diagnostics.concat(normalized_attr.diagnostics.map(|d| { ..d, offset: attr_start + d.offset }))
 				after_name = $pos
+				$metadata = record_name($metadata, AttributeName, attr_name, { start: attr_start, end: after_name })
 				while $pos < bytes.len() and space(byte_at(bytes, $pos)) {
 					$pos = $pos + 1
 				}
@@ -254,7 +287,7 @@ HtmlTokenizer :: [].{
 					var $normalize_value = False
 					while $pos < bytes.len() and (if (quoted) byte_at(bytes, $pos) != quote else !space(byte_at(bytes, $pos)) and byte_at(bytes, $pos) != '>') {
 						if $diagnostics.len() > reader.max_diagnostics {
-							return exhausted(reader, $pos, $diagnostics)
+							return with_metadata(exhausted(reader, $pos, $diagnostics), $metadata)
 						}
 						if !quoted and (
 							match byte_at(bytes, $pos) {
@@ -296,19 +329,19 @@ HtmlTokenizer :: [].{
 				else {
 					$attributes = $attributes.append({ name: attr_name, value: $value, span: { start: attr_start, end: $pos } })
 					if $attributes.len() > reader.max_attributes {
-						return { token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: False }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics, attribute_limit: True } }
+						return { token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: False }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics, attribute_limit: True }, metadata: $metadata }
 					}
 				}
 			}
 		}
 		if !$done {
 			$diagnostics = $diagnostics.append({ code: EofInTag, offset: start })
-			return { token: { kind: Eof, span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+			return { token: { kind: Eof, span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics }, metadata: $metadata }
 		}
 		if closing and (!$attributes.is_empty() or $self_closing) {
 			$diagnostics = $diagnostics.append({ code: EndTagAttributes, offset: start })
 		}
-		{ token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: $self_closing }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics } }
+		{ token: { kind: if (closing) End(name) else Start({ name, attributes: $attributes, self_closing: $self_closing }), span: { start, end: $pos } }, reader: { ..reader, pos: $pos, diagnostics: $diagnostics }, metadata: $metadata }
 	}
 
 	## Input-stream parse errors from original UTF-8, before references expand.
@@ -1354,6 +1387,13 @@ expect HtmlTokenizer.next({ bytes: "foo</style><b>&amp;".to_utf8(), pos: 0, diag
 expect HtmlTokenizer.next({ bytes: "<!-- inside </script> -->".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("<!-- inside </script> -->")
 expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("</script><b>&amp;")
 
+ignore_name = |_, _, _, _| {}
+
+collect_name = |events, kind, normalized, span| events.append({ kind, normalized, span })
+
+with_metadata : { token : HtmlTokenizer.Token, reader : ScanReader }, meta -> { token : HtmlTokenizer.Token, reader : ScanReader, metadata : meta }
+with_metadata = |result, metadata| { token: result.token, reader: result.reader, metadata }
+
 ScanReader : { bytes : List(U8), pos : U64, diagnostics : List(HtmlTokenizer.Diagnostic), max_diagnostics : U64, max_attributes : U64, attribute_limit : Bool }
 
 # A borrowed byte slice stays heap-backed after UTF-8 conversion, even when
@@ -1485,4 +1525,43 @@ expect {
 		$at = $at + 1
 	}
 	$same
+}
+
+# Name evidence retains original byte extents before case/NUL normalization.
+expect {
+	source = "<SVG viewBox = '>' viewbox='x'></SVG>"
+	bytes = source.to_utf8()
+	reader = { bytes, pos: 0, diagnostics: [] }
+	named = HtmlTokenizer.next_with_names(reader, Data, True, {})
+	plain = HtmlTokenizer.next_with(reader, Data, True, {})
+	{ token: named.token, reader: named.reader, limited: named.limited } == plain and named.names == [
+		{ kind: StartName, normalized: "svg", span: { start: 1, end: 4 } },
+		{ kind: AttributeName, normalized: "viewbox", span: { start: 5, end: 12 } },
+		{ kind: AttributeName, normalized: "viewbox", span: { start: 19, end: 26 } },
+	]
+}
+expect {
+	source = "<SVG\u(0) a\u(0)b='x'>"
+	named = HtmlTokenizer.next_with_names({ bytes: source.to_utf8(), pos: 0, diagnostics: [] }, Data, True, {})
+	named.names == [
+		{ kind: StartName, normalized: "svg\u(FFFD)", span: { start: 1, end: 5 } },
+		{ kind: AttributeName, normalized: "a\u(FFFD)b", span: { start: 6, end: 9 } },
+	]
+}
+expect {
+	reader = { bytes: "<SVG a=1 b=2>".to_utf8(), pos: 0, diagnostics: [] }
+	named = HtmlTokenizer.next_with_names(reader, Data, True, { max_attributes: 0 })
+	named.limited == Attributes and named.names == [
+		{ kind: StartName, normalized: "svg", span: { start: 1, end: 4 } },
+		{ kind: AttributeName, normalized: "a", span: { start: 5, end: 6 } },
+	] and { token: named.token, reader: named.reader, limited: named.limited } == HtmlTokenizer.next_with(reader, Data, True, { max_attributes: 0 })
+}
+
+expect {
+	reader = { bytes: "<SVG viewBox=".to_utf8(), pos: 0, diagnostics: [] }
+	named = HtmlTokenizer.next_with_names(reader, Data, True, {})
+	named.token.kind == Eof and named.names == [
+		{ kind: StartName, normalized: "svg", span: { start: 1, end: 4 } },
+		{ kind: AttributeName, normalized: "viewbox", span: { start: 5, end: 12 } },
+	] and { token: named.token, reader: named.reader, limited: named.limited } == HtmlTokenizer.next_with(reader, Data, True, {})
 }

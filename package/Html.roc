@@ -13,7 +13,9 @@ Html := { parsed : Markup.Parsed }.{
 
 	## HTML defaults and explicit XML/recovery/validation/fragment-context options.
 	## exact_structure requires authored nesting without browser repairs.
-	Props := { syntax : Markup.Syntax ?? HtmlSyntax, exact_structure : Bool ?? False, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
+	## strict_foreign_spelling requires authored SVG/MathML names to match
+	## their canonical DOM spelling in HTML syntax, including closing tags.
+	Props := { syntax : Markup.Syntax ?? HtmlSyntax, exact_structure : Bool ?? False, strict_foreign_spelling : Bool ?? False, recovery : [Strict, Browser] ?? Strict, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256, context_namespace : Str ?? "http://www.w3.org/1999/xhtml", context_element : Str ?? "body", scripting : Bool ?? True }
 
 	## Source and diagnostics label for checked imported constants.
 	ValidationProps := { source : Str, name : Str ?? "<literal>", options : Props ?? {} }
@@ -145,7 +147,7 @@ syntax = |text, props, fragment| {
 }
 
 shared : Html.Props -> Markup.Props
-shared = |p| { syntax: p.syntax, exact_structure: p.exact_structure, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
+shared = |p| { syntax: p.syntax, exact_structure: p.exact_structure, strict_foreign_spelling: p.strict_foreign_spelling, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
 
 # Browser recovery retains reference diagnostics while Exact independently checks
 # authored structure. Decoded CR references are not source newline preprocessing.
@@ -399,3 +401,67 @@ expect {
 expect Html.parse_fragment("<p strange='value'>x</p>", { allow_unknown_attributes: True, max_diagnostics: 0 }).is_err()
 expect Html.parse_fragment("<img>", {}).is_err()
 expect Html.parse_fragment("<p hidden='false'>x</p>", {}).is_err()
+
+# Foreign spelling is an authored-name policy, independent of browser repair.
+expect {
+	cases = [{ source: "<SVG></SVG>", authored: "SVG", expected: "svg", start: 1.U64, end: 4.U64, line: 1.U64, column: 2.U64, browser: False }, { source: "<svg viewbox='0 0 1 1'></svg>", authored: "viewbox", expected: "viewBox", start: 5.U64, end: 12.U64, line: 1.U64, column: 6.U64, browser: False }, { source: "<svg VIEWBOX='0 0 1 1'></svg>", authored: "VIEWBOX", expected: "viewBox", start: 5.U64, end: 12.U64, line: 1.U64, column: 6.U64, browser: False }, { source: "<svg><lineargradient></lineargradient></svg>", authored: "lineargradient", expected: "linearGradient", start: 6.U64, end: 20.U64, line: 1.U64, column: 7.U64, browser: False }, { source: "<svg><linearGradient></lineargradient></svg>", authored: "lineargradient", expected: "linearGradient", start: 23.U64, end: 37.U64, line: 1.U64, column: 24.U64, browser: False }, { source: "<svg><linearGradient></LINEARGRADIENT></svg>", authored: "LINEARGRADIENT", expected: "linearGradient", start: 23.U64, end: 37.U64, line: 1.U64, column: 24.U64, browser: False }, { source: "<svg><path XML:LANG='en'/></svg>", authored: "XML:LANG", expected: "xml:lang", start: 11.U64, end: 19.U64, line: 1.U64, column: 12.U64, browser: False }, { source: "<svg><path XLINK:HREF='#id'/></svg>", authored: "XLINK:HREF", expected: "xlink:href", start: 11.U64, end: 21.U64, line: 1.U64, column: 12.U64, browser: False }, { source: "<svg xmlns:XLINK='http://www.w3.org/1999/xlink'></svg>", authored: "xmlns:XLINK", expected: "xmlns:xlink", start: 5.U64, end: 16.U64, line: 1.U64, column: 6.U64, browser: False }, { source: "<math definitionurl='x'></math>", authored: "definitionurl", expected: "definitionURL", start: 6.U64, end: 19.U64, line: 1.U64, column: 7.U64, browser: False }, { source: "<math definitionURL='x'></MATH>", authored: "MATH", expected: "math", start: 26.U64, end: 30.U64, line: 1.U64, column: 27.U64, browser: False }, { source: "Ω<svg viewbox='x'></svg>", authored: "viewbox", expected: "viewBox", start: 7.U64, end: 14.U64, line: 1.U64, column: 8.U64, browser: False }, { source: "\r\n<svg\r\n viewbox = 'value &amp; >'></svg>", authored: "viewbox", expected: "viewBox", start: 9.U64, end: 16.U64, line: 3.U64, column: 2.U64, browser: False }, { source: "<svg><foreignObject><math></FOREIGNOBJECT></svg>", authored: "FOREIGNOBJECT", expected: "foreignObject", start: 28.U64, end: 41.U64, line: 1.U64, column: 29.U64, browser: True }, { source: "<svg><path data-X='x'/></svg>", authored: "data-X", expected: "data-x", start: 11.U64, end: 17.U64, line: 1.U64, column: 12.U64, browser: False }]
+	cases.all(
+		|case| match Html.parse_fragment(case.source, { strict_foreign_spelling: True, recovery: if (case.browser) Browser else Strict, allow_unknown_attributes: True, check_values: False }) {
+			Err(InvalidMarkup(error)) => match error.problem {
+				NonCanonicalName(detail) => detail == { authored: case.authored, expected: case.expected, span: { start: case.start, end: case.end } } and error.line == case.line and error.column == case.column
+				_ => False
+			}
+			_ => False
+		},
+	)
+}
+
+expect Html.parse_fragment("<svg viewBox='0 0 1 1'><linearGradient id='g'></linearGradient><path xml:lang='en' xlink:href='#g'/></svg>", { strict_foreign_spelling: True }).is_ok()
+expect Html.parse_fragment("<math><semantics><mi>x</mi><annotation definitionURL='x'>x</annotation></semantics></math>", { strict_foreign_spelling: True }).is_ok()
+expect Html.parse_fragment("<svg><foreignObject><DIV DATA-X='x'>Text</DIV></foreignObject></svg>", { strict_foreign_spelling: True, exact_structure: True }).is_ok()
+expect Html.parse_fragment("<math><mtext><SPAN TITLE='text'>x</SPAN></mtext></math>", { strict_foreign_spelling: True, exact_structure: True }).is_ok()
+expect Html.parse_fragment("<svg viewbox='0 0 1 1'></svg>", { exact_structure: True }).is_ok()
+expect Html.parse_fragment("<svg xmlns='http://www.w3.org/2000/svg' viewbox='0 0 1 1'/>", { syntax: XmlSyntax, strict_foreign_spelling: True, allow_unknown_attributes: True }).is_ok()
+expect Html.parse_segments(["<svg viewbox='", "'></svg>"], { strict_foreign_spelling: True }).is_err()
+expect {
+	plan = Html.parse_segments(["<svg viewBox='", "'></svg>"], { strict_foreign_spelling: True })?
+	_ = Html.Template.bind(plan, ["0 0 1 1"].iter())?
+	True
+}
+expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True, max_diagnostics: 0 }) {
+	Err(InvalidMarkup(error)) => error.problem == ResourceLimit("max_diagnostics")
+	_ => False
+}
+expect match Html.parse_fragment("<svg viewbox='x'></svg>", { strict_foreign_spelling: True, max_attributes: 0 }) {
+	Err(InvalidMarkup(error)) => error.problem == LimitExceeded(Attributes)
+	_ => False
+}
+expect match Html.parse_fragment("<svg viewbox='x' viewbox='y'></svg>", { strict_foreign_spelling: True }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		HtmlSyntax(DuplicateAttribute("viewbox")) => True
+		_ => False
+	}
+	_ => False
+}
+expect match Html.parse_fragment("<svg viewbox='x'></svg><p>x", { strict_foreign_spelling: True, exact_structure: True }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		HtmlStructure(_) => True
+		_ => False
+	}
+	_ => False
+}
+
+expect match Html.parse_fragment("<svg viewBox='x' VIEWBOX='y'></svg>", { strict_foreign_spelling: True, recovery: Browser, check_values: False }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		NonCanonicalName(detail) => detail.authored == "VIEWBOX" and detail.expected == "viewBox" and detail.span == { start: 17, end: 24 }
+		_ => False
+	}
+	_ => False
+}
+expect match Html.parse_fragment("<svg a\u(0)b='x'></svg>", { strict_foreign_spelling: True, recovery: Browser, allow_unknown_attributes: True }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		NonCanonicalName(detail) => detail.authored == "a\u(0)b" and detail.expected == "a\u(FFFD)b" and detail.span == { start: 5, end: 8 }
+		_ => False
+	}
+	_ => False
+}

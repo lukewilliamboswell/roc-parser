@@ -127,16 +127,18 @@ Markup :: [].{
 	StructureReason : [ImpliedElement(Str), MissingEndTag(Str), UnexpectedEndTag(Str), NonVoidSelfClosing(Str), ReparentedContent, IgnoredMarkup, ReconstructedContent, ChangedAttributes]
 
 	## Structured reason for rejection. Presentation is separate.
-	Problem : [HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(Str), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
+	Problem : [NonCanonicalName({ authored : Str, expected : Str, span : Span }), HtmlStructure({ reason : StructureReason, span : Span }), SyntaxError(Str), HtmlSyntax(MarkupHtmlError.Code), NamespaceError(XmlNs.Problem), WrongRoot({ expected : Str, actual : Str }), UnknownElement(Str), UnknownAttribute({ element : Str, attribute : Str }), InvalidValue({ attribute : Str, value : Str, expected : ValueGrammar }), InvalidChildren({ element : Str, expected : Str }), Unsupported(Str), LimitExceeded(Xml.Limit), SourceTooLarge(U64), ResourceLimit(Str), Interpolation({ index : U64, reason : Str }), BindingCount({ expected : U64, actual : U64 })]
 
 	## One-based lines and UTF-8 byte columns refer to authored source.
 	Error : { problem : Problem, line : U64, column : U64 }
 
 	## Configurable validation and resource limits, strict by default.
 	## exact_structure rejects repaired HTML nesting before derived projection.
+	## strict_foreign_spelling requires authored SVG/MathML names to match
+	## their canonical DOM spelling in HTML syntax, including closing tags.
 	## XML work counts deterministic source-byte traversals and reader events;
 	## it is a progress ceiling rather than a count of machine instructions.
-	Props := { syntax : Syntax ?? XmlSyntax, exact_structure : Bool ?? False, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
+	Props := { syntax : Syntax ?? XmlSyntax, exact_structure : Bool ?? False, strict_foreign_spelling : Bool ?? False, allow_unknown_elements : Bool ?? False, allow_unknown_attributes : Bool ?? False, check_values : Bool ?? True, max_source_bytes : U64 ?? 16_777_216, max_depth : U64 ?? 1024, max_elements : U64 ?? 4_194_304, max_nodes : U64 ?? 4_194_304, max_slots : U64 ?? 65_536, max_attributes : U64 ?? 1024, recovery : [Strict, Browser] ?? Strict, max_diagnostics : U64 ?? 1024, max_work_per_byte : U64 ?? 256 }
 
 	## Saturating progress budget proportional to source bytes (one for empty input).
 	work_budget : Props, U64 -> U64

@@ -25,6 +25,31 @@ test! = |bytes| {
 			}
 		}
 	}
+	# Authored spelling is independent of recovery and leaves canonical DOMs
+	# untouched. Keep these checks outside the default allocation observation.
+	options : Html.Props
+	options = { recovery: Browser, allow_unknown_elements: True, allow_unknown_attributes: True, check_values: False }
+	ordinary = Html.parse_source(input, options, True)
+	strict = Html.parse_source(input, { ..options, strict_foreign_spelling: True }, True)
+	match strict {
+		Ok(parsed) => if ordinary != Ok(parsed) {
+			crash "canonical foreign spelling changed the parsed source/tree"
+		}
+		Err(InvalidMarkup(error)) => match error.problem {
+			NonCanonicalName(detail) => {
+				if ordinary.is_err() or detail.span.start >= detail.span.end or detail.span.end > bytes.len() {
+					crash "foreign spelling displaced syntax/limits or has an invalid name span"
+				}
+				authored = bytes.sublist({ start: detail.span.start, len: detail.span.end - detail.span.start })
+				if authored != detail.authored.to_utf8() or detail.authored == detail.expected {
+					crash "foreign spelling does not witness the exact authored name bytes"
+				}
+			}
+			_ => if strict != ordinary {
+				crash "foreign spelling changed syntax/resource rejection precedence"
+			}
+		}
+	}
 	Fuzz.keep
 }
 

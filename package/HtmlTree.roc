@@ -110,16 +110,24 @@ HtmlTree :: [].{
 		var $source_regions = []
 		var $authored_tokens = []
 		var $authored_repairs = []
+		initial_spelling : Try(SpellingFailure, [None])
+		initial_spelling = Err(None)
+		var $spelling_failure = initial_spelling
 		var $authored_creation = if props.exact_structure {
 			$state.nodes.map_with_index(|node, id| { parent: find_parent($state, id), origin: node.origin })
 		} else []
 		while !$done {
 			mode = content_mode($state)
 			foreign = adjusted_namespace_class($state) != HtmlNamespace
-			next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
-				Tok.next_with_source($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			next = if props.strict_foreign_spelling {
+				Tok.next_with_source_names($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
 			} else {
-				Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+				raw_next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+					Tok.next_with_source($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+				} else {
+					Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+				}
+				{ token: raw_next.token, reader: raw_next.reader, limited: raw_next.limited, names: [] }
 			}
 			match next.limited {
 				NoLimit => {}
@@ -154,6 +162,10 @@ HtmlTree :: [].{
 			}
 
 			previous_nodes = $state.nodes.len()
+			# Resolve the end target before mutation without retaining the old arena.
+			expected_end = if props.strict_foreign_spelling and $spelling_failure.is_err() {
+				foreign_end_spelling($state, next.token)
+			} else Err(None)
 			if $state.skip_lf {
 				$state = { ..$state, skip_lf: False }
 				match next.token.kind {
@@ -172,6 +184,9 @@ HtmlTree :: [].{
 				}
 			} else {
 				$state = process_with_mode($state, next.token, mode, context.scripting)
+			}
+			if props.strict_foreign_spelling and $spelling_failure.is_err() {
+				$spelling_failure = spelling_for_token($state, previous_nodes, next.token, next.names, $reader.bytes, expected_end)
 			}
 			if props.exact_structure {
 				var $id = previous_nodes
@@ -250,6 +265,13 @@ HtmlTree :: [].{
 		}
 		if props.recovery == Strict and !diagnostics.is_empty() {
 			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
+		}
+		match $spelling_failure {
+			Ok(detail) => {
+				at = Literal.position(source, detail.span.start)
+				return Err(InvalidMarkup({ problem: NonCanonicalName(detail), line: at.line, column: at.column }))
+			}
+			Err(None) => {}
 		}
 		if !context.defer_projection {
 			$state = project_selectedcontent($state, props).map_err(
@@ -3121,24 +3143,16 @@ foreign_process = |state, token| {
 			if Tok.lower(adjusted_name($s)) != n {
 				$s = problem($s, UnexpectedForeignEndTag, token.span.start)
 			}
-			var $i = $s.stack.len()
-			var $found = False
-			while $i > 0 {
-				$i = $i - 1
-				id = $s.stack.get($i) ?? 0
-				if namespace_class_at($s, id) == HtmlNamespace {
+			match foreign_end_target($s, n) {
+				ForeignTarget(target) => {
+					$s = close_from($s, target.position)
+				}
+				HtmlTarget => {
 					$s = process_html($s, token, $s.context.scripting)
-					$found = True
-					break
 				}
-				if Tok.lower(name_at($s, id)) == n {
-					$s = close_from($s, $i)
-					$found = True
-					break
+				MissingTarget => {
+					$s = problem($s, UnexpectedForeignEndTag, token.span.start)
 				}
-			}
-			if !$found {
-				$s = problem($s, UnexpectedForeignEndTag, token.span.start)
 			}
 		}
 		Doctype(_) => {
@@ -3147,6 +3161,103 @@ foreign_process = |state, token| {
 		Eof => {}
 	}
 	$s
+}
+
+# The same foreign end-tag target controls tree mutation and spelling evidence.
+foreign_end_target = |s, name| {
+	var $index = s.stack.len()
+	while $index > 0 {
+		$index = $index - 1
+		id = s.stack.get($index) ?? 0
+		if namespace_class_at(s, id) == HtmlNamespace {
+			return HtmlTarget
+		}
+		if Tok.lower(name_at(s, id)) == name {
+			return ForeignTarget({ id, position: $index })
+		}
+	}
+	MissingTarget
+}
+
+SpellingFailure : { authored : Str, expected : Str, span : Markup.Span }
+
+foreign_end_spelling : State, Tok.Token -> Try(Str, [None])
+foreign_end_spelling = |state, token| {
+	match token.kind {
+		End(name) if name != "p" and name != "br" and foreign_token(state, token) => {
+			match foreign_end_target(state, name) {
+				ForeignTarget(target) if namespace_class_at(state, target.id) == SvgNamespace or namespace_class_at(state, target.id) == MathNamespace => Ok(name_at(state, target.id))
+				_ => Err(None)
+			}
+		}
+		_ => Err(None)
+	}
+}
+
+spelling_for_token : State, U64, Tok.Token, List(Tok.NameEvent), List(U8), Try(Str, [None]) -> Try(SpellingFailure, [None])
+spelling_for_token = |state, previous_nodes, token, names, bytes, expected_end| {
+	match token.kind {
+		Start(_) => {
+			var $id = previous_nodes
+			while $id < state.nodes.len() {
+				node = node_at(state, $id)
+				match (node.kind, node.origin) {
+					(Element(name), Authored(span)) if span.start == token.span.start and (namespace_class_at(state, $id) == SvgNamespace or namespace_class_at(state, $id) == MathNamespace) => {
+						namespace = match name.namespace {
+							Uri(uri) => uri
+							NoNamespace => ""
+						}
+						return check_spelling_names(names, bytes, name.local, namespace)
+					}
+					_ => {}
+				}
+				$id = $id + 1
+			}
+			Err(None)
+		}
+		End(_) => match expected_end {
+			Ok(expected) => {
+				for event in names {
+					if event.kind == EndName {
+						return check_spelling_name(bytes, event.span, expected)
+					}
+				}
+				Err(None)
+			}
+			Err(None) => Err(None)
+		}
+		_ => Err(None)
+	}
+}
+
+check_spelling_names : List(Tok.NameEvent), List(U8), Str, Str -> Try(SpellingFailure, [None])
+check_spelling_names = |names, bytes, element, namespace| {
+	for event in names {
+		expected = match event.kind {
+			StartName => element
+			AttributeName => {
+				name = attribute_name(event.normalized, namespace)
+				match name.prefix {
+					Prefix(prefix) => "${prefix}:${name.local}"
+					Unprefixed => name.local
+				}
+			}
+			EndName => element
+		}
+		result = check_spelling_name(bytes, event.span, expected)
+		if result.is_ok() {
+			return result
+		}
+	}
+	Err(None)
+}
+
+check_spelling_name : List(U8), Markup.Span, Str -> Try(SpellingFailure, [None])
+check_spelling_name = |bytes, span, expected| {
+	authored = Str.from_utf8_lossy(bytes.sublist({ start: span.start, len: span.end - span.start }))
+	if authored == expected {
+		Err(None)
+	} else Ok({ authored, expected, span })
 }
 
 attribute_name = |raw, namespace| {

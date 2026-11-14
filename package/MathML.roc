@@ -201,3 +201,14 @@ expect {
 	p = MathML.parse_segments(["<mi xmlns:x='urn:extension' x:r='", "'>x</mi>"], { allow_unknown_attributes: True })?
 	p.slots.first()?.expected == Language("namespaced attribute")
 }
+
+expect match MathML.parse_fragment("<annotation definitionurl='x'>x</annotation>", { syntax: HtmlSyntax, strict_foreign_spelling: True }) {
+	Err(InvalidMarkup(error)) => match error.problem {
+		NonCanonicalName(detail) => detail.authored == "definitionurl" and detail.expected == "definitionURL"
+		_ => False
+	}
+	_ => False
+}
+expect MathML.parse_fragment("<annotation definitionURL='x'>x</annotation>", { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
+expect MathML.parse_segments(["<annotation definitionurl='", "'>x</annotation>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_err()
+expect MathML.parse_segments(["<annotation definitionURL='", "'>x</annotation>"], { syntax: HtmlSyntax, strict_foreign_spelling: True }).is_ok()
