@@ -801,7 +801,7 @@ parse_list = |lines, kind, key, ancestors| {
 					$children = $children.concat(continuation.blocks)
 					$rest = attached.rest
 				} else if kind == "dlist" and $body == "" and next.starts_with(" ") {
-					$body = next.trim_start()
+					$body = next
 					$rest = $rest.drop_first(1)
 				} else if next == "" {
 					while !$rest.is_empty() and ($rest.first() ?? empty_line).text == "" {
@@ -823,16 +823,29 @@ parse_list = |lines, kind, key, ancestors| {
 					$item_done = True
 				}
 				else {
-					$body = if ($body == "") next.trim_start() else "${$body}\n${next.trim_start()}"
+					$body = if ($body == "") next else "${$body}\n${next}"
 					$rest = $rest.drop_first(1)
 				}
 			}
-			$items = $items.append(rich("list_item", $body, marker.term, "", "", line.attrs, $children, 0))
+			$items = $items.append(rich("list_item", list_item_source($body, marker.text != ""), marker.term, "", "", line.attrs, $children, 0))
 		} else {
 			$done = True
 		}
 	}
 	{ blocks: $items, rest: $rest }
+}
+
+# Continuation lines lose their common indentation as a group. The text
+# following the marker is already unindented and does not set that width.
+list_item_source : Str, Bool -> Str
+list_item_source = |source, same_line| {
+	if !same_line {
+		return dedent(source)
+	}
+	match source.split_first("\n") {
+		Ok({ before, after }) => "${before}\n${dedent(after)}"
+		Err(_) => source
+	}
 }
 
 ## A block attribute list, anchor or block title that can precede a list.
@@ -3209,6 +3222,15 @@ expect render_source(". a\n+\n----\n[lowerroman]\n.. no\n----\n. b").contains("<
 # Unordered lists render their style on the wrapper and the list.
 expect render_source("* a\n+\n[square]\n** x").contains("<div class=\"ulist square\">\n<ul class=\"square\">")
 expect render_source("[circle]\n* [x] done").contains("<div class=\"ulist checklist circle\">\n<ul class=\"checklist\">")
+
+# List paragraphs preserve indentation beyond the common continuation width,
+# including an unindented line and descriptions starting after the marker.
+expect render_source("* one\n  two\nthree\n  four").contains("<p>one\n  two\nthree\n  four</p>")
+expect render_source("* one\n two\n  three").contains("<p>one\ntwo\n three</p>")
+expect render_source("* one\n\ttwo\n  three").contains("<p>one\ntwo\n three</p>")
+expect render_source(". one\n   two\n three").contains("<p>one\n  two\nthree</p>")
+expect render_source("Term:: one\n  two\nthree\n  four").contains("<p>one\n  two\nthree\n  four</p>")
+expect render_source("Term::\n  one\n  two\nthree\n  four").contains("<p>  one\n  two\nthree\n  four</p>")
 
 # Each marker style is its own list: alpha, roman, arabic and dot markers,
 # and dash and star bullets, nest instead of joining the list above them.
