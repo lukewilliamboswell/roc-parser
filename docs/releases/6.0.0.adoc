@@ -72,6 +72,8 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Fixed
 
+* AsciiDoc list paragraphs preserve indentation beyond the common width of
+  their continuation lines.
 * AsciiDoc preserves metadata and styles on nested lists, recognises Roman
   markers, and nests differing marker styles correctly.
 * AsciiDoc keeps titles on thematic breaks, handles block macros following

@@ -7,9 +7,13 @@ templates and DOM consumer facts to the XML and AsciiDoc changes in rc.1.
 Use the official Roc nightly named in the release record and basic-cli 0.28.1.
 Unicode 4.3.3 preserves the public Unicode APIs and Unicode 17 data while
 updating compiler compatibility. Repository fuzz applications use roc-fuzz 0.6.2.
-Preview APIs may change before
-6.0.0. Repository CI and release checks use the latest official nightly, with
-warnings enabled; locally patched compilers are not release inputs.
+
+AsciiDoc list paragraphs preserve indentation beyond the common width of their
+continuation lines.
+
+Preview APIs may change before 6.0.0. Repository CI and release checks use the
+latest official nightly, with warnings enabled; locally patched compilers are not
+release inputs.
 
 == Use this release
 
