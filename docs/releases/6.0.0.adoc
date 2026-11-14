@@ -43,7 +43,10 @@ Applications using basic-cli should use 0.28.1.
   grammar, and `MarkupFacts` for enumerable canonical element/ARIA vocabularies,
   namespace-aware boolean/enumerated attributes, HTML text/void/initial-newline
   behavior and known handler attributes.
-* `MarkupContext` for a new child or text value's placement using retained finite
+* `DomConstruction` for bounded HTML repair checks on explicit DOM names, with
+  opaque finite contexts, unchanged namespace/prefix/local identity and typed
+  attribute-dependent results. Success does not certify a full round trip.
+* `MarkupContext` for a new child or text value's authoring placement using retained finite
   context, without reparsing or walking ancestors. History-sensitive contexts
   return `UnsupportedContext`; whole-parent completeness remains a separate check.
 * Opt-in `strict_foreign_spelling` to reject HTML-syntax SVG/MathML name

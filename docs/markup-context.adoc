@@ -1,8 +1,11 @@
 [#markup-context]
-= Check a child before constructing DOM
+= Check authoring placement before constructing DOM
 
-Use `MarkupContext` when a renderer constructs nodes directly or changes one
-reactive child or text value. A context records the enclosing placement rules;
+Use `MarkupContext` for canonical source-authoring identities and HTML, SVG or
+MathML content rules when a renderer constructs nodes directly or changes one
+reactive child or text value. For bounded HTML repairs on already-resolved DOM
+names, use xref:dom-construction.adoc#dom-construction[`DomConstruction`].
+A context records the enclosing placement rules;
 checking a new value needs no source string, parsed tree or ancestor walk.
 Names and attributes use explicit namespace identities, as in `Markup.Tree`.
 Pass canonical names from a parsed tree, or validate computed names with

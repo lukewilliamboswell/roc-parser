@@ -50,6 +50,7 @@ import parser.MathML
 import parser.SvgPath
 import parser.Markup
 import parser.MarkupFacts
+import parser.DomConstruction
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''

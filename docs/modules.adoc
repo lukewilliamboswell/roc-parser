@@ -78,6 +78,14 @@ parsers for data formats, web markup and Roc source.
 |Validate computed DOM names while preserving explicit namespace, prefix and local identity
 |`DomName.validate_and_extract`, `DomName.html_element`, `DomName.qualified`
 
+|{api}DomConstruction/[`DomConstruction`]
+|Check bounded HTML repairs for explicitly named DOM children without walking ancestors
+|`DomConstruction.root`, `DomConstruction.enter`, `DomConstruction.text`
+
+|{api}MarkupContext/[`MarkupContext`]
+|Check canonical source-authoring placement and HTML/SVG/MathML content models
+|`MarkupContext.seed`, `MarkupContext.child`, `MarkupContext.text`
+
 |{api}MarkupFacts/[`MarkupFacts`]
 |Query vocabulary, expanded attribute kinds, HTML text behavior and handler facts for consumers
 |`MarkupFacts.is_boolean_attribute`, `MarkupFacts.enumerated_values`, `MarkupFacts.text_behavior`, `MarkupFacts.is_event_handler`

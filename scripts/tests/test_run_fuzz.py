@@ -85,7 +85,7 @@ class SeedCorpusTests(unittest.TestCase):
         self.assertEqual(listed, list(run_fuzz.SCHEDULED_TARGET_ORDER))
 
     def test_markup_targets_remain_local_only(self) -> None:
-        markup = {"svg-path", "svg-raw", "mathml-raw", "html-raw", "markup-source", "markup-structured", "markup-limits", "markup-segments"}
+        markup = {"dom-construction", "svg-path", "svg-raw", "mathml-raw", "html-raw", "markup-source", "markup-structured", "markup-limits", "markup-segments"}
         self.assertTrue(markup.issubset(run_fuzz.TARGETS))
         self.assertTrue(markup.isdisjoint(run_fuzz.SCHEDULED_TARGET_ORDER))
         self.assertTrue(markup.issubset(run_fuzz.resolve_targets(["all"])))

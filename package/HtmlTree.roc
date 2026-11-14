@@ -1829,12 +1829,7 @@ process_html_general = |state, token, scripting| {
 			}
 			(InCell, _) => {
 				match token.kind {
-					Start(t) if (
-						match t.name {
-							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
-							_ => False
-						}
-					) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
+					Start(t) if (HtmlContextRules.table_part(t.name)) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
 						$s = problem($s, UnexpectedCellEnd, token.span.start)
 					}
 					End(n) if n == "td" or n == "th" => {
@@ -1846,12 +1841,7 @@ process_html_general = |state, token, scripting| {
 							$s = problem($s, UnexpectedCellEnd, token.span.start)
 						}
 					}
-					Start(t) if (
-						match t.name {
-							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
-							_ => False
-						}
-					) => {
+					Start(t) if (HtmlContextRules.table_part(t.name)) => {
 						$s = close_cell($s)
 						$reprocess = True
 					}
@@ -1874,12 +1864,7 @@ process_html_general = |state, token, scripting| {
 					End("caption") | End("table") if !in_scope($s, "caption", TableScope) => {
 						$s = problem($s, UnexpectedTableEnd, token.span.start)
 					}
-					Start(t) if (
-						match t.name {
-							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
-							_ => False
-						}
-					) and !in_scope($s, "caption", TableScope) => {
+					Start(t) if (HtmlContextRules.table_part(t.name)) and !in_scope($s, "caption", TableScope) => {
 						$s = problem($s, UnexpectedTableElement, token.span.start)
 					}
 					End("caption") => {
@@ -1887,12 +1872,7 @@ process_html_general = |state, token, scripting| {
 						$s = clear_active($s)
 						$s = { ..$s, mode: InTable }
 					}
-					Start(t) if (
-						match t.name {
-							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
-							_ => False
-						}
-					) => {
+					Start(t) if (HtmlContextRules.table_part(t.name)) => {
 						$s = close_to(implied($s, ""), "caption")
 						$s = clear_active($s)
 						$s = { ..$s, mode: InTable }
@@ -1966,14 +1946,7 @@ process_html_general = |state, token, scripting| {
 						}
 					}
 					Start(t) => {
-						next = if (
-							(
-								match t.name {
-									"caption" | "colgroup" | "tbody" | "tfoot" | "thead" => True
-									_ => False
-								}
-							)
-						) InTable else if (t.name == "col") InColgroup else if (t.name == "tr") InTableBody else if (t.name == "td" or t.name == "th") InRow else InBody
+						next = if (((HtmlContextRules.table_section(t.name) or t.name == "caption" or t.name == "colgroup"))) InTable else if (t.name == "col") InColgroup else if (t.name == "tr") InTableBody else if (HtmlContextRules.table_cell(t.name)) InRow else InBody
 						$s = { ..$s, mode: next, modes: $s.modes.drop_last(1).append(next) }
 						$reprocess = True
 					}
@@ -2137,10 +2110,7 @@ body = |state, token| {
 				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
-				if match current($s) {
-					"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
-					_ => False
-				} {
+				if HtmlContextRules.heading(current($s)) {
 					$s = problem($s, NestedHeading, token.span.start)
 					$s = pop_current($s)
 				}
@@ -2178,12 +2148,7 @@ body = |state, token| {
 						$s = close_to($s, n)
 						break
 					}
-					if special_at($s, $s.stack.get($i) ?? 0) and !(
-						match n {
-							"address" | "div" | "p" => True
-							_ => False
-						}
-					) {
+					if HtmlContextRules.list_scan_stops(special_at($s, $s.stack.get($i) ?? 0), n) {
 						break
 					}
 				}
@@ -2246,7 +2211,7 @@ body = |state, token| {
 					$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(oldest)) }
 				}
 				$s = { ..$s, active: $s.active.append(Entry(id)) }
-			} else if name == "applet" or name == "marquee" or name == "object" {
+			} else if HtmlContextRules.formatting_container(name) {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, active: $s.active.append(Marker), frameset_ok: False }
@@ -2331,10 +2296,7 @@ body = |state, token| {
 			} else if name == "math" or name == "svg" {
 				$s = reconstruct($s)
 				$s = insert_tag($s, tag, if (name == "svg") Markup.svg_namespace else Markup.mathml_namespace, token.span, !tag.self_closing)
-			} else if match name {
-				"caption" | "col" | "colgroup" | "frame" | "head" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
-				_ => False
-			} {
+			} else if HtmlContextRules.table_part(name) or name == "frame" or name == "head" {
 				$s = problem($s, UnexpectedTableElement, token.span.start)
 			} else {
 				$s = reconstruct($s)
@@ -2409,14 +2371,14 @@ body = |state, token| {
 			} else if name == "br" {
 				$s = problem($s, EndTagBr, token.span.start)
 				$s = body($s, { ..token, kind: Start({ name: "br", attributes: [], self_closing: False }) })
-			} else if name == "li" or name == "dd" or name == "dt" or name == "button" or name == "applet" or name == "marquee" or name == "object" {
+			} else if name == "li" or name == "dd" or name == "dt" or name == "button" or HtmlContextRules.formatting_container(name) {
 				scope = if (name == "li") ListScope else DefaultScope
 				if !in_scope($s, name, scope) {
 					$s = problem($s, UnexpectedEndTag, token.span.start)
 				}
 				else {
 					$s = close_to(implied($s, name), name)
-					if name == "applet" or name == "marquee" or name == "object" {
+					if HtmlContextRules.formatting_container(name) {
 						$s = clear_active($s)
 					}
 				}
@@ -2722,22 +2684,12 @@ table = |state, token| {
 			$s = { ..$s, mode: InColgroup }
 			$s = process($s, token, $s.context.scripting)
 		}
-		Start(t) if (
-			match t.name {
-				"tbody" | "tfoot" | "thead" => True
-				_ => False
-			}
-		) => {
+		Start(t) if HtmlContextRules.table_section(t.name) => {
 			$s = clear_table_stack($s)
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			$s = { ..$s, mode: InTableBody }
 		}
-		Start(t) if (
-			match t.name {
-				"tr" | "td" | "th" => True
-				_ => False
-			}
-		) => {
+		Start(t) if (t.name == "tr" or HtmlContextRules.table_cell(t.name)) => {
 			$s = clear_table_stack($s)
 			$s = insert_element($s, "tbody", Markup.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InTableBody }
@@ -2777,12 +2729,7 @@ table = |state, token| {
 				$s = { ..$s, form: Ok(id) }
 			}
 		}
-		Start(t) if (
-			match t.name {
-				"style" | "script" | "template" => True
-				_ => False
-			}
-		) => {
+		Start(t) if HtmlContextRules.table_head_content(t.name) => {
 			$s = body($s, token)
 		}
 		Eof => {
@@ -2812,12 +2759,7 @@ clear_table_stack = |s| {
 
 clear_section_stack = |s| {
 	var $s = s
-	while !$s.stack.is_empty() and !(
-		match current($s) {
-			"tbody" | "tfoot" | "thead" | "template" | "html" => True
-			_ => False
-		}
-	) {
+	while !$s.stack.is_empty() and !(HtmlContextRules.table_section(current($s)) or current($s) == "template" or current($s) == "html") {
 		$s = pop_current($s)
 	}
 	$s
@@ -2839,15 +2781,10 @@ clear_row_stack = |s| {
 table_body = |state, token| {
 	var $s = state
 	match token.kind {
-		Start(t) if (
-			match t.name {
-				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
-				_ => False
-			}
-		) and !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+		Start(t) if (HtmlContextRules.table_section(t.name) or ["caption", "col", "colgroup"].contains(t.name)) and !HtmlContextRules.table_sections.any(|n| in_scope($s, n, TableScope)) => {
 			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
 		}
-		End("table") if !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+		End("table") if !HtmlContextRules.table_sections.any(|n| in_scope($s, n, TableScope)) => {
 			$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
 		}
 
@@ -2856,19 +2793,14 @@ table_body = |state, token| {
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			$s = { ..$s, mode: InRow }
 		}
-		Start(t) if t.name == "td" or t.name == "th" => {
+		Start(t) if HtmlContextRules.table_cell(t.name) => {
 			$s = problem($s, CellWithoutRow, token.span.start)
 			$s = clear_section_stack($s)
 			$s = insert_element($s, "tr", Markup.html_namespace, [], Implied(token.span.start), True)
 			$s = { ..$s, mode: InRow }
 			$s = process($s, token, $s.context.scripting)
 		}
-		End(n) if (
-			match n {
-				"tbody" | "tfoot" | "thead" => True
-				_ => False
-			}
-		) => {
+		End(n) if HtmlContextRules.table_section(n) => {
 			if in_scope($s, n, TableScope) {
 				$s = clear_section_stack($s)
 				$s = pop_mode($s, InTable)
@@ -2876,12 +2808,7 @@ table_body = |state, token| {
 				$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
 			}
 		}
-		Start(t) if (
-			match t.name {
-				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
-				_ => False
-			}
-		) => {
+		Start(t) if (HtmlContextRules.table_section(t.name) or ["caption", "col", "colgroup"].contains(t.name)) => {
 			$s = clear_section_stack($s)
 			if current($s) != "html" {
 				$s = pop_mode($s, InTable)
@@ -2913,7 +2840,7 @@ table_body = |state, token| {
 row = |state, token| {
 	var $s = state
 	match token.kind {
-		Start(t) if t.name == "td" or t.name == "th" => {
+		Start(t) if HtmlContextRules.table_cell(t.name) => {
 			$s = clear_row_stack($s)
 			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
 			$s = { ..$s, active: $s.active.append(Marker), mode: InCell }

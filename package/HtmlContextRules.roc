@@ -89,4 +89,24 @@ HtmlContextRules :: [].{
 		stop_list = list_scan_stops(special(namespace, name), name)
 		{ p: (html and name == "p") or (scopes.p and !scope_boundary(namespace, name, ButtonScope)), button: (html and name == "button") or (scopes.button and !stop_default), nobr: (html and name == "nobr") or (scopes.nobr and !stop_default), select: (html and name == "select") or (scopes.select and !stop_default), option: (html and name == "option") or (scopes.option and !stop_default), optgroup: (html and name == "optgroup") or (scopes.optgroup and !stop_default), li: (html and name == "li") or (scopes.li and !stop_list), definition_item: (html and ["dd", "dt"].contains(name)) or (scopes.definition_item and !stop_list), form: scopes.form or (html and name == "form") }
 	}
+	# Table categories used by source construction, authoring and DOM placement.
+	table_sections = ["tbody", "thead", "tfoot"]
+	table_section = |name| table_sections.contains(name)
+	table_cell = |name| name == "td" or name == "th"
+	table_part = |name| table_section(name) or table_cell(name) or ["caption", "col", "colgroup", "tr"].contains(name)
+	table_head_content = |name| ["script", "style", "template"].contains(name)
+	table_regular_child = |name| table_section(name) or ["caption", "colgroup"].contains(name) or table_head_content(name)
+	table_delegated_child = |name| table_head_content(name) or name == "form"
+	restricted_table_parent = |name| name == "table" or table_section(name) or name == "tr" or name == "colgroup"
+	table_mode = |name| match name {
+		"table" => Table
+		"tbody" | "thead" | "tfoot" => Section
+		"tr" => Row
+		"colgroup" => Colgroup
+		"caption" | "td" | "th" => Body
+		_ => Inherit
+	}
+	formatting_container = |name| ["applet", "marquee", "object"].contains(name)
+	formatting_marker = |name| formatting_container(name) or name == "template" or name == "caption" or table_cell(name)
+
 }

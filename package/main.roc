@@ -15,6 +15,7 @@ package
 	[
 		AsciiDoc,
 		CSV,
+		DomConstruction,
 		DomName,
 		HTTP,
 		Html,

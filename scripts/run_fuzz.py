@@ -103,6 +103,7 @@ TARGETS = dict(
         target("mathml-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
         target("html-raw", "markup", "raw", "markup", timeout=10, scheduled=False),
         target("markup-source", "markup", "raw", "markup", timeout=10, scheduled=False),
+        target("dom-construction", max_input_size=12, timeout=10, examples=True, scheduled=False),
         target("markup-structured", max_input_size=128, timeout=10, scheduled=False),
         target("markup-limits", max_input_size=8, timeout=10, scheduled=False),
         target("markup-segments", max_input_size=256, timeout=10, scheduled=False),
@@ -243,7 +244,7 @@ def build_target(target_name: str, roc: str, no_build: bool, *, capture: bool = 
     output = binary_path(target_name)
 
     manifest_path = output.with_suffix(".build.json")
-    syntax_target = target_name.startswith(("roc-syntax-", "markup-", "svg-", "mathml-", "html-"))
+    syntax_target = target_name.startswith(("roc-syntax-", "markup-", "svg-", "mathml-", "html-", "dom-construction"))
     identity = build_identity(target_name, roc) if syntax_target else None
     if no_build:
         if not output.is_file():
