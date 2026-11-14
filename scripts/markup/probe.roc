@@ -79,10 +79,10 @@ main! = |arguments| {
 		Err(_) => Stdout.line!("{\"status\":\"error\",\"error\":{\"code\":\"InvalidUtf8\",\"line\":1,\"column\":1}}")?
 		Ok(source) => {
 			props : Markup.Props
-			props = { syntax, recovery, allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values }
+			props = { syntax, recovery, exact_structure: args.get(12) == Ok("on"), strict_foreign_spelling: args.get(13) == Ok("on"), allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values }
 			result = if format == "html" {
 				html_props : Html.Props
-				html_props = { syntax, recovery, allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
+				html_props = { syntax, recovery, exact_structure: args.get(12) == Ok("on"), strict_foreign_spelling: args.get(13) == Ok("on"), allow_unknown_elements: allow_elements, allow_unknown_attributes: allow_attributes, check_values, context_namespace: namespace, context_element: context, scripting: args.get(7) == Ok("on") }
 				if !validate {
 					Html.parse_source(source, html_props, fragment)
 				} else if fragment {

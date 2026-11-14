@@ -530,5 +530,29 @@
       "HTML",
       "InvalidCharacterReference"
     ]
+  },
+  {
+    "name": "markup-canonical-foreign-spelling",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nfragment : CanonicalHtml\nfragment = \"<svg viewBox='0 0 1 1'><linearGradient></linearGradient><foreignObject><DIV ID='x'>text</DIV></foreignObject></svg>\"\nvalue = fragment.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-noncanonical-foreign-attribute",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nvalue : CanonicalHtml\nvalue = \"<svg viewbox='0 0 1 1'></svg>\"\n",
+    "errors": [
+      "invalid string",
+      "NonCanonicalName",
+      "viewbox",
+      "viewBox"
+    ]
+  },
+  {
+    "name": "markup-noncanonical-foreign-end",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nvalue : CanonicalHtml\nvalue = \"<svg><linearGradient></lineargradient></svg>\"\n",
+    "errors": [
+      "invalid string",
+      "NonCanonicalName",
+      "lineargradient",
+      "linearGradient"
+    ]
   }
 ]

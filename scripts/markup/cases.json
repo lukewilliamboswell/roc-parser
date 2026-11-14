@@ -714,6 +714,75 @@
         "local": "table"
       },
       "input": "<tr><td'>x<td>y"
+    },
+    {
+      "id": "html-exact-cr-reference-controls",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<p title='a&#13;b'>a&#xD;b</p>",
+      "accepted": true,
+      "recovery": "browser",
+      "exact_structure": true
+    },
+    {
+      "id": "html-exact-duplicate-controls",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<p a='1' a='2'></p>",
+      "accepted": false,
+      "recovery": "browser",
+      "exact_structure": true,
+      "allow_unknown_attributes": true
+    },
+    {
+      "id": "html-exact-html-case-fold-controls",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<DIV ID='a'><SPAN>x</SPAN></DIV>",
+      "accepted": true,
+      "exact_structure": true
+    },
+    {
+      "id": "html-foreign-canonical-controls",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<svg viewBox='0 0 1 1'><linearGradient id='x'></linearGradient></svg>",
+      "accepted": true,
+      "exact_structure": true,
+      "strict_foreign_spelling": true
+    },
+    {
+      "id": "html-foreign-adjusted-rejected",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<svg viewbox='0 0 1 1'></svg>",
+      "accepted": false,
+      "exact_structure": true,
+      "strict_foreign_spelling": true
+    },
+    {
+      "id": "html-foreign-default-adjusted",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<svg viewbox='0 0 1 1'></svg>",
+      "accepted": true,
+      "exact_structure": true
+    },
+    {
+      "id": "html-foreign-html-integration-controls",
+      "format": "html",
+      "syntax": "html",
+      "fragment": true,
+      "input": "<svg><foreignObject><DIV ID='a'>x</DIV></foreignObject></svg>",
+      "accepted": true,
+      "exact_structure": true,
+      "strict_foreign_spelling": true
     }
   ]
 }

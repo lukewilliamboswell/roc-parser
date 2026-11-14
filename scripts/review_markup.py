@@ -179,7 +179,7 @@ def probe(executable: Path, case: dict, timeout: float = 10) -> dict:
     arguments = [case['format'], case.get('syntax', 'html' if case['format'] == 'html' else 'xml'),
                  'fragment' if case.get('fragment') else 'document', case.get('recovery', 'strict'),
                  'validate' if case.get('validate', True) else 'structural',
-                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'consumer-fidelity' if case.get('projection') == 'consumer-fidelity' else 'bindings' if case.get('include_bindings') else 'semantic', *[('on' if case[key] else 'off') if key in case else 'default' for key in ['allow_unknown_elements', 'allow_unknown_attributes', 'check_values']]]
+                 case.get('context', {}).get('namespace', NS[case['format']]), case.get('context', {}).get('local', 'body' if case['format'] == 'html' else 'svg' if case['format'] == 'svg' else 'math'), 'on' if case.get('scripting') else 'off', 'consumer-fidelity' if case.get('projection') == 'consumer-fidelity' else 'bindings' if case.get('include_bindings') else 'semantic', *[('on' if case[key] else 'off') if key in case else 'default' for key in ['allow_unknown_elements', 'allow_unknown_attributes', 'check_values']], *['on' if case.get(key) else 'off' for key in ['exact_structure', 'strict_foreign_spelling']]]
     try:
         result = subprocess.run([str(executable), *arguments], input=case['input'].encode(), capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
