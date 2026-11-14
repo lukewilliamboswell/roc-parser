@@ -2,8 +2,9 @@
 
 == Upgrade impact
 
-Use Roc `nightly-2026-11-12-ce942d6` and basic-cli 0.28.0 for the maintained
-applications and examples. Repository tooling uses its separate fixed compiler.
+Use the compiler named in the published release record and basic-cli 0.28.1
+for the maintained applications and examples. Repository tooling uses its
+separate fixed compiler.
 The published release record identifies the compiler used for the delivered
 package.
 
@@ -26,7 +27,7 @@ Add the package to your app's header:
 parser: "{package-url}",
 ----
 
-Applications using basic-cli should use 0.28.0.
+Applications using basic-cli should use 0.28.1.
 
 == Added
 
@@ -74,7 +75,7 @@ handler attributes, including MathML handlers and SVG global events.
 
 == Contributor tooling
 
-Fuzz targets use roc-fuzz 0.6.1, and Blueprint tooling uses 0.13.0. Markup oracle
+Fuzz targets use roc-fuzz 0.6.2, and Blueprint tooling uses 0.13.0. Markup oracle
 checks include pinned independent parsers, semantic validators and browser DOM
 consumers. Git keeps curated cases and an upstream manifest; the full WPT corpus
 is fetched and generated into ignored local storage. Markup fuzz campaigns and
