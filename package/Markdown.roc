@@ -1,4 +1,5 @@
 import MarkdownEntities
+import MarkdownTypes
 import Parser
 import Utf8
 import Literal as Quotation
@@ -73,16 +74,16 @@ Markdown := [
 	}
 
 	## Heading levels from one through six.
-	Level : HeadingLevel
+	Level : MarkdownTypes.Level
 
 	## The marker and starting number of a Markdown list.
-	ListKind : MarkdownListKind
+	ListKind : MarkdownTypes.ListKind
 
 	## Whether a list item is a task and, if so, whether it is checked.
-	TaskState : MarkdownTaskState
+	TaskState : MarkdownTypes.TaskState
 
 	## Column alignment declared by a Markdown table delimiter row.
-	Alignment : TableAlignment
+	Alignment : MarkdownTypes.Alignment
 
 	## Destination and optional title of a link or image.
 	LinkTarget : {
@@ -91,7 +92,7 @@ Markdown := [
 	}
 
 	## Inline Markdown syntax nodes.
-	Inline : MarkdownInline
+	Inline : MarkdownTypes.Inline
 
 	## Hash a Markdown syntax tree, so that it can be a `Dict` key or `Set` element.
 	to_hash : _
@@ -151,127 +152,6 @@ Markdown := [
 
 }
 
-MarkdownInline := [
-	Text(Str),
-	Strong(List(Markdown.Inline)),
-	Emphasis(List(Markdown.Inline)),
-	Strikethrough(List(Markdown.Inline)),
-	InlineCode(Str),
-	Link({ label : List(Markdown.Inline), target : Markdown.LinkTarget }),
-	Image({ alt : List(Markdown.Inline), target : Markdown.LinkTarget }),
-	HardBreak,
-	HtmlInline(Str),
-].{
-
-	## Render an inline node in Roc source-like notation for inspection.
-	to_inspect : Markdown.Inline -> Str
-	to_inspect = |inline| {
-		inspect_inline(inline)
-	}
-
-	## Compare two inline syntax trees structurally.
-	is_eq : _
-
-	## Hash this value, so that it can be a `Dict` key or `Set` element.
-	to_hash : _
-}
-
-TableAlignment := [
-	Default,
-	Left,
-	Center,
-	Right,
-].{
-
-	## Render a table alignment for inspection.
-	to_inspect : Markdown.Alignment -> Str
-	to_inspect = |alignment| {
-		inspect_alignment(alignment)
-	}
-
-	## Convert a table alignment to a compact string.
-	to_str : Markdown.Alignment -> Str
-	to_str = |alignment| {
-		alignment_to_str(alignment)
-	}
-
-	## Compare two table alignments.
-	is_eq : _
-
-	## Hash this value, so that it can be a `Dict` key or `Set` element.
-	to_hash : _
-}
-
-MarkdownTaskState := [
-	NoTask,
-	Unchecked,
-	Checked,
-].{
-
-	## Render a task state for inspection.
-	to_inspect : Markdown.TaskState -> Str
-	to_inspect = |task| {
-		inspect_task_state(task)
-	}
-
-	## Convert a task state to a compact string.
-	to_str : Markdown.TaskState -> Str
-	to_str = |task| {
-		task_state_to_str(task)
-	}
-
-	## Compare two task states.
-	is_eq : _
-
-	## Hash this value, so that it can be a `Dict` key or `Set` element.
-	to_hash : _
-}
-
-MarkdownListKind := [
-	Unordered,
-	Ordered({ start : U64 }),
-].{
-
-	## Render a list kind for inspection.
-	to_inspect : Markdown.ListKind -> Str
-	to_inspect = |kind| {
-		inspect_list_kind(kind)
-	}
-
-	## Convert a list kind to a compact string.
-	to_str : Markdown.ListKind -> Str
-	to_str = |kind| {
-		list_kind_to_str(kind)
-	}
-
-	## Compare two list kinds structurally.
-	is_eq : _
-
-	## Hash this value, so that it can be a `Dict` key or `Set` element.
-	to_hash : _
-}
-
-HeadingLevel := [One, Two, Three, Four, Five, Six].{
-
-	## Render a heading level for inspection.
-	to_inspect : Markdown.Level -> Str
-	to_inspect = |level| {
-		inspect_level(level)
-	}
-
-	## Convert a heading level to its decimal representation.
-	to_str : Markdown.Level -> Str
-	to_str = |level| {
-		level_to_str(level)
-	}
-
-	## Compare two heading levels.
-	is_eq : _
-
-	## Hash this value, so that it can be a `Dict` key or `Set` element.
-	to_hash : _
-}
-
 inspect_markdown : Markdown -> Str
 inspect_markdown = |node| {
 	match node {
@@ -301,138 +181,6 @@ inspect_markdown = |node| {
 
 		Frontmatter(raw) =>
 			"Frontmatter(${Str.inspect(raw)})"
-	}
-}
-
-inspect_level : Markdown.Level -> Str
-inspect_level = |level| {
-	match level {
-		One => "One"
-		Two => "Two"
-		Three => "Three"
-		Four => "Four"
-		Five => "Five"
-		Six => "Six"
-	}
-}
-
-level_to_str : Markdown.Level -> Str
-level_to_str = |level| {
-	match level {
-		One => "1"
-		Two => "2"
-		Three => "3"
-		Four => "4"
-		Five => "5"
-		Six => "6"
-	}
-}
-
-inspect_list_kind : Markdown.ListKind -> Str
-inspect_list_kind = |kind| {
-	match kind {
-		Unordered =>
-			"Unordered"
-
-		Ordered({ start }) =>
-			"Ordered({ start: ${start.to_str()} })"
-	}
-}
-
-list_kind_to_str : Markdown.ListKind -> Str
-list_kind_to_str = |kind| {
-	match kind {
-		Unordered =>
-			"unordered"
-
-		Ordered({ start }) =>
-			"ordered:${start.to_str()}"
-	}
-}
-
-inspect_task_state : Markdown.TaskState -> Str
-inspect_task_state = |task| {
-	match task {
-		NoTask => "NoTask"
-		Unchecked => "Unchecked"
-		Checked => "Checked"
-	}
-}
-
-task_state_to_str : Markdown.TaskState -> Str
-task_state_to_str = |task| {
-	match task {
-		NoTask => "none"
-		Unchecked => "unchecked"
-		Checked => "checked"
-	}
-}
-
-inspect_alignment : Markdown.Alignment -> Str
-inspect_alignment = |alignment| {
-	match alignment {
-		Default => "Default"
-		Left => "Left"
-		Center => "Center"
-		Right => "Right"
-	}
-}
-
-alignment_to_str : Markdown.Alignment -> Str
-alignment_to_str = |alignment| {
-	match alignment {
-		Default => "default"
-		Left => "left"
-		Center => "center"
-		Right => "right"
-	}
-}
-
-inspect_inline : Markdown.Inline -> Str
-inspect_inline = |inline| {
-	match inline {
-		Text(text) =>
-			"Text(${Str.inspect(text)})"
-
-		Strong(children) =>
-			"Strong(${Str.inspect(children)})"
-
-		Emphasis(children) =>
-			"Emphasis(${Str.inspect(children)})"
-
-		Strikethrough(children) =>
-			"Strikethrough(${Str.inspect(children)})"
-
-		InlineCode(code) =>
-			"InlineCode(${Str.inspect(code)})"
-
-		Link({ label, target }) =>
-			"Link({ label: ${Str.inspect(label)}, target: ${inspect_link_target(target)} })"
-
-		Image({ alt, target }) =>
-			"Image({ alt: ${Str.inspect(alt)}, target: ${inspect_link_target(target)} })"
-
-		HardBreak =>
-			"HardBreak"
-
-		HtmlInline(raw) =>
-			"HtmlInline(${Str.inspect(raw)})"
-	}
-}
-
-inspect_link_target : Markdown.LinkTarget -> Str
-inspect_link_target = |target| {
-	"{ href: ${Str.inspect(target.href)}, title: ${inspect_link_title(target.title)} }"
-}
-
-inspect_link_title : Try(Str, [Missing]) -> Str
-inspect_link_title = |title| {
-	match title {
-		Ok(value) =>
-			"Ok(${Str.inspect(value)})"
-
-		Err(Missing) =>
-			"Err(Missing)"
 	}
 }
 
