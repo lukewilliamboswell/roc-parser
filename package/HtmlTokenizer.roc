@@ -323,7 +323,7 @@ HtmlTokenizer :: [].{
 						$pos = after_name
 					}
 				}
-				if $attributes.any(|a| a.name == attr_name) {
+				if !$attributes.is_empty() and attribute_names_contain($attributes, attr_name) {
 					$diagnostics = $diagnostics.append({ code: DuplicateAttribute(attr_name), offset: attr_start })
 				}
 				else {
@@ -1386,6 +1386,22 @@ expect HtmlTokenizer.next({ bytes: "foo</textarea><b>&amp;".to_utf8(), pos: 0, d
 expect HtmlTokenizer.next({ bytes: "foo</style><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, RawtextFragment, False).token.kind == Characters("foo</style><b>&amp;")
 expect HtmlTokenizer.next({ bytes: "<!-- inside </script> -->".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("<!-- inside </script> -->")
 expect HtmlTokenizer.next({ bytes: "</script><b>&amp;".to_utf8(), pos: 0, diagnostics: [] }, ScriptFragment, False).token.kind == Characters("</script><b>&amp;")
+
+# Read only the duplicate key from the existing lexical attribute buffer.
+attribute_names_contain : List(HtmlTokenizer.Attribute), Str -> Bool
+attribute_names_contain = |attributes, name| {
+	var $index = 0.U64
+	while $index < attributes.len() {
+		match attributes.get($index) {
+			Ok(attribute) => if attribute.name == name {
+				return True
+			}
+			Err(_) => {}
+		}
+		$index = $index + 1
+	}
+	False
+}
 
 ignore_name = |_, _, _, _| {}
 
