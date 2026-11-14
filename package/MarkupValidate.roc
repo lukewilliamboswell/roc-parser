@@ -132,6 +132,14 @@ MarkupValidate :: [].{
 		Ok(plan)
 	}
 
+	# Internal single-child predicates; complete-parent cardinality stays below.
+	child_placement : Bool, Str, Str -> Bool
+	child_placement = |svg, parent, child| if (svg) svg_child_allowed((svg_child_model(parent)).0, child) else if (parent == "mtable") member(["mtr", "mlabeledtr"], child) else if (member(["mtr", "mlabeledtr"], parent)) child == "mtd" else !math_leaf(parent)
+	text_placement : Bool, Str, Str -> Bool
+	text_placement = |svg, parent, text| Markup.whitespace(text) or (if (svg) !(svg_child_model(parent)).1 else math_text_allowed(parent))
+	child_expectation : Bool, Str -> Str
+	child_expectation = |svg, parent| if (svg) "supported SVG content model" else if (parent == "mtable") "mtr or mlabeledtr" else if (member(["mtr", "mlabeledtr"], parent)) "mtd" else "text only"
+
 	element_known : Bool, Str -> Bool
 	element_known = |svg, local| if (svg) svg_elements(local) else math_elements(local)
 	attribute_known : Bool, Str, Markup.Name -> Bool
@@ -556,7 +564,7 @@ check_math_children = |parsed, node, name| {
 	var $elements = []
 	var $count = 0
 	needs_names = name == "mmultiscripts" or name == "semantics" or name == "mtable" or name == "mtr" or name == "mlabeledtr"
-	text_allowed = name == "mi" or name == "mn" or name == "mo" or name == "ms" or name == "mtext" or name == "annotation"
+	text_allowed = math_text_allowed(name)
 	var $child_index = 0
 	while $child_index < node.children.len() {
 		index = node.children.get($child_index) ?? 0
@@ -609,13 +617,13 @@ check_math_children = |parsed, node, name| {
 	if name == "semantics" and (count == 0 or [Ok("annotation"), Ok("annotation-xml")].contains($elements.first()) or !$elements.drop_first(1).all(|e| member(["annotation", "annotation-xml"], e))) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "one expression followed by annotations" }))
 	}
-	if name == "mtable" and !$elements.all(|e| member(["mtr", "mlabeledtr"], e)) {
+	if name == "mtable" and !$elements.all(|e| MarkupValidate.child_placement(False, name, e)) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtr or mlabeledtr" }))
 	}
-	if member(["mtr", "mlabeledtr"], name) and !$elements.all(|e| e == "mtd") {
+	if member(["mtr", "mlabeledtr"], name) and !$elements.all(|e| MarkupValidate.child_placement(False, name, e)) {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "mtd" }))
 	}
-	if member(["mi", "mn", "mo", "ms", "mspace", "none", "mprescripts"], name) and count != 0 {
+	if math_leaf(name) and count != 0 {
 		return fail(parsed, node, InvalidChildren({ element: name, expected: "text only" }))
 	}
 	Ok({})
@@ -810,3 +818,7 @@ expect {
 	invalid = { ..parsed, tree: { ..parsed.tree, nodes } }
 	MarkupValidate.foreign(invalid, {}, []).map_ok(|_| {}) == Err(InvalidMarkup({ problem: Unsupported("invalid child index"), line: 1, column: 1 }))
 }
+
+math_text_allowed = |name| name == "mi" or name == "mn" or name == "mo" or name == "ms" or name == "mtext" or name == "annotation"
+
+math_leaf = |name| member(["mi", "mn", "mo", "ms", "mspace", "none", "mprescripts"], name)

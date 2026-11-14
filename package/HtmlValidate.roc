@@ -67,70 +67,15 @@ HtmlValidate :: [].{
 						}
 						$at = $at + 1
 					}
-					if name.local == "a" and item.anchor {
-						return fail(parsed, node, InvalidChildren({ element: "a", expected: "no descendant a element" }))
+					ancestry = context_of(item)
+					attributes = if (ancestry.interactive or ancestry.in_option or name.local == "option") summarize_attributes(node.attributes) else empty_attributes
+					match context_problem(ancestry, name.local, attributes) {
+						Ok(_) => {}
+						Err(problem) => return fail(parsed, node, problem)
 					}
-					if item.interactive and (interactive(node, name.local) or has_attribute(node, "tabindex")) {
-						return fail(parsed, node, InvalidChildren({ element: "button", expected: "no nested interactive content" }))
-					}
-					if item.in_option and (
-						interactive(node, name.local) or (
-							match name.local {
-								"datalist" | "object" => True
-								_ => False
-							}
-						) or has_attribute(node, "tabindex")
-					) {
-						return fail(parsed, node, InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
-					}
-					if name.local == "selectedcontent" and !item.selected_context {
-						return fail(parsed, node, InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
-					}
-					check_children(parsed, node, name.local, item.in_datalist)?
-					allowed_parent = match name.local {
-						"li" => (
-							match item.parent {
-								"ul" | "ol" | "menu" => True
-								_ => False
-							}
-						)
-						"dt" | "dd" => item.parent == "dl" or item.parent == "div"
-						"tr" => (
-							match item.parent {
-								"table" | "thead" | "tbody" | "tfoot" => True
-								_ => False
-							}
-						)
-						"td" | "th" => item.parent == "tr"
-						"thead" | "tbody" | "tfoot" | "caption" | "colgroup" => item.parent == "table"
-						"col" => item.parent == "colgroup"
-						"option" => item.option_context
-						"optgroup" => item.option_context
-						"summary" => item.parent == "details"
-						"legend" => (
-							match item.parent {
-								"fieldset" | "optgroup" => True
-								_ => False
-							}
-						)
-						"source" => (
-							match item.parent {
-								"audio" | "video" | "picture" => True
-								_ => False
-							}
-						)
-						"track" => (
-							match item.parent {
-								"audio" | "video" => True
-								_ => False
-							}
-						)
-						_ => True
-					}
-					# A fragment has a declared context, and standalone row/option
-					# fragments are legal in that context. Parent checks apply
-					# only where an authored parent is available.
-					if item.parent != "" and !allowed_parent {
+					check_children_with_attributes(parsed, node, name.local, item.in_datalist, attributes)?
+					# Standalone fragment roots have no authored parent.
+					if item.parent != "" and !parent_allowed(ancestry, name.local) {
 						return fail(parsed, node, InvalidChildren({ element: item.parent, expected: "allowed parent for ${name.local}" }))
 					}
 					if name.local == "img" and !has_attribute(node, "alt") and !(
@@ -144,27 +89,15 @@ HtmlValidate :: [].{
 					if name.local == "input" and HtmlTokenizer.lower(value(node, "type")) == "image" and (!has_attribute(node, "src") or !has_attribute(node, "alt")) {
 						return fail(parsed, node, InvalidChildren({ element: "input", expected: "image input requires src and alt" }))
 					}
+					next_context = descend(ancestry, name)
 					for child in node.children {
-						$pending = $pending.append({
-							index: child,
-							parent: name.local,
-							interactive: item.interactive or name.local == "button",
-							anchor: item.anchor or name.local == "a",
-							option_context: item.option_context or (
-								match name.local {
-									"select" | "optgroup" | "datalist" => True
-									_ => False
-								}
-							),
-							in_option: item.in_option or name.local == "option",
-							in_datalist: item.in_datalist or name.local == "datalist",
-							selected_context: item.selected_context or (name.local == "button" and item.parent == "select"),
-						})
+						$pending = $pending.append(context_frame(child, next_context))
 					}
 				}
-				Element(_) => {
+				Element(name) => {
+					next_context = descend(context_of(item), name)
 					for child in node.children {
-						$pending = $pending.append({ ..item, index: child, parent: "" })
+						$pending = $pending.append(context_frame(child, next_context))
 					}
 				}
 				_ => {}
@@ -172,6 +105,126 @@ HtmlValidate :: [].{
 		}
 		Ok({ ..parsed, diagnostics: $diagnostics })
 	}
+
+	# Internal finite authoring state shared with constructor-context queries.
+	ContextState : { parent : Str, interactive : Bool, anchor : Bool, option_context : Bool, in_option : Bool, in_datalist : Bool, selected_context : Bool }
+	empty_context : ContextState
+	empty_context = { parent: "", interactive: False, anchor: False, option_context: False, in_option: False, in_datalist: False, selected_context: False }
+	AttributeSummary : { href : Bool, tabindex : Bool, hidden_input : Bool, controls : Bool, usemap : Bool, label : Bool, value : Bool, html_encoding : Bool, font_breakout : Bool }
+	empty_attributes : AttributeSummary
+	empty_attributes = { href: False, tabindex: False, hidden_input: False, controls: False, usemap: False, label: False, value: False, html_encoding: False, font_breakout: False }
+	summarize_attributes : List({ name : Markup.Name, value : Str, ..extra }) -> AttributeSummary
+	summarize_attributes = |attributes| {
+		var $seen_type = False
+		var $seen_encoding = False
+		var $summary = empty_attributes
+		for attribute in attributes {
+			if attribute.name.namespace == NoNamespace {
+				match attribute.name.local {
+					"href" => {
+						$summary = { ..$summary, href: True }
+					}
+					"tabindex" => {
+						$summary = { ..$summary, tabindex: True }
+					}
+					"type" if !$seen_type => {
+						$seen_type = True
+						$summary = { ..$summary, hidden_input: HtmlTokenizer.lower(attribute.value) == "hidden" }
+					}
+					"controls" => {
+						$summary = { ..$summary, controls: True }
+					}
+					"usemap" => {
+						$summary = { ..$summary, usemap: True }
+					}
+					"label" => {
+						$summary = { ..$summary, label: True }
+					}
+					"value" => {
+						$summary = { ..$summary, value: True }
+					}
+					"encoding" if !$seen_encoding => {
+						$seen_encoding = True
+						$summary = { ..$summary, html_encoding: ["text/html", "application/xhtml+xml"].contains(HtmlTokenizer.lower(attribute.value)) }
+					}
+					"color" | "face" | "size" => {
+						$summary = { ..$summary, font_breakout: True }
+					}
+					_ => {}
+				}
+			}
+		}
+		$summary
+	}
+	context_problem : ContextState, Str, AttributeSummary -> Try({}, [InvalidChildren({ element : Str, expected : Str })])
+	context_problem = |context, element, attributes| {
+		if element == "a" and context.anchor {
+			return Err(InvalidChildren({ element: "a", expected: "no descendant a element" }))
+		}
+		if context.interactive and (interactive_summary(attributes, element) or attributes.tabindex) {
+			return Err(InvalidChildren({ element: "button", expected: "no nested interactive content" }))
+		}
+		if context.in_option and (interactive_summary(attributes, element) or ["datalist", "object"].contains(element) or attributes.tabindex) {
+			return Err(InvalidChildren({ element: "option", expected: "non-interactive option content without tabindex" }))
+		}
+		if element == "selectedcontent" and !context.selected_context {
+			return Err(InvalidChildren({ element: "selectedcontent", expected: "descendant of a button that is a child of select" }))
+		}
+		Ok({})
+	}
+	descend : ContextState, Markup.Name -> ContextState
+	descend = |context, element| if element.namespace == Uri(Markup.html_namespace) {
+		{ parent: element.local, interactive: context.interactive or element.local == "button", anchor: context.anchor or element.local == "a", option_context: context.option_context or ["select", "optgroup", "datalist"].contains(element.local), in_option: context.in_option or element.local == "option", in_datalist: context.in_datalist or element.local == "datalist", selected_context: context.selected_context or (element.local == "button" and context.parent == "select") }
+	} else { ..context, parent: "" }
+	parent_allowed : ContextState, Str -> Bool
+	parent_allowed = |context, element| match element {
+		"li" => ["ul", "ol", "menu"].contains(context.parent)
+		"dt" | "dd" => context.parent == "dl" or context.parent == "div"
+		"tr" => ["table", "thead", "tbody", "tfoot"].contains(context.parent)
+		"td" | "th" => context.parent == "tr"
+		"thead" | "tbody" | "tfoot" | "caption" | "colgroup" => context.parent == "table"
+		"col" => context.parent == "colgroup"
+		"option" | "optgroup" => context.option_context
+		"summary" => context.parent == "details"
+		"legend" => context.parent == "fieldset" or context.parent == "optgroup"
+		"source" => ["audio", "video", "picture"].contains(context.parent)
+		"track" => context.parent == "audio" or context.parent == "video"
+		_ => True
+	}
+	ChildRule : [AnyChildren, NoChildren, TextOnly, ElementNames(List(Str))]
+	child_rule : Str, AttributeSummary, Bool -> ChildRule
+	child_rule = |element, attributes, in_datalist| {
+		if void_elements(element) or element == "selectedcontent" or (element == "option" and attributes.label and attributes.value) {
+			return NoChildren
+		}
+		if element == "option" and (attributes.label or in_datalist) {
+			return TextOnly
+		}
+		match element {
+			"ul" | "ol" | "menu" => ElementNames(["li", "script", "template"])
+			"dl" => ElementNames(["dt", "dd", "div", "script", "template"])
+			"table" => ElementNames(["caption", "colgroup", "thead", "tbody", "tfoot", "tr", "script", "template"])
+			"thead" | "tbody" | "tfoot" => ElementNames(["tr", "script", "template"])
+			"tr" => ElementNames(["td", "th", "script", "template"])
+			"colgroup" => ElementNames(["col", "script", "template"])
+			"select" => ElementNames(["button", "option", "optgroup", "hr", "div", "script", "template", "noscript"])
+			"optgroup" => ElementNames(["legend", "option", "div", "script", "template", "noscript"])
+			_ => AnyChildren
+		}
+	}
+	child_expected : ChildRule, Markup.Name -> Try({}, [Rejected(Str)])
+	child_expected = |rule, element| match rule {
+		AnyChildren => Ok({})
+		NoChildren => Err(Rejected("no authored child content"))
+		TextOnly => Err(Rejected(""))
+		ElementNames(names) => if (element.namespace == Uri(Markup.html_namespace) and names.contains(element.local)) Ok({}) else Err(Rejected(Str.join_with(names, ", ")))
+	}
+	text_expected : ChildRule, Str -> Try({}, [Rejected(Str)])
+	text_expected = |rule, text| if (Markup.whitespace(text)) Ok({}) else match rule {
+		NoChildren | ElementNames(_) => Err(Rejected("element-only content"))
+		_ => Ok({})
+	}
+
 	element_known : Str -> Bool
 	element_known = elements
 	custom_element_name : Str -> Bool
@@ -475,38 +528,16 @@ attributes = |element, attr| match element {
 	_ => False
 }
 
-interactive = |node, name| (
-	match name {
-		"button" | "details" | "embed" | "iframe" | "label" | "select" | "textarea" => True
-		_ => False
-	}
-) or (name == "input" and HtmlTokenizer.lower(value(node, "type")) != "hidden") or (name == "a" and has_attribute(node, "href")) or (
-	(
-		match name {
-			"audio" | "video" => True
-			_ => False
-		}
-	) and has_attribute(node, "controls")
-) or (name == "img" and has_attribute(node, "usemap"))
+interactive_summary = |attribute_facts, name| ["button", "details", "embed", "iframe", "label", "select", "textarea"].contains(name) or (name == "input" and !attribute_facts.hidden_input) or (name == "a" and attribute_facts.href) or (["audio", "video"].contains(name) and attribute_facts.controls) or (name == "img" and attribute_facts.usemap)
+
+context_of = |item| { parent: item.parent, interactive: item.interactive, anchor: item.anchor, option_context: item.option_context, in_option: item.in_option, in_datalist: item.in_datalist, selected_context: item.selected_context }
 
 check_children : Markup.Parsed, Markup.Node, Str, Bool -> Try({}, [InvalidMarkup(Markup.Error)])
-check_children = |parsed, node, name, in_datalist| {
-	allowed_children = match name {
-		"ul" | "ol" | "menu" => ["li", "script", "template"]
-		"dl" => ["dt", "dd", "div", "script", "template"]
-		"table" => ["caption", "colgroup", "thead", "tbody", "tfoot", "tr", "script", "template"]
-		"thead" | "tbody" | "tfoot" => ["tr", "script", "template"]
-		"tr" => ["td", "th", "script", "template"]
-		"colgroup" => ["col", "script", "template"]
-		"select" => ["button", "option", "optgroup", "hr", "div", "script", "template", "noscript"]
-		"optgroup" => ["legend", "option", "div", "script", "template", "noscript"]
-		_ => []
-	}
-	nothing = void_elements(name) or name == "selectedcontent" or (name == "option" and has_attribute(node, "label") and has_attribute(node, "value"))
-	text_only = name == "option" and (has_attribute(node, "label") or in_datalist)
-	if !nothing and !text_only and allowed_children.is_empty() {
-		# Unrestricted content still requires valid arena edges. Its child
-		# kinds, namespaces and text cannot reject this content model.
+check_children = |parsed, node, name, in_datalist| check_children_with_attributes(parsed, node, name, in_datalist, if (name == "option") HtmlValidate.summarize_attributes(node.attributes) else HtmlValidate.empty_attributes)
+
+check_children_with_attributes = |parsed, node, name, in_datalist, attribute_facts| {
+	rule = HtmlValidate.child_rule(name, attribute_facts, in_datalist)
+	if rule == AnyChildren {
 		node_count = parsed.tree.nodes.len()
 		if node.children.any(|index| index >= node_count) {
 			return fail(parsed, node, Unsupported("invalid child node"))
@@ -519,18 +550,18 @@ check_children = |parsed, node, name, in_datalist| {
 			Cloned(_) => True
 			_ => False
 		}
-		match child.kind {
-			Element(n) => {
-				if !(name == "selectedcontent" and derived) and (nothing or text_only or (!allowed_children.is_empty() and (n.namespace != Uri(Markup.html_namespace) or !allowed_children.contains(n.local)))) {
-					return fail(parsed, child, InvalidChildren({ element: name, expected: if (nothing) "no authored child content" else Str.join_with(allowed_children, ", ") }))
+		if !(name == "selectedcontent" and derived) {
+			match child.kind {
+				Element(n) => match HtmlValidate.child_expected(rule, n) {
+					Ok(_) => {}
+					Err(Rejected(expected)) => return fail(parsed, child, InvalidChildren({ element: name, expected }))
 				}
-			}
-			Text(text) if !Markup.whitespace(text) => {
-				if !(name == "selectedcontent" and derived) and (nothing or !allowed_children.is_empty()) {
-					return fail(parsed, child, InvalidChildren({ element: name, expected: "element-only content" }))
+				Text(text) => match HtmlValidate.text_expected(rule, text) {
+					Ok(_) => {}
+					Err(Rejected(expected)) => return fail(parsed, child, InvalidChildren({ element: name, expected }))
 				}
+				_ => {}
 			}
-			_ => {}
 		}
 	}
 	Ok({})
@@ -575,3 +606,6 @@ expect {
 	invalid = { ..parent, children: [1, 2] }
 	check_children(parsed, parent, "p", False) == Ok({}) and check_children(parsed, invalid, "p", False) == Err(InvalidMarkup({ problem: Unsupported("invalid child node"), line: 1, column: 1 }))
 }
+
+context_frame : U64, HtmlValidate.ContextState -> _
+context_frame = |index, context| { index, parent: context.parent, interactive: context.interactive, anchor: context.anchor, option_context: context.option_context, in_option: context.in_option, in_datalist: context.in_datalist, selected_context: context.selected_context }

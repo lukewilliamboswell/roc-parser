@@ -3,10 +3,16 @@ import HtmlTokenizer as Tok
 import Literal
 import MarkupHtmlError
 import MarkupVocabulary
+import HtmlContextRules
 
 ## HTML tree construction. The open-elements and active-formatting stacks are
 ## separate from the indexed output tree so recovery can reparent existing nodes.
 HtmlTree :: [].{
+	# Internal HTML spellings used by constructor-context preservation checks.
+	canonical_element_name : Str, Str -> Markup.Name
+	canonical_element_name = |qualified, namespace| { namespace: if (namespace == "") NoNamespace else Uri(namespace), prefix: Unprefixed, local: adjust_tag(Tok.lower(qualified), namespace) }
+	canonical_attribute_name : Str, Str -> Markup.Name
+	canonical_attribute_name = |qualified, namespace| attribute_name(Tok.lower(qualified), namespace)
 	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True, defer_projection : Bool ?? False }
 
 	## Recompute derived selected option content after a template materializes
@@ -1072,22 +1078,14 @@ Active : [Entry(U64), Marker]
 # Detached/root nodes retain an explicit missing parent entry.
 State : { nodes : List(Markup.Node), roots : List(U64), parents : List(NodeIndexEntry), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, context_class : NamespaceClass, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
 
-NamespaceClass : [HtmlNamespace, SvgNamespace, MathNamespace, OtherNamespace]
+NamespaceClass : HtmlContextRules.NamespaceClass
 
 NodeIndexEntry : { parent : Try(U64, [Missing]), namespace : NamespaceClass }
 
 empty_index_entry : NodeIndexEntry
 empty_index_entry = { parent: Err(Missing), namespace: OtherNamespace }
 
-namespace_class = |uri| if uri == Markup.html_namespace {
-	HtmlNamespace
-} else if uri == Markup.svg_namespace {
-	SvgNamespace
-} else if uri == Markup.mathml_namespace {
-	MathNamespace
-} else {
-	OtherNamespace
-}
+namespace_class = HtmlContextRules.namespace_class
 
 kind_namespace = |kind| match kind {
 	Element({ namespace: Uri(uri), .. }) => namespace_class(uri)
@@ -1405,49 +1403,8 @@ in_scope = |s, name, kind| {
 		if ns == HtmlNamespace and n == name {
 			return True
 		}
-		if ns == HtmlNamespace {
-			if match n {
-				"html" | "table" | "template" => True
-				_ => False
-			} {
-				return False
-			}
-			if kind != TableScope and (
-				match n {
-					"applet" | "caption" | "td" | "th" | "marquee" | "object" | "select" => True
-					_ => False
-				}
-			) {
-				return False
-			}
-			if kind == ListScope and (
-				match n {
-					"ol" | "ul" => True
-					_ => False
-				}
-			) {
-				return False
-			}
-			if kind == ButtonScope and n == "button" {
-				return False
-			}
-		} else if kind != TableScope {
-			if ns == MathNamespace and (
-				match n {
-					"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
-					_ => False
-				}
-			) {
-				return False
-			}
-			if ns == SvgNamespace and (
-				match n {
-					"foreignObject" | "desc" | "title" => True
-					_ => False
-				}
-			) {
-				return False
-			}
+		if HtmlContextRules.scope_boundary(ns, n, kind) {
+			return False
 		}
 	}
 	False
@@ -1455,12 +1412,7 @@ in_scope = |s, name, kind| {
 
 implied = |s, except| {
 	var $s = s
-	while (
-		match current($s) {
-			"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" => True
-			_ => False
-		}
-	) and current($s) != except {
+	while HtmlContextRules.implied_end_element(current($s)) and current($s) != except {
 		$s = pop_current($s)
 	}
 	$s
@@ -2176,19 +2128,13 @@ body = |state, token| {
 			else if name == "template" {
 				$s = start_template($s, tag, token.span)
 			}
-			else if match name {
-				"address" | "article" | "aside" | "blockquote" | "center" | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "main" | "menu" | "nav" | "ol" | "p" | "search" | "section" | "summary" | "ul" => True
-				_ => False
-			} {
-				if in_scope($s, "p", ButtonScope) {
+			else if HtmlContextRules.block_start(name) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
-			} else if match name {
-				"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
-				_ => False
-			} {
-				if in_scope($s, "p", ButtonScope) {
+			} else if HtmlContextRules.heading(name) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				if match current($s) {
@@ -2200,7 +2146,7 @@ body = |state, token| {
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 			} else if name == "pre" or name == "listing" {
-				if in_scope($s, "p", ButtonScope) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -2210,7 +2156,7 @@ body = |state, token| {
 					$s = problem($s, NestedForm, token.span.start)
 				}
 				else {
-					if in_scope($s, "p", ButtonScope) {
+					if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 						$s = close_p($s)
 					}
 					id = $s.nodes.len()
@@ -2241,13 +2187,13 @@ body = |state, token| {
 						break
 					}
 				}
-				if in_scope($s, "p", ButtonScope) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, frameset_ok: False }
 			} else if name == "plaintext" {
-				if in_scope($s, "p", ButtonScope) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -2305,7 +2251,7 @@ body = |state, token| {
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
 				$s = { ..$s, active: $s.active.append(Marker), frameset_ok: False }
 			} else if name == "table" {
-				if !$s.quirks and in_scope($s, "p", ButtonScope) {
+				if !$s.quirks and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -2313,7 +2259,7 @@ body = |state, token| {
 			} else if name == "input" and $s.fragment and $s.context.name == "select" {
 				$s = problem($s, UnexpectedSelectContent, token.span.start)
 			} else if void(name) {
-				if name == "hr" and in_scope($s, "p", ButtonScope) {
+				if name == "hr" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				if name == "input" and in_scope($s, "select", DefaultScope) {
@@ -2329,7 +2275,7 @@ body = |state, token| {
 				}
 				adjusted = if (name == "image") { ..tag, name: "img" } else tag
 				$s = insert_tag($s, adjusted, Markup.html_namespace, token.span, False)
-				if name == "hr" and in_scope($s, "p", ButtonScope) {
+				if name == "hr" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				if !(
@@ -2347,7 +2293,7 @@ body = |state, token| {
 				"xmp" | "iframe" | "noembed" | "noscript" | "script" | "style" | "title" | "noframes" => True
 				_ => False
 			} {
-				if name == "xmp" and in_scope($s, "p", ButtonScope) {
+				if name == "xmp" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
 					$s = close_p($s)
 				}
 				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
@@ -3039,12 +2985,7 @@ foreign_token = |s, token| {
 		_ => {}
 	}
 	name = adjusted_name(s)
-	if namespace == MathNamespace and (
-		match name {
-			"mi" | "mo" | "mn" | "ms" | "mtext" => True
-			_ => False
-		}
-	) {
+	if namespace == MathNamespace and HtmlContextRules.math_text_integration(name) {
 		match token.kind {
 			Characters(_) => return False
 			Start(t) if t.name != "mglyph" and t.name != "malignmark" => return False
@@ -3069,12 +3010,7 @@ foreign_token = |s, token| {
 integration = |s| {
 	ns = adjusted_namespace_class(s)
 	name = adjusted_name(s)
-	if ns == SvgNamespace and (
-		match name {
-			"foreignObject" | "desc" | "title" => True
-			_ => False
-		}
-	) {
+	if ns == SvgNamespace and HtmlContextRules.svg_integration(name) {
 		return True
 	}
 	if ns == MathNamespace and name == "annotation-xml" {
@@ -3107,21 +3043,7 @@ foreign_process = |state, token| {
 			$s = append_node($s, { kind: Comment(t), attributes: [], children: [], origin: Authored(token.span) })
 		}
 		Start(t) => {
-			breakout = (
-				match t.name {
-					"b" | "big" | "blockquote" | "body" | "br" | "center" | "code" | "dd" | "div" | "dl" | "dt" | "em" | "embed" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "hr" | "i" | "img" | "li" | "listing" | "menu" | "meta" | "nobr" | "ol" | "p" | "pre" | "ruby" | "s" | "small" | "span" | "strong" | "strike" | "sub" | "sup" | "table" | "tt" | "u" | "ul" | "var" => True
-					_ => False
-				}
-			) or (
-				t.name == "font" and t.attributes.any(
-					|a| (
-						match a.name {
-							"color" | "face" | "size" => True
-							_ => False
-						}
-					),
-				)
-			)
+			breakout = HtmlContextRules.foreign_breakout(t.name, t.attributes.any(|attribute| ["color", "face", "size"].contains(attribute.name)))
 			if breakout {
 				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
 				while !$s.stack.is_empty() and namespace_class_at($s, $s.stack.last() ?? 0) != HtmlNamespace and !integration($s) {
@@ -3303,34 +3225,14 @@ svg_tags = [("altglyph", "altGlyph"), ("altglyphdef", "altGlyphDef"), ("altglyph
 
 svg_attributes = [("attributename", "attributeName"), ("attributetype", "attributeType"), ("basefrequency", "baseFrequency"), ("baseprofile", "baseProfile"), ("calcmode", "calcMode"), ("clippathunits", "clipPathUnits"), ("diffuseconstant", "diffuseConstant"), ("edgemode", "edgeMode"), ("filterunits", "filterUnits"), ("glyphref", "glyphRef"), ("gradienttransform", "gradientTransform"), ("gradientunits", "gradientUnits"), ("kernelmatrix", "kernelMatrix"), ("kernelunitlength", "kernelUnitLength"), ("keypoints", "keyPoints"), ("keysplines", "keySplines"), ("keytimes", "keyTimes"), ("lengthadjust", "lengthAdjust"), ("limitingconeangle", "limitingConeAngle"), ("markerheight", "markerHeight"), ("markerunits", "markerUnits"), ("markerwidth", "markerWidth"), ("maskcontentunits", "maskContentUnits"), ("maskunits", "maskUnits"), ("numoctaves", "numOctaves"), ("pathlength", "pathLength"), ("patterncontentunits", "patternContentUnits"), ("patterntransform", "patternTransform"), ("patternunits", "patternUnits"), ("pointsatx", "pointsAtX"), ("pointsaty", "pointsAtY"), ("pointsatz", "pointsAtZ"), ("preservealpha", "preserveAlpha"), ("preserveaspectratio", "preserveAspectRatio"), ("primitiveunits", "primitiveUnits"), ("refx", "refX"), ("refy", "refY"), ("repeatcount", "repeatCount"), ("repeatdur", "repeatDur"), ("requiredextensions", "requiredExtensions"), ("requiredfeatures", "requiredFeatures"), ("specularconstant", "specularConstant"), ("specularexponent", "specularExponent"), ("spreadmethod", "spreadMethod"), ("startoffset", "startOffset"), ("stddeviation", "stdDeviation"), ("stitchtiles", "stitchTiles"), ("surfacescale", "surfaceScale"), ("systemlanguage", "systemLanguage"), ("tablevalues", "tableValues"), ("targetx", "targetX"), ("targety", "targetY"), ("textlength", "textLength"), ("viewbox", "viewBox"), ("viewtarget", "viewTarget"), ("xchannelselector", "xChannelSelector"), ("ychannelselector", "yChannelSelector"), ("zoomandpan", "zoomAndPan")]
 
-whitespace = |text| {
-	bytes = text.to_utf8()
-	var $at = 0
-	while $at < bytes.len() {
-		if !Tok.space(bytes.get($at) ?? 0) {
-			return False
-		}
-		$at = $at + 1
-	}
-	True
-}
+whitespace = HtmlContextRules.html_whitespace
 
 # In-body insertion ignores col/frame; image is a source alias for img.
 void = |name| name == "image" or (name != "col" and name != "frame" and MarkupVocabulary.html_void(name))
 
-formatting = |n| (
-	match n {
-		"a" | "b" | "big" | "code" | "em" | "font" | "i" | "nobr" | "s" | "small" | "strike" | "strong" | "tt" | "u" => True
-		_ => False
-	}
-)
+formatting = HtmlContextRules.formatting
 
-special = |n| (
-	match n {
-		"address" | "applet" | "area" | "article" | "aside" | "base" | "basefont" | "bgsound" | "blockquote" | "body" | "br" | "button" | "caption" | "center" | "col" | "colgroup" | "dd" | "details" | "dir" | "div" | "dl" | "dt" | "embed" | "fieldset" | "figcaption" | "figure" | "footer" | "form" | "frame" | "frameset" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head" | "header" | "hgroup" | "hr" | "html" | "iframe" | "img" | "input" | "li" | "link" | "listing" | "main" | "marquee" | "menu" | "meta" | "nav" | "noembed" | "noframes" | "noscript" | "object" | "ol" | "p" | "param" | "plaintext" | "pre" | "script" | "search" | "section" | "select" | "source" | "style" | "summary" | "table" | "tbody" | "td" | "template" | "textarea" | "tfoot" | "th" | "thead" | "title" | "tr" | "track" | "ul" | "wbr" | "xmp" => True
-		_ => False
-	}
-)
+special = HtmlContextRules.html_special
 
 expect {
 	parsed = HtmlTree.parse("<!doctype html><p>a<div>b</div>", False, {}, {})?
@@ -3524,32 +3426,8 @@ expect {
 	pis == ["a", "b", "c", "d"]
 }
 
-special_at = |s, id| {
-	ns = namespace_class_at(s, id)
-	n = name_at(s, id)
-	if ns == HtmlNamespace {
-		special(n)
-	}
-	else if ns == MathNamespace {
-		(
-			match n {
-				"mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml" => True
-				_ => False
-			}
-		)
-	}
-	else if ns == SvgNamespace {
-		(
-			match n {
-				"foreignObject" | "desc" | "title" => True
-				_ => False
-			}
-		)
-	}
-	else {
-		False
-	}
-}
+special_at = |s, id| HtmlContextRules.special(namespace_class_at(s, id), name_at(s, id))
+
 expect {
 	p = HtmlTree.parse("<select><div><i></div><option>option", True, {}, { recovery: Browser })?
 	names(p.tree).contains("div") and names(p.tree).contains("i")
