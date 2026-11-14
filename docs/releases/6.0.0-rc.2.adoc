@@ -35,9 +35,16 @@ the exact compiler used to build and test the delivered bundle.
   compilation. `Template(a)` keeps typed values separately and binds text or
   whole quoted attributes without reparsing.
 * `DomName` validates computed DOM names independently of XML source grammar.
-  `MarkupFacts` exposes vocabulary, namespace-aware attributes and known inline
-  handlers. Handler rejection is an opt-in consumer policy; the normal parsers
-  accept valid handler attributes.
+  `MarkupFacts` exposes enumerable canonical element/ARIA names,
+  namespace-aware attribute facts, known inline handlers and initial-newline
+  behavior, including comments between a start tag and text. Handler rejection
+  is an opt-in consumer policy; the normal parsers accept valid handler attributes.
+* `MarkupContext` retains finite placement state for balanced DOM construction.
+  Check one child or decoded text value without reparsing or walking ancestors;
+  history-sensitive contexts return `UnsupportedContext` explicitly.
+* `strict_foreign_spelling` optionally rejects HTML-syntax SVG/MathML name
+  adjustments, with exact authored-name spans and expected spellings. It is
+  independent of `exact_structure` and leaves normal HTML case folding available.
 * SVG checks include path commands and common geometry/value grammars. MathML
   checks cover Core and common Presentation structures. Embedded CSS,
   JavaScript, URLs and full Content MathML semantics are outside these checks.

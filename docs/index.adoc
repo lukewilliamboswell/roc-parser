@@ -69,6 +69,7 @@ include::markup.adoc[leveloffset=+1]
 include::dom-names.adoc[leveloffset=+1]
 
 include::markup-facts.adoc[leveloffset=+1]
+include::markup-context.adoc[leveloffset=+1]
 
 include::exact-structure.adoc[leveloffset=+1]
 

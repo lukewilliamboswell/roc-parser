@@ -39,4 +39,9 @@ and https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-refere
 Discarded insignificant HTML whitespace is permitted; fostered or moved content
 is rejected. The authored check runs before `selectedcontent` projection, so
 legitimate derived copies and template binding fan-out remain supported.
-XML syntax already requires explicit nesting and is unaffected by this option.
+`exact_structure` permits normal foreign-name adjustments. To reject spelling
+changes such as `viewbox` to `viewBox`, also enable
+`strict_foreign_spelling: True`. Its `NonCanonicalName` diagnostic identifies
+the exact name span and expected spelling. HTML names inside integration points
+still use normal HTML case folding. XML syntax already requires explicit nesting
+and is unaffected by these HTML policies.

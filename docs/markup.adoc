@@ -60,6 +60,14 @@ Set `syntax: HtmlSyntax` on SVG or MathML props for browser fragment rules.
 Set `syntax: XmlSyntax` on HTML props for XHTML-style XML rules. The original
 source bytes remain available regardless of the selected syntax.
 
+For literals that require canonical foreign spelling, set
+`strict_foreign_spelling: True`. In HTML syntax this rejects SVG or MathML
+names whose authored spelling differs from the constructed name, such as
+`viewbox` instead of `viewBox`, while preserving normal HTML case folding
+inside integration points. `NonCanonicalName` reports the authored and expected
+spellings and the exact name's UTF-8 byte span. The default permits browser
+name adjustment; XML syntax keeps its existing case-sensitive rules.
+
 For HTML fragments, `context_namespace` and `context_element` select the parent
 context. A table row fragment uses `context_element: "tbody"`; SVG children use
 the SVG namespace and `context_element: "svg"`. The `scripting` prop defaults to `True` for browser parsing of `noscript`;
@@ -138,6 +146,7 @@ Strict syntax and validation are the defaults. The options are independent:
 |Prop |Effect
 |`recovery: Browser` |Use HTML's repaired tree and retain diagnostics. XML remains well-formedness based.
 |`exact_structure: True` |Require authored HTML nesting, explicit non-void ends and no structural repairs, before derived projection.
+|`strict_foreign_spelling: True` |Require canonical authored SVG/MathML names in HTML syntax, independently of structural repairs.
 |`allow_unknown_elements: True` |Preserve extension elements.
 |`allow_unknown_attributes: True` |Preserve extension attributes.
 |`check_values: False` |Retain values without the implemented attribute-value checks.
@@ -178,6 +187,7 @@ Use `Markup.text(tree, index)` to join descendant character data.
 Keep URI, prefix and local name separately when lowering a tree.
 xref:dom-names.adoc#dom-names[`DomName`] validates computed DOM names without changing XML source grammar;
 xref:markup-facts.adoc#markup-facts[`MarkupFacts`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
+xref:markup-context.adoc#markup-context[`MarkupContext`] checks a new child or text value against a retained enclosing context without reparsing or walking ancestors.
 The xref:consumer-fidelity.adoc#consumer-fidelity[consumer-fidelity review] checks prefixes, qualified spellings, namespace declarations, binding identity and adoption.
 
 Read original bytes to reproduce authored source exactly. Reconstructing a tree

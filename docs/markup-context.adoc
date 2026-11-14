@@ -1,0 +1,59 @@
+[#markup-context]
+= Check a child before constructing DOM
+
+Use `MarkupContext` when a renderer constructs nodes directly or changes one
+reactive child or text value. A context records the enclosing placement rules;
+checking a new value needs no source string, parsed tree or ancestor walk.
+Names and attributes use explicit namespace identities, as in `Markup.Tree`.
+Pass canonical names from a parsed tree, or validate computed names with
+xref:dom-names.adoc#dom-names[`DomName`]. These queries check placement; vocabulary
+membership remains available through `MarkupFacts`.
+
+Seed a known enclosing boundary with `MarkupContext.seed(parent, attributes,
+options)`. Pass that context to `child` for each new element. Keep the returned
+context beside the child node and use it for that node's children and later text
+updates. `text(context, decoded_text)` checks text placement. Attribute values
+are decoded strings; a colon in a spelling does not supply a namespace.
+
+The complete runnable example is
+https://github.com/lukewilliamboswell/roc-parser/blob/main/examples/markup-context.roc[`examples/markup-context.roc`].
+Its name helpers set the HTML, SVG or MathML namespace explicitly:
+
+[source,roc]
+----
+include::examples/markup-context.roc[tag=context]
+----
+
+The inherited button restriction survives the intervening `span`, so adding an
+interactive link is rejected. The table example requires an explicit `tbody`
+before `tr`. SVG and MathML contexts apply the same content rules as their
+validators; an `mi` permits text while an `mrow` needs MathML child elements.
+
+== Reuse the enclosing boundary
+
+A seed describes the parent and establishes a boundary for inherited rules.
+It cannot infer ancestors outside that boundary. Propagate returned contexts
+from the enclosing boundary instead of seeding each descendant independently.
+For a replacement child, reuse its parent's context. If placement-relevant
+attributes change, derive a new child context before checking its descendants.
+No existing DOM node is mutated by these queries.
+
+The default syntax is HTML and scripting is enabled, matching the parser's
+browser context settings. XML syntax uses namespace-aware content checks
+without HTML tree-construction repairs. These queries operate on decoded node
+values; source syntax, escaping and input-stream diagnostics remain parser or
+serializer responsibilities.
+
+== Handle rejection and unsupported contexts
+
+`InvalidChild` and `InvalidText` identify a placement rejected by the content
+rules. `WouldRepair` identifies a browser repair that would change balanced
+construction. `UnexpectedNamespace` gives the required namespace.
+`UnsupportedContext` explicitly identifies a context that needs history beyond
+these finite checks. Handle that result rather than treating it as acceptance.
+
+These are checks for one balanced element or text placement. They do not prove
+whole-parent arity, sibling counts, document completeness, attribute value
+grammars or source escaping. Use the format's parser or `validate_tree` for
+complete markup validation. Contexts needing insertion or sibling history,
+such as templates and framesets, report `UnsupportedContext`.

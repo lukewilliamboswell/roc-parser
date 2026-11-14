@@ -40,8 +40,14 @@ Applications using basic-cli should use 0.28.1.
 * Shared `Markup` trees with resolved namespaces, exact source bytes, lexical
   regions, resource limits and authored, implied or cloned node locations.
 * `DomName` validation for computed DOM names, distinct from XML source-name
-  grammar, and `MarkupFacts` for namespace-aware vocabulary, boolean/enumerated
-  attributes, HTML text/void behavior and known handler attributes.
+  grammar, and `MarkupFacts` for enumerable canonical element/ARIA vocabularies,
+  namespace-aware boolean/enumerated attributes, HTML text/void/initial-newline
+  behavior and known handler attributes.
+* `MarkupContext` for a new child or text value's placement using retained finite
+  context, without reparsing or walking ancestors. History-sensitive contexts
+  return `UnsupportedContext`; whole-parent completeness remains a separate check.
+* Opt-in `strict_foreign_spelling` to reject HTML-syntax SVG/MathML name
+  adjustments with authored/expected spellings and exact name spans.
 * Opt-in `exact_structure` for authored HTML nesting without repairs, with typed
   reasons and causing source spans before selected-content projection.
 * `SvgPath` command parsing, common SVG value grammars, and MathML Core plus

@@ -53,6 +53,19 @@
       ]
     },
     {
+      "path": "examples/markup-context.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "HTML, SVG and MathML constructor contexts checked\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/markup-literals.roc",
       "cases": [
         {
