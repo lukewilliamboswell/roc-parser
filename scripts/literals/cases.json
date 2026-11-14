@@ -517,5 +517,18 @@
       "HtmlStructure",
       "MissingEndTag"
     ]
+  },
+  {
+    "name": "markup-browser-exact-cr-references",
+    "body": "ReportedHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ReportedHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { recovery: Browser, exact_structure: True } }).map_ok(|fragment| ReportedHtml.{ parsed: fragment.parsed })\n}\nfragment : ReportedHtml\nfragment = \"<p title='a&#13;b'>a&#13;b</p>\"\nvalue = {\n root = fragment.parsed.tree.roots.first() ?? crash \"missing paragraph\"\n node = fragment.parsed.tree.nodes.get(root) ?? crash \"missing root\"\n attribute = node.attributes.first() ?? crash \"missing title\"\n Markup.text(fragment.parsed.tree, root) == \"a\\rb\" and attribute.value == \"a\\rb\" and fragment.parsed.diagnostics.len() == 2\n}\n"
+  },
+  {
+    "name": "markup-strict-cr-reference",
+    "body": "StrictHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(StrictHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| StrictHtml.{ parsed: fragment.parsed })\n}\nvalue : StrictHtml\nvalue = \"<p>&#13;</p>\"\n",
+    "errors": [
+      "invalid string",
+      "HTML",
+      "InvalidCharacterReference"
+    ]
   }
 ]

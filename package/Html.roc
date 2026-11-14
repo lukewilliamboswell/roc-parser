@@ -147,6 +147,66 @@ syntax = |text, props, fragment| {
 shared : Html.Props -> Markup.Props
 shared = |p| { syntax: p.syntax, exact_structure: p.exact_structure, recovery: p.recovery, allow_unknown_elements: p.allow_unknown_elements, allow_unknown_attributes: p.allow_unknown_attributes, check_values: p.check_values, max_source_bytes: p.max_source_bytes, max_depth: p.max_depth, max_elements: p.max_elements, max_nodes: p.max_nodes, max_slots: p.max_slots, max_attributes: p.max_attributes, max_diagnostics: p.max_diagnostics, max_work_per_byte: p.max_work_per_byte }
 
+# Browser recovery retains reference diagnostics while Exact independently checks
+# authored structure. Decoded CR references are not source newline preprocessing.
+expect {
+	source = "<p title='a&#13;b'>a&#xD;b</p>"
+	match Html.parse_fragment(source, { recovery: Browser, exact_structure: True }) {
+		Ok(fragment) => {
+			parsed = fragment.parsed
+			root = parsed.tree.roots.first()?
+			node = parsed.tree.nodes.get(root)?
+			attribute = node.attributes.first()?
+			Markup.text(parsed.tree, root) == "a\rb" and attribute.value == "a\rb" and parsed.source.bytes == source.to_utf8() and parsed.source.partition_valid() and parsed.diagnostics == [
+				{ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 12 },
+				{ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 21 },
+			]
+		}
+		Err(_) => False
+	}
+}
+expect {
+	match Html.parse_fragment("<p title='a&#13;b'>a&#xD;b</p>", { exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlSyntax(InvalidCharacterReference), line: 1, column: 12 })) => True
+		_ => False
+	}
+}
+expect {
+	source = "<p title='a\r\nb\rc'>a\r\nb\rc</p>"
+	match Html.parse_fragment(source, { exact_structure: True }) {
+		Ok(fragment) => {
+			parsed = fragment.parsed
+			root = parsed.tree.roots.first()?
+			node = parsed.tree.nodes.get(root)?
+			attribute = node.attributes.first()?
+			Markup.text(parsed.tree, root) == "a\nb\nc" and attribute.value == "a\nb\nc" and parsed.source.bytes == source.to_utf8() and parsed.diagnostics.is_empty()
+		}
+		Err(_) => False
+	}
+}
+expect {
+	source = "<p>\u(000B)</p>"
+	match (Html.parse_fragment(source, {}), Html.parse_fragment(source, { recovery: Browser, exact_structure: True })) {
+		(Err(InvalidMarkup({ problem: HtmlSyntax(ControlCharacterInInputStream), line: 1, column: 4 })), Ok(fragment)) => {
+			root = fragment.parsed.tree.roots.first()?
+			Markup.text(fragment.parsed.tree, root) == "\u(000B)" and fragment.parsed.diagnostics == [{ problem: HtmlSyntax(ControlCharacterInInputStream), line: 1, column: 4 }]
+		}
+		_ => False
+	}
+}
+expect {
+	match Html.parse_fragment("<p>&#13;</p><table><tr><td>x</td></tr></table>", { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ImpliedElement("tbody"), .. }), .. })) => True
+		_ => False
+	}
+}
+expect {
+	match Html.parse_fragment("<p a='1' a='2'></p>", { recovery: Browser, exact_structure: True, allow_unknown_attributes: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ChangedAttributes, span: { start: 0, end: 15 } }), .. })) => True
+		_ => False
+	}
+}
+
 expect Html.parse_str("<!doctype html><html lang='en'><head><title>Example</title></head><body><p>Hello &amp; welcome</p></body></html>").is_ok()
 expect Html.parse_fragment("<input type='CHECKBOX' checked><span aria-pressed='false'>x</span>", {}).is_ok()
 expect Html.parse_fragment("<div hidden='false'></div>", {}).is_err()

@@ -26,8 +26,16 @@ half-open UTF-8 byte span. Line and column identify that span's start. For
 example, `<p><div></div></p>` identifies the opening `div`, while a missing end
 tag identifies the end of input.
 
-Case folding, character-reference decoding, CR normalization and the normal
-first-newline handling of `pre`, `listing` and `textarea` remain available.
+Case folding, character-reference decoding, source CR/CRLF normalization and
+normal first-newline handling of `pre`, `listing` and `textarea` remain available.
+To retain non-structural parse diagnostics, combine `recovery: Browser` with
+`exact_structure: True`. For example, `<p>&#13;</p>` retains decoded CR text and
+an `InvalidCharacterReference` diagnostic; strict recovery rejects it. A literal
+source CR or CRLF becomes LF before reference decoding. Decoded CR references
+are not normalized again. These policies follow the
+https://html.spec.whatwg.org/multipage/parsing.html#preprocessing-the-input-stream[HTML input preprocessing]
+and https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state[numeric reference rules].
+
 Discarded insignificant HTML whitespace is permitted; fostered or moved content
 is rejected. The authored check runs before `selectedcontent` projection, so
 legitimate derived copies and template binding fan-out remain supported.
