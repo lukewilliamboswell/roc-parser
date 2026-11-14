@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -37,6 +38,20 @@ class FuzzStrEncodingTests(unittest.TestCase):
 
 
 class SeedCorpusTests(unittest.TestCase):
+    def test_receipt_platform_matches_every_target_header(self) -> None:
+        release = run_fuzz.ROC_FUZZ_RELEASE
+        expected = (
+            "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/"
+            f"{release['version']}/{release['bundle']}"
+        )
+        for name, config in run_fuzz.TARGETS.items():
+            with self.subTest(target=name):
+                platforms = re.findall(
+                    r'^\s*fuzz:\s*platform\s*"([^"\n]+)"',
+                    config.source.read_text(), re.MULTILINE,
+                )
+                self.assertEqual(platforms, [expected])
+
     def test_all_reviewable_seed_files_are_valid(self) -> None:
         for target_name in run_fuzz.TARGET_ORDER:
             config = run_fuzz.TARGETS[target_name]
