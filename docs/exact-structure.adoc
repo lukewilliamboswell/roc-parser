@@ -1,0 +1,47 @@
+[#exact-structure]
+= Exact authored HTML structure
+
+Set `exact_structure: True` in `Html.Props` when source nesting must match the
+constructed tree, for example before compiling a literal into DOM constructors.
+The default remains normal HTML parsing. This policy is independent of
+`recovery`: enabling browser recovery does not permit structural repairs when
+exact structure is requested.
+
+[source,roc]
+----
+Html.parse_fragment("<table><tbody><tr><td>x</td></tr></tbody></table>", {
+    exact_structure: True,
+})
+----
+
+Every non-void element needs an explicit matching end tag. HTML void elements
+such as `br` need none; foreign SVG and MathML elements may use self-closing
+syntax. Implicit elements, implicit closes, ignored tags, reparenting, formatting
+reconstruction and discarded or duplicated attributes are rejected. Document elements must be authored, including any required `html`, `head` and
+`body` wrappers. Fragment context nodes are synthetic and do not need to appear
+in the source.
+
+Errors use `Markup.Problem.HtmlStructure` with a typed reason and the causing
+half-open UTF-8 byte span. Line and column identify that span's start. For
+example, `<p><div></div></p>` identifies the opening `div`, while a missing end
+tag identifies the end of input.
+
+Case folding, character-reference decoding, source CR/CRLF normalization and
+normal first-newline handling of `pre`, `listing` and `textarea` remain available.
+To retain non-structural parse diagnostics, combine `recovery: Browser` with
+`exact_structure: True`. For example, `<p>&#13;</p>` retains decoded CR text and
+an `InvalidCharacterReference` diagnostic; strict recovery rejects it. A literal
+source CR or CRLF becomes LF before reference decoding. Decoded CR references
+are not normalized again. These policies follow the
+https://html.spec.whatwg.org/multipage/parsing.html#preprocessing-the-input-stream[HTML input preprocessing]
+and https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state[numeric reference rules].
+
+Discarded insignificant HTML whitespace is permitted; fostered or moved content
+is rejected. The authored check runs before `selectedcontent` projection, so
+legitimate derived copies and template binding fan-out remain supported.
+`exact_structure` permits normal foreign-name adjustments. To reject spelling
+changes such as `viewbox` to `viewBox`, also enable
+`strict_foreign_spelling: True`. Its `NonCanonicalName` diagnostic identifies
+the exact name span and expected spelling. HTML names inside integration points
+still use normal HTML case folding. XML syntax already requires explicit nesting
+and is unaffected by these HTML policies.

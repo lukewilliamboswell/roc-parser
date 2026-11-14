@@ -156,7 +156,9 @@ Yaml := [
 	validate_as = |props| {
 		node = validation_tree(props.source, props.name, props.lints)?
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: props.keys, unknown_keys: props.unknown_keys })
+		# TODO: Restore Yaml.Format in these derivation calls and the Parseable
+		# requirement after https://github.com/roc-lang/roc/issues/13022 is fixed.
+		parse_value = A.parser_for(YamlFormat.{ keys: props.keys, unknown_keys: props.unknown_keys })
 		match decode_node(parse_value, node) {
 			Ok(value) => Ok(value)
 			Err(InvalidYaml(problem)) => Err(checked_error(props.name, problem))
@@ -165,13 +167,7 @@ Yaml := [
 	}
 
 	## A typed YAML quotation. Access the decoded application value with `.value`.
-	Decoded(a) := { value : a }.{
-
-		## Decode quoted source with the defaults of [Yaml.validate_as].
-		from_quote : Str -> Try(Decoded(a), [BadQuotedBytes(Str)])
-			where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
-		from_quote = |source| Yaml.validate_as({ source: source }).map_ok(|value| Decoded.{ value })
-	}
+	Decoded(a) : YamlDecoded(a)
 
 	## Parse one YAML configuration document from a string.
 	##
@@ -365,7 +361,7 @@ Yaml := [
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
 	decode = |input| {
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: SnakeCase, unknown_keys: Skip })
+		parse_value = A.parser_for(YamlFormat.{ keys: SnakeCase, unknown_keys: Skip })
 		decode_with(parse_value, input)
 	}
 
@@ -393,7 +389,7 @@ Yaml := [
 		where [a.Parseable([InvalidYaml(Error), ..errs])]
 	decoder = |options| {
 		A : a
-		parse_value = A.parser_for(Yaml.Format.{ keys: options.keys, unknown_keys: options.unknown_keys })
+		parse_value = A.parser_for(YamlFormat.{ keys: options.keys, unknown_keys: options.unknown_keys })
 		|input| decode_with(parse_value, input)
 	}
 
@@ -410,289 +406,303 @@ Yaml := [
 	## ```
 	a.Parseable(errs) :
 		where [
-			a.parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, errs)),
+			a.parser_for : YamlFormat -> (Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, errs)),
 		]
 
 	## The decoding format that [Yaml.decode] passes to a type's `parser_for`.
 	## It implements the builtin parsing protocol; you do not call its methods
 	## yourself.
-	Format :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, Reject] }.{
-
-		## Spell a Roc field name as a YAML key, following the decoder's `keys` option.
-		rename_field : Format, Str -> Str
-		rename_field = |format, name| {
-			match format.keys {
-				SnakeCase => name
-				KebabCase => Str.join_with(Str.split_on(name, "_"), "-")
-				CamelCase => camel_case(name)
-			}
-		}
-
-		## Read a string: any quoted or block scalar, or a plain scalar other than null.
-		parse_str : Format, Cursor -> Try({ value : Str, rest : Cursor }, [InvalidYaml(Error)])
-		parse_str = |_, cursor| {
-			scalar = take_scalar(cursor, "a string")?
-			if scalar.plain and is_null_text(scalar.text) {
-				fail(scalar.line, scalar.column, "expected a string, found null")
-			} else {
-				Ok({ value: scalar.text, rest: advance_cursor(cursor, 1) })
-			}
-		}
-
-		## Read a core-schema boolean such as `true` or `FALSE`.
-		parse_bool : Format, Cursor -> Try({ value : Bool, rest : Cursor }, [InvalidYaml(Error)])
-		parse_bool = |_, cursor| {
-			scalar = take_scalar(cursor, "a boolean")?
-			value =
-				if !scalar.plain {
-					return scalar_mismatch(scalar, "a boolean")
-				} else if is_true_text(scalar.text) {
-					True
-				} else if is_false_text(scalar.text) {
-					False
-				} else {
-					return scalar_mismatch(scalar, "a boolean")
-				}
-			Ok({ value, rest: advance_cursor(cursor, 1) })
-		}
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_u8 : Format, Cursor -> Try({ value : U8, rest : Cursor }, [InvalidYaml(Error)])
-		parse_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_i8 : Format, Cursor -> Try({ value : I8, rest : Cursor }, [InvalidYaml(Error)])
-		parse_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_u16 : Format, Cursor -> Try({ value : U16, rest : Cursor }, [InvalidYaml(Error)])
-		parse_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_i16 : Format, Cursor -> Try({ value : I16, rest : Cursor }, [InvalidYaml(Error)])
-		parse_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_u32 : Format, Cursor -> Try({ value : U32, rest : Cursor }, [InvalidYaml(Error)])
-		parse_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_i32 : Format, Cursor -> Try({ value : I32, rest : Cursor }, [InvalidYaml(Error)])
-		parse_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_u64 : Format, Cursor -> Try({ value : U64, rest : Cursor }, [InvalidYaml(Error)])
-		parse_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_i64 : Format, Cursor -> Try({ value : I64, rest : Cursor }, [InvalidYaml(Error)])
-		parse_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_u128 : Format, Cursor -> Try({ value : U128, rest : Cursor }, [InvalidYaml(Error)])
-		parse_u128 = |_, cursor| decode_integer(cursor, "U128", U128.from_str, |n| Ok(n))
-
-		## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
-		parse_i128 : Format, Cursor -> Try({ value : I128, rest : Cursor }, [InvalidYaml(Error)])
-		parse_i128 = |_, cursor| decode_integer(cursor, "I128", I128.from_str, U128.to_i128_try)
-
-		## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-		parse_dec : Format, Cursor -> Try({ value : Dec, rest : Cursor }, [InvalidYaml(Error)])
-		parse_dec = |_, cursor| decode_float(cursor, "Dec", Dec.from_str, |_| Err(NotFinite))
-
-		## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-		parse_f32 : Format, Cursor -> Try({ value : F32, rest : Cursor }, [InvalidYaml(Error)])
-		parse_f32 = |_, cursor| decode_float(cursor, "F32", F32.from_str, special_f32)
-
-		## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
-		parse_f64 : Format, Cursor -> Try({ value : F64, rest : Cursor }, [InvalidYaml(Error)])
-		parse_f64 = |_, cursor| decode_float(cursor, "F64", F64.from_str, special_f64)
-
-		## Succeeds only on a null, so a `Try(_, [Null])` field falls back to
-		## its value parser otherwise.
-		parse_null : Format, Cursor -> Try(Cursor, [InvalidYaml(Error)])
-		parse_null = |_, cursor| {
-			event = current_event(cursor)?
-			match event.kind {
-				Plain(text) if is_null_text(text) => Ok(advance_cursor(cursor, 1))
-				_ => fail(event.line, event.column, "expected null")
-			}
-		}
-
-		## Read a tag without payloads from a scalar holding its name.
-		parse_tag_union : Format, Encoding.ParseTagUnionSpec(a), Cursor -> Try({ value : a, rest : Cursor }, [InvalidYaml(Error)])
-		parse_tag_union = |format, spec, cursor| {
-			scalar = take_scalar(cursor, "a tag name")?
-			Encoding.ParseTagUnionSpec.parse(
-				spec,
-				{
-					tag: scalar.text,
-					encoding: format,
-					state: advance_cursor(cursor, 1),
-					start_payloads: |state, count|
-						if count == 0 {
-							Ok(state)
-						} else {
-							fail(scalar.line, scalar.column, "tags with payloads cannot be decoded from YAML")
-						},
-					next_payload: |state, _, _| Ok(state),
-					finish_payloads: |state, _| Ok(state),
-					missing: InvalidYaml({ line: scalar.line, column: scalar.column, message: "unexpected tag `${scalar.text}`" }),
-				},
-			)
-		}
-
-		## Start a list at a sequence (or a null, as an empty list); sequences are always counted.
-		parse_list_start : Format, Cursor -> Try([Counted({ len : U64, rest : Cursor }), Uncounted(Cursor)], [InvalidYaml(Error)])
-		parse_list_start = |_, cursor| {
-			event = current_event(cursor)?
-			match event.kind {
-				SeqStart({ len, size: _ }) => Ok(Counted({ len, rest: advance_cursor(cursor, 1) }))
-				Plain(text) if is_null_text(text) => Ok(Counted({ len: 0, rest: advance_cursor(cursor, 1) }))
-				_ => mismatch(event, "a sequence")
-			}
-		}
-
-		## Sequences are always counted, so the driver never asks for the next item.
-		parse_list_next : Format, Cursor -> Try([Item(Cursor), Done(Cursor)], [InvalidYaml(Error)])
-		parse_list_next = |_, cursor| Ok(Done(cursor))
-
-		## Protocol step that counted YAML collections never need; it does nothing.
-		parse_list_after_item : Format, Cursor -> Try([Continue(Cursor), Done(Cursor)], [InvalidYaml(Error)])
-		parse_list_after_item = |_, cursor| Ok(Done(cursor))
-
-		## Tuple protocol step; a tuple needs a sequence of exactly its length.
-		parse_tuple_start : Format, Cursor, U64 -> Try(Cursor, [InvalidYaml(Error)])
-		parse_tuple_start = |_, cursor, expected| {
-			event = current_event(cursor)?
-			match event.kind {
-				SeqStart({ len, size: _ }) if len == expected => Ok(advance_cursor(cursor, 1))
-				SeqStart({ len, size: _ }) => fail(event.line, event.column, "expected a sequence of ${expected.to_str()} items, found ${len.to_str()}")
-				_ => mismatch(event, "a sequence of ${expected.to_str()} items")
-			}
-		}
-
-		## Tuple protocol step; a tuple needs a sequence of exactly its length.
-		parse_tuple_next : Format, Cursor, U64, U64 -> Try(Cursor, [InvalidYaml(Error)])
-		parse_tuple_next = |_, cursor, _, _| Ok(cursor)
-
-		## Tuple protocol step; a tuple needs a sequence of exactly its length.
-		parse_tuple_end : Format, Cursor, U64 -> Try(Cursor, [InvalidYaml(Error)])
-		parse_tuple_end = |_, cursor, _| Ok(cursor)
-
-		## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
-		parse_record_start : Format, Cursor -> Try([Counted({ len : U64, rest : Cursor }), Uncounted(Cursor)], [InvalidYaml(Error)])
-		parse_record_start = |_, cursor| mapping_start(cursor)
-
-		## Read the next mapping key for the generated record parser to match.
-		parse_record_field : Format,
-		Encoding.FieldName.FieldNames(_shape),
-		Cursor -> Try(
-			[
-				Field({ field : Encoding.FieldName(_shape), rest : Cursor }),
-				TryField({ name : Str, rest : Cursor }),
-				TryFieldCaseless({ name : Str, rest : Cursor }),
-				Continue(Cursor),
-				Done(Cursor),
-			],
-			[InvalidYaml(Error)],
-		)
-		parse_record_field = |_, _, cursor| {
-			event = current_event(cursor)?
-			match event.kind {
-				Key(name) => Ok(TryField({ name, rest: advance_cursor(cursor, 1) }))
-				_ => mismatch(event, "a mapping key")
-			}
-		}
-
-		## Mappings are always counted, so the driver never asks whether another
-		## field follows.
-		parse_record_after_field : Format, Cursor -> Try([Continue(Cursor), Done(Cursor)], [InvalidYaml(Error)])
-		parse_record_after_field = |_, cursor| Ok(Done(cursor))
-
-		## Skip the value of a key the record lacks, or reject it when `unknown_keys` is `Reject`.
-		skip_record_field : Format, Cursor -> Try(Cursor, [InvalidYaml(Error)])
-		skip_record_field = |format, cursor| {
-			match format.unknown_keys {
-				Skip => Ok(skip_value(cursor))
-				Reject => {
-					key = cursor.events.get(cursor.pos - 1) ?? { line: 1, column: 1, kind: Key("") }
-					name =
-						match key.kind {
-							Key(text) => text
-							_ => ""
-						}
-					fail(key.line, key.column, "unknown key `${name}`")
-				}
-			}
-		}
-
-		## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
-		parse_dict_start : Format, Cursor -> Try([Counted({ len : U64, rest : Cursor }), Uncounted(Cursor)], [InvalidYaml(Error)])
-		parse_dict_start = |_, cursor| mapping_start(cursor)
-
-		## Protocol step that counted YAML collections never need; it does nothing.
-		parse_dict_next : Format, Cursor -> Try([Entry(Cursor), Done(Cursor)], [InvalidYaml(Error)])
-		parse_dict_next = |_, cursor| Ok(Done(cursor))
-
-		## Protocol step that counted YAML collections never need; it does nothing.
-		parse_dict_after_key : Format, Cursor -> Try(Cursor, [InvalidYaml(Error)])
-		parse_dict_after_key = |_, cursor| Ok(cursor)
-
-		## Protocol step that counted YAML collections never need; it does nothing.
-		parse_dict_after_entry : Format, Cursor -> Try([Continue(Cursor), Done(Cursor)], [InvalidYaml(Error)])
-		parse_dict_after_entry = |_, cursor| Ok(Done(cursor))
-
-		## The error for a value the generated parser cannot use.
-		invalid_value : Format, Cursor -> [InvalidYaml(Error)]
-		invalid_value = |_, cursor| {
-			event = cursor.events.get(cursor.pos) ?? { line: 1, column: 1, kind: Plain("") }
-			InvalidYaml({ line: event.line, column: event.column, message: "this value cannot be decoded into the requested type" })
-		}
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_str : Format, Cursor -> Try({ value : Str, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_str = |_, cursor| {
-			key = take_key(cursor)?
-			Ok({ value: key.text, rest: advance_cursor(cursor, 1) })
-		}
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_u8 : Format, Cursor -> Try({ value : U8, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_i8 : Format, Cursor -> Try({ value : I8, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_u16 : Format, Cursor -> Try({ value : U16, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_i16 : Format, Cursor -> Try({ value : I16, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_u32 : Format, Cursor -> Try({ value : U32, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_i32 : Format, Cursor -> Try({ value : I32, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_u64 : Format, Cursor -> Try({ value : U64, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
-
-		## Read a mapping key as a `Dict` key.
-		parse_key_i64 : Format, Cursor -> Try({ value : I64, rest : Cursor }, [InvalidYaml(Error)])
-		parse_key_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
-	}
+	Format : YamlFormat
 
 	## The read position that [Yaml.decode] threads through a type's parser:
 	## the document as a flat list of events and an index into it.
 	Cursor :: { events : List(Event), pos : U64 }
+}
+
+YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, Reject] }.{
+
+	## Spell a Roc field name as a YAML key, following the decoder's `keys` option.
+	rename_field : Yaml.Format, Str -> Str
+	rename_field = |format, name| {
+		match format.keys {
+			SnakeCase => name
+			KebabCase => Str.join_with(Str.split_on(name, "_"), "-")
+			CamelCase => camel_case(name)
+		}
+	}
+
+	## Read a string: any quoted or block scalar, or a plain scalar other than null.
+	parse_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_str = |_, cursor| {
+		scalar = take_scalar(cursor, "a string")?
+		if scalar.plain and is_null_text(scalar.text) {
+			fail(scalar.line, scalar.column, "expected a string, found null")
+		} else {
+			Ok({ value: scalar.text, rest: advance_cursor(cursor, 1) })
+		}
+	}
+
+	## Read a core-schema boolean such as `true` or `FALSE`.
+	parse_bool : Yaml.Format, Yaml.Cursor -> Try({ value : Bool, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_bool = |_, cursor| {
+		scalar = take_scalar(cursor, "a boolean")?
+		value =
+			if !scalar.plain {
+				return scalar_mismatch(scalar, "a boolean")
+			} else if is_true_text(scalar.text) {
+				True
+			} else if is_false_text(scalar.text) {
+				False
+			} else {
+				return scalar_mismatch(scalar, "a boolean")
+			}
+		Ok({ value, rest: advance_cursor(cursor, 1) })
+	}
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_u128 : Yaml.Format, Yaml.Cursor -> Try({ value : U128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_u128 = |_, cursor| decode_integer(cursor, "U128", U128.from_str, |n| Ok(n))
+
+	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
+	parse_i128 : Yaml.Format, Yaml.Cursor -> Try({ value : I128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_i128 = |_, cursor| decode_integer(cursor, "I128", I128.from_str, U128.to_i128_try)
+
+	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
+	parse_dec : Yaml.Format, Yaml.Cursor -> Try({ value : Dec, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dec = |_, cursor| decode_float(cursor, "Dec", Dec.from_str, |_| Err(NotFinite))
+
+	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
+	parse_f32 : Yaml.Format, Yaml.Cursor -> Try({ value : F32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_f32 = |_, cursor| decode_float(cursor, "F32", F32.from_str, special_f32)
+
+	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
+	parse_f64 : Yaml.Format, Yaml.Cursor -> Try({ value : F64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_f64 = |_, cursor| decode_float(cursor, "F64", F64.from_str, special_f64)
+
+	## Succeeds only on a null, so a `Try(_, [Null])` field falls back to
+	## its value parser otherwise.
+	parse_null : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_null = |_, cursor| {
+		event = current_event(cursor)?
+		match event.kind {
+			Plain(text) if is_null_text(text) => Ok(advance_cursor(cursor, 1))
+			_ => fail(event.line, event.column, "expected null")
+		}
+	}
+
+	## Report a required field absent from the input.
+	missing_field : Yaml.Format, Str -> [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]
+	missing_field = |_, name| MissingRequiredField(name)
+
+	## Read a tag without payloads from a scalar holding its name.
+	parse_tag_union : Yaml.Format, Encoding.ParseTagUnionSpec(a, Yaml.Format, Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]), Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tag_union = |format, spec, cursor| {
+		scalar = take_scalar(cursor, "a tag name")?
+		Encoding.ParseTagUnionSpec.parse(
+			spec,
+			{
+				tag: scalar.text,
+				encoding: format,
+				state: advance_cursor(cursor, 1),
+				start_payloads: |state, count|
+					if count == 0 {
+						Ok(state)
+					} else {
+						fail(scalar.line, scalar.column, "tags with payloads cannot be decoded from YAML")
+					},
+				next_payload: |state, _, _| Ok(state),
+				finish_payloads: |state, _| Ok(state),
+				missing: InvalidYaml({ line: scalar.line, column: scalar.column, message: "unexpected tag `${scalar.text}`" }),
+			},
+		)
+	}
+
+	## Start a list at a sequence (or a null, as an empty list); sequences are always counted.
+	parse_list_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_start = |_, cursor| {
+		event = current_event(cursor)?
+		match event.kind {
+			SeqStart({ len, size: _ }) => Ok(Counted({ len, rest: advance_cursor(cursor, 1) }))
+			Plain(text) if is_null_text(text) => Ok(Counted({ len: 0, rest: advance_cursor(cursor, 1) }))
+			_ => mismatch(event, "a sequence")
+		}
+	}
+
+	## Sequences are always counted, so the driver never asks for the next item.
+	parse_list_next : Yaml.Format, Yaml.Cursor -> Try([Item(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_next = |_, cursor| Ok(Done(cursor))
+
+	## Protocol step that counted YAML collections never need; it does nothing.
+	parse_list_after_item : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_list_after_item = |_, cursor| Ok(Done(cursor))
+
+	## Tuple protocol step; a tuple needs a sequence of exactly its length.
+	parse_tuple_start : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_start = |_, cursor, expected| {
+		event = current_event(cursor)?
+		match event.kind {
+			SeqStart({ len, size: _ }) if len == expected => Ok(advance_cursor(cursor, 1))
+			SeqStart({ len, size: _ }) => fail(event.line, event.column, "expected a sequence of ${expected.to_str()} items, found ${len.to_str()}")
+			_ => mismatch(event, "a sequence of ${expected.to_str()} items")
+		}
+	}
+
+	## Tuple protocol step; a tuple needs a sequence of exactly its length.
+	parse_tuple_next : Yaml.Format, Yaml.Cursor, U64, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_next = |_, cursor, _, _| Ok(cursor)
+
+	## Tuple protocol step; a tuple needs a sequence of exactly its length.
+	parse_tuple_end : Yaml.Format, Yaml.Cursor, U64 -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_tuple_end = |_, cursor, _| Ok(cursor)
+
+	## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
+	parse_record_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_record_start = |_, cursor| mapping_start(cursor)
+
+	## Read the next mapping key for the generated record parser to match.
+	parse_record_field : Yaml.Format,
+	Encoding.FieldName.FieldNames(_shape),
+	Yaml.Cursor -> Try(
+		[
+			Field({ field : Encoding.FieldName(_shape), rest : Yaml.Cursor }),
+			TryField({ name : Str, rest : Yaml.Cursor }),
+			TryFieldCaseless({ name : Str, rest : Yaml.Cursor }),
+			Continue(Yaml.Cursor),
+			Done(Yaml.Cursor),
+		],
+		[InvalidYaml(Yaml.Error), MissingRequiredField(Str)],
+	)
+	parse_record_field = |_, _, cursor| {
+		event = current_event(cursor)?
+		match event.kind {
+			Key(name) => Ok(TryField({ name, rest: advance_cursor(cursor, 1) }))
+			_ => mismatch(event, "a mapping key")
+		}
+	}
+
+	## Mappings are always counted, so the driver never asks whether another
+	## field follows.
+	parse_record_after_field : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_record_after_field = |_, cursor| Ok(Done(cursor))
+
+	## Skip the value of a key the record lacks, or reject it when `unknown_keys` is `Reject`.
+	skip_record_field : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	skip_record_field = |format, cursor| {
+		match format.unknown_keys {
+			Skip => Ok(skip_value(cursor))
+			Reject => {
+				key = cursor.events.get(cursor.pos - 1) ?? { line: 1, column: 1, kind: Key("") }
+				name =
+					match key.kind {
+						Key(text) => text
+						_ => ""
+					}
+				fail(key.line, key.column, "unknown key `${name}`")
+			}
+		}
+	}
+
+	## Start a record or dict at a mapping (or a null, as an empty one); mappings are always counted.
+	parse_dict_start : Yaml.Format, Yaml.Cursor -> Try([Counted({ len : U64, rest : Yaml.Cursor }), Uncounted(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_start = |_, cursor| mapping_start(cursor)
+
+	## Protocol step that counted YAML collections never need; it does nothing.
+	parse_dict_next : Yaml.Format, Yaml.Cursor -> Try([Entry(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_next = |_, cursor| Ok(Done(cursor))
+
+	## Protocol step that counted YAML collections never need; it does nothing.
+	parse_dict_after_key : Yaml.Format, Yaml.Cursor -> Try(Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_after_key = |_, cursor| Ok(cursor)
+
+	## Protocol step that counted YAML collections never need; it does nothing.
+	parse_dict_after_entry : Yaml.Format, Yaml.Cursor -> Try([Continue(Yaml.Cursor), Done(Yaml.Cursor)], [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_dict_after_entry = |_, cursor| Ok(Done(cursor))
+
+	## The error for a value the generated parser cannot use.
+	invalid_value : Yaml.Format, Yaml.Cursor -> [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]
+	invalid_value = |_, cursor| {
+		event = cursor.events.get(cursor.pos) ?? { line: 1, column: 1, kind: Plain("") }
+		InvalidYaml({ line: event.line, column: event.column, message: "this value cannot be decoded into the requested type" })
+	}
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_str = |_, cursor| {
+		key = take_key(cursor)?
+		Ok({ value: key.text, rest: advance_cursor(cursor, 1) })
+	}
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
+
+	## Read a mapping key as a `Dict` key.
+	parse_key_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+	parse_key_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
+}
+
+YamlDecoded(a) := { value : a }.{
+
+	## Decode quoted source with the defaults of [Yaml.validate_as].
+	from_quote : Str -> Try(Yaml.Decoded(a), [BadQuotedBytes(Str)])
+		where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]
+	from_quote = |source| Yaml.validate_as({ source: source }).map_ok(|value| Yaml.Decoded.{ value })
 }
 
 ## One step of a flattened document. A collection start records its item

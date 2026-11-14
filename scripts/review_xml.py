@@ -14,7 +14,8 @@ reason; discovery never updates the baseline.
 Known oracle disagreements (reported, not failures): expat uses the pre-Fifth
 Edition name character tables, so names such as <IllegalExtender〆/> that are
 well-formed under XML 1.0 (5th ed.) [4]/[4a] are rejected by expat; the suite
-verdict wins there. Expat also does not check VersionNum [26].
+verdict wins there. Explicit specification fixtures keep VersionNum [26]
+checks independent of the host Expat version.
 
 Usage:
   python3 scripts/review_xml.py check [--baseline scripts/xml/known-failures.json]

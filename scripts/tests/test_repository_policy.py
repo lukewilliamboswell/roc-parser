@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PINNED_ACTION_RE = re.compile(r"^[^\s]+@[0-9a-f]{40}$")
 # The reviewed roc-automation revision every workflow uses.
-ROC_AUTOMATION = "e12512e2605608588782edb044dd766137e34869"
+ROC_AUTOMATION = "cc6d4081762c6d70bf95bf18c9abf99b5e9ade25"
 
 
 def repository_files() -> list[Path]:

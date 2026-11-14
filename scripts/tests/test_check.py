@@ -31,7 +31,8 @@ class CheckTests(unittest.TestCase):
         self.assertIn('["scripts/check_asciidoc.roc", "--"]', source)
         for expected in (
             "-m unittest discover -s scripts/tests -p test_*.py",
-            "scripts/run_fuzz.py smoke all",
+            "scripts/run_fuzz.py smoke --ci all",
+            "scripts/review_markup.py check",
             "scripts/check_roc_syntax.py --skip-fuzz --reference-performance smoke",
         ):
             self.assertIn(expected, commands)

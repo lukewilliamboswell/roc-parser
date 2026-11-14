@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "contract": "The manifest names concrete implemented rule families and independent evidence; it does not claim complete HTML/SVG/MathML semantic conformance. Local suite runs enforce upstream tree construction expectations without suppressing mismatches.",
+  "specifications": {
+    "xml": "https://www.w3.org/TR/xml/",
+    "namespaces": "https://www.w3.org/TR/xml-names/",
+    "html": "https://html.spec.whatwg.org/multipage/parsing.html",
+    "html-authoring": "https://html.spec.whatwg.org/multipage/syntax.html",
+    "svg": "https://www.w3.org/TR/SVG2/",
+    "mathml": "https://www.w3.org/TR/mathml-core/"
+  },
+  "rules": [
+    {
+      "id": "xml-well-formedness-and-normalization",
+      "level": "validated",
+      "specification": "xml",
+      "details": "Balanced names, quoting, duplicate attributes, character/entity references, line endings, CDATA and character-data coalescence; retain comments and processing instructions. DTDs rejected.",
+      "fixtures": [
+        "svg-xml-normalization",
+        "svg-xml-comment-pi",
+        "svg-xml-invalid-case-close",
+        "svg-xml-unknown-entity",
+        "svg-xml-invalid-character"
+      ]
+    },
+    {
+      "id": "namespace-resolution",
+      "level": "validated",
+      "specification": "namespaces",
+      "details": "Expanded names, explicit namespace shadowing/undeclaration, prefix bindings and duplicate expanded attribute names.",
+      "fixtures": [
+        "svg-xml-namespace-shadow",
+        "svg-xml-prefix",
+        "svg-xml-duplicate-expanded-attribute",
+        "svg-xml-undeclared-prefix"
+      ]
+    },
+    {
+      "id": "html-tree-construction",
+      "level": "tree-construction",
+      "specification": "html",
+      "details": "Documents/fragments, context and scripting flags, optional tags, void elements, table insertion/foster parenting, active formatting/adoption, templates, foreign integration and recovery.",
+      "fixtures": [
+        "html-optional-li",
+        "html-optional-p",
+        "html-table-context",
+        "html-select-context",
+        "html-template",
+        "html-adoption-agency",
+        "html-foster-parenting",
+        "html-table-context-foster-unknown-tag"
+      ],
+      "upstream_suite": "tree-suite-manifest.json",
+      "acceptance_gate": "Every selected parser-only upstream expectation is compared, including both scripting modes when required; crashes and mismatches fail."
+    },
+    {
+      "id": "html-tokenization",
+      "level": "tree-construction",
+      "specification": "html",
+      "details": "Character references, raw text/RCDATA/script-data, comments, doctypes and processing instructions; strict rejection is separate from standard recovery.",
+      "fixtures": [
+        "html-text-entities",
+        "html-unquoted",
+        "html-comments",
+        "html-rcdata",
+        "html-raw-script",
+        "html-raw-style",
+        "html-null-recovery",
+        "html-strict-duplicate-attribute",
+        "html-strict-self-closing"
+      ],
+      "upstream_suite": "tree-suite-manifest.json"
+    },
+    {
+      "id": "foreign-content-boundaries",
+      "level": "tree-construction",
+      "specification": "html",
+      "details": "HTML case adjustment and namespace transitions at SVG/MathML integration points, distinguished from explicit XML namespace rules.",
+      "fixtures": [
+        "html-svg-adjustment",
+        "html-svg-foreignobject",
+        "html-svg-title-integration",
+        "html-math-text-integration",
+        "html-math-annotation-integration",
+        "html-mixed-namespaced-attribute",
+        "mathml-xml-html-boundary"
+      ]
+    },
+    {
+      "id": "html-authoring-validation",
+      "level": "selected-grammars-and-content-models",
+      "specification": "html-authoring",
+      "details": "Known/current element and attribute vocabulary, custom element names, global/data/ARIA names; boolean/enumerated values, selected numeric/token values and common parent/interactive/required-attribute rules. This is not a complete conformance checker.",
+      "fixtures": [
+        "html-boolean-false",
+        "html-enumerated-hidden"
+      ],
+      "roc_tests": [
+        "package/HtmlValidate.roc"
+      ]
+    },
+    {
+      "id": "svg-vocabulary",
+      "level": "vocabulary-and-selected-content-models",
+      "specification": "svg",
+      "details": "SVG2 element/attribute names with exact XML case, common SVG1.1 compatibility names and xlink href; selected container restrictions. Recognizing an attribute does not imply validation of all its value semantics.",
+      "fixtures": [
+        "svg-exact-case",
+        "svg-bad-case-attribute",
+        "svg-unknown-element",
+        "svg-xml-prefix"
+      ],
+      "roc_tests": [
+        "package/MarkupValidate.roc"
+      ]
+    },
+    {
+      "id": "svg-path-data",
+      "level": "validated-grammar",
+      "specification": "svg",
+      "details": "All absolute/relative path command families, initial moveto, implicit repetitions, numeric grammar, command arity, arc flags and nonnegative radii. Layout/geometric evaluation is not performed.",
+      "fixtures": [
+        "svg-valid-path",
+        "svg-bad-path-arity",
+        "svg-bad-path-start",
+        "svg-bad-arc-flag"
+      ],
+      "fuzz_targets": [
+        "svg-path"
+      ]
+    },
+    {
+      "id": "svg-common-values",
+      "level": "selected-grammars",
+      "specification": "svg",
+      "details": "Numbers, nonnegative dimensions, lengths/units, lists, transforms, viewBox/aspect ratio, paint/color and selected filter/presentation/animation keywords and numeric values. Complex CSS and timing grammars outside these checks are opaque.",
+      "fixtures": [
+        "svg-viewbox-valid",
+        "svg-viewbox-negative-size",
+        "svg-bad-viewbox",
+        "svg-transform-valid",
+        "svg-transform-arity",
+        "svg-filter-number-pair",
+        "svg-filter-negative-pair",
+        "svg-dasharray-valid",
+        "svg-dasharray-negative",
+        "svg-paint-valid"
+      ],
+      "roc_tests": [
+        "package/MarkupValues.roc",
+        "package/MarkupValidate.roc"
+      ]
+    },
+    {
+      "id": "mathml-core-and-presentation",
+      "level": "vocabulary-selected-grammars-and-content-models",
+      "specification": "mathml",
+      "details": "Core and common Presentation vocabulary, fixed-arity fractions/roots/scripts, multiscript pairs, table cells/rows and semantics annotations; selected enumerated/number/length attributes. Full Content MathML symbolic validation is not provided.",
+      "fixtures": [
+        "mathml-fraction",
+        "mathml-script",
+        "mathml-table",
+        "mathml-annotation",
+        "mathml-bad-fraction-arity",
+        "mathml-bad-script-arity",
+        "mathml-multiscript-pairs",
+        "mathml-multiscript-missing-partner",
+        "mathml-semantics-missing-expression",
+        "mathml-content-extension-strict"
+      ]
+    },
+    {
+      "id": "lossless-source-and-locations",
+      "level": "source-contract",
+      "details": "Original arbitrary bytes and partitioned spans remain distinct from normalized/repaired tree nodes. Implied nodes have insertion origins. Source retention does not promise normalized-tree serialization.",
+      "fuzz_targets": [
+        "markup-source",
+        "markup-limits"
+      ],
+      "roc_tests": [
+        "package/Markup.roc"
+      ]
+    },
+    {
+      "id": "literal-and-runtime-parity",
+      "level": "conversion-contract",
+      "details": "Runtime parsing and typed quotations use the same format validation/options. Compiler rejection fixtures assert the intended diagnostic, including imported text.",
+      "compiler_fixtures": [
+        "markup-documents",
+        "markup-fragments",
+        "markup-invalid-svg-case",
+        "markup-invalid-viewbox",
+        "markup-invalid-math-arity",
+        "markup-invalid-html-boolean",
+        "markup-imported",
+        "markup-imported-invalid"
+      ]
+    },
+    {
+      "id": "typed-interpolation-plans",
+      "level": "conversion-contract",
+      "details": "Indexed character-data and whole quoted attribute slots retain generic values; structural/namespace/raw-language positions rejected. Static values are validated; dynamic values keep explicit expected grammars and are never interpreted as markup.",
+      "fuzz_targets": [
+        "markup-segments"
+      ],
+      "compiler_fixtures": [
+        "markup-interpolation",
+        "markup-invalid-hole-position",
+        "markup-invalid-hole-type"
+      ],
+      "roc_tests": [
+        "package/MarkupTemplate.roc"
+      ]
+    },
+    {
+      "id": "relaxation-and-recovery",
+      "level": "configuration-contract",
+      "details": "Syntax recovery, unknown element/attribute preservation, and value-check relaxation are independent. Unknown extension acceptance records diagnostics; disabling value checks is an explicit prop and does not establish that skipped checks passed. Original source bytes remain unchanged.",
+      "fixtures": [
+        "html-duplicate-attribute",
+        "html-null-recovery",
+        "html-strict-duplicate-attribute",
+        "svg-preserve-extension-element",
+        "svg-preserve-extension-attribute",
+        "svg-disable-value-checks",
+        "mathml-preserve-content-extension",
+        "html-preserve-extension-attribute",
+        "html-standard-custom-element",
+        "html-recovery-keeps-authoring-validation"
+      ],
+      "roc_tests": [
+        "package/Html.roc",
+        "package/Svg.roc",
+        "package/MathML.roc"
+      ]
+    }
+  ],
+  "opaque": [
+    {
+      "language": "CSS",
+      "contract": "Retain style blocks, style attributes and recognized attributes with unimplemented complex CSS value grammars without claiming full CSS validation."
+    },
+    {
+      "language": "JavaScript",
+      "contract": "Retain script/event source as inert text; no JavaScript evaluation or DOM mutation during parsing."
+    },
+    {
+      "language": "URLs and cross-document resources",
+      "contract": "Retain authored values; no resource fetching, ID-reference resolution across documents or rendering proof."
+    },
+    {
+      "language": "Content MathML",
+      "contract": "Can be preserved through unknown-extension props; strict defaults reject unknown symbolic vocabulary rather than promising symbolic semantics."
+    }
+  ],
+  "oracle_limitations": "oracle-limitations.json",
+  "local_only": [
+    "Randomized campaigns",
+    "Scaling and allocation benchmarks",
+    "Compiler-cost and artifact-size comparisons",
+    "Browser multi-engine/consumer comparisons"
+  ]
+}

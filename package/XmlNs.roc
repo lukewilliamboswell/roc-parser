@@ -216,9 +216,9 @@ XmlNs := {
 
 		## The next event, `Done` at the end of the document, or `Failed`.
 		next : Reader -> [Event(XmlNs.Event, Reader), Done, Failed(XmlNs.ReadError)]
-		next = |reader| {
-			inner = reader.inner
-			scope = reader.scope
+		next = |input_reader| {
+			inner = input_reader.inner
+			scope = input_reader.scope
 			match inner.next() {
 				Event(Start(tag), rest) =>
 					match resolve_start(scope, tag.name, tag.attributes) {
@@ -247,20 +247,20 @@ XmlNs := {
 		## Directly after a `Start` event, that element and its subtree, and
 		## the reader after its end tag. `NotAfterStart` otherwise.
 		element : Reader -> [Element(XmlNs.Node, Reader), Failed(XmlNs.ReadError), NotAfterStart]
-		element = |reader| {
-			match reader.last_start {
+		element = |input_reader| {
+			match input_reader.last_start {
 				NotStarted => NotAfterStart
-				Started(start) => build_element(reader, start)
+				Started(start) => build_element(input_reader, start)
 			}
 		}
 
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
-		declaration = |reader| reader.inner.declaration()
+		declaration = |input_reader| input_reader.inner.declaration()
 
 		## Where the most recent event starts, as [Xml.Reader] reports it.
 		location : Reader -> { line : U64, column : U64 }
-		location = |reader| reader.inner.location()
+		location = |input_reader| input_reader.inner.location()
 	}
 
 	## A [XmlNs.Reader] positioned before the root element. The limits of
@@ -271,6 +271,60 @@ XmlNs := {
 		match Xml.reader(input, namespaced) {
 			Ok(inner) => Ok({ inner, scope: empty_scope, last_start: NotStarted })
 			Err(error) => Err(widen(error))
+		}
+	}
+
+	## An expanded source attribute, including namespace declarations.
+	SourceAttribute : { name : Name, value : Str, span : Xml.SourceSpan }
+
+	## Authored events with expanded names and ordered attribute source ranges.
+	SourceEvent : [
+		Start({ name : Name, attributes : List(SourceAttribute), span : Xml.SourceSpan, empty : Bool }),
+		End(Xml.SourceSpan),
+		Text({ value : Str, span : Xml.SourceSpan }),
+		CData({ value : Str, span : Xml.SourceSpan }),
+		Comment({ value : Str, span : Xml.SourceSpan }),
+		ProcessingInstruction({ target : Str, data : Str, span : Xml.SourceSpan }),
+		Declaration(Xml.SourceSpan),
+		Gap(Xml.SourceSpan),
+	]
+
+	## Fold validated lexical source events while resolving namespace scope.
+	fold_source : Str, Xml.ReaderProps, state, (state, SourceEvent -> state) -> Try(state, ReadError)
+	fold_source = |input, props, initial, on_event| {
+		namespaced = { max_depth: props.max_depth, max_elements: props.max_elements, max_attributes: props.max_attributes, namespaces: True }
+		folded = Xml.fold_source(
+			input,
+			namespaced,
+			{ bound: { entries: [], active: Box.box(Dict.empty()), default_index: none }, marks: [], value: initial },
+			|state, event| {
+				match event {
+					Start(tag) => {
+						mark = state.bound.entries.len()
+						resolved = resolve_source_start(state.bound, tag.name, tag.attributes, tag.attribute_spans)?
+						value = on_event(state.value, Start({ name: resolved.name, attributes: resolved.attributes, span: tag.span, empty: tag.empty }))
+						bound = if (tag.empty and resolved.bound.entries.len() > mark) source_unbind_to(resolved.bound, mark) else resolved.bound
+						marks = if (tag.empty) state.marks else state.marks.append(mark)
+						Ok({ bound, marks, value })
+					}
+					End(span) => {
+						mark = state.marks.last() ?? 0
+						bound = if (state.bound.entries.len() > mark) source_unbind_to(state.bound, mark) else state.bound
+						Ok({ bound, marks: state.marks.drop_last(1), value: on_event(state.value, End(span)) })
+					}
+					Text(text) => Ok({ ..state, value: on_event(state.value, Text(text)) })
+					CData(text) => Ok({ ..state, value: on_event(state.value, CData(text)) })
+					Comment(comment) => Ok({ ..state, value: on_event(state.value, Comment(comment)) })
+					ProcessingInstruction(pi) => Ok({ ..state, value: on_event(state.value, ProcessingInstruction(pi)) })
+					Declaration(span) => Ok({ ..state, value: on_event(state.value, Declaration(span)) })
+					Gap(span) => Ok({ ..state, value: on_event(state.value, Gap(span)) })
+				}
+			},
+		)
+		match folded {
+			Folded(state) => Ok(state.value)
+			Failed(error) => Err(widen(error))
+			Rejected(problem, at) => Err(InvalidNamespace({ problem, line: at.line, column: at.column }))
 		}
 	}
 
@@ -402,6 +456,33 @@ XmlNs := {
 	## The namespace of `xmlns` declarations, which no prefix may be bound to.
 	xmlns_namespace : Str
 	xmlns_namespace = "http://www.w3.org/2000/xmlns/"
+	# Internal stable namespace context over already XML-validated start tags
+	# and their authored spans. A later declaration requests the complete fold.
+	StableSourceScope := { bound : SourceBound }.{
+		begin : Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ scope : StableSourceScope, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, [Fallback])
+		begin = |written, attributes, spans| {
+			resolved = resolve_source_start({ entries: [], active: Box.box(Dict.empty()), default_index: none }, written, attributes, spans).map_err(|_| Fallback)?
+			Ok({ scope: StableSourceScope.{ bound: resolved.bound }, name: resolved.name, attributes: resolved.attributes })
+		}
+		resolve_tag : StableSourceScope, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, [Fallback])
+		resolve_tag = |scope, written, attributes, spans| {
+			if has_declaration(attributes) {
+				return Err(Fallback)
+			}
+			resolve_source_names(scope.bound, written, attributes, spans).map_err(|_| Fallback)
+		}
+		read_tag : StableSourceScope, Str, List(U8), U64, U64, U64 -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute), empty : Bool, pos : U64, name_end : U64 }, [Fallback])
+		read_tag = |scope, source, bytes, start, maximum, prefix| {
+			match Xml.SourceLex.read_head(source, bytes, start)? {
+				Complete(tag) => {
+					resolved_element = source_element_name(scope.bound, tag.name).map_err(|_| Fallback)?
+					Ok({ name: resolved_element, attributes: [], empty: tag.empty, pos: tag.pos, name_end: start + 1 + tag.name.count_utf8_bytes() })
+				}
+				Attributes(written) => stable_read_attributes(scope.bound, source, bytes, start, written, maximum, prefix)
+			}
+		}
+	}
+
 }
 
 ## The bindings in scope. `entries` holds every binding of the open
@@ -445,8 +526,11 @@ resolve_start = |scope, name, attributes| {
 	var $active = scope.active
 	frames = scope.frames.append($entries.len())
 	var $bindings = []
-	for attribute in attributes {
-		binding = declaration(attribute)?
+	var $attribute_index = 0
+	while $attribute_index < attributes.len() {
+		attribute = attributes.get($attribute_index) ?? { name: "", value: "" }
+		$attribute_index = $attribute_index + 1
+		binding = namespace_declaration(attribute)?
 		match binding {
 			Ok(declared) => {
 				key = match declared.prefix {
@@ -488,7 +572,10 @@ resolve_names = |entries, active, name, attributes, stop| {
 	}
 	var $resolved = List.with_capacity(attributes.len())
 	var $prefixed = 0
-	for attribute in attributes {
+	var $attribute_index = 0
+	while $attribute_index < attributes.len() {
+		attribute = attributes.get($attribute_index) ?? { name: "", value: "" }
+		$attribute_index = $attribute_index + 1
 		# With `stop` there are none to skip.
 		if stop or !is_declaration(attribute.name) {
 			attribute_name = split_qname(attribute.name).map_err(|problem| Invalid(problem))?
@@ -563,8 +650,8 @@ is_declaration = |name| name.starts_with("xmlns") and (name.count_utf8_bytes() =
 
 # The binding an attribute declares, with the rules for reserved prefixes
 # and namespaces (https://www.w3.org/TR/xml-names/#xmlReserved).
-declaration : Xml.Attribute -> Try(Try(XmlNs.Binding, [NotADeclaration]), XmlNs.Problem)
-declaration = |attribute| {
+namespace_declaration : Xml.Attribute -> Try(Try(XmlNs.Binding, [NotADeclaration]), XmlNs.Problem)
+namespace_declaration = |attribute| {
 	value = attribute.value
 	if attribute.name == "xmlns" {
 		if value == XmlNs.xml_namespace or value == XmlNs.xmlns_namespace {
@@ -594,8 +681,12 @@ declaration = |attribute| {
 # has at most one colon, and both parts are NCNames
 # (https://www.w3.org/TR/xml-names/#ns-qualnames). The input is already an
 # XML Name, so each part only needs a check of its first character.
-split_qname : Str -> Try({ prefix : Str, local : Str, written : Str }, XmlNs.Problem)
+split_qname : Str -> Try({ prefix : Str, local : Str }, [NotAQName(Str)])
 split_qname = |name| {
+	# Unprefixed inline names need no temporary byte list.
+	if !name.contains(":") {
+		return Ok({ prefix: "", local: name })
+	}
 	bytes = name.to_utf8()
 	var $colon = none
 	var $index = 0
@@ -609,14 +700,14 @@ split_qname = |name| {
 		$index = $index + 1
 	}
 	if $colon == none {
-		return Ok({ prefix: "", local: name, written: name })
+		return Ok({ prefix: "", local: name })
 	}
 	if $colon == 0 or $colon + 1 == bytes.len() or !starts_ncname(bytes, $colon + 1) {
 		return Err(NotAQName(name))
 	}
 	prefix = name.drop_last_bytes(bytes.len() - $colon) ?? ""
 	local = name.drop_first_bytes($colon + 1) ?? ""
-	Ok({ prefix, local, written: name })
+	Ok({ prefix, local })
 }
 
 # Whether the name character at `pos` may start an NCName: anything but a
@@ -636,7 +727,7 @@ starts_ncname = |bytes, pos| {
 	}
 }
 
-resolve : { prefix : Str, local : Str, written : Str }, List({ prefix : Str, namespace : XmlNs.Namespace, previous : U64 }), Dict(Str, U64), Bool -> Try(XmlNs.Name, XmlNs.Problem)
+resolve : { prefix : Str, local : Str }, List({ prefix : Str, namespace : XmlNs.Namespace, previous : U64 }), Dict(Str, U64), Bool -> Try(XmlNs.Name, XmlNs.Problem)
 resolve = |qname, entries, active, is_element| {
 	if qname.prefix == "" {
 		namespace =
@@ -1337,8 +1428,8 @@ problem_of = |input| {
 root_of : Str -> Try(XmlNs.Node, [InvalidXml(Xml.Error), InvalidNamespace(XmlNs.NamespaceProblem)])
 root_of = |input| XmlNs.parse_str(input).map_ok(|doc| doc.root)
 
-name : Str, Str -> XmlNs.Name
-name = |uri, local| { namespace: Uri(uri), local, prefix: Unprefixed }
+example_name : Str, Str -> XmlNs.Name
+example_name = |uri, local| { namespace: Uri(uri), local, prefix: Unprefixed }
 
 # Scope: a binding covers its element and descendants, an inner binding
 # shadows an outer one, and xmlns="" removes the default namespace.
@@ -1349,13 +1440,13 @@ expect {
 				[Element(b), Element(e)] =>
 					match b.children {
 						[Element(c), Element(d)] =>
-							a.name == name("urn:1", "a")
+							a.name == example_name("urn:1", "a")
 								and a.bindings == [{ prefix: Default, namespace: Uri("urn:1") }, { prefix: Prefix("p"), namespace: Uri("urn:p") }]
-								and b.name == name("urn:2", "b")
+								and b.name == example_name("urn:2", "b")
 								and c.name == { namespace: Uri("urn:p"), local: "c", prefix: Prefix("p") }
 								and d.name == { namespace: NoNamespace, local: "d", prefix: Unprefixed }
 								and d.bindings == [{ prefix: Default, namespace: NoNamespace }]
-								and e.name == name("urn:1", "e")
+								and e.name == example_name("urn:1", "e")
 
 						_ => False
 					}
@@ -1441,12 +1532,12 @@ expect {
 						Event(Start(b), after_b) =>
 							match after_b.element() {
 								Element(Element(subtree), rest) =>
-									a.name == name("urn:a", "a")
-										and b.name == name("urn:a", "b")
-										and subtree.children == [Element({ name: name("urn:a", "c"), bindings: [], attributes: [], children: [] })]
+									a.name == example_name("urn:a", "a")
+										and b.name == example_name("urn:a", "b")
+										and subtree.children == [Element({ name: example_name("urn:a", "c"), bindings: [], attributes: [], children: [] })]
 										and (
 											match rest.next() {
-												Event(End(end), done) => end == name("urn:a", "a") and (
+												Event(End(end), done) => end == example_name("urn:a", "a") and (
 													match done.next() {
 														Done => True
 														_ => False
@@ -1509,8 +1600,8 @@ render_omitted = |input| {
 	}
 }
 
-element : XmlNs.Name, List(XmlNs.Binding), List(XmlNs.Attribute), List(XmlNs.Node) -> XmlNs.Node
-element = |element_name, bindings, attributes, children| Element({ name: element_name, bindings, attributes, children })
+example_element : XmlNs.Name, List(XmlNs.Binding), List(XmlNs.Attribute), List(XmlNs.Node) -> XmlNs.Node
+example_element = |element_name, bindings, attributes, children| Element({ name: element_name, bindings, attributes, children })
 
 plain : Str -> XmlNs.Name
 plain = |local| { namespace: NoNamespace, local, prefix: Unprefixed }
@@ -1520,32 +1611,32 @@ render_tree = |root, props| XmlNs.render({ declaration: Err(Missing), root }, pr
 
 # Escaping: `&` and `<` everywhere, `>` after `]]`, `"` and whitespace in
 # attribute values, and a carriage return in text.
-expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "<&\"'>\t\n\r" }], [Text("a<b&c]]>d>\r]>")]), { declaration: Omitted }) == Ok("<a k=\"&lt;&amp;&quot;'>&#x9;&#xA;&#xD;\">a&lt;b&amp;c]]&gt;d>&#xD;]></a>")
+expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "<&\"'>\t\n\r" }], [Text("a<b&c]]>d>\r]>")]), { declaration: Omitted }) == Ok("<a k=\"&lt;&amp;&quot;'>&#x9;&#xA;&#xD;\">a&lt;b&amp;c]]&gt;d>&#xD;]></a>")
 expect render_omitted("<a k='x&#9;y&#10;z'>&#13;é&#x1F600;</a>") == Ok("<a k=\"x&#x9;y&#xA;z\">&#xD;é😀</a>")
 
 # Declarations.
-expect render_tree(element(plain("a"), [], [], []), {}) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<a/>")
-expect render_tree(element(plain("a"), [], [], []), { declaration: Standalone }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<a/>")
+expect render_tree(example_element(plain("a"), [], [], []), {}) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<a/>")
+expect render_tree(example_element(plain("a"), [], [], []), { declaration: Standalone }) == Ok("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<a/>")
 
 # AsRead writes the tree's own prefixes and bindings.
 expect render_omitted("<r xmlns='urn:d' xmlns:p='urn:p'><p:a p:k='1' k='2'/><b xmlns=''/>t</r>") == Ok("<r xmlns=\"urn:d\" xmlns:p=\"urn:p\"><p:a p:k=\"1\" k=\"2\"/><b xmlns=\"\"/>t</r>")
 
 # Characters and names XML 1.0 does not allow are refused, with a path.
-expect render_tree(element(plain("a"), [], [], [element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
-expect render_tree(element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
-expect render_tree(element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
-expect render_tree(element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
-expect render_tree(element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [], [], [example_element(plain("b"), [], [], [Text("x\u(1)")])]), { declaration: Omitted }) == Err(Unrenderable({ problem: InvalidChar(1), path: ["a", "b"] }))
+expect render_tree(example_element(plain("a"), [], [{ name: plain("k"), value: "\u(FFFE)" }], []), {}) == Err(Unrenderable({ problem: InvalidChar(0xFFFE), path: ["a"] }))
+expect render_tree(example_element(plain("1a"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("1a"), path: ["1a"] }))
+expect render_tree(example_element(plain("a:b"), [], [], []), {}) == Err(Unrenderable({ problem: InvalidName("a:b"), path: ["a:b"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("xmlns"), namespace: Uri("urn:x") }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:xmlns"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: NoNamespace }], [], []), {}) == Err(Unrenderable({ problem: InvalidName("xmlns:p"), path: ["a"] }))
 
 # A prefix must be bound to its name's namespace where it is used.
-expect render_tree(element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
-expect render_tree(element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
-expect render_tree(element(plain("a"), [], [{ name: { namespace: Uri(XmlNs.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
+expect render_tree(example_element({ namespace: Uri("urn:p"), local: "a", prefix: Prefix("p") }, [], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace("urn:p"), path: ["p:a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Default, namespace: Uri("urn:d") }], [{ name: { namespace: Uri("urn:d"), local: "k", prefix: Unprefixed }, value: "" }], []), {}) == Err(Unrenderable({ problem: UnboundNamespace(""), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [], [{ name: { namespace: Uri(XmlNs.xml_namespace), local: "lang", prefix: Prefix("xml") }, value: "en" }], []), { declaration: Omitted }) == Ok("<a xml:lang=\"en\"/>")
 
 # Duplicate expanded attribute names are refused.
-expect render_tree(element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
+expect render_tree(example_element(plain("a"), [{ prefix: Prefix("p"), namespace: Uri("urn:x") }, { prefix: Prefix("q"), namespace: Uri("urn:x") }], [{ name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("p") }, value: "" }, { name: { namespace: Uri("urn:x"), local: "k", prefix: Prefix("q") }, value: "" }], []), {}) == Err(Unrenderable({ problem: DuplicateAttribute("q:k"), path: ["a"] }))
 
 # A table names every namespace once, on the root, in table order, with no
 # unused declarations, and switches the default where needed.
@@ -1625,7 +1716,7 @@ expect {
 
 # With a table, a root in no namespace leaves the default to the first
 # element in it.
-expect render_tree(element(plain("r"), [], [], [element(name("urn:a", "a"), [], [], [element(name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
+expect render_tree(example_element(plain("r"), [], [], [example_element(example_name("urn:a", "a"), [], [], [example_element(example_name("urn:a", "b"), [], [], [])])]), { declaration: Omitted, prefixes: Table([{ prefix: "", namespace: "urn:a" }]) }) == Ok("<r><a xmlns=\"urn:a\"><b/></a></r>")
 
 # Many bindings shadow and restore like a few do.
 expect {
@@ -1658,3 +1749,213 @@ expect {
 	}
 }
 expect problem_of("<r xmlns:a='urn:a' xmlns:b='urn:b' xmlns:c='urn:c' xmlns:d='urn:d' xmlns:e='urn:e' xmlns:f='urn:f' xmlns:g='urn:g' xmlns:h='urn:h'><x xmlns:i='urn:i'/><i:y/></r>") == Ok(UndeclaredPrefix("i"))
+
+# Keep the namespace dictionary behind one pointer in the event-fold state.
+# Unprefixed names use the cached default and never open it.
+SourceBound : { entries : List(Entry), active : Box(Dict(Str, U64)), default_index : U64 }
+
+# The default binding changes only at namespace declarations and their ends.
+# Keep its entry index so ordinary element names need no dictionary lookup.
+source_unbind_to : SourceBound, U64 -> SourceBound
+source_unbind_to = |bound, mark| {
+	unbound = unbind_to({ entries: bound.entries, active: Box.unbox(bound.active) }, mark)
+	default_index = unbound.active.get("") ?? none
+	{ entries: unbound.entries, active: Box.box(unbound.active), default_index }
+}
+
+resolve_source_start : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ bound : SourceBound, name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
+resolve_source_start = |bound, written, attributes, spans| {
+	if has_declaration(attributes) {
+		resolved = resolve_start({ entries: bound.entries, active: Box.unbox(bound.active), frames: [], names: [] }, written, attributes)?
+		ordered_attributes = ordered_source_attributes(attributes, spans, resolved.attributes, resolved.bindings)
+		default_index = resolved.scope.active.get("") ?? none
+		Ok({ bound: { entries: resolved.scope.entries, active: Box.box(resolved.scope.active), default_index }, name: resolved.name, attributes: ordered_attributes })
+	} else {
+		resolved = resolve_source_names(bound, written, attributes, spans)?
+		Ok({ bound, name: resolved.name, attributes: resolved.attributes })
+	}
+}
+
+resolve_source_names : SourceBound, Str, List(Xml.Attribute), List(Xml.SourceSpan) -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute) }, XmlNs.Problem)
+resolve_source_names = |bound, written, attributes, spans| {
+	resolved_name = source_element_name(bound, written)?
+	var $resolved = List.with_capacity(attributes.len())
+	var $index = 0
+	var $prefixed = 0
+	while $index < attributes.len() {
+		attribute = attributes.get($index) ?? { name: "", value: "" }
+		span = spans.get($index) ?? { start: 0, end: 0 }
+		$index = $index + 1
+		resolved_attribute_name = source_attribute_name(bound, attribute.name)?
+		if resolved_attribute_name.prefix != Unprefixed {
+			$prefixed = $prefixed + 1
+		}
+		$resolved = $resolved.append({ name: resolved_attribute_name, value: attribute.value, span })
+	}
+	if $prefixed > 1 {
+		check_unique($resolved.map(|attribute| { name: attribute.name, value: attribute.value }))?
+	}
+	Ok({ name: resolved_name, attributes: $resolved })
+}
+
+source_element_name : SourceBound, Str -> Try(XmlNs.Name, XmlNs.Problem)
+source_element_name = |bound, written| {
+	element_name = split_qname(written)?
+	if element_name.prefix == "xmlns" {
+		return Err(ReservedPrefix("xmlns"))
+	}
+	Ok(
+		if element_name.prefix == "" {
+			namespace = if bound.default_index == none {
+				NoNamespace
+			} else bound.entries.get(bound.default_index).map_ok(|entry| entry.namespace) ?? NoNamespace
+			{ namespace, local: element_name.local, prefix: Unprefixed }
+		} else resolve(element_name, bound.entries, Box.unbox(bound.active), True)?,
+	)
+}
+
+source_attribute_name : SourceBound, Str -> Try(XmlNs.Name, XmlNs.Problem)
+source_attribute_name = |bound, written| {
+	qname = split_qname(written)?
+	if qname.prefix == "" {
+		Ok({ namespace: NoNamespace, local: qname.local, prefix: Unprefixed })
+	} else resolve(qname, bound.entries, Box.unbox(bound.active), False)
+}
+
+stable_read_attributes : SourceBound, Str, List(U8), U64, { val : Str, pos : U64 }, U64, U64 -> Try({ name : XmlNs.Name, attributes : List(XmlNs.SourceAttribute), empty : Bool, pos : U64, name_end : U64 }, [Fallback])
+stable_read_attributes = |bound, source, bytes, start, written, maximum, prefix| {
+	parsed = Xml.SourceLex.read_attributes_with(source, bytes, written, maximum, { attributes: [], seen: Set.empty() }, |state, written_attribute, _| stable_attribute_name(bound, state, written_attribute), |state, resolved_attribute, value, span| stable_attribute_append(state, resolved_attribute, value, { start: span.start - prefix, end: span.end - prefix }))?
+	resolved_element = source_element_name(bound, parsed.name).map_err(|_| Fallback)?
+	Ok({ name: resolved_element, attributes: parsed.state.attributes, empty: parsed.empty, pos: parsed.pos, name_end: start + 1 + parsed.name.count_utf8_bytes() })
+}
+
+StableAttributes : { attributes : List(XmlNs.SourceAttribute), seen : Set(Str) }
+
+stable_attribute_name : SourceBound, StableAttributes, Str -> Try(XmlNs.Name, [Fallback])
+stable_attribute_name = |bound, state, written| {
+	if is_declaration(written) {
+		return Err(Fallback)
+	}
+	resolved_attribute = source_attribute_name(bound, written).map_err(|_| Fallback)?
+	if state.attributes.len() <= 16 {
+		var $index = 0.U64
+		while $index < state.attributes.len() {
+			prior = state.attributes.get($index) ?? crash "invalid stable attribute index"
+			if prior.name.local == resolved_attribute.local and prior.name.namespace == resolved_attribute.namespace {
+				return Err(Fallback)
+			}
+			$index = $index + 1
+		}
+	} else if state.seen.contains(stable_attribute_key(resolved_attribute)) {
+		return Err(Fallback)
+	}
+	Ok(resolved_attribute)
+}
+
+stable_attribute_append : StableAttributes, XmlNs.Name, Str, Xml.SourceSpan -> StableAttributes
+stable_attribute_append = |state, resolved_attribute, value, span| {
+	attributes = state.attributes.append({ name: resolved_attribute, value, span })
+	seen = if attributes.len() > 16 {
+		if state.seen.is_empty() {
+			Set.from_list(attributes.map(|attribute| stable_attribute_key(attribute.name)))
+		} else state.seen.insert(stable_attribute_key(resolved_attribute))
+	} else state.seen
+	{ attributes, seen }
+}
+
+stable_attribute_key : XmlNs.Name -> Str
+stable_attribute_key = |resolved_attribute| match resolved_attribute.namespace {
+	Uri(uri) => "${uri}\u(0)${resolved_attribute.local}"
+	NoNamespace => "\u(0)${resolved_attribute.local}"
+}
+
+ordered_source_attributes : List(Xml.Attribute), List(Xml.SourceSpan), List(XmlNs.Attribute), List(XmlNs.Binding) -> List(XmlNs.SourceAttribute)
+ordered_source_attributes = |raw, spans, attributes, bindings| {
+	var $ordered = List.with_capacity(raw.len())
+	var $index = 0
+	var $attribute_index = 0
+	var $binding_index = 0
+	while $index < raw.len() {
+		attribute = raw.get($index) ?? { name: "", value: "" }
+		span = spans.get($index) ?? { start: 0, end: 0 }
+		$index = $index + 1
+		if is_declaration(attribute.name) {
+			match bindings.get($binding_index) {
+				Ok(binding) => {
+					$binding_index = $binding_index + 1
+					value = match binding.namespace {
+						Uri(uri) => uri
+						NoNamespace => ""
+					}
+					(local, prefix) = match binding.prefix {
+						Default => ("xmlns", Unprefixed)
+						Prefix(p) => (p, Prefix("xmlns"))
+					}
+					$ordered = $ordered.append({ name: { namespace: Uri(XmlNs.xmlns_namespace), local, prefix }, value, span })
+				}
+				Err(_) => {}
+			}
+		} else {
+			match attributes.get($attribute_index) {
+				Ok(resolved) => {
+					$attribute_index = $attribute_index + 1
+					$ordered = $ordered.append({ name: resolved.name, value: resolved.value, span })
+				}
+				Err(_) => {}
+			}
+		}
+	}
+	$ordered
+}
+
+expect {
+	names = XmlNs.fold_source(
+		"<a xmlns:p='urn:p' xmlns='urn:a' xmlns:q='urn:q'><b xmlns:p='urn:innerp' xmlns='urn:b'><p:c/><d xmlns=''><e xmlns='urn:e'/><f/></d><g/></b><p:h/><i/><q:j/></a>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append((tag.name.local, tag.name.namespace))
+			_ => collected
+		},
+	)?
+	names == [("a", Uri("urn:a")), ("b", Uri("urn:b")), ("c", Uri("urn:innerp")), ("d", NoNamespace), ("e", Uri("urn:e")), ("f", NoNamespace), ("g", Uri("urn:b")), ("h", Uri("urn:p")), ("i", Uri("urn:a")), ("j", Uri("urn:q"))]
+}
+
+expect {
+	names = XmlNs.fold_source(
+		"<p:a xmlns:p='urn:p'><b/><p:c xmlns:p='urn:q'/><p:d/></p:a>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append((tag.name.local, tag.name.namespace))
+			_ => collected
+		},
+	)?
+	names == [("a", Uri("urn:p")), ("b", NoNamespace), ("c", Uri("urn:q")), ("d", Uri("urn:p"))]
+}
+
+expect {
+	attributes = XmlNs.fold_source(
+		"<r xmlns='urn:d' xmlns:p='urn:p' plain='a' p:x='b' xml:lang='en'><p:s xmlns:p='urn:q' p:x='c'/><p:t p:x='d' plain='e'/></r>",
+		{},
+		[],
+		|collected, event| match event {
+			Start(tag) => collected.append(tag.attributes.keep_if(|attribute| attribute.name.namespace != Uri(XmlNs.xmlns_namespace)).map(|attribute| (attribute.name.local, attribute.name.namespace, attribute.value)))
+			_ => collected
+		},
+	)?
+	attributes == [[("plain", NoNamespace, "a"), ("x", Uri("urn:p"), "b"), ("lang", Uri(XmlNs.xml_namespace), "en")], [("x", Uri("urn:q"), "c")], [("x", Uri("urn:p"), "d"), ("plain", NoNamespace, "e")]]
+}
+
+expect {
+	["<p:r/>", "<r p:x='1'/>", "<r xmlns:p='urn:p'><a xmlns:q='urn:q'/><q:b/></r>", "<r xmlns:p='urn:p' xmlns:q='urn:p' p:x='1' q:x='2'/>", "<r xmlns:xml='urn:bad'/>", "<r xmlns='urn:r'><a xmlns=''/><b/></r>"].all(
+		|input| XmlNs.fold_source(input, {}, {}, |state, _| state) == XmlNs.parse(input, {}).map_ok(|_| {}),
+	)
+}
+
+expect {
+	input = "<é:根 xmlns:é='urn:é' é:属性='值'><é:子/></é:根>"
+	doc = XmlNs.parse_str(input)?
+	doc.root.name() == Ok({ namespace: Uri("urn:é"), local: "根", prefix: Prefix("é") }) and doc.root.attribute(Uri("urn:é"), "属性") == Ok("值") and doc.root.children_named(Uri("urn:é"), "子").len() == 1
+}
+expect problem_of("<a:·x xmlns:a='urn:a'/>") == Ok(NotAQName("a:·x"))

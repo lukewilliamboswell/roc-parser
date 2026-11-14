@@ -1,0 +1,90 @@
+= roc-parser 6.0.0
+
+== Upgrade impact
+
+Use the compiler named in the published release record and basic-cli 0.28.1
+for the maintained applications and examples. Repository tooling uses its
+separate fixed compiler.
+The published release record identifies the compiler used for the delivered
+package.
+
+This major release changes AsciiDoc output where it disagreed with Asciidoctor
+and adopts the compiler's current format-owned error contract. CSV and YAML
+derived operations include `MissingRequiredField(Str)`, including headerless CSV
+tuple parsing. Add that variant to explicitly closed result annotations that
+previously allowed only `InvalidCsv(CSV.Error)`.
+
+Existing `Xml.parse_str` and `Xml.parser` signatures and results are preserved.
+The new markup APIs are additions; choose XML or HTML syntax explicitly when
+switching between standalone SVG/MathML and browser markup.
+
+== Use this release
+
+Add the package to your app's header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Applications using basic-cli should use 0.28.1.
+
+== Added
+
+* `Html`, `Svg` and `MathML` document and fragment parsers, with strict defaults,
+  explicit HTML/XML syntax selection, configurable fragment contexts, browser
+  recovery with typed diagnostics, and independent extension/value options.
+* Checked literals, named imported-source validation and generic `Template(a)`
+  interpolation. Fixed structure is checked during compilation; typed values
+  bind to indexed text or whole quoted attribute positions without reparsing.
+* Shared `Markup` trees with resolved namespaces, exact source bytes, lexical
+  regions, resource limits and authored, implied or cloned node locations.
+* `DomName` validation for computed DOM names, distinct from XML source-name
+  grammar, and `MarkupFacts` for enumerable canonical element/ARIA vocabularies,
+  namespace-aware boolean/enumerated attributes, HTML text/void/initial-newline
+  behavior and known handler attributes.
+* `MarkupContext` for a new child or text value's placement using retained finite
+  context, without reparsing or walking ancestors. History-sensitive contexts
+  return `UnsupportedContext`; whole-parent completeness remains a separate check.
+* Opt-in `strict_foreign_spelling` to reject HTML-syntax SVG/MathML name
+  adjustments with authored/expected spellings and exact name spans.
+* Opt-in `exact_structure` for authored HTML nesting without repairs, with typed
+  reasons and causing source spans before selected-content projection.
+* `SvgPath` command parsing, common SVG value grammars, and MathML Core plus
+  common Presentation MathML structures and child-count checks. Embedded CSS,
+  JavaScript and URL languages remain outside these semantic checks.
+* `Xml.reader`, with `Start`, `End` and `Text` events, subtree conversion through
+  `element` and `element_with`, and document location/declaration access.
+* `Xml.parse` and `Xml.ReaderProps` limits for depth, elements and attributes per
+  element. Excess input fails at the relevant tag or attribute.
+* `XmlNs` namespace-aware parsing and pull reading, plus `XmlNs.render` for
+  namespaced trees with preserved or configured prefixes.
+* `Xml.fold_source` and `XmlNs.fold_source` for validated source events with
+  lexical and attribute ranges, including comments, CDATA and declarations.
+
+See the https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0/docs/markup.adoc[markup guide]
+for syntax differences, validation coverage, extension options and downstream
+consumer examples. Runtime parsing remains pure Roc and platform-independent.
+DOM consumer checks retain prefixes, qualified spellings and namespace-declaration
+attributes, and verify binding/removal by expanded identity and adoption fidelity.
+Handler restrictions remain a consumer policy; ordinary parsers accept valid
+handler attributes, including MathML handlers and SVG global events.
+
+== Fixed
+
+* AsciiDoc list paragraphs preserve indentation beyond the common width of
+  their continuation lines.
+* AsciiDoc preserves metadata and styles on nested lists, recognises Roman
+  markers, and nests differing marker styles correctly.
+* AsciiDoc keeps titles on thematic breaks, handles block macros following
+  verbatim styles, resolves repeated media attributes, and corrects `pass:`,
+  multiline `xref:` and table-column interpretation.
+* XML decodes mixed references, line endings and CDATA in linear time.
+
+== Contributor tooling
+
+Fuzz targets use roc-fuzz 0.6.2, and Blueprint tooling uses 0.13.0. Markup oracle
+checks include pinned independent parsers, semantic validators and browser DOM
+consumers. Git keeps curated cases and an upstream manifest; the full WPT corpus
+is fetched and generated into ignored local storage. Markup fuzz campaigns and
+benchmarks run locally, with no new scheduled campaigns.

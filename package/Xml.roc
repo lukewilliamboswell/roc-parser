@@ -1,5 +1,6 @@
 import Parser
 import Utf8
+import MarkupScan
 import Literal as Quotation
 
 ## XML document tree and parser based on the XML 1.0 (Fifth Edition)
@@ -331,6 +332,43 @@ Xml := {
 		LimitExceeded({ limit : Limit, max : U64, line : U64, column : U64 }),
 	]
 
+	## An exact byte interval in XML source.
+	SourceSpan : { start : U64, end : U64 }
+
+	## A start tag with a source range for each attribute, in the same order.
+	SourceStart : { name : Str, attributes : List(Attribute), attribute_spans : List(SourceSpan), span : SourceSpan, empty : Bool }
+
+	## Validated lexical events retaining comments, processing instructions,
+	## CDATA boundaries, and attribute ranges. Gap contains document whitespace
+	## or a byte order mark outside the root; Declaration is the XML declaration.
+	## A self-closing Start has empty=True and no corresponding End event.
+	SourceEvent : [
+		Start(SourceStart),
+		End(SourceSpan),
+		Text({ value : Str, span : SourceSpan }),
+		CData({ value : Str, span : SourceSpan }),
+		Comment({ value : Str, span : SourceSpan }),
+		ProcessingInstruction({ target : Str, data : Str, span : SourceSpan }),
+		Declaration(SourceSpan),
+		Gap(SourceSpan),
+	]
+
+	## Fold validated authored events without constructing an XML tree.
+	## Callback rejection stops at that event's source location. Existing reader
+	## events and tree parsing retain their coalescing and omission behavior.
+	fold_source : Str, ReaderProps, state, (state, SourceEvent -> Try(state, problem)) -> [Folded(state), Failed(ReadError), Rejected(problem, { line : U64, column : U64 })]
+	fold_source = |input, props, initial, on_event| {
+		bytes = input.to_utf8()
+		match fold_source_impl(input, bytes, reader_limits(props), initial, on_event) {
+			Ok(value) => Folded(value)
+			Err(Failed(failure)) => Failed(read_error(bytes, failure))
+			Err(Rejected(problem, offset)) => {
+				at = locate(bytes, offset, "")
+				Rejected(problem, { line: at.line, column: at.column })
+			}
+		}
+	}
+
 	## One step through a document, in document order.
 	##
 	## Events match the tree [Xml.parse_str] builds: an empty-element tag
@@ -398,10 +436,10 @@ Xml := {
 		## }
 		## ```
 		next : Reader -> [Event(Xml.Event, Reader), Done, Failed(Xml.ReadError)]
-		next = |reader| {
-			bytes = reader.bytes
-			match step(reader.src, bytes, reader.limits, reader.cursor) {
-				Ok(Ev(event, cursor)) => Event(event, { ..reader, cursor })
+		next = |input_reader| {
+			bytes = input_reader.bytes
+			match step(input_reader.src, bytes, input_reader.limits, input_reader.cursor) {
+				Ok(Ev(event, cursor)) => Event(event, { ..input_reader, cursor })
 				Ok(Finished(pos)) =>
 					if pos == bytes.len() {
 						Done
@@ -437,18 +475,18 @@ Xml := {
 		## }
 		## ```
 		element : Reader -> [Element(Xml.Node, Reader), Failed(Xml.ReadError), NotAfterStart]
-		element = |reader| {
-			if reader.cursor.start == no_start {
+		element = |input_reader| {
+			if input_reader.cursor.start == no_start {
 				return NotAfterStart
 			}
-			bytes = reader.bytes
+			bytes = input_reader.bytes
 			tag =
-				match parse_start_tag(reader.src, bytes, reader.cursor.start, reader.limits.attributes) {
+				match parse_start_tag(input_reader.src, bytes, input_reader.cursor.start, input_reader.limits.attributes) {
 					Ok(parsed) => parsed
 					Err(failure) => return Failed(read_error(bytes, failure))
 				}
-			match build_element(reader.src, bytes, reader.limits, reader.cursor, tag.name, tag.attributes) {
-				Ok(built) => Element(built.node, { ..reader, cursor: built.cursor })
+			match build_element(input_reader.src, bytes, input_reader.limits, input_reader.cursor, tag.name, tag.attributes) {
+				Ok(built) => Element(built.node, { ..input_reader, cursor: built.cursor })
 				Err(failure) => Failed(read_error(bytes, failure))
 			}
 		}
@@ -481,13 +519,13 @@ Xml := {
 		## }
 		## ```
 		element_with : Reader, { context : ctx, first : open, start : ctx, Str, List(Xml.Attribute) -> Try({ context : ctx, open : open }, err), text : Str -> node, end : ctx, open, List(node) -> { context : ctx, node : node } } -> [Element(node, ctx, Reader), Failed(Xml.ReadError), Rejected(err, { line : U64, column : U64 }), NotAfterStart]
-		element_with = |reader, builder| {
-			if reader.cursor.start == no_start {
+		element_with = |input_reader, builder| {
+			if input_reader.cursor.start == no_start {
 				return NotAfterStart
 			}
-			bytes = reader.bytes
-			match build_with(reader.src, bytes, reader.limits, reader.cursor, builder.context, builder.first, builder.start, builder.text, builder.end) {
-				Built(built) => Element(built.node, built.context, { ..reader, cursor: built.cursor })
+			bytes = input_reader.bytes
+			match build_with(input_reader.src, bytes, input_reader.limits, input_reader.cursor, builder.context, builder.first, builder.start, builder.text, builder.end) {
+				Built(built) => Element(built.node, built.context, { ..input_reader, cursor: built.cursor })
 				Unread(failure) => Failed(read_error(bytes, failure))
 				Rejected(error, offset) => {
 					at = locate(bytes, offset, "")
@@ -498,14 +536,14 @@ Xml := {
 
 		## The document's XML declaration, or `Err(Missing)` when it has none.
 		declaration : Reader -> Try(Xml.Declaration, [Missing])
-		declaration = |reader| Box.unbox(reader.declaration)
+		declaration = |input_reader| Box.unbox(input_reader.declaration)
 
 		## Where the most recent event starts: the `<` of its tag, or the
 		## first byte of its text. Before the first event, the root's start
 		## tag. Lines and columns count as in [Xml.Error].
 		location : Reader -> { line : U64, column : U64 }
-		location = |reader| {
-			at = locate(reader.bytes, reader.cursor.at, "")
+		location = |input_reader| {
+			at = locate(input_reader.bytes, input_reader.cursor.at, "")
 			{ line: at.line, column: at.column }
 		}
 	}
@@ -523,6 +561,52 @@ Xml := {
 		bytes = input.to_utf8()
 		open_reader(input, bytes, reader_limits(props)).map_err(|failure| read_error(bytes, failure))
 	}
+	# Internal scanner operations for arena construction. Bytes must come from
+	# src; token prefixes and expected name ranges are verified by the caller.
+	# The root-close predicate selects a route; the full parser checks content.
+	SourceLex :: [].{
+		StartTag : { name : Str, attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), empty : Bool, pos : U64 }
+		read_start : Str, List(U8), U64, U64 -> Try(StartTag, [Fallback])
+		read_start = |src, bytes, start, maximum| parse_source_start_tag(src, bytes, start, maximum).map_err(|_| Fallback)
+		read_head : Str, List(U8), U64 -> Try([Complete({ name : Str, empty : Bool, pos : U64 }), Attributes({ val : Str, pos : U64 })], [Fallback])
+		read_head = |src, bytes, start| parse_source_start_head(src, bytes, start).map_err(|_| Fallback)
+		read_attributes_with : Str, List(U8), { val : Str, pos : U64 }, U64, state, (state, Str, U64 -> Try(prepared, problem)), (state, prepared, Str, Xml.SourceSpan -> state) -> Try({ name : Str, state : state, empty : Bool, pos : U64 }, [Fallback])
+		read_attributes_with = |src, bytes, name, maximum, initial, on_name, on_attribute| parse_source_attributes_with(src, bytes, name, maximum, initial, on_name, on_attribute).map_err(|_| Fallback)
+		read_text : Str, List(U8), U64 -> Try({ val : Str, pos : U64 }, [Fallback])
+		read_text = |src, bytes, start| read_source_text(src, bytes, start).map_err(|_| Fallback)
+		read_end : Str, List(U8), U64, Xml.SourceSpan -> Try({ name_end : U64, pos : U64 }, [Fallback])
+		read_end = |src, bytes, start, expected| read_end_tag(src, bytes, start, expected).map_err(|_| Fallback)
+		closes_document : Str, U64 -> Bool
+		closes_document = |src, maximum_attributes| {
+			bytes = src.to_utf8()
+			var $start = 0.U64
+			while $start < bytes.len() and is_space(bytes.get($start) ?? 0) {
+				$start = $start + 1
+			}
+			if bytes.get($start) != Ok('<') or bytes.get($start + 1) == Ok('!') or bytes.get($start + 1) == Ok('?') or bytes.get($start + 1) == Ok('/') {
+				return False
+			}
+			root = parse_source_start_tag(src, bytes, $start, maximum_attributes) ?? return False
+			if root.empty {
+				return True
+			}
+			last_tag = src.split_last("<") ?? return False
+			closing_start = last_tag.before.count_utf8_bytes()
+			if bytes.get(closing_start + 1) != Ok('/') {
+				return False
+			}
+			closing = read_end_tag(src, bytes, closing_start, { start: $start + 1, end: $start + 1 + root.name.count_utf8_bytes() }) ?? return False
+			var $trailing = closing.pos
+			while $trailing < bytes.len() and is_space(bytes.get($trailing) ?? 0) {
+				$trailing = $trailing + 1
+			}
+			$trailing == bytes.len()
+		}
+
+		allows : U64, U64, U64, U64 -> Bool
+		allows = |maximum_depth, maximum_elements, depth, elements| check_start({ depth: maximum_depth, elements: maximum_elements, attributes: 0, namespaces: True }, depth, elements, 0).is_ok()
+	}
+
 }
 
 Failure : { offset : U64, message : Str }
@@ -1152,7 +1236,7 @@ materialize = |bytes, text, start, end| {
 # UTF-8 elsewhere in the input) the bytes are validated.
 slice_str : Str, List(U8), U64, U64 -> Str
 slice_str = |src, bytes, start, end| {
-	if src.is_empty() {
+	value = if src.is_empty() {
 		Str.from_utf8(bytes.sublist({ start, len: end - start })) ?? ""
 	} else {
 		match src.drop_first_bytes(start) {
@@ -1160,6 +1244,11 @@ slice_str = |src, bytes, start, end| {
 			Err(_) => ""
 		}
 	}
+	# Eleven bytes fit inline on both 32-bit and 64-bit targets. Short names
+	# and values then avoid shared-string reference counts during tree building.
+	if value.count_utf8_bytes() <= 11 {
+		value.release_excess_capacity()
+	} else value
 }
 
 # `build_element` for a tree of the caller's type: `start` and `end` make
@@ -1686,8 +1775,8 @@ ascii_lowercase = |bytes| bytes.map(|c| if (c >= 'A' and c <= 'Z') c + 32 else c
 v1_0 : Xml.Version
 v1_0 = { major: 1, minor: 0 }
 
-element : Str, List(Xml.Attribute), List(Xml.Node) -> Xml.Node
-element = |name, attributes, children| Element({ name, attributes, children })
+example_element : Str, List(Xml.Attribute), List(Xml.Node) -> Xml.Node
+example_element = |name, attributes, children| Element({ name, attributes, children })
 
 root_of : Str -> Try(Xml.Node, [InvalidXml(Xml.Error)])
 root_of = |input| Xml.parse_str(input).map_ok(|xml| xml.root)
@@ -1716,12 +1805,12 @@ expect {
 				version: v1_0,
 				encoding: Ok(Utf8Encoding),
 			}),
-			root: element(
+			root: example_element(
 				"root",
 				[],
 				[
 					Text("\n    "),
-					element("element", [{ name: "arg", value: "value" }], []),
+					example_element("element", [{ name: "arg", value: "value" }], []),
 					Text("\n"),
 				],
 			),
@@ -1731,7 +1820,7 @@ expect {
 # XML parsing accepts documents without a prolog.
 expect {
 	result = Utf8.parse_str(Xml.parser, "<element />")?
-	result == { declaration: Err(Missing), root: element("element", [], []) }
+	result == { declaration: Err(Missing), root: example_element("element", [], []) }
 }
 
 # A declaration without an encoding reports it as missing, and versions
@@ -1741,20 +1830,20 @@ expect Xml.parse_str("<?xml version='1.0' encoding='latin1'?><a/>").map_ok(|xml|
 expect error_at("<?xml version='1.99999999999999999999'?><a/>") == Ok({ line: 1, column: 1 })
 
 # Empty elements can omit whitespace before the self-closing marker.
-expect root_of("<element/>") == Ok(element("element", [], []))
+expect root_of("<element/>") == Ok(example_element("element", [], []))
 
 # Empty elements can carry attributes.
-expect root_of("<element arg=\"value\"/>") == Ok(element("element", [{ name: "arg", value: "value" }], []))
+expect root_of("<element arg=\"value\"/>") == Ok(example_element("element", [{ name: "arg", value: "value" }], []))
 
 # Explicit start and end tags can represent an empty element.
-expect root_of("<element></element>") == Ok(element("element", [], []))
+expect root_of("<element></element>") == Ok(example_element("element", [], []))
 
 # Elements can parse multiple attributes and text content.
 expect {
 	result = root_of("<element firstArg=\"one\" secondArg='two'>text content</element>")
 	result
 		== Ok(
-			element(
+			example_element(
 				"element",
 				[
 					{ name: "firstArg", value: "one" },
@@ -1766,22 +1855,22 @@ expect {
 }
 
 # CDATA sections parse into text nodes.
-expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(element("element", [], [Text("<literal />")]))
+expect root_of("<element><![CDATA[<literal />]]></element>") == Ok(example_element("element", [], [Text("<literal />")]))
 
 # Partial CDATA closing text is preserved until the real close marker.
-expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(element("element", [], [Text("this is ]] not ]> the end")]))
+expect root_of("<element><![CDATA[this is ]] not ]> the end]]></element>") == Ok(example_element("element", [], [Text("this is ]] not ]> the end")]))
 
 # Nested elements preserve attributes on parent and child nodes.
 expect {
 	result = root_of("<parent argParent=\"outer\"><child argChild=\"inner\" /></parent>")
-	result == Ok(element("parent", [{ name: "argParent", value: "outer" }], [element("child", [{ name: "argChild", value: "inner" }], [])]))
+	result == Ok(example_element("parent", [{ name: "argParent", value: "outer" }], [example_element("child", [{ name: "argChild", value: "inner" }], [])]))
 }
 
 # Nested element parsing preserves whitespace text nodes.
-expect root_of("<parent>\n    <child />\n</parent>") == Ok(element("parent", [], [Text("\n    "), element("child", [], []), Text("\n")]))
+expect root_of("<parent>\n    <child />\n</parent>") == Ok(example_element("parent", [], [Text("\n    "), example_element("child", [], []), Text("\n")]))
 
 # Siblings and nested children end up under the right parents.
-expect root_of("<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>") == Ok(element("a", [], [Text("1"), element("b", [], [Text("2"), element("c", [], []), Text("3")]), Text("4"), element("d", [], [element("e", [], [Text("5")])]), Text("6")]))
+expect root_of("<a>1<b>2<c/>3</b>4<d><e>5</e></d>6</a>") == Ok(example_element("a", [], [Text("1"), example_element("b", [], [Text("2"), example_element("c", [], []), Text("3")]), Text("4"), example_element("d", [], [example_element("e", [], [Text("5")])]), Text("6")]))
 
 # Elements can parse a diverse set of child nodes.
 expect {
@@ -1795,14 +1884,14 @@ expect {
 
 	result
 		== Ok(
-			element(
+			example_element(
 				"feed",
 				[{ name: "xmlns", value: "http://www.w3.org/2005/Atom" }],
 				[
 					Text("\n    "),
-					element("title", [], [Text("Atom Feed")]),
+					example_element("title", [], [Text("Atom Feed")]),
 					Text("\n    "),
-					element(
+					example_element(
 						"link",
 						[
 							{ name: "rel", value: "self" },
@@ -1812,7 +1901,7 @@ expect {
 						[],
 					),
 					Text("\n    "),
-					element("updated", [], [Text("2024-02-23T20:38:24Z")]),
+					example_element("updated", [], [Text("2024-02-23T20:38:24Z")]),
 					Text("\n"),
 				],
 			),
@@ -1826,7 +1915,7 @@ expect {
 	result
 		== Ok({
 			declaration: Ok({ version: v1_0, encoding: Ok(Utf8Encoding) }),
-			root: element("root", [], [element("Example", [], [])]),
+			root: example_element("root", [], [example_element("Example", [], [])]),
 		})
 }
 
@@ -1838,10 +1927,10 @@ expect Utf8.parse_str(Xml.parser, "<ӿ").is_err()
 expect error_at("<a><b></a></b>") == Ok({ line: 1, column: 7 })
 
 # Names may contain digits and non-ASCII letters.
-expect root_of("<h1 données-2='x'>é</h1>") == Ok(element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
+expect root_of("<h1 données-2='x'>é</h1>") == Ok(example_element("h1", [{ name: "données-2", value: "x" }], [Text("é")]))
 
 # Predefined entity and character references are replaced in text and attributes.
-expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
+expect root_of("<a t='&lt;&#65;&#x1F600;&quot;'>&amp;&gt;&apos;</a>") == Ok(example_element("a", [{ name: "t", value: "<A😀\"" }], [Text("&>'")]))
 
 # Undeclared entities, bare ampersands, and references to illegal characters are errors.
 expect error_at("<a>&nbsp;</a>") == Ok({ line: 1, column: 4 })
@@ -1859,16 +1948,16 @@ expect error_at("<a b='1' b='2'/>") == Ok({ line: 1, column: 10 })
 
 # Attribute values are normalised: literal whitespace becomes a space, while
 # character references keep the character they name.
-expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(element("a", [{ name: "b", value: "x y z \n\t" }], []))
+expect root_of("<a b='x\r\ny\tz\n&#10;&#9;'/>") == Ok(example_element("a", [{ name: "b", value: "x y z \n\t" }], []))
 
 # Line endings in content are normalised to LF (XML 1.0 section 2.11).
-expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(element("a", [], [Text("1\n2\n3\n")]))
+expect root_of("<a>1\r\n2\r3<![CDATA[\r\n]]></a>") == Ok(example_element("a", [], [Text("1\n2\n3\n")]))
 
 # Comments and processing instructions are accepted everywhere Misc is
 # allowed, and text on both sides of them is merged.
 expect {
 	result = Xml.parse_str("<!-- c --><?pi data?>\n<a>x<!-- y -->z<?p?><![CDATA[w]]>&amp;</a><!---->\n<?q ?>")
-	result.map_ok(|xml| xml.root) == Ok(element("a", [], [Text("xzw&")]))
+	result.map_ok(|xml| xml.root) == Ok(example_element("a", [], [Text("xzw&")]))
 }
 
 # Comments may not contain '--', and PI targets may not be 'xml'.
@@ -2298,3 +2387,253 @@ expect {
 		Err(_) => False
 	}
 }
+
+parse_source_start_tag : Str, List(U8), U64, U64 -> Try({ name : Str, attributes : List(Xml.Attribute), attribute_spans : List(Xml.SourceSpan), empty : Bool, pos : U64 }, ReadFailure)
+parse_source_start_tag = |src, bytes, start, max_attributes| {
+	name = match parse_source_start_head(src, bytes, start)? {
+		Complete(tag) => return Ok({ name: tag.name, attributes: [], attribute_spans: [], empty: tag.empty, pos: tag.pos })
+		Attributes(parsed) => parsed
+	}
+	parsed = parse_source_attributes_with(src, bytes, name, max_attributes, { attributes: [], spans: [], seen: Set.empty() }, source_attribute_name, source_attribute_append).map_err(
+		|problem| match problem {
+			Failed(failure) => failure
+			Rejected(failure) => failure
+		},
+	)?
+	Ok({ name: parsed.name, attributes: parsed.state.attributes, attribute_spans: parsed.state.spans, empty: parsed.empty, pos: parsed.pos })
+}
+
+parse_source_start_head : Str, List(U8), U64 -> Try([Complete({ name : Str, empty : Bool, pos : U64 }), Attributes({ val : Str, pos : U64 })], ReadFailure)
+parse_source_start_head = |src, bytes, start| {
+	name = match parse_name(src, bytes, start + 1) {
+		Ok(parsed) => parsed
+		Err(_) => return fail(start + 1, "expected an element name after '<'")
+	}
+	if bytes.get(name.pos) == Ok('>') {
+		return Ok(Complete({ name: name.val, empty: False, pos: name.pos + 1 }))
+	}
+	if bytes.get(name.pos) == Ok('/') and bytes.get(name.pos + 1) == Ok('>') {
+		return Ok(Complete({ name: name.val, empty: True, pos: name.pos + 2 }))
+	}
+	Ok(Attributes(name))
+}
+
+SourceAttributes : { attributes : List(Xml.Attribute), spans : List(Xml.SourceSpan), seen : Set(Str) }
+
+source_attribute_name : SourceAttributes, Str, U64 -> Try(Str, ReadFailure)
+source_attribute_name = |state, written, offset| {
+	duplicate = if state.attributes.len() <= small_attribute_count {
+		state.attributes.any(|attribute| attribute.name == written)
+	} else state.seen.contains(written)
+	if duplicate {
+		return fail(offset, "duplicate attribute ${written}")
+	}
+	Ok(written)
+}
+
+source_attribute_append : SourceAttributes, Str, Str, Xml.SourceSpan -> SourceAttributes
+source_attribute_append = |state, written, value, span| {
+	attributes = state.attributes.append({ name: written, value })
+	seen = if attributes.len() > small_attribute_count {
+		if state.seen.is_empty() {
+			Set.from_list(attributes.map(|attribute| attribute.name))
+		} else state.seen.insert(written)
+	} else state.seen
+	{ attributes, spans: state.spans.append(span), seen }
+}
+
+parse_source_attributes_with : Str, List(U8), { val : Str, pos : U64 }, U64, state, (state, Str, U64 -> Try(prepared, problem)), (state, prepared, Str, Xml.SourceSpan -> state) -> Try({ name : Str, state : state, empty : Bool, pos : U64 }, [Failed(ReadFailure), Rejected(problem)])
+parse_source_attributes_with = |src, bytes, name, max_attributes, initial, on_name, on_attribute| {
+	var $state = initial
+	var $count = 0.U64
+	var $pos = name.pos
+	while True {
+		before_space = $pos
+		$pos = skip_space(bytes, $pos)
+		if bytes.get($pos) == Ok('>') {
+			return Ok({ name: name.val, state: $state, empty: False, pos: $pos + 1 })
+		}
+		if bytes.get($pos) == Ok('/') and bytes.get($pos + 1) == Ok('>') {
+			return Ok({ name: name.val, state: $state, empty: True, pos: $pos + 2 })
+		}
+		if $pos >= bytes.len() {
+			return fail($pos, "expected '>' to close the start tag <${name.val}>").map_err(|failure| Failed(failure))
+		}
+		if $pos == before_space {
+			return fail($pos, "expected whitespace, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
+		}
+		attribute_start = $pos
+		attribute_name = match parse_name(src, bytes, $pos) {
+			Ok(parsed) => parsed
+			Err(_) => return fail($pos, "expected an attribute name, '>' or '/>' in the start tag <${name.val}>").map_err(|failure| Failed(failure))
+		}
+		if $count >= max_attributes {
+			return Err(Failed(LimitFail({ limit: Attributes, max: max_attributes, offset: $pos })))
+		}
+		prepared = on_name($state, attribute_name.val, $pos).map_err(|problem| Rejected(problem))?
+		$pos = skip_eq(bytes, attribute_name.pos).map_err(|failure| Failed(failure))?
+		value = parse_attribute_value(src, bytes, $pos).map_err(|failure| Failed(failure))?
+		$state = on_attribute($state, prepared, value.val, { start: attribute_start, end: value.pos })
+		$count = $count + 1
+		$pos = value.pos
+	}
+}
+
+# The authored fold shares the XML name, attribute, reference, character,
+# end-tag, comment, PI and declaration validators with the existing reader.
+fold_source_impl : Str, List(U8), Limits, state, (state, Xml.SourceEvent -> Try(state, problem)) -> Try(state, [Failed(ReadFailure), Rejected(problem, U64)])
+fold_source_impl = |src, bytes, limits, initial, on_event| {
+	var $state = initial
+	var $pos = 0
+	var $open = []
+	var $closed = False
+	var $elements = 0
+	if starts_with_at(bytes, 0, [0xEF, 0xBB, 0xBF]) {
+		$state = on_event($state, Gap({ start: 0, end: 3 })).map_err(|problem| Rejected(problem, 0))?
+		$pos = 3
+	}
+	if starts_with_at(bytes, $pos, "<?xml".to_utf8()) and is_space_at(bytes, $pos + 5) {
+		declaration = parse_xml_declaration(bytes, $pos).map_err(|failure| Failed(failure))?
+		$state = on_event($state, Declaration({ start: $pos, end: declaration.pos })).map_err(|problem| Rejected(problem, $pos))?
+		$pos = declaration.pos
+	}
+	while True {
+		start = $pos
+		leading = bytes.get(start) ?? 0
+		following = bytes.get(start + 1) ?? 0
+		if $open.is_empty() and is_space(leading) {
+			$pos = skip_space(bytes, start)
+			$state = on_event($state, Gap({ start, end: $pos })).map_err(|problem| Rejected(problem, start))?
+		} else if leading == '<' and following == '!' and starts_with_at(bytes, start, "<!--".to_utf8()) {
+			$pos = skip_comment(bytes, start).map_err(|failure| Failed(failure))?
+			value = source_lines(slice_str(src, bytes, start + 4, $pos - 3))
+			$state = on_event($state, Comment({ value, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
+		} else if leading == '<' and following == '?' {
+			$pos = skip_processing_instruction(bytes, start, limits.namespaces).map_err(|failure| Failed(failure))?
+			target = parse_name(src, bytes, start + 2) ?? { val: "", pos: start + 2 }
+			data_start = skip_space(bytes, target.pos)
+			data = source_lines(slice_str(src, bytes, if (data_start < $pos - 2) data_start else $pos - 2, $pos - 2))
+			$state = on_event($state, ProcessingInstruction({ target: target.val, data, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
+		} else if $open.is_empty() and $closed {
+			if start == bytes.len() {
+				return Ok($state)
+			}
+			return Err(Failed(XmlFail({ offset: start, message: "unexpected content after the root element" })))
+		} else if $open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<!DOCTYPE".to_utf8()) {
+			return Err(Failed(XmlFail({ offset: start, message: "document type declarations are not supported" })))
+		} else if start >= bytes.len() {
+			if $open.is_empty() {
+				return Err(Failed(XmlFail({ offset: start, message: "expected a root element" })))
+			}
+			return Err(Failed(XmlFail({ offset: start, message: "expected </${open_name(src, bytes, $open)}> before the end of the document" })))
+		} else if $open.is_empty() and leading != '<' {
+			return Err(Failed(XmlFail({ offset: start, message: "expected a root element, but found text" })))
+		} else if !$open.is_empty() and leading == '<' and following == '!' and starts_with_at(bytes, start, "<![CDATA[".to_utf8()) {
+			parsed = read_source_cdata(src, bytes, start).map_err(|failure| Failed(failure))?
+			$pos = parsed.pos
+			$state = on_event($state, CData({ value: parsed.val, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
+		} else if !$open.is_empty() and leading != '<' {
+			parsed = read_source_text(src, bytes, start).map_err(|failure| Failed(failure))?
+			$pos = parsed.pos
+			$state = on_event($state, Text({ value: parsed.val, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
+		} else if !$open.is_empty() and following == '!' {
+			return Err(Failed(XmlFail({ offset: start, message: "expected a comment or CDATA section after '<!'" })))
+		} else if following == '/' {
+			end_tag = read_end_tag(src, bytes, start, $open.last() ?? { start: 0, end: 0 }).map_err(|failure| Failed(failure))?
+			$pos = end_tag.pos
+			$open = $open.drop_last(1)
+			$closed = $open.is_empty()
+			$state = on_event($state, End({ start, end: $pos })).map_err(|problem| Rejected(problem, start))?
+		} else {
+			check_start(limits, $open.len(), $elements, start).map_err(|failure| Failed(failure))?
+			tag = parse_source_start_tag(src, bytes, start, limits.attributes).map_err(|failure| Failed(failure))?
+			$pos = tag.pos
+			$elements = $elements + 1
+			$state = on_event($state, Start({ name: tag.name, attributes: tag.attributes, attribute_spans: tag.attribute_spans, empty: tag.empty, span: { start, end: $pos } })).map_err(|problem| Rejected(problem, start))?
+			if tag.empty {
+				$closed = $open.is_empty()
+			} else {
+				$open = $open.append({ start: start + 1, end: start + 1 + tag.name.count_utf8_bytes() })
+			}
+		}
+	}
+}
+
+source_lines : Str -> Str
+source_lines = |value| if value.contains("\r") {
+	Str.join_with(Str.join_with(value.split_on("\r\n"), "\n").split_on("\r"), "\n")
+} else value
+
+read_source_text : Str, List(U8), U64 -> Parsed(Str)
+read_source_text = |src, bytes, start| {
+	first_byte = bytes.get(start) ?? 0
+	if first_byte >= 0x20 and first_byte < 0x80 and first_byte != '<' and first_byte != '&' and first_byte != ']' and bytes.get(start + 1) == Ok('<') {
+		return Ok({ val: slice_str(src, bytes, start, start + 1), pos: start + 1 })
+	}
+	var $text = []
+	var $run_start = start
+	var $run_end = start
+	var $pos = start
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		if byte == '<' {
+			break
+		} else if byte == '&' {
+			reference = parse_reference(bytes, $pos)?
+			$text = append_utf8(materialize(bytes, $text, $run_start, $run_end), reference.val)
+			$pos = reference.pos
+			$run_start = $pos
+			$run_end = $pos
+		} else if byte == ']' and starts_with_at(bytes, $pos, "]]>".to_utf8()) {
+			return fail($pos, "']]>' is not allowed in character data")
+		} else if byte == '\r' {
+			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
+			$run_start = $pos
+			$run_end = $pos
+		} else {
+			end = if byte >= 0x20 and byte < 0x80 {
+				MarkupScan.xml_text(bytes, $pos + 1)
+			} else check_char(bytes, $pos)?
+			$run_end = end
+			$pos = end
+		}
+	}
+	Ok({ val: text_str(src, bytes, $text, $run_start, $run_end), pos: $pos })
+}
+
+read_source_cdata : Str, List(U8), U64 -> Parsed(Str)
+read_source_cdata = |src, bytes, start| {
+	var $text = []
+	var $run_start = start + 9
+	var $run_end = start + 9
+	var $pos = start + 9
+	while $pos < bytes.len() {
+		byte = bytes.get($pos) ?? 0
+		if byte == ']' and bytes.get($pos + 1) == Ok(']') and bytes.get($pos + 2) == Ok('>') {
+			return Ok({ val: text_str(src, bytes, $text, $run_start, $run_end), pos: $pos + 3 })
+		} else if byte == '\r' {
+			$text = materialize(bytes, $text, $run_start, $run_end).append('\n')
+			$pos = if (bytes.get($pos + 1) == Ok('\n')) $pos + 2 else $pos + 1
+			$run_start = $pos
+			$run_end = $pos
+		} else {
+			end = if byte >= 0x20 and byte < 0x80 and byte != ']' {
+				MarkupScan.cdata_text(bytes, $pos + 1)
+			} else check_char(bytes, $pos)?
+			$run_end = end
+			$pos = end
+		}
+	}
+	fail(start, "unterminated CDATA section")
+}
+
+expect Xml.fold_source(
+	"<x/>\n<!--z-->",
+	{},
+	0.U64,
+	|count, event| match event {
+		Comment(_) => Err(Stopped)
+		_ => Ok(count + 1)
+	},
+) == Rejected(Stopped, { line: 2, column: 1 })

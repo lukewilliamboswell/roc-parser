@@ -41,7 +41,7 @@ Install:
   `PATH` as `roc`;
 * Python 3, for the independent parser test and reference harnesses;
 * the `blueprint` binary of
-  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.12.0[roc-blueprint 0.12.0],
+  https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
   which runs the same named tasks as CI;
 * `openssl` and `jq`, for the source inventory and attestation checks.
 
@@ -66,7 +66,7 @@ release's `blueprint.sha256` before you run it. For an Apple silicon Mac:
 
 [source,bash]
 ----
-gh release download 0.12.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
+gh release download 0.13.0 --repo lukewilliamboswell/roc-blueprint --pattern blueprint-aarch64-darwin --pattern blueprint.sha256
 shasum -a 256 --check --ignore-missing blueprint.sha256
 chmod +x blueprint-aarch64-darwin
 mv blueprint-aarch64-darwin ~/.local/bin/blueprint
@@ -226,7 +226,7 @@ of the `Release` workflow; download the `release-site` artifact of that run to
 preview it.
 
 When you write a chapter, follow the
-https://github.com/lukewilliamboswell/roc-automation/blob/0ad737abd3cad3d14d7e409e91161cd42c05142c/docs/documentation.adoc[shared documentation guide]:
+https://github.com/lukewilliamboswell/roc-automation/blob/cc6d4081762c6d70bf95bf18c9abf99b5e9ade25/docs/documentation.adoc[shared documentation guide]:
 give each page one purpose (tutorial, how-to, reference or explanation), name
 the reader and the outcome at the top, label commands and their output
 separately, and put any warning before the step it applies to.

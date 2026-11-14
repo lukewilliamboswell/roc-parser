@@ -99,7 +99,7 @@ composition! = || {
 		relationships: [{ from: "Subject", to: "roc-parser", relation: "contains", scope: "", basis: "The source bundle contains this package's modules; every archive member is accounted for below." }].concat(reviewed.relationships).concat(member_edges),
 		coverage: [
 			{ scope: "source-members", status: "complete", reason: "Every archive member is listed by the shared tool and its SHA-256 matches the working-tree package source.", contact: "https://github.com/${repository}/issues" },
-			{ scope: "package-dependencies", status: "complete", reason: "The package compiler's dependency tree matches the reviewed Unicode 4.3.2 closure. Unicode's production data inputs are recorded from its vendor manifest; conformance-only inputs are excluded.", contact: "https://github.com/${repository}/issues" },
+			{ scope: "package-dependencies", status: "complete", reason: "The package compiler's dependency tree matches the reviewed Unicode 4.3.3 closure. Unicode's production data inputs are recorded from its vendor manifest; conformance-only inputs are excluded.", contact: "https://github.com/${repository}/issues" },
 			{ scope: "build-tooling", status: "excluded", reason: "This is a source-only deliverable. The inventory records why each Blueprint input is excluded; no build tool or test platform is shipped in the archive.", contact: "https://github.com/${repository}/issues" },
 		],
 		inputs: reviewed.inputs,

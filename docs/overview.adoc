@@ -26,6 +26,10 @@ layers:
   combinators_. You use them to read a format of your own, from a one-line
   `key=value` setting to a complete file format.
 
+Web markup has ready-made parsers too: xref:markup.adoc#markup[`Html`, `Svg`
+and `MathML`] retain namespaces and original source, with checked literals
+and typed interpolation plans for downstream renderers.
+
 This manual is for Roc programmers. You do not need to know anything about
 parsing theory.
 

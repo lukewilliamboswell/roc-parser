@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "limitations": [
+    {
+      "oracle": "Nu26.11.9",
+      "cases": [
+        "svg-bad-path-start",
+        "svg-bad-viewbox"
+      ],
+      "kind": "invalid_acceptance",
+      "coverage": "Specification fixtures retain strict authoring rejection; these rules are not claimed as independently validated by Nu."
+    },
+    {
+      "oracle": "W3C MathML schema 9439b477f168127d4510e2d361043c27c61c18a1",
+      "file": "mathml4-presentation.rng",
+      "kind": "schema_compile_error",
+      "message": "libxml2 RelaxNG: Attributes conflicts in group, line 755",
+      "coverage": "Use the compiling Core RNG for its overlapping vocabulary/attributes; independent fixtures cover Presentation and arity rules."
+    },
+    {
+      "oracle": "Browser DOM APIs",
+      "kind": "scripting_mode_boundary",
+      "coverage": "DOMParser uses scripting-off document parsing; native innerHTML uses scripting-on fragment parsing. Other scripting modes are tested against WPT/parse5. Explicit browser requests outside these native modes fail as oracle infrastructure/configuration errors instead of silently using the wrong mode."
+    }
+  ]
+}

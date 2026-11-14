@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -37,6 +38,20 @@ class FuzzStrEncodingTests(unittest.TestCase):
 
 
 class SeedCorpusTests(unittest.TestCase):
+    def test_receipt_platform_matches_every_target_header(self) -> None:
+        release = run_fuzz.ROC_FUZZ_RELEASE
+        expected = (
+            "https://github.com/lukewilliamboswell/roc-fuzz/releases/download/"
+            f"{release['version']}/{release['bundle']}"
+        )
+        for name, config in run_fuzz.TARGETS.items():
+            with self.subTest(target=name):
+                platforms = re.findall(
+                    r'^\s*fuzz:\s*platform\s*"([^"\n]+)"',
+                    config.source.read_text(), re.MULTILINE,
+                )
+                self.assertEqual(platforms, [expected])
+
     def test_all_reviewable_seed_files_are_valid(self) -> None:
         for target_name in run_fuzz.TARGET_ORDER:
             config = run_fuzz.TARGETS[target_name]
@@ -59,7 +74,7 @@ class SeedCorpusTests(unittest.TestCase):
 
     def test_every_fuzz_target_is_registered(self) -> None:
         # Shared generator modules and the allocation diagnostic are not campaigns.
-        not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc"}
+        not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc", "markup-alloc", "MarkupCheck"}
         sources = {path.stem for path in run_fuzz.FUZZ_ROOT.glob("*.roc")} - not_targets
         self.assertEqual(sources, set(run_fuzz.TARGET_ORDER))
 
@@ -67,7 +82,13 @@ class SeedCorpusTests(unittest.TestCase):
         workflow = (run_fuzz.ROOT / ".github" / "workflows" / "fuzz.yml").read_text(encoding="utf-8")
         matrix = workflow.split("        target:\n", 1)[1].split("    steps:", 1)[0]
         listed = [line.strip()[2:] for line in matrix.splitlines() if line.strip().startswith("- ")]
-        self.assertEqual(listed, list(run_fuzz.TARGET_ORDER))
+        self.assertEqual(listed, list(run_fuzz.SCHEDULED_TARGET_ORDER))
+
+    def test_markup_targets_remain_local_only(self) -> None:
+        markup = {"svg-path", "svg-raw", "mathml-raw", "html-raw", "markup-source", "markup-structured", "markup-limits", "markup-segments"}
+        self.assertTrue(markup.issubset(run_fuzz.TARGETS))
+        self.assertTrue(markup.isdisjoint(run_fuzz.SCHEDULED_TARGET_ORDER))
+        self.assertTrue(markup.issubset(run_fuzz.resolve_targets(["all"])))
 
     def test_raw_seeds_are_plain_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -110,6 +131,15 @@ class TargetSelectionTests(unittest.TestCase):
         expected = list(run_fuzz.TARGET_ORDER)
         self.assertEqual(run_fuzz.resolve_targets([]), expected)
         self.assertEqual(run_fuzz.resolve_targets(["all"]), expected)
+
+    def test_ci_smoke_filters_only_local_targets(self) -> None:
+        args = run_fuzz.make_argument_parser().parse_args(["smoke", "--ci", "all", "--no-build"])
+        with patch.object(run_fuzz, "execute_target_command", return_value=0) as execute, patch.object(run_fuzz, "prepare_corpus", return_value=Path("corpus")):
+            self.assertEqual(run_fuzz.run_fuzz_mode(args), 0)
+        self.assertEqual([call.args[0] for call in execute.call_args_list if call.args[3][0] == "explore"], list(run_fuzz.SCHEDULED_TARGET_ORDER))
+        args.targets = ["svg-raw"]
+        with self.assertRaisesRegex(ValueError, "no CI-enabled"):
+            run_fuzz.run_fuzz_mode(args)
 
     def test_selection_preserves_order_and_removes_duplicates(self) -> None:
         self.assertEqual(

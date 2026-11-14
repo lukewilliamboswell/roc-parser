@@ -24,7 +24,7 @@ except ImportError:
 
 
 FIXTURES = ROOT / "scripts" / "literals" / "cases.json"
-PLATFORM = "https://github.com/roc-lang/basic-cli/releases/download/0.27.0/9yjxqdGTP4xSpSEmDazwTmRsehfRZzA19pwEKkR6fj1g.tar.zst"
+PLATFORM = "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst"
 
 
 def app_source(body: str) -> str:
@@ -44,6 +44,12 @@ import parser.AsciiDoc
 import parser.HTTP
 import parser.RocSyntax
 import parser.JsonValue
+import parser.Html
+import parser.Svg
+import parser.MathML
+import parser.SvgPath
+import parser.Markup
+import parser.MarkupFacts
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''

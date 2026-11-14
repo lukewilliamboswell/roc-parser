@@ -1,0 +1,88 @@
+[#consumer-fidelity]
+= Verify DOM consumer fidelity
+
+Use the local consumer review when a downstream renderer constructs DOM nodes
+from parsed markup or binds values into a parsed template. It checks names,
+namespace declarations, DOM interfaces and adoption into another document.
+
+== Run the review
+
+The review requires Node, the pinned Playwright browsers and the Roc compiler
+used by the package. Browser dependencies are installed in the ignored oracle
+cache. Generated probes and reports also stay in ignored local storage.
+
+[source,shell]
+----
+python3 scripts/review_markup.py \
+  --work .roc-parser-tmp/markup/consumer \
+  consumer --engines chromium firefox webkit
+----
+
+Read `consumer.json` in the work directory. A changed namespace, prefix,
+qualified spelling, namespace declaration or binding target fails the review.
+Each constructed tree has a `prerender_sha256` and `fidelity_sha256`; adoption
+must leave the projection and its digest unchanged. These are digests of the
+consumer tree, including values and attribute order, rather than digests of the
+original source spelling.
+
+The report separates implementation gaps from mismatches. The pinned Firefox
+159.0 browser does not execute an unnamespaced `oninput` handler on an SVG `g`;
+Chromium and WebKit do. That exact engine/version observation is reported as
+`oracle_gap`. The negative `online` attribute probe dispatches `line` and must not execute.
+Other handler disagreements fail the review. The report also
+records auxiliary event and computed-name observations without treating browser
+acceptance as an authoring rule. A constructor that cannot preserve an explicit
+name returns `consumer_gap` and fails the consumer comparison.
+
+== Preserve explicit names
+
+The `consumer-fidelity` projection carries every name as:
+
+[source,json]
+----
+{"namespace":"http://www.w3.org/1999/xhtml","prefix":null,"local":"h:div","qualified":"h:div"}
+----
+
+`namespace` and `prefix` are nullable. `local` is never split on a colon.
+`qualified` equals `local` for a null prefix, or `prefix + ":" + local` otherwise.
+An element is `["element", name, attributes, children]`; each attribute is
+`[name, value]`. Namespace declaration attributes are included. Text, comments,
+processing instructions and doctypes retain their separate node kinds.
+
+For example, HTML `createElement("h:div")` produces the name above, while
+`createElementNS("http://www.w3.org/1999/xhtml", "h:div")` produces prefix `h`
+and local `div`. Both have the same qualified spelling. A renderer must choose
+its constructor using the explicit fields and verify the resulting identity.
+It must not select a namespace or a prefix from a colon in a string.
+
+The reviewed consumer uses namespace constructors for qualified names. Literal
+colon-containing names with a null namespace use the XML document's non-namespace
+constructor and are adopted into the target document. An unprefixed HTML element
+whose local name contains a colon uses HTML `createElement`. Every constructor
+result is checked against all four name fields. Some computed identities have
+no preserving constructor in a browser: they are reported rather than rewritten
+or reparsed. For example, Chromium 158 drops the last component from
+`createElementNS(svgNamespace, "p:a:b")`, while the reviewed Firefox and WebKit
+retain local `a:b`.
+
+Attribute updates and removal use expanded identity: `(namespace, local)`.
+An unnamespaced attribute with local `xlink:href` can coexist with an XLink
+attribute with local `href`, even though both have qualified spelling
+`xlink:href`. Binding updates the existing attribute's value and preserves its
+prefix. `removeAttributeNS(null, "xlink:href")` removes only the literal attribute;
+`removeAttributeNS(xlinkNamespace, "href")` removes only the XLink attribute.
+
+== Interpret the two projections
+
+The WPT/tree-construction projection compares namespace URI, local name, values
+and tree shape using the fixture format's normalization. It is suitable for
+those parser tests. The separate consumer projection retains prefixes,
+qualified spellings and all `xmlns` attributes, so it distinguishes `h:div`
+from `q:div`, `a:href` from `b:href`, and changed namespace bindings.
+
+The consumer constructs nodes from the Roc tree and applies typed bindings as
+text or attribute values. It never reparses source or binding text. XML fragment
+references inherit their namespace from a wrapper whose own declarations are
+excluded from the fragment result. Browser parsing, DOM construction and
+selected-content projection remain separate checks; a browser lacking
+selected-content cloning is recorded as that specific oracle gap.

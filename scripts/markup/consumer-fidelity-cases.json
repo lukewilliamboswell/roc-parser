@@ -1,0 +1,14 @@
+{
+  "pairs": [["html-prefix-h", "html-prefix-q"], ["xlink-prefix-a", "xlink-prefix-b"], ["binding-first", "binding-second"]],
+  "cases": [
+    {"id":"html-prefix-h","format":"html","syntax":"xml","validate":false,"input":"<h:div xmlns:h=\"http://www.w3.org/1999/xhtml\"/>"},
+    {"id":"html-prefix-q","format":"html","syntax":"xml","validate":false,"input":"<q:div xmlns:q=\"http://www.w3.org/1999/xhtml\"/>"},
+    {"id":"xlink-prefix-a","format":"svg","syntax":"xml","validate":false,"input":"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:a=\"http://www.w3.org/1999/xlink\" a:href=\"#x\"/>"},
+    {"id":"xlink-prefix-b","format":"svg","syntax":"xml","validate":false,"input":"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:b=\"http://www.w3.org/1999/xlink\" b:href=\"#x\"/>"},
+    {"id":"binding-first","format":"svg","syntax":"xml","validate":false,"input":"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:p=\"urn:first\"/>"},
+    {"id":"binding-second","format":"svg","syntax":"xml","validate":false,"input":"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:p=\"urn:second\"/>"},
+    {"id":"html-literal-colon","format":"html","syntax":"html","fragment":true,"scripting":true,"validate":false,"recovery":"browser","input":"<h:div xlink:href=\"literal\"></h:div>"},
+    {"id":"ordinary-namespaced-xmlns","format":"svg","syntax":"xml","validate":false,"input":"<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"urn:ordinary\" x:xmlns=\"kept\"/>"},
+    {"id":"xml-fragment-inherited-namespace","format":"svg","syntax":"xml","fragment":true,"validate":false,"input":"<g/><path/>"}
+  ]
+}

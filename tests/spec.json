@@ -53,6 +53,32 @@
       ]
     },
     {
+      "path": "examples/markup-context.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "HTML, SVG and MathML constructor contexts checked\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "path": "examples/markup-literals.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "SVG: svg in http://www.w3.org/2000/svg\nBound cx: 42\nCaption: <path/> stays text\nMathML fraction: True\nHTML panel: True\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/numbers.roc",
       "cases": [
         {

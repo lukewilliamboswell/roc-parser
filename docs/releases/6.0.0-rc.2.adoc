@@ -1,0 +1,73 @@
+= roc-parser 6.0.0-rc.2
+
+== Upgrade impact
+
+This preview adds HTML, SVG and MathML parsing, checked literals, typed markup
+templates and DOM consumer facts to the XML and AsciiDoc changes in rc.1.
+Use the official Roc nightly named in the release record and basic-cli 0.28.1.
+Unicode 4.3.3 preserves the public Unicode APIs and Unicode 17 data while
+updating compiler compatibility. Repository fuzz applications use roc-fuzz 0.6.2.
+
+AsciiDoc list paragraphs preserve indentation beyond the common width of their
+continuation lines.
+
+Preview APIs may change before 6.0.0. Repository CI and release checks use the
+latest official nightly, with warnings enabled; locally patched compilers are not
+release inputs.
+
+== Use this release
+
+Add this dependency to your application's header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Keep the package and its examples archive together. The release record names
+the exact compiler used to build and test the delivered bundle.
+
+== Markup parsing and consumer APIs
+
+* `Html`, `Svg` and `MathML` parse documents and fragments into shared `Markup`
+  trees. Choose XML or HTML syntax explicitly; HTML recovery, fragment context,
+  scripting and validation relaxation are configurable.
+* Trees retain source bytes, lexical regions, namespace identities, attributes,
+  comments and authored, implied or cloned locations. Resource limits apply to
+  parsing, and `exact_structure` can reject HTML repairs with source diagnostics.
+* Checked literals and named imported sources validate fixed structure during
+  compilation. `Template(a)` keeps typed values separately and binds text or
+  whole quoted attributes without reparsing.
+* `DomName` validates computed DOM names independently of XML source grammar.
+  `MarkupFacts` exposes enumerable canonical element/ARIA names,
+  namespace-aware attribute facts, known inline handlers and initial-newline
+  behavior, including comments between a start tag and text. Handler rejection
+  is an opt-in consumer policy; the normal parsers accept valid handler attributes.
+* `MarkupContext` retains finite placement state for balanced DOM construction.
+  Check one child or decoded text value without reparsing or walking ancestors;
+  history-sensitive contexts return `UnsupportedContext` explicitly.
+* `strict_foreign_spelling` optionally rejects HTML-syntax SVG/MathML name
+  adjustments, with exact authored-name spans and expected spellings. It is
+  independent of `exact_structure` and leaves normal HTML case folding available.
+* SVG checks include path commands and common geometry/value grammars. MathML
+  checks cover Core and common Presentation structures. Embedded CSS,
+  JavaScript, URLs and full Content MathML semantics are outside these checks.
+
+See the https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0-rc.2/docs/markup.adoc[markup guide]
+for syntax selection, limits, validation coverage and consumer examples, and the
+https://github.com/lukewilliamboswell/roc-parser/blob/6.0.0-rc.2/docs/releases/6.0.0.adoc[6.0.0 upgrade notes]
+for the combined changes since 5.0.0.
+
+== Validation and remaining work
+
+Independent parser and browser oracles, compiler fixtures and local native fuzz
+campaigns check source preservation, complete results, diagnostics, limits and
+consumer construction. Git contains curated fixtures and upstream manifests;
+large generated corpora and campaign outputs remain local. New markup campaigns
+and benchmarks are local commands, with no scheduled markup campaigns.
+
+The runtime performance target remains open: the full public API must parse
+all 16 representative fixtures within 1.5 times the fastest eligible Rust, Go or
+Python implementation. Current results do not meet that target for every case.
+This RC supports downstream testing while performance work continues; it does
+not establish final performance acceptance.

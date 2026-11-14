@@ -38,7 +38,7 @@ class LiteralContractTests(unittest.TestCase):
             errors = case.get("errors", [])
             if errors:
                 self.assertTrue(
-                    any(marker in errors for marker in ("invalid string", "compile time crash")),
+                    any(marker in errors for marker in ("invalid string", "compile time crash", "type mismatch")),
                     case["name"],
                 )
 

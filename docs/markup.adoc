@@ -1,0 +1,236 @@
+[#markup]
+= Parse HTML, SVG and MathML
+:idprefix: _
+:idseparator: _
+
+Use `Html`, `Svg` and `MathML` when an application needs markup as Roc values:
+checked literals, imported files, runtime documents, or a fixed template whose
+holes contain your application's values. The modules share resolved names,
+indexed trees, source spans and typed diagnostics. They do not depend on a DOM,
+a renderer, or a reactive framework.
+
+The complete program in `examples/markup-literals.roc` lowers a parsed drawing
+into an independent consumer tree. Its text binding contains `<path/>` and
+remains text. The same program is exercised as
+`docs/examples/markup-literals.roc`.
+
+== Choose a document or fragment
+
+[cols="1,1,2,2",options="header"]
+|===
+|Module |Default syntax |Document |Fragment
+|`Html` |HTML |An HTML document |Children of `body`, or a configured context
+|`Svg` |XML |An `svg` root in the SVG namespace |Children in the SVG namespace
+|`MathML` |XML |A `math` root in the MathML namespace |Children in the MathML namespace
+|===
+
+`parse_str(source)` reads a complete document. `parse_with(source, props)`
+selects options. `parse_fragment(source, props)` accepts multiple roots, including
+text, and returns a nominal `Fragment`. A fragment's `single_element()` requires
+one element and no other non-whitespace root content; comments and processing
+instructions do not count as roots.
+
+A document parsed with XML syntax needs its namespace declaration, such as
+`<svg xmlns="http://www.w3.org/2000/svg">`. A `Svg.Fragment` starts with that
+namespace already in scope, so `<path d="M0 0L10 10"/>` needs no wrapper.
+Explicit namespace declarations inside a fragment still apply.
+
+A literal's expected type establishes compile-time checking:
+
+[source,roc]
+----
+include::examples/markup-literals.roc[tag=literals]
+----
+
+Use `Literal.require(Svg.validate({ source: text, name: "drawing.svg" }))` for
+an imported complete document, or `Svg.Fragment.validate` for an imported
+fragment. `Html` and `MathML` provide the same document conversion. Dynamic
+input should retain its fallible parsing result rather than call
+`Literal.require`.
+
+== Select XML or HTML syntax deliberately
+
+The syntaxes can produce different trees from similar text. XML preserves exact
+case and resolves explicit namespace declarations. HTML adjusts SVG spellings
+such as `viewbox` to `viewBox`, inserts permitted implied elements, and applies
+HTML's SVG/MathML integration rules. For example, HTML children of
+`foreignObject` enter the HTML namespace automatically; XML requires a declaration.
+
+Set `syntax: HtmlSyntax` on SVG or MathML props for browser fragment rules.
+Set `syntax: XmlSyntax` on HTML props for XHTML-style XML rules. The original
+source bytes remain available regardless of the selected syntax.
+
+For literals that require canonical foreign spelling, set
+`strict_foreign_spelling: True`. In HTML syntax this rejects SVG or MathML
+names whose authored spelling differs from the constructed name, such as
+`viewbox` instead of `viewBox`, while preserving normal HTML case folding
+inside integration points. `NonCanonicalName` reports the authored and expected
+spellings and the exact name's UTF-8 byte span. The default permits browser
+name adjustment; XML syntax keeps its existing case-sensitive rules.
+
+For HTML fragments, `context_namespace` and `context_element` select the parent
+context. A table row fragment uses `context_element: "tbody"`; SVG children use
+the SVG namespace and `context_element: "svg"`. The `scripting` prop defaults to `True` for browser parsing of `noscript`;
+set it to `False` to model a scripting-disabled document. It does not execute scripts.
+
+== Bind typed holes without reparsing
+
+`Template(a)` accepts homogeneous hole values of any type `a`, including an
+application's signal or handler wrapper. Roc calls `from_interpolation` on the
+fixed `List(Str)` during compilation. The returned assembler accepts `Iter(a)`
+and retains the parsed plan and the values separately.
+
+Holes may occupy character data or an entire quoted attribute value. A hole
+cannot change an element name, attribute name, namespace declaration, markup
+delimiter, comment, or raw-text body (including script, style and noscript). It cannot split a character reference
+or occupy only part of a fixed attribute value. Namespace-switching attributes
+such as MathML `annotation-xml`'s `encoding` must remain fixed.
+
+A template's original input is its `List(Str)` of fixed segments. The plan retains
+those boundaries; its `parsed.source` contains the concatenated fixed text.
+The Roc expressions between segments belong to the compiler, not the markup
+source representation.
+
+The plan's `slots` identify text nodes or attribute positions by index and
+contain a typed `expected` grammar. Fixed values are validated during parsing;
+a future hole value is not validated merely because its slot is legal. A
+consumer can validate that value, retain a more specific producer type, or apply
+its own policy when binding. A homogeneous hole type does not prove that every
+value is appropriate for every syntactic position.
+
+`parse_segments(segments, props)` builds a plan explicitly. Use
+`MarkupTemplate.bind(plan, values.iter())` to check a manual binding count.
+There is one logical binding per segment boundary. Multiple slots can share
+that binding index when HTML construction copies selected option content into
+`selectedcontent`; apply the value to every matching slot. Binding reports the
+first excess value without exhausting an unbounded iterator.
+Compiler-provided assemblers capture the values directly. Neither operation
+parses the values as markup or reparses the fixed source.
+
+The example's consumer applies bindings to resolved tree positions:
+
+[source,roc]
+----
+include::examples/markup-literals.roc[tag=lower]
+----
+
+== Validate and handle errors
+
+The format APIs return `InvalidMarkup({ problem, line, column })`. Lines and
+UTF-8 byte columns are one-based. `problem` distinguishes syntax, namespace,
+root, element/attribute vocabulary, content-model, value-grammar, interpolation,
+binding-count and resource-limit failures. `InvalidValue` includes its authored
+value and a typed grammar such as `Length`, `PathData` or `Keyword(values)`.
+
+The implemented checks include:
+
+* HTML vocabulary and common content models, required attributes, boolean and
+  enumerated values, integer fields, and selected ARIA values.
+* SVG vocabulary, basic-shape and gradient content, all SVG path commands and
+  argument groups, arc flags and nonnegative radii, transforms, `viewBox`,
+  lengths, coordinate lists, aspect ratios, common enumerations and paint forms.
+* MathML Core and common Presentation vocabulary, fractions/roots/scripts and
+  table structure, token children, boolean/enumerated attributes, and common
+  length and integer values.
+
+These checks are not full CSS, JavaScript, URL, or document-wide accessibility
+validation. Embedded programs and CSS expressions remain opaque languages.
+Content MathML requires the explicit extension options. The independent review
+harness records which validation rules each oracle can actually check; browser
+acceptance alone is not proof of valid authored values.
+
+Strict syntax and validation are the defaults. The options are independent:
+
+[cols="2,3",options="header"]
+|===
+|Prop |Effect
+|`recovery: Browser` |Use HTML's repaired tree and retain diagnostics. XML remains well-formedness based.
+|`exact_structure: True` |Require authored HTML nesting, explicit non-void ends and no structural repairs, before derived projection.
+|`strict_foreign_spelling: True` |Require canonical authored SVG/MathML names in HTML syntax, independently of structural repairs.
+|`allow_unknown_elements: True` |Preserve extension elements.
+|`allow_unknown_attributes: True` |Preserve extension attributes.
+|`check_values: False` |Retain values without the implemented attribute-value checks.
+|===
+
+Recovery does not disable authoring checks. For example, an unknown element may
+need both browser recovery and the corresponding extension prop. Normal HTML
+optional tags are accepted in strict mode when the standard permits them.
+Use xref:exact-structure.adoc#exact-structure[exact authored structure] for an additional literal or prerender policy; failures include the causing source span.
+Checks run on authored content before selected-option projection, so generated
+copies cannot hide an invalid authored child. Use `Html.parse_source` or
+`Html.parse_syntax` when only HTML syntax and browser tree construction are
+needed, without the format's authoring checks.
+
+Resource props bound source bytes, depth, elements, all nodes, attributes per
+element, diagnostics, slots and parser work. Defaults are 16 MiB of source,
+depth 1,024, 4,194,304 elements/nodes, 1,024 attributes per element and diagnostics,
+and 65,536 physical slot targets, including generated copies. Work is bounded relative to input length. Exceeding a limit
+returns a classified error. XML rejects DTDs and never resolves external data.
+
+== Retain source and inspect the tree
+
+A parsed value's `parsed.source` retains original bytes. Its `tokens` partition
+those bytes into lexical regions; spelling, quotation marks, character references,
+line endings, whitespace and malformed content remain retrievable.
+`Markup.Source.from_bytes` also retains invalid UTF-8. Lossless source retention
+is separate from semantic parsing, whose text and attributes are decoded and
+normalized according to the selected syntax.
+
+The tree contains resolved element names, attribute lists, text, comments,
+processing instructions and HTML document types. Child indices refer to the
+same tree's node list. `Authored(span)` identifies original bytes;
+`Implied(offset)` identifies an insertion point chosen by tree construction.
+`Cloned({ source, at })` identifies a generated copy, retaining its authored
+source span and the destination insertion point.
+Use `Markup.text(tree, index)` to join descendant character data.
+
+Keep URI, prefix and local name separately when lowering a tree.
+xref:dom-names.adoc#dom-names[`DomName`] validates computed DOM names without changing XML source grammar;
+xref:markup-facts.adoc#markup-facts[`MarkupFacts`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
+xref:markup-context.adoc#markup-context[`MarkupContext`] checks a new child or text value against a retained enclosing context without reparsing or walking ancestors.
+The xref:consumer-fidelity.adoc#consumer-fidelity[consumer-fidelity review] checks prefixes, qualified spellings, namespace declarations, binding identity and adoption.
+
+Read original bytes to reproduce authored source exactly. Reconstructing a tree
+or changing a binding does not promise byte-identical serialization. Source-edit
+operations and a general HTML serializer are not part of these APIs.
+
+== Run independent checks locally
+
+The deterministic conformance check runs against pinned independent parsers:
+
+[source,sh]
+----
+blueprint run markup
+----
+
+The repository keeps 82 curated cases and an upstream manifest with a revision
+and file hashes. Run the full upstream tree and strict-syntax checks locally:
+
+[source,sh]
+----
+python3 scripts/review_markup.py suite
+----
+
+This downloads verified upstream inputs and generates the 1,967-case corpus in
+ignored scratch storage. Both scripting modes produce 3,898 executions; cached
+inputs support subsequent offline runs. Generated test data stays out of Git.
+
+Fuzz campaigns and markup benchmarks are local work, with no scheduled runs:
+
+[source,sh]
+----
+python3 scripts/run_fuzz.py smoke html-raw svg-raw svg-path mathml-raw markup-source markup-structured markup-limits markup-segments
+python3 scripts/review_markup.py campaign --smoke
+python3 scripts/review_markup.py browser --engines chromium firefox webkit
+python3 scripts/bench_markup.py --allocations --check-scaling --compile-literals
+----
+
+For runtime throughput comparisons against Rust, Go and Python, follow
+xref:benchmarks.adoc#markup-runtime-comparison[the markup runtime comparison].
+Those parsing measurements exclude compilation and report bytes per second.
+
+Node/npm supply the pinned HTML and browser adapters. Semantic checks use a
+hash-pinned Nu checker on Java 17 or newer and a pinned MathML schema with lxml.
+All downloaded oracle packages and generated reports live in ignored scratch
+storage. Reports distinguish parser disagreements, oracle limitations, crashes,
+timeouts and infrastructure failures.

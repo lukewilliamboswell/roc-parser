@@ -161,3 +161,11 @@ useful `BadQuotedBytes` explanation when they fail.
 The complete {src}/docs/examples/compile-time-parsing.roc[example] is checked,
 tested, and run in CI. Each format's quotation and imported-file rejection
 contracts are checked by {src}/scripts/check_literals.py[the compiler tests].
+
+== Checked web markup and typed templates
+
+`Html`, `Svg` and `MathML` provide checked document and `Fragment` literals,
+imported-source validation, and `Template(a)` interpolation. Fixed markup is
+parsed during compilation; typed hole values remain separate from the plan.
+See xref:markup.adoc#markup[Parse HTML, SVG and MathML] for legal hole positions,
+syntax selection, validation limits, and a tested downstream consumer example.

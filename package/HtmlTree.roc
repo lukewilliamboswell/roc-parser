@@ -1,0 +1,4132 @@
+import Markup
+import HtmlTokenizer as Tok
+import Literal
+import MarkupHtmlError
+import MarkupVocabulary
+import HtmlContextRules
+
+## HTML tree construction. The open-elements and active-formatting stacks are
+## separate from the indexed output tree so recovery can reparent existing nodes.
+HtmlTree :: [].{
+	# Internal HTML spellings used by constructor-context preservation checks.
+	canonical_element_name : Str, Str -> Markup.Name
+	canonical_element_name = |qualified, namespace| { namespace: if (namespace == "") NoNamespace else Uri(namespace), prefix: Unprefixed, local: adjust_tag(Tok.lower(qualified), namespace) }
+	canonical_attribute_name : Str, Str -> Markup.Name
+	canonical_attribute_name = |qualified, namespace| attribute_name(Tok.lower(qualified), namespace)
+	Context := { name : Str ?? "body", namespace : Str ?? "http://www.w3.org/1999/xhtml", scripting : Bool ?? True, defer_projection : Bool ?? False }
+
+	## Recompute derived selected option content after a template materializes
+	## explicit text-hole nodes. This edits the tree and never reparses source.
+	Clone : { original : U64, clone : U64 }
+	project_parsed : Markup.Parsed, Markup.Props -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed = |parsed, props| project_parsed_with(parsed, props, True)
+
+	## Preserve document depth and element accounting for complete HTML roots.
+	project_parsed_with : Markup.Parsed, Markup.Props, Bool -> Try({ parsed : Markup.Parsed, clones : List(Clone) }, [InvalidMarkup(Markup.Error)])
+	project_parsed_with = |parsed, props, fragment| {
+		# Most fragments have no selected option projection. Keep their arena
+		# untouched and avoid rebuilding a parent index for the derived phase.
+		var $candidate = False
+		var $at = 0
+		while $at < parsed.tree.nodes.len() {
+			match (parsed.tree.nodes.get($at) ?? empty_node).kind {
+				Element(name) if name.namespace == Uri(Markup.html_namespace) and name.local == "selectedcontent" => {
+					$candidate = True
+					break
+				}
+				_ => {}
+			}
+			$at = $at + 1
+		}
+		if !$candidate {
+			return Ok({ parsed, clones: [] })
+		}
+		parents = parsed.tree.nodes.map_with_index(|node, index| (node, index)).fold(parsed.tree.nodes.map(|node| { parent: Err(Missing), namespace: kind_namespace(node.kind) }), |entries, pair| pair.0.children.fold(entries, |map, child| set_parent(map, child, Ok(pair.1))))
+		elements = parsed.tree.nodes.fold(
+			0.U64,
+			|count, node| count + (
+				match node.kind {
+					Element(_) => 1
+					_ => 0
+				}
+			),
+		)
+		state : State
+		state = { nodes: parsed.tree.nodes, roots: parsed.tree.roots, parents, stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment, context: {}, context_class: HtmlNamespace, diagnostics: parsed.diagnostics, max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: False, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, parsed.source.bytes.len()), element_count: elements, diagnostics_exceeded: False, quirks: False, token_span: { start: parsed.source.bytes.len(), end: parsed.source.bytes.len() }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+		projected = project_selectedcontent(state, props).map_err(
+			|InvalidMarkup(e)| {
+				at = Markup.position(parsed.source, e.column)
+				InvalidMarkup({ ..e, line: at.line, column: at.column })
+			},
+		)?
+		Ok({ parsed: { ..parsed, tree: { nodes: projected.nodes, roots: projected.roots } }, clones: projected.clones })
+	}
+	parse : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	parse = |source, fragment, context, props| {
+		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment(source, context.namespace, props) {
+				Ok(parsed) => return Ok(parsed)
+				Err(Replay) => {}
+			}
+		}
+		if !fragment and context.namespace == Markup.html_namespace {
+			match direct_document(source, context.namespace, props) {
+				Ok(parsed) => return Ok(parsed)
+				Err(Replay) => {}
+			}
+		}
+		parse_general(source, fragment, context, props)
+	}
+
+	## Internal proof carried only from a successful conservative direct parse.
+	Domain : [PureHtmlNoProjection, General]
+	Classified : { parsed : Markup.Parsed, domain : Domain }
+	parse_classified : Str, Bool, Context, Markup.Props -> Try(Classified, [InvalidMarkup(Markup.Error)])
+	parse_classified = |source, fragment, context, props| {
+		if fragment and context.namespace == Markup.html_namespace and (context.name == "body" or context.name == "div") {
+			match direct_fragment(source, context.namespace, props) {
+				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
+				Err(Replay) => {}
+			}
+		}
+		if !fragment and context.namespace == Markup.html_namespace {
+			match direct_document(source, context.namespace, props) {
+				Ok(parsed) => return Ok({ parsed, domain: PureHtmlNoProjection })
+				Err(Replay) => {}
+			}
+		}
+		parsed = parse_general(source, fragment, context, props)?
+		Ok({ parsed, domain: General })
+	}
+
+	parse_general : Str, Bool, Context, Markup.Props -> Try(Markup.Parsed, [InvalidMarkup(Markup.Error)])
+	parse_general = |source, fragment, context, props| {
+		if source.count_utf8_bytes() > props.max_source_bytes {
+			return Err(InvalidMarkup({ problem: SourceTooLarge(props.max_source_bytes), line: 1, column: 1 }))
+		}
+		initial : State
+		initial = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: Initial, head: Err(Missing), form: Err(Missing), fragment, context, context_class: namespace_class(context.namespace), diagnostics: [], max_diagnostics: props.max_diagnostics, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: work_limit(props.max_work_per_byte, source.count_utf8_bytes()), element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 0 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+		var $state = initial
+		if fragment {
+			$state = insert_element($state, "html", Markup.html_namespace, [], Implied(0), True)
+			$state = { ..$state, mode: context_mode(context.name) }
+		}
+		var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
+		var $done = False
+		var $source_regions = []
+		var $authored_tokens = []
+		var $authored_repairs = []
+		initial_spelling : Try(SpellingFailure, [None])
+		initial_spelling = Err(None)
+		var $spelling_failure = initial_spelling
+		var $authored_creation = if props.exact_structure {
+			$state.nodes.map_with_index(|node, id| { parent: find_parent($state, id), origin: node.origin })
+		} else []
+		while !$done {
+			mode = content_mode($state)
+			foreign = adjusted_namespace_class($state) != HtmlNamespace
+			next = if props.strict_foreign_spelling {
+				Tok.next_with_source_names($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+			} else {
+				raw_next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+					Tok.next_with_source($reader, source, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+				} else {
+					Tok.next_with($reader, mode, foreign, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+				}
+				{ token: raw_next.token, reader: raw_next.reader, limited: raw_next.limited, names: [] }
+			}
+			match next.limited {
+				NoLimit => {}
+				Attributes => {
+					at = Literal.position(source, next.token.span.start)
+					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+				}
+				Diagnostics => {
+					offset = next.reader.diagnostics.last().map_ok(|d| d.offset) ?? next.token.span.start
+					at = Literal.position(source, offset)
+					return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+				}
+			}
+			if props.exact_structure {
+				$authored_tokens = $authored_tokens.append(next.token)
+			}
+			# DataMixed retains every literal NUL and reports UnexpectedNull for it.
+			# A successful character token with no new diagnostics has none.
+			no_nulls = mode == DataMixed and next.reader.diagnostics.len() == $reader.diagnostics.len() and (
+				match next.token.kind {
+					Characters(_) => True
+					_ => False
+				}
+			)
+			$reader = next.reader
+			$state = { ..$state, token_no_nulls: no_nulls }
+			match source_token(next.token, $reader.bytes) {
+				Ok(region) => {
+					$source_regions = $source_regions.append(region)
+				}
+				Err(_) => {}
+			}
+
+			previous_nodes = $state.nodes.len()
+			# Resolve the end target before mutation without retaining the old arena.
+			expected_end = if props.strict_foreign_spelling and $spelling_failure.is_err() {
+				foreign_end_spelling($state, next.token)
+			} else Err(None)
+			if $state.skip_lf {
+				$state = { ..$state, skip_lf: False }
+				match next.token.kind {
+					Characters(text) => {
+						bytes = text.to_utf8()
+						if bytes.first() == Ok('\n') {
+							trimmed = { ..next.token, kind: Characters(Str.from_utf8_lossy(bytes.drop_first(1))), span: { start: skipped_lf_end($reader.bytes, next.token.span), end: next.token.span.end } }
+							$state = process_with_mode($state, trimmed, mode, context.scripting)
+						} else {
+							$state = process_with_mode($state, next.token, mode, context.scripting)
+						}
+					}
+					_ => {
+						$state = process_with_mode($state, next.token, mode, context.scripting)
+					}
+				}
+			} else {
+				$state = process_with_mode($state, next.token, mode, context.scripting)
+			}
+			if props.strict_foreign_spelling and $spelling_failure.is_err() {
+				$spelling_failure = spelling_for_token($state, previous_nodes, next.token, next.names, $reader.bytes, expected_end)
+			}
+			if props.exact_structure {
+				var $id = previous_nodes
+				while $id < $state.nodes.len() {
+					node = node_at($state, $id)
+					$authored_creation = $authored_creation.append({ parent: find_parent($state, $id), origin: node.origin })
+					match node.origin {
+						Implied(_) => {
+							reason = match node.kind {
+								Element(name) => ImpliedElement(name.local)
+								_ => ReconstructedContent
+							}
+							$authored_repairs = $authored_repairs.append({ reason, span: next.token.span })
+						}
+						Cloned(_) => {
+							$authored_repairs = $authored_repairs.append({ reason: ReconstructedContent, span: next.token.span })
+						}
+						Authored(_) => {}
+					}
+					$id = $id + 1
+				}
+			}
+			if ($state.stack.len() - if (fragment) 1 else 0) > props.max_depth {
+				at = Literal.position(source, next.token.span.start)
+				return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: at.line, column: at.column }))
+			}
+			if ($state.element_count - if (fragment) 1 else 0) > props.max_elements {
+				at = Literal.position(source, next.token.span.start)
+				return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: at.line, column: at.column }))
+			}
+			if $state.nodes.len() > props.max_nodes {
+				at = Literal.position(source, next.token.span.start)
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: at.line, column: at.column }))
+			}
+			if $state.diagnostics_exceeded or $reader.diagnostics.len() + $state.diagnostics.len() > props.max_diagnostics {
+				at = Literal.position(source, next.token.span.start)
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: at.line, column: at.column }))
+			}
+			if $state.work > $state.work_limit {
+				at = Literal.position(source, next.token.span.start)
+				return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: at.line, column: at.column }))
+			}
+			match next.token.kind {
+				Start(tag) if tag.attributes.len() > props.max_attributes => {
+					at = Literal.position(source, next.token.span.start)
+					return Err(InvalidMarkup({ problem: LimitExceeded(Attributes), line: at.line, column: at.column }))
+				}
+				Eof => {
+					$done = True
+				}
+				_ => {}
+			}
+		}
+		remaining_open = $state.stack
+		for id in remaining_open {
+			$state = finish_node($state, id)
+		}
+		var $diagnostics = $state.diagnostics
+		for d in $reader.diagnostics {
+			if $diagnostics.len() < props.max_diagnostics {
+				$diagnostics = $diagnostics.append({ problem: HtmlSyntax(d.code), line: 0, column: d.offset })
+			}
+		}
+		diagnostics = $diagnostics.map(
+			|d| {
+				if d.line != 0 {
+					d
+				} else {
+					at = Literal.position(source, d.column)
+					{ ..d, line: at.line, column: at.column }
+				}
+			},
+		)
+		if props.exact_structure {
+			exact_structure(source, fragment, $state, $authored_tokens, $reader.diagnostics, $authored_repairs, $authored_creation)?
+		}
+		if props.recovery == Strict and !diagnostics.is_empty() {
+			return Err(InvalidMarkup(diagnostics.first() ?? { problem: HtmlSyntax(InvalidHtml), line: 1, column: 1 }))
+		}
+		match $spelling_failure {
+			Ok(detail) => {
+				at = Literal.position(source, detail.span.start)
+				return Err(InvalidMarkup({ problem: NonCanonicalName(detail), line: at.line, column: at.column }))
+			}
+			Err(None) => {}
+		}
+		if !context.defer_projection {
+			$state = project_selectedcontent($state, props).map_err(
+				|InvalidMarkup(e)| {
+					at = Literal.position(source, e.column)
+					InvalidMarkup({ ..e, line: at.line, column: at.column })
+				},
+			)?
+		}
+		roots = if fragment {
+			(node_at($state, 0)).children
+		} else $state.roots
+		Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $source_regions }, tree: { nodes: $state.nodes, roots }, diagnostics })
+	}
+}
+
+# A small proof domain over the unchanged context-sensitive tokenizer. Every
+# uncertain token, repair, diagnostic or resource boundary replays the complete
+# general parser, which owns error precedence and all HTML recovery behavior.
+direct_fragment : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
+direct_fragment = |source, namespace, props| {
+	if source.count_utf8_bytes() > props.max_source_bytes {
+		return Err(Replay)
+	}
+	var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
+	if !$reader.diagnostics.is_empty() {
+		return Err(Replay)
+	}
+	root : Markup.Node
+	root = { kind: Element({ local: "html", namespace: Uri(namespace), prefix: Unprefixed }), attributes: [], children: [], origin: Implied(0) }
+	var $nodes = [root]
+	var $open = [{ id: 0.U64, name: "html" }]
+	var $regions = []
+	var $elements = 0.U64
+	var $paragraph = False
+	var $heading = False
+	var $formatting = 0.U8
+	var $active = 0.U64
+	var $form = False
+	var $button = False
+	var $work = 1.U64
+	limit = work_limit(props.max_work_per_byte, source.count_utf8_bytes())
+	while True {
+		# +2 dispatch, body stack+active+1, append<=1; a happy formatting
+		# close adds one stack+active+1 adoption step. Distinct formatting
+		# names give <=5 active entries, all open: reconstruction is a no-op
+		# and Noah's Ark cannot remove an entry. Uncertain limits replay.
+		overhead = 2 * $active + 7
+		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - overhead) // 2 {
+			return Err(Replay)
+		}
+		charge = 2 * $open.len() + overhead
+		if $work > limit or charge > limit - $work {
+			return Err(Replay)
+		}
+		$work = $work + charge
+		next = if $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+			Tok.next_with_source($reader, source, DataMixed, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		} else {
+			Tok.next_with($reader, DataMixed, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		}
+		if next.limited != NoLimit or !next.reader.diagnostics.is_empty() {
+			return Err(Replay)
+		}
+		$reader = next.reader
+		match source_token(next.token, $reader.bytes) {
+			Ok(region) => {
+				$regions = $regions.append(region)
+			}
+			Err(_) => {}
+		}
+		parent = ($open.last() ?? { id: 0, name: "html" }).id
+		match next.token.kind {
+			Start(tag) => {
+				class = direct_tag(tag.name)
+				if class == UnsupportedTag or (tag.self_closing and class != VoidTag) {
+					return Err(Replay)
+				}
+				flag = if class == FormattingTag {
+					direct_formatting_flag(tag.name)
+				} else 0
+				if ($paragraph and (class == BlockTag or class == HeadingTag or class == FormTag or class == ListItemTag or tag.name == "hr")) or ($heading and class == HeadingTag) {
+					return Err(Replay)
+				}
+				if U8.bitwise_and($formatting, flag) != 0 or ($form and class == FormTag) or ($button and class == ButtonTag) {
+					return Err(Replay)
+				}
+				# Require explicit list structure, excluding implied li closes.
+				if class == ListItemTag {
+					owner = ($open.last() ?? { id: 0, name: "html" }).name
+					if owner != "ul" and owner != "ol" {
+						return Err(Replay)
+					}
+				}
+				id = $nodes.len()
+				$nodes = direct_append($nodes, parent, { kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }), children: [], origin: Authored(next.token.span) })
+				$elements = $elements + 1
+				if class != VoidTag {
+					$open = $open.append({ id, name: tag.name })
+					if tag.name == "p" {
+						$paragraph = True
+					}
+					if class == HeadingTag {
+						$heading = True
+					}
+					if flag != 0 {
+						$formatting = U8.bitwise_or($formatting, flag)
+						$active = $active + 1
+					}
+					if class == FormTag {
+						$form = True
+					}
+					if class == ButtonTag {
+						$button = True
+					}
+				}
+			}
+			End(name) => {
+				entry = $open.last() ?? { id: 0, name: "html" }
+				if $open.len() == 1 or entry.name != name {
+					return Err(Replay)
+				}
+				$open = $open.drop_last(1)
+				# Happy adoption and form-pointer closes leave start-only origins.
+				# Every other accepted close mirrors finish_node's explicit end.
+				class = direct_tag(name)
+				flag = if class == FormattingTag {
+					direct_formatting_flag(name)
+				} else 0
+				if flag == 0 and name != "form" {
+					moved = $nodes.replace(entry.id, empty_node) ?? return Err(Replay)
+					origin = match moved.prev.origin {
+						Authored(span) => Authored({ start: span.start, end: next.token.span.end })
+						other => other
+					}
+					$nodes = moved.list.set(entry.id, { ..moved.prev, origin }) ?? return Err(Replay)
+				}
+				if name == "p" {
+					$paragraph = False
+				}
+				if class == HeadingTag {
+					$heading = False
+				}
+				if flag != 0 {
+					$formatting = U8.bitwise_xor($formatting, flag)
+					$active = $active - 1
+				}
+				if name == "form" {
+					$form = False
+				}
+				if name == "button" {
+					$button = False
+				}
+			}
+			Characters(text) => {
+				$nodes = direct_text($nodes, parent, text, next.token.span)
+			}
+			Eof => {
+				if $open.len() != 1 or next.token.span.start != next.token.span.end {
+					return Err(Replay)
+				}
+				if $nodes.len() > props.max_nodes {
+					return Err(Replay)
+				}
+				roots = ($nodes.get(0) ?? root).children
+				# This accepted grammar already proves exact authored structure:
+				# explicit balanced ends, no repairs, and no dropped attributes.
+				# It contains no selectedcontent/template projection candidates.
+				return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots }, diagnostics: [] })
+			}
+			_ => return Err(Replay)
+		}
+		if $open.len() - 1 > props.max_depth or $elements > props.max_elements or $nodes.len() > props.max_nodes {
+			return Err(Replay)
+		}
+	}
+}
+
+direct_tag = |name| match name {
+	"div" | "section" | "article" | "main" | "header" | "nav" | "footer" | "ul" | "ol" | "p" => BlockTag
+	"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => HeadingTag
+	"span" | "label" => InlineTag
+	"a" | "b" | "i" | "em" | "strong" => FormattingTag
+	"form" => FormTag
+	"button" => ButtonTag
+	"li" => ListItemTag
+	"br" | "hr" | "img" | "input" => VoidTag
+	_ => UnsupportedTag
+}
+
+# Distinct open formatting names exclude Noah's Ark entry removal.
+direct_formatting_flag : Str -> U8
+direct_formatting_flag = |name| match name {
+	"a" => 1
+	"b" => 2
+	"i" => 4
+	"em" => 8
+	"strong" => 16
+	_ => 0
+}
+
+# Explicit authored documents use the unchanged tokenization and body grammar.
+# Missing wrappers, table repairs, foster text, foreign/template/raw content and
+# every uncertain resource boundary replay the complete general parser.
+direct_document : Str, Str, Markup.Props -> Try(Markup.Parsed, [Replay])
+direct_document = |source, namespace, props| {
+	if source.count_utf8_bytes() > props.max_source_bytes {
+		return Err(Replay)
+	}
+	var $reader = { bytes: source.to_utf8(), pos: 0, diagnostics: Tok.input_diagnostics_from_str(source, props.max_diagnostics) }
+	if !$reader.diagnostics.is_empty() {
+		return Err(Replay)
+	}
+	var $nodes = []
+	var $roots = []
+	var $open = []
+	var $regions = []
+	var $elements = 0.U64
+	var $paragraph = False
+	var $heading = False
+	var $formatting = 0.U8
+	var $active = 0.U64
+	var $form = False
+	var $button = False
+	var $phase = DocDoctype
+	var $work = 0.U64
+	limit = work_limit(props.max_work_per_byte, source.count_utf8_bytes())
+	while True {
+		# Explicit transitions never reprocess a token. Ordinary/adoption body
+		# work is bounded as in fragments. A text-only cell has one formatting
+		# Marker; formatting is forbidden across and within tables, so A<=5.
+		active = $active + if $phase == DocCell {
+			1
+		} else 0
+		overhead = 2 * active + 7
+		if $open.len() > (0xFFFFFFFFFFFFFFFF.U64 - overhead) // 2 {
+			return Err(Replay)
+		}
+		charge = 2 * $open.len() + overhead
+		if $work > limit or charge > limit - $work {
+			return Err(Replay)
+		}
+		$work = $work + charge
+		mode = if $phase == DocTitle {
+			Rcdata("title")
+		} else if $phase == DocBody or $phase == DocCell {
+			DataMixed
+		} else Data
+		next = if mode == DataMixed and $reader.pos < $reader.bytes.len() and $reader.bytes.get($reader.pos) != Ok('<') {
+			Tok.next_with_source($reader, source, mode, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		} else {
+			Tok.next_with($reader, mode, False, { max_attributes: props.max_attributes, max_diagnostics: props.max_diagnostics })
+		}
+		if next.limited != NoLimit or !next.reader.diagnostics.is_empty() {
+			return Err(Replay)
+		}
+		$reader = next.reader
+		match source_token(next.token, $reader.bytes) {
+			Ok(region) => {
+				$regions = $regions.append(region)
+			}
+			Err(_) => {}
+		}
+		parent = ($open.last() ?? { id: 0.U64, name: "" }).id
+		if $phase == DocBody {
+			match next.token.kind {
+				Start(tag) => {
+					if tag.name == "table" {
+						if tag.self_closing or $paragraph or $active != 0 {
+							return Err(Replay)
+						}
+						id = $nodes.len()
+						$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+						$open = $open.append({ id, name: "table" })
+						$elements = $elements + 1
+						$phase = DocTable
+					} else {
+						class = direct_tag(tag.name)
+						if class == UnsupportedTag or (tag.self_closing and class != VoidTag) {
+							return Err(Replay)
+						}
+						flag = if class == FormattingTag {
+							direct_formatting_flag(tag.name)
+						} else 0
+						if ($paragraph and (class == BlockTag or class == HeadingTag or class == FormTag or class == ListItemTag or tag.name == "hr")) or ($heading and class == HeadingTag) {
+							return Err(Replay)
+						}
+						if U8.bitwise_and($formatting, flag) != 0 or ($form and class == FormTag) or ($button and class == ButtonTag) {
+							return Err(Replay)
+						}
+						# Require explicit list structure, excluding implied li closes.
+						if class == ListItemTag {
+							owner = ($open.last() ?? { id: 0, name: "html" }).name
+							if owner != "ul" and owner != "ol" {
+								return Err(Replay)
+							}
+						}
+						id = $nodes.len()
+						$nodes = direct_append($nodes, parent, { kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }), children: [], origin: Authored(next.token.span) })
+						$elements = $elements + 1
+						if class != VoidTag {
+							$open = $open.append({ id, name: tag.name })
+							if tag.name == "p" {
+								$paragraph = True
+							}
+							if class == HeadingTag {
+								$heading = True
+							}
+							if flag != 0 {
+								$formatting = U8.bitwise_or($formatting, flag)
+								$active = $active + 1
+							}
+							if class == FormTag {
+								$form = True
+							}
+							if class == ButtonTag {
+								$button = True
+							}
+						}
+					}
+				}
+				End(name) => {
+					if name == "body" {
+						if $open.len() != 2 or ($open.last() ?? { id: 0, name: "" }).name != "body" {
+							return Err(Replay)
+						}
+						$phase = DocAfterBody
+					} else {
+						entry = $open.last() ?? { id: 0, name: "html" }
+						if $open.len() <= 2 or entry.name != name {
+							return Err(Replay)
+						}
+						$open = $open.drop_last(1)
+						# Happy adoption and form-pointer closes leave start-only origins.
+						# Every other accepted close mirrors finish_node's explicit end.
+						class = direct_tag(name)
+						flag = if class == FormattingTag {
+							direct_formatting_flag(name)
+						} else 0
+						if flag == 0 and name != "form" {
+							moved = $nodes.replace(entry.id, empty_node) ?? return Err(Replay)
+							origin = match moved.prev.origin {
+								Authored(span) => Authored({ start: span.start, end: next.token.span.end })
+								other => other
+							}
+							$nodes = moved.list.set(entry.id, { ..moved.prev, origin }) ?? return Err(Replay)
+						}
+						if name == "p" {
+							$paragraph = False
+						}
+						if class == HeadingTag {
+							$heading = False
+						}
+						if flag != 0 {
+							$formatting = U8.bitwise_xor($formatting, flag)
+							$active = $active - 1
+						}
+						if name == "form" {
+							$form = False
+						}
+						if name == "button" {
+							$button = False
+						}
+					}
+				}
+				Characters(text) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				_ => return Err(Replay)
+			}
+		} else {
+			match ($phase, next.token.kind) {
+				(DocDoctype, Characters(text)) | (DocHtml, Characters(text)) | (DocHead, Characters(text)) if whitespace(text) => {}
+				(DocDoctype, Doctype(doctype)) if doctype.name == "html" and !doctype.has_public and !doctype.has_system and !doctype.quirks => {
+					id = $nodes.len()
+					$nodes = $nodes.append({ kind: Doctype({ name: doctype.name, public_id: doctype.public_id, system_id: doctype.system_id }), attributes: [], children: [], origin: Authored(next.token.span) })
+					$roots = $roots.append(id)
+					$phase = DocHtml
+				}
+				(DocHtml, Start(tag)) if tag.name == "html" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = $nodes.append(direct_document_element(tag, namespace, next.token.span))
+					$roots = $roots.append(id)
+					$open = $open.append({ id, name: "html" })
+					$elements = $elements + 1
+					$phase = DocHead
+				}
+				(DocHead, Start(tag)) if tag.name == "head" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "head" })
+					$elements = $elements + 1
+					$phase = DocInHead
+				}
+				(DocInHead, Characters(text)) | (DocBodyStart, Characters(text)) if whitespace(text) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocInHead, Start(tag)) if tag.name == "meta" => {
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$elements = $elements + 1
+				}
+				(DocInHead, Start(tag)) if tag.name == "title" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "title" })
+					$elements = $elements + 1
+					$phase = DocTitle
+				}
+				(DocTitle, Characters(text)) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocTitle, End("title")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocInHead
+				}
+				(DocInHead, End("head")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocBodyStart
+				}
+				(DocBodyStart, Start(tag)) if tag.name == "body" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "body" })
+					$elements = $elements + 1
+					$phase = DocBody
+				}
+				(DocTable, Start(tag)) if tag.name == "tbody" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "tbody" })
+					$elements = $elements + 1
+					$phase = DocSection
+				}
+				(DocSection, Start(tag)) if tag.name == "tr" and !tag.self_closing => {
+					id = $nodes.len()
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$open = $open.append({ id, name: "tr" })
+					$elements = $elements + 1
+					$phase = DocRow
+				}
+				(DocRow, Start(tag)) if (tag.name == "td" or tag.name == "th") and !tag.self_closing => {
+					id = $nodes.len()
+					$open = $open.append({ id, name: tag.name })
+					$nodes = direct_append($nodes, parent, direct_document_element(tag, namespace, next.token.span))
+					$elements = $elements + 1
+					$phase = DocCell
+				}
+				(DocCell, Characters(text)) => {
+					$nodes = direct_text($nodes, parent, text, next.token.span)
+				}
+				(DocCell, End(name)) if name == ($open.last() ?? { id: 0, name: "" }).name => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocRow
+				}
+				(DocRow, End("tr")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocSection
+				}
+				(DocSection, End("tbody")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocTable
+				}
+				(DocTable, End("table")) => {
+					$nodes = direct_document_finish($nodes, parent, next.token.span.end)?
+					$open = $open.drop_last(1)
+					$phase = DocBody
+				}
+				(DocAfterBody, End("html")) => {
+					$phase = DocAfterHtml
+				}
+				(DocAfterHtml, Eof) if next.token.span.start == next.token.span.end and $open.len() == 2 => {
+					# General body/html closes retain both wrappers on the stack.
+					# EOF extends BOTH origins through the complete document bytes.
+					for entry in $open {
+						$nodes = direct_document_finish($nodes, entry.id, next.token.span.start)?
+					}
+					if $nodes.len() > props.max_nodes {
+						return Err(Replay)
+					}
+					return Ok({ source: Markup.Source.{ bytes: source.to_utf8(), tokens: $regions }, tree: { nodes: $nodes, roots: $roots }, diagnostics: [] })
+				}
+				_ => return Err(Replay)
+			}
+		}
+		if $open.len() > props.max_depth or $elements > props.max_elements or $nodes.len() > props.max_nodes {
+			return Err(Replay)
+		}
+	}
+}
+
+direct_document_element : Tok.Tag, Str, Markup.Span -> Markup.Node
+direct_document_element = |tag, namespace, span| {
+	kind: Element({ local: tag.name, namespace: Uri(namespace), prefix: Unprefixed }),
+	attributes: tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span }),
+	children: [],
+	origin: Authored(span),
+}
+
+direct_document_finish : List(Markup.Node), U64, U64 -> Try(List(Markup.Node), [Replay])
+direct_document_finish = |nodes, id, end| {
+	moved = nodes.replace(id, empty_node) ?? return Err(Replay)
+	origin = match moved.prev.origin {
+		Authored(span) => Authored({ start: span.start, end })
+		other => other
+	}
+	Ok(moved.list.set(id, { ..moved.prev, origin }) ?? return Err(Replay))
+}
+
+# Move the parent out before growing its children, just as edit_node does.
+direct_append : List(Markup.Node), U64, Markup.Node -> List(Markup.Node)
+direct_append = |nodes, parent, node| {
+	id = nodes.len()
+	moved = nodes.replace(parent, empty_node) ?? { list: [], prev: empty_node }
+	parent_node = { ..moved.prev, children: moved.prev.children.append(id) }
+	(moved.list.set(parent, parent_node) ?? []).append(node)
+}
+
+direct_text : List(Markup.Node), U64, Str, Markup.Span -> List(Markup.Node)
+direct_text = |nodes, parent, text, span| {
+	if text == "" {
+		return nodes
+	}
+	match (nodes.get(parent) ?? empty_node).children.last() {
+		Ok(previous) => match (nodes.get(previous) ?? empty_node).kind {
+			Text(_) => {
+				moved = nodes.replace(previous, empty_node) ?? return []
+				before = match moved.prev.kind {
+					Text(value) => value
+					_ => ""
+				}
+				origin = match moved.prev.origin {
+					Authored(old) => Authored({ start: old.start, end: span.end })
+					_ => Authored(span)
+				}
+				return moved.list.set(previous, { ..moved.prev, kind: Text(Str.concat(before, text)), origin }) ?? []
+			}
+			_ => {}
+		}
+		Err(_) => {}
+	}
+	direct_append(nodes, parent, { kind: Text(text), attributes: [], children: [], origin: Authored(span) })
+}
+
+# This optional pass compares the authored nesting with the constructed arena
+# before selectedcontent makes legitimate derived copies. Token kinds come from
+# the original context-sensitive scan, including raw text and script states.
+# Creation parents keep later adoption moves from blaming an earlier start tag.
+# Adoption emits implied-node witnesses; frameset detachment emits a diagnostic.
+# Foster insertion is checked at creation, including merged-text diagnostics.
+# Final reachability still rejects authored nodes removed by any of those paths.
+exact_structure : Str, Bool, State, List(Tok.Token), List(Tok.Diagnostic), List({ reason : Markup.StructureReason, span : Markup.Span }), List({ parent : Try(U64, [Missing]), origin : Markup.Origin }) -> Try({}, [InvalidMarkup(Markup.Error)])
+exact_structure = |source, fragment, state, tokens, lexical, repairs, creation| {
+	var $failure = repairs.fold(Err(Missing), |best, repair| structure_failure(best, repair.reason, repair.span))
+	var $by_start = Dict.empty()
+	var $texts = []
+	var $reachable = Set.empty()
+	var $pending = if fragment {
+		(node_at(state, 0)).children
+	} else state.roots
+	while !$pending.is_empty() {
+		id = $pending.last() ?? 0
+		$pending = $pending.drop_last(1)
+		if !$reachable.contains(id) {
+			$reachable = $reachable.insert(id)
+			$pending = $pending.concat((node_at(state, id)).children)
+		}
+	}
+	for (node, id) in state.nodes.map_with_index(|node, id| (node, id)) {
+		if !(fragment and id == 0) {
+			original = creation.get(id).map_ok(|entry| entry.origin) ?? node.origin
+			origin = match (node.kind, node.origin, original) {
+				# A foster merge marks the combined text Implied. Keep the
+				# earlier text's original interval so it is not blamed for the
+				# later repair. Ordinary Authored merges retain their final span.
+				(Text(_), Implied(_), Authored(span)) => Authored(span)
+				_ => node.origin
+			}
+			match origin {
+				Authored(span) => {
+					if !$reachable.contains(id) {
+						$failure = structure_failure($failure, ReconstructedContent, { start: source.count_utf8_bytes(), end: source.count_utf8_bytes() })
+					}
+					match node.kind {
+						Text(_) => {
+							$texts = $texts.append({ span, parent: creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing) })
+						}
+						_ => {
+							if $by_start.contains(span.start) {
+								$failure = structure_failure($failure, ReconstructedContent, { start: source.count_utf8_bytes(), end: source.count_utf8_bytes() })
+							}
+							$by_start = $by_start.insert(span.start, id)
+						}
+					}
+				}
+				Implied(_) | Cloned(_) => {}
+			}
+		}
+	}
+	# These lexical repairs discard authored structure even when the surviving
+	# start tag and its resulting element otherwise have matching attributes.
+	for diagnostic in lexical {
+		match diagnostic.code {
+			DuplicateAttribute(_) | EndTagAttributes | InvalidSolidus | InvalidAttributeCharacter | MissingAttributeValue | MissingWhitespace => {
+				$failure = structure_failure($failure, ChangedAttributes, trigger_span(tokens, diagnostic.offset))
+			}
+			UnexpectedNull | EofInTag | InvalidTagOpen | EofInComment | IncorrectComment | BogusComment | EofInDoctype | InvalidDoctype | MissingDoctypeName | EofInProcessingInstruction | InvalidFirstCharacterOfProcessingInstructionTarget | InvalidProcessingInstructionTarget | DisallowedProcessingInstructionTarget => {
+				$failure = structure_failure($failure, IgnoredMarkup, trigger_span(tokens, diagnostic.offset))
+			}
+			_ => {}
+		}
+	}
+	texts = $texts.sort_with(
+		|a, b| if a.span.start < b.span.start {
+			Before
+		} else if a.span.start > b.span.start {
+			After
+		} else {
+			Same
+		},
+	)
+	var $text_at = 0
+	var $stack = []
+	var $skip_lf = False
+	for token in tokens {
+		parent = match $stack.last() {
+			Ok(entry) => Ok(entry.id)
+			Err(_) => if fragment {
+				Ok(0)
+			} else {
+				Err(Missing)
+			}
+		}
+		match token.kind {
+			Start(tag) => {
+				$skip_lf = False
+				match $by_start.get(token.span.start) {
+					Err(_) => {
+						$failure = structure_failure($failure, IgnoredMarkup, token.span)
+					}
+					Ok(id) => {
+						node = node_at(state, id)
+						match node.kind {
+							Element(name) => {
+								if (creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing)) != parent {
+									$failure = structure_failure($failure, ReparentedContent, token.span)
+								}
+								namespace = match name.namespace {
+									Uri(uri) => uri
+									NoNamespace => ""
+								}
+								if name.local != adjust_tag(tag.name, namespace) {
+									$failure = structure_failure($failure, IgnoredMarkup, token.span)
+								}
+								expected = tag.attributes.map(|attr| { name: attribute_name(attr.name, namespace), value: attr.value, span: attr.span })
+								if expected != node.attributes {
+									$failure = structure_failure($failure, ChangedAttributes, token.span)
+								}
+								html = namespace == Markup.html_namespace
+								is_void = html and MarkupVocabulary.html_void(name.local)
+								if html and tag.self_closing and !is_void {
+									$failure = structure_failure($failure, NonVoidSelfClosing(name.local), token.span)
+								}
+								if !is_void and !(tag.self_closing and !html) {
+									$stack = $stack.append({ id, name: Tok.lower(name.local) })
+								}
+								$skip_lf = MarkupVocabulary.drops_initial_newline(namespace, name.local)
+							}
+							_ => {
+								$failure = structure_failure($failure, IgnoredMarkup, token.span)
+							}
+						}
+					}
+				}
+			}
+			End(name) => {
+				$skip_lf = False
+				match $stack.last() {
+					Ok(entry) if entry.name == name => {
+						$stack = $stack.drop_last(1)
+					}
+					_ => {
+						$failure = structure_failure($failure, UnexpectedEndTag(name), token.span)
+					}
+				}
+			}
+			Characters(text) => {
+				while $text_at < texts.len() and (texts.get($text_at) ?? { span: token.span, parent }).span.end <= token.span.start {
+					$text_at = $text_at + 1
+				}
+				var $matched = False
+				var $at = $text_at
+				while $at < texts.len() {
+					entry = texts.get($at) ?? { span: token.span, parent }
+					if entry.span.start >= token.span.end {
+						break
+					}
+					if entry.span.end > token.span.start {
+						$matched = True
+						if entry.parent != parent {
+							$failure = structure_failure($failure, ReparentedContent, token.span)
+						}
+					}
+					$at = $at + 1
+				}
+				if !$matched and !text.to_utf8().all(Tok.space) and !($skip_lf and text == "\n") {
+					$failure = structure_failure($failure, IgnoredMarkup, token.span)
+				}
+				$skip_lf = False
+			}
+			Comment(_) | Doctype(_) | ProcessingInstruction(_) => {
+				$skip_lf = False
+				match $by_start.get(token.span.start) {
+					Ok(id) => {
+						if (creation.get(id).map_ok(|entry| entry.parent) ?? Err(Missing)) != parent {
+							$failure = structure_failure($failure, ReparentedContent, token.span)
+						}
+					}
+					Err(_) => {
+						$failure = structure_failure($failure, IgnoredMarkup, token.span)
+					}
+				}
+			}
+			Eof => {
+				if token.span.start != token.span.end {
+					$failure = structure_failure($failure, IgnoredMarkup, token.span)
+				}
+				match $stack.last() {
+					Ok(entry) => {
+						$failure = structure_failure($failure, MissingEndTag(entry.name), token.span)
+					}
+					Err(_) => {}
+				}
+			}
+		}
+	}
+	for diagnostic in state.diagnostics {
+		match diagnostic.problem {
+			HtmlSyntax(code) => match code {
+				MissingDoctype | NonConformingDoctype | EofWithOpenElements | EofInTemplate => {}
+				FosterParentedContent => {
+					span = trigger_span(tokens, diagnostic.column)
+					$failure = match $failure {
+						Ok({ reason: IgnoredMarkup, span: previous }) if previous.start == span.start => Ok({ reason: ReparentedContent, span })
+						_ => structure_failure($failure, ReparentedContent, span)
+					}
+				}
+				_ => {
+					$failure = structure_failure($failure, ReconstructedContent, trigger_span(tokens, diagnostic.column))
+				}
+			}
+			_ => {}
+		}
+	}
+	match $failure {
+		Ok(detail) => {
+			at = Literal.position(source, detail.span.start)
+			Err(InvalidMarkup({ problem: HtmlStructure(detail), line: at.line, column: at.column }))
+		}
+		Err(_) => Ok({})
+	}
+}
+
+structure_failure = |previous, reason, span| match previous {
+	Ok(detail) if detail.span.start <= span.start => previous
+	_ => Ok({ reason, span })
+}
+
+trigger_span = |tokens, offset| {
+	var $lo = 0
+	var $hi = tokens.len()
+	while $lo < $hi {
+		mid = $lo + ($hi - $lo) // 2
+		if (tokens.get(mid) ?? { kind: Eof, span: { start: offset, end: offset } }).span.start <= offset {
+			$lo = mid + 1
+		} else {
+			$hi = mid
+		}
+	}
+	if $lo > 0 {
+		span = (tokens.get($lo - 1) ?? { kind: Eof, span: { start: offset, end: offset } }).span
+		if offset < span.end or span.start == span.end {
+			return span
+		}
+	}
+	{ start: offset, end: offset }
+}
+
+Mode : [Initial, BeforeHtml, BeforeHead, InHead, InHeadNoscript, AfterHead, InBody, InTable, InCaption, InColgroup, InTableBody, InRow, InCell, InTemplate, AfterBody, AfterAfterBody, InFrameset, AfterFrameset, AfterAfterFrameset]
+
+Active : [Entry(U64), Marker]
+
+# Parent links and namespace classes share the arena's dense node indices.
+# Detached/root nodes retain an explicit missing parent entry.
+State : { nodes : List(Markup.Node), roots : List(U64), parents : List(NodeIndexEntry), stack : List(U64), active : List(Active), modes : List(Mode), mode : Mode, head : Try(U64, [Missing]), form : Try(U64, [Missing]), fragment : Bool, context : HtmlTree.Context, context_class : NamespaceClass, diagnostics : List(Markup.Error), max_diagnostics : U64, foster : Bool, frameset_ok : Bool, skip_lf : Bool, work : U64, work_limit : U64, element_count : U64, diagnostics_exceeded : Bool, quirks : Bool, token_span : Markup.Span, token_end_name : Str, token_no_nulls : Bool, plaintext : Bool, pending_text : List({ text : Str, span : Markup.Span }), clones : List(HtmlTree.Clone) }
+
+NamespaceClass : HtmlContextRules.NamespaceClass
+
+NodeIndexEntry : { parent : Try(U64, [Missing]), namespace : NamespaceClass }
+
+empty_index_entry : NodeIndexEntry
+empty_index_entry = { parent: Err(Missing), namespace: OtherNamespace }
+
+namespace_class = HtmlContextRules.namespace_class
+
+kind_namespace = |kind| match kind {
+	Element({ namespace: Uri(uri), .. }) => namespace_class(uri)
+	_ => OtherNamespace
+}
+
+namespace_class_at = |s, id| (s.parents.get(id) ?? empty_index_entry).namespace
+
+adjusted_namespace_class = |s| if (s.fragment and s.stack.len() == 1) s.context_class else match s.stack.last() {
+	Ok(i) => namespace_class_at(s, i)
+	Err(_) => HtmlNamespace
+}
+
+empty_node : Markup.Node
+empty_node = { kind: Text(""), attributes: [], children: [], origin: Implied(0) }
+
+node_at : State, U64 -> Markup.Node
+node_at = |s, i| s.nodes.get(i) ?? empty_node
+
+name_at : State, U64 -> Str
+name_at = |s, i| match s.nodes.get(i) {
+	Ok({ kind: Element(n), .. }) => n.local
+	_ => ""
+}
+
+namespace_at : State, U64 -> Str
+namespace_at = |s, i| match s.nodes.get(i) {
+	Ok({ kind: Element({ namespace: Uri(n), .. }), .. }) => n
+	_ => ""
+}
+
+current : State -> Str
+current = |s| match s.stack.last() {
+	Ok(i) => name_at(s, i)
+	Err(_) => ""
+}
+
+adjusted_namespace = |s| if (s.fragment and s.stack.len() == 1) s.context.namespace else match s.stack.last() {
+	Ok(i) => namespace_at(s, i)
+	Err(_) => Markup.html_namespace
+}
+
+adjusted_name = |s| if (s.fragment and s.stack.len() == 1) s.context.name else current(s)
+
+problem : State, MarkupHtmlError.Code, U64 -> State
+problem = |s, code, offset| if (s.diagnostics.len() < s.max_diagnostics) { ..s, diagnostics: s.diagnostics.append({ problem: HtmlSyntax(code), line: 0, column: offset }) } else { ..s, diagnostics_exceeded: True }
+
+append_node : State, Markup.Node -> State
+append_node = |s, node| {
+	index = s.nodes.len()
+	foster = s.foster and (
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	)
+	var $parent = s.stack.last().map_err(|_| Missing)
+	var $before = Err(Missing)
+	if foster {
+		template_result = last_named(s, "template")
+		table_result = last_named(s, "table")
+		use_template = match (template_result, table_result) {
+			(Ok(template_id), Ok(table_id)) => (stack_position(s, template_id) ?? 0) > (stack_position(s, table_id) ?? 0)
+			(Ok(_), Err(_)) => True
+			_ => False
+		}
+		if use_template {
+			$parent = template_result
+		} else {
+			match table_result {
+				Ok(table_id) => {
+					match find_parent(s, table_id) {
+						Ok(parent) => {
+							$parent = Ok(parent)
+							$before = index_of((node_at(s, parent)).children, table_id)
+						}
+						Err(_) => {
+							position = stack_position(s, table_id) ?? 0
+							$parent = if (position > 0) s.stack.get(position - 1).map_err(|_| Missing) else Err(Missing)
+						}
+					}
+				}
+				_ => {
+					# Fragment table contexts have no actual table on the stack.
+					# Foster content appends to its first (synthetic html) element.
+					$parent = s.stack.first().map_err(|_| Missing)
+				}
+			}
+		}
+	}
+	added_element = match node.kind {
+		Element(_) => 1
+		_ => 0
+	}
+	parents = s.parents.append({ parent: $parent, namespace: kind_namespace(node.kind) })
+	next = { ..s, nodes: s.nodes.append(node), parents, work: s.work + 1, element_count: s.element_count + added_element }
+	match $parent {
+		Ok(parent) => {
+			before = $before
+			edit_node(
+				next,
+				parent,
+				|previous| {
+					children = match before {
+						Ok(at) => previous.children.insert(at, index) ?? []
+						Err(_) => previous.children.append(index)
+					}
+					{ ..previous, children }
+				},
+			)
+		}
+		Err(_) => { ..next, roots: next.roots.append(index) }
+	}
+}
+
+# Move the old node out before editing its child/attribute lists. Otherwise the
+# node retained in the arena forces every append through copy-on-write.
+edit_node : State, U64, (Markup.Node -> Markup.Node) -> State
+edit_node = |s, index, edit| {
+	if index >= s.nodes.len() {
+		return s
+	}
+	moved = s.nodes.replace(index, empty_node) ?? { list: [], prev: empty_node }
+	replacement = edit(moved.prev)
+	{ ..s, nodes: moved.list.set(index, replacement) ?? [] }
+}
+
+insert_element = |s, name, namespace, attrs, origin, push| {
+	index = s.nodes.len()
+	next = append_node(s, { kind: Element({ local: name, namespace: Uri(namespace), prefix: Unprefixed }), attributes: attrs, children: [], origin })
+	if (push) { ..next, stack: next.stack.append(index) } else next
+}
+
+insert_tag = |s, tag, namespace, span, push| {
+	next = insert_element(s, adjust_tag(tag.name, namespace), namespace, tag.attributes.map(|a| { name: attribute_name(a.name, namespace), value: a.value, span: a.span }), Authored(span), push)
+	if namespace == Markup.html_namespace and tag.self_closing and push {
+		problem(next, NonVoidHtmlElementStartTagWithTrailingSolidus, span.start)
+	} else {
+		next
+	}
+}
+
+insert_text = |s, text, span| {
+	if text == "" {
+		return s
+	}
+	# Adjacent source text shares a DOM text node. Foster parenting can select a
+	# different parent, in which case append_node computes the insertion point.
+	if !s.foster or !(
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	) {
+		siblings = match s.stack.last() {
+			Ok(p) => (node_at(s, p)).children
+			Err(_) => s.roots
+		}
+		match siblings.last() {
+			Ok(last) => {
+				previous = node_at(s, last)
+				match previous.kind {
+					Text(before) => {
+						origin = match previous.origin {
+							Authored(p) => Authored({ start: p.start, end: span.end })
+							_ => Authored(span)
+						}
+						return { ..s, nodes: s.nodes.set(last, { ..previous, kind: Text(Str.concat(before, text)), origin }) ?? [] }
+					}
+					_ => {}
+				}
+			}
+			Err(_) => {}
+		}
+	}
+	if s.foster and (
+		match current(s) {
+			"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+			_ => False
+		}
+	) {
+		match last_named(s, "table") {
+			Ok(table_id) => {
+				siblings = match find_parent(s, table_id) {
+					Ok(p) => (node_at(s, p)).children
+					_ => s.roots
+				}
+				at = index_of(siblings, table_id) ?? 0
+				if at > 0 {
+					previous_id = siblings.get(at - 1) ?? 0
+					previous = node_at(s, previous_id)
+					match previous.kind {
+						Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? [] }
+						_ => {}
+					}
+				}
+			}
+			Err(_) if last_named(s, "template").is_err() => {
+				parent = s.stack.first() ?? 0
+				match (node_at(s, parent)).children.last() {
+					Ok(previous_id) => {
+						previous = node_at(s, previous_id)
+						match previous.kind {
+							Text(before) => return { ..s, nodes: s.nodes.set(previous_id, { ..previous, kind: Text(Str.concat(before, text)), origin: Implied(origin_offset(previous.origin)) }) ?? [] }
+							_ => {}
+						}
+					}
+					_ => {}
+				}
+			}
+			_ => {}
+		}
+	}
+	append_node(s, { kind: Text(text), attributes: [], children: [], origin: Authored(span) })
+}
+
+close_to = |s, name| {
+	match last_named(s, name) {
+		Ok(id) => close_from(s, stack_position(s, id) ?? 0)
+		Err(_) => s
+	}
+}
+
+close_from : State, U64 -> State
+close_from = |s, position| {
+	closing = s.stack.drop_first(position)
+	remaining = s.stack.take_first(position)
+	var $next = { ..s, stack: remaining }
+	for id in closing {
+		$next = finish_node($next, id)
+	}
+	$next
+}
+
+finish_node : State, U64 -> State
+finish_node = |s, id| {
+	token_span = s.token_span
+	token_name = s.token_end_name
+	edit_node(
+		s,
+		id,
+		|node| {
+			match node.origin {
+				Authored(span) => {
+					explicit = token_name != "" and (
+						match node.kind {
+							Element(name) => name.local == token_name or Tok.lower(name.local) == token_name
+							_ => False
+						}
+					)
+					end = if (explicit) token_span.end else token_span.start
+					{ ..node, origin: Authored({ start: span.start, end: if (end > span.end) end else span.end }) }
+				}
+				_ => node
+			}
+		},
+	)
+}
+
+pop_current : State -> State
+pop_current = |s| if (s.stack.is_empty()) s else close_from(s, s.stack.len() - 1)
+
+pop_mode = |s, mode| {
+	popped = pop_current(s)
+	{ ..popped, mode }
+}
+
+last_named : State, Str -> Try(U64, [Missing])
+last_named = |s, name| {
+	var $i = s.stack.len()
+	while $i > 0 {
+		$i = $i - 1
+		id = s.stack.get($i) ?? 0
+		if namespace_class_at(s, id) == HtmlNamespace and name_at(s, id) == name {
+			return Ok(id)
+		}
+	}
+	Err(Missing)
+}
+
+stack_position = |s, id| index_of(s.stack, id)
+
+index_of : List(U64), U64 -> Try(U64, [Missing])
+index_of = |items, value| {
+	var $i = 0
+	while $i < items.len() {
+		if items.get($i) == Ok(value) {
+			return Ok($i)
+		}
+		$i = $i + 1
+	}
+	Err(Missing)
+}
+
+find_parent : State, U64 -> Try(U64, [Missing])
+find_parent = |s, id| (s.parents.get(id) ?? empty_index_entry).parent
+
+# Check first so the successful update can consume its list. Retaining the
+# original as an error fallback would copy the whole index on every reparent.
+set_parent = |parents, id, parent| {
+	if id >= parents.len() {
+		return parents
+	}
+	previous = parents.get(id) ?? empty_index_entry
+	parents.set(id, { ..previous, parent }) ?? []
+}
+
+in_scope = |s, name, kind| {
+	var $i = s.stack.len()
+	while $i > 0 {
+		$i = $i - 1
+		id = s.stack.get($i) ?? 0
+		n = name_at(s, id)
+		ns = namespace_class_at(s, id)
+		if ns == HtmlNamespace and n == name {
+			return True
+		}
+		if HtmlContextRules.scope_boundary(ns, n, kind) {
+			return False
+		}
+	}
+	False
+}
+
+implied = |s, except| {
+	var $s = s
+	while HtmlContextRules.implied_end_element(current($s)) and current($s) != except {
+		$s = pop_current($s)
+	}
+	$s
+}
+
+close_p = |s| {
+	next = implied(s, "p")
+	checked = if (current(next) != "p") problem(next, MisnestedEndTag, s.token_span.start) else next
+	close_to(checked, "p")
+}
+
+context_mode = |name| match name {
+	"select" => InBody
+	"td" | "th" => InCell
+	"tr" => InRow
+	"tbody" | "thead" | "tfoot" => InTableBody
+	"caption" => InCaption
+	"colgroup" => InColgroup
+	"table" => InTable
+	"template" => InTemplate
+	"head" => InBody
+	"html" => BeforeHead
+	"frameset" => InFrameset
+	_ => InBody
+}
+
+reset_mode = |s| {
+	var $i = s.stack.len()
+	while $i > 0 {
+		$i = $i - 1
+		n = if ($i == 0 and s.fragment) s.context.name else name_at(s, s.stack.get($i) ?? 0)
+		if match n {
+			"td" | "th" | "tr" | "tbody" | "thead" | "tfoot" | "caption" | "colgroup" | "table" | "template" | "head" | "frameset" => True
+			_ => False
+		} {
+			return { ..s, mode: if (n == "template") (s.modes.last() ?? InTemplate) else if (n == "head") InHead else context_mode(n) }
+		}
+		if n == "body" {
+			return { ..s, mode: InBody }
+		}
+		if n == "html" {
+			return { ..s, mode: if (s.fragment) context_mode(s.context.name) else if (s.head.is_ok()) AfterHead else BeforeHead }
+		}
+	}
+	{ ..s, mode: InBody }
+}
+
+content_mode = |s| {
+	if s.plaintext {
+		return Plaintext
+	}
+	if s.fragment and s.stack.len() == 1 and s.context.namespace == Markup.html_namespace {
+		match MarkupVocabulary.text_behavior(s.context.name, s.context.scripting) {
+			Rcdata => return RcdataFragment
+			RawText => return RawtextFragment
+			ScriptData => return ScriptFragment
+			Plaintext => return Plaintext
+			Data => {}
+		}
+	}
+	if adjusted_namespace_class(s) != HtmlNamespace {
+		return Data
+	}
+	name = adjusted_name(s)
+	match MarkupVocabulary.text_behavior(name, s.context.scripting) {
+		Rcdata => Rcdata(name)
+		RawText => Rawtext(name)
+		ScriptData => Script
+		Plaintext => Plaintext
+		Data => match s.mode {
+			InBody | InCell | InCaption => DataMixed
+			_ => Data
+		}
+	}
+}
+
+# DataMixed was selected from the adjusted HTML element before tokenization.
+# Ordinary body tokens can reuse that classification and avoid the raw/foreign
+# dispatcher. Pending table text and reprocessed tokens retain the full route.
+process_with_mode : State, Tok.Token, Tok.Mode, Bool -> State
+process_with_mode = |state, token, mode, scripting| {
+	ordinary = mode == DataMixed and state.mode == InBody and state.pending_text.is_empty() and (
+		match token.kind {
+			Start(_) | Characters(_) => True
+			End(name) => name != "template"
+			_ => False
+		}
+	)
+	if ordinary {
+		end_name = match token.kind {
+			End(name) => name
+			_ => ""
+		}
+		prepared = { ..state, token_span: token.span, token_end_name: end_name }
+		if prepared.work > prepared.work_limit {
+			return prepared
+		}
+		return body({ ..prepared, work: prepared.work + 2 }, token)
+	}
+	process(state, token, scripting)
+}
+
+process : State, Tok.Token, Bool -> State
+process = |initial_state, token, scripting| {
+	end_name = match token.kind {
+		End(name) => name
+		_ => ""
+	}
+	var $prepared = initial_state
+	match token.kind {
+		Characters(_) => {}
+		_ => {
+			$prepared = flush_table_text($prepared)
+		}
+	}
+	state = { ..$prepared, token_span: token.span, token_end_name: end_name }
+	match token.kind {
+		Characters(text) if [InTable, InTableBody, InRow].contains(state.mode) and namespace_class_at(state, state.stack.last() ?? 0) == HtmlNamespace and (
+			match current(state) {
+				"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
+			return { ..state, pending_text: state.pending_text.append({ text, span: token.span }) }
+		}
+		_ => {}
+	}
+	if state.work > state.work_limit {
+		return state
+	}
+	# Raw text is a tokenizer mode and a tree-construction text mode. The
+	# surrounding insertion mode (table/head/body) resumes after its end tag.
+	if !state.plaintext and (
+		match current(state) {
+			"title" | "textarea" | "script" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "plaintext" => True
+			"noscript" => state.context.scripting
+			_ => False
+		}
+	) and namespace_class_at(state, state.stack.last() ?? 0) == HtmlNamespace {
+		match token.kind {
+			Characters(text) => return insert_text(state, text, token.span)
+			End(name) if name == current(state) => return pop_current(state)
+			Eof => {
+				next = problem(state, EofWithOpenElements, token.span.start)
+				return process_html(pop_current(next), token, scripting)
+			}
+			_ => {}
+		}
+	}
+	if foreign_token(state, token) {
+		return foreign_process(state, token)
+	}
+	process_html(state, token, scripting)
+}
+
+process_html : State, Tok.Token, Bool -> State
+process_html = |state, token, scripting| {
+	# Ordinary body tokens need one insertion-mode step and no reprocessing.
+	# Keep them out of the general mode loop and its large temporary state.
+	ordinary_body = state.mode == InBody and (
+		match token.kind {
+			Start(_) | Characters(_) => True
+			End(name) => name != "template"
+			_ => False
+		}
+	)
+	if ordinary_body {
+		if state.work > state.work_limit {
+			return state
+		}
+		# The general dispatcher charges one entry and one mode step before
+		# body construction. Preserve the same resource accounting here.
+		return body({ ..state, work: state.work + 2 }, token)
+	}
+	process_html_general(state, token, scripting)
+}
+
+process_html_general : State, Tok.Token, Bool -> State
+process_html_general = |state, token, scripting| {
+	if state.work > state.work_limit {
+		return state
+	}
+	var $s = { ..state, work: state.work + 1 }
+	var $reprocess = True
+	var $count = 0.U64
+	while $reprocess {
+		$count = $count + 1
+		$s = { ..$s, work: $s.work + 1 }
+		if $s.work > $s.work_limit {
+			return $s
+		}
+		$reprocess = False
+		mode = $s.mode
+		match (mode, token.kind) {
+			(_, Eof) if last_named($s, "template").is_ok() => {
+				$s = problem($s, EofInTemplate, token.span.start)
+				$s = end_template($s, token.span.start)
+				$reprocess = True
+			}
+			(_, ProcessingInstruction(pi)) => {
+				$s = append_misc($s, { kind: ProcessingInstruction(pi), attributes: [], children: [], origin: Authored(token.span) })
+			}
+			(_, Comment(text)) => {
+				$s = append_misc($s, { kind: Comment(text), attributes: [], children: [], origin: Authored(token.span) })
+			}
+			(Initial, Characters(text)) if whitespace(text) => {}
+			(Initial, Doctype(d)) => {
+				$s = append_node($s, { kind: Doctype({ name: d.name, public_id: d.public_id, system_id: d.system_id }), attributes: [], children: [], origin: Authored(token.span) })
+				if d.name != "html" or d.has_public or (d.has_system and d.system_id != "about:legacy-compat") {
+					$s = problem($s, NonConformingDoctype, token.span.start)
+				}
+				$s = { ..$s, mode: BeforeHtml, quirks: doctype_quirks(d) }
+			}
+			(Initial, _) => {
+				$s = problem($s, MissingDoctype, token.span.start)
+				$s = { ..$s, mode: BeforeHtml, quirks: True }
+				$reprocess = True
+			}
+			(_, Doctype(_)) => {
+				$s = problem($s, UnexpectedDoctype, token.span.start)
+			}
+			(BeforeHtml, Characters(t)) if whitespace(t) => {}
+			(BeforeHtml, Start(t)) if t.name == "html" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: BeforeHead }
+			}
+			(BeforeHtml, End(n)) if !(
+				match n {
+					"head" | "body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(BeforeHtml, _) => {
+				$s = insert_element($s, "html", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = { ..$s, mode: BeforeHead }
+				$reprocess = True
+			}
+			(BeforeHead, Characters(t)) if whitespace(t) => {}
+			(BeforeHead, Start(t)) if t.name == "head" => {
+				id = $s.nodes.len()
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, head: Ok(id), mode: InHead }
+			}
+			(BeforeHead, End(n)) if !(
+				match n {
+					"head" | "body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(BeforeHead, _) => {
+				id = $s.nodes.len()
+				$s = insert_element($s, "head", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = { ..$s, head: Ok(id), mode: InHead }
+				$reprocess = True
+			}
+			(InHead, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InHead, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(InHead, Start(t)) if (
+				match t.name {
+					"base" | "basefont" | "bgsound" | "link" | "meta" => True
+					_ => False
+				}
+			) => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+			}
+			(InHead, Start(t)) if (
+				match t.name {
+					"title" | "style" | "script" | "noframes" => True
+					_ => False
+				}
+			) or (t.name == "noscript" and scripting) => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
+			(InHead, End("head")) => {
+				$s = pop_mode($s, AfterHead)
+			}
+			(InHead, End(n)) if (
+				match n {
+					"title" | "style" | "script" | "noframes" | "noscript" => True
+					_ => False
+				}
+			) and current($s) == n => {
+				$s = pop_current($s)
+			}
+			(InHead, Start(t)) if t.name == "noscript" and !scripting => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: InHeadNoscript }
+			}
+			(InHead, Start(t)) if t.name == "head" => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+			}
+			(InHead, Start(t)) if t.name == "template" => {
+				$s = start_template($s, t, token.span)
+			}
+			(_, End("template")) => {
+				$s = end_template($s, token.span.start)
+			}
+			(InHead, Characters(t)) if current($s) != "head" => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InHead, End(n)) if !(
+				match n {
+					"body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(InHeadNoscript, End("noscript")) => {
+				$s = pop_mode($s, InHead)
+			}
+			(InHeadNoscript, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InHeadNoscript, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(InHeadNoscript, Start(t)) if (
+				match t.name {
+					"basefont" | "bgsound" | "link" | "meta" | "noframes" | "style" => True
+					_ => False
+				}
+			) => {
+				$s = process_html({ ..$s, mode: InHead }, token, scripting)
+				$s = { ..$s, mode: InHeadNoscript }
+			}
+			(InHeadNoscript, Start(t)) if t.name == "head" or t.name == "noscript" => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+			}
+			(InHeadNoscript, End(n)) if n != "br" => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(InHeadNoscript, _) => {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+				$s = pop_mode($s, InHead)
+				$reprocess = True
+			}
+			(InHead, _) => {
+				$s = close_to($s, "head")
+				$s = { ..$s, mode: AfterHead }
+				$reprocess = True
+			}
+			(AfterHead, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(AfterHead, Start(t)) if t.name == "body" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: InBody, frameset_ok: False }
+			}
+			(AfterHead, Start(t)) if t.name == "frameset" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: InFrameset }
+			}
+			(AfterHead, Start(t)) if (
+				match t.name {
+					"base" | "basefont" | "bgsound" | "link" | "meta" | "script" | "style" | "template" | "title" => True
+					_ => False
+				}
+			) => {
+				$s = problem($s, HeadContentAfterHead, token.span.start)
+				match $s.head {
+					Ok(h) => {
+						old = $s.stack
+						$s = { ..$s, stack: old.append(h), mode: InHead }
+						$s = process($s, token, scripting)
+						$s = { ..$s, stack: $s.stack.keep_if(|i| i != h), mode: if ($s.mode == InHead) AfterHead else $s.mode }
+					}
+					_ => {}
+				}
+			}
+			(AfterHead, End(n)) if !(
+				match n {
+					"body" | "html" | "br" => True
+					_ => False
+				}
+			) => {
+				$s = problem($s, UnexpectedEndTag, token.span.start)
+			}
+			(AfterHead, _) => {
+				$s = insert_element($s, "body", Markup.html_namespace, [], Implied(token.span.start), True)
+				$s = { ..$s, mode: InBody, frameset_ok: True }
+				$reprocess = True
+			}
+			(InBody, Eof) if last_named($s, "template").is_ok() => {
+				$s = problem($s, EofInTemplate, token.span.start)
+				$s = end_template($s, token.span.start)
+				$reprocess = True
+			}
+			(InBody, Eof) if !$s.modes.is_empty() => {
+				# A template fragment context has a template insertion mode even
+				# though no authored template element is on the open stack.
+				$s = { ..$s, mode: InTemplate }
+				$reprocess = True
+			}
+			(InBody, _) => {
+				$s = body($s, token)
+			}
+			(InTable, _) => {
+				$s = table($s, token)
+			}
+			(InTableBody, _) => {
+				$s = table_body($s, token)
+			}
+			(InRow, _) => {
+				$s = row($s, token)
+			}
+			(InCell, _) => {
+				match token.kind {
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) and !in_scope($s, "td", TableScope) and !in_scope($s, "th", TableScope) => {
+						$s = problem($s, UnexpectedCellEnd, token.span.start)
+					}
+					End(n) if n == "td" or n == "th" => {
+						if in_scope($s, n, TableScope) {
+							$s = close_to(implied($s, ""), n)
+							$s = clear_active($s)
+							$s = { ..$s, mode: InRow }
+						} else {
+							$s = problem($s, UnexpectedCellEnd, token.span.start)
+						}
+					}
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) => {
+						$s = close_cell($s)
+						$reprocess = True
+					}
+					End(n) if (
+						match n {
+							"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+							_ => False
+						}
+					) and in_scope($s, n, TableScope) => {
+						$s = close_cell($s)
+						$reprocess = True
+					}
+					_ => {
+						$s = body($s, token)
+					}
+				}
+			}
+			(InCaption, _) => {
+				match token.kind {
+					End("caption") | End("table") if !in_scope($s, "caption", TableScope) => {
+						$s = problem($s, UnexpectedTableEnd, token.span.start)
+					}
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) and !in_scope($s, "caption", TableScope) => {
+						$s = problem($s, UnexpectedTableElement, token.span.start)
+					}
+					End("caption") => {
+						$s = close_to(implied($s, ""), "caption")
+						$s = clear_active($s)
+						$s = { ..$s, mode: InTable }
+					}
+					Start(t) if (
+						match t.name {
+							"caption" | "col" | "colgroup" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+							_ => False
+						}
+					) => {
+						$s = close_to(implied($s, ""), "caption")
+						$s = clear_active($s)
+						$s = { ..$s, mode: InTable }
+						$reprocess = True
+					}
+					End("table") => {
+						$s = close_to(implied($s, ""), "caption")
+						$s = clear_active($s)
+						$s = { ..$s, mode: InTable }
+						$reprocess = True
+					}
+					_ => {
+						$s = body($s, token)
+					}
+				}
+			}
+			(InColgroup, _) => {
+				match token.kind {
+					Start(t) if t.name == "template" => {
+						$s = start_template($s, t, token.span)
+					}
+					Characters(t) if whitespace(t) => {
+						$s = insert_text($s, t, token.span)
+					}
+					Start(t) if t.name == "col" => {
+						$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+					}
+					End("colgroup") if current($s) != "colgroup" => {
+						$s = problem($s, UnexpectedColEnd, token.span.start)
+					}
+					End("colgroup") => {
+						$s = pop_mode($s, InTable)
+					}
+					End("col") => {
+						$s = problem($s, UnexpectedColEnd, token.span.start)
+					}
+					Eof => {}
+					_ if current($s) != "colgroup" => {
+						$s = problem($s, UnexpectedTableElement, token.span.start)
+					}
+					_ => {
+						$s = pop_mode($s, InTable)
+						$reprocess = True
+					}
+				}
+			}
+
+			(InTemplate, _) => {
+				match token.kind {
+					Characters(_) => {
+						$s = body($s, token)
+					}
+					Start(t) if (
+						match t.name {
+							"base" | "link" | "meta" | "script" | "style" | "template" | "title" => True
+							_ => False
+						}
+					) => {
+						old = $s.mode
+						$s = { ..$s, mode: InHead }
+						$s = process($s, token, scripting)
+						if $s.mode == InHead {
+							$s = { ..$s, mode: old }
+						}
+					}
+					Eof => {
+						if last_named($s, "template").is_ok() {
+							$s = problem($s, EofInTemplate, token.span.start)
+							$s = end_template($s, token.span.start)
+							$reprocess = True
+						}
+					}
+					Start(t) => {
+						next = if (
+							(
+								match t.name {
+									"caption" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+									_ => False
+								}
+							)
+						) InTable else if (t.name == "col") InColgroup else if (t.name == "tr") InTableBody else if (t.name == "td" or t.name == "th") InRow else InBody
+						$s = { ..$s, mode: next, modes: $s.modes.drop_last(1).append(next) }
+						$reprocess = True
+					}
+					_ => {
+						$s = problem($s, UnexpectedTemplateToken, token.span.start)
+					}
+				}
+			}
+			(AfterBody, Start(t)) | (AfterAfterBody, Start(t)) | (InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(AfterBody, Characters(t)) if whitespace(t) => {
+				$s = body($s, token)
+			}
+			(AfterBody, End("html")) => {
+				if $s.fragment {
+					$s = problem($s, UnexpectedEndTag, token.span.start)
+				} else {
+					$s = { ..$s, mode: AfterAfterBody }
+				}
+			}
+			(AfterBody, Eof) | (AfterAfterBody, Eof) => {}
+			(AfterAfterBody, Characters(t)) if whitespace(t) => {
+				$s = body($s, token)
+			}
+			(AfterBody, _) | (AfterAfterBody, _) => {
+				$s = problem($s, ContentAfterBody, token.span.start)
+				$s = { ..$s, mode: InBody }
+				$reprocess = True
+			}
+			(InFrameset, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InFrameset, Start(t)) if t.name == "frameset" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
+			(InFrameset, Start(t)) if t.name == "frame" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+			}
+			(InFrameset, End("frameset")) if current($s) == "html" => {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
+			}
+			(InFrameset, End("frameset")) => {
+				$s = pop_current($s)
+				if current($s) != "frameset" {
+					$s = { ..$s, mode: AfterFrameset }
+				}
+			}
+			(AfterFrameset, Characters(t)) if whitespace(t) => {
+				$s = insert_text($s, t, token.span)
+			}
+			(InFrameset, Start(t)) | (AfterFrameset, Start(t)) if t.name == "noframes" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
+			(InFrameset, Eof) => {
+				if current($s) != "html" {
+					$s = problem($s, EofWithOpenElements, token.span.start)
+				}
+			}
+			(AfterFrameset, Eof) => {}
+			(AfterFrameset, End("html")) => {
+				$s = { ..$s, mode: AfterAfterFrameset }
+			}
+			(AfterAfterFrameset, Eof) => {}
+			(AfterAfterFrameset, Characters(t)) if whitespace(t) => {
+				$s = body($s, token)
+			}
+			(AfterAfterFrameset, Start(t)) if t.name == "html" => {
+				$s = body($s, token)
+			}
+			(AfterAfterFrameset, Start(t)) if t.name == "noframes" => {
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			}
+			(AfterAfterFrameset, _) => {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
+			}
+			(InFrameset, _) | (AfterFrameset, _) => {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
+			}
+		}
+	}
+	$s
+}
+
+body : State, Tok.Token -> State
+body = |state, token| {
+	if state.work > state.work_limit {
+		return state
+	}
+	var $s = { ..state, work: state.work + state.stack.len() + state.active.len() + 1 }
+	match token.kind {
+		Characters(raw_text) => {
+			text = if (!state.token_no_nulls and raw_text.contains("\u(0)")) Str.join_with(raw_text.split_on("\u(0)"), "") else raw_text
+			$s = reconstruct($s)
+			$s = insert_text($s, text, token.span)
+			if !whitespace(text) {
+				$s = { ..$s, frameset_ok: False }
+			}
+		}
+		Eof => {
+			if $s.stack.any(
+				|i| !(
+					match name_at($s, i) {
+						"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" | "body" | "html" => True
+						_ => False
+					}
+				),
+			) {
+				$s = problem($s, EofWithOpenElements, token.span.start)
+			}
+		}
+		Start(tag) => {
+			name = tag.name
+			if name == "html" {
+				$s = problem($s, UnexpectedHtmlStart, token.span.start)
+				if parsing_template($s) {
+					return $s
+				}
+				if !$s.stack.is_empty() {
+					$s = merge_attributes($s, $s.stack.first() ?? 0, tag)
+				}
+			} else if name == "body" {
+				$s = problem($s, UnexpectedBodyStart, token.span.start)
+				if parsing_template($s) {
+					return $s
+				}
+				match last_named($s, "body") {
+					Ok(id) => {
+						$s = merge_attributes($s, id, tag)
+						$s = { ..$s, frameset_ok: False }
+					}
+					_ => {}
+				}
+			} else if name == "frameset" {
+				$s = problem($s, UnexpectedFramesetContent, token.span.start)
+				if $s.frameset_ok and last_named($s, "body").is_ok() and !parsing_template($s) {
+					body_id = last_named($s, "body") ?? 0
+					$s = detach($s, body_id)
+					$s = { ..$s, stack: $s.stack.take_first(1) }
+					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = { ..$s, mode: InFrameset }
+				}
+			} else if name == "head" {
+				$s = problem($s, UnexpectedHeadStart, token.span.start)
+			}
+			else if match name {
+				"base" | "basefont" | "bgsound" | "link" | "meta" => True
+				_ => False
+			} {
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, False)
+			}
+			else if name == "template" {
+				$s = start_template($s, tag, token.span)
+			}
+			else if HtmlContextRules.block_start(name) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+			} else if HtmlContextRules.heading(name) {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				if match current($s) {
+					"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
+					_ => False
+				} {
+					$s = problem($s, NestedHeading, token.span.start)
+					$s = pop_current($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+			} else if name == "pre" or name == "listing" {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
+			} else if name == "form" {
+				if $s.form.is_ok() and !parsing_template($s) {
+					$s = problem($s, NestedForm, token.span.start)
+				}
+				else {
+					if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+						$s = close_p($s)
+					}
+					id = $s.nodes.len()
+					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					if !parsing_template($s) {
+						$s = { ..$s, form: Ok(id) }
+					}
+				}
+			} else if name == "li" or name == "dd" or name == "dt" {
+				var $i = $s.stack.len()
+				while $i > 0 {
+					$i = $i - 1
+					n = name_at($s, $s.stack.get($i) ?? 0)
+					if n == name or (name != "li" and (n == "dd" or n == "dt")) {
+						$s = implied($s, n)
+						if current($s) != n {
+							$s = problem($s, MisnestedEndTag, token.span.start)
+						}
+						$s = close_to($s, n)
+						break
+					}
+					if special_at($s, $s.stack.get($i) ?? 0) and !(
+						match n {
+							"address" | "div" | "p" => True
+							_ => False
+						}
+					) {
+						break
+					}
+				}
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, frameset_ok: False }
+			} else if name == "plaintext" {
+				if HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, plaintext: True }
+			} else if name == "button" {
+				if in_scope($s, "button", DefaultScope) {
+					$s = problem($s, NestedButton, token.span.start)
+					$s = close_to(implied($s, ""), "button")
+				}
+				$s = reconstruct($s)
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, frameset_ok: False }
+			} else if formatting(name) {
+				if name == "a" {
+					match active_named($s, "a") {
+						Ok(id) => {
+							$s = problem($s, NestedAnchor, token.span.start)
+							$s = adoption($s, "a", token.span.start)
+							$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(id)), stack: $s.stack.keep_if(|i| i != id) }
+						}
+						_ => {}
+					}
+				}
+				if name == "nobr" and in_scope($s, "nobr", DefaultScope) {
+					$s = problem($s, NestedNobr, token.span.start)
+					$s = adoption($s, "nobr", token.span.start)
+				}
+				$s = reconstruct($s)
+				id = $s.nodes.len()
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				# Noah's Ark clause: retain at most three equivalent entries after
+				# the last marker, even while older elements remain open.
+				var $same = []
+				var $active_at = $s.active.len()
+				fresh = node_at($s, id)
+				while $active_at > 0 {
+					$active_at = $active_at - 1
+					match $s.active.get($active_at) ?? Marker {
+						Marker => break
+						Entry(previous_id) => {
+							previous = node_at($s, previous_id)
+							if previous.kind == fresh.kind and previous.attributes.map(|a| (a.name, a.value)) == fresh.attributes.map(|a| (a.name, a.value)) {
+								$same = $same.append(previous_id)
+							}
+						}
+					}
+				}
+				if $same.len() >= 3 {
+					oldest = $same.last() ?? id
+					$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(oldest)) }
+				}
+				$s = { ..$s, active: $s.active.append(Entry(id)) }
+			} else if name == "applet" or name == "marquee" or name == "object" {
+				$s = reconstruct($s)
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, active: $s.active.append(Marker), frameset_ok: False }
+			} else if name == "table" {
+				if !$s.quirks and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, mode: InTable, frameset_ok: False }
+			} else if name == "input" and $s.fragment and $s.context.name == "select" {
+				$s = problem($s, UnexpectedSelectContent, token.span.start)
+			} else if void(name) {
+				if name == "hr" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				if name == "input" and in_scope($s, "select", DefaultScope) {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+					$s = close_to($s, "select")
+				}
+				if name == "hr" and in_scope($s, "select", DefaultScope) {
+					$s = implied($s, "")
+				}
+				$s = reconstruct($s)
+				if name == "image" {
+					$s = problem($s, ImageStartTag, token.span.start)
+				}
+				adjusted = if (name == "image") { ..tag, name: "img" } else tag
+				$s = insert_tag($s, adjusted, Markup.html_namespace, token.span, False)
+				if name == "hr" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				if !(
+					match name {
+						"param" | "source" | "track" => True
+						_ => False
+					}
+				) and (name != "input" or !tag.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden")) {
+					$s = { ..$s, frameset_ok: False }
+				}
+			} else if name == "textarea" {
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, skip_lf: MarkupVocabulary.drops_initial_newline(Markup.html_namespace, name), frameset_ok: False }
+			} else if match name {
+				"xmp" | "iframe" | "noembed" | "noscript" | "script" | "style" | "title" | "noframes" => True
+				_ => False
+			} {
+				if name == "xmp" and HtmlContextRules.closes_p(name) and in_scope($s, "p", ButtonScope) {
+					$s = close_p($s)
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+				$s = { ..$s, frameset_ok: False }
+			} else if name == "select" {
+				if $s.fragment and $s.context.name == "select" {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+				} else if in_scope($s, "select", DefaultScope) {
+					$s = problem($s, UnexpectedSelectContent, token.span.start)
+					$s = close_to($s, "select")
+				} else {
+					$s = reconstruct($s)
+					$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+					$s = { ..$s, frameset_ok: False }
+				}
+			} else if name == "option" or name == "optgroup" {
+				if in_scope($s, "select", DefaultScope) {
+					$s = implied($s, if (name == "option") "optgroup" else "")
+					if in_scope($s, "option", DefaultScope) or (name == "optgroup" and in_scope($s, "optgroup", DefaultScope)) {
+						$s = problem($s, UnexpectedSelectContent, token.span.start)
+					}
+				} else if current($s) == "option" {
+					$s = pop_current($s)
+				}
+				$s = reconstruct($s)
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+			} else if match name {
+				"rb" | "rtc" | "rp" | "rt" => True
+				_ => False
+			} {
+				if in_scope($s, "ruby", DefaultScope) {
+					$s = implied($s, if (name == "rt" or name == "rp") "rtc" else "")
+				}
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+			} else if name == "math" or name == "svg" {
+				$s = reconstruct($s)
+				$s = insert_tag($s, tag, if (name == "svg") Markup.svg_namespace else Markup.mathml_namespace, token.span, !tag.self_closing)
+			} else if match name {
+				"caption" | "col" | "colgroup" | "frame" | "head" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+				_ => False
+			} {
+				$s = problem($s, UnexpectedTableElement, token.span.start)
+			} else {
+				$s = reconstruct($s)
+				$s = insert_tag($s, tag, Markup.html_namespace, token.span, True)
+			}
+		}
+		End(name) => {
+			if name == "body" or name == "html" {
+				if in_scope($s, "body", DefaultScope) {
+					if $s.stack.any(
+						|i| !(
+							match name_at($s, i) {
+								"dd" | "dt" | "li" | "optgroup" | "option" | "p" | "rb" | "rp" | "rt" | "rtc" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" | "body" | "html" => True
+								_ => False
+							}
+						),
+					) {
+						$s = problem($s, MisnestedEndTag, token.span.start)
+					}
+					if name == "html" and $s.fragment {
+						$s = problem($s, UnexpectedEndTag, token.span.start)
+					}
+					$s = { ..$s, mode: if (name == "html" and !$s.fragment) AfterAfterBody else AfterBody }
+				}
+				else {
+					$s = problem($s, UnexpectedBodyEnd, token.span.start)
+				}
+			} else if name == "p" {
+				if !in_scope($s, "p", ButtonScope) {
+					$s = problem($s, UnexpectedPEnd, token.span.start)
+					$s = insert_element($s, "p", Markup.html_namespace, [], Implied(token.span.start), True)
+				}
+				$s = close_p($s)
+			} else if match name {
+				"address" | "article" | "aside" | "blockquote" | "center" | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "listing" | "main" | "menu" | "nav" | "ol" | "pre" | "search" | "section" | "select" | "summary" | "ul" => True
+				_ => False
+			} {
+				if !in_scope($s, name, DefaultScope) {
+					$s = problem($s, UnexpectedEndTag, token.span.start)
+				}
+				else {
+					$s = implied($s, "")
+					if current($s) != name {
+						$s = problem($s, MisnestedEndTag, token.span.start)
+					}
+					$s = close_to($s, name)
+				}
+			} else if formatting(name) {
+				$s = adoption($s, name, token.span.start)
+			}
+			else if name == "form" and !parsing_template($s) {
+				match $s.form {
+					Ok(id) => {
+						if !s_in_scope_id($s, id) {
+							$s = problem($s, UnexpectedFormEnd, token.span.start)
+						} else {
+							$s = implied($s, "")
+							$s = { ..$s, stack: $s.stack.keep_if(|i| i != id) }
+						}
+					}
+					_ => {
+						$s = problem($s, UnexpectedFormEnd, token.span.start)
+					}
+				}
+				$s = { ..$s, form: Err(Missing) }
+			} else if name == "form" {
+				if in_scope($s, "form", DefaultScope) {
+					$s = close_to(implied($s, ""), "form")
+				} else {
+					$s = problem($s, UnexpectedFormEnd, token.span.start)
+				}
+			} else if name == "br" {
+				$s = problem($s, EndTagBr, token.span.start)
+				$s = body($s, { ..token, kind: Start({ name: "br", attributes: [], self_closing: False }) })
+			} else if name == "li" or name == "dd" or name == "dt" or name == "button" or name == "applet" or name == "marquee" or name == "object" {
+				scope = if (name == "li") ListScope else DefaultScope
+				if !in_scope($s, name, scope) {
+					$s = problem($s, UnexpectedEndTag, token.span.start)
+				}
+				else {
+					$s = close_to(implied($s, name), name)
+					if name == "applet" or name == "marquee" or name == "object" {
+						$s = clear_active($s)
+					}
+				}
+			} else if match name {
+				"h1" | "h2" | "h3" | "h4" | "h5" | "h6" => True
+				_ => False
+			} {
+				var $found = ""
+				for heading in ["h1", "h2", "h3", "h4", "h5", "h6"] {
+					if in_scope($s, heading, DefaultScope) {
+						$found = heading
+					}
+				}
+				if $found == "" {
+					$s = problem($s, UnexpectedHeadingEnd, token.span.start)
+				}
+				else {
+					if $found != name {
+						$s = problem($s, MismatchedHeadingEnd, token.span.start)
+					}
+					$s = close_to(implied($s, ""), $found)
+				}
+			} else {
+				$s = generic_end($s, name, token.span.start)
+			}
+		}
+		_ => {}
+	}
+	$s
+}
+
+s_in_scope_id = |s, id| s.stack.contains(id) and in_scope(s, name_at(s, id), DefaultScope)
+
+merge_attributes = |s, id, tag| {
+	node = node_at(s, id)
+	extra = tag.attributes.keep_if(|a| !node.attributes.any(|b| b.name.local == a.name)).map(|a| { name: attribute_name(a.name, Markup.html_namespace), value: a.value, span: a.span })
+	{ ..s, nodes: s.nodes.set(id, { ..node, attributes: node.attributes.concat(extra) }) ?? [] }
+}
+
+generic_end = |s, name, offset| {
+	var $s = s
+	var $i = s.stack.len()
+	while $i > 0 {
+		$i = $i - 1
+		id = s.stack.get($i) ?? 0
+		n = name_at(s, id)
+		if namespace_class_at($s, id) == HtmlNamespace and n == name {
+			$s = implied($s, name)
+			if current($s) != name {
+				$s = problem($s, MisnestedEndTag, offset)
+			}
+			return close_from($s, $i)
+		}
+		if special_at($s, id) {
+			return problem($s, UnexpectedEndTag, offset)
+		}
+	}
+	problem($s, UnexpectedEndTag, offset)
+}
+
+start_template = |s, tag, span| {
+	next = insert_tag(s, tag, Markup.html_namespace, span, True)
+	{ ..next, active: next.active.append(Marker), modes: next.modes.append(InTemplate), mode: InTemplate, frameset_ok: False }
+}
+
+end_template = |s, offset| {
+	if last_named(s, "template").is_err() {
+		return problem(s, UnexpectedTemplateEnd, offset)
+	}
+	next = clear_active(close_to(implied(s, ""), "template"))
+	reset_mode({ ..next, modes: next.modes.drop_last(1) })
+}
+
+clear_active = |s| {
+	var $active = s.active
+	while !$active.is_empty() {
+		last = $active.last() ?? Marker
+		$active = $active.drop_last(1)
+		if last == Marker {
+			break
+		}
+	}
+	{ ..s, active: $active }
+}
+
+reconstruct = |s| {
+	if s.active.is_empty() {
+		return s
+	}
+	last = s.active.last() ?? Marker
+	match last {
+		Marker => return s
+		Entry(id) if s.stack.contains(id) => return s
+		_ => {}
+	}
+	var $i = s.active.len() - 1
+	while $i > 0 {
+		match s.active.get($i - 1) ?? Marker {
+			Marker => break
+			Entry(id) if s.stack.contains(id) => break
+			_ => {
+				$i = $i - 1
+			}
+		}
+	}
+	var $s = s
+	while $i < $s.active.len() {
+		match $s.active.get($i) ?? Marker {
+			Entry(id) => {
+				original = node_at($s, id)
+				new = $s.nodes.len()
+				$s = append_node($s, { ..original, children: [], origin: Implied(origin_offset(original.origin)) })
+				$s = { ..$s, stack: $s.stack.append(new), active: $s.active.set($i, Entry(new)) ?? $s.active }
+			}
+			_ => {}
+		}
+		$i = $i + 1
+	}
+	$s
+}
+
+origin_offset = |origin| match origin {
+	Authored(span) => span.start
+	Implied(offset) => offset
+	Cloned(info) => info.source.start
+}
+
+active_named : State, Str -> Try(U64, [Missing])
+active_named = |s, name| {
+	var $i = s.active.len()
+	while $i > 0 {
+		$i = $i - 1
+		match s.active.get($i) ?? Marker {
+			Marker => break
+			Entry(id) if name_at(s, id) == name => return Ok(id)
+			_ => {}
+		}
+	}
+	Err(Missing)
+}
+
+# Adoption agency algorithm, including the furthest-block reconstruction and
+# reparenting path
+# Eight outer iterations bound pathological formatting.
+adoption = |s, name, offset| {
+	var $s = s
+	var $outer = 0.U64
+	while $outer < 8 {
+		$outer = $outer + 1
+		$s = { ..$s, work: $s.work + $s.stack.len() + $s.active.len() + 1 }
+		if $s.work > $s.work_limit {
+			return $s
+		}
+		match active_named($s, name) {
+			Err(_) => return generic_end($s, name, offset)
+			Ok(formatting_id) => {
+				if !$s.stack.contains(formatting_id) {
+					return { ..problem($s, FormattingElementNotOpen, offset), active: $s.active.keep_if(|a| a != Entry(formatting_id)) }
+				}
+				if !s_in_scope_id($s, formatting_id) {
+					return problem($s, FormattingElementOutOfScope, offset)
+				}
+				if ($s.stack.last() ?? 0) != formatting_id {
+					$s = problem($s, MisnestedFormatting, offset)
+				}
+				at = stack_position($s, formatting_id) ?? 0
+				var $furthest = Err(Missing)
+				var $i = at + 1
+				while $i < $s.stack.len() {
+					id = $s.stack.get($i) ?? 0
+					if special_at($s, id) {
+						$furthest = Ok(id)
+						break
+					}
+					$i = $i + 1
+				}
+				match $furthest {
+					Err(_) => return { ..$s, stack: $s.stack.take_first(at), active: $s.active.keep_if(|a| a != Entry(formatting_id)) }
+					Ok(block) => {
+						common = if (at > 0) $s.stack.get(at - 1) ?? 0 else 0
+						var $bookmark = active_position($s, formatting_id) ?? 0
+						var $last = block
+						var $node_pos = stack_position($s, block) ?? 0
+						var $inner = 0.U64
+						while $node_pos > at + 1 {
+							$inner = $inner + 1
+							$s = { ..$s, work: $s.work + $s.nodes.len() + 1 }
+							if $s.work > $s.work_limit {
+								return $s
+							}
+							$node_pos = $node_pos - 1
+							node_id = $s.stack.get($node_pos) ?? 0
+							if $inner > 3 {
+								$s = { ..$s, active: $s.active.keep_if(|a| a != Entry(node_id)) }
+							}
+							match active_position($s, node_id) {
+								Err(_) => {
+									$s = { ..$s, stack: $s.stack.take_first($node_pos).concat($s.stack.drop_first($node_pos + 1)) }
+								}
+								Ok(active_at) => {
+									original = node_at($s, node_id)
+									new_id = $s.nodes.len()
+									$s = { ..$s, nodes: $s.nodes.append({ ..original, children: [], origin: Implied(offset) }), parents: $s.parents.append({ parent: Err(Missing), namespace: kind_namespace(original.kind) }), element_count: $s.element_count + 1, stack: $s.stack.set($node_pos, new_id) ?? $s.stack, active: $s.active.set(active_at, Entry(new_id)) ?? $s.active }
+									if $last == block {
+										$bookmark = active_at + 1
+									}
+									$s = reparent($s, $last, new_id)
+									$last = new_id
+								}
+							}
+						}
+						if match name_at($s, common) {
+							"table" | "tbody" | "tfoot" | "thead" | "tr" => True
+							_ => False
+						} {
+							moved = node_at($s, $last)
+							$s = detach($s, $last)
+							# append_node allocates a new index, so use a temporary
+							# append and transfer its computed insertion position.
+							old_count = $s.nodes.len()
+							old_elements = $s.element_count
+							original_stack = $s.stack
+							target_position = stack_position($s, common) ?? 0
+							temporary = append_node({ ..$s, foster: True, stack: original_stack.take_first(target_position + 1) }, moved)
+							$s = replace_child_id({ ..temporary, stack: original_stack, foster: False, nodes: temporary.nodes.take_first(old_count), element_count: old_elements }, old_count, $last)
+						} else {
+							$s = reparent($s, $last, common)
+						}
+						original = node_at($s, formatting_id)
+						new_formatting = $s.nodes.len()
+						block_node = node_at($s, block)
+						$s = { ..$s, nodes: $s.nodes.append({ ..original, children: block_node.children, origin: Implied(offset) }), element_count: $s.element_count + 1 }
+						parents = block_node.children.fold($s.parents.append({ parent: Ok(block), namespace: kind_namespace(original.kind) }), |entries, child| set_parent(entries, child, Ok(new_formatting)))
+						$s = { ..$s, parents, nodes: $s.nodes.set(block, { ..block_node, children: [new_formatting] }) ?? [] }
+						active = $s.active.keep_if(|a| a != Entry(formatting_id))
+						bookmark = if ($bookmark > active.len()) active.len() else $bookmark
+						$s = { ..$s, active: active.insert(bookmark, Entry(new_formatting)) ?? active.append(Entry(new_formatting)), stack: $s.stack.keep_if(|id| id != formatting_id) }
+						block_at = stack_position($s, block) ?? 0
+						$s = { ..$s, stack: $s.stack.insert(block_at + 1, new_formatting) ?? $s.stack.append(new_formatting) }
+					}
+				}
+			}
+		}
+	}
+	$s
+}
+
+active_position : State, U64 -> Try(U64, [Missing])
+active_position = |s, id| {
+	var $i = 0
+	while $i < s.active.len() {
+		if s.active.get($i) == Ok(Entry(id)) {
+			return Ok($i)
+		}
+		$i = $i + 1
+	}
+	Err(Missing)
+}
+
+detach = |s, id| {
+	previous_parent = find_parent(s, id)
+	removed = { ..s, parents: set_parent(s.parents, id, Err(Missing)) }
+	match previous_parent {
+		Ok(parent) => edit_node(removed, parent, |previous| { ..previous, children: previous.children.keep_if(|child| child != id) })
+		Err(_) => { ..removed, roots: removed.roots.keep_if(|child| child != id) }
+	}
+}
+
+reparent = |s, id, parent| {
+	detached = detach(s, id)
+	edit_node({ ..detached, parents: set_parent(detached.parents, id, Ok(parent)) }, parent, |previous| { ..previous, children: previous.children.append(id) })
+}
+
+replace_child_id = |s, old, new| {
+	parent = find_parent(s, old)
+	cleared = set_parent(s.parents, old, Err(Missing))
+	parents = match parent {
+		Ok(p) => set_parent(cleared, new, Ok(p))
+		_ => cleared
+	}
+	{ ..s, parents: parents.take_first(s.nodes.len()), roots: s.roots.map(|id| if (id == old) new else id), nodes: s.nodes.map(|n| { ..n, children: n.children.map(|id| if (id == old) new else id) }) }
+}
+
+table = |state, token| {
+	var $s = state
+	match token.kind {
+		Characters(t) if whitespace(t) => {
+			$s = insert_text($s, t, token.span)
+		}
+		Start(t) if t.name == "caption" => {
+			$s = clear_table_stack($s)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = { ..$s, active: $s.active.append(Marker), mode: InCaption }
+		}
+		Start(t) if t.name == "colgroup" => {
+			$s = clear_table_stack($s)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = { ..$s, mode: InColgroup }
+		}
+		Start(t) if t.name == "col" => {
+			$s = clear_table_stack($s)
+			$s = insert_element($s, "colgroup", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = { ..$s, mode: InColgroup }
+			$s = process($s, token, $s.context.scripting)
+		}
+		Start(t) if (
+			match t.name {
+				"tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
+			$s = clear_table_stack($s)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = { ..$s, mode: InTableBody }
+		}
+		Start(t) if (
+			match t.name {
+				"tr" | "td" | "th" => True
+				_ => False
+			}
+		) => {
+			$s = clear_table_stack($s)
+			$s = insert_element($s, "tbody", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = { ..$s, mode: InTableBody }
+			$s = process($s, token, $s.context.scripting)
+		}
+		Start(t) if t.name == "table" => {
+			$s = problem($s, NestedTable, token.span.start)
+			if in_scope($s, "table", TableScope) {
+				$s = reset_mode(close_to($s, "table"))
+				$s = process($s, token, $s.context.scripting)
+			}
+		}
+		End("table") => {
+			if in_scope($s, "table", TableScope) {
+				$s = reset_mode(close_to($s, "table"))
+			} else {
+				$s = problem($s, UnexpectedTableEnd, token.span.start)
+			}
+		}
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "tbody" | "td" | "tfoot" | "th" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
+			$s = problem($s, UnexpectedTableEndTag, token.span.start)
+		}
+		Start(t) if t.name == "input" and t.attributes.any(|a| a.name == "type" and Tok.lower(a.value) == "hidden") => {
+			$s = problem($s, HiddenInputInTable, token.span.start)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+		}
+		Start(t) if t.name == "form" => {
+			$s = problem($s, FormInTable, token.span.start)
+			if $s.form.is_err() {
+				id = $s.nodes.len()
+				$s = insert_tag($s, t, Markup.html_namespace, token.span, False)
+				$s = { ..$s, form: Ok(id) }
+			}
+		}
+		Start(t) if (
+			match t.name {
+				"style" | "script" | "template" => True
+				_ => False
+			}
+		) => {
+			$s = body($s, token)
+		}
+		Eof => {
+			$s = body($s, token)
+		}
+		_ => {
+			$s = problem($s, FosterParentedContent, token.span.start)
+			$s = body({ ..$s, foster: True }, token)
+			$s = { ..$s, foster: False }
+		}
+	}
+	$s
+}
+
+clear_table_stack = |s| {
+	var $s = s
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"table" | "template" | "html" => True
+			_ => False
+		}
+	) {
+		$s = pop_current($s)
+	}
+	$s
+}
+
+clear_section_stack = |s| {
+	var $s = s
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"tbody" | "tfoot" | "thead" | "template" | "html" => True
+			_ => False
+		}
+	) {
+		$s = pop_current($s)
+	}
+	$s
+}
+
+clear_row_stack = |s| {
+	var $s = s
+	while !$s.stack.is_empty() and !(
+		match current($s) {
+			"tr" | "template" | "html" => True
+			_ => False
+		}
+	) {
+		$s = pop_current($s)
+	}
+	$s
+}
+
+table_body = |state, token| {
+	var $s = state
+	match token.kind {
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) and !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
+		}
+		End("table") if !["tbody", "tfoot", "thead"].any(|n| in_scope($s, n, TableScope)) => {
+			$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
+		}
+
+		Start(t) if t.name == "tr" => {
+			$s = clear_section_stack($s)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = { ..$s, mode: InRow }
+		}
+		Start(t) if t.name == "td" or t.name == "th" => {
+			$s = problem($s, CellWithoutRow, token.span.start)
+			$s = clear_section_stack($s)
+			$s = insert_element($s, "tr", Markup.html_namespace, [], Implied(token.span.start), True)
+			$s = { ..$s, mode: InRow }
+			$s = process($s, token, $s.context.scripting)
+		}
+		End(n) if (
+			match n {
+				"tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
+			if in_scope($s, n, TableScope) {
+				$s = clear_section_stack($s)
+				$s = pop_mode($s, InTable)
+			} else {
+				$s = problem($s, UnexpectedTableSectionEnd, token.span.start)
+			}
+		}
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
+			$s = clear_section_stack($s)
+			if current($s) != "html" {
+				$s = pop_mode($s, InTable)
+				$s = process($s, token, $s.context.scripting)
+			}
+		}
+		End("table") => {
+			$s = clear_section_stack($s)
+			if current($s) != "html" {
+				$s = pop_mode($s, InTable)
+				$s = process($s, token, $s.context.scripting)
+			}
+		}
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "td" | "th" | "tr" => True
+				_ => False
+			}
+		) => {
+			$s = problem($s, UnexpectedTableSectionToken, token.span.start)
+		}
+		_ => {
+			$s = table($s, token)
+		}
+	}
+	$s
+}
+
+row = |state, token| {
+	var $s = state
+	match token.kind {
+		Start(t) if t.name == "td" or t.name == "th" => {
+			$s = clear_row_stack($s)
+			$s = insert_tag($s, t, Markup.html_namespace, token.span, True)
+			$s = { ..$s, active: $s.active.append(Marker), mode: InCell }
+		}
+		End("tr") => {
+			if in_scope($s, "tr", TableScope) {
+				$s = clear_row_stack($s)
+				$s = pop_mode($s, InTableBody)
+			} else {
+				$s = problem($s, UnexpectedRowEnd, token.span.start)
+			}
+		}
+		Start(t) if (
+			match t.name {
+				"caption" | "col" | "colgroup" | "tbody" | "tfoot" | "thead" | "tr" => True
+				_ => False
+			}
+		) => {
+			if in_scope($s, "tr", TableScope) {
+				$s = clear_row_stack($s)
+				$s = pop_mode($s, InTableBody)
+				$s = process($s, token, $s.context.scripting)
+			} else {
+				$s = problem($s, UnexpectedRowToken, token.span.start)
+			}
+		}
+		End(n) if (
+			match n {
+				"table" | "tbody" | "tfoot" | "thead" => True
+				_ => False
+			}
+		) => {
+			if in_scope($s, n, TableScope) {
+				$s = clear_row_stack($s)
+				$s = pop_mode($s, InTableBody)
+				$s = process($s, token, $s.context.scripting)
+			} else {
+				$s = problem($s, UnexpectedRowEnd, token.span.start)
+			}
+		}
+		End(n) if (
+			match n {
+				"body" | "caption" | "col" | "colgroup" | "html" | "td" | "th" => True
+				_ => False
+			}
+		) => {
+			$s = problem($s, UnexpectedRowToken, token.span.start)
+		}
+		_ => {
+			$s = table($s, token)
+		}
+	}
+	$s
+}
+
+close_cell = |s| {
+	name = if (in_scope(s, "td", TableScope)) "td" else "th"
+	next = clear_active(close_to(implied(s, ""), name))
+	{ ..next, mode: InRow }
+}
+
+foreign_token = |s, token| {
+	namespace = adjusted_namespace_class(s)
+	if namespace == HtmlNamespace {
+		return False
+	}
+	match token.kind {
+		Eof => return False
+		_ => {}
+	}
+	name = adjusted_name(s)
+	if namespace == MathNamespace and HtmlContextRules.math_text_integration(name) {
+		match token.kind {
+			Characters(_) => return False
+			Start(t) if t.name != "mglyph" and t.name != "malignmark" => return False
+			_ => {}
+		}
+	}
+	if namespace == MathNamespace and name == "annotation-xml" {
+		match token.kind {
+			Start(t) if t.name == "svg" => return False
+			_ => {}
+		}
+	}
+	if integration(s) {
+		match token.kind {
+			Characters(_) | Start(_) => return False
+			_ => {}
+		}
+	}
+	True
+}
+
+integration = |s| {
+	ns = adjusted_namespace_class(s)
+	name = adjusted_name(s)
+	if ns == SvgNamespace and HtmlContextRules.svg_integration(name) {
+		return True
+	}
+	if ns == MathNamespace and name == "annotation-xml" {
+		n = node_at(s, s.stack.last() ?? 0)
+		return n.attributes.any(
+			|a| a.name.local == "encoding" and (
+				match Tok.lower(a.value) {
+					"text/html" | "application/xhtml+xml" => True
+					_ => False
+				}
+			),
+		)
+	}
+	False
+}
+
+foreign_process = |state, token| {
+	var $s = state
+	match token.kind {
+		Characters(t) => {
+			if !whitespace(Str.join_with(t.split_on("\u(0)"), "")) {
+				$s = { ..$s, frameset_ok: False }
+			}
+			$s = insert_text($s, Str.join_with(t.split_on("\u(0)"), "\u(FFFD)"), token.span)
+		}
+		ProcessingInstruction(pi) => {
+			$s = append_node($s, { kind: ProcessingInstruction(pi), attributes: [], children: [], origin: Authored(token.span) })
+		}
+		Comment(t) => {
+			$s = append_node($s, { kind: Comment(t), attributes: [], children: [], origin: Authored(token.span) })
+		}
+		Start(t) => {
+			breakout = HtmlContextRules.foreign_breakout(t.name, t.attributes.any(|attribute| ["color", "face", "size"].contains(attribute.name)))
+			if breakout {
+				$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
+				while !$s.stack.is_empty() and namespace_class_at($s, $s.stack.last() ?? 0) != HtmlNamespace and !integration($s) {
+					$s = pop_current($s)
+				}
+				$s = process_html($s, token, $s.context.scripting)
+			} else {
+				$s = insert_tag($s, t, adjusted_namespace($s), token.span, !t.self_closing)
+			}
+		}
+		End(n) if n == "p" or n == "br" => {
+			$s = problem($s, HtmlStartTagInForeignContent, token.span.start)
+			while !$s.stack.is_empty() and namespace_class_at($s, $s.stack.last() ?? 0) != HtmlNamespace and !integration($s) {
+				$s = pop_current($s)
+			}
+			$s = process_html($s, token, $s.context.scripting)
+		}
+		End(n) => {
+			if Tok.lower(adjusted_name($s)) != n {
+				$s = problem($s, UnexpectedForeignEndTag, token.span.start)
+			}
+			match foreign_end_target($s, n) {
+				ForeignTarget(target) => {
+					$s = close_from($s, target.position)
+				}
+				HtmlTarget => {
+					$s = process_html($s, token, $s.context.scripting)
+				}
+				MissingTarget => {
+					$s = problem($s, UnexpectedForeignEndTag, token.span.start)
+				}
+			}
+		}
+		Doctype(_) => {
+			$s = problem($s, DoctypeInForeignContent, token.span.start)
+		}
+		Eof => {}
+	}
+	$s
+}
+
+# The same foreign end-tag target controls tree mutation and spelling evidence.
+foreign_end_target = |s, name| {
+	var $index = s.stack.len()
+	while $index > 0 {
+		$index = $index - 1
+		id = s.stack.get($index) ?? 0
+		if namespace_class_at(s, id) == HtmlNamespace {
+			return HtmlTarget
+		}
+		if Tok.lower(name_at(s, id)) == name {
+			return ForeignTarget({ id, position: $index })
+		}
+	}
+	MissingTarget
+}
+
+SpellingFailure : { authored : Str, expected : Str, span : Markup.Span }
+
+foreign_end_spelling : State, Tok.Token -> Try(Str, [None])
+foreign_end_spelling = |state, token| {
+	match token.kind {
+		End(name) if name != "p" and name != "br" and foreign_token(state, token) => {
+			match foreign_end_target(state, name) {
+				ForeignTarget(target) if namespace_class_at(state, target.id) == SvgNamespace or namespace_class_at(state, target.id) == MathNamespace => Ok(name_at(state, target.id))
+				_ => Err(None)
+			}
+		}
+		_ => Err(None)
+	}
+}
+
+spelling_for_token : State, U64, Tok.Token, List(Tok.NameEvent), List(U8), Try(Str, [None]) -> Try(SpellingFailure, [None])
+spelling_for_token = |state, previous_nodes, token, names, bytes, expected_end| {
+	match token.kind {
+		Start(_) => {
+			var $id = previous_nodes
+			while $id < state.nodes.len() {
+				node = node_at(state, $id)
+				match (node.kind, node.origin) {
+					(Element(name), Authored(span)) if span.start == token.span.start and (namespace_class_at(state, $id) == SvgNamespace or namespace_class_at(state, $id) == MathNamespace) => {
+						namespace = match name.namespace {
+							Uri(uri) => uri
+							NoNamespace => ""
+						}
+						return check_spelling_names(names, bytes, name.local, namespace)
+					}
+					_ => {}
+				}
+				$id = $id + 1
+			}
+			Err(None)
+		}
+		End(_) => match expected_end {
+			Ok(expected) => {
+				for event in names {
+					if event.kind == EndName {
+						return check_spelling_name(bytes, event.span, expected)
+					}
+				}
+				Err(None)
+			}
+			Err(None) => Err(None)
+		}
+		_ => Err(None)
+	}
+}
+
+check_spelling_names : List(Tok.NameEvent), List(U8), Str, Str -> Try(SpellingFailure, [None])
+check_spelling_names = |names, bytes, element, namespace| {
+	for event in names {
+		expected = match event.kind {
+			StartName => element
+			AttributeName => {
+				name = attribute_name(event.normalized, namespace)
+				match name.prefix {
+					Prefix(prefix) => "${prefix}:${name.local}"
+					Unprefixed => name.local
+				}
+			}
+			EndName => element
+		}
+		result = check_spelling_name(bytes, event.span, expected)
+		if result.is_ok() {
+			return result
+		}
+	}
+	Err(None)
+}
+
+check_spelling_name : List(U8), Markup.Span, Str -> Try(SpellingFailure, [None])
+check_spelling_name = |bytes, span, expected| {
+	authored = Str.from_utf8_lossy(bytes.sublist({ start: span.start, len: span.end - span.start }))
+	if authored == expected {
+		Err(None)
+	} else Ok({ authored, expected, span })
+}
+
+attribute_name = |raw, namespace| {
+	if namespace != Markup.html_namespace {
+		if raw == "xmlns" {
+			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: "xmlns", prefix: Unprefixed }
+		}
+		if raw == "xmlns:xlink" {
+			return { namespace: Uri("http://www.w3.org/2000/xmlns/"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xmlns") }
+		}
+		if match raw {
+			"xlink:actuate" | "xlink:arcrole" | "xlink:href" | "xlink:role" | "xlink:show" | "xlink:title" | "xlink:type" => True
+			_ => False
+		} {
+			return { namespace: Uri("http://www.w3.org/1999/xlink"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(6)), prefix: Prefix("xlink") }
+		}
+		if match raw {
+			"xml:lang" | "xml:space" => True
+			_ => False
+		} {
+			return { namespace: Uri("http://www.w3.org/XML/1998/namespace"), local: Str.from_utf8_lossy(raw.to_utf8().drop_first(4)), prefix: Prefix("xml") }
+		}
+	}
+	local = if (namespace == Markup.svg_namespace) adjust_svg_attribute(raw) else if (namespace == Markup.mathml_namespace and raw == "definitionurl") "definitionURL" else raw
+	{ namespace: NoNamespace, local, prefix: Unprefixed }
+}
+
+adjust_tag = |raw, namespace| if (namespace == Markup.svg_namespace) adjusted(raw, svg_tags) else raw
+
+adjust_svg_attribute = |raw| adjusted(raw, svg_attributes)
+
+adjusted : Str, List((Str, Str)) -> Str
+adjusted = |raw, pairs| {
+	for pair in pairs {
+		if pair.0 == raw {
+			return pair.1
+		}
+	}
+	raw
+}
+
+svg_tags = [("altglyph", "altGlyph"), ("altglyphdef", "altGlyphDef"), ("altglyphitem", "altGlyphItem"), ("animatecolor", "animateColor"), ("animatemotion", "animateMotion"), ("animatetransform", "animateTransform"), ("clippath", "clipPath"), ("feblend", "feBlend"), ("fecolormatrix", "feColorMatrix"), ("fecomponenttransfer", "feComponentTransfer"), ("fecomposite", "feComposite"), ("feconvolvematrix", "feConvolveMatrix"), ("fediffuselighting", "feDiffuseLighting"), ("fedisplacementmap", "feDisplacementMap"), ("fedistantlight", "feDistantLight"), ("fedropshadow", "feDropShadow"), ("feflood", "feFlood"), ("fefunca", "feFuncA"), ("fefuncb", "feFuncB"), ("fefuncg", "feFuncG"), ("fefuncr", "feFuncR"), ("fegaussianblur", "feGaussianBlur"), ("feimage", "feImage"), ("femerge", "feMerge"), ("femergenode", "feMergeNode"), ("femorphology", "feMorphology"), ("feoffset", "feOffset"), ("fepointlight", "fePointLight"), ("fespecularlighting", "feSpecularLighting"), ("fespotlight", "feSpotLight"), ("fetile", "feTile"), ("feturbulence", "feTurbulence"), ("foreignobject", "foreignObject"), ("glyphref", "glyphRef"), ("lineargradient", "linearGradient"), ("radialgradient", "radialGradient"), ("textpath", "textPath")]
+
+svg_attributes = [("attributename", "attributeName"), ("attributetype", "attributeType"), ("basefrequency", "baseFrequency"), ("baseprofile", "baseProfile"), ("calcmode", "calcMode"), ("clippathunits", "clipPathUnits"), ("diffuseconstant", "diffuseConstant"), ("edgemode", "edgeMode"), ("filterunits", "filterUnits"), ("glyphref", "glyphRef"), ("gradienttransform", "gradientTransform"), ("gradientunits", "gradientUnits"), ("kernelmatrix", "kernelMatrix"), ("kernelunitlength", "kernelUnitLength"), ("keypoints", "keyPoints"), ("keysplines", "keySplines"), ("keytimes", "keyTimes"), ("lengthadjust", "lengthAdjust"), ("limitingconeangle", "limitingConeAngle"), ("markerheight", "markerHeight"), ("markerunits", "markerUnits"), ("markerwidth", "markerWidth"), ("maskcontentunits", "maskContentUnits"), ("maskunits", "maskUnits"), ("numoctaves", "numOctaves"), ("pathlength", "pathLength"), ("patterncontentunits", "patternContentUnits"), ("patterntransform", "patternTransform"), ("patternunits", "patternUnits"), ("pointsatx", "pointsAtX"), ("pointsaty", "pointsAtY"), ("pointsatz", "pointsAtZ"), ("preservealpha", "preserveAlpha"), ("preserveaspectratio", "preserveAspectRatio"), ("primitiveunits", "primitiveUnits"), ("refx", "refX"), ("refy", "refY"), ("repeatcount", "repeatCount"), ("repeatdur", "repeatDur"), ("requiredextensions", "requiredExtensions"), ("requiredfeatures", "requiredFeatures"), ("specularconstant", "specularConstant"), ("specularexponent", "specularExponent"), ("spreadmethod", "spreadMethod"), ("startoffset", "startOffset"), ("stddeviation", "stdDeviation"), ("stitchtiles", "stitchTiles"), ("surfacescale", "surfaceScale"), ("systemlanguage", "systemLanguage"), ("tablevalues", "tableValues"), ("targetx", "targetX"), ("targety", "targetY"), ("textlength", "textLength"), ("viewbox", "viewBox"), ("viewtarget", "viewTarget"), ("xchannelselector", "xChannelSelector"), ("ychannelselector", "yChannelSelector"), ("zoomandpan", "zoomAndPan")]
+
+whitespace = HtmlContextRules.html_whitespace
+
+# In-body insertion ignores col/frame; image is a source alias for img.
+void = |name| name == "image" or (name != "col" and name != "frame" and MarkupVocabulary.html_void(name))
+
+formatting = HtmlContextRules.formatting
+
+special = HtmlContextRules.html_special
+
+expect {
+	parsed = HtmlTree.parse("<!doctype html><p>a<div>b</div>", False, {}, {})?
+	names(parsed.tree) == ["html", "head", "body", "p", "div"] and texts(parsed.tree) == ["a", "b"]
+}
+expect {
+	parsed = HtmlTree.parse("<ul><li>a<li>b</ul>", True, {}, {})?
+	names(parsed.tree) == ["html", "ul", "li", "li"] and parsed.diagnostics.is_empty()
+}
+expect {
+	parsed = HtmlTree.parse("<table><tr><td>a<td>b</table>", True, {}, {})?
+	names(parsed.tree) == ["html", "table", "tbody", "tr", "td", "td"]
+}
+expect {
+	parsed = HtmlTree.parse("<table>outside<tr><td>cell</td></tr></table>", True, {}, { recovery: Browser })?
+	root_names = parsed.tree.roots.map(
+		|i| match (parsed.tree.nodes.get(i) ?? empty_node).kind {
+			Element(n) => n.local
+			Text(t) => t
+			_ => "?"
+		},
+	)
+	root_names == ["outside", "table"] and !parsed.diagnostics.is_empty()
+}
+expect {
+	parsed = HtmlTree.parse("<svg viewbox='0 0 10 10'><lineargradient/><foreignObject><div>x</div></foreignObject></svg><math><mtext><b>y</b></mtext></math>", True, {}, {})?
+	named = parsed.tree.nodes.keep_if(
+		|n| match n.kind {
+			Element(_) => True
+			_ => False
+		},
+	).map(
+		|n| match n.kind {
+			Element(name) => (name.local, name.namespace)
+			_ => ("", NoNamespace)
+		},
+	)
+	named.contains(("linearGradient", Uri(Markup.svg_namespace))) and named.contains(("div", Uri(Markup.html_namespace))) and named.contains(("b", Uri(Markup.html_namespace)))
+}
+expect {
+	parsed = HtmlTree.parse("<textarea>\n&lt;b&gt;</textarea><script>if (a < b) x='&amp;'</script>", True, {}, {})?
+	texts(parsed.tree) == ["<b>", "if (a < b) x='&amp;'"]
+}
+expect {
+	parsed = HtmlTree.parse("<b><i>x</b>y</i>", True, {}, { recovery: Browser })?
+	names(parsed.tree) == ["html", "b", "i", "i"] and texts(parsed.tree) == ["x", "y"] and !parsed.diagnostics.is_empty()
+}
+expect {
+	parsed = HtmlTree.parse("<template><table><tr><td>x</td></tr></table></template>", True, {}, {})?
+	names(parsed.tree) == ["html", "template", "table", "tbody", "tr", "td"]
+}
+expect HtmlTree.parse("<div/>", True, {}, {}).is_err()
+expect HtmlTree.parse("<div><span>x</span></div>", True, {}, { max_depth: 1 }).is_err()
+expect HtmlTree.parse("abc", True, {}, { max_source_bytes: 2 }).is_err()
+
+names = |tree| tree.nodes.keep_if(
+	|n| match n.kind {
+		Element(_) => True
+		_ => False
+	},
+).map(
+	|n| match n.kind {
+		Element(name) => name.local
+		_ => ""
+	},
+)
+
+texts = |tree| tree.nodes.keep_if(
+	|n| match n.kind {
+		Text(_) => True
+		_ => False
+	},
+).map(
+	|n| match n.kind {
+		Text(text) => text
+		_ => ""
+	},
+)
+
+expect HtmlTree.parse("<span/>x", True, {}, { max_diagnostics: 0 }).is_err()
+expect HtmlTree.parse("<div>\n<span>x</span></div>", True, {}, { max_depth: 1 }).map_err(|InvalidMarkup(e)| (e.line, e.column)) == Err((2, 1))
+expect {
+	p = HtmlTree.parse("a\u(0)b", True, {}, { recovery: Browser })?
+	texts(p.tree) == ["ab"] and !p.diagnostics.is_empty()
+}
+expect {
+	p = HtmlTree.parse("<svg>a\u(0)b</svg>", True, {}, { recovery: Browser })?
+	texts(p.tree) == ["a\u(FFFD)b"]
+}
+expect HtmlTree.parse("<!--x--><!--y-->", True, {}, { max_nodes: 2 }).is_err()
+
+work_limit : U64, U64 -> U64
+work_limit = |per_byte, size| {
+	maximum = 0xFFFFFFFFFFFFFFFF.U64
+	if (per_byte > (maximum - 4096) // (size + 1)) maximum else 4096 + per_byte * (size + 1)
+}
+expect HtmlTree.parse("<p>x</p>", True, {}, { max_work_per_byte: 0xFFFFFFFFFFFFFFFF }).is_ok()
+expect HtmlTree.parse("<b><div>x</b>y", True, {}, { recovery: Browser, max_elements: 2 }) == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 10 }))
+
+expect {
+	source = "<b><i><div>x</b>y"
+	limited = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 4 })
+	parsed = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 5 })?
+	elements = parsed.tree.nodes.fold(
+		0.U64,
+		|sum, node| sum + match node.kind {
+			Element(_) => 1
+			_ => 0
+		},
+	) - 1
+	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 13 })) and elements == 5
+}
+
+expect {
+	source = "<table><b><div>x</b>y"
+	limited = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 3 })
+	parsed = HtmlTree.parse(source, True, {}, { recovery: Browser, max_elements: 4 })?
+	elements = parsed.tree.nodes.fold(
+		0.U64,
+		|sum, node| sum + match node.kind {
+			Element(_) => 1
+			_ => 0
+		},
+	) - 1
+	limited == Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 1, column: 17 })) and elements == 4
+}
+
+expect {
+	# Charging the dispatcher step can exhaust work before body construction.
+	# Neither route may insert the start tag after crossing that boundary.
+	state : State
+	state = { nodes: [], roots: [], parents: [], stack: [], active: [], modes: [], mode: InBody, head: Err(Missing), form: Err(Missing), fragment: True, context: {}, context_class: HtmlNamespace, diagnostics: [], max_diagnostics: 1024, foster: False, frameset_ok: True, skip_lf: False, work: 0, work_limit: 1, element_count: 0, diagnostics_exceeded: False, quirks: False, token_span: { start: 0, end: 3 }, token_end_name: "", token_no_nulls: False, plaintext: False, pending_text: [], clones: [] }
+	token = { kind: Start({ name: "p", attributes: [], self_closing: False }), span: { start: 0, end: 3 } }
+	direct = process_html(state, token, True)
+	general = process_html_general(state, token, True)
+	tokens = [token, { ..token, kind: Characters(" x ") }, { ..token, kind: End("p") }, { ..token, kind: End("template") }, { ..token, kind: Comment("x") }, { ..token, kind: Eof }]
+	snapshot = |s| { nodes: s.nodes, roots: s.roots, parents: s.parents, stack: s.stack, active: s.active, modes: s.modes, mode: s.mode, head: s.head, form: s.form, diagnostics: s.diagnostics, max_diagnostics: s.max_diagnostics, foster: s.foster, frameset_ok: s.frameset_ok, skip_lf: s.skip_lf, work: s.work, work_limit: s.work_limit, element_count: s.element_count, diagnostics_exceeded: s.diagnostics_exceeded, quirks: s.quirks, token_span: s.token_span, token_end_name: s.token_end_name, token_no_nulls: s.token_no_nulls, plaintext: s.plaintext, pending_text: s.pending_text, clones: s.clones }
+	mode_parity = [0, 1, 2, 3, 4, 5].all(|limit| tokens.all(|item| snapshot(process_with_mode({ ..state, work_limit: limit }, item, DataMixed, True)) == snapshot(process({ ..state, work_limit: limit }, item, True))))
+	mode_parity and (direct.work, direct.nodes.len(), direct.element_count) == (general.work, general.nodes.len(), general.element_count) and direct.work == 2 and direct.nodes.is_empty() and direct.element_count == 0
+}
+expect {
+	p = HtmlTree.parse("<table><div>x</div><tr><td>y</table>", True, {}, { recovery: Browser })?
+	div = p.tree.nodes.get(p.tree.roots.first()?)?
+	div.children.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "x"
+}
+
+expect {
+	p = HtmlTree.parse("<g></path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser })?
+	Markup.text(p.tree, p.tree.roots.first()?) == "X"
+}
+expect HtmlTree.parse("</path>X", True, { namespace: Markup.svg_namespace, name: "path" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</foreignObject>X", True, { namespace: Markup.svg_namespace, name: "foreignObject" }, { recovery: Browser }).is_ok()
+expect HtmlTree.parse("</math>X", True, { namespace: Markup.mathml_namespace, name: "math" }, { recovery: Browser }).is_ok()
+
+append_misc : State, Markup.Node -> State
+append_misc = |s, node| {
+	stack = s.stack
+	if s.mode == AfterBody {
+		n = append_node({ ..s, stack: s.stack.take_first(1) }, node)
+		{ ..n, stack }
+	} else if s.mode == AfterAfterBody or s.mode == AfterAfterFrameset {
+		n = append_node({ ..s, stack: [] }, node)
+		{ ..n, stack }
+	} else {
+		append_node(s, node)
+	}
+}
+expect {
+	p = HtmlTree.parse("<head><noscript><!--foo--></noscript></head>", False, { scripting: False }, { recovery: Browser })?
+	head = p.tree.nodes.get(1)?
+	head.children.len() == 1
+}
+expect {
+	p = HtmlTree.parse("<!doctype html><html></p><!--foo-->", False, {}, { recovery: Browser })?
+	names(p.tree) == ["html", "head", "body"]
+}
+expect {
+	p = HtmlTree.parse("<!doctype html><div></body><!--foo-->", False, {}, { recovery: Browser })?
+	html = p.tree.nodes.get(1)?
+	html.children.len() == 3
+}
+
+expect {
+	p = HtmlTree.parse("<!doctype html><?a first?><html><body><?b second></body><?c third?></html><?d?>", False, {}, {})?
+	pis = p.tree.nodes.keep_oks(
+		|n| match n.kind {
+			ProcessingInstruction(pi) => Ok(pi.target)
+			_ => Err(Skip)
+		},
+	)
+	pis == ["a", "b", "c", "d"]
+}
+
+special_at = |s, id| HtmlContextRules.special(namespace_class_at(s, id), name_at(s, id))
+
+expect {
+	p = HtmlTree.parse("<select><div><i></div><option>option", True, {}, { recovery: Browser })?
+	names(p.tree).contains("div") and names(p.tree).contains("i")
+}
+expect {
+	p = HtmlTree.parse("<p><math><mi><p><h1>", True, {}, { recovery: Browser })?
+	outer = p.tree.nodes.get(p.tree.roots.first()?)?
+	outer.children.len() == 1 and p.tree.roots.len() == 1
+}
+
+expect {
+	p = HtmlTree.parse("<p><table>", False, {}, { recovery: Browser })?
+	root = p.tree.nodes.get(3)?
+	root.children.len() == 1
+}
+expect {
+	p = HtmlTree.parse("<svg></p><foo>", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 3
+}
+
+expect {
+	p = HtmlTree.parse("<table><script>foo</script><tr><td>x</table>", True, {}, {})?
+	texts(p.tree) == ["foo", "x"] and p.tree.roots.len() == 1
+}
+expect HtmlTree.parse("<script/>", True, {}, {}).is_err()
+expect HtmlTree.parse("<table><script>foo", True, {}, { recovery: Browser }).is_ok()
+
+doctype_quirks = |d| {
+	public_id = Tok.lower(d.public_id)
+	system_id = Tok.lower(d.system_id)
+	d.quirks or d.name != "html" or (
+		match public_id {
+			"-//w3o//dtd w3 html strict 3.0//en//" | "-/w3c/dtd html 4.0 transitional/en" | "html" => True
+			_ => False
+		}
+	) or system_id == "http://www.ibm.com/data/dtd/v11/ibmxhtml1-transitional.dtd" or quirks_public_prefixes.any(|prefix| public_id.starts_with(prefix)) or (d.system_id == "" and ["-//w3c//dtd html 4.01 frameset//", "-//w3c//dtd html 4.01 transitional//"].any(|prefix| public_id.starts_with(prefix)))
+}
+
+quirks_public_prefixes = ["+//silmaril//dtd html pro v0r11 19970101//", "-//as//dtd html 3.0 aswedit + extensions//", "-//advasoft ltd//dtd html 3.0 aswedit + extensions//", "-//ietf//dtd html 2.0 level 1//", "-//ietf//dtd html 2.0 level 2//", "-//ietf//dtd html 2.0 strict level 1//", "-//ietf//dtd html 2.0 strict level 2//", "-//ietf//dtd html 2.0 strict//", "-//ietf//dtd html 2.0//", "-//ietf//dtd html 2.1e//", "-//ietf//dtd html 3.0//", "-//ietf//dtd html 3.2 final//", "-//ietf//dtd html 3.2//", "-//ietf//dtd html 3//", "-//ietf//dtd html level 0//", "-//ietf//dtd html level 1//", "-//ietf//dtd html level 2//", "-//ietf//dtd html level 3//", "-//ietf//dtd html strict level 0//", "-//ietf//dtd html strict level 1//", "-//ietf//dtd html strict level 2//", "-//ietf//dtd html strict level 3//", "-//ietf//dtd html strict//", "-//ietf//dtd html//", "-//metrius//dtd metrius presentational//", "-//microsoft//dtd internet explorer 2.0 html strict//", "-//microsoft//dtd internet explorer 2.0 html//", "-//microsoft//dtd internet explorer 2.0 tables//", "-//microsoft//dtd internet explorer 3.0 html strict//", "-//microsoft//dtd internet explorer 3.0 html//", "-//microsoft//dtd internet explorer 3.0 tables//", "-//netscape comm. corp.//dtd html//", "-//netscape comm. corp.//dtd strict html//", "-//o'reilly and associates//dtd html 2.0//", "-//o'reilly and associates//dtd html extended 1.0//", "-//o'reilly and associates//dtd html extended relaxed 1.0//", "-//sq//dtd html 2.0 hotmetal + extensions//", "-//softquad software//dtd hotmetal pro 6.0::19990601::extensions to html 4.0//", "-//softquad//dtd hotmetal pro 4.0::19971010::extensions to html 4.0//", "-//spyglass//dtd html 2.0 extended//", "-//sun microsystems corp.//dtd hotjava html//", "-//sun microsystems corp.//dtd hotjava strict html//", "-//w3c//dtd html 3 1995-03-24//", "-//w3c//dtd html 3.2 draft//", "-//w3c//dtd html 3.2 final//", "-//w3c//dtd html 3.2//", "-//w3c//dtd html 3.2s draft//", "-//w3c//dtd html 4.0 frameset//", "-//w3c//dtd html 4.0 transitional//", "-//w3c//dtd html experimental 19960712//", "-//w3c//dtd html experimental 970421//", "-//w3c//dtd w3 html//", "-//w3o//dtd w3 html 3.0//", "-//webtechs//dtd mozilla html 2.0//", "-//webtechs//dtd mozilla html//"]
+
+expect {
+	p = HtmlTree.parse("<table><template><tr><div>x</div></tr></template></table>", True, {}, { recovery: Browser })?
+	table_node = p.tree.nodes.get(p.tree.roots.first()?)?
+	template = p.tree.nodes.get(table_node.children.first()?)?
+	template.children.len() == 2
+}
+expect {
+	p = HtmlTree.parse("<body><template><tr></tr><tbody><tr></tr></template>", False, {}, { recovery: Browser })?
+	names(p.tree).contains("template")
+}
+
+expect {
+	p = HtmlTree.parse("<table><a>1<p>2</a>3</p>", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 3 and Markup.text(p.tree, p.tree.roots.get(1)?) == "23"
+}
+
+expect {
+	p = HtmlTree.parse("<div><span>x</span></div>", True, {}, {})?
+	div = p.tree.nodes.get(p.tree.roots.first()?)?
+	span = p.tree.nodes.get(div.children.first()?)?
+	div.origin == Authored({ start: 0, end: 25 }) and span.origin == Authored({ start: 5, end: 19 })
+}
+expect {
+	p = HtmlTree.parse("<p>a<div>b</div>", True, {}, {})?
+	pnode = p.tree.nodes.get(p.tree.roots.first()?)?
+	pnode.origin == Authored({ start: 0, end: 4 })
+}
+expect HtmlTree.parse("<p>\u(B)</p>", True, {}, {}).is_err()
+expect HtmlTree.parse("<p>\u(FDD0)</p>", True, {}, {}).is_err()
+
+skipped_lf_end : List(U8), Markup.Span -> U64
+skipped_lf_end = |bytes, span| {
+	first = bytes.get(span.start) ?? 0
+	if first == '\r' {
+		span.start + if (bytes.get(span.start + 1) == Ok('\n')) 2 else 1
+	}
+	else if first == '&' {
+		var $end = span.start + 1
+		while $end < span.end and bytes.get($end) != Ok(';') {
+			$end = $end + 1
+		}
+		if ($end < span.end) $end + 1 else $end
+	} else {
+		span.start + 1
+	}
+}
+expect {
+	p = HtmlTree.parse("<textarea>\r\nAB</textarea>", True, {}, {})?
+	root = p.tree.nodes.get(p.tree.roots.first()?)?
+	text = p.tree.nodes.get(root.children.first()?)?
+	text.origin == Authored({ start: 12, end: 14 })
+}
+expect {
+	p = HtmlTree.parse("<textarea>&#10;AB</textarea>", True, {}, {})?
+	root = p.tree.nodes.get(p.tree.roots.first()?)?
+	text = p.tree.nodes.get(root.children.first()?)?
+	text.origin == Authored({ start: 15, end: 17 })
+}
+
+expect HtmlTree.parse("<p>x</p>", True, {}, { max_diagnostics: 0 }).is_ok()
+
+parsing_template = |s| last_named(s, "template").is_ok() or (s.fragment and s.context.name == "template" and s.context.namespace == Markup.html_namespace)
+
+flush_table_text : State -> State
+flush_table_text = |s| {
+	if s.pending_text.is_empty() {
+		return s
+	}
+	pending = s.pending_text
+	nonwhite = pending.any(|part| !whitespace(Str.join_with(part.text.split_on("\u(0)"), "")))
+	var $next = { ..s, pending_text: [] }
+	if nonwhite {
+		first = pending.first() ?? { text: "", span: { start: 0, end: 0 } }
+		$next = problem($next, FosterParentedContent, first.span.start)
+		for part in pending {
+			$next = body({ ..$next, foster: True }, { kind: Characters(part.text), span: part.span })
+		}
+		{ ..$next, foster: False }
+	} else {
+		for part in pending {
+			$next = insert_text($next, Str.join_with(part.text.split_on("\u(0)"), ""), part.span)
+		}
+		$next
+	}
+}
+expect {
+	p = HtmlTree.parse("<table> x </table>", True, {}, { recovery: Browser })?
+	Markup.text(p.tree, p.tree.roots.first()?) == " x "
+}
+expect {
+	p = HtmlTree.parse("<html a=b><template><col></col><html b=c><col></col></template>", False, {}, { recovery: Browser })?
+	p.tree.roots.len() == 1 and names(p.tree).contains("body")
+}
+expect {
+	p = HtmlTree.parse("<form><form>", True, { name: "template" }, { recovery: Browser })?
+	names(p.tree) == ["html", "form", "form"]
+}
+
+source_token : Tok.Token, List(U8) -> Try(Markup.Token, [Empty])
+source_token = |token, bytes| {
+	if token.span.end == token.span.start {
+		return Err(Empty)
+	}
+	kind = match token.kind {
+		Start(_) | End(_) => Tag
+		Characters(_) => if (bytes.get(token.span.start) == Ok('<') and Tok.starts(bytes, token.span.start, "<![CDATA[")) CData else Text
+		Comment(_) => Comment
+		Doctype(_) => Declaration
+		ProcessingInstruction(_) => ProcessingInstruction
+		Eof => Invalid
+	}
+	Ok({ kind, span: token.span })
+}
+expect {
+	p = HtmlTree.parse("<script>if(a<b)x()</script><p>text</p>", True, {}, {})?
+	p.source.tokens.map(|t| t.kind) == [Tag, Text, Tag, Tag, Text, Tag] and p.source.tokens.fold([], |out, t| out.concat(p.source.slice(t.span))) == p.source.bytes
+}
+
+expect HtmlTree.parse("<div>x</div>", True, {}, { max_depth: 1, max_elements: 1 }).is_ok()
+expect HtmlTree.parse("", True, {}, { max_depth: 0, max_elements: 0 }).is_ok()
+expect HtmlTree.parse("<div/>", True, {}, { recovery: Browser, max_depth: 0 }).is_err()
+expect {
+	p = HtmlTree.parse("<head></head><template>Foo</template>", False, {}, { recovery: Browser })?
+	names(p.tree) == ["html", "head", "template", "body"]
+}
+expect {
+	p = HtmlTree.parse("<div><svg><path><foreignObject><math></div>a", True, {}, { recovery: Browser })?
+	p.tree.roots.len() == 1 and Markup.text(p.tree, p.tree.roots.first()?) == "a"
+}
+
+# The standard selectedcontent element reflects the selected option's subtree.
+# Cloned origins retain physical source provenance for template slot fan-out.
+project_selectedcontent : State, Markup.Props -> Try(State, [InvalidMarkup(Markup.Error)])
+project_selectedcontent = |state, props| {
+	var $s = state
+	original_count = state.nodes.len()
+	var $index = 0
+	while $index < original_count {
+		if namespace_class_at($s, $index) == HtmlNamespace and name_at($s, $index) == "select" {
+			select_node = node_at($s, $index)
+			if !select_node.attributes.any(|a| a.name.local == "multiple") {
+				destinations = selectedcontent_targets($s, $index)
+				if !destinations.is_empty() {
+					options = select_options($s, $index)
+					var $selected = Err(Missing)
+					for option in options {
+						n = node_at($s, option)
+						if n.attributes.any(|a| a.name.local == "selected") {
+							$selected = Ok(option)
+						}
+					}
+					size = select_node.attributes.find_first(|a| a.name.local == "size").map_ok(|a| select_size_class(a.value)) ?? 0
+					if (
+						match $selected {
+							Err(_) => True
+							Ok(_) => False
+						}
+					) and size <= 1 {
+						for option in options {
+							if !option_disabled($s, option) {
+								$selected = Ok(option)
+								break
+							}
+						}
+					}
+					source_children = match $selected {
+						Ok(option) => (node_at($s, option)).children
+						Err(_) => []
+					}
+					for target in destinations {
+						old_children = (node_at($s, target)).children
+						parents = old_children.fold($s.parents, |entries, id| set_parent(entries, id, Err(Missing)))
+						$s = edit_node({ ..$s, parents }, target, |n| { ..n, children: [] })
+						insertion_at = origin_offset((node_at($s, target)).origin)
+						var $pending = []
+						var $child = source_children.len()
+						while $child > 0 {
+							$child = $child - 1
+							$pending = $pending.append({ source: source_children.get($child) ?? 0, parent: target, depth: node_depth($s, target) + 1 })
+						}
+						while !$pending.is_empty() {
+							item = $pending.last() ?? { source: 0, parent: target, depth: 1 }
+							$pending = $pending.drop_last(1)
+							original = node_at($s, item.source)
+							# Selectedcontent clones exclude executable and embedded browsing
+							# content, including their descendants, per the HTML clone steps.
+							removed = match original.kind {
+								Element(name) => (
+									name.namespace == Uri(Markup.html_namespace) and (
+										match name.local {
+											"script" | "frame" | "iframe" | "embed" | "object" => True
+											_ => False
+										}
+									)
+								) or (name.namespace == Uri(Markup.svg_namespace) and name.local == "script")
+								_ => False
+							}
+							if !removed {
+								if $s.nodes.len() >= props.max_nodes {
+									return Err(InvalidMarkup({ problem: ResourceLimit("max_nodes"), line: 0, column: insertion_at }))
+								}
+								is_element = match original.kind {
+									Element(_) => True
+									_ => False
+								}
+								if is_element and ($s.element_count - if ($s.fragment) 1 else 0) >= props.max_elements {
+									return Err(InvalidMarkup({ problem: LimitExceeded(Elements), line: 0, column: insertion_at }))
+								}
+								if is_element and item.depth > props.max_depth {
+									return Err(InvalidMarkup({ problem: LimitExceeded(Depth), line: 0, column: insertion_at }))
+								}
+								new_id = $s.nodes.len()
+								source_span = match original.origin {
+									Authored(span) => span
+									Cloned(info) => info.source
+									Implied(at) => { start: at, end: at }
+								}
+								stack = $s.stack
+								$s = append_node({ ..$s, stack: [item.parent], foster: False }, { ..original, children: [], origin: Cloned({ source: source_span, at: insertion_at }) })
+								$s = { ..$s, stack, clones: $s.clones.append({ original: item.source, clone: new_id }) }
+								if $s.work > $s.work_limit {
+									return Err(InvalidMarkup({ problem: ResourceLimit("max_work_per_byte"), line: 0, column: insertion_at }))
+								}
+								var $i = original.children.len()
+								while $i > 0 {
+									$i = $i - 1
+									$pending = $pending.append({ source: original.children.get($i) ?? 0, parent: new_id, depth: item.depth + 1 })
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		$index = $index + 1
+	}
+	Ok($s)
+}
+
+selectedcontent_targets = |s, select_id| {
+	# A second ancestor select disables the descendant selectedcontent, even
+	# when it belongs to the innermost select's option list.
+	var $ancestor = find_parent(s, select_id)
+	while $ancestor.is_ok() {
+		id = $ancestor ?? select_id
+		if namespace_class_at(s, id) == HtmlNamespace and (
+			match name_at(s, id) {
+				"select" | "option" | "selectedcontent" => True
+				_ => False
+			}
+		) {
+			return []
+		}
+		$ancestor = find_parent(s, id)
+	}
+	var $targets = []
+	var $pending = reverse_ids((node_at(s, select_id)).children)
+	while !$pending.is_empty() {
+		id = $pending.last() ?? select_id
+		$pending = $pending.drop_last(1)
+		html = namespace_class_at(s, id) == HtmlNamespace
+		name = name_at(s, id)
+		if html and name == "selectedcontent" {
+			$targets = $targets.append(id)
+		} else if !(
+			html and (
+				match name {
+					"select" | "option" | "template" => True
+					_ => False
+				}
+			)
+		) {
+			$pending = $pending.concat(reverse_ids((node_at(s, id)).children))
+		}
+	}
+	$targets
+}
+
+select_options = |s, select_id| {
+	var $options = []
+	var $pending = (reverse_ids((node_at(s, select_id)).children)).map(|id| { id, optgroups: 0.U64 })
+	while !$pending.is_empty() {
+		item = $pending.last() ?? { id: select_id, optgroups: 0 }
+		$pending = $pending.drop_last(1)
+		html = namespace_class_at(s, item.id) == HtmlNamespace
+		name = name_at(s, item.id)
+		if html and name == "option" {
+			$options = $options.append(item.id)
+		} else if !(
+			html and (
+				match name {
+					"select" | "template" | "datalist" | "hr" => True
+					_ => False
+				}
+			)
+		) {
+			optgroups = item.optgroups + if (html and name == "optgroup") 1 else 0
+			if optgroups <= 1 {
+				$pending = $pending.concat((reverse_ids((node_at(s, item.id)).children)).map(|id| { id, optgroups }))
+			}
+		}
+	}
+	$options
+}
+
+# Only the distinction 0/1/>1 affects default selectedness. HTML's IDL integer
+# parser accepts a leading plus and a digit prefix; saturate at two safely.
+select_size_class : Str -> U64
+select_size_class = |text| {
+	bytes = text.to_utf8()
+	var $at = 0
+	while $at < bytes.len() and Tok.space(bytes.get($at) ?? 0) {
+		$at = $at + 1
+	}
+	if bytes.get($at) == Ok('+') {
+		$at = $at + 1
+	}
+	var $size = 0.U64
+	while $at < bytes.len() {
+		byte = bytes.get($at) ?? 0
+		if byte < '0' or byte > '9' {
+			break
+		}
+		next = $size * 10 + (byte - '0').to_u64()
+		$size = if (next > 1) 2 else next
+		$at = $at + 1
+	}
+	$size
+}
+
+option_disabled = |s, option| {
+	if (node_at(s, option)).attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "disabled") {
+		return True
+	}
+	var $parent = find_parent(s, option)
+	while $parent.is_ok() {
+		id = $parent ?? option
+		if namespace_class_at(s, id) == HtmlNamespace {
+			name = name_at(s, id)
+			if match name {
+				"select" | "hr" | "datalist" | "option" => True
+				_ => False
+			} {
+				return False
+			}
+			if name == "optgroup" {
+				return (node_at(s, id)).attributes.any(|a| a.name.namespace == NoNamespace and a.name.local == "disabled")
+			}
+		}
+		$parent = find_parent(s, id)
+	}
+	False
+}
+
+expect {
+	p = HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><option>X<option selected>Y</select>", True, {}, {})?
+	root = p.tree.nodes.get(p.tree.roots.first()?)?
+	button = p.tree.nodes.get(root.children.first()?)?
+	selectedcontent = p.tree.nodes.get(button.children.first()?)?
+	Markup.text(p.tree, selectedcontent.children.first()?) == "Y" and (p.tree.nodes.get(selectedcontent.children.first()?)?).origin == Cloned({ source: { start: 86, end: 87 }, at: 16 })
+}
+
+reverse_ids : List(U64) -> List(U64)
+reverse_ids = |ids| {
+	var $out = []
+	var $i = ids.len()
+	while $i > 0 {
+		$i = $i - 1
+		$out = $out.append(ids.get($i) ?? 0)
+	}
+	$out
+}
+
+node_depth : State, U64 -> U64
+node_depth = |s, id| {
+	var $depth = 1
+	var $current = id
+	var $steps = 0
+	while $steps < s.nodes.len() {
+		match find_parent(s, $current) {
+			Ok(parent) => {
+				$depth = $depth + 1
+				$current = parent
+			}
+			Err(_) => break
+		}
+		$steps = $steps + 1
+	}
+	$depth - if (s.fragment) 1 else 0
+}
+expect HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><option><i>x</i></option></select>", True, {}, { max_depth: 3 }).is_err()
+
+expect HtmlTree.parse("<p a='1' b='2'>x</p>", True, {}, { max_attributes: 1 }).is_err()
+expect HtmlTree.parse("<p>x</p a='1' b='2'>", True, {}, { max_attributes: 1, recovery: Browser }).is_err()
+expect HtmlTree.parse("<p>\u(B)\u(B)</p>", True, {}, { max_diagnostics: 1, recovery: Browser }).is_err()
+
+expect {
+	p = HtmlTree.parse("<select><div><selectedcontent></selectedcontent></div><option>A</option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	div = p.tree.nodes.get(select.children.first()?)?
+	content = p.tree.nodes.get(div.children.first()?)?
+	Markup.text(p.tree, content.children.first()?) == "A"
+}
+expect {
+	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<script>x</script><object>y</object><svg><script>z</script><text>B</text></svg></option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	content = p.tree.nodes.get(select.children.first()?)?
+	content.children.len() == 2 and Markup.text(p.tree, content.children.get(0)?) == "A" and Markup.text(p.tree, content.children.get(1)?) == "B"
+}
+expect {
+	p = HtmlTree.parse("<select><selectedcontent></selectedcontent><option>A<selectedcontent>original</selectedcontent></option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	option = p.tree.nodes.get(select.children.get(1)?)?
+	inside = p.tree.nodes.get(option.children.get(1)?)?
+	Markup.text(p.tree, inside.children.first()?) == "original"
+}
+
+expect [
+	"<!doctype html><div></body>",
+	"<!doctype html><html><html>",
+	"<!doctype html><body><body>",
+	"<!doctype html><p><frameset><frame>",
+	"<!doctype html><basefont><frameset>",
+	"<!doctype html><image/>",
+	"<!doctype html><dt><div><dd>",
+	"<!doctype html><title>x</title><div><p>x<u></p></div></body>",
+	"<!doctype html><table><caption><svg>foo</table>bar",
+].all(|source| HtmlTree.parse(source, False, {}, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser }).map_ok(|p| !p.diagnostics.is_empty()) == Ok(True))
+expect ["<caption><td>", "<col><td>", "<tbody><td>", "<tr><td>", "</table><td>", "</tbody></tfoot></thead><td>"].all(|source| HtmlTree.parse(source, True, { name: "tr" }, {}).is_err())
+expect HtmlTree.parse("<html>X", True, { namespace: Markup.svg_namespace, name: "desc" }, {}).is_err()
+expect HtmlTree.parse("</html><!--abc-->", True, { name: "html" }, {}).is_err()
+expect HtmlTree.parse("<form><form>", True, { name: "template" }, {}).is_ok()
+
+expect HtmlTree.parse("<body>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
+expect HtmlTree.parse("<frameset>", True, {}, { recovery: Browser, max_diagnostics: 1 }).map_ok(|p| p.diagnostics.len()) == Ok(1)
+
+expect {
+	p = HtmlTree.parse("<!doctype html><select><button><selectedcontent></selectedcontent></button><option><span>A</span></option></select>", False, { defer_projection: True }, { max_depth: 5, max_elements: 8 })?
+	HtmlTree.project_parsed_with(p, { max_depth: 5 }, False).is_err() and HtmlTree.project_parsed_with(p, { max_elements: 8 }, False).is_err() and HtmlTree.project_parsed_with(p, { max_depth: 6, max_elements: 9 }, False).is_ok()
+}
+expect {
+	p = HtmlTree.parse("<select><button><selectedcontent></selectedcontent></button><optgroup label='g' disabled><div><option>A</option></div></optgroup><option>B</option></select>", True, {}, {})?
+	select = p.tree.nodes.get(p.tree.roots.first()?)?
+	button = p.tree.nodes.get(select.children.first()?)?
+	content = p.tree.nodes.get(button.children.first()?)?
+	Markup.text(p.tree, content.children.first()?) == "B"
+}
+
+expect ["2junk", " +2", "000000000000000000000000000000000000002"].all(
+	|size| (
+		|_| {
+			p = HtmlTree.parse("<select size='${size}'><button><selectedcontent></selectedcontent></button><option>A</option></select>", True, {}, {})?
+			select = p.tree.nodes.get(p.tree.roots.first()?)?
+			button = p.tree.nodes.get(select.children.first()?)?
+			content = p.tree.nodes.get(button.children.first()?)?
+			Ok(content.children.is_empty())
+		}
+	)({}) == Ok(True),
+)
+
+expect {
+	p = HtmlTree.parse("<tr><td'>x<td>y", True, { name: "table" }, { recovery: Browser })?
+	tbody = p.tree.nodes.get(p.tree.roots.get(0)?)?
+	tr = p.tree.nodes.get(tbody.children.first()?)?
+	td = p.tree.nodes.get(tr.children.first()?)?
+	fostered = p.tree.nodes.get(p.tree.roots.get(1)?)?
+	p.tree.roots.len() == 2 and tr.children.len() == 1 and td.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td", prefix: Unprefixed }) and Markup.text(p.tree, td.children.first()?) == "y" and fostered.kind == Element({ namespace: Uri(Markup.html_namespace), local: "td'", prefix: Unprefixed }) and Markup.text(p.tree, fostered.children.first()?) == "x"
+}
+expect {
+	p = HtmlTree.parse("<tr>x y<td>z", True, { name: "table" }, { recovery: Browser })?
+	p.tree.roots.len() == 2 and (p.tree.nodes.get(p.tree.roots.get(1)?)?).kind == Text("x y")
+}
+
+expect {
+	p = HtmlTree.parse("<p>a &#32;b\u(0)c</p>", True, {}, { recovery: Browser })?
+	n = p.tree.nodes.get(p.tree.roots.first()?)?
+	n.children.len() == 1 and (p.tree.nodes.get(n.children.first()?)?).kind == Text("a  bc") and p.source.partition_valid() and p.diagnostics == [{ problem: HtmlSyntax(UnexpectedNull), line: 1, column: 12 }]
+}
+expect HtmlTree.parse("<p>a\nb\u(0)c</p>", True, {}, { recovery: Browser, max_diagnostics: 0 }) == Err(InvalidMarkup({ problem: ResourceLimit("max_diagnostics"), line: 2, column: 2 }))
+
+# Exact authored structure is separate from WHATWG recovery and precedes
+# selectedcontent projection. The default browser tree remains unchanged.
+expect {
+	valid = ["<p>Hello &amp; <b>world</b></p>", "<table><tbody><tr><td>x</td></tr></tbody></table>", "<template><p>x</p></template>", "<svg><path/></svg>", "<pre>\ntext</pre>", "<textarea>\n&lt;p&gt;</textarea>", "<script>if(a<b)x()</script>", "<select><button><selectedcontent></selectedcontent></button><option>A</option></select>"]
+	valid.all(|source| HtmlTree.parse(source, True, {}, { exact_structure: True }).is_ok())
+}
+expect {
+	invalid = ["<p><div></div></p>", "<table><tr><td>x</td></tr></table>", "<p>x", "<div/>", "<b><i>x</b></i>", "<table>x<tbody></tbody></table>", "<div a='1' a='2'></div>", "<p>x</p></br>", "<head></head>"]
+	invalid.all(|source| HtmlTree.parse(source, True, {}, { recovery: Browser, exact_structure: True }).is_err())
+}
+expect {
+	match HtmlTree.parse("<p>\n<div></div></p>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), line, column })) => span == { start: 4, end: 9 } and line == 2 and column == 1
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<table><tr><td>x</td></tr></table>", True, {}, { exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ImpliedElement("tbody"), span }), .. })) => span == { start: 7, end: 11 }
+		_ => False
+	}
+}
+expect HtmlTree.parse("<!doctype html><html><head></head><body><p>x</p></body></html>", False, {}, { exact_structure: True }).is_ok()
+expect HtmlTree.parse("<!doctype html><p>x</p>", False, {}, { recovery: Browser, exact_structure: True }).is_err()
+expect HtmlTree.parse("<p>x", True, {}, { recovery: Browser }).is_ok()
+
+expect {
+	valid = ["<a><div>x</div></a>", "<b><div>x</div></b>", "<div ID='a'>a\rb&#x20;c</div>", "<svg viewBox='0 0 1 1'><linearGradient id='x'></linearGradient><![CDATA[<x>]]></svg>", "<math><mi>x</mi><mo>+</mo><mi>y</mi></math>", "<noscript><p>x</p></noscript>", "<img>", "<svg><image/></svg>"]
+	valid.all(|source| HtmlTree.parse(source, True, {}, { exact_structure: True }).is_ok())
+}
+expect {
+	invalid = ["<!-- unfinished", "<!bogus>", "<p>a\u(0000)b</p>", "<image>", "<h1><h2></h2></h1>", "<a><a></a></a>", "<form><form></form></form>", "<select><option>x<option>y</option></select>", "<table><col></table>", "<table><tbody><td>x</td></tbody></table>", "before<table>inside<tbody></tbody></table>", "<p><b>x</p><p>y</b></p>"]
+	invalid.all(|source| HtmlTree.parse(source, True, {}, { recovery: Browser, exact_structure: True }).is_err())
+}
+expect HtmlTree.parse("<noscript><p>x</p></noscript>", True, { scripting: False }, { exact_structure: True }).is_ok()
+expect HtmlTree.parse("<p>x</p>", True, { name: "textarea" }, { exact_structure: True }).is_ok()
+expect {
+	match HtmlTree.parse("<p>x", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: MissingEndTag("p"), span }), .. })) => span == { start: 4, end: 4 }
+		_ => False
+	}
+}
+
+expect {
+	match HtmlTree.parse("<p><b>x</p><p>y</b></p>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: UnexpectedEndTag("p"), span }), .. })) => span == { start: 7, end: 11 }
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<DIV/>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: NonVoidSelfClosing("div"), span }), .. })) => span == { start: 0, end: 6 }
+		_ => False
+	}
+}
+expect {
+	match HtmlTree.parse("<div>", True, {}, { exact_structure: True, max_elements: 0 }) {
+		Err(InvalidMarkup({ problem: LimitExceeded(Elements), .. })) => True
+		_ => False
+	}
+}
+
+# Later adoption moves must identify the close that caused them, rather than
+# the earlier authored starts whose final parents changed.
+expect {
+	match HtmlTree.parse("<b><div>x</b>y</div>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), .. })) => span == { start: 9, end: 13 }
+		_ => False
+	}
+}
+expect {
+	source = "<!doctype html><html><head></head><body></body><frameset></frameset></html>"
+	match HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ span, .. }), .. })) => span == { start: 47, end: 57 }
+		_ => False
+	}
+}
+
+# Foster merging must not blame the earlier text whose provenance changes.
+expect {
+	match HtmlTree.parse("before<table>outside<tr><td>inside</td></tr></table>", True, {}, { recovery: Browser, exact_structure: True }) {
+		Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14
+		_ => False
+	}
+}
+
+expect {
+	accepted = ["", "plain &amp; α🙂 prose", "<section><article><h2>Card</h2><p>Hello &amp; <span>welcome</span>.</p><a href='/x'><span>more</span></a></article></section>", "<a><div><p>x<br>y<img src='x'/></p></div></a>", "<p><span>x</span></p><hr>"]
+	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, {}) == HtmlTree.parse_general(source, True, {}, {}))
+}
+expect {
+	replayed = ["<p><div></div></p>", "<h1><span><h2>x</h2></span></h1>", "<a><span><a>x</a></span></a>", "<p>x", "<div/>", "<p>x</p><svg><path/></svg>", "<p>x</p><!-- comment -->", "<p a='1' a='2'>x</p>", "<p>a\u(0)b</p>", "<p>word</p></br>"]
+	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+}
+expect {
+	source = "<section><a href='x'><p>text &amp; more<br></p></a></section>"
+	[0.U64, 1, 2, 4, 16, 256].all(
+		|limit| {
+			props : Markup.Props
+			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
+			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
+		},
+	)
+}
+
+expect {
+	accepted = ["<main><header><h1>Title</h1><nav><a href='/x'>next</a></nav></header><p>A <strong><em><b><i>typed</i></b></em></strong> tree.</p><ul><li>one<ol><li>nested</li></ol></li><li>two</li></ul><form action='/search'><label for='q'>Search</label><input id='q' name='q' type='search'><button type='submit'>Find</button></form><footer>done</footer></main>", "<form><p><button><span>ok</span></button></p></form><form><input type='hidden'></form>", "<strong><main><form><button><em>x</em></button></form></main></strong>", "<p><button>ok</button><label>label<input></label></p>"]
+	accepted.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, True, {}, { exact_structure: True }) == HtmlTree.parse_general(source, True, {}, { exact_structure: True }))
+}
+expect {
+	replayed = ["<strong><strong>x</strong></strong>", "<b><i>x</b>y</i>", "<form><form></form></form>", "<button><span><button>x</button></span></button>", "<ul><li>one<li>two</ul>", "<li>x</li>", "<ul><div><li>x</li></div></ul>", "<p><form></form></p>", "<p><ul><li>x</li></ul></p>", "<form><p>x</form></p>", "<p><strong>x</p>y</strong>"]
+	replayed.all(|source| direct_fragment(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, True, {}, { recovery: Browser }) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }))
+}
+expect {
+	source = "<main><form><label><strong><em><b><i><a>x</a></i></b></em></strong><input></label><button>ok</button></form><ul><li>x</li></ul></main>"
+	[0.U64, 1, 2, 4, 8, 16, 256].all(
+		|limit| {
+			props : Markup.Props
+			props = { max_work_per_byte: limit, max_depth: limit, max_nodes: limit, max_elements: limit, max_attributes: limit, max_diagnostics: limit, exact_structure: True, recovery: Browser }
+			HtmlTree.parse(source, True, {}, props) == HtmlTree.parse_general(source, True, {}, props)
+		},
+	)
+}
+
+expect {
+	source = "<!doctype html><html lang='en'><head><meta charset='utf-8'><title>A &amp; B</title></head><body><main><h1>Title</h1><p>Words.</p><table><tbody><tr><th>Item</th><th>Count</th></tr><tr><td>Examples</td><td>12</td></tr></tbody></table></main></body></html>"
+	direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }) and HtmlTree.parse_classified(source, False, {}, {}).map_ok(|result| result.domain) == Ok(PureHtmlNoProjection)
+}
+
+# The authored body remains on the general stack through EOF; its origin includes
+# </html>, unlike the explicit origins on head/title/table/cell elements.
+expect {
+	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
+	p = direct_document(source, Markup.html_namespace, {})?
+	element = |name, children, start, end| { kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: name }), attributes: [], children, origin: Authored({ start, end }) }
+	text = |value, start, end| { kind: Text(value), attributes: [], children: [], origin: Authored({ start, end }) }
+	expected : List(Markup.Node)
+	expected = [
+		{ kind: Doctype({ name: "html", public_id: "", system_id: "" }), attributes: [], children: [], origin: Authored({ start: 0, end: 15 }) },
+		element("html", [2, 6], 15, 157),
+		element("head", [3, 5], 21, 78),
+		element("title", [4], 27, 49),
+		text("A&B", 34, 41),
+		{ kind: Element({ namespace: Uri(Markup.html_namespace), prefix: Unprefixed, local: "meta" }), attributes: [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: "charset" }, value: "utf-8", span: { start: 55, end: 70 } }], children: [], origin: Authored({ start: 49, end: 71 }) },
+		element("body", [7], 78, 157),
+		element("table", [8], 84, 143),
+		element("tbody", [9], 91, 135),
+		element("tr", [10, 12], 98, 127),
+		element("th", [11], 102, 112),
+		text("H", 106, 107),
+		element("td", [13], 112, 122),
+		text("X", 116, 117),
+	]
+	p.tree == { roots: [0, 1], nodes: expected } and p.diagnostics == [] and p.source.bytes == source.to_utf8() and p.source.tokens.len() == 23 and p.source.tokens.first().map_ok(|token| token.kind) == Ok(Declaration) and p.source.tokens.fold([], |bytes, token| bytes.concat(p.source.slice(token.span))) == source.to_utf8()
+}
+expect {
+	accepted = ["<!doctype html><html><head></head><body></body></html>", "\r\n<!DOCTYPE HTML>\t<html>\n<head><title>literal <b> &amp; Ω</title><meta name='x' content='y'/></head> \r\n<body><p><b>hi</b></p><form><input></form><table><tbody></tbody></table></body></html>", "<!doctype html><html><head><title></title><title>x</title></head><body><form><table><tbody><tr><td>A &amp; B</td><th>Ω🙂</th></tr></tbody><tbody><tr></tr></tbody></table></form><p>after</p></body></html>"]
+	accepted.all(|source| direct_document(source, Markup.html_namespace, {}).is_ok() and HtmlTree.parse(source, False, {}, { exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { exact_structure: True }))
+}
+expect {
+	bodies = ["<table> <tbody></tbody></table>", "<table><tbody>\n<tr><td>x</td></tr></tbody></table>", "<table><tbody><tr> <td>x</td></tr></tbody></table>", "<table><tr><td>x</td></tr></table>", "<table><tbody><td>x</td></tbody></table>", "<table><tbody><tr><td>x</tr></tbody></table>", "<b><table><tbody><tr><td>x</td></tr></tbody></table></b>", "<table><tbody><tr><td><b>x</b></td></tr></tbody></table>", "<table><tbody><tr><td><table></table></td></tr></tbody></table>", "<table><form></form></table>", "<p><table></table></p>", "<script>x()</script>", "<svg><g/></svg>", "<template><p>x</p></template>", "<!--x--><p>x</p>"]
+	bodies.all(
+		|content| {
+			source = "<!doctype html><html><head><title>x</title></head><body>${content}</body></html>"
+			direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True })
+		},
+	)
+}
+expect {
+	sources = ["<html><head></head><body></body></html>", "<!doctype html><html><body></body></html>", "<!doctype html><html><head></head><p>x</p></html>", "<!doctype html><html><head></head><body></html>", "<!doctype html><html><head></head><body></body>", "<!doctype html><html><head></head><body></body> </html>", "<!doctype html><html><head></head><body></body></html>\n", "<!doctype html PUBLIC 'legacy'><html><head></head><body></body></html>", "<!doctype html><html><head><style>x</style></head><body></body></html>", "<!doctype html><html><head><title>x</head><body></body></html>"]
+	sources.all(|source| direct_document(source, Markup.html_namespace, {}).is_err() and HtmlTree.parse(source, False, {}, { recovery: Browser, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { recovery: Browser, exact_structure: True }))
+}
+expect {
+	source = "<!doctype html><html><head><title>A&amp;B</title><meta charset='utf-8'></head><body><table><tbody><tr><th>H</th><td>X</td></tr></tbody></table></body></html>"
+	[0.U64, 1, 2, 3, 4, 5, 6, 9, 10, 13, 14, 15, 16, 156, 157, 256, 0xFFFFFFFFFFFFFFFF].all(
+		|limit| {
+			cases : List(Markup.Props)
+			cases = [{ max_depth: limit }, { max_elements: limit }, { max_nodes: limit }, { max_attributes: limit }, { max_work_per_byte: limit }, { max_source_bytes: limit }, { max_diagnostics: limit }]
+			cases.all(|props| HtmlTree.parse(source, False, {}, { ..props, exact_structure: True }) == HtmlTree.parse_general(source, False, {}, { ..props, exact_structure: True }))
+		},
+	)
+}

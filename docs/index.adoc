@@ -37,7 +37,7 @@ endif::[]
 New to roc-parser:: Read <<overview>>, then <<getting-started>>, then
 <<combinator-primer>>.
 Parsing a format roc-parser already supports:: Go to its guide: <<csv>>,
-<<yaml>>, <<xml>>, <<json>>, <<markdown>> or <<http>>.
+<<yaml>>, <<xml>>, <<markup>>, <<json>>, <<markdown>> or <<http>>.
 Writing your own parser:: Read <<combinators>>, <<custom-format>> and
 <<errors>>.
 Looking something up:: <<modules>>, <<conformance>>, <<performance>>, <<compatibility>> and
@@ -63,6 +63,17 @@ include::csv.adoc[leveloffset=+1]
 include::yaml.adoc[leveloffset=+1]
 
 include::xml.adoc[leveloffset=+1]
+
+include::markup.adoc[leveloffset=+1]
+
+include::dom-names.adoc[leveloffset=+1]
+
+include::markup-facts.adoc[leveloffset=+1]
+include::markup-context.adoc[leveloffset=+1]
+
+include::exact-structure.adoc[leveloffset=+1]
+
+include::consumer-fidelity.adoc[leveloffset=+1]
 
 include::json.adoc[leveloffset=+1]
 

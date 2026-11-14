@@ -1,18 +1,18 @@
 {
   "evidence": {
-    "supplier_manifest": "https://github.com/roc-lang/unicode/blob/4.3.2/vendor/unicode/manifest.json",
-    "supplier_license": "https://github.com/roc-lang/unicode/blob/4.3.2/LICENSE",
-    "data_license": "https://github.com/roc-lang/unicode/blob/4.3.2/vendor/unicode/LICENSE-UNICODE"
+    "supplier_manifest": "https://github.com/roc-lang/unicode/blob/4.3.3/vendor/unicode/manifest.json",
+    "supplier_license": "https://github.com/roc-lang/unicode/blob/4.3.3/LICENSE",
+    "data_license": "https://github.com/roc-lang/unicode/blob/4.3.3/vendor/unicode/LICENSE-UNICODE"
   },
   "components": [
     {
       "id": "unicode",
       "name": "roc-lang/unicode",
       "producer": "Organization: Roc contributors",
-      "version": "4.3.2",
-      "identity": "pkg:github/roc-lang/unicode@4.3.2",
-      "download": "https://github.com/roc-lang/unicode/releases/download/4.3.2/3gvgiWm6BShjHKbNV2zRH6fhC5ZvScZgWF7AnVDWHSdd.tar.zst",
-      "sha256": "57775c7ea3b46d571cf839c5e27a1833daf658b1d2b3615ca8cce03ced1c646e",
+      "version": "4.3.3",
+      "identity": "pkg:github/roc-lang/unicode@4.3.3",
+      "download": "https://github.com/roc-lang/unicode/releases/download/4.3.3/AJfFMmhvmbgn7THAF1E1sofC3dZaVWPFmVV7GH8Bc7k7.tar.zst",
+      "sha256": "e4bdde8dea6abe4952844c37b77cb01adc2df8d8e5f6f1b6d8b091329e27dcab",
       "license": "UPL-1.0 AND Unicode-3.0",
       "license_url": "",
       "modified": "",
@@ -383,175 +383,175 @@
       "to": "unicode-data-arabic-shaping",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-bidi-brackets",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-bidi-mirroring",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-case-folding",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-derived-bidi-class",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-derived-combining-class",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-derived-core-properties",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-derived-general-category",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-derived-joining-type",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-east-asian-width",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-emoji-data",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-emoji-variation-sequences",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-grapheme-break-property",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-indic-positional-category",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-indic-syllabic-category",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-line-break",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-prop-list",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-property-aliases",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-property-value-aliases",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-script-extensions",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-scripts",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-special-casing",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-unicode-data",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-vertical-orientation",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     },
     {
       "from": "unicode",
       "to": "unicode-data-word-break-property",
       "relation": "dependsOn",
       "scope": "build",
-      "basis": "Production data input recorded in roc-lang/unicode 4.3.2 vendor/unicode/manifest.json; conformance-only datasets are excluded."
+      "basis": "Production data input recorded in roc-lang/unicode 4.3.3 vendor/unicode/manifest.json; conformance-only datasets are excluded."
     }
   ],
   "inputs": [
@@ -734,6 +734,16 @@
       "input": "task:docs-path",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
+      "input": "task:markup",
+      "component": "",
+      "reason": "Development-only independent markup checks and local campaigns; neither harness nor oracle suppliers are included in the source bundle."
+    },
+    {
+      "input": "task:markup-campaign",
+      "component": "",
+      "reason": "Development-only independent markup checks and local campaigns; neither harness nor oracle suppliers are included in the source bundle."
     }
   ]
 }

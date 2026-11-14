@@ -80,13 +80,7 @@ CSV := { records : List(CSV.Record) }.{
 	from_quote = |source| CSV.validate({ source: source }).map_ok(|records| CSV.{ records })
 
 	## A quotation of typed CSV rows. Access the rows with `.value`.
-	Decoded(row) := { value : List(row) }.{
-
-		## Decode quoted CSV using exact header names and enabled header checks.
-		from_quote : Str -> Try(Decoded(row), [BadQuotedBytes(Str)])
-			where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
-		from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| Decoded.{ value })
-	}
+	Decoded(row) : CsvDecoded(row)
 
 	## Validate raw CSV records, rejecting selected header checks as well as
 	## malformed CSV. Header checks compare normalized names in `Normalized`
@@ -365,7 +359,7 @@ CSV := { records : List(CSV.Record) }.{
 	## the tuple has elements. Cells decode as in [CSV.parse].
 	##
 	## ```roc
-	## pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
+	## pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	## pairs = CSV.parse_headerless("Ada,36\nAlan,41\n")
 	##
 	## expect pairs == Ok([("Ada", 36), ("Alan", 41)])
@@ -386,7 +380,7 @@ CSV := { records : List(CSV.Record) }.{
 		rename_field = |_, name| name
 
 		## Read the cell as UTF-8 text, verbatim.
-		parse_str : Format, State -> Try({ value : Str, rest : State }, [InvalidCsv(Error)])
+		parse_str : Format, State -> Try({ value : Str, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_str = |_, state| {
 			bytes = current_cell(state)?
 			match Str.from_utf8(bytes) {
@@ -396,7 +390,7 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## Read `true` or `false` in any letter case.
-		parse_bool : Format, State -> Try({ value : Bool, rest : State }, [InvalidCsv(Error)])
+		parse_bool : Format, State -> Try({ value : Bool, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_bool = |_, state| {
 			bytes = current_cell(state)?
 			word = lowercase_ascii(bytes)
@@ -410,47 +404,47 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## Read ASCII digits with an optional `+` as a U8.
-		parse_u8 : Format, State -> Try({ value : U8, rest : State }, [InvalidCsv(Error)])
+		parse_u8 : Format, State -> Try({ value : U8, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_u8 = |_, state| cell_int(state, U8.from_str, False, "a U8")
 
 		## Read ASCII digits with an optional sign as a I8.
-		parse_i8 : Format, State -> Try({ value : I8, rest : State }, [InvalidCsv(Error)])
+		parse_i8 : Format, State -> Try({ value : I8, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_i8 = |_, state| cell_int(state, I8.from_str, True, "an I8")
 
 		## Read ASCII digits with an optional `+` as a U16.
-		parse_u16 : Format, State -> Try({ value : U16, rest : State }, [InvalidCsv(Error)])
+		parse_u16 : Format, State -> Try({ value : U16, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_u16 = |_, state| cell_int(state, U16.from_str, False, "a U16")
 
 		## Read ASCII digits with an optional sign as a I16.
-		parse_i16 : Format, State -> Try({ value : I16, rest : State }, [InvalidCsv(Error)])
+		parse_i16 : Format, State -> Try({ value : I16, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_i16 = |_, state| cell_int(state, I16.from_str, True, "an I16")
 
 		## Read ASCII digits with an optional `+` as a U32.
-		parse_u32 : Format, State -> Try({ value : U32, rest : State }, [InvalidCsv(Error)])
+		parse_u32 : Format, State -> Try({ value : U32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_u32 = |_, state| cell_int(state, U32.from_str, False, "a U32")
 
 		## Read ASCII digits with an optional sign as a I32.
-		parse_i32 : Format, State -> Try({ value : I32, rest : State }, [InvalidCsv(Error)])
+		parse_i32 : Format, State -> Try({ value : I32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_i32 = |_, state| cell_int(state, I32.from_str, True, "an I32")
 
 		## Read ASCII digits with an optional `+` as a U64.
-		parse_u64 : Format, State -> Try({ value : U64, rest : State }, [InvalidCsv(Error)])
+		parse_u64 : Format, State -> Try({ value : U64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_u64 = |_, state| cell_int(state, U64.from_str, False, "a U64")
 
 		## Read ASCII digits with an optional sign as a I64.
-		parse_i64 : Format, State -> Try({ value : I64, rest : State }, [InvalidCsv(Error)])
+		parse_i64 : Format, State -> Try({ value : I64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_i64 = |_, state| cell_int(state, I64.from_str, True, "an I64")
 
 		## Read ASCII digits with an optional `+` as a U128.
-		parse_u128 : Format, State -> Try({ value : U128, rest : State }, [InvalidCsv(Error)])
+		parse_u128 : Format, State -> Try({ value : U128, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_u128 = |_, state| cell_int(state, U128.from_str, False, "a U128")
 
 		## Read ASCII digits with an optional sign as a I128.
-		parse_i128 : Format, State -> Try({ value : I128, rest : State }, [InvalidCsv(Error)])
+		parse_i128 : Format, State -> Try({ value : I128, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_i128 = |_, state| cell_int(state, I128.from_str, True, "an I128")
 
 		## Read an optional sign, digits and an optional fraction.
-		parse_dec : Format, State -> Try({ value : Dec, rest : State }, [InvalidCsv(Error)])
+		parse_dec : Format, State -> Try({ value : Dec, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_dec = |_, state| {
 			bytes = current_cell(state)?
 			match dec_from_bytes(bytes) {
@@ -460,7 +454,7 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## Read a float with the grammar of [CSV.f64].
-		parse_f32 : Format, State -> Try({ value : F32, rest : State }, [InvalidCsv(Error)])
+		parse_f32 : Format, State -> Try({ value : F32, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_f32 = |_, state| {
 			bytes = current_cell(state)?
 			match decimal_f64(bytes) {
@@ -470,7 +464,7 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## Read a float with the grammar of [CSV.f64].
-		parse_f64 : Format, State -> Try({ value : F64, rest : State }, [InvalidCsv(Error)])
+		parse_f64 : Format, State -> Try({ value : F64, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_f64 = |_, state| {
 			bytes = current_cell(state)?
 			match decimal_f64(bytes) {
@@ -480,14 +474,14 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## An empty cell is null, so a `Try(a, [Null])` field is `Err(Null)`.
-		parse_null : Format, State -> Try(State, [InvalidCsv(Error)])
+		parse_null : Format, State -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_null = |_, state| {
 			bytes = current_cell(state)?
 			if (bytes.is_empty()) Ok(state) else Err(cell_error(state, "expected an empty cell"))
 		}
 
 		## A row is one record; a record inside a row is rejected.
-		parse_record_start : Format, State -> Try([Counted({ len : U64, rest : State }), Uncounted(State)], [InvalidCsv(Error)])
+		parse_record_start : Format, State -> Try([Counted({ len : U64, rest : State }), Uncounted(State)], [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_record_start = |_, state| {
 			if state.nested {
 				Err(cell_error(state, "a CSV cell cannot hold a record"))
@@ -507,7 +501,7 @@ CSV := { records : List(CSV.Record) }.{
 				Continue(State),
 				Done(State),
 			],
-			[InvalidCsv(Error)],
+			[InvalidCsv(Error), MissingRequiredField(Str)],
 		)
 		parse_record_field = |_, _, state| {
 			match state.header.get(state.column) {
@@ -517,17 +511,17 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## The record ends after the last header column.
-		parse_record_after_field : Format, State -> Try([Continue(State), Done(State)], [InvalidCsv(Error)])
+		parse_record_after_field : Format, State -> Try([Continue(State), Done(State)], [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_record_after_field = |_, state| {
 			if (state.column >= state.header.len()) Ok(Done(state)) else Ok(Continue(state))
 		}
 
 		## The cell to skip is chosen by the column, so nothing is consumed.
-		skip_record_field : Format, State -> Try(State, [InvalidCsv(Error)])
+		skip_record_field : Format, State -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
 		skip_record_field = |_, state| Ok(state)
 
 		## A headerless row is a tuple with one element per field.
-		parse_tuple_start : Format, State, U64 -> Try(State, [InvalidCsv(Error)])
+		parse_tuple_start : Format, State, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_tuple_start = |_, state, len| {
 			if state.nested {
 				Err(cell_error(state, "a CSV cell cannot hold a tuple"))
@@ -539,19 +533,23 @@ CSV := { records : List(CSV.Record) }.{
 		}
 
 		## Move to the cell of the next tuple element.
-		parse_tuple_next : Format, State, U64, U64 -> Try(State, [InvalidCsv(Error)])
+		parse_tuple_next : Format, State, U64, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_tuple_next = |_, state, index, _| Ok(State.{ row: state.row, header: state.header, column: index, cell: index, record: state.record, nested: True })
 
 		## The error for a cell that holds no valid value.
-		invalid_value : Format, State -> [InvalidCsv(Error)]
+		invalid_value : Format, State -> [InvalidCsv(Error), MissingRequiredField(Str)]
 		invalid_value = |_, state| cell_error(state, "the cell does not hold a valid value")
 
 		## Finish a tuple row.
-		parse_tuple_end : Format, State, U64 -> Try(State, [InvalidCsv(Error)])
+		parse_tuple_end : Format, State, U64 -> Try(State, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_tuple_end = |_, state, _| Ok(state)
 
+		## Report a required field absent from the input.
+		missing_field : Format, Str -> [InvalidCsv(Error), MissingRequiredField(Str)]
+		missing_field = |_, name| MissingRequiredField(name)
+
 		## A tag without a payload is read from its name.
-		parse_tag_union : Format, Encoding.ParseTagUnionSpec(a), State -> Try({ value : a, rest : State }, [InvalidCsv(Error)])
+		parse_tag_union : Format, Encoding.ParseTagUnionSpec(a, Format, State, [InvalidCsv(Error), MissingRequiredField(Str)]), State -> Try({ value : a, rest : State }, [InvalidCsv(Error), MissingRequiredField(Str)])
 		parse_tag_union = |format, spec, state| {
 			bytes = current_cell(state)?
 			Encoding.ParseTagUnionSpec.parse(
@@ -573,6 +571,14 @@ CSV := { records : List(CSV.Record) }.{
 	## and indices into them. Used through [CSV.parse]; you do not need to name
 	## it.
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
+}
+
+CsvDecoded(row) := { value : List(row) }.{
+
+	## Decode quoted CSV using exact header names and enabled header checks.
+	from_quote : Str -> Try(CSV.Decoded(row), [BadQuotedBytes(Str)])
+		where [row.CSV.Parseable([InvalidCsv(CSV.Error), ..errs])]
+	from_quote = |source| CSV.validate_as({ source: source }).map_ok(|value| CSV.Decoded.{ value })
 }
 
 ## Decode every data record of `text` with a row parser built by `parser_for`.
@@ -1245,12 +1251,12 @@ expect {
 
 # Headerless input decodes into tuples, and the width must match.
 expect {
-	rows : Try(List((Str, U64, Bool)), [InvalidCsv(CSV.Error)])
+	rows : Try(List((Str, U64, Bool)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	rows = CSV.parse_headerless("Ada,36,true\nAlan,41,false\n")
 	rows == Ok([("Ada", 36, True), ("Alan", 41, False)])
 }
 expect {
-	rows : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
+	rows : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	rows = CSV.parse_headerless("Ada,36\nAlan\n")
 	error_of(rows) == Ok({ record: 2, field: 2, line: 2, column: 1, message: "the record has 1 fields, fewer than the 2 columns" })
 }
@@ -1310,7 +1316,7 @@ expect {
 }
 
 expect {
-	pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error)])
+	pairs : Try(List((Str, U64)), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	pairs = CSV.parse_headerless("Ada,36\nAlan,41\n")
 	pairs == Ok([("Ada", 36), ("Alan", 41)])
 }

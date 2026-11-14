@@ -19,7 +19,7 @@ AsciiDocSource :: [].{
 			_ => False
 		}
 		get : Index, Str -> Try(Str, [Missing])
-		get = |index, name| match index {
+		get = |source_index, name| match source_index {
 			JoinedIndex(joined) => {
 				var $position = 0.U64
 				while $position < joined.parts.len() {
@@ -51,9 +51,9 @@ AsciiDocSource :: [].{
 			}
 		}
 		contains : Index, Str -> Bool
-		contains = |index, name| index.get(name).is_ok()
+		contains = |source_index, name| source_index.get(name).is_ok()
 		is_empty : Index -> Bool
-		is_empty = |index| match index {
+		is_empty = |source_index| match source_index {
 			JoinedIndex(joined) => joined.parts.all(|part| part.reader.is_empty())
 			FlatIndex(values) => values.is_empty()
 			OrderedIndex(ordered) => ordered.values.is_empty()

@@ -1,0 +1,8 @@
+{
+  "name": "roc-parser-markup-oracles",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "dependencies": {"parse5": "8.1.1", "playwright": "1.65.0"}
+}

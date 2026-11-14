@@ -5,7 +5,7 @@
   },
   {
     "name": "typed-and-multiline",
-    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"😀\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
+    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"\ud83d\ude00\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
   },
   {
     "name": "imported-formats",
@@ -363,5 +363,200 @@
   {
     "name": "commented-includes",
     "body": "document : AsciiDoc\ndocument = \"/////\\ninclude::missing.adoc[]\\n/////\\n\\nText\"\nvalue = document.blocks == [Paragraph(\"Text\")]\n"
+  },
+  {
+    "name": "markup-documents",
+    "body": "svg : Svg\nsvg = \"<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0L1 1'/></svg>\"\nmath : MathML\nmath = \"<math xmlns='http://www.w3.org/1998/Math/MathML'><mi>x</mi></math>\"\nhtml : Html\nhtml = \"<!doctype html><html><head><title>Example</title></head><body><p>hello</p></body></html>\"\nvalue = svg.parsed.tree.roots.len() == 1 and math.parsed.tree.roots.len() == 1 and html.parsed.tree.roots.len() == 2\n"
+  },
+  {
+    "name": "markup-fragments",
+    "body": "svg : Svg.Fragment\nsvg = \"<path d='M0 0' pathLength='1'/>\"\nmath : MathML.Fragment\nmath = \"<mfrac><mn>1</mn><mn>2</mn></mfrac>\"\nhtml : Html.Fragment\nhtml = \"<div hidden='until-found'><button disabled>Button</button></div>\"\npath : SvgPath\npath = \"M0 0L1 1z\"\nvalue = svg.single_element().is_ok() and math.single_element().is_ok() and html.single_element().is_ok() and path.commands.len() == 3\n"
+  },
+  {
+    "name": "markup-interpolation",
+    "body": "coordinate = 42.U64\nsvg : Svg.Template(U64)\nsvg = \"<circle cx='${coordinate}' r='2'/>\"\nmath : MathML.Template(Str)\nmath = \"<mi>${\"<markup stays text>\"}</mi>\"\nhtml : Html.Template(Str)\nhtml = \"<p title='${\"caption\"}'>${\"<b>text</b>\"}</p>\"\nvalue = svg.bound.values == [42] and math.bound.values == [\"<markup stays text>\"] and html.bound.values == [\"caption\", \"<b>text</b>\"]\n"
+  },
+  {
+    "name": "markup-invalid-svg-case",
+    "body": "value : Svg.Fragment\nvalue = \"<path pathlength='2'/>\"\n",
+    "errors": [
+      "invalid string",
+      "UnknownAttribute",
+      "pathlength"
+    ]
+  },
+  {
+    "name": "markup-invalid-viewbox",
+    "body": "value : Svg.Fragment\nvalue = \"<svg viewBox='0 0 10'/>\"\n",
+    "errors": [
+      "invalid string",
+      "viewBox",
+      "NumberList"
+    ]
+  },
+  {
+    "name": "markup-invalid-math-arity",
+    "body": "value : MathML.Fragment\nvalue = \"<mfrac><mn>1</mn></mfrac>\"\n",
+    "errors": [
+      "invalid string",
+      "InvalidChildren",
+      "mfrac"
+    ]
+  },
+  {
+    "name": "markup-invalid-html-boolean",
+    "body": "value : Html.Fragment\nvalue = \"<button disabled='false'>Button</button>\"\n",
+    "errors": [
+      "invalid string",
+      "InvalidValue",
+      "disabled"
+    ]
+  },
+  {
+    "name": "markup-invalid-hole-position",
+    "body": "x = \"path\"\nvalue : Svg.Template(Str)\nvalue = \"<${x}/>\"\n",
+    "errors": [
+      "invalid string",
+      "Interpolation"
+    ]
+  },
+  {
+    "name": "markup-invalid-hole-type",
+    "body": "x = \"text\"\nvalue : Svg.Template(U64)\nvalue = \"<text>${x}</text>\"\n",
+    "errors": [
+      "type mismatch",
+      "U64"
+    ]
+  },
+  {
+    "name": "markup-imported",
+    "assets": {
+      "drawing.svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><circle r='2'/></svg>"
+    },
+    "body": "import \"drawing.svg\" as text : Str\nsvg = Literal.require(Svg.validate({source: text,name: \"drawing.svg\"}))\nvalue = svg.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-imported-invalid",
+    "assets": {
+      "drawing.svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20'/>"
+    },
+    "body": "import \"drawing.svg\" as text : Str\nvalue = Literal.require(Svg.validate({source: text,name: \"drawing.svg\"}))\n",
+    "errors": [
+      "compile time crash",
+      "drawing.svg",
+      "viewBox"
+    ]
+  },
+  {
+    "name": "markup-policy-ordinary-handlers",
+    "body": "svg : Svg.Fragment\nsvg = \"<metadata><math xmlns='http://www.w3.org/1998/Math/MathML'><mrow onclick='go()'><mi>x</mi></mrow></math></metadata><g oninput='go()'/>\"\nmath : MathML.Fragment\nmath = \"<mrow onclick='go()'><mi>x</mi></mrow>\"\nsegments = Literal.require(Svg.parse_segments([\"<metadata><m:mrow xmlns:m='http://www.w3.org/1998/Math/MathML' onclick='go()'/></metadata>\"], {}).map_err(|InvalidMarkup(error)| Markup.quoted_error(\"SVG\", error)))\nvalue = segments.parsed.tree.roots.len() == 1 and svg.parsed.tree.roots.len() == 2 and math.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-custom-attributes",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\naccepted : NoHandlers\naccepted = \"<metadata><extension online='custom' customonline='also custom'/></metadata>\"\nvalue = accepted.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-namespaced-onclick",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\naccepted : NoHandlers\naccepted = \"<g xmlns:e='urn:extension' e:onclick='data'/>\"\nvalue = accepted.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-policy-mixed-math-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nvalue : NoHandlers\nvalue = \"<metadata><m:mrow xmlns:m='http://www.w3.org/1998/Math/MathML' onclick='go()'/></metadata>\"\n",
+    "errors": [
+      "invalid string",
+      "NoHandlers",
+      "inline handler onclick forbidden on mrow"
+    ]
+  },
+  {
+    "name": "markup-policy-svg-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nvalue : NoHandlers\nvalue = \"<g oninput='go()'/>\"\n",
+    "errors": [
+      "invalid string",
+      "NoHandlers",
+      "inline handler oninput forbidden on g"
+    ]
+  },
+  {
+    "name": "markup-policy-math-handler",
+    "body": "# This consumer permits extension attributes, but forbids known inline handler attributes.\n# It is a consumer policy; ordinary SVG and MathML parsing preserves handlers.\nNoHandlers := { parsed : Markup.Parsed }.{\n\tfrom_quote : Str -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tfrom_quote = |source| {\n\t\tfragment = Svg.Fragment.validate({ source, options: { allow_unknown_attributes: True } })?\n\t\tcheck(fragment.parsed)\n\t}\n\n\tcheck : Markup.Parsed -> Try(NoHandlers, [BadQuotedBytes(Str)])\n\tcheck = |parsed| {\n\t\tfor node in parsed.tree.nodes {\n\t\t\tmatch node.kind {\n\t\t\t\tElement(element) => {\n\t\t\t\t\tfor attribute in node.attributes {\n\t\t\t\t\t\tif MarkupFacts.is_event_handler(element, attribute.name) {\n\t\t\t\t\t\t\tposition = Markup.position(parsed.source, attribute.span.start)\n\t\t\t\t\t\t\treturn Err(Literal.error({ format: \"NoHandlers\", message: \"inline handler ${attribute.name.local} forbidden on ${element.local}\", line: position.line, column: position.column }))\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t_ => {}\n\t\t\t}\n\t\t}\n\t\tOk(NoHandlers.{ parsed })\n\t}\n}\n\nmath : MathML.Fragment\nmath = \"<mrow onclick='go()'><mi>x</mi></mrow>\"\nvalue = Literal.require(NoHandlers.check(math.parsed))\n",
+    "errors": [
+      "compile time crash",
+      "NoHandlers",
+      "inline handler onclick forbidden on mrow"
+    ]
+  },
+  {
+    "name": "markup-exact-explicit-and-template",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nfragment : ExactHtml\nfragment = \"<table><tbody><tr><td>x</td></tr></tbody></table>\"\nplan = Literal.require(Html.parse_segments([\"<select><button><selectedcontent></selectedcontent></button><option>\", \"</option></select>\"], { exact_structure: True }).map_err(|InvalidMarkup(error)| Markup.quoted_error(\"HTML\", error)))\nspan_ok = match Html.parse_fragment(\"before<table>outside<tr><td>inside</td></tr></table>\", { exact_structure: True, recovery: Browser }) {\n Err(InvalidMarkup({ problem: HtmlStructure({ reason: ReparentedContent, span }), line, column })) => span == { start: 13, end: 20 } and line == 1 and column == 14\n _ => False\n}\nvalue = fragment.parsed.tree.roots.len() == 1 and plan.slots.len() == 2 and span_ok\n"
+  },
+  {
+    "name": "markup-exact-p-close",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<p><div></div></p>\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "ReparentedContent"
+    ]
+  },
+  {
+    "name": "markup-exact-tbody",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<table><tr><td>x</td></tr></table>\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "ImpliedElement",
+      "tbody"
+    ]
+  },
+  {
+    "name": "markup-exact-explicit-end",
+    "body": "ExactHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ExactHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| ExactHtml.{ parsed: fragment.parsed })\n}\nvalue : ExactHtml\nvalue = \"<p>x\"\n",
+    "errors": [
+      "invalid string",
+      "HtmlStructure",
+      "MissingEndTag"
+    ]
+  },
+  {
+    "name": "markup-browser-exact-cr-references",
+    "body": "ReportedHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(ReportedHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { recovery: Browser, exact_structure: True } }).map_ok(|fragment| ReportedHtml.{ parsed: fragment.parsed })\n}\nfragment : ReportedHtml\nfragment = \"<p title='a&#13;b'>a&#13;b</p>\"\nvalue = {\n root = fragment.parsed.tree.roots.first() ?? crash \"missing paragraph\"\n node = fragment.parsed.tree.nodes.get(root) ?? crash \"missing root\"\n attribute = node.attributes.first() ?? crash \"missing title\"\n Markup.text(fragment.parsed.tree, root) == \"a\\rb\" and attribute.value == \"a\\rb\" and fragment.parsed.diagnostics.len() == 2\n}\n"
+  },
+  {
+    "name": "markup-strict-cr-reference",
+    "body": "StrictHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(StrictHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True } }).map_ok(|fragment| StrictHtml.{ parsed: fragment.parsed })\n}\nvalue : StrictHtml\nvalue = \"<p>&#13;</p>\"\n",
+    "errors": [
+      "invalid string",
+      "HTML",
+      "InvalidCharacterReference"
+    ]
+  },
+  {
+    "name": "markup-canonical-foreign-spelling",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nfragment : CanonicalHtml\nfragment = \"<svg viewBox='0 0 1 1'><linearGradient></linearGradient><foreignObject><DIV ID='x'>text</DIV></foreignObject></svg>\"\nvalue = fragment.parsed.tree.roots.len() == 1\n"
+  },
+  {
+    "name": "markup-noncanonical-foreign-attribute",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nvalue : CanonicalHtml\nvalue = \"<svg viewbox='0 0 1 1'></svg>\"\n",
+    "errors": [
+      "invalid string",
+      "NonCanonicalName",
+      "viewbox",
+      "viewBox"
+    ]
+  },
+  {
+    "name": "markup-noncanonical-foreign-end",
+    "body": "CanonicalHtml := { parsed : Markup.Parsed }.{\n from_quote : Str -> Try(CanonicalHtml, [BadQuotedBytes(Str)])\n from_quote = |source| Html.Fragment.validate({ source, options: { exact_structure: True, strict_foreign_spelling: True } }).map_ok(|fragment| CanonicalHtml.{ parsed: fragment.parsed })\n}\nvalue : CanonicalHtml\nvalue = \"<svg><linearGradient></lineargradient></svg>\"\n",
+    "errors": [
+      "invalid string",
+      "NonCanonicalName",
+      "lineargradient",
+      "linearGradient"
+    ]
+  },
+  {
+    "name": "yaml-decoder-public-api",
+    "body": "load : Str -> Try(a, [InvalidYaml(Yaml.Error), ..errs]) where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]\nload = |source| Yaml.decode(source)\nCustom := [Value(Str)].{\n    is_eq : _\n    parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : Custom, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]))\n    parser_for = |format| |cursor| Yaml.Format.parse_str(format, cursor).map_ok(|parsed| { value: Value(parsed.value), rest: parsed.rest })\n}\nrecord : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nrecord = load(\"app_name: demo\")\ncustom : Try(Custom, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\ncustom = Yaml.decode(\"custom\")\nkebab : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nkebab = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })(\"app-name: demo\")\nquoted : Yaml.Decoded({ port : U16 })\nquoted = \"port: 8080\"\nchecked : { user_id : U64 }\nchecked = Literal.require(Yaml.validate_as({ source: \"userId: 12\", keys: CamelCase, unknown_keys: Reject }))\nvalue = record == Ok({ app_name: \"demo\" }) and custom == Ok(Value(\"custom\")) and kebab == Ok({ app_name: \"demo\" }) and quoted.value == { port: 8080 } and checked == { user_id: 12 }\n"
   }
 ]

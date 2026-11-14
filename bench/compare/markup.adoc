@@ -1,0 +1,66 @@
+= Local markup runtime comparisons
+
+`scripts/compare_markup_performance.py` compares common SVG, MathML and HTML inputs
+against complete Rust, Go and Python DOM implementations. Preparation builds and
+installs pinned dependencies in ignored scratch storage. Timing never builds or
+installs dependencies. These commands are local diagnostics; no scheduled job or
+CI campaign invokes them.
+
+[source,shell]
+----
+flock -s .roc-parser-tmp/markup-perf-cpu.lock \
+  python3 scripts/compare_markup_performance.py --roc /path/to/roc \
+  --python-base /path/to/python-with-venv --compiler-build-mode ReleaseFast prepare
+flock -x .roc-parser-tmp/markup-perf-cpu.lock \
+  python3 scripts/compare_markup_performance.py run
+----
+
+All collaborating worktrees must use the same absolute lock path: shared locks
+for compilation, tests and profiling; an exclusive lock for elapsed-time
+measurements. Build Roc with `--opt=speed`; compiler profiling builds use Zig
+`ReleaseFast` with symbols. Rust uses release optimization with debug symbols.
+On Linux, the pinned basic-cli 0.28 platform supplies a musl target; it does not
+support a glibc build. Rust, Go and Python use their installed native runtimes.
+Keep that allocator/runtime difference visible when interpreting the results.
+
+The report retains source, compiler, binary, input and dependency-lock identities,
+build flags, every sample, medians, throughput and per-case ratios. Changing a
+source or executable invalidates the prepared snapshot. Defaults collect seven
+samples in shuffled implementation order. Input reading, UTF-8 decoding, imports
+and process startup precede each native timing boundary. Parsing, DOM allocation
+and tree consumption are inside it. Native destruction or garbage collection
+follows each runtime's ordinary behavior; Go does not force a collection at the
+end of each parse. A warm batch precedes sampling.
+
+Every driver consumes element local names, attribute local names/values and text
+UTF-8 lengths from the completed tree. XML declarations, namespace declarations,
+comments and doctypes do not contribute to this workload checksum. Inputs use
+default XML namespaces and contain no comments; this keeps the comparison focused
+on common trees. The pull parsers build an owned, namespace-resolved tree before
+consuming it. Outside the timer, every adapter also exports a complete canonical
+tree. Namespace URI/local names, sorted attribute triples, exact text and child
+shape must match an independent ElementTree/XML or html5lib/HTML model. Canonical
+trees and hashes are retained beside the input bytes. A canonical disagreement,
+checksum disagreement or rejected workload fails before timings are accepted.
+
+`roc-full` measures the public format parser, including source retention, location
+tracking and authoring validation. `roc-raw` retains syntax/source work while
+bypassing format authoring checks. Both remain in the report. Other libraries do
+not perform SVG/MathML authoring validation. HTML adapters expose their native
+WHATWG or legacy libxml2 semantics; fragment adapters consume the children of the
+body context. The corpus uses common inputs whose consumed trees agree.
+Selectolax's Python API does not expose namespace URIs; its adapter is restricted
+to these HTML-only cases and supplies their implicit HTML namespace. It cannot
+serve as a namespace oracle for embedded SVG/MathML.
+
+The gate compares `roc-full` against the fastest eligible complete DOM adapter on
+each case, across all three reference languages. A ratio above `1.5` fails the
+command. Faster syntax-only Roc timings never replace that gate, and slower
+references never hide the fastest result. Measurements are evidence for these
+inputs and runtime conditions, rather than a general proof of complexity.
+
+The corpus includes repeated SVG paths, MathML fractions and HTML cards at three
+sizes, a drawing, a formula, a short HTML snippet and a complete HTML document.
+Three additional long paragraphs cover ordinary ASCII prose, Unicode prose and
+entity-bearing prose separately. Inputs are generated locally from these small
+definitions; generated input bytes and canonical trees stay beside the report.
