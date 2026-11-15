@@ -36,6 +36,19 @@ https://github.com/roc-lang/roc/issues/13023[roc#13023]. Parser results and
 runtime checks are unchanged. The official nightly passes the normal warning
 checks with this layout; no diagnostics or release checks are suppressed.
 
+== Checker compatibility on macOS
+
+The Roc syntax parser passes its final mutable-list value directly, and an
+AsciiDoc store test splits two observations while retaining every assertion.
+Shared HTML predicates carry explicit types. These source spellings avoid the
+latest compiler's reported ReleaseSafe checker panics; restoration TODOs link
+to the upstream reports. Parser behavior is unchanged.
+
+The compatibility workflow checks package tests and representative consumer
+imports on macOS arm64 with the official nightly and with a ReleaseSafe compiler
+built from the same source commit. This covers the reported checker configuration
+alongside the normal Linux release suite. It adds no scheduled fuzz campaign.
+
 == Explicit DOM construction
 
 `DomConstruction.root` accepts any explicit parent name. `enter` checks one
