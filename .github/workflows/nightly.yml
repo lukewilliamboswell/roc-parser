@@ -25,5 +25,5 @@ jobs:
     with:
       nightly-tag: ${{ inputs.nightly-tag || '' }}
       release-tag: ${{ inputs.release-tag || '' }}
-      runners: '["ubuntu-24.04"]'
+      runners: '["ubuntu-24.04","macos-15"]'
       report-issue: true

@@ -61,7 +61,7 @@ the compiler or in the package, and needs a fix or an upstream issue.
 {roc-automation}/docs/nightly-compatibility.adoc[nightly compatibility]
 workflow every day at 13:17 UTC. It downloads the examples archive of the latest
 final release, checks, builds and runs every case of its `spec.json` on the
-latest nightly, and keeps one tracking issue: opened by the first failure,
+latest nightly on Linux x86-64 and macOS arm64, and keeps one tracking issue: opened by the first failure,
 commented on by later ones, closed by the next pass. A failure means the
 published release needs a patch release that works with the new compiler.
 

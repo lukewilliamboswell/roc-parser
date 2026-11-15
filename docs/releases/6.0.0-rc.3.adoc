@@ -44,10 +44,11 @@ Shared HTML predicates carry explicit types. These source spellings avoid the
 latest compiler's reported ReleaseSafe checker panics; restoration TODOs link
 to the upstream reports. Parser behavior is unchanged.
 
-The compatibility workflow checks package tests and representative consumer
-imports on macOS arm64 with the official nightly and with a ReleaseSafe compiler
-built from the same source commit. This covers the reported checker configuration
-alongside the normal Linux release suite. It adds no scheduled fuzz campaign.
+The package and representative consumer imports check without warnings with the
+official latest nightly on Linux x86-64 and macOS arm64. Routine published-release
+compatibility uses roc-automation's shared runner on those targets. CI and release
+tooling use the official compiler binaries; they do not build a compiler or
+require ReleaseSafe. No new scheduled fuzz campaign is added.
 
 == Explicit DOM construction
 
