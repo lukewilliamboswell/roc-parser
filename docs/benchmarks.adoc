@@ -427,6 +427,7 @@ Use `--replay failures/<hash>-<mode>.json` to time a saved input again.
 `--smoke` selects only two tiny inputs and one one-millisecond sample, checks the
 protocol and correctness, and disables ratio assertions. This is the intended CI
 freshness check. Broad runtime ratchets remain an explicit local activity because
-shared CI timing is noisy. The smoke also permits a verified `ReleaseSafe`
-oracle; a full ratio comparison requires a `ReleaseFast` build receipt matching
-the binary hash and immutable compiler revision.
+shared CI timing is noisy. Routine checks build the reference oracle with
+`ReleaseFast`, also required for a full ratio comparison. Its build receipt must
+match the binary hash and immutable compiler revision. The smoke permits an
+explicit `ReleaseSafe` build for optional safety checks.

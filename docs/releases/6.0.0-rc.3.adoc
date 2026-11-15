@@ -48,7 +48,8 @@ The package and representative consumer imports check without warnings with the
 official latest nightly on Linux x86-64 and macOS arm64. Routine published-release
 compatibility uses roc-automation's shared runner on those targets. CI and release
 tooling use the official compiler binaries; they do not build a compiler or
-require ReleaseSafe. No new scheduled fuzz campaign is added.
+require ReleaseSafe. The syntax reference oracle defaults to ReleaseFast for
+routine checks and measurements. No new scheduled fuzz campaign is added.
 
 == Explicit DOM construction
 

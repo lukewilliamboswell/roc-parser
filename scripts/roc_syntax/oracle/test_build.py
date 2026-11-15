@@ -31,21 +31,24 @@ def archive(name, kind=tarfile.REGTYPE):
 
 class ArchiveTests(unittest.TestCase):
     def test_build_optimization_matches_command_and_receipt(self):
-        for optimize in ('ReleaseSafe', 'ReleaseFast'):
+        for optimize in (None, 'ReleaseSafe', 'ReleaseFast'):
             with self.subTest(optimize=optimize), tempfile.TemporaryDirectory() as folder:
                 cache = Path(folder)
                 binary = cache / 'install/bin/roc-syntax-oracle'
                 binary.parent.mkdir(parents=True)
                 binary.write_bytes(b'optimized-binary')
-                argv = ['build_oracle.py', '--cache-dir', folder, '--optimize', optimize]
+                argv = ['build_oracle.py', '--cache-dir', folder]
+                if optimize is not None:
+                    argv += ['--optimize', optimize]
                 with patch.object(sys, 'argv', argv), patch.object(module, 'source_tree', return_value=cache), \
                      patch.object(module, 'select_git_source', return_value=cache), \
                      patch.object(module, 'run', side_effect=[SimpleNamespace(stdout=module.ZIG_VERSION), None]) as run, \
                      contextlib.redirect_stdout(io.StringIO()):
                     module.main()
-                self.assertIn('-Doptimize=' + optimize, run.call_args_list[1].args[0])
+                expected_optimize = optimize or 'ReleaseFast'
+                self.assertIn('-Doptimize=' + expected_optimize, run.call_args_list[1].args[0])
                 receipt = json.loads(binary.with_suffix('.json').read_text())
-                self.assertEqual(receipt['optimize'], optimize)
+                self.assertEqual(receipt['optimize'], expected_optimize)
                 self.assertEqual(receipt['binary_sha256'], __import__('hashlib').sha256(binary.read_bytes()).hexdigest())
 
     def test_extracts_source(self):

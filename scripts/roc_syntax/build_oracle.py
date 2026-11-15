@@ -93,7 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roc-repo", type=Path, help="Local Git object source (working tree ignored)")
     parser.add_argument("--zig", default=os.environ.get("ZIG", "zig"))
-    parser.add_argument("--optimize", choices=("ReleaseSafe", "ReleaseFast"), default="ReleaseSafe")
+    parser.add_argument("--optimize", choices=("ReleaseSafe", "ReleaseFast"), default="ReleaseFast")
     parser.add_argument("--cache-dir", type=Path, default=ROOT / ".roc-parser-tmp" / "syntax-oracle")
     args = parser.parse_args()
     version = run([args.zig, "version"], capture_output=True, text=True).stdout.strip()
