@@ -169,6 +169,8 @@ unverified old executable is not comparable evidence.
 
 Build this measurement worker with
 `python3 scripts/roc_syntax/build_oracle.py --optimize ReleaseFast --cache-dir .roc-parser-tmp/syntax-speed-oracle`.
-The default correctness build remains `ReleaseSafe`; the receipt records the
-chosen optimization mode and hashes the executable. Allow at least 15 seconds
-for the benchmark worker request so its ten-second internal cap can be reported.
+The default build is `ReleaseFast` for routine checks and measurements;
+`--optimize ReleaseSafe` is available for explicit safety checks. The receipt
+records the chosen optimization mode and hashes the executable. Allow at least
+15 seconds for the benchmark worker request so its ten-second internal cap can
+be reported.
