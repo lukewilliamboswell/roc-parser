@@ -1,0 +1,85 @@
+= roc-parser 6.0.0-rc.3
+
+== Upgrade impact
+
+This preview adds `DomConstruction`, which checks a bounded set of HTML repairs
+for explicitly named DOM nodes. It also moves the XML node backing declarations
+into separate modules to work around current compiler warnings. Use the official
+Roc nightly named in the release record and
+basic-cli 0.28.1. Unicode remains 4.3.3 and repository fuzz apps use roc-fuzz 0.6.2.
+
+Add this dependency to your application header:
+
+[source,roc]
+----
+parser: "{package-url}",
+----
+
+Keep the package and examples archive together. The release record names the
+exact compiler used to build and test the delivered bundle. CI and release
+checks use the latest official nightly with warnings enabled.
+
+== XML node compatibility
+
+`Xml.Node` and `XmlNs.Node` are now public aliases for backing node types in
+separate modules. Their constructors, pattern matching, helper methods,
+equality and hashing remain available through the existing public names.
+`Xml.Attribute` and the namespace/name/binding/attribute aliases in `XmlNs`
+continue to describe the same record and tag shapes.
+
+The compiler's API comparison expands some of these structural aliases inline
+and reports this as a breaking change from rc.2. Consumers should recompile and
+check any explicit node/type annotations against this preview. The source
+contains restoration TODOs linked to
+https://github.com/roc-lang/roc/issues/13077[roc#13077] and
+https://github.com/roc-lang/roc/issues/13023[roc#13023]. Parser results and
+runtime checks are unchanged. The official nightly passes the normal warning
+checks with this layout; no diagnostics or release checks are suppressed.
+
+== Explicit DOM construction
+
+`DomConstruction.root` accepts any explicit parent name. `enter` checks one
+child and returns its opaque descendant context; retain it beside the child
+and reuse its parent context for siblings. Namespace, prefix and local name
+are preserved exactly, without canonicalization, namespace inference or
+vocabulary restrictions. Checks use finite inherited facts and do no ancestor
+walk. `text` scans only a new value in restricted table contexts and returns
+without scanning for unrestricted parents.
+
+Typed repair rules cover paragraph, table, anchor, form, button, list-item,
+description-item, option and heading repairs, void children and elements in
+text-content parents. A table input returns `Unsupported` because `type=hidden`
+changes its placement. Success does not certify a complete serialization round
+trip; sibling/insertion history and other repairs remain outside this check.
+Use `MarkupContext` for canonical source-authoring placement and content models.
+
+The {src}/docs/dom-construction.adoc[guide] and
+{src}/examples/dom-construction.roc[runnable example] explain boundaries,
+result handling and the supported repair subset. Table and scope facts are
+shared with the existing HTML tree builder and authoring checks.
+
+== Runtime parsing improvements
+
+HTML duplicate-attribute checks scan attribute names without repeatedly copying
+full lexical records. Shared XML tree construction uses ownership-aware arena
+updates for child links and closing spans.
+
+Matched local measurements on official `nightly-2026-11-13-03dce41`, compiler
+ReleaseFast, applications optimized for speed, found the 128-attribute HTML case
+about 3.7 times faster and MathML cases using 8–13% less time. Typical SVG and
+HTML gains were small. These are runtime parsing measurements, excluding
+compilation, process startup and input reading.
+
+The full 16-fixture acceptance matrix still has 7 passing and 9 failing cases
+against the unchanged 1.5-times-fastest eligible Rust/Go/Python threshold.
+Full SVG/MathML parsing remains about 6.5–7.8 times slower than Rust `roxmltree`
+on those fixtures. This preview does not establish final performance acceptance.
+Performance evidence and the remaining hypotheses are recorded in
+https://github.com/lukewilliamboswell/roc-parser/pull/119[PR 119].
+
+The new DOM-construction differential fuzz target and performance campaigns
+are local commands; no new scheduled campaign is added. Generated corpora,
+binaries and full campaign logs remain outside Git.
+
+See the {src}/docs/releases/6.0.0.adoc[combined 6.0.0 upgrade notes] for changes
+since 5.0.0.

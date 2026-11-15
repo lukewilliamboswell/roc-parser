@@ -187,7 +187,8 @@ Use `Markup.text(tree, index)` to join descendant character data.
 Keep URI, prefix and local name separately when lowering a tree.
 xref:dom-names.adoc#dom-names[`DomName`] validates computed DOM names without changing XML source grammar;
 xref:markup-facts.adoc#markup-facts[`MarkupFacts`] supplies namespace-aware vocabulary, attribute and text-behavior facts.
-xref:markup-context.adoc#markup-context[`MarkupContext`] checks a new child or text value against a retained enclosing context without reparsing or walking ancestors.
+xref:dom-construction.adoc#dom-construction[`DomConstruction`] checks bounded HTML repairs for explicitly named DOM nodes.
+xref:markup-context.adoc#markup-context[`MarkupContext`] checks authoring placement for a new child or text value against a retained enclosing context without reparsing or walking ancestors.
 The xref:consumer-fidelity.adoc#consumer-fidelity[consumer-fidelity review] checks prefixes, qualified spellings, namespace declarations, binding identity and adoption.
 
 Read original bytes to reproduce authored source exactly. Reconstructing a tree

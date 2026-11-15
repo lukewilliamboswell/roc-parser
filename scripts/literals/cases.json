@@ -5,7 +5,7 @@
   },
   {
     "name": "typed-and-multiline",
-    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"\ud83d\ude00\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
+    "body": "config : Yaml.Decoded({ port : U16, name : Str })\nconfig =\n    \\\\port: 8080\n    \\\\name: app\npeople : CSV.Decoded({ name : Str, age : U8 })\npeople =\n    \\\\name,age\n    \\\\Ada,36\nlarge : Yaml.Decoded(U64)\nlarge = \"18446744073709551615\"\nexpected : U64\nexpected = 18446744073709551615\nother : Yaml.Decoded({ rate : Str })\nother = \"rate: 1.10\"\nlock : JsonValue\nlock =\n    \\\\{\"big\": 340282366920938463463374607431768211455,\n    \\\\ \"smile\": \"\\\\ud83d\\\\ude00\"}\nvalue = config.value.port == 8080 and people.value == [{ name: \"Ada\", age: 36 }] and large.value == expected and other.value.rate == \"1.10\" and lock.get(\"smile\") == Ok(String(\"😀\")) and lock.get(\"big\") == Ok(Number(\"340282366920938463463374607431768211455\"))\n"
   },
   {
     "name": "imported-formats",
@@ -558,5 +558,22 @@
   {
     "name": "yaml-decoder-public-api",
     "body": "load : Str -> Try(a, [InvalidYaml(Yaml.Error), ..errs]) where [a.Yaml.Parseable([InvalidYaml(Yaml.Error), ..errs])]\nload = |source| Yaml.decode(source)\nCustom := [Value(Str)].{\n    is_eq : _\n    parser_for : Yaml.Format -> (Yaml.Cursor -> Try({ value : Custom, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]))\n    parser_for = |format| |cursor| Yaml.Format.parse_str(format, cursor).map_ok(|parsed| { value: Value(parsed.value), rest: parsed.rest })\n}\nrecord : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nrecord = load(\"app_name: demo\")\ncustom : Try(Custom, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\ncustom = Yaml.decode(\"custom\")\nkebab : Try({ app_name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])\nkebab = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })(\"app-name: demo\")\nquoted : Yaml.Decoded({ port : U16 })\nquoted = \"port: 8080\"\nchecked : { user_id : U64 }\nchecked = Literal.require(Yaml.validate_as({ source: \"userId: 12\", keys: CamelCase, unknown_keys: Reject }))\nvalue = record == Ok({ app_name: \"demo\" }) and custom == Ok(Value(\"custom\")) and kebab == Ok({ app_name: \"demo\" }) and quoted.value == { port: 8080 } and checked == { user_id: 12 }\n"
+  },
+  {
+    "name": "dom-construction-public-api",
+    "body": "parent : Markup.Name\nparent = { namespace: Uri(\"urn:custom\"), prefix: Prefix(\"x\"), local: \"Panel\" }\ncontext : DomConstruction.Context\ncontext = DomConstruction.root({ parent: parent })\nvalue = DomConstruction.text(context, \"custom text\").is_ok()\n"
+  },
+  {
+    "name": "dom-construction-opaque-context",
+    "body": "context = DomConstruction.root({ parent: { namespace: NoNamespace, prefix: Unprefixed, local: \"anything\" } })\nvalue = context.parent\n",
+    "errors": [
+      "type mismatch",
+      "not a record",
+      "DomConstruction.Context"
+    ]
+  },
+  {
+    "name": "xml-public-node-aliases",
+    "body": "attributes : List(Xml.Attribute)\nattributes = [{ name: \"id\", value: \"a\" }]\nnode : Xml.Node\nnode = Xml.Node.Element({ name: \"root\", attributes: attributes, children: [Xml.Node.Text(\"text\")] })\ndocument = Literal.require(Xml.parse_str(\"<root id='a'>text</root>\").map_err(|_| BadQuotedBytes(\"XML rejected\")))\nnamespace : XmlNs.Namespace\nnamespace = Uri(\"urn:example\")\nname : XmlNs.Name\nname = { namespace: namespace, prefix: Unprefixed, local: \"root\" }\nbindings : List(XmlNs.Binding)\nbindings = [{ prefix: Default, namespace: namespace }]\nns_attributes : List(XmlNs.Attribute)\nns_attributes = [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: \"id\" }, value: \"a\" }]\nns_node : XmlNs.Node\nns_node = XmlNs.Node.Element({ name: name, bindings: bindings, attributes: ns_attributes, children: [XmlNs.Node.Text(\"text\")] })\nns_document = Literal.require(XmlNs.parse_str(\"<root xmlns='urn:example' id='a'>text</root>\").map_err(|_| BadQuotedBytes(\"namespaced XML rejected\")))\nvalue = Xml.Node.is_eq(node, document.root) and Xml.is_eq(document, document) and Xml.Node.name(node) == Ok(\"root\") and Xml.Node.attribute(node, \"id\") == Ok(\"a\") and Xml.Node.text(node) == \"text\" and Xml.Node.children_named(node, \"root\").is_empty() and Set.from_list([node, document.root]).len() == 1 and Dict.empty().insert(document, \"ok\").get(document) == Ok(\"ok\") and XmlNs.Node.is_eq(ns_node, ns_document.root) and XmlNs.is_eq(ns_document, ns_document) and XmlNs.Node.name(ns_node) == Ok(name) and XmlNs.Node.attribute(ns_node, NoNamespace, \"id\") == Ok(\"a\") and XmlNs.Node.text(ns_node) == \"text\" and XmlNs.Node.children_named(ns_node, namespace, \"root\").is_empty() and Set.from_list([ns_node, ns_document.root]).len() == 1 and Dict.empty().insert(ns_document, \"ok\").get(ns_document) == Ok(\"ok\")\n"
   }
 ]

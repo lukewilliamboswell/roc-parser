@@ -27,6 +27,19 @@
       ]
     },
     {
+      "path": "examples/dom-construction.roc",
+      "cases": [
+        {
+          "name": "default",
+          "args": [],
+          "stdin": "",
+          "stdout": "Explicit DOM names and bounded HTML repairs checked\n",
+          "stderr": "",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
       "path": "examples/letters.roc",
       "cases": [
         {

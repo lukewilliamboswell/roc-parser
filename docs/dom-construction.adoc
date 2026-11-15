@@ -1,0 +1,84 @@
+[#dom-construction]
+= Check repairs when constructing DOM nodes
+
+Use `DomConstruction` to check a bounded set of HTML tree-construction repairs
+before appending an explicitly named DOM element or text node. Its names have
+already been resolved, as with `createElementNS`: namespace, prefix and local
+name stay exactly as supplied. No case folding, namespace inference, name
+validation or vocabulary check occurs. No-namespace names, extension namespace
+URIs, prefixes and unknown names are accepted as identities. An HTML-namespace
+`math` stays HTML; an explicitly HTML-namespaced child below SVG `foreignObject`
+stays HTML.
+
+`root({ parent: name })` starts at any explicit enclosing boundary and always
+returns a context. It assumes no outer ancestors or previous siblings. Keep the
+context returned by `enter(parent_context, child_name)` beside its child node.
+Reuse the original parent context for siblings or replacement children. Both
+operations retain only the immediate parent and finite inherited facts; their
+work is independent of tree depth. They never walk or retain an ancestor list.
+
+The runnable {src}/examples/dom-construction.roc[example] demonstrates paragraph
+closure, explicit table sections, attribute-dependent inputs and extension names:
+
+[source,roc]
+----
+include::examples/dom-construction.roc[tag=construction]
+----
+
+== Handle the result
+
+`enter` returns the child's context or a `Problem`. `text(context, decoded_value)`
+returns an empty record or a `Problem`; it does not create a node or escape text.
+
+`Repair(detail)` reports a covered repair. `detail.parent` is the exact immediate
+parent name, and `detail.child` is `Element(name)` or `Text`. Its `rule` is one of:
+
+[cols="1,3",options="header"]
+|===
+|Rule |Covered condition
+|`CloseParagraph` |A block-like start tag closes an open paragraph in button scope.
+|`InsertTableSection` |A row directly in a table requires an implied section.
+|`InvalidTableChild` |A child is moved, ignored or requires an implied table part in the current table insertion mode.
+|`TablePartOutsideTable` |A table part in ordinary body context is ignored.
+|`NestedAnchor` |An active anchor exists after the last formatting marker.
+|`NestedForm` |An existing form pointer prevents another form outside template handling.
+|`NestedButton` |A button in scope is closed before another button starts.
+|`CloseListItem` |A new list item closes the previous item before a list-scan boundary.
+|`CloseDescriptionItem` |A new `dd` or `dt` closes a previous description item.
+|`CloseOption` |An option/group or select child implies the current option-related end tag.
+|`CloseHeading` |A heading starts with another heading as the immediate parent.
+|`ChildOfVoid` |An HTML void element is given an element or any text node, including empty text.
+|`ElementInTextContent` |An element child is given to an HTML raw-text, RCDATA or plaintext parent.
+|`FosterTableText` |Text cannot remain below its intended restricted table parent.
+|===
+
+An `input` in table, section or row insertion mode returns
+`Unsupported({ parent, child, reason: AttributeDependentTableInput })`.
+`type=hidden` changes tree construction, so its name alone cannot establish a
+repair. Handle `Unsupported` separately from `Repair`.
+
+Unrestricted `text` returns without scanning the new value. Restricted table
+parents accept HTML whitespace, including form feed, and scan only that value.
+A form inserted directly in a table is not pushed onto the parser stack, so
+subsequent children and nonempty text cannot remain inside that form.
+The optional `scripting` field of `RootProps` defaults to `True`; it controls
+`noscript` text handling and propagates to descendants.
+
+== Scope of the check
+
+A successful check does not certify a complete serialization round trip.
+The listed repairs operate on a fresh enclosing boundary and finite inherited
+scope facts. Sibling/insertion history, document and frameset modes, foreign
+content breakouts and namespace adjustments, ruby rules, nested selects,
+formatting adoption on end tags and attribute-dependent behavior are outside
+this bounded check. Templates establish scope and formatting boundaries, but
+these contexts do not model changing template insertion modes across siblings.
+Source escaping, initial-newline stripping, null preprocessing and tokenizer
+end delimiters remain serializer responsibilities.
+
+Use xref:markup-context.adoc#markup-context[`MarkupContext`] for source-authoring
+placement, canonical HTML identities and HTML/SVG/MathML content models.
+Use `DomName` to validate computed names independently. Use `Html.parse_source`
+with browser recovery to inspect complete HTML tree construction, or the format
+parser and `validate_tree` for authoring validation. `DomConstruction` does not
+replace those checks.

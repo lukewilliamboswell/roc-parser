@@ -38,6 +38,7 @@ import parser.Utf8
 import parser.Parser
 import parser.Yaml
 import parser.Xml
+import parser.XmlNs
 import parser.CSV
 import parser.Markdown
 import parser.AsciiDoc
@@ -50,6 +51,7 @@ import parser.MathML
 import parser.SvgPath
 import parser.Markup
 import parser.MarkupFacts
+import parser.DomConstruction
 '''
     main = '''main! = |_args| Stdout.line!(Str.inspect(value))
 '''

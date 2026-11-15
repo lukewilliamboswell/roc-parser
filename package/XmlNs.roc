@@ -1,3 +1,4 @@
+import XmlNsTypes
 import Xml
 
 ## XML with namespaces resolved, following
@@ -41,7 +42,7 @@ XmlNs := {
 
 	## The namespace a name is in. `xmlns=""` puts unprefixed elements in
 	## `NoNamespace`, and unprefixed attributes are always in it.
-	Namespace : [Uri(Str), NoNamespace]
+	Namespace : XmlNsTypes.Namespace
 
 	## A resolved name: its namespace, its local part, and the prefix it was
 	## written with.
@@ -49,15 +50,15 @@ XmlNs := {
 	## ```roc
 	## expect XmlNs.parse_str("<s:svg xmlns:s='http://www.w3.org/2000/svg'/>").map_ok(|doc| doc.root.name()) == Ok(Ok({ namespace: Uri("http://www.w3.org/2000/svg"), local: "svg", prefix: Prefix("s") }))
 	## ```
-	Name : { namespace : Namespace, local : Str, prefix : [Prefix(Str), Unprefixed] }
+	Name : XmlNsTypes.Name
 
 	## A namespace declaration: `xmlns:p="u"` binds `Prefix("p")`, and
 	## `xmlns="u"` binds `Default` (to `NoNamespace` for `xmlns=""`).
-	Binding : { prefix : [Prefix(Str), Default], namespace : Namespace }
+	Binding : XmlNsTypes.Binding
 
 	## An attribute other than a namespace declaration, with its resolved
 	## name and its decoded value.
-	Attribute : { name : Name, value : Str }
+	Attribute : XmlNsTypes.Attribute
 
 	## An element or text node of a namespaced document.
 	##
@@ -65,104 +66,7 @@ XmlNs := {
 	## makes in `bindings` (in source order), its other `attributes` in source
 	## order, and its `children` in document order. `Text` is as in
 	## [Xml.Node].
-	Node := [
-		Element({ name : Name, bindings : List(Binding), attributes : List(Attribute), children : List(Node) }),
-		Text(Str),
-	].{
-
-		## Compare two nodes structurally.
-		is_eq : _
-
-		## Hash a node, so nodes can be `Dict` keys and `Set` members.
-		to_hash : _
-
-		## The resolved name of an element, or `Err(NotAnElement)` for text.
-		name : Node -> Try(Name, [NotAnElement])
-		name = |node| {
-			match node {
-				Element(element) => Ok(element.name)
-				Text(_) => Err(NotAnElement)
-			}
-		}
-
-		## The value of the element's attribute with this namespace and local
-		## name, or `Err(Missing)` when there is none or the node is text.
-		##
-		## ```roc
-		## expect {
-		##     root = XmlNs.parse_str("<a xmlns:x='urn:x' x:id='1' id='2'/>")?.root
-		##     root.attribute(Uri("urn:x"), "id") == Ok("1") and root.attribute(NoNamespace, "id") == Ok("2")
-		## }
-		## ```
-		attribute : Node, Namespace, Str -> Try(Str, [Missing])
-		attribute = |node, namespace, local| {
-			match node {
-				Element(element) =>
-					match element.attributes.find_first(|attr| attr.name.local == local and attr.name.namespace == namespace) {
-						Ok(attr) => Ok(attr.value)
-						Err(_) => Err(Missing)
-					}
-
-				Text(_) => Err(Missing)
-			}
-		}
-
-		## The element's direct child elements with this namespace and local
-		## name, in document order. Empty for a text node.
-		children_named : Node, Namespace, Str -> List(Node)
-		children_named = |node, namespace, local| {
-			match node {
-				Element(element) =>
-					element.children.keep_if(
-						|child| {
-							match child {
-								Element(child_element) => child_element.name.local == local and child_element.name.namespace == namespace
-								Text(_) => False
-							}
-						},
-					)
-
-				Text(_) => []
-			}
-		}
-
-		## All character data in the node and its descendants, concatenated in
-		## document order.
-		text : Node -> Str
-		text = |node| {
-			# An explicit work list keeps deep trees from exhausting the call stack.
-			var $out = []
-			var $pending = [node]
-			while !$pending.is_empty() {
-				match $pending.last() {
-					Ok(Text(str)) => {
-						$out = $out.concat(str.to_utf8())
-						$pending = $pending.drop_last(1)
-					}
-
-					Ok(Element(element)) => {
-						$pending = $pending.drop_last(1)
-						var $index = element.children.len()
-						while $index > 0 {
-							$index = $index - 1
-							match element.children.get($index) {
-								Ok(child) => {
-									$pending = $pending.append(child)
-								}
-
-								Err(_) => {}
-							}
-						}
-					}
-
-					Err(_) => {
-						$pending = []
-					}
-				}
-			}
-			Str.from_utf8($out) ?? ""
-		}
-	}
+	Node : XmlNsTypes.Node
 
 	## A rule of Namespaces in XML 1.0 that a document breaks.
 	##

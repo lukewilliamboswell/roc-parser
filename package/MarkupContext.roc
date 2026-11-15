@@ -68,7 +68,7 @@ MarkupContext :: [].{
 			if MarkupVocabulary.html_void(context.parent.local) {
 				return Err(WouldRepair(ReparentedContent))
 			}
-			if context.mode != Body and (["table", "tbody", "thead", "tfoot", "tr", "colgroup"].contains(context.parent.local)) and !Rules.html_whitespace(value) {
+			if context.mode != Body and Rules.restricted_table_parent(context.parent.local) and !Rules.html_whitespace(value) {
 				return Err(WouldRepair(ReparentedContent))
 			}
 		}
@@ -146,13 +146,13 @@ child_mode = |previous, element| {
 	if element.namespace != Uri(Markup.html_namespace) {
 		return previous
 	}
-	match element.local {
-		"table" => Table
-		"tbody" | "thead" | "tfoot" => Section
-		"tr" => Row
-		"colgroup" => Colgroup
-		"td" | "th" | "caption" => Body
-		_ => previous
+	match Rules.table_mode(element.local) {
+		Inherit => previous
+		Body => Body
+		Table => Table
+		Section => Section
+		Row => Row
+		Colgroup => Colgroup
 	}
 }
 
@@ -242,7 +242,7 @@ check_html_child = |context, element, attributes| {
 	if ["html", "head", "body", "image"].contains(name) {
 		return Err(WouldRepair(IgnoredMarkup))
 	}
-	if context.mode == Body and ["caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr", "frame"].contains(name) {
+	if context.mode == Body and (Rules.table_part(name) or name == "frame") {
 		return Err(WouldRepair(IgnoredMarkup))
 	}
 	if context.mode == Table and name == "tr" {
@@ -251,16 +251,16 @@ check_html_child = |context, element, attributes| {
 	if context.mode == Table and name == "col" {
 		return Err(WouldRepair(ImpliedElement("colgroup")))
 	}
-	if (context.mode == Table or context.mode == Section) and ["td", "th"].contains(name) {
+	if (context.mode == Table or context.mode == Section) and Rules.table_cell(name) {
 		return Err(WouldRepair(ImpliedElement("tr")))
 	}
-	if context.mode == Table and !["caption", "colgroup", "thead", "tbody", "tfoot", "script", "style"].contains(name) {
+	if context.mode == Table and !Rules.table_regular_child(name) {
 		return Err(WouldRepair(ReparentedContent))
 	}
-	if context.mode == Section and !["tr", "script", "style"].contains(name) {
+	if context.mode == Section and !(name == "tr" or Rules.table_head_content(name)) {
 		return Err(WouldRepair(ReparentedContent))
 	}
-	if context.mode == Row and !["td", "th", "script", "style"].contains(name) {
+	if context.mode == Row and !(Rules.table_cell(name) or Rules.table_head_content(name)) {
 		return Err(WouldRepair(ReparentedContent))
 	}
 	if context.mode == Colgroup and name != "col" {
