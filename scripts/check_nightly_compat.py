@@ -12,12 +12,54 @@ import platform
 import re
 import shutil
 import subprocess
+import tarfile
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def gh_json(endpoint: str):
     return json.loads(subprocess.check_output(["gh", "api", endpoint], text=True))
+
+
+def install_zig(version: str) -> None:
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise ValueError("Expected a released Zig version")
+    system = {"Darwin": "macos", "Linux": "linux"}[platform.system()]
+    arch = {"arm64": "aarch64", "aarch64": "aarch64", "x86_64": "x86_64"}[platform.machine()]
+    target = f"{arch}-{system}"
+    with urllib.request.urlopen("https://ziglang.org/download/index.json", timeout=60) as response:
+        index = json.load(response)
+    metadata = index[version][target]
+    filename = f"zig-{target}-{version}.tar.xz"
+    url = f"https://ziglang.org/download/{version}/{filename}"
+    if metadata["tarball"] != url or not re.fullmatch(r"[0-9a-f]{64}", metadata["shasum"]):
+        raise ValueError("Unexpected Zig supplier metadata")
+    work = ROOT / ".roc-parser-tmp" / "nightly-zig"
+    work.mkdir(parents=True, exist_ok=True)
+    archive = work / filename
+    if not archive.exists():
+        with urllib.request.urlopen(url, timeout=120) as response, archive.open("wb") as stream:
+            shutil.copyfileobj(response, stream)
+    if hashlib.sha256(archive.read_bytes()).hexdigest() != metadata["shasum"]:
+        raise ValueError("Zig archive differs from its supplier digest")
+    directory = work / filename.removesuffix(".tar.xz")
+    if not (directory / "zig").is_file():
+        with tarfile.open(archive) as stream:
+            if any(member.name.split("/")[0] != directory.name for member in stream.getmembers()):
+                raise ValueError("Unexpected Zig archive root")
+            stream.extractall(work, filter="data")
+    actual = subprocess.check_output([str(directory / "zig"), "version"], text=True).strip()
+    if actual != version:
+        raise ValueError("Installed Zig version differs from selected version")
+    if os.environ.get("GITHUB_PATH"):
+        with Path(os.environ["GITHUB_PATH"]).open("a") as stream:
+            stream.write(str(directory) + "\n")
+    receipt = ROOT / ".roc-parser-tmp" / "nightly-compatibility" / "zig-install.json"
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    receipt.write_text(json.dumps({"version": actual, "target": target, "url": url,
+                                   "sha256": metadata["shasum"]}, indent=2) + "\n")
+    print(receipt.read_text())
 
 
 def nightly_revision(tag: str) -> str:
@@ -116,6 +158,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="command", required=True)
     modes.add_parser("resolve")
+    zig = modes.add_parser("zig")
+    zig.add_argument("--version", required=True)
     checks = modes.add_parser("check")
     checks.add_argument("--roc", default="roc")
     checks.add_argument("--nightly", required=True)
@@ -127,6 +171,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "resolve":
         resolve()
+    elif args.command == "zig":
+        install_zig(args.version)
     else:
         check(args)
 
