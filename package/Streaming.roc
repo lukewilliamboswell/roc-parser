@@ -25,7 +25,7 @@ Streaming :: [].{
 	ReadEvent(item, problem) : [Value(item), Rejected(problem), Finished(Report)]
 
 	## Terminal decoding failure, including the rejection exceeding the budget.
-	ReadError(problem) : [ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem })]
+	ReadError(problem) : [ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(Str)]
 
 	## One pure step. `consumed` counts bytes of this call's input only.
 	Step(state, item, problem) : {
@@ -96,28 +96,30 @@ Streaming :: [].{
 	## Lazily decode pure byte chunks. Empty chunks are data, never EOF.
 	iter : Iter(Bytes), state, (state, Bytes, InputEnd -> Step(state, item, problem)), ReadProps -> Iter(Try(ReadEvent(item, problem), ReadError(problem)))
 	iter = |chunks, initial, step, props| Iter.custom(
-		Reading({ chunks, buffer: [], index: 0, final: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
+		Reading({ chunks, buffer: [], index: 0, final: False, need_input: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
 		Err(Unknown),
 		|cursor| match cursor {
 			Stopped => Err(NoMore)
 			Reading(start) => {
 				var $cursor = start
 				while True {
-					if $cursor.index >= $cursor.buffer.len() and !$cursor.final {
+					if $cursor.need_input {
 						match $cursor.chunks.next() {
 							Done => {
-								$cursor = { ..$cursor, buffer: [], index: 0, final: True }
+								$cursor = { ..$cursor, buffer: [], index: 0, final: True, need_input: False }
 							}
 							Skip({ rest }) => {
 								$cursor = { ..$cursor, chunks: rest }
 							}
 							One({ item, rest }) => {
-								$cursor = { ..$cursor, chunks: rest, buffer: item, index: 0 }
+								$cursor = { ..$cursor, chunks: rest, buffer: item, index: 0, need_input: False }
 							}
 						}
-					}
-					if $cursor.index < $cursor.buffer.len() or $cursor.final {
+					} else {
 						next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
+						if next.consumed > $cursor.buffer.len() - $cursor.index {
+							return Ok((Err(DecoderProtocol("decoder consumed beyond its input")), Stopped))
+						}
 						$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 						match next.outcome {
 							Item(value) => {
@@ -136,8 +138,21 @@ Streaming :: [].{
 									return Ok((Ok(Rejected(error)), Reading($cursor)))
 								}
 							}
-							NeedInput => {}
-							Done => return Ok((Ok(Finished($cursor.report)), Stopped))
+							NeedInput => {
+								if $cursor.final {
+									return Ok((Err(DecoderProtocol("decoder requested input after EOF")), Stopped))
+								}
+								if $cursor.index != $cursor.buffer.len() {
+									return Ok((Err(DecoderProtocol("decoder left input before requesting more")), Stopped))
+								}
+								$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
+							}
+							Done => {
+								if !$cursor.final or $cursor.index != $cursor.buffer.len() {
+									return Ok((Err(DecoderProtocol("decoder completed before consuming EOF")), Stopped))
+								}
+								return Ok((Ok(Finished($cursor.report)), Stopped))
+							}
 							Failed(error) => return Ok((Err(ParseErr(error)), Stopped))
 						}
 					}
@@ -147,31 +162,33 @@ Streaming :: [].{
 	)
 
 	## Lazily decode an effectful source. Source errors stop without finalizing.
-	stream : Stream(Try(Bytes, source_error)), state, (state, Bytes, InputEnd -> Step(state, item, problem)), ReadProps -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem })]))
+	stream : Stream(Try(Bytes, source_error)), state, (state, Bytes, InputEnd -> Step(state, item, problem)), ReadProps -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(Str)]))
 	stream = |chunks, initial, step, props| Stream.custom(
-		Reading({ chunks, buffer: [], index: 0, final: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
+		Reading({ chunks, buffer: [], index: 0, final: False, need_input: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
 		Err(Unknown),
 		|cursor| match cursor {
 			Stopped => Err(NoMore)
 			Reading(start) => {
 				var $cursor = start
 				while True {
-					if $cursor.index >= $cursor.buffer.len() and !$cursor.final {
+					if $cursor.need_input {
 						match $cursor.chunks.next!() {
 							Done => {
-								$cursor = { ..$cursor, buffer: [], index: 0, final: True }
+								$cursor = { ..$cursor, buffer: [], index: 0, final: True, need_input: False }
 							}
 							Skip({ rest }) => {
 								$cursor = { ..$cursor, chunks: rest }
 							}
 							One({ item: Ok(bytes), rest }) => {
-								$cursor = { ..$cursor, chunks: rest, buffer: bytes, index: 0 }
+								$cursor = { ..$cursor, chunks: rest, buffer: bytes, index: 0, need_input: False }
 							}
 							One({ item: Err(error), .. }) => return Ok((Err(SourceErr(error)), Stopped))
 						}
-					}
-					if $cursor.index < $cursor.buffer.len() or $cursor.final {
+					} else {
 						next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
+						if next.consumed > $cursor.buffer.len() - $cursor.index {
+							return Ok((Err(DecoderProtocol("decoder consumed beyond its input")), Stopped))
+						}
 						$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 						match next.outcome {
 							Item(value) => {
@@ -190,8 +207,21 @@ Streaming :: [].{
 									return Ok((Ok(Rejected(error)), Reading($cursor)))
 								}
 							}
-							NeedInput => {}
-							Done => return Ok((Ok(Finished($cursor.report)), Stopped))
+							NeedInput => {
+								if $cursor.final {
+									return Ok((Err(DecoderProtocol("decoder requested input after EOF")), Stopped))
+								}
+								if $cursor.index != $cursor.buffer.len() {
+									return Ok((Err(DecoderProtocol("decoder left input before requesting more")), Stopped))
+								}
+								$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
+							}
+							Done => {
+								if !$cursor.final or $cursor.index != $cursor.buffer.len() {
+									return Ok((Err(DecoderProtocol("decoder completed before consuming EOF")), Stopped))
+								}
+								return Ok((Ok(Finished($cursor.report)), Stopped))
+							}
 							Failed(error) => return Ok((Err(ParseErr(error)), Stopped))
 						}
 					}
@@ -201,7 +231,7 @@ Streaming :: [].{
 	)
 
 	## Collect values, failing rather than silently dropping rejected records.
-	collect : Iter(Try(ReadEvent(item, problem), terminal_error)) -> Try(List(item), [ReadFailed(terminal_error), RejectedRecord(problem)])
+	collect : Iter(Try(ReadEvent(item, problem), terminal_error)) -> Try(List(item), [ReadFailed(terminal_error), RejectedRecord(problem), MissingFinished, SkippedRecords(Report)])
 	collect = |events| {
 		var $values = []
 		for event in events {
@@ -210,12 +240,106 @@ Streaming :: [].{
 					$values = $values.append(value)
 				}
 				Ok(Rejected(error)) => return Err(RejectedRecord(error))
-				Ok(Finished(_)) => return Ok($values)
+				Ok(Finished(report)) => return if (report.rejected_records == 0) Ok($values) else Err(SkippedRecords(report))
 				Err(error) => return Err(ReadFailed(error))
 			}
 		}
-		Ok($values)
+		Err(MissingFinished)
 	}
+
+	## Validate and encode each item before emitting its first bounded byte chunk.
+	encode_iter : Iter(item), (item -> Try(Bytes, problem)), U64 -> Iter(Try(Bytes, [EncodeErr(problem), InvalidChunkSize]))
+	encode_iter = |items, encode, chunk_bytes| Iter.custom(
+		Reading({ items, buffer: [], index: 0 }),
+		Err(Unknown),
+		|cursor| match cursor {
+			Stopped => Err(NoMore)
+			Reading(start) => {
+				if chunk_bytes == 0 {
+					return Ok((Err(InvalidChunkSize), Stopped))
+				}
+				var $cursor = start
+				while True {
+					if $cursor.index < $cursor.buffer.len() {
+						len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
+						bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
+						$cursor = { ..$cursor, index: $cursor.index + len }
+						return Ok((Ok(bytes), Reading($cursor)))
+					}
+					match $cursor.items.next() {
+						Done => return Err(NoMore)
+						Skip({ rest }) => {
+							$cursor = { ..$cursor, items: rest }
+						}
+						One({ item, rest }) => match encode(item) {
+							Ok(bytes) => {
+								$cursor = { items: rest, buffer: bytes, index: 0 }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+					}
+				}
+			}
+		},
+	)
+
+	## Stream encoded chunks, retaining only the current validated item.
+	encode_stream : Stream(Try(item, source_error)), (item -> Try(Bytes, problem)), U64 -> Stream(Try(Bytes, [SourceErr(source_error), EncodeErr(problem), InvalidChunkSize]))
+	encode_stream = |items, encode, chunk_bytes| Stream.custom(
+		Reading({ items, buffer: [], index: 0 }),
+		Err(Unknown),
+		|cursor| match cursor {
+			Stopped => Err(NoMore)
+			Reading(start) => {
+				if chunk_bytes == 0 {
+					return Ok((Err(InvalidChunkSize), Stopped))
+				}
+				var $cursor = start
+				while True {
+					if $cursor.index < $cursor.buffer.len() {
+						len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
+						bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
+						$cursor = { ..$cursor, index: $cursor.index + len }
+						return Ok((Ok(bytes), Reading($cursor)))
+					}
+					match $cursor.items.next!() {
+						Done => return Err(NoMore)
+						Skip({ rest }) => {
+							$cursor = { ..$cursor, items: rest }
+						}
+						One({ item: Ok(item), rest }) => match encode(item) {
+							Ok(bytes) => {
+								$cursor = { items: rest, buffer: bytes, index: 0 }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+						One({ item: Err(error), .. }) => return Ok((Err(SourceErr(error)), Stopped))
+					}
+				}
+			}
+		},
+	)
+
+	## Explicitly collect successful values and bounded reported rejections.
+	collect_report : Iter(Try(ReadEvent(item, problem), terminal_error)) -> Try({ values : List(item), errors : List(problem), report : Report }, [ReadFailed(terminal_error), MissingFinished])
+	collect_report = |events| {
+		var $values = []
+		var $errors = []
+		for event in events {
+			match event {
+				Ok(Value(value)) => {
+					$values = $values.append(value)
+				}
+				Ok(Rejected(error)) => {
+					$errors = $errors.append(error)
+				}
+				Ok(Finished(report)) => return Ok({ values: $values, errors: $errors, report })
+				Err(error) => return Err(ReadFailed(error))
+			}
+		}
+		Err(MissingFinished)
+	}
+
 }
 
 expect Streaming.decode_text([0x80, 0xE9], Windows1252) == Ok("€é")
@@ -232,3 +356,23 @@ expect List.from_iter(Streaming.iter([[1.U8], [], [2]].iter(), 0, test_step, {})
 expect List.from_iter(Streaming.iter([[1.U8, 0, 2]].iter(), 0, test_step, {})) == [Ok(Value(1)), Err(ParseErr("zero"))]
 expect List.from_iter(Streaming.iter([[1.U8, 0, 2]].iter(), 0, test_step, { error_policy: SkipInvalidRecords })) == [Ok(Value(1)), Ok(Value(2)), Ok(Finished({ emitted_items: 2, rejected_records: 1 }))]
 expect List.from_iter(Streaming.iter([[0.U8, 0]].iter(), 0, test_step, { error_policy: ReportInvalidRecords, max_errors: 1 })) == [Ok(Rejected("zero")), Err(ErrorLimitExceeded({ max: 1, error: "zero" }))]
+
+expect Streaming.collect([Ok(Value(1.U64))].iter()) == Err(MissingFinished)
+expect Streaming.collect_report(Streaming.iter([[1.U8, 0, 2]].iter(), 0, test_step, { error_policy: ReportInvalidRecords })) == Ok({ values: [1, 2], errors: ["zero"], report: { emitted_items: 2, rejected_records: 1 } })
+expect List.from_iter(Streaming.encode_iter(["abcd"].iter(), |text| Ok(text.to_utf8()), 2)) == [Ok("ab".to_utf8()), Ok("cd".to_utf8())]
+expect List.from_iter(Streaming.encode_iter(["abc"].iter(), |text| Ok(text.to_utf8()), 0)) == [Err(InvalidChunkSize)]
+expect {
+	queued = |state, bytes, end| {
+		if state == 1 {
+			{ state: 2, consumed: 0, outcome: Item(9.U8) }
+		}
+		else {
+			match bytes.first() {
+				Ok(value) => { state: 1, consumed: bytes.len(), outcome: Item(value) }
+				Err(_) => { state, consumed: 0, outcome: if (end == Final) Done else NeedInput }
+			}
+		}
+	}
+	List.from_iter(Streaming.iter([[1.U8]].iter(), 0, queued, {})) == [Ok(Value(1)), Ok(Value(9)), Ok(Finished({ emitted_items: 2, rejected_records: 0 }))]
+}
+expect List.from_iter(Streaming.iter([].iter(), 0.U64, |state, _, _| { state, consumed: 0, outcome: NeedInput }, {})) == [Err(DecoderProtocol("decoder requested input after EOF"))]
