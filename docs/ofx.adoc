@@ -55,7 +55,9 @@ and late context changes fail rather than changing an already emitted context.
 Transaction `extensions` retain supported XML elements in relative order.
 Attributes and unknown SGML extension tags are unsupported. SGML has omitted
 leaf closes, so guessing whether an unknown tag is a leaf would be ambiguous.
-DTD declarations, external entities, investment statements, and nonstatement
+Padded CDATA in typed scalar fields is explicitly unsupported; ordinary scalar
+whitespace is normalized. This avoids discarding spaces that CDATA makes
+significant. DTD declarations, external entities, investment statements, and nonstatement
 message sets are outside this banking/card subset. Files containing unsupported
 constructs are rejected rather than silently interpreted as another format.
 
@@ -102,3 +104,9 @@ reader/writer pipelines, and safe recovery. `ofx-ceilings` creates distinct
 chunks inside `Fuzz.measure!` and discards events immediately. Its small/large
 examples hold chunk size, record size, and depth fixed while increasing record
 count, enforcing constant peak retained memory and linear allocator traffic.
+
+The retention measuring examples keep a 32-byte first transaction identifier
+while draining later records. Their first source chunk includes a 64-KiB record
+and 256 KiB of unrelated markup. Both the source chunk and captured record must
+be released: only the retained string remains live after the drain. This checks
+retention by returned values separately from the discard-all parser-state test.

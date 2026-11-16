@@ -483,6 +483,12 @@ consume_token = |state| {
 		return Err(problem(state, "DTDs and external entities are unsupported"))
 	}
 	if text.starts_with("<!--") or text.starts_with("<![CDATA[") {
+		if text.starts_with("<![CDATA[") and ["NAME", "MEMO", "FITID", "TRNTYPE", "DTPOSTED", "TRNAMT", "CHECKNUM", "BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY", "BALAMT", "DTASOF"].contains(state.stack.last().map_ok(|frame| frame.name) ?? "") {
+			content = Str.from_utf8_lossy(text.to_utf8().sublist({ start: 9, len: text.count_utf8_bytes() - 12 }))
+			if content != content.trim() {
+				return Err(problem(state, "padded CDATA in typed OFX fields is unsupported"))
+			}
+		}
 		_ = Xml.parse_str("<v>${text}</v>").map_err(|_| problem(state, "malformed XML comment or CDATA"))?
 		if state.syntax == Sgml102 {
 			return Err(problem(state, "SGML comments and CDATA are unsupported"))
@@ -1253,3 +1259,10 @@ xml_encoding = |text| {
 }
 expect OFX.parse_bytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}".to_utf8(), { encoding: Windows1252 }).is_err()
 expect OFX.parse_str("<?xml version=\"1.0\" encoding=\"invalid-utf-8\"?>${sample_xml}").is_err()
+
+expect OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "<![CDATA[  padded  ]]>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<MEMO>One</MEMO>", "<MEMO><![CDATA[  padded  ]]></MEMO>")).is_err()
+expect {
+	document = OFX.parse_str(sample_xml.replace_each("Café &amp; tea", "  ordinary  "))?
+	document.statements.first()?.transactions.first()?.name == "ordinary"
+}
