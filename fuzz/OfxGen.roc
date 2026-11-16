@@ -29,7 +29,7 @@ OfxGen :: [].{
 		bank = if (card) "" else leaf("BANKID", "001")
 		records = Str.join_with($transactions.map(|t| "<STMTTRN>${leaf("TRNTYPE", t.type)}${leaf("DTPOSTED", t.posted)}${leaf("TRNAMT", t.amount)}${leaf("FITID", t.id)}${leaf("NAME", t.name)}${leaf("MEMO", t.memo)}</STMTTRN>"), "")
 		body = "<OFX><SIGNONMSGSRSV1><SONRS><STATUS>${leaf("CODE", "0")}${leaf("SEVERITY", "INFO")}</STATUS>${leaf("DTSERVER", "20000101000000")}${leaf("LANGUAGE", "ENG")}</SONRS></SIGNONMSGSRSV1><${group}><${wrap}>${leaf("TRNUID", "0")}<STATUS>${leaf("CODE", "0")}${leaf("SEVERITY", "INFO")}</STATUS><${stmt}>${leaf("CURDEF", "AUD")}<${acct}>${bank}${leaf("ACCTID", "000123")}${if (card) "" else leaf("ACCTTYPE", "CHECKING")}</${acct}><BANKTRANLIST>${leaf("DTSTART", "20260101")}${leaf("DTEND", "20260201")}${records}</BANKTRANLIST><LEDGERBAL>${leaf("BALAMT", balance.amount)}${leaf("DTASOF", balance.as_of)}</LEDGERBAL></${stmt}></${wrap}></${group}></OFX>"
-		prefix = if (sgml) "OFXHEADER:100\r\nDATA:OFXSGML\r\nVERSION:102\r\nSECURITY:NONE\r\nENCODING:UTF-8\r\nCHARSET:NONE\r\nCOMPRESSION:NONE\r\nOLDFILEUID:NONE\r\nNEWFILEUID:NONE\r\n\r\n" else ""
+		prefix = if (sgml) "OFXHEADER:100\r\nDATA:OFXSGML\r\nVERSION:102\r\nSECURITY:NONE\r\nENCODING:UTF-8\r\nCHARSET:NONE\r\nCOMPRESSION:NONE\r\nOLDFILEUID:NONE\r\nNEWFILEUID:NONE\r\n\r\n" else "<?xml version=\"1.0\" encoding=\"UTF-8\"?><?OFX OFXHEADER=\"200\" VERSION=\"203\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>"
 		{ bytes: "${prefix}${body}".to_utf8(), expected }
 	}
 

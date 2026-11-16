@@ -25,9 +25,10 @@ WORK = ROOT / '.roc-parser-tmp' / 'ofx-review'
 DATA = ROOT / 'scripts' / 'ofx'
 
 
-def normalize_tree(root: ET.Element, header=None) -> dict:
+def normalize_tree(root: ET.Element, header=None, *, decode_entities=False) -> dict:
     def text(element, name):
-        return html.unescape((element.findtext(name) or '').strip())
+        value = (element.findtext(name) or '').strip()
+        return html.unescape(value) if decode_entities else value
     def balance(element, name):
         value = element.find(name)
         return None if value is None else {'amount': text(value, 'BALAMT'), 'as_of': text(value, 'DTASOF')}
@@ -78,9 +79,14 @@ def oracle_bytes(data: bytes) -> bytes:
 def normalize_ofxtools(data: bytes) -> dict:
     from ofxtools.Parser import OFXTree
     parser = OFXTree()
-    parser.parse(io.BytesIO(oracle_bytes(data)))
+    normalized = oracle_bytes(data)
+    parser.parse(io.BytesIO(normalized))
     parser.convert()  # Validate the typed banking model as well as markup.
-    return normalize_tree(parser.getroot(), parser.header)
+    if normalized.lstrip().startswith(b'OFXHEADER:'):
+        return normalize_tree(parser.getroot(), parser.header, decode_entities=True)
+    # Standard XML parsing preserves the distinction between literal CDATA and
+    # references, which the ofxtools raw tree no longer represents.
+    return normalize_tree(ET.fromstring(normalized), parser.header)
 
 
 def normalize_ofxparse(data: bytes) -> list[dict]:
@@ -176,10 +182,56 @@ def check_one(binary: Path, data: bytes, *, cross_write=True) -> dict | None:
         tree = OFXTree()
         tree.parse(io.BytesIO(oracle_bytes(data)))
         converted = tree.convert()
-        serialized = ('<?xml version="1.0" encoding="UTF-8"?>\n' + str(make_header(203)) + ET.tostring(converted.to_etree(), encoding='unicode')).encode()
-        if not equivalent(oracle(serialized), probe(binary, serialized)):
-            return {'problem': 'ofxtools writer -> Roc mismatch'}
+        serialized = (str(make_header(203)) + ET.tostring(converted.to_etree(), encoding='unicode')).encode()
+        external = oracle(serialized)
+        reparsed = probe(binary, serialized)
+        if not equivalent(external, reparsed):
+            return {'problem': 'ofxtools writer -> Roc mismatch', 'external': external, 'actual': reparsed}
+        if semantic_projection(actual) != semantic_projection(external):
+            return {'classification': 'external_writer_limitation' if known_writer_loss(data, actual, external) else 'external_writer_data_loss', 'library': 'ofxtools==1.1.1',
+                    'reason': 'typed writer changes original semantic data',
+                    'original': actual, 'written': external}
+
     return None
+
+
+def known_writer_loss(data: bytes, before: dict, after: dict) -> bool:
+    """Classify only the reproduced ofxtools CDATA/numeric-reference text bug."""
+    if b'<![CDATA[' not in data and not re.search(br'&#(?:x[0-9a-fA-F]+|[0-9]+);', data):
+        return False
+    from copy import deepcopy
+    expected = semantic_projection(before)
+    actual = semantic_projection(after)
+    adjusted = deepcopy(expected)
+    if len(adjusted['statements']) != len(actual['statements']):
+        return False
+    for left, right in zip(adjusted['statements'], actual['statements']):
+        if len(left['transactions']) != len(right['transactions']):
+            return False
+        for original, written in zip(left['transactions'], right['transactions']):
+            original['name'], original['memo'] = written['name'], written['memo']
+    return adjusted == actual
+
+
+def semantic_projection(model: dict) -> dict:
+    """Ignore numeric/date spelling only for independently canonicalizing writers."""
+    from ofxtools.Types import DateTime
+    from copy import deepcopy
+    result = deepcopy(model)
+    for statement in result.get('statements', []):
+        for key in ('start', 'end'):
+            if statement[key]:
+                statement[key] = DateTime().convert(statement[key]).isoformat()
+        if statement['header']['server_date']:
+            statement['header']['server_date'] = DateTime().convert(statement['header']['server_date']).isoformat()
+        for item in statement['transactions']:
+            item['amount'] = str(Decimal(item['amount']).normalize())
+            item['posted'] = DateTime().convert(item['posted']).isoformat()
+        for key in ('ledger_balance', 'available_balance'):
+            if statement[key]:
+                statement[key]['amount'] = str(Decimal(statement[key]['amount']).normalize())
+                statement[key]['as_of'] = DateTime().convert(statement[key]['as_of']).isoformat()
+    return result
 
 
 def main() -> int:
@@ -217,9 +269,12 @@ def main() -> int:
             if args.smoke and len(cases) >= 16:
                 break
     failures = []
+    limitations = []
     if args.command == 'check':
         for fixture in json.loads((DATA/'cases.json').read_text()):
             actual = probe(args.binary, fixture['input'].encode())
+            if fixture['accept']:
+                cases.append(fixture['input'].encode())
             if (actual['status'] == 'ok') != fixture['accept']:
                 failures.append('fixture:' + fixture['name'])
     for data in cases:
@@ -231,8 +286,11 @@ def main() -> int:
             WORK.mkdir(parents=True, exist_ok=True)
             path = WORK / f'repro-{hashlib.sha256(data).hexdigest()[:16]}.json'
             path.write_text(json.dumps({'seed': args.seed, 'input_hex': data.hex(), **mismatch}, indent=2))
-            failures.append(str(path))
-    print(json.dumps({'cases': len(cases), 'failures': failures, 'seed': args.seed}))
+            if mismatch.get('classification') == 'external_writer_limitation':
+                limitations.append(str(path))
+            else:
+                failures.append(str(path))
+    print(json.dumps({'cases': len(cases), 'failures': failures, 'external_writer_limitations': limitations, 'seed': args.seed}))
     return bool(failures)
 
 

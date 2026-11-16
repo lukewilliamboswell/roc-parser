@@ -84,8 +84,12 @@ Run `scripts/review_ofx.py check` with the pinned packages from
 `scripts/ofx/requirements.txt`. The primary oracle is ofxtools 1.1.1; ofxparse
 0.21 checks its represented account and transaction fields independently.
 The adapter explicitly decodes declared Windows-1252 using strict Python codecs
-and normalizes transport for libraries that assume UTF-8 or ASCII. ofxtools'
-raw-tree entity spelling is decoded once for semantic comparison.
+and normalizes transport for libraries that assume UTF-8 or ASCII. XML values are projected from Python's standard XML parser after ofxtools
+validation, preserving CDATA/reference provenance. SGML raw-tree entity spelling
+is decoded once. Cross-writer checks compare original semantic values as well
+as readers of the written output. Reproduced ofxtools 1.1.1 text loss for
+CDATA/numeric references is reported separately with both models; unexpected
+writer data changes fail the review.
 
 The review exercises bank/card, SGML/XML, and UTF-8/Windows-1252 combinations,
 our writers through external readers, and the independent ofxtools XML writer

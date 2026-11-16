@@ -499,7 +499,20 @@ consume_token = |state| {
 		if state.root_seen {
 			return Err(problem(state, "processing instruction inside OFX is unsupported"))
 		}
+		if state.syntax == Sgml102 {
+			return Err(problem(state, "XML prologue contradicts SGML header"))
+		}
 		low = lower(text)
+		marker = if (low.starts_with("<?xml ")) "xml" else "ofx"
+		if state.context_seen.contains(marker) or (marker == "xml" and state.context_seen.contains("ofx")) {
+			return Err(problem(state, "duplicate or out-of-order OFX prologue"))
+		}
+		if marker == "xml" {
+			_ = Xml.parse_str("${text}<v/>").map_err(|_| problem(state, "malformed XML declaration"))?
+			if !state.header.is_empty() and state.header != [239, 187, 191] {
+				return Err(problem(state, "XML declaration must start the document"))
+			}
+		}
 		var $next = state
 		if low.starts_with("<?xml ") {
 			if low.contains("windows-1252") {
@@ -524,7 +537,7 @@ consume_token = |state| {
 		} else {
 			return Err(problem(state, "unknown OFX processing instruction"))
 		}
-		return Ok({ state: $next, outcome: Quiet })
+		return Ok({ state: { ..$next, context_seen: state.context_seen.append(marker) }, outcome: Quiet })
 	}
 	if text.starts_with("<!") {
 		return Err(problem(state, "unsupported OFX declaration"))
@@ -1176,3 +1189,6 @@ expect {
 	OFX.write(once.writer, LedgerBalance(balance)).is_err()
 }
 expect !timestamp("20260101[5:EST:extra]") and !timestamp("20260101[5:EST]extra]")
+
+expect OFX.parse_str("<?xml version=\"1.0\"?><?xml version=\"1.0\"?>${sample_xml}").is_err()
+expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}").is_err()
