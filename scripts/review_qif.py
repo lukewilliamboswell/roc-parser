@@ -141,7 +141,9 @@ def main():
     if args.command == "campaign":
         seconds = 1 if args.smoke else max(1, args.seconds / 10)
         for target in ("qif-raw", "qif-roundtrip", "qif-malformed", "qif-stream", "qif-ceilings"):
-            subprocess.run([sys.executable, "scripts/run_fuzz.py", "campaign", target, "--seconds", str(int(seconds))], cwd=ROOT, check=True)
+            command = [sys.executable, "scripts/run_fuzz.py", "smoke" if args.smoke else "campaign", target]
+            command += ["--runs", "100"] if args.smoke else ["--seconds", str(int(seconds))]
+            subprocess.run(command, cwd=ROOT, check=True)
     known = {entry["input"]: entry["reason"] for entry in json.loads((DATA / "known-failures.json").read_text())}
     failures = []
     start = time.monotonic()

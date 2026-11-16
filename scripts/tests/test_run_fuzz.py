@@ -90,6 +90,15 @@ class SeedCorpusTests(unittest.TestCase):
         self.assertTrue(markup.isdisjoint(run_fuzz.SCHEDULED_TARGET_ORDER))
         self.assertTrue(markup.issubset(run_fuzz.resolve_targets(["all"])))
 
+    def test_dictionary_escapes_are_supported_by_libfuzzer(self) -> None:
+        dictionaries = {config.dictionary for config in run_fuzz.TARGETS.values() if config.dictionary}
+        for path in dictionaries:
+            for line in path.read_text().splitlines():
+                if not line.strip() or line.lstrip().startswith("#"):
+                    continue
+                for escape in re.findall(r'\\(?:x..|.)', line):
+                    self.assertRegex(escape, r'^\\(?:\\|"|x[0-9a-fA-F]{2})$', str(path))
+
     def test_raw_seeds_are_plain_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             corpus = run_fuzz.prepare_corpus("yaml-raw", Path(directory) / "corpus")
