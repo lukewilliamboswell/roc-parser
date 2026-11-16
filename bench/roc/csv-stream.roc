@@ -5,6 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.CSV
+import parser.Parser
 import Bench
 
 ## Parse-only comparison: Bench preloads input; this driver discards rows.
@@ -28,10 +29,10 @@ parse = |input| {
 		},
 	)
 	var $sum = 0.U64
-	for event in CSV.iter_records(chunks, {}, {}) {
+	for event in CSV.iter_with(Parser.many(CSV.field(CSV.string)), chunks, {}, {}) {
 		match event {
 			Ok(Value(row)) => {
-				$sum = row.fold($sum + 1, |total, field| field.iter().with_index().fold(total, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))
+				$sum = row.fold($sum + 1, |total, field| field.to_utf8().iter().with_index().fold(total, |weighted, pair| weighted + (pair.0 + 1) * pair.1.to_u64()))
 			}
 			Ok(Finished(_)) => return Ok($sum)
 			_ => return Err(1)

@@ -429,6 +429,38 @@ Streaming :: [].{
 		Err(MissingFinished)
 	}
 
+	## Extract successful stream values, requiring explicit successful completion.
+	## Rejected or skipped records are failures; use a custom loop for recovery.
+	values_stream : Stream(Try(ReadEvent(item, problem), terminal_error)) -> Stream(Try(item, [ReadFailed(terminal_error), RejectedRecord(problem), MissingFinished, SkippedRecords(Report)]))
+	values_stream = |events| Stream.custom(
+		Reading(events),
+		Err(Unknown),
+		|cursor| match cursor {
+			Stopped => Err(NoMore)
+			Reading(start) => {
+				var $events = start
+				while True {
+					match $events.next!() {
+						Done => return Ok((Err(MissingFinished), Stopped))
+						Skip({ rest }) => {
+							$events = rest
+						}
+						One({ item, rest }) => match item {
+							Ok(Value(value)) => return Ok((Ok(value), Reading(rest)))
+							Ok(Finished(report)) => return if report.rejected_records == 0 {
+								Err(NoMore)
+							} else {
+								Ok((Err(SkippedRecords(report)), Stopped))
+							}
+							Ok(Rejected(error)) => return Ok((Err(RejectedRecord(error)), Stopped))
+							Err(error) => return Ok((Err(ReadFailed(error)), Stopped))
+						}
+					}
+				}
+			}
+		},
+	)
+
 }
 
 expect Streaming.decode_text([0x80, 0xE9], Windows1252) == Ok("€é")
@@ -467,3 +499,6 @@ expect {
 expect List.from_iter(Streaming.iter([].iter(), 0.U64, |state, _, _| { state, consumed: 0, outcome: NeedInput }, {})) == [Err(DecoderProtocol("decoder requested input after EOF"))]
 
 expect List.from_iter(Streaming.encode_state_iter(["ab", "cd"].iter(), 0.U64, |state, item| Ok({ state: state + 1, bytes: item.to_utf8() }), |state| Ok(state.to_str().to_utf8()), 1)) == [Ok("a".to_utf8()), Ok("b".to_utf8()), Ok("c".to_utf8()), Ok("d".to_utf8()), Ok("2".to_utf8())]
+
+# Independently decoded Windows-1252 control range, including every defined byte.
+expect Streaming.decode_text([128.U8, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 142, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 158, 159], Windows1252) == Ok("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ")

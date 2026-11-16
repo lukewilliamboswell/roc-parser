@@ -323,8 +323,8 @@ include::examples/csv-guide.expected[lines=12..15]
 * The separator is always `,`. Tab- or semicolon-separated files are not
   supported.
 * A UTF-8 byte order mark is not removed; it becomes part of the first field.
-* The whole input is parsed before decoding starts, so very large files are
-  held in memory.
+* Whole-document convenience functions retain the input and collected output.
+  Use the incremental APIs for files that approach the application memory limit.
 
 For every function and type in the module, see the
 link:{api}CSV[CSV API reference].
@@ -332,12 +332,15 @@ link:{api}CSV[CSV API reference].
 [#csv-performance]
 == Performance
 
-Reading every field as a string runs at 120–150 MB/s on an Apple M2, from
-a 1.6 KB export to a 1 MiB file: on par with Rust's `csv` crate, about 2.3
-times slower than Go's `encoding/csv` and nearly twice as fast as Python's C
-`csv` module. Delimiters and quotes are found 16 bytes at a time with SIMD,
-and fields without doubled quotes are slices of the input.
-The parser is a byte scanner and stays linear on very wide rows and long runs
-of escaped quotes. Decoding typed columns adds the cost of each conversion.
-The whole file and every field are held in memory: about 12 MiB of peak
-memory for a 1 MiB file. See <<performance>> for the method and caveats.
+Whole-document raw scanning uses SIMD delimiter searches and can share field
+slices with the input. Incremental scanning owns unfinished records so completed
+records do not pin old source chunks. Typed decoding adds each conversion's
+cost, and whole-document collection retains the resulting values.
+
+Run `scripts/bench.py --formats csv` for separate collection and string-record
+consumption comparisons. `bench/roc/csv-file-stream.roc` reads a real file or
+stdin without preloading it and reports record count, content checksum, first-item
+latency and elapsed time including reads. Use that driver for source-retention
+measurements; parse-only benchmarks intentionally keep their input in memory.
+See <<benchmarks>> and <<performance>> for build modes, receipts and comparison
+requirements.

@@ -326,3 +326,22 @@ The review scripts can also compare a fuzzing corpus with the oracles. CI runs a
 campaign for every target on each pull request and a longer one every night.
 <<property-testing,Property testing>> describes the targets and how to run
 them.
+
+== QIF and OFX banking records
+
+`scripts/review_qif.py check` compares bank/cash/card records with pinned
+Quiffen and exercises both writer directions. Dates use an explicit day-first
+policy in the comparison. Exact decimal values and account/category semantics
+are compared separately from source layout and numeric spelling.
+
+`scripts/review_ofx.py check` compares the supported banking/card statement
+subset with pinned ofxtools and ofxparse. The corpus exercises SGML/XML and
+UTF-8/Windows-1252 combinations. Models preserve identifiers, exact monetary
+values, timestamps, statement context and supported extension data. Unsupported
+message sets and ambiguous SGML extensions are explicit parser limits.
+
+Both reviews expose seeded `campaign`, `corpus` and `replay` commands. The
+`--smoke` campaign is the short scheduled integration check; longer local runs
+retain inputs and diagnostics under `.roc-parser-tmp/`. Agreement on this
+finite corpus establishes supported-subset evidence, not complete QIF or OFX
+specification coverage.

@@ -234,6 +234,19 @@ def semantic_projection(model: dict) -> dict:
     return result
 
 
+def known_inputs(path: Path) -> dict[bytes, str]:
+    """Read exact reviewed divergences without accepting unclassified failures."""
+    result = {}
+    for entry in json.loads(path.read_text()):
+        if not entry.get('reason'):
+            raise ValueError('known failure requires a reason')
+        data = bytes.fromhex(entry['input_hex']) if 'input_hex' in entry else entry['input'].encode('utf-8')
+        if data in result:
+            raise ValueError('duplicate known failure input')
+        result[data] = entry['reason']
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['check', 'campaign', 'corpus', 'replay'], nargs='?', default='check')
@@ -268,8 +281,11 @@ def main() -> int:
             cases.append(data)
             if args.smoke and len(cases) >= 16:
                 break
+    known = known_inputs(DATA / "known-failures.json")
+    cases.extend(data for data in known if data not in cases)
     failures = []
     limitations = []
+    known_seen = set()
     if args.command == 'check':
         for fixture in json.loads((DATA/'cases.json').read_text()):
             actual = probe(args.binary, fixture['input'].encode())
@@ -288,9 +304,14 @@ def main() -> int:
             path.write_text(json.dumps({'seed': args.seed, 'input_hex': data.hex(), **mismatch}, indent=2))
             if mismatch.get('classification') == 'external_writer_limitation':
                 limitations.append(str(path))
+            elif data in known:
+                known_seen.add(data)
             else:
                 failures.append(str(path))
-    print(json.dumps({'cases': len(cases), 'failures': failures, 'external_writer_limitations': limitations, 'seed': args.seed}))
+    for data, reason in known.items():
+        if data not in known_seen:
+            failures.append({'stale_known_failure': data.hex(), 'reason': reason})
+    print(json.dumps({'known_failures': len(known_seen), 'cases': len(cases), 'failures': failures, 'external_writer_limitations': limitations, 'seed': args.seed}))
     return bool(failures)
 
 

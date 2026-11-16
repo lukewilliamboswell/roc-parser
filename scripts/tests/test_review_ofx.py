@@ -2,6 +2,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 import xml.etree.ElementTree as ET
 
 SPEC = importlib.util.spec_from_file_location('review_ofx', Path(__file__).resolve().parents[1] / 'review_ofx.py')
@@ -41,6 +43,17 @@ class XmlProvenanceTests(unittest.TestCase):
         root = ET.fromstring('<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKACCTFROM/><BANKTRANLIST><STMTTRN><NAME>&#38;lt;</NAME></STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>')
         normalized = review.normalize_tree(root)
         self.assertEqual(normalized['statements'][0]['transactions'][0]['name'], '&lt;')
+
+
+class KnownFailureTests(unittest.TestCase):
+    def test_baselines_require_reasons_and_preserve_arbitrary_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'known.json'
+            path.write_text(json.dumps([{'input_hex': '00ff', 'reason': 'reviewed dialect difference'}]))
+            self.assertEqual(review.known_inputs(path), {b'\x00\xff': 'reviewed dialect difference'})
+            path.write_text(json.dumps([{'input_hex': '00ff'}]))
+            with self.assertRaises(ValueError):
+                review.known_inputs(path)
 
 
 if __name__ == '__main__':

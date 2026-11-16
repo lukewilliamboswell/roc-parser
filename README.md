@@ -14,6 +14,8 @@ compilation, with configurable validation checks.
 | Format | Specification | Manual |
 | --- | --- | --- |
 | CSV | RFC 4180, with common relaxations | [Reading CSV](https://lukewilliamboswell.github.io/roc-parser/#csv) |
+| QIF | Quicken bank/cash/card records | [Reading QIF](docs/qif.adoc) |
+| OFX | Banking/card statements in SGML and XML | [Reading OFX](docs/ofx.adoc) |
 | YAML | A configuration subset of YAML 1.2 | [Reading YAML](https://lukewilliamboswell.github.io/roc-parser/#yaml) |
 | XML | XML 1.0 well-formedness, without DTDs | [Reading XML](https://lukewilliamboswell.github.io/roc-parser/#xml) |
 | HTML | HTML document and fragment parsing, with explicit recovery | [Reading markup](docs/markup.adoc) |
@@ -26,8 +28,10 @@ compilation, with configurable validation checks.
 | Roc source | Lossless tokens and indexed syntax trees | [Parsing Roc source](docs/roc-syntax.adoc) |
 | Your own | Parser combinators | [Your first parser](https://lukewilliamboswell.github.io/roc-parser/#combinator-primer) |
 
-It reads complete inputs held in memory and does not stream. JSON and namespace-aware XML can also be written back out, with
-`JsonValue.to_str` and `XmlNs.render`.
+CSV, QIF and OFX support [chunked reading and writing](docs/streaming.adoc)
+through Roc’s builtin `Iter` and `Stream`. The other format parsers require
+complete input in memory. JSON and namespace-aware XML also support writing,
+with `JsonValue.to_str` and `XmlNs.render`.
 
 ## Try it
 

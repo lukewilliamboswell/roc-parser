@@ -202,9 +202,11 @@ python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
 Follow "Add a benchmark" in <<benchmarks>>: add `bench/roc/toml.roc`, which
 calls the public entry point through `Bench.run!`, a branch in
 `bench/roc/alloc.roc`, a deterministic generator and `pathological` entries in
-`scripts/bench.py`, a frozen sample, and at least one comparator per language,
-pinned exactly. `scripts/tests/test_bench.py` fails until the format has all
-of them. Check that the pathological documents scale linearly; the allocation
+`scripts/bench.py`, a frozen sample, and vetted independent comparators pinned exactly.
+Register each language explicitly; leave a comparator list empty when no
+qualified implementation covers the workload, and document that gap.
+`scripts/tests/test_bench.py` requires a Roc driver and at least one comparator
+for each format. Check that the pathological documents scale linearly; the allocation
 counts from `--allocations` are a steadier signal than the timings:
 
 [source,bash]

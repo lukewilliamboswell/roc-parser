@@ -323,8 +323,8 @@ def pathological() -> dict[str, dict[str, str]]:
 def samples() -> dict[str, dict[str, bytes]]:
     folder = BENCH / "corpus" / "samples"
     return {
-        "qif": {"sample-bank": qif_doc(random.Random(1), 512).encode()},
-        "ofx": {"sample-bank": ofx_doc(random.Random(1), 1024).encode()},
+        "qif": {"sample-bank": (folder / "bank-statement.qif").read_bytes()},
+        "ofx": {"sample-bank": (folder / "bank-statement.ofx").read_bytes()},
         "csv": {"sample-orders-export": (folder / "orders-export.csv").read_bytes()},
         "yaml": {"sample-github-actions": (folder / "github-actions.yaml").read_bytes()},
         "xml": {"sample-svg": (folder / "logo.svg").read_bytes()},
@@ -368,6 +368,10 @@ class Impl:
     format: str
     command: list[str]
     notes: str = ""
+
+    @property
+    def workload(self) -> str:
+        return "consume" if "consume" in self.name else "collect"
 
     @property
     def id(self) -> str:
@@ -438,11 +442,15 @@ class Builder:
         impls = []
         self.versions["roc"] = tool_version([self.roc, "version"]) or tool_version([self.roc, "--version"])
         for fmt in formats:
-            binary = self.out / "bin" / f"roc-{fmt}"
-            binary.parent.mkdir(parents=True, exist_ok=True)
-            if self.run(f"roc-{fmt}", [self.roc, "build", "--opt=speed", str(BENCH / "roc" / f"{fmt}.roc"),
-                                        f"--output={binary}"]):
-                impls.append(Impl("roc", "roc-parser", fmt, [str(binary)], "roc build --opt=speed"))
+            drivers = [(fmt, "roc-parser", "collect")]
+            if fmt == "csv":
+                drivers.append(("csv-stream", "roc-parser-consume", "consume: string fields, preloaded source"))
+            for driver, name, notes in drivers:
+                binary = self.out / "bin" / f"roc-{driver}"
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                if self.run(f"roc-{driver}", [self.roc, "build", "--opt=speed", "--debug", str(BENCH / "roc" / f"{driver}.roc"),
+                                             f"--output={binary}"]):
+                    impls.append(Impl("roc", name, fmt, [str(binary)], notes + "; roc build --opt=speed --debug"))
         return impls
 
     def rust_impls(self, formats: tuple[str, ...]) -> list[Impl]:
@@ -591,7 +599,7 @@ def summarize(per_parse_ns: list[float], size: int) -> dict:
 
 def measure(impl: Impl, doc: Doc, args) -> dict:
     record = {"impl": impl.id, "lang": impl.lang, "library": impl.name, "doc": doc.id, "kind": doc.kind,
-              "bytes": len(doc.data)}
+              "bytes": len(doc.data), "workload": impl.workload}
     try:
         first = run_once(impl.command, doc.data, 1, args.timeout)
         iterations = calibrate(first["elapsed_ns"], int(args.target_ms * 1e6), args.max_iterations)
@@ -599,6 +607,10 @@ def measure(impl: Impl, doc: Doc, args) -> dict:
         batches = [run_once(impl.command, doc.data, iterations, args.timeout) for _ in range(args.repetitions)]
     except RunError as error:
         record["error"] = str(error)
+        return record
+    if any((batch["successes"], batch["checksum"]) != (batches[0]["successes"], batches[0]["checksum"])
+           for batch in batches[1:]):
+        record["error"] = "unstable success count or content checksum across batches"
         return record
     record.update(summarize([b["elapsed_ns"] / iterations for b in batches], len(doc.data)))
     record["iterations"] = iterations
@@ -635,20 +647,30 @@ def comparison(results: list[dict]) -> list[dict]:
     by_key = {(r["impl"], r["doc"]): r for r in results if "median_ns" in r}
     rows = []
     for fmt in FORMATS:
-        roc = {doc: r for (impl, doc), r in by_key.items() if impl == "roc/roc-parser" and doc.startswith(fmt + "/")}
-        impls = sorted({impl for (impl, doc) in by_key if doc.startswith(fmt + "/") and impl != "roc/roc-parser"})
-        for impl in impls:
-            ratios, docs = [], []
-            for doc, mine in roc.items():
-                other = by_key.get((impl, doc))
-                if other and mine["kind"] != "pathological" and mine["accepted"] and other["accepted"]:
-                    ratios.append(mine["median_ns"] / other["median_ns"])
-                    docs.append(doc)
-            mbps = [by_key[(impl, d)]["mb_per_s"] for d in docs]
-            rows.append({"format": fmt, "impl": impl, "documents": len(docs),
-                         "speedup_vs_roc": geomean(ratios),
-                         "impl_mb_per_s": geomean(mbps),
-                         "roc_mb_per_s": geomean([roc[d]["mb_per_s"] for d in docs])})
+        for workload, reference in (("collect", "roc/roc-parser"), ("consume", "roc/roc-parser-consume")):
+            roc = {doc: r for (impl, doc), r in by_key.items()
+                   if impl == reference and doc.startswith(fmt + "/") and r.get("workload", "collect") == workload}
+            impls = sorted({impl for (impl, doc), r in by_key.items()
+                            if doc.startswith(fmt + "/") and not impl.startswith("roc/")
+                            and r.get("workload", "collect") == workload})
+            for impl in impls:
+                ratios, docs = [], []
+                mismatches = []
+                for doc, mine in roc.items():
+                    other = by_key.get((impl, doc))
+                    if other and mine["kind"] != "pathological" and mine["accepted"] and other["accepted"]:
+                        if fmt in ("csv", "qif", "ofx") and (
+                            "checksum" not in mine or "checksum" not in other
+                            or mine["checksum"] * other.get("iterations", 1) != other["checksum"] * mine.get("iterations", 1)
+                        ):
+                            mismatches.append(doc)
+                            continue
+                        ratios.append(mine["median_ns"] / other["median_ns"])
+                        docs.append(doc)
+                mbps = [by_key[(impl, d)]["mb_per_s"] for d in docs]
+                rows.append({"format": fmt, "workload": workload, "impl": impl, "documents": len(docs), "semantic_mismatches": mismatches,
+                             "speedup_vs_roc": geomean(ratios), "impl_mb_per_s": geomean(mbps),
+                             "roc_mb_per_s": geomean([roc[d]["mb_per_s"] for d in docs])})
     return rows
 
 
@@ -686,8 +708,12 @@ def markdown_report(report: dict) -> str:
     for row in report["comparison"]:
         lib_mb = f"{row['impl_mb_per_s']:.3g}" if row["impl_mb_per_s"] else "-"
         roc_mb = f"{row['roc_mb_per_s']:.3g}" if row["roc_mb_per_s"] else "-"
-        lines.append(f"| {row['format']} | {row['impl']} | {row['documents']} | {lib_mb} | {roc_mb} | "
+        lines.append(f"| {row['format']} ({row.get('workload', 'collect')}) | {row['impl']} | {row['documents']} | {lib_mb} | {roc_mb} | "
                      f"{fmt_ratio(1 / row['speedup_vs_roc']) if row['speedup_vs_roc'] else '-'} |")
+    mismatches = [(row["impl"], doc) for row in report["comparison"] for doc in row.get("semantic_mismatches", [])]
+    if mismatches:
+        lines += ["", "Excluded from ratios because decoded checksums differ: "
+                  + "; ".join(f"{impl}: {doc}" for impl, doc in mismatches)]
     lines += ["", "## Every measurement", "",
               "| Document | Bytes | Implementation | Median | Spread | MB/s | Peak RSS | Result |",
               "| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |"]
@@ -838,7 +864,7 @@ def main(argv: list[str] | None = None) -> int:
         "machine": machine(), "git": git_state(), "environment": environment(blueprint=args.blueprint),
         "versions": builder.versions,
         "skipped": builder.skipped, "repetitions": args.repetitions, "target_ms": args.target_ms,
-        "implementations": [{"id": i.id, "format": i.format, "notes": i.notes} for i in impls],
+        "implementations": [{"id": i.id, "format": i.format, "workload": i.workload, "notes": i.notes} for i in impls],
         "corpus": manifest,
         "measurement": "in-process parse loop around an in-memory document; stdin, process start and "
                        "output are outside the timed region; median of per-parse time over batches",

@@ -9,38 +9,10 @@ import parser.Streaming
 
 ## Canonicalize QIF from stdin to stdout without retaining the document.
 ## Full success requires consuming the parser's Finished event.
-values : Stream(Try(Streaming.ReadEvent(item, record_error), failure)) -> Stream(Try(item, [Source(failure), Rejected(record_error)]))
-values = |source| Stream.custom(
-	Reading(source),
-	Err(Unknown),
-	|state| match state {
-		Stopped => Err(NoMore)
-		Reading(start) => {
-			var $source = start
-			while True {
-				match $source.next!() {
-					Done => return Err(NoMore)
-					Skip({ rest }) => {
-						$source = rest
-					}
-					One({ item, rest }) => {
-						$source = rest
-						match item {
-							Ok(Value(value)) => return Ok((Ok(value), Reading($source)))
-							Ok(Finished(_)) => return Err(NoMore)
-							Ok(Rejected(error)) => return Ok((Err(Rejected(error)), Stopped))
-							Err(error) => return Ok((Err(Source(error)), Stopped))
-						}
-					}
-				}
-			}
-		}
-	},
-)
 
 main! = |_| {
 	parsed = QIF.parse_stream(Stdin.chunks(), {})
-	for! chunk in QIF.write_stream(values(parsed), {}) {
+	for! chunk in QIF.write_stream(Streaming.values_stream(parsed), {}) {
 		Stdout.write_bytes!(chunk?)?
 	}
 	Ok({})

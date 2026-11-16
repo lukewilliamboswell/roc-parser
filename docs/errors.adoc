@@ -31,6 +31,11 @@ format has. Combinator runners report the furthest failure.
 |===
 |Function |Error |What it tells you
 
+|`QIF.parse_str`, `OFX.parse_str`
+|`InvalidQif({ offset, line, column, message })`, `InvalidOfx({ offset, line, column, message })`
+|The original byte offset and one-based line/byte column. Chunk readers also
+preserve source failures and expose recoverable record diagnostics; see <<streaming>>.
+
 |`Yaml.parse_str`, `Yaml.decode`
 |`InvalidYaml({ line, column, message })`
 |Where the problem is and what it is. Columns count bytes.

@@ -58,7 +58,13 @@ include::combinator-primer.adoc[leveloffset=+1]
 
 = Guides
 
+include::streaming.adoc[leveloffset=+1]
+
 include::csv.adoc[leveloffset=+1]
+
+include::qif.adoc[leveloffset=+1]
+
+include::ofx.adoc[leveloffset=+1]
 
 include::yaml.adoc[leveloffset=+1]
 

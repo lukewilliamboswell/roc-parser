@@ -34,6 +34,8 @@ bytes, including the header. Raw CSV does not assume its first row is a header.
 |Quotation type |Access to the parsed result
 |`Yaml` |The document tree itself
 |`Yaml.Decoded(a)` |`.value`, decoded as `a`
+|`QIF` |`.events`, ordered raw section/account/record events
+|`OFX` |`.statements`, supported bank/card statements
 |`CSV` |`.records`, raw CSV records
 |`CSV.Decoded(row)` |`.value`, a list of decoded rows
 |`Xml` |The document's `.root` and `.declaration`

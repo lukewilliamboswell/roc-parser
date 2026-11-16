@@ -393,3 +393,17 @@ independently generated structure, source partitioning, bounds and typed holes.
 They are registered with `scheduled: False`. Run them locally using the commands
 in xref:markup.adoc#markup[Parse HTML, SVG and MathML]. Their seeds and dictionaries
 are reviewable source; corpus/report output remains in ignored scratch storage.
+
+== Incremental document parsing
+
+`stream-contract` compares shared adapters against an independent byte-record
+model under arbitrary splits and injected source errors. `stream-ceilings`
+measures distinct generated chunks inside the allocator measurement and discards
+completed output. CSV, QIF and OFX add format-specific chunk equivalence,
+round-trip, malformed-record and resource targets. They run in PR smoke and
+scheduled campaigns through the same registry as the existing formats.
+
+The financial reviews use pinned independent Python libraries and cross-writer
+checks. Record-error recovery is checked against independently filtered expected
+models; broken framing remains terminal. Source chunks, syntax boundaries and
+encoding boundaries are independent fuzz choices.

@@ -1,0 +1,82 @@
+[#streaming]
+= Read and write documents in chunks
+:idprefix: _
+:idseparator: _
+
+Use the CSV, QIF and OFX chunk APIs when a file is too large to keep in memory.
+The package parses bytes without performing I/O. Roc's builtin `Iter` supplies
+pure chunks; builtin `Stream` supplies effectful chunks from a file or stdin.
+The pinned basic-cli platform provides `File.Reader.chunks`, `Stdin.chunks` and
+`File.Writer.write_stream!` for these pipelines.
+
+== Consume a document completely
+
+Chunk boundaries have no syntax significance. A chunk may end inside a UTF-8
+character, CRLF, quoted field, tag or entity. Empty chunks are permitted and do
+not signal EOF. Only exhaustion of the source finalizes the decoder.
+
+Readers yield `Try` items. Successful events are `Value(value)`,
+`Rejected(problem)` when reporting recoverable errors, and one final
+`Finished(report)`. Terminal failures yield an error once and stop. Source
+failures retain their original value under `SourceErr`; they never finalize a
+truncated document as though it had reached EOF.
+
+Drain the reader through `Finished` to validate the whole document. Stopping
+early releases the remaining pipeline when its values are dropped, but leaves
+the unread suffix unvalidated. Keep only the latest iterator/stream state to
+allow consumed chunks to be released.
+
+`Streaming.collect` requires successful completion and rejects any omitted or
+reported invalid records. `Streaming.values_stream` extracts values for a fail-fast writer pipeline and
+requires `Finished`; rejected or skipped records remain errors.
+Use `Streaming.collect_report` when the application
+intentionally wants both values and diagnostics. Both collectors retain the
+collected values; use an ordinary pull loop to process and discard records.
+
+== Choose an error policy
+
+`FailFast` is the default. `SkipInvalidRecords` discards records that were
+completely framed but failed semantic decoding. `ReportInvalidRecords` emits
+`Rejected` and continues. The completion report counts emitted items and
+rejected records; metadata/context events count as emitted items too.
+
+These policies never recover from broken framing, invalid encoding, source
+failures, invalid account/statement context, or resource-limit failures. For
+example, an unclosed CSV quote cannot safely be skipped at a physical newline
+because quoted fields can contain newlines.
+
+`max_errors` defaults to 1,000 and permits exactly that many recoverable
+rejections. The next rejection is terminal and retains its triggering error.
+An allowance of zero stops at the first invalid record.
+
+== Bound retained memory
+
+Choose format props for unfinished fields/records, token lengths, nesting and
+context storage. Memory depends on those bounds and the current source chunk,
+not just the number of records already processed. Retaining output values
+intentionally contributes to the application's memory use.
+
+Writers validate each logical record before emitting its first bytes, then
+split it into bounded chunks. They can still fail after earlier records have
+been written. Use an application-managed temporary file and rename after
+success if the destination must appear atomically.
+
+QIF and OFX support UTF-8/ASCII and Windows-1252. Unsupported input encodings,
+invalid bytes and unrepresentable output characters produce errors. Writers
+never replace characters silently. Round trips preserve supported semantics;
+formatting, quoting and permitted numeric/date spellings may be normalized.
+
+== Implement another chunk decoder
+
+`Streaming.Step` returns the updated state, the number of bytes consumed from
+this call, and `Item`, `RecordError`, `NeedInput`, `Done` or `Failed`.
+A decoder must retain unfinished syntax and its original byte positions.
+It must drain pending output before requesting more input. `NeedInput` consumes
+the supplied input, and is invalid after `Final`; `Done` requires `Final` and
+complete consumption. The shared adapters reject these protocol violations.
+
+Use `Streaming.iter` and `Streaming.stream` to turn the pure step function into
+builtin iterators and streams. `Streaming.encode_iter` and
+`Streaming.encode_stream` apply a fallible record encoder and bound each emitted
+chunk. Source state belongs in the evolving iterator state so terminal states
+can release it.

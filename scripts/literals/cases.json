@@ -575,5 +575,33 @@
   {
     "name": "xml-public-node-aliases",
     "body": "attributes : List(Xml.Attribute)\nattributes = [{ name: \"id\", value: \"a\" }]\nnode : Xml.Node\nnode = Xml.Node.Element({ name: \"root\", attributes: attributes, children: [Xml.Node.Text(\"text\")] })\ndocument = Literal.require(Xml.parse_str(\"<root id='a'>text</root>\").map_err(|_| BadQuotedBytes(\"XML rejected\")))\nnamespace : XmlNs.Namespace\nnamespace = Uri(\"urn:example\")\nname : XmlNs.Name\nname = { namespace: namespace, prefix: Unprefixed, local: \"root\" }\nbindings : List(XmlNs.Binding)\nbindings = [{ prefix: Default, namespace: namespace }]\nns_attributes : List(XmlNs.Attribute)\nns_attributes = [{ name: { namespace: NoNamespace, prefix: Unprefixed, local: \"id\" }, value: \"a\" }]\nns_node : XmlNs.Node\nns_node = XmlNs.Node.Element({ name: name, bindings: bindings, attributes: ns_attributes, children: [XmlNs.Node.Text(\"text\")] })\nns_document = Literal.require(XmlNs.parse_str(\"<root xmlns='urn:example' id='a'>text</root>\").map_err(|_| BadQuotedBytes(\"namespaced XML rejected\")))\nvalue = Xml.Node.is_eq(node, document.root) and Xml.is_eq(document, document) and Xml.Node.name(node) == Ok(\"root\") and Xml.Node.attribute(node, \"id\") == Ok(\"a\") and Xml.Node.text(node) == \"text\" and Xml.Node.children_named(node, \"root\").is_empty() and Set.from_list([node, document.root]).len() == 1 and Dict.empty().insert(document, \"ok\").get(document) == Ok(\"ok\") and XmlNs.Node.is_eq(ns_node, ns_document.root) and XmlNs.is_eq(ns_document, ns_document) and XmlNs.Node.name(ns_node) == Ok(name) and XmlNs.Node.attribute(ns_node, NoNamespace, \"id\") == Ok(\"a\") and XmlNs.Node.text(ns_node) == \"text\" and XmlNs.Node.children_named(ns_node, namespace, \"root\").is_empty() and Set.from_list([ns_node, ns_document.root]).len() == 1 and Dict.empty().insert(ns_document, \"ok\").get(ns_document) == Ok(\"ok\")\n"
+  },
+  {
+    "name": "financial-format-literals",
+    "body": "qif : QIF\nqif = \"!Type:Bank\\nD27/08/2026\\nT-1.00\\nPAda\\n^\\n\"\nofx : OFX\nofx = \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<?OFX OFXHEADER=\\\"200\\\" VERSION=\\\"203\\\" SECURITY=\\\"NONE\\\" OLDFILEUID=\\\"NONE\\\" NEWFILEUID=\\\"NONE\\\"?>\\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-0.25</TRNAMT><FITID>0</FITID><NAME>Alan Turing</NAME><MEMO>record 0</MEMO></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-1.25</TRNAMT><FITID>1</FITID><NAME>Frances Allen</NAME><MEMO>record 1</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>\"\nvalue = qif.events.len() == 2 and ofx.statements.len() == 1\n"
+  },
+  {
+    "name": "financial-format-imports",
+    "assets": {
+      "bank.qif": "!Type:Bank\nD27/08/2026\nT-1.00\nPAda\n^\n",
+      "bank.ofx": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<?OFX OFXHEADER=\"200\" VERSION=\"203\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>\n<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1><BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-0.25</TRNAMT><FITID>0</FITID><NAME>Alan Turing</NAME><MEMO>record 0</MEMO></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-1.25</TRNAMT><FITID>1</FITID><NAME>Frances Allen</NAME><MEMO>record 1</MEMO></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
+    },
+    "body": "import \"bank.qif\" as qif_text : Str\nimport \"bank.ofx\" as ofx_text : Str\nqif = Literal.require(QIF.validate({ source: qif_text, name: \"bank.qif\" }))\nofx = Literal.require(OFX.validate({ source: ofx_text, name: \"bank.ofx\" }))\nvalue = qif.events.len() == 2 and ofx.statements.len() == 1\n"
+  },
+  {
+    "name": "inline-qif-syntax",
+    "body": "value : QIF\nvalue = \"!Type:Bank\\nT1\\n\"\n",
+    "errors": [
+      "invalid string",
+      "QIF"
+    ]
+  },
+  {
+    "name": "inline-ofx-syntax",
+    "body": "value : OFX\nvalue = \"<OFX>\"\n",
+    "errors": [
+      "invalid string",
+      "OFX"
+    ]
   }
 ]

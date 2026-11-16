@@ -14,6 +14,9 @@ compiler and application-platform requirements.
 Read the {src}/docs/releases/4.0.0.adoc[4.0.0 upgrade notes] for JSON byte
 limits, writer error handling and Roc syntax span changes.
 
+The {src}/docs/releases/unreleased.adoc[working-tree changes] describe incremental
+CSV/QIF/OFX APIs and the CSV typed-error ordering change.
+
 == Release candidates
 
 A release marked prerelease is a preview. Read that release's notes and keep its

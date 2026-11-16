@@ -1,0 +1,16 @@
+= Unreleased changes
+
+CSV typed parsing now reports errors in encounter order. An invalid value in an
+earlier completed row takes precedence over malformed CSV later in the file.
+The existing function signatures and raw CSV dialect are unchanged.
+
+CSV, QIF and OFX expose incremental byte readers and bounded-chunk writers with
+builtin `Iter` and `Stream`. Readers default to fail-fast; configurable recovery
+only skips or reports semantic errors in completely framed records. Successful
+validation ends with `Finished`, including counts of emitted and rejected items.
+
+QIF supports ordered raw records and bank/cash/card transaction decoding. OFX
+supports bank/card statements in SGML and XML, with XML output by default.
+Both support UTF-8 and Windows-1252, preserve exact monetary values, and provide
+semantic round trips. Typed investment support is outside these modules' current
+scope. See the streaming and format guides for supported syntax and limits.

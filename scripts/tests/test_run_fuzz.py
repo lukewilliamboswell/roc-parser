@@ -74,7 +74,7 @@ class SeedCorpusTests(unittest.TestCase):
 
     def test_every_fuzz_target_is_registered(self) -> None:
         # Shared generator modules and the allocation diagnostic are not campaigns.
-        not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc", "markup-alloc", "MarkupCheck"}
+        not_targets = {"HttpGen", "HttpCheck", "XmlGen", "yaml-alloc", "markup-alloc", "MarkupCheck", "QifCheck", "OfxGen"}
         sources = {path.stem for path in run_fuzz.FUZZ_ROOT.glob("*.roc")} - not_targets
         self.assertEqual(sources, set(run_fuzz.TARGET_ORDER))
 

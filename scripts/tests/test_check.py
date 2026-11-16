@@ -51,6 +51,6 @@ class ConformanceTests(unittest.TestCase):
     def test_every_requirements_file_exists(self) -> None:
         source = (ROOT / "scripts/src/HarnessPlan.roc").read_text()
         paths = re.findall(r'"(scripts/[^"\n]+/requirements.txt)"', source)
-        self.assertEqual(len(paths), 3)
+        self.assertEqual(len(paths), 5)
         for path in paths:
             self.assertTrue((ROOT / path).is_file(), path)

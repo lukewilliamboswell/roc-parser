@@ -71,10 +71,24 @@ jobs:
           - json-raw
           - json-options
           - json-roundtrip
+          - ofx-raw
+          - ofx-stream
+          - ofx-roundtrip
+          - ofx-malformed
+          - ofx-ceilings
+          - qif-raw
+          - qif-stream
+          - qif-roundtrip
+          - qif-malformed
+          - qif-ceilings
+          - stream-contract
+          - stream-ceilings
           - csv
           - csv-raw
           - csv-roundtrip
           - csv-decode
+          - csv-stream-raw
+          - csv-stream-ceilings
           - http-request
           - http-response
           - http-raw
@@ -139,6 +153,10 @@ jobs:
           - xml
           - json
           - json-robustness
+          - ofx
+          - ofx-robustness
+          - qif
+          - qif-robustness
           - csv
           - http
     steps:

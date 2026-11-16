@@ -46,6 +46,18 @@ parsers for data formats, web markup and Roc source.
 |Read comma-separated values, raw or decoded into your own record type
 |`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
 
+|{api}Streaming/[`Streaming`]
+|Adapt pure chunk decoders to builtin Iter and Stream, with bounded writers
+|`Streaming.iter`, `Streaming.stream`, `Streaming.collect_report`
+
+|{api}QIF/[`QIF`]
+|Read and write raw Quicken records and decode bank/cash/card transactions
+|`QIF.parse_str`, `QIF.decode_iter`, `QIF.parse_stream`, `QIF.write_stream`
+
+|{api}OFX/[`OFX`]
+|Read and write bank/card statements in SGML or XML, with incremental events
+|`OFX.parse_str`, `OFX.parse_stream`, `OFX.write_stream`
+
 |{api}HTTP/[`HTTP`]
 |Read one HTTP/1.1 request or response message, including its body
 |`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.header`

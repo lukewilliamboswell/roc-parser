@@ -107,7 +107,7 @@ class Measurement(unittest.TestCase):
 class Reports(unittest.TestCase):
     def result(self, impl, doc, ns, kind="small", accepted=True):
         return {"impl": impl, "doc": doc, "kind": kind, "median_ns": ns, "accepted": accepted,
-                "mb_per_s": 1000 / ns, "lang": impl.split("/")[0]}
+                "mb_per_s": 1000 / ns, "lang": impl.split("/")[0], "checksum": 1, "iterations": 1}
 
     def test_comparison_skips_pathological_and_rejected_documents(self):
         results = [
@@ -121,6 +121,21 @@ class Reports(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["documents"], 2)
         self.assertAlmostEqual(rows[0]["speedup_vs_roc"], 2.0)
+
+    def test_collection_and_consumption_ratios_use_matching_references(self):
+        results = [self.result("roc/roc-parser", "csv/a", 100),
+                   self.result("go/encoding-csv", "csv/a", 50),
+                   dict(self.result("roc/roc-parser-consume", "csv/a", 400), workload="consume"),
+                   dict(self.result("go/encoding-csv-consume", "csv/a", 100), workload="consume")]
+        ratios = {row["workload"]: row["speedup_vs_roc"] for row in bench.comparison(results)}
+        self.assertEqual(ratios, {"collect": 2, "consume": 4})
+
+    def test_semantically_different_results_are_excluded_from_ratios(self):
+        rows = bench.comparison([self.result("roc/roc-parser", "csv/a", 100),
+                                 dict(self.result("go/encoding-csv", "csv/a", 10), checksum=2)])
+        self.assertEqual(rows[0]["documents"], 0)
+        self.assertIsNone(rows[0]["speedup_vs_roc"])
+        self.assertEqual(rows[0]["semantic_mismatches"], ["csv/a"])
 
     def test_ratio_wording(self):
         self.assertEqual(bench.fmt_ratio(0.5), "2x slower")

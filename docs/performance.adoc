@@ -19,9 +19,11 @@ old measurements do not establish the performance of a current nightly.
 == Choose an appropriate workload
 
 roc-parser is a pure-Roc package that returns typed values and structured errors.
-Every parser needs the complete input in memory. It has no streaming or event
-interface, so measure carefully when parsing is a high-volume bottleneck or
-inputs approach your application's memory limit.
+CSV, QIF and OFX provide incremental readers and writers through builtin
+`Iter` and `Stream`; see <<streaming>>. Their whole-document convenience
+functions collect results in memory. The other formats require complete input.
+XML provides event readers over an in-memory source. Measure the representation
+and source lifetime needed by your application.
 
 A parser returning a full tree does different work from a tokenizer returning
 borrowed events. Compare the representation and validation your caller actually
@@ -54,7 +56,9 @@ for untrusted recursive formats and test the limit and the first rejected input.
 [#performance-memory]
 == Memory behaviour
 
-The complete input and parsed values contribute to peak memory. Allocation
+For whole-document APIs, the complete input and parsed values contribute to
+peak memory. Chunk readers retain the current source chunk, bounded unfinished
+syntax and format context; collecting their results adds retained output. Allocation
 traffic also depends on how many fields, nodes and decoded strings are created;
 byte length alone does not describe the workload.
 

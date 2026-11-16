@@ -40,6 +40,8 @@ import parser.Yaml
 import parser.Xml
 import parser.XmlNs
 import parser.CSV
+import parser.QIF
+import parser.OFX
 import parser.Markdown
 import parser.AsciiDoc
 import parser.HTTP
