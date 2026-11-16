@@ -628,7 +628,13 @@ CSV := { records : List(CSV.Record) }.{
 	}
 
 	## Writer options. Each emitted chunk is bounded; records are validated first.
-	WriteProps := { chunk_bytes : U64 ?? 65_536, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536 }
+	LineEnding : [CrLf, Lf, Cr]
+
+	## Whether to quote only special fields or every field.
+	Quoting : [Necessary, Always]
+
+	## Writer byte limits and output dialect.
+	WriteProps := { line_ending : LineEnding ?? CrLf, quoting : Quoting ?? Necessary, chunk_bytes : U64 ?? 65_536, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536 }
 
 	## Validate and encode one byte record using necessary quoting and CRLF.
 	encode_record : Record, WriteProps -> Try(List(U8), [InvalidRecord(Str)])
@@ -639,12 +645,17 @@ CSV := { records : List(CSV.Record) }.{
 		if row_fields.len() > props.max_fields {
 			return Err(InvalidRecord("field count limit exceeded"))
 		}
-		var $size = 1 + row_fields.len()
+		terminator = match props.line_ending {
+			CrLf => ['\r', '\n']
+			Lf => ['\n']
+			Cr => ['\r']
+		}
+		var $size = terminator.len() + row_fields.len() - 1
 		for cell_bytes in row_fields {
 			if cell_bytes.len() > props.max_field_bytes {
 				return Err(InvalidRecord("field byte limit exceeded"))
 			}
-			quoted = cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
+			quoted = props.quoting == Always or cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
 			size = cell_bytes.len() + (if (quoted) 2 + cell_bytes.count_if(|byte| byte == '"') else 0)
 			if size > props.max_record_bytes or $size > props.max_record_bytes - size {
 				return Err(InvalidRecord("record byte limit exceeded"))
@@ -657,7 +668,7 @@ CSV := { records : List(CSV.Record) }.{
 			if $index > 0 {
 				$out = $out.append(',')
 			}
-			quoted = cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
+			quoted = props.quoting == Always or cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
 			if quoted {
 				$out = $out.append('"')
 				for byte in cell_bytes {
@@ -672,7 +683,7 @@ CSV := { records : List(CSV.Record) }.{
 			}
 			$index = $index + 1
 		}
-		Ok($out.append('\r').append('\n'))
+		Ok($out.concat(terminator))
 	}
 
 	## Encode validated records into bounded chunks without collecting the document.
@@ -1674,3 +1685,6 @@ expect {
 		_ => False
 	}
 }
+
+expect CSV.encode_record(["a".to_utf8(), "b".to_utf8()], { quoting: Always, line_ending: Lf }) == Ok("\"a\",\"b\"\n".to_utf8())
+expect CSV.encode_record(["a".to_utf8()], { line_ending: Cr }) == Ok("a\r".to_utf8())

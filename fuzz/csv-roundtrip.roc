@@ -7,6 +7,7 @@ import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
 import parser.Utf8
+import parser.Streaming
 
 ## Round-trip property: fuzzer bytes choose a table of arbitrary UTF-8 fields
 ## (ragged rows allowed) *and* how to write it: which fields to quote beyond
@@ -128,6 +129,24 @@ test = |input| {
 		Ok(records) if records.map(|fields| fields.map(Str.from_utf8_lossy)) == input.expected => {}
 		_ => crash "parse_records disagrees with parse_with\n${Str.inspect(input.csv)}"
 	}
+	chunks = input.csv.to_utf8().map(|byte| [byte]).iter()
+	expected_bytes = input.expected.map(|row| row.map(Str.to_utf8))
+	if Streaming.collect(CSV.iter_records(chunks, {}, {})) != Ok(expected_bytes) {
+		crash "generated streaming CSV differs from independent model"
+	}
+	var $encoded = []
+	for part in CSV.write_iter(expected_bytes.iter(), { chunk_bytes: 3 }) {
+		match part {
+			Ok(bytes) => {
+				$encoded = $encoded.concat(bytes)
+			}
+			Err(_) => crash "generated model did not encode"
+		}
+	}
+	if Streaming.collect(CSV.iter_records($encoded.map(|byte| [byte]).iter(), {}, {})) != Ok(expected_bytes) {
+		crash "generated streaming writer round trip differs from model"
+	}
+
 	Fuzz.keep
 }
 

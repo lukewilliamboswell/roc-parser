@@ -6,6 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.CSV
 import parser.Parser
+import parser.Streaming
 
 ## Typed decoding properties: fuzzer bytes choose rows of (U64, F64, Str)
 ## values, how each number is spelled, how each field is quoted, and possibly
@@ -318,6 +319,21 @@ test = |input| {
 	named : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
 	named = CSV.parse(input.with_header)
 	check("by header name", input.with_header, named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
+	streaming_named : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+	streaming_named = match Streaming.collect(CSV.iter(input.with_header.to_utf8().map(|byte| [byte]).iter(), Exact, {}, {})) {
+		Ok(values) => Ok(values)
+		Err(ReadFailed(ParseErr(error))) => Err(error)
+		Err(_) => crash "typed streaming CSV protocol failure"
+	}
+	check("streaming by header", input.with_header, streaming_named, input.first_bad.map_ok(|{ index, defect }| named_error(input, index, defect)), input.rows)
+	streaming_positional : Try(List(Row), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
+	streaming_positional = match Streaming.collect(CSV.iter_with(decoder, input.csv.to_utf8().map(|byte| [byte]).iter(), {}, {})) {
+		Ok(values) => Ok(values)
+		Err(ReadFailed(ParseErr(error))) => Err(InvalidCsv(error))
+		Err(_) => crash "positional streaming CSV protocol failure"
+	}
+	check("streaming positional", input.csv, streaming_positional, input.first_bad.map_ok(|{ index, defect }| positional_error(index, defect)), input.rows)
+
 	Fuzz.keep
 }
 
