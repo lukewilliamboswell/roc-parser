@@ -515,15 +515,8 @@ consume_token = |state| {
 		}
 		var $next = state
 		if low.starts_with("<?xml ") {
-			if low.contains("windows-1252") {
-				$next = { ..state, encoding: Windows1252 }
-			}
-			else if low.contains("encoding") and !low.contains("utf-8") and !low.contains("us-ascii") {
-				return Err(problem(state, "unsupported XML encoding"))
-			}
-			if low.contains("us-ascii") {
-				$next = { ..$next, encoding: Ascii }
-			}
+			declared = xml_encoding(text).map_err(|message| problem(state, message))?
+			$next = { ..state, encoding: declared }
 			if (state.props.encoding == Utf8 and $next.encoding == Windows1252) or (state.props.encoding == Windows1252 and $next.encoding != Windows1252) {
 				return Err(problem(state, "encoding override contradicts XML declaration"))
 			}
@@ -1242,3 +1235,21 @@ scalar_fields = |node, allowed| {
 expect OFX.parse_str(sample_xml.replace_each("</BANKACCTFROM>", "<EXTRA>x</EXTRA></BANKACCTFROM>")).is_err()
 expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "<EXTRA>x</EXTRA></LEDGERBAL>")).is_err()
 expect OFX.parse_str(sample_xml.replace_each("<STMTTRN>", "<STMTTRN>discarded")).is_err()
+
+xml_encoding : Str -> Try([Utf8, Windows1252, Ascii], Str)
+xml_encoding = |text| {
+	xml = Xml.parse_str("${text}<v/>").map_err(|_| "malformed XML declaration")?
+	match xml.declaration {
+		Err(_) => Err("missing XML declaration")
+		Ok(declaration) => match declaration.encoding {
+			Err(_) | Ok(Utf8Encoding) => Ok(Utf8)
+			Ok(OtherEncoding(value)) => match lower(value) {
+				"windows-1252" => Ok(Windows1252)
+				"us-ascii" => Ok(Ascii)
+				_ => Err("unsupported XML encoding")
+			}
+		}
+	}
+}
+expect OFX.parse_bytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?>${sample_xml}".to_utf8(), { encoding: Windows1252 }).is_err()
+expect OFX.parse_str("<?xml version=\"1.0\" encoding=\"invalid-utf-8\"?>${sample_xml}").is_err()
