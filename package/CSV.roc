@@ -173,11 +173,12 @@ CSV := { records : List(CSV.Record) }.{
 			match scan_record(bytes, $pos) {
 				Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
 				Ok({ fields, next }) => {
-					match decode(record_parser, [fields]) {
-						Ok(values) => {
-							$values = $values.concat(values)
+					match record_parser.run(fields) {
+						Ok({ value, rest }) if rest.is_empty() => {
+							$values = $values.append(value)
 						}
-						Err(InvalidCsv(problem)) => return Err(InvalidCsv(locate(bytes, { ..problem, record: $index + 1 })))
+						Ok({ rest, .. }) => return Err(InvalidCsv(locate(bytes, leftover_error(record_parser, fields, rest.len(), $index + 1))))
+						Err(ParseError({ message, offset })) => return Err(InvalidCsv(locate(bytes, { record: $index + 1, field: offset + 1, line: 0, column: 0, message })))
 					}
 					$pos = after_break(bytes, next)
 					$index = $index + 1
@@ -1688,3 +1689,10 @@ expect {
 
 expect CSV.encode_record(["a".to_utf8(), "b".to_utf8()], { quoting: Always, line_ending: Lf }) == Ok("\"a\",\"b\"\n".to_utf8())
 expect CSV.encode_record(["a".to_utf8()], { line_ending: Cr }) == Ok("a\r".to_utf8())
+
+expect Streaming.collect(CSV.iter_records(["\"a\"\"\"\n".to_utf8()].iter(), { max_field_bytes: 2 }, {})) == Ok([["a\"".to_utf8()]])
+expect Streaming.collect(CSV.iter_records(["\"a\"\"\"\n".to_utf8()].iter(), { max_field_bytes: 1 }, {})).is_err()
+expect Streaming.collect(CSV.iter_records(["a,b".to_utf8()].iter(), { max_fields: 2 }, {})) == Ok([["a".to_utf8(), "b".to_utf8()]])
+expect Streaming.collect(CSV.iter_records(["a,b,c".to_utf8()].iter(), { max_fields: 2 }, {})).is_err()
+expect Streaming.collect(CSV.iter_records(["a,b".to_utf8()].iter(), { max_record_bytes: 3 }, {})) == Ok([["a".to_utf8(), "b".to_utf8()]])
+expect Streaming.collect(CSV.iter_records(["a,b".to_utf8()].iter(), { max_record_bytes: 2 }, {})).is_err()

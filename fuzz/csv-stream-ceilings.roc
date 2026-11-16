@@ -17,7 +17,7 @@ drain = |records, field_bytes, retain| {
 			if index >= records {
 				Err(NoMore)
 			} else {
-				row = if (retain and index == 0) "tiny,z\n" else "x,${Str.repeat("y", field_bytes)}\n"
+				row = if (retain and index == 0) "tiny,${Str.repeat("y", field_bytes)}\n" else "x,${Str.repeat("y", field_bytes)}\n"
 				Ok((row.to_utf8(), index + 1))
 			}
 		},
@@ -50,6 +50,9 @@ test! = |bytes| {
 	}
 	if shape == 2 and measured.value.retained != "tiny".to_utf8() {
 		crash "retained field changed"
+	}
+	if measured.stats.exit_live_bytes > measured.stats.entry_live_bytes + 2048 {
+		crash "retaining a tiny field pinned an input chunk"
 	}
 	held = measured.stats.peak_live_bytes - measured.stats.entry_live_bytes
 	if held > 32_768 + 32 * field_bytes {
