@@ -148,7 +148,7 @@ OFX := { statements : List(OFX.Statement) }.{
 
 	## Begin a writer. Call write for each item and finish after StatementEnd.
 	writer : WriteProps -> Writer
-	writer = |props| { props, opened: False, statement: False, list_open: False, kind: Bank }
+	writer = |props| { props, opened: False, statement: False, list_open: False, kind: Bank, balances: [], header: empty_header }
 
 	## Validate and encode one complete item atomically.
 	write : Writer, Event -> Try({ writer : Writer, bytes : List(U8) }, [InvalidOfx(Error)])
@@ -197,7 +197,7 @@ Frame : { name : Str, offset : U64 }
 
 State : { props : OFX.Props, offset : U64, line : U64, column : U64, last_cr : Bool, token : List(U8), token_mode : Bool, quote : U8, header : List(U8), header_done : Bool, syntax : OFX.Syntax, encoding : [Utf8, Windows1252, Ascii], stack : List(Frame), capture : List(U8), capture_tag : Str, capture_depth : U64, leaf : List(U8), context : OFX.Context, started : Bool, in_statement : Bool, root_seen : Bool, root_closed : Bool, header_info : OFX.Header, wrapper_id : Str, wrapper_status : OFX.Status, status_seen : Bool, context_seen : List(Str), balances_seen : List(Str), terminal : Bool }
 
-WriteState : { props : OFX.WriteProps, opened : Bool, statement : Bool, list_open : Bool, kind : [Bank, CreditCard] }
+WriteState : { props : OFX.WriteProps, opened : Bool, statement : Bool, list_open : Bool, kind : [Bank, CreditCard], balances : List(Str), header : OFX.Header }
 
 empty_account : OFX.Account
 empty_account = { bank_id: "", branch_id: "", account_id: "", account_type: "", key: "" }
@@ -594,7 +594,7 @@ consume_token = |state| {
 		$s = { ..$s, context_seen: $s.context_seen.append("account") }
 	}
 	if name == "LEDGERBAL" or name == "AVAILBAL" {
-		if $s.balances_seen.contains(name) {
+		if $s.balances_seen.contains(name) or (name == "LEDGERBAL" and $s.balances_seen.contains("AVAILBAL")) {
 			return Err(problem($s, "duplicate OFX balance"))
 		}
 		$s = { ..$s, balances_seen: $s.balances_seen.append(name) }
@@ -726,6 +726,9 @@ transaction = |node| {
 
 validate_context : OFX.Context -> Try({}, Str)
 validate_context = |context| {
+	if !timestamp(context.header.server_date) or context.header.language.count_utf8_bytes() != 3 or !context.header.language.to_utf8().all(|byte| byte >= 'A' and byte <= 'Z') {
+		return Err("invalid OFX signon date or language")
+	}
 	if [context.account.bank_id, context.account.branch_id, context.account.account_id, context.account.account_type, context.account.key, context.transaction_id].any(|text| text != text.trim()) {
 		return Err("context identifiers must use normalized whitespace")
 	}
@@ -850,7 +853,11 @@ timestamp = |text| {
 		if !zone.ends_with("]") {
 			return False
 		}
-		offset = Str.from_utf8_lossy(zone.to_utf8().drop_last(1)).split_on(":").first() ?? ""
+		interior = Str.from_utf8_lossy(zone.to_utf8().drop_last(1))
+		if interior.contains("[") or interior.contains("]") or interior.split_on(":").len() > 2 {
+			return False
+		}
+		offset = interior.split_on(":").first() ?? ""
 		if !decimal(offset) {
 			return False
 		}
@@ -950,6 +957,9 @@ write_event = |writer, event| {
 				return Err(InvalidOfx(write_error("nested writer statement")))
 			}
 			validate_context(context).map_err(|message| InvalidOfx(write_error(message)))?
+			if writer.opened and writer.header != context.header {
+				return Err(InvalidOfx(write_error("statement header differs from the open document")))
+			}
 			if !writer.opened {
 				header = context.header
 				$text = "${preamble(writer.props, header)}<OFX><SIGNONMSGSRSV1><SONRS><STATUS>${scalar("CODE", "0", syntax)}${scalar("SEVERITY", "INFO", syntax)}</STATUS>${scalar("DTSERVER", header.server_date, syntax)}${scalar("LANGUAGE", header.language, syntax)}${if (header.org.is_empty() and header.fid.is_empty()) "" else "<FI>${scalar("ORG", header.org, syntax)}${scalar("FID", header.fid, syntax)}</FI>"}</SONRS></SIGNONMSGSRSV1>"
@@ -961,7 +971,7 @@ write_event = |writer, event| {
 			acct = if (kind == Bank) "BANKACCTFROM" else "CCACCTFROM"
 			account = context.account
 			$text = Str.concat($text, "<${group}><${wrap}>${scalar("TRNUID", context.transaction_id, syntax)}<STATUS>${scalar("CODE", context.status.code, syntax)}${scalar("SEVERITY", context.status.severity, syntax)}${scalar("MESSAGE", context.status.message, syntax)}</STATUS><${stmt}>${scalar("CURDEF", context.currency, syntax)}<${acct}>${scalar("BANKID", account.bank_id, syntax)}${scalar("BRANCHID", account.branch_id, syntax)}${scalar("ACCTID", account.account_id, syntax)}${scalar("ACCTTYPE", account.account_type, syntax)}${scalar("ACCTKEY", account.key, syntax)}</${acct}><BANKTRANLIST>${scalar("DTSTART", context.start, syntax)}${scalar("DTEND", context.end, syntax)}")
-			$next = { ..writer, opened: True, statement: True, list_open: True, kind }
+			$next = { ..writer, opened: True, statement: True, list_open: True, kind, balances: [], header: context.header }
 		}
 		Transaction(value) => {
 			if !writer.statement or !writer.list_open {
@@ -981,8 +991,11 @@ write_event = |writer, event| {
 				LedgerBalance(_) => "LEDGERBAL"
 				_ => "AVAILBAL"
 			}
+			if writer.balances.contains(name) or (name == "LEDGERBAL" and writer.balances.contains("AVAILBAL")) {
+				return Err(InvalidOfx(write_error("duplicate or out-of-order writer balance")))
+			}
 			$text = Str.concat($text, "${if (writer.list_open) "</BANKTRANLIST>" else ""}<${name}>${scalar("BALAMT", balance.amount, syntax)}${scalar("DTASOF", balance.as_of, syntax)}</${name}>\n")
-			$next = { ..writer, list_open: False }
+			$next = { ..writer, list_open: False, balances: writer.balances.append(name) }
 		}
 		StatementEnd => {
 			if !writer.statement {
@@ -1153,3 +1166,13 @@ expect {
 	bytes = "\u(feff)${sample_xml}".to_utf8()
 	List.from_iter(OFX.parse_iter([bytes].iter(), {})) == List.from_iter(OFX.parse_iter(bytes.map(|byte| [byte]).iter(), {}))
 }
+
+expect {
+	document = OFX.parse_str(sample_xml)?
+	statement = document.statements.first()?
+	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	balance = statement.ledger_balance?
+	once = OFX.write(opened.writer, LedgerBalance(balance))?
+	OFX.write(once.writer, LedgerBalance(balance)).is_err()
+}
+expect !timestamp("20260101[5:EST:extra]") and !timestamp("20260101[5:EST]extra]")
