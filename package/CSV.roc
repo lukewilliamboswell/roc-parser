@@ -1,6 +1,8 @@
 import Parser
 import Utf8
 import Literal as Quotation
+import Streaming
+import CSVReader
 
 ## RFC 4180-style CSV parsing and typed record decoding.
 ##
@@ -164,15 +166,25 @@ CSV := { records : List(CSV.Record) }.{
 	parse_with : Parser(Record, a), Str -> Try(List(a), [InvalidCsv(Error)])
 	parse_with = |record_parser, text| {
 		bytes = text.to_utf8()
-		match scan_table(bytes) {
-			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
-			Ok(records) => {
-				match decode(record_parser, records) {
-					Ok(values) => Ok(values)
-					Err(InvalidCsv(problem)) => Err(InvalidCsv(locate(bytes, problem)))
+		var $values = []
+		var $pos = 0.U64
+		var $index = 0.U64
+		while $pos < bytes.len() {
+			match scan_record(bytes, $pos) {
+				Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+				Ok({ fields, next }) => {
+					match decode(record_parser, [fields]) {
+						Ok(values) => {
+							$values = $values.concat(values)
+						}
+						Err(InvalidCsv(problem)) => return Err(InvalidCsv(locate(bytes, { ..problem, record: $index + 1 })))
+					}
+					$pos = after_break(bytes, next)
+					$index = $index + 1
 				}
 			}
 		}
+		Ok($values)
 	}
 
 	## Decode already parsed records with a hand-built record parser.
@@ -567,10 +579,176 @@ CSV := { records : List(CSV.Record) }.{
 		}
 	}
 
+	## Limits for the unfinished streaming record. Completed rows leave the reader.
+	ReaderProps : CSVReader.Props
+
+	## Persistent byte scanner state; retain only the most recent returned state.
+	Reader : CSVReader.State
+
+	## Start a chunk decoder with finite field, record and column limits.
+	reader : ReaderProps -> Reader
+	reader = CSVReader.new
+
+	## Parse one raw record from a byte chunk. Chunk exhaustion is not EOF.
+	step : Reader, List(U8), Streaming.InputEnd -> Streaming.Step(Reader, Record, Error)
+	step = CSVReader.step
+
+	## Lazily read raw byte records with explicit validation completion.
+	iter_records : Iter(List(U8)), ReaderProps, Streaming.ReadProps -> Iter(Try(Streaming.ReadEvent(Record, Error), Streaming.ReadError(Error)))
+	iter_records = |chunks, props, handling| Streaming.iter(chunks, reader(props), step, handling)
+
+	## Read raw records from an effectful byte source without collecting input.
+	stream_records : Stream(Try(List(U8), source_error)), ReaderProps, Streaming.ReadProps -> Stream(Try(Streaming.ReadEvent(Record, Error), [SourceErr(source_error), ParseErr(Error), ErrorLimitExceeded({ max : U64, error : Error }), DecoderProtocol(Str)]))
+	stream_records = |chunks, props, handling| Streaming.stream(chunks, reader(props), step, handling)
+
+	## Decode one safely framed row at a time with a positional field parser.
+	iter_with : Parser(Record, row), Iter(List(U8)), ReaderProps, Streaming.ReadProps -> Iter(Try(Streaming.ReadEvent(row, Error), Streaming.ReadError(Error)))
+	iter_with = |parse_row, chunks, props, handling| Streaming.iter(chunks, reader(props), |state, bytes, end| positional_step(parse_row, state, bytes, end), handling)
+
+	## Effectful counterpart of [CSV.iter_with].
+	stream_with : Parser(Record, row), Stream(Try(List(U8), source_error)), ReaderProps, Streaming.ReadProps -> Stream(Try(Streaming.ReadEvent(row, Error), [SourceErr(source_error), ParseErr(Error), ErrorLimitExceeded({ max : U64, error : Error }), DecoderProtocol(Str)]))
+	stream_with = |parse_row, chunks, props, handling| Streaming.stream(chunks, reader(props), |state, bytes, end| positional_step(parse_row, state, bytes, end), handling)
+
+	## Decode raw chunks into the inferred record type using the chosen header mode.
+	iter : Iter(List(U8)), HeaderMode, ReaderProps, Streaming.ReadProps -> Iter(Try(Streaming.ReadEvent(row, [InvalidCsv(Error), ..errs]), Streaming.ReadError([InvalidCsv(Error), ..errs])))
+		where [row.Parseable([InvalidCsv(Error), ..errs])]
+	iter = |chunks, header, props, handling| {
+		Row : row
+		parse_row = Row.parser_for(Format.Default)
+		Streaming.iter(chunks, typed_state(header, props), |state, bytes, end| typed_step(parse_row, state, bytes, end), handling)
+	}
+
+	## Decode an effectful source into inferred records; source errors remain distinct.
+	stream : Stream(Try(List(U8), source_error)), HeaderMode, ReaderProps, Streaming.ReadProps -> Stream(Try(Streaming.ReadEvent(row, [InvalidCsv(Error), ..errs]), [SourceErr(source_error), ParseErr([InvalidCsv(Error), ..errs]), ErrorLimitExceeded({ max : U64, error : [InvalidCsv(Error), ..errs] }), DecoderProtocol(Str)]))
+		where [row.Parseable([InvalidCsv(Error), ..errs])]
+	stream = |chunks, header, props, handling| {
+		Row : row
+		parse_row = Row.parser_for(Format.Default)
+		Streaming.stream(chunks, typed_state(header, props), |state, bytes, end| typed_step(parse_row, state, bytes, end), handling)
+	}
+
+	## Writer options. Each emitted chunk is bounded; records are validated first.
+	WriteProps := { chunk_bytes : U64 ?? 65_536, max_field_bytes : U64 ?? 16_777_216, max_record_bytes : U64 ?? 67_108_864, max_fields : U64 ?? 65_536 }
+
+	## Validate and encode one byte record using necessary quoting and CRLF.
+	encode_record : Record, WriteProps -> Try(List(U8), [InvalidRecord(Str)])
+	encode_record = |row_fields, props| {
+		if row_fields.is_empty() {
+			return Err(InvalidRecord("a CSV record must contain at least one field"))
+		}
+		if row_fields.len() > props.max_fields {
+			return Err(InvalidRecord("field count limit exceeded"))
+		}
+		var $size = 1 + row_fields.len()
+		for cell_bytes in row_fields {
+			if cell_bytes.len() > props.max_field_bytes {
+				return Err(InvalidRecord("field byte limit exceeded"))
+			}
+			quoted = cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
+			size = cell_bytes.len() + (if (quoted) 2 + cell_bytes.count_if(|byte| byte == '"') else 0)
+			if size > props.max_record_bytes or $size > props.max_record_bytes - size {
+				return Err(InvalidRecord("record byte limit exceeded"))
+			}
+			$size = $size + size
+		}
+		var $out = List.with_capacity($size)
+		var $index = 0.U64
+		for cell_bytes in row_fields {
+			if $index > 0 {
+				$out = $out.append(',')
+			}
+			quoted = cell_bytes.contains(',') or cell_bytes.contains('"') or cell_bytes.contains('\r') or cell_bytes.contains('\n') or row_fields == [[]]
+			if quoted {
+				$out = $out.append('"')
+				for byte in cell_bytes {
+					$out = $out.append(byte)
+					if byte == '"' {
+						$out = $out.append('"')
+					}
+				}
+				$out = $out.append('"')
+			} else {
+				$out = $out.concat(cell_bytes)
+			}
+			$index = $index + 1
+		}
+		Ok($out.append('\r').append('\n'))
+	}
+
+	## Encode validated records into bounded chunks without collecting the document.
+	write_iter : Iter(Record), WriteProps -> Iter(Try(List(U8), [EncodeErr([InvalidRecord(Str)]), InvalidChunkSize]))
+	write_iter = |records, props| Streaming.encode_iter(records, |row_fields| encode_record(row_fields, props), props.chunk_bytes)
+
+	## Encode records from an effectful source into bounded byte chunks.
+	write_stream : Stream(Try(Record, source_error)), WriteProps -> Stream(Try(List(U8), [SourceErr(source_error), EncodeErr([InvalidRecord(Str)]), InvalidChunkSize]))
+	write_stream = |records, props| Streaming.encode_stream(records, |row_fields| encode_record(row_fields, props), props.chunk_bytes)
+
 	## The cursor for type-directed decoding: one record, the header names,
 	## and indices into them. Used through [CSV.parse]; you do not need to name
 	## it.
 	State :: { row : Record, header : List(Str), column : U64, cell : U64, record : U64, nested : Bool }
+}
+
+TypedState : { reader : CSV.Reader, header : List(Str), header_read : Bool, mode : CSV.HeaderMode }
+
+typed_state : CSV.HeaderMode, CSV.ReaderProps -> TypedState
+typed_state = |mode, props| { reader: CSV.reader(props), header: [], header_read: mode == Absent, mode }
+
+stream_location : CSV.Reader, CSV.Error -> CSV.Error
+stream_location = |reader, problem| {
+	at = reader.last_starts.get(if (problem.field == 0) 0 else problem.field - 1) ?? (reader.last_starts.first() ?? reader.last_end)
+	{ ..problem, line: at.line, column: at.column }
+}
+
+positional_step : Parser(CSV.Record, row), CSV.Reader, List(U8), Streaming.InputEnd -> Streaming.Step(CSV.Reader, row, CSV.Error)
+positional_step = |parse_row, reader, bytes, end| {
+	next = CSV.step(reader, bytes, end)
+	outcome = match next.outcome {
+		Item(fields) => match parse_row.run(fields) {
+			Ok({ value, rest }) if rest.is_empty() => Item(value)
+			Ok({ rest, .. }) => RecordError(stream_location(next.state, leftover_error(parse_row, fields, rest.len(), next.state.record - 1)))
+			Err(ParseError({ message, offset })) => RecordError(stream_location(next.state, { record: next.state.record - 1, field: offset + 1, line: 0, column: 0, message }))
+		}
+		RecordError(error) => RecordError(error)
+		NeedInput => NeedInput
+		Done => Done
+		Failed(error) => Failed(error)
+	}
+	{ state: next.state, consumed: next.consumed, outcome }
+}
+
+typed_step : (CSV.State -> Try({ value : row, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errs])), TypedState, List(U8), Streaming.InputEnd -> Streaming.Step(TypedState, row, [InvalidCsv(CSV.Error), ..errs])
+typed_step = |parse_row, initial, bytes, end| {
+	var $state = initial
+	var $consumed = 0.U64
+	while True {
+		next = CSV.step($state.reader, bytes.drop_first($consumed), end)
+		$consumed = $consumed + next.consumed
+		$state = { ..$state, reader: next.state }
+		match next.outcome {
+			Item(fields) => {
+				if !$state.header_read {
+					$state = { ..$state, header: fields.map(|cell| if ($state.mode == Normalized) normalize_name(cell) else Str.from_utf8_lossy(cell)), header_read: True }
+				} else if fields != [[]] {
+					if $state.mode != Absent and fields.len() != $state.header.len() {
+						error = stream_location(next.state, { record: next.state.record - 1, field: smaller(fields.len(), $state.header.len()) + 1, line: 0, column: 0, message: width_message(fields.len(), $state.header.len()) })
+						return { state: $state, consumed: $consumed, outcome: RecordError(InvalidCsv(error)) }
+					}
+					parsed = parse_row(CSV.State.{ row: fields, header: $state.header, column: 0, cell: 0, record: next.state.record - 1, nested: False })
+					outcome = match parsed {
+						Ok({ value, .. }) => Item(value)
+						Err(InvalidCsv(error)) => RecordError(InvalidCsv(stream_location(next.state, error)))
+						Err(other) => RecordError(other)
+					}
+					return { state: $state, consumed: $consumed, outcome }
+				}
+			}
+			NeedInput => return { state: $state, consumed: $consumed, outcome: NeedInput }
+			Done => return { state: $state, consumed: $consumed, outcome: Done }
+			Failed(error) => return { state: $state, consumed: $consumed, outcome: Failed(InvalidCsv(error)) }
+			RecordError(error) => return { state: $state, consumed: $consumed, outcome: RecordError(InvalidCsv(error)) }
+		}
+	}
 }
 
 CsvDecoded(row) := { value : List(row) }.{
@@ -585,12 +763,34 @@ CsvDecoded(row) := { value : List(row) }.{
 decode_table : Str, (CSV.State -> Try({ value : row, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errs])), [HeaderExact, HeaderNormalized, Headerless] -> Try(List(row), [InvalidCsv(CSV.Error), ..errs])
 decode_table = |text, parse_row, mode| {
 	bytes = text.to_utf8()
-	records =
-		match scan_table(bytes) {
-			Ok(found) => found
-			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, bad)))
+	var $header = []
+	var $index = 0.U64
+	var $pos = 0.U64
+	var $values = []
+	while $pos < bytes.len() {
+		match scan_record(bytes, $pos) {
+			Err(bad) => return Err(InvalidCsv(syntax_error(bytes, { field: bad.field, at: bad.at, problem: bad.problem, record: $index })))
+			Ok({ fields: row, next }) => {
+				if $index == 0 and mode != Headerless {
+					$header = row.map(|field| if (mode == HeaderNormalized) normalize_name(field) else Str.from_utf8_lossy(field))
+				} else if row != [[]] {
+					if mode != Headerless and row.len() != $header.len() {
+						return Err(InvalidCsv(locate(bytes, { record: $index + 1, field: smaller(row.len(), $header.len()) + 1, line: 0, column: 0, message: width_message(row.len(), $header.len()) })))
+					}
+					match parse_row(CSV.State.{ row, header: $header, column: 0, cell: 0, record: $index + 1, nested: False }) {
+						Ok({ value, rest: _ }) => {
+							$values = $values.append(value)
+						}
+						Err(InvalidCsv(problem)) => return Err(InvalidCsv(locate(bytes, problem)))
+						Err(other) => return Err(other)
+					}
+				}
+				$pos = after_break(bytes, next)
+				$index = $index + 1
+			}
 		}
-	decode_records(bytes, records, parse_row, mode)
+	}
+	Ok($values)
 }
 
 decode_records : List(U8), List(CSV.Record), (CSV.State -> Try({ value : row, rest : CSV.State }, [InvalidCsv(CSV.Error), ..errs])), [HeaderExact, HeaderNormalized, Headerless] -> Try(List(row), [InvalidCsv(CSV.Error), ..errs])
@@ -1411,5 +1611,66 @@ expect {
 	match result {
 		Err(BadQuotedBytes(message)) => message.contains("CustomCsvFailure") and message.contains("custom detail")
 		Ok(_) => False
+	}
+}
+
+# The streaming scanner and complete parser agree at every byte boundary,
+# including UTF-8, doubled quotes, CRLF, and malformed quoted fields.
+stream_records_for_test : List(List(U8)) -> Try(List(CSV.Record), [InvalidCsv(CSV.Error)])
+stream_records_for_test = |chunks| {
+	var $rows = []
+	for event in CSV.iter_records(chunks.iter(), {}, {}) {
+		match event {
+			Ok(Value(row)) => {
+				$rows = $rows.append(row)
+			}
+			Ok(Finished(_)) => return Ok($rows)
+			Ok(Rejected(error)) | Err(ParseErr(error)) => return Err(InvalidCsv(error))
+			Err(_) => crash "streaming protocol failure"
+		}
+	}
+	crash "missing finished event"
+}
+expect ["", "\n", "a,b\r\nc,d", "a\r\n\nb", "é,😀", "\u(feff)a", "a\"b, \"c\" ", "\"a\r\nb\",\"x\"\"y\"\n", "a,\"b", "x\n\"a\"b,c"].all(
+	|text| {
+		bytes = text.to_utf8()
+		(0..=bytes.len()).iter().fold(True, |good, split| good and stream_records_for_test([bytes.take_first(split), [], bytes.drop_first(split)]) == CSV.parse_records(text))
+	},
+)
+expect CSV.encode_record(["a,b".to_utf8(), "x\"y".to_utf8()], {}) == Ok("\"a,b\",\"x\"\"y\"\r\n".to_utf8())
+expect CSV.encode_record([[]], {}) == Ok("\"\"\r\n".to_utf8())
+expect CSV.encode_record([], {}).is_err()
+expect CSV.encode_record(["a".to_utf8()], { max_record_bytes: 3 }) == Ok("a\r\n".to_utf8())
+expect CSV.encode_record(["a".to_utf8()], { max_record_bytes: 2 }).is_err()
+expect {
+	encoded = List.from_iter(CSV.write_iter([["a,b".to_utf8(), "é".to_utf8()], [[]]].iter(), { chunk_bytes: 1 }))
+	encoded.all(|result| result.map_ok(|bytes| bytes.len() <= 1) == Ok(True)) and stream_records_for_test(encoded.map(|chunk| chunk ?? [])) == Ok([["a,b".to_utf8(), "é".to_utf8()], [[]]])
+}
+expect {
+	decode = Parser.many(CSV.field(CSV.u64))
+	events = CSV.iter_with(decode, ["1\nwrong\n2\n".to_utf8()].iter(), {}, { error_policy: ReportInvalidRecords })
+	match Streaming.collect_report(events) {
+		Ok({ values, errors, report }) => values == [[1], [2]] and errors.len() == 1 and (errors.first() ?? { record: 0, field: 0, line: 0, column: 0, message: "" }).line == 2 and report == { emitted_items: 2, rejected_records: 1 }
+		Err(_) => False
+	}
+}
+expect {
+	result : Try(List({ name : Str, age : U64 }), _)
+	result = Streaming.collect(CSV.iter(["name,age\r".to_utf8(), "\nAda,36\nAlan,41".to_utf8()].iter(), Exact, {}, {}))
+	result == Ok([{ name: "Ada", age: 36 }, { name: "Alan", age: 41 }])
+}
+expect {
+	result : Try(List({ id : U64 }), _)
+	result = CSV.parse("id\nwrong\n\"unterminated")
+	match result {
+		Err(InvalidCsv(error)) => error.record == 2 and error.message.contains("a U64")
+		_ => False
+	}
+}
+expect {
+	decode = Parser.many(CSV.field(CSV.u64))
+	match CSV.parse_with(decode, "bad\n\"unterminated") {
+		Err(InvalidCsv(error)) => error.record == 1 and error.message.contains("a U64")
+		_ => False
 	}
 }
