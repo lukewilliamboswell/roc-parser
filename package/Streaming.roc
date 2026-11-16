@@ -320,6 +320,95 @@ Streaming :: [].{
 		},
 	)
 
+	## Encode contextual records and validate document completion on source EOF.
+	encode_state_iter : Iter(item), state, (state, item -> Try({ state : state, bytes : Bytes }, problem)), (state -> Try(Bytes, problem)), U64 -> Iter(Try(Bytes, [EncodeErr(problem), InvalidChunkSize]))
+	encode_state_iter = |items, initial, write, finish, chunk_bytes| Iter.custom(
+		Reading({ items, writer: initial, buffer: [], index: 0, finishing: False }),
+		Err(Unknown),
+		|cursor| match cursor {
+			Stopped => Err(NoMore)
+			Reading(start) => {
+				if chunk_bytes == 0 {
+					return Ok((Err(InvalidChunkSize), Stopped))
+				}
+				var $cursor = start
+				while True {
+					if $cursor.index < $cursor.buffer.len() {
+						len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
+						bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
+						$cursor = { ..$cursor, index: $cursor.index + len }
+						return Ok((Ok(bytes), Reading($cursor)))
+					}
+					if $cursor.finishing {
+						return Err(NoMore)
+					}
+					match $cursor.items.next() {
+						Done => match finish($cursor.writer) {
+							Ok(bytes) => {
+								$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+						Skip({ rest }) => {
+							$cursor = { ..$cursor, items: rest }
+						}
+						One({ item, rest }) => match write($cursor.writer, item) {
+							Ok({ state, bytes }) => {
+								$cursor = { ..$cursor, items: rest, writer: state, buffer: bytes, index: 0 }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+					}
+				}
+			}
+		},
+	)
+
+	## Effectful contextual writer. Source failure never finalizes the writer.
+	encode_state_stream : Stream(Try(item, source_error)), state, (state, item -> Try({ state : state, bytes : Bytes }, problem)), (state -> Try(Bytes, problem)), U64 -> Stream(Try(Bytes, [SourceErr(source_error), EncodeErr(problem), InvalidChunkSize]))
+	encode_state_stream = |items, initial, write, finish, chunk_bytes| Stream.custom(
+		Reading({ items, writer: initial, buffer: [], index: 0, finishing: False }),
+		Err(Unknown),
+		|cursor| match cursor {
+			Stopped => Err(NoMore)
+			Reading(start) => {
+				if chunk_bytes == 0 {
+					return Ok((Err(InvalidChunkSize), Stopped))
+				}
+				var $cursor = start
+				while True {
+					if $cursor.index < $cursor.buffer.len() {
+						len = U64.min(chunk_bytes, $cursor.buffer.len() - $cursor.index)
+						bytes = $cursor.buffer.sublist({ start: $cursor.index, len })
+						$cursor = { ..$cursor, index: $cursor.index + len }
+						return Ok((Ok(bytes), Reading($cursor)))
+					}
+					if $cursor.finishing {
+						return Err(NoMore)
+					}
+					match $cursor.items.next!() {
+						Done => match finish($cursor.writer) {
+							Ok(bytes) => {
+								$cursor = { ..$cursor, buffer: bytes, index: 0, finishing: True }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+						Skip({ rest }) => {
+							$cursor = { ..$cursor, items: rest }
+						}
+						One({ item: Ok(item), rest }) => match write($cursor.writer, item) {
+							Ok({ state, bytes }) => {
+								$cursor = { ..$cursor, items: rest, writer: state, buffer: bytes, index: 0 }
+							}
+							Err(error) => return Ok((Err(EncodeErr(error)), Stopped))
+						}
+						One({ item: Err(error), .. }) => return Ok((Err(SourceErr(error)), Stopped))
+					}
+				}
+			}
+		},
+	)
+
 	## Explicitly collect successful values and bounded reported rejections.
 	collect_report : Iter(Try(ReadEvent(item, problem), terminal_error)) -> Try({ values : List(item), errors : List(problem), report : Report }, [ReadFailed(terminal_error), MissingFinished])
 	collect_report = |events| {
@@ -376,3 +465,5 @@ expect {
 	List.from_iter(Streaming.iter([[1.U8]].iter(), 0, queued, {})) == [Ok(Value(1)), Ok(Value(9)), Ok(Finished({ emitted_items: 2, rejected_records: 0 }))]
 }
 expect List.from_iter(Streaming.iter([].iter(), 0.U64, |state, _, _| { state, consumed: 0, outcome: NeedInput }, {})) == [Err(DecoderProtocol("decoder requested input after EOF"))]
+
+expect List.from_iter(Streaming.encode_state_iter(["ab", "cd"].iter(), 0.U64, |state, item| Ok({ state: state + 1, bytes: item.to_utf8() }), |state| Ok(state.to_str().to_utf8()), 1)) == [Ok("a".to_utf8()), Ok("b".to_utf8()), Ok("c".to_utf8()), Ok("d".to_utf8()), Ok("2".to_utf8())]
