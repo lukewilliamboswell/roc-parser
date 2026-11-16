@@ -72,7 +72,7 @@ sys.exit(7 if os.environ.get("HARNESS_FAIL", "unmatched") in sys.argv else 0)
         result = self.invoke("conformance", "json", "http", "json", HARNESS_FAIL="scripts/review_json.py")
         self.assertNotEqual(result.returncode, 0)
         calls = self.calls()
-        self.assertEqual(calls[0]["args"], ["scripts/setup_oracles.py", "scripts/http/requirements.txt",
+        self.assertEqual(calls[0]["args"], ["scripts/setup_oracles.py", "scripts/ofx/requirements.txt", "scripts/qif/requirements.txt", "scripts/http/requirements.txt",
                                            "scripts/markdown/requirements.txt", "scripts/yaml/requirements.txt"])
         self.assertEqual([call["args"][0] for call in calls[1:]], ["scripts/review_json.py", "scripts/review_http.py"])
         self.assertTrue(all(call["program"] == "oracle-python" for call in calls[1:]))
