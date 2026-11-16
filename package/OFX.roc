@@ -723,12 +723,16 @@ unique = |node| {
 account_from : Xml.Node -> Try(OFX.Account, Str)
 account_from = |node| {
 	unique(node)?
+	scalar_fields(node, if (node.name() == Ok("CCACCTFROM")) ["ACCTID", "ACCTKEY"] else ["BANKID", "BRANCHID", "ACCTID", "ACCTTYPE", "ACCTKEY"])?
 	Ok({ bank_id: field(node, "BANKID"), branch_id: field(node, "BRANCHID"), account_id: field(node, "ACCTID"), account_type: field(node, "ACCTTYPE"), key: field(node, "ACCTKEY") })
 }
 
 transaction : Xml.Node -> Try(OFX.Transaction, Str)
 transaction = |node| {
 	unique(node)?
+	if !aggregate_whitespace(node) {
+		return Err("unexpected text between transaction fields")
+	}
 	if children(node).any(|child| leaf_tag(child.name() ?? "") and !children(child).is_empty()) {
 		return Err("nested content in scalar transaction field")
 	}
@@ -813,6 +817,7 @@ validate_transaction = |value| {
 balance_from : Xml.Node -> Try(OFX.Balance, Str)
 balance_from = |node| {
 	unique(node)?
+	scalar_fields(node, ["BALAMT", "DTASOF"])?
 	value = { amount: field(node, "BALAMT"), as_of: field(node, "DTASOF") }
 	if !decimal(value.amount) or !timestamp(value.as_of) {
 		return Err("invalid OFX balance")
@@ -1206,3 +1211,34 @@ expect {
 	["1EXT", ".EXT"].all(|name| OFX.write(opened.writer, Transaction({ ..value, extensions: [Element({ name, attributes: [], children: [Text("x")] })] })).is_err())
 }
 expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><1EXT></1EXT>")).is_err()
+
+aggregate_whitespace : Xml.Node -> Bool
+aggregate_whitespace = |node| match node {
+	Text(_) => False
+	Element(element) => element.attributes.is_empty() and element.children.all(
+		|child| match child {
+			Text(value) => value.trim().is_empty()
+			Element(_) => True
+		},
+	)
+}
+
+scalar_fields : Xml.Node, List(Str) -> Try({}, Str)
+scalar_fields = |node, allowed| {
+	if !aggregate_whitespace(node) {
+		return Err("unexpected text or attributes in OFX aggregate")
+	}
+	for child in children(node) {
+		if !allowed.contains(child.name() ?? "") or !children(child).is_empty() {
+			return Err("unsupported OFX account or balance field")
+		}
+		match child {
+			Element(element) if !element.attributes.is_empty() => return Err("unsupported field attributes")
+			_ => {}
+		}
+	}
+	Ok({})
+}
+expect OFX.parse_str(sample_xml.replace_each("</BANKACCTFROM>", "<EXTRA>x</EXTRA></BANKACCTFROM>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("</LEDGERBAL>", "<EXTRA>x</EXTRA></LEDGERBAL>")).is_err()
+expect OFX.parse_str(sample_xml.replace_each("<STMTTRN>", "<STMTTRN>discarded")).is_err()
