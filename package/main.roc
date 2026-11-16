@@ -29,6 +29,7 @@ package
 		MathML,
 		Parser,
 		RocSyntax,
+		Streaming,
 		Svg,
 		SvgPath,
 		Utf8,

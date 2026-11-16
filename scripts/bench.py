@@ -40,8 +40,8 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "bench"
 DEFAULT_OUT = ROOT / ".roc-parser-tmp" / "bench"
-FORMATS = ("csv", "yaml", "xml", "json", "markdown", "http")
-EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "json": "json", "markdown": "md", "http": "http"}
+FORMATS = ("csv", "yaml", "xml", "json", "markdown", "http", "qif", "ofx")
+EXTENSIONS = {"csv": "csv", "yaml": "yaml", "xml": "xml", "json": "json", "markdown": "md", "http": "http", "qif": "qif", "ofx": "ofx"}
 SIZES = {"small": 4 * 1024, "medium": 64 * 1024, "large": 1024 * 1024}
 SCHEMA_VERSION = 1
 
@@ -242,8 +242,28 @@ def http_chunked(rng: random.Random, target: int, chunk: int = 8192) -> str:
             f"Server: example\r\n\r\n{chunks}0\r\n\r\n")
 
 
+def qif_doc(rng: random.Random, target: int) -> str:
+    return fill(target, lambda i: f"D27/08/2026\nT-{i % 100}.25\nP{rng.choice(NAMES)}\nMrecord {i}\nLExpenses\n^\n", "!Type:Bank\n")
+
+
+def ofx_doc(rng: random.Random, target: int) -> str:
+    head = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<?OFX OFXHEADER="200" VERSION="203" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>\n'
+            '<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>'
+            '<DTSERVER>20260827120000</DTSERVER><LANGUAGE>ENG</LANGUAGE></SONRS></SIGNONMSGSRSV1>'
+            '<BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>'
+            '<STMTRS><CURDEF>AUD</CURDEF><BANKACCTFROM><BANKID>123</BANKID><ACCTID>456</ACCTID>'
+            '<ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST>'
+            '<DTSTART>20260801000000</DTSTART><DTEND>20260831000000</DTEND>')
+    tail = ('</BANKTRANLIST><LEDGERBAL><BALAMT>100.00</BALAMT><DTASOF>20260831000000</DTASOF>'
+            '</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>')
+    return fill(target - len(tail), lambda i: (
+        f'<STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260827120000</DTPOSTED><TRNAMT>-{i % 100}.25</TRNAMT>'
+        f'<FITID>{i}</FITID><NAME>{rng.choice(NAMES)}</NAME><MEMO>record {i}</MEMO></STMTTRN>'), head, tail)
+
+
 GENERATORS: dict[str, Callable[[random.Random, int], str]] = {
-    "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "json": json_doc, "markdown": markdown_doc,
+    "qif": qif_doc, "ofx": ofx_doc, "csv": csv_doc, "yaml": yaml_doc, "xml": xml_doc, "json": json_doc, "markdown": markdown_doc,
 }
 
 
@@ -255,6 +275,8 @@ def seed_for(name: str) -> int:
 def pathological() -> dict[str, dict[str, str]]:
     """Adversarial shapes that once were (or commonly are) super-linear."""
     return {
+        "qif": {"long-memo": "!Type:Bank\nD27/08/2026\nT1\nM" + "a" * 65536 + "\n^\n"},
+        "ofx": {"many-transactions": ofx_doc(random.Random(0), 128 * 1024)},
         "csv": {
             "wide-row": ",".join(f"f{i}" for i in range(20000)) + "\n",
             "escaped-quotes": '"' + '""' * 50000 + '"\n',
@@ -301,6 +323,8 @@ def pathological() -> dict[str, dict[str, str]]:
 def samples() -> dict[str, dict[str, bytes]]:
     folder = BENCH / "corpus" / "samples"
     return {
+        "qif": {"sample-bank": qif_doc(random.Random(1), 512).encode()},
+        "ofx": {"sample-bank": ofx_doc(random.Random(1), 1024).encode()},
         "csv": {"sample-orders-export": (folder / "orders-export.csv").read_bytes()},
         "yaml": {"sample-github-actions": (folder / "github-actions.yaml").read_bytes()},
         "xml": {"sample-svg": (folder / "logo.svg").read_bytes()},
@@ -353,7 +377,9 @@ class Impl:
 #: Comparator libraries per language and format, with what each one measures.
 COMPARATORS = {
     "rust": {
-        "csv": [("csv", "csv 1.3 StringRecords copied into Vec<Vec<String>>")],
+        "qif": [("qif_parser", "qif_parser typed transactions (borrowed strings)")],
+        "ofx": [("ofx-rs", "ofx-rs typed bank/card statements")],
+        "csv": [("csv", "collect: csv 1.3 StringRecords copied into Vec<Vec<String>>"), ("csv-consume", "consume: reusable StringRecord, values discarded")],
         "yaml": [("yaml-rust2", "yaml-rust2 YamlLoader tree"), ("serde_yaml", "serde_yaml Value tree (unsafe-libyaml)")],
         "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree read-only DOM")],
         "json": [("serde_json", "serde_json Value with preserve_order and arbitrary_precision: ordered, lossless")],
@@ -361,7 +387,8 @@ COMPARATORS = {
         "http": [("httparse", "httparse head plus Content-Length/chunked body framing, copied")],
     },
     "go": {
-        "csv": [("encoding-csv", "encoding/csv ReadAll")],
+        "qif": [], "ofx": [("ofxgo", "ofxgo validated bank/card statement model")],
+        "csv": [("encoding-csv", "collect: encoding/csv ReadAll"), ("encoding-csv-consume", "consume: encoding/csv Read with ReuseRecord")],
         "yaml": [("yaml.v3", "gopkg.in/yaml.v3 Unmarshal into interface{}")],
         "xml": [("encoding-xml", "encoding/xml tokens built into a tree")],
         "json": [("encoding-json", "encoding/json Decoder.UseNumber into interface{}; maps are unordered")],
@@ -369,7 +396,9 @@ COMPARATORS = {
         "http": [("net-http", "net/http ReadRequest/ReadResponse plus io.ReadAll body")],
     },
     "python": {
-        "csv": [("csv", "stdlib csv.reader (C) into lists")],
+        "qif": [("quiffen", "quiffen typed accounts and transactions")],
+        "ofx": [("ofxtools", "ofxtools typed statements"), ("ofxparse", "ofxparse typed statements")],
+        "csv": [("csv", "collect: stdlib csv.reader (C) into lists"), ("csv-consume", "consume: stdlib csv.reader (C), rows discarded")],
         "yaml": [("pyyaml", "PyYAML SafeLoader, pure Python"), ("pyyaml-libyaml", "PyYAML CSafeLoader (libyaml)")],
         "xml": [("etree", "xml.etree.ElementTree.fromstring (expat)")],
         "json": [("json", "stdlib json.loads (C scanner) into dicts and lists; numbers become int and float")],

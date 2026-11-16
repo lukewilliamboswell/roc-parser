@@ -4,3 +4,18 @@ PyYAML==6.0.3
 markdown-it-py==4.0.0
 mdurl==0.1.2
 h11==0.16.0
+
+# Financial-format collection comparators.
+quiffen==4.0.1
+ofxtools==1.1.1
+ofxparse==0.21
+annotated-types==0.8.0
+beautifulsoup4==4.15.0
+lxml==6.1.3
+pydantic==2.14.3
+pydantic-core==2.50.4
+python-dateutil==2.9.0.post0
+six==1.17.0
+soupsieve==4.1.1
+typing-extensions==4.16.0
+typing-inspection==0.4.5

@@ -178,8 +178,9 @@ class Reports(unittest.TestCase):
     def test_every_format_has_a_roc_driver_and_comparators(self):
         for fmt in bench.FORMATS:
             self.assertTrue((bench.BENCH / "roc" / f"{fmt}.roc").exists(), fmt)
+            self.assertTrue(any(bench.COMPARATORS[lang][fmt] for lang in bench.COMPARATORS), fmt)
             for lang in bench.COMPARATORS:
-                self.assertTrue(bench.COMPARATORS[lang][fmt], (lang, fmt))
+                self.assertIn(fmt, bench.COMPARATORS[lang])
 
 
 if __name__ == "__main__":

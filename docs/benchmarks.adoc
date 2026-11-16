@@ -19,7 +19,7 @@ and how to read a report.
 == Run the benchmarks
 
 You need a recent Roc nightly; the report records which one. Go,
-Rust (cargo) and Python 3 are optional: a missing toolchain is skipped and
+Rust (cargo, Rust 1.98 or newer for the financial comparators) and Python 3 are optional: a missing toolchain is skipped and
 named in the report.
 
 [source,console]
@@ -63,9 +63,22 @@ document a given number of times, stops the clock, and prints one JSON line:
 ----
 
 Process start-up, reading the input and printing are outside the timed region.
-Each parse builds the implementation's in-memory result and then folds over it
-into the checksum, so the work cannot be optimised away and every
-implementation pays for the structure it returns.
+Collection comparators build their in-memory result and fold over it into a
+checksum. CSV comparators labelled `consume` discard each completed record and
+reuse buffers where the library permits. Compare collection and consumption
+workloads separately. These drivers preload the source: their RSS includes the
+complete input and does not establish bounded file-source memory.
+
+QIF compares typed bank transactions with Quiffen and Rust `qif_parser`.
+OFX compares bank/card statements with ofxtools, ofxparse, ofxgo, and Rust
+`ofx-rs`. Financial checksums include transaction counts and weighted UTF-8
+payee/name and memo bytes; exact amounts and dates are checked by the correctness
+reviews. CSV checksums include every decoded field byte. The Go QIF slot has no
+comparator because the surveyed Go reader does not provide the required coverage.
+
+When several Rust toolchains are installed, select the intended one explicitly,
+for example `RUSTUP_TOOLCHAIN=1.98.1 python3 scripts/bench.py --formats qif,ofx`.
+The report records the selected compiler and locked library versions.
 
 For each document and implementation, `scripts/bench.py`:
 

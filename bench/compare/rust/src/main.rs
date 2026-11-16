@@ -24,7 +24,17 @@ fn csv_parse(text: &str) -> Result<u64, ()> {
         let record = record.map_err(|_| ())?;
         rows.push(record.iter().map(str::to_owned).collect());
     }
-    Ok(rows.iter().map(|r| 1 + r.iter().map(|f| f.len() as u64).sum::<u64>()).sum())
+    Ok(rows.iter().map(|r| 1 + r.iter().map(|f| field_checksum(f)).sum::<u64>()).sum())
+}
+
+fn csv_consume(text: &str) -> Result<u64, ()> {
+    let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(text.as_bytes());
+    let mut record = csv::StringRecord::new();
+    let mut total = 0;
+    while reader.read_record(&mut record).map_err(|_| ())? {
+        total += 1 + record.iter().map(field_checksum).sum::<u64>();
+    }
+    Ok(total)
 }
 
 fn yaml_walk(value: &yaml_rust2::Yaml) -> u64 {
@@ -241,9 +251,49 @@ fn httparse_parse(text: &str) -> Result<u64, ()> {
     Ok(owned.len() as u64 + body.len() as u64 + 1)
 }
 
+fn field_checksum(text: &str) -> u64 {
+    text.bytes().enumerate().map(|(i, b)| (i as u64 + 1) * b as u64).sum()
+}
+
+fn qif_parse(text: &str) -> Result<u64, ()> {
+    let parsed = qif_parser::parse(text, Some("%d/%m/%Y")).map_err(|_| ())?;
+    Ok(parsed.transactions.iter().map(|t| 1 + field_checksum(t.payee) + field_checksum(t.memo)).sum())
+}
+
+fn ofx_parse(text: &str) -> Result<u64, ()> {
+    let parsed = ofx_rs::parse(text).map_err(|_| ())?;
+    let mut total = 0;
+    if let Some(bank) = parsed.banking() {
+        for wrapper in bank.statement_responses() {
+            if let Some(stmt) = wrapper.response() {
+                if let Some(list) = stmt.transaction_list() {
+                    for t in list.transactions() {
+                        total += 1 + field_checksum(t.name().unwrap_or("")) + field_checksum(t.memo().unwrap_or(""));
+                    }
+                }
+            }
+        }
+    }
+    if let Some(card) = parsed.credit_card() {
+        for wrapper in card.statement_responses() {
+            if let Some(stmt) = wrapper.response() {
+                if let Some(list) = stmt.transaction_list() {
+                    for t in list.transactions() {
+                        total += 1 + field_checksum(t.name().unwrap_or("")) + field_checksum(t.memo().unwrap_or(""));
+                    }
+                }
+            }
+        }
+    }
+    Ok(total)
+}
+
 fn implementation(name: &str) -> Parse {
     match name {
+        "qif_parser" => qif_parse,
+        "ofx-rs" => ofx_parse,
         "csv" => csv_parse,
+        "csv-consume" => csv_consume,
         "yaml-rust2" => yaml_rust2_parse,
         "serde_yaml" => serde_yaml_parse,
         "quick-xml" => quick_xml_parse,
