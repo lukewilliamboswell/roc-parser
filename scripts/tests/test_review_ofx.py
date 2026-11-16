@@ -31,10 +31,6 @@ class OracleNormalizationTests(unittest.TestCase):
         self.assertEqual(normalized['statements'][0]['transactions'][0]['name'], 'A &amp; B')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class XmlProvenanceTests(unittest.TestCase):
     def test_xml_cdata_is_not_decoded_as_a_character_reference(self):
         root = ET.fromstring('<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKACCTFROM/><BANKTRANLIST><STMTTRN><NAME><![CDATA[&amp;lt;]]></NAME></STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>')
@@ -45,3 +41,7 @@ class XmlProvenanceTests(unittest.TestCase):
         root = ET.fromstring('<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKACCTFROM/><BANKTRANLIST><STMTTRN><NAME>&#38;lt;</NAME></STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>')
         normalized = review.normalize_tree(root)
         self.assertEqual(normalized['statements'][0]['transactions'][0]['name'], '&lt;')
+
+
+if __name__ == '__main__':
+    unittest.main()

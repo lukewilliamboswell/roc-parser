@@ -547,7 +547,7 @@ consume_token = |state| {
 	start = if (closing) 2 else 1
 	end = text.count_utf8_bytes() - (if (self_closed) 2 else 1)
 	name = Str.from_utf8_lossy(state.token.sublist({ start, len: end - start })).trim()
-	if name.is_empty() or !name.to_utf8().all(|b| (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '.' or b == '_' or b == ':') {
+	if !valid_name(name) {
 		return Err(problem(state, "OFX tag names must be uppercase without attributes"))
 	}
 	var $s = state
@@ -895,7 +895,7 @@ node_xml = |node, syntax, depth| match node {
 		if depth >= 64 {
 			return Err("OFX extension exceeds maximum writer depth")
 		}
-		if element.name.is_empty() or !element.name.to_utf8().all(|b| (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '.' or b == '_' or b == ':') {
+		if !valid_name(element.name) {
 			return Err("invalid extension tag name")
 		}
 		if !element.attributes.is_empty() {
@@ -1192,3 +1192,17 @@ expect !timestamp("20260101[5:EST:extra]") and !timestamp("20260101[5:EST]extra]
 
 expect OFX.parse_str("<?xml version=\"1.0\"?><?xml version=\"1.0\"?>${sample_xml}").is_err()
 expect OFX.parse_str(" <?xml version=\"1.0\"?>${sample_xml}").is_err()
+
+valid_name : Str -> Bool
+valid_name = |name| {
+	first = name.to_utf8().first() ?? 0
+	((first >= 'A' and first <= 'Z') or first == '_' or first == ':') and name.to_utf8().all(|byte| (byte >= 'A' and byte <= 'Z') or (byte >= '0' and byte <= '9') or byte == '.' or byte == '_' or byte == ':')
+}
+expect {
+	document = OFX.parse_str(sample_xml)?
+	statement = document.statements.first()?
+	value = statement.transactions.first()?
+	opened = OFX.write(OFX.writer({}), StatementStart(statement.context))?
+	["1EXT", ".EXT"].all(|name| OFX.write(opened.writer, Transaction({ ..value, extensions: [Element({ name, attributes: [], children: [Text("x")] })] })).is_err())
+}
+expect OFX.parse_str(sample_xml.replace_each("<OFX>", "<OFX><1EXT></1EXT>")).is_err()
