@@ -1,0 +1,42 @@
+[
+  {
+    "name": "bank-decimal-unicode",
+    "input": "!Type:Bank\nD27/08/2024\nT-12.3400\nPCafé\nM€ coffee\nLFood\nN7\nC*\n^\n"
+  },
+  {
+    "name": "cash-splits",
+    "input": "!Type:Cash\nD29/02/2024\nT-12.34\nPSplits\nSFood\nEcoffee\n$-2.34\nSTravel\nEtrain\n$-10.00\n^\n"
+  },
+  {
+    "name": "card-account-context",
+    "input": "!Account\nNCard\nTCCard\n^\n!Type:CCard\nD01/02/2024\nT-1\nPShop\n^\n"
+  },
+  {
+    "name": "final-terminator-no-newline",
+    "input": "!Type:Bank\nD31/12/2024\nT1\nPFinal\n^"
+  },
+  {
+    "name": "bad-amount",
+    "input": "!Type:Bank\nD27/08/2024\nTbad\n^\n",
+    "expected": "error"
+  },
+  {
+    "name": "missing-terminator",
+    "input": "!Type:Bank\nD27/08/2024\nT1\n",
+    "expected": "error",
+    "policy": "requires the explicit ^ record terminator"
+  },
+  {
+    "name": "empty-document",
+    "input": "",
+    "expected": "ok",
+    "policy": "empty documents contain zero records"
+  },
+  {
+    "name": "number-preserves-zeroes",
+    "input": "!Type:Bank\nD27/08/2024\nT1\nN0007\n^\n",
+    "expected": "ok",
+    "expected_number": "0007",
+    "policy": "Quiffen coerces numeric reference strings to integers; raw identifiers remain strings"
+  }
+]

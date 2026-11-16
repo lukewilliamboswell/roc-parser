@@ -1,0 +1,73 @@
+[#qif]
+= Read and write QIF
+
+`QIF` reads ordered Quicken Interchange Format sections and records. Raw parsing
+preserves repeated and unknown fields. Typed decoding supports bank, cash and
+credit-card transactions, account names, repeated split fields, and exact amount
+text. Category and class records remain available as context. Other sections are
+available through raw parsing and rejected by typed decoding.
+
+== Read chunks
+
+Use `QIF.parse_iter(chunks, props)` for raw events and `QIF.decode_iter` for typed
+transactions. Their `Stream` counterparts accept an effectful source of fallible
+byte chunks. The package remains platform-independent. The complete program in
+`examples/qif-stream.roc` connects basic-cli stdin chunks to the incremental
+parser and writer; it never collects the document.
+
+Results use `Streaming`'s `Value`, `Rejected` and `Finished` events. Default
+handling stops on the first error. Set `props.errors.error_policy` to
+`ReportInvalidRecords` to receive diagnostics for fully framed records, or
+`SkipInvalidRecords` to omit them. Both modes count rejected records and stop
+when the configured error budget is exceeded. Missing terminators, invalid
+encoding, resource limits and malformed account context remain terminal.
+Consume through `Finished` to validate the entire document.
+
+`QIF.parse_str` collects raw events into a document; `doc.transactions(props)`
+decodes its transactions and explicitly requires the fail-fast policy.
+Use `doc.transactions_report(props)` to collect typed values with recovery,
+diagnostics and counts. `QIF.parse_report` and `QIF.decode_report` similarly
+collect the public event streams under the configured error policy. `QIF.parser` composes complete raw parsing with other
+byte parsers. Quotations and `QIF.validate` use the same grammar and options.
+
+== Decode dates and amounts
+
+The default date policy rejects ambiguous dates such as `01/02/2024`. Choose
+`DayFirst`, `MonthFirst` or `YearFirst` explicitly when the export convention is
+known. Unambiguous dates are validated against the Gregorian calendar. Two-digit
+years 70–99 mean 1970–1999; 00–69 mean 2000–2069.
+
+Amounts remain decimal strings, preserving precision and spelling. The supported
+grammar is an optional sign, decimal digits and at most one decimal point, with
+at least one digit. Locale grouping separators and exponents are rejected.
+`QIF.amount_to_dec` performs a fallible conversion to Roc's bounded `Dec` type.
+Identifiers such as check numbers remain strings, including leading zeroes.
+
+== Write incrementally
+
+`QIF.write_iter(events, props)` and `QIF.write_stream` validate each raw event
+before emitting its bytes, splitting output into chunks no larger than
+`props.chunk_bytes`. Supply ordered headers and records, as produced by raw
+parsing. A zero chunk size is an error. Default output uses CRLF and UTF-8;
+`line_ending` also accepts `Lf` or `Cr`, and `encoding` accepts `Windows1252`.
+Unsupported Windows-1252 characters fail without replacement.
+
+`QIF.to_bytes` and `QIF.to_str` collect the same canonical output. Field order,
+unknown fields and repeated values survive semantic round trips; source locations
+and original line endings need not. A leading UTF-8 BOM is accepted and omitted from canonical output. Every record requires a terminating `^`,
+including the last. NUL and embedded record/header line breaks are rejected.
+
+== Limits and verification
+
+Read props limit individual lines (1 MiB), records (16 MiB), fields per record
+(65,536), and section/account context (64 KiB). Limits count original bytes;
+errors locate original byte positions even for Windows-1252 input. The parser
+retains only context and the unfinished record. A caller collecting results
+naturally retains those results too.
+
+The QIF fuzz targets exercise arbitrary bytes, chunk equivalence, independent
+models, malformed records, recovery, and allocation/retention ceilings. Run the
+pinned Quiffen conformance and cross-writer checks with
+`python3 scripts/review_qif.py check`. Its campaign and replay commands retain
+reproducers in `.roc-parser-tmp/qif-review`. Intentional differences include
+strict terminators, empty documents, and preserving numeric reference strings.

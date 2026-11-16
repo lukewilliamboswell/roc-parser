@@ -1,0 +1,8 @@
+quiffen==4.0.1
+pydantic==2.14.3
+pydantic-core==2.50.4
+annotated-types==0.8.0
+typing-inspection==0.4.5
+typing-extensions==4.16.0
+python-dateutil==2.9.0.post0
+six==1.17.0
