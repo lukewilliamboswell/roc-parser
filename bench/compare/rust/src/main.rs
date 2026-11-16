@@ -6,6 +6,8 @@
 //! stdin before the clock starts, parsed <iterations> times, and one JSON line
 //! is printed. Every implementation builds owned values (Strings, Vecs or the
 //! library's own tree) so the work matches the trees roc-parser returns;
+//! QIF retains the library's borrowed strings and is labelled collect-borrowed;
+//! it is excluded from ratios against owned collection.
 //! quick-xml and pulldown-cmark are streaming parsers, so their events are
 //! consumed and their text copied into owned values.
 use std::hint::black_box;

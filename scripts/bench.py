@@ -371,6 +371,8 @@ class Impl:
 
     @property
     def workload(self) -> str:
+        if self.name == "qif_parser":
+            return "collect-borrowed"
         return "consume" if "consume" in self.name else "collect"
 
     @property
@@ -700,6 +702,13 @@ def markdown_report(report: dict) -> str:
              f"{meta['target_ms']} ms after a warmup batch", ""]
     if meta["skipped"]:
         lines += ["Skipped: " + "; ".join(f"{k} ({v.splitlines()[0][:120]})" for k, v in meta["skipped"].items()), ""]
+    implementations = meta.get("implementations", [])
+    if implementations:
+        lines += ["## Implementations", "", "| Format | Implementation | Workload | Representation |",
+                  "| --- | --- | --- | --- |"]
+        for impl in implementations:
+            lines.append(f"| {impl['format']} | {impl['id']} | {impl.get('workload', 'collect')} | {impl['notes']} |")
+        lines.append("")
     lines += ["## Comparison", "",
               "Geometric mean over the non-pathological documents both accepted. "
               "\"3x slower\" means roc-parser takes three times as long as that library.", "",
