@@ -56,7 +56,7 @@ import parser.Markup
 
 def assert_compiler_result(result: subprocess.CompletedProcess[str], errors: list[str]) -> None:
     output = (result.stdout or "") + (result.stderr or "")
-    lower = output.casefold()
+    lower = " ".join(output.casefold().split())
     if result.returncode < 0 or any(marker in lower for marker in (
         "segmentation fault", "internal compiler error", "thread panic", "panic:",
     )):
@@ -67,7 +67,7 @@ def assert_compiler_result(result: subprocess.CompletedProcess[str], errors: lis
         return
     if result.returncode == 0:
         raise AssertionError(f"compiler accepted an invalid literal:\n{output}")
-    missing = [fragment for fragment in errors if fragment.casefold() not in lower]
+    missing = [fragment for fragment in errors if " ".join(fragment.casefold().split()) not in lower]
     if missing:
         raise AssertionError(f"missing intended diagnostics {missing}:\n{output}")
 

@@ -34,15 +34,19 @@ test = |bytes| {
 					}
 				}
 				Err(Unsupported(error)) | Err(InvalidAsciiDoc(error)) => {
-					if error.offset > bytes.len() or error.line == 0 {
+					position = match error.location {
+						Text(at) => at
+						_ => crash "AsciiDoc source error lost its byte and text coordinates"
+					}
+					if position.offset > bytes.len() or position.line == 0 {
 						crash "invalid AsciiDoc error location: ${Str.inspect(source)}"
 					}
-					prefix = bytes.sublist({ start: 0, len: error.offset })
+					prefix = bytes.sublist({ start: 0, len: position.offset })
 					if !Str.from_utf8(prefix).is_ok() {
 						crash "AsciiDoc error offset splits a UTF-8 character"
 					}
 					line = 1 + prefix.fold(0.U64, |count, byte| if (byte == '\n') count + 1 else count)
-					if error.line != line {
+					if position.line != line {
 						crash "AsciiDoc byte offset and line disagree"
 					}
 				}

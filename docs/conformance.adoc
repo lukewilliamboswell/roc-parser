@@ -190,7 +190,7 @@ Every accepted value is also written compact, with `indent: 2` and with
 `sort_keys: True`, and compared byte for byte with what `json.dumps` writes.
 Rejections are compared as verdicts, and an error's line and column must lie
 inside the input. Each case also checks that `JsonValue.parser_with` agrees
-with `JsonValue.parse_with`.
+with `JsonValue.parse_str`.
 
 The inputs are:
 
@@ -222,8 +222,9 @@ parsing rejects a repeated key on purpose. The review checks them with
 `policy_deviations` in its report.
 
 Limitations: the input must be UTF-8, the relaxations stop well short of
-JSON5, and there is no streaming interface. The {api}JsonValue/[JsonValue
-module documentation] lists every option.
+JSON5. Incremental parsing accepts NDJSON or top-level array records through
+`JsonValue.record_decoder`; complete values require their full document. The
+{api}JsonValue/[JsonValue module documentation] lists every option.
 
 [#_markdown_2]
 == Markdown

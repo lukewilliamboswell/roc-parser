@@ -86,14 +86,14 @@ The XML pull reader and namespaces have their own raw targets:
   fails with a `LimitExceeded` it really exceeds, located no later than any
   well-formedness error, and the parse holds no more than a ceiling linear in
   the input and in `max_elements`.
-* `xmlns-raw` requires `XmlNs` to agree with `Xml` on well-formedness, to give
+* `xmlns-raw` requires `Xml.Namespaced` to agree with `Xml` on well-formedness, to give
   a tree of `Xml`'s shape whose names resolve as an independent walk of the
   bindings says, and to write trees that read back the same, with their own
   prefixes and with a table of fresh ones.
 
 `xml-ceilings` is a measuring target: two bytes choose a document shape and
 size, and `Fuzz.measure!` requires the allocator traffic and held bytes of
-`Xml.parse_str`, a loop over `Xml.Reader.next` and `XmlNs.parse_str` to stay
+`Xml.parse_str`, a loop over `Xml.Reader.next` and `Xml.Namespaced.parse_str` to stay
 under ceilings linear in the document (and, for the reader, in its depth). Its
 22 declared examples are a small and a large document of each shape, and its
 whole input space is a few thousand documents. Ceilings only move down; a
@@ -418,3 +418,12 @@ The financial reviews use pinned independent Python libraries and cross-writer
 checks. Record-error recovery is checked against independently filtered expected
 models; broken framing remains terminal. Source chunks, syntax boundaries and
 encoding boundaries are independent fuzz choices.
+
+== Check diagnostic ownership
+
+Run `python3 scripts/run_fuzz.py smoke diagnostic-lifetimes` locally to check
+that native JSON, YAML and CSV diagnostic payloads survive after their input
+is dropped without retaining unrelated source bytes. Two-byte seeds choose a
+failure kind and generated padding size; the property checks complete payload
+identity and retained allocation size. XML error lifetimes are also checked by
+`xml-stream-ceilings` alongside its reader and namespace bounds.

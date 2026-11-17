@@ -143,6 +143,7 @@ TARGETS = dict(
         target("parser-combinators", max_input_size=256),
         # The first byte chooses the format and the second an offset.
         target("validate", "validate", "raw", max_input_size=1024, timeout=10),
+        target("diagnostic-lifetimes", max_input_size=2, timeout=20, examples=True, scheduled=False),
         target("string-primitives", max_input_size=256, timeout=10),
         target("byte-scan", max_input_size=256, timeout=10),
         target("roc-syntax-raw", "roc-syntax", "raw", "roc-syntax", max_input_size=4096),

@@ -103,8 +103,8 @@ high-level Roc source.
 [#performance-simd]
 == Byte scanning and slices
 
-`Utf8.ByteClass` describes a set of bytes. `Utf8.find_any`, `Utf8.skip_class`,
-`Utf8.find_line_end` and `Utf8.span_class` examine runs with `U8x16`, then handle
+`Parser.Utf8.ByteClass` describes a set of bytes. `Parser.Utf8.find_any`, `Parser.Utf8.skip_class`,
+`Parser.Utf8.find_line_end` and `Parser.Utf8.span_class` examine runs with `U8x16`, then handle
 remaining bytes with a scalar loop. Build reusable classes outside hot loops.
 The gain depends on the distance between matches and the amount of result
 construction after each match.
@@ -119,7 +119,7 @@ avoids copies but retains the original allocation while a slice is reachable.
 
 * Build with `--opt=speed` before measuring production throughput.
 * Prefer run scanners such as `Parser.chomp_while`, `Parser.chomp_until` and
-  `Utf8.ByteClass` to one combinator call and append per byte.
+  `Parser.Utf8.ByteClass` to one combinator call and append per byte.
 * Keep backtracking shallow. `Parser.one_of` and `Parser.alt` retry from the same
   position; dispatch on a leading keyword or punctuation when practical.
 * Build structured problems on the failure path and render diagnostic text at

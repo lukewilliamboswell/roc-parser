@@ -60,8 +60,9 @@ not.
 == Format
 In type-directed decoding, a type whose methods (`parse_str`,
 `parse_record_field`, `parse_list_start` and so on) read one value at a time
-from the input. `CSV.Format` and `Yaml.Format` are formats; you use them
-through `CSV.parse` and `Yaml.decode` and never name them. See
+from the input. `CSV.Format(errors)` and `Yaml.Format(errors)` are formats; ordinary callers use them
+through `CSV.decode_str` and `Yaml.decode_str`. Custom scalar decoders name the
+format and their complete error row in `parser_for`. See
 <<glossary-parser-for,`parser_for`>>.
 
 [#glossary-framing]
@@ -74,7 +75,7 @@ the connection. See <<glossary-smuggling,smuggling>>.
 == Furthest failure
 Of all the failures seen while parsing, the one that read furthest into the
 input, including failures that an alternative or a repetition recovered
-from. The runners report it as `ParseError({ problem, offset })`, so the
+from. The runners report it as `ParseError({ problem, location, path })`, so the
 error points at the bad element and not at the input left over after it.
 
 [#glossary-i-json]
@@ -82,20 +83,20 @@ error points at the bad element and not at the input left over after it.
 The Internet JSON profile of https://www.rfc-editor.org/rfc/rfc7493[RFC 7493]:
 JSON restricted so that every reader gets the same data. Among other rules,
 numbers should fit an IEEE 754 double and keys must be unique.
-`JsonValue.parse_with` checks its number rule with `interoperable_numbers:
+`JsonValue.parse_str` checks its number rule with `interoperable_numbers:
 True`, and rejects repeated keys by default. See <<json-options>>.
 
 [#glossary-input]
 == Input
 The data a parser reads, given by the first type parameter of
-`Parser(input, a, problem)`. For text it is `Utf8.Bytes`, a list of UTF-8 bytes; for CSV
+`Parser(input, a, problem)`. For text it is `Parser.Utf8.Bytes`, a list of UTF-8 bytes; for CSV
 record decoding it is a `CSV.Record`, a list of fields.
 
 [#glossary-jsonc]
 == JSONC
 JSON with comments: JSON that also allows `//` and `/* */` comments and, in
 most tools, trailing commas, as in `tsconfig.json` and editor settings.
-`JsonValue.parse_with` reads it with `comments: True` and
+`JsonValue.parse_str` reads it with `comments: True` and
 `trailing_commas: True`. It is not JSON5. See <<json-options>>.
 
 [#glossary-known-failure]
@@ -128,7 +129,7 @@ oracle is itself wrong, the specification decides. See
 
 [#glossary-parseable]
 == `Parseable`
-A where-clause alias, `row.Parseable(errs)`, that `CSV.parse` and the other
+A where-clause alias, `row.Parseable(errs)`, that `CSV.decode_str` and the other
 decoding functions use to say "a type that this format can decode" without
 naming the format's internal state type. You rarely write it yourself.
 
@@ -136,21 +137,21 @@ naming the format's internal state type. You rarely write it yourself.
 == Parser
 A value of type `Parser(input, a, problem)`: a description of how to read an `a` from
 the start of an input. Running it returns the value and the unconsumed input,
-or a `ParseError` with a problem tag and an offset.
+or a `ParseError` with a typed problem, location and logical path.
 
 [#glossary-parser-for]
 == `parser_for`
 The method the compiler derives for records, tuples, lists and the builtin
 scalar types, which reads a value of that type with a given
-<<glossary-format,format>>. It is how `CSV.parse` and `Yaml.decode` decode
+<<glossary-format,format>>. It is how `CSV.decode_str` and `Yaml.decode_str` decode
 into the type your annotation names. A field of type `Try(a, [Missing])` is
-optional; a required field that is absent fails with
-`MissingRequiredField(name)`, which the compiler adds to the error type.
+optional. A missing required field is reported by the format with a typed
+problem and a path identifying the field.
 
 [#glossary-parsing-incomplete]
 == Parsing incomplete
 The parser succeeded but did not consume the whole input. Functions such as
-`Utf8.parse_str`, which expect to read everything, report it as a
+`parser.parse_str`, which expect to read everything, report it as a
 `ParseError` at the furthest failure, or as `UnexpectedInput` at the
 leftover.
 
@@ -181,7 +182,7 @@ space; this library keeps it as `\n` in the `Text` node.
 == Static dispatch
 Choosing which function a method call runs from the type of the value, at
 compile time. It is how `value.to_inspect()` finds the `Yaml` version for a
-`Yaml` value, and how `CSV.parse` finds the `parser_for` of your row type.
+`Yaml` value, and how `CSV.decode_str` finds the `parser_for` of your row type.
 
 [#glossary-try]
 == `Try`
@@ -193,9 +194,9 @@ optional value is `Try(a, [Missing])`.
 == Type module
 A module named after the one type it defines, with that type's methods in
 the `.{ }` block of its declaration. `Parser`, `Yaml`, `Xml`, `JsonValue` and
-`Markdown` are type modules. `Utf8`, `CSV` and `HTTP` define their type as
-`[]`, an empty tag union, because they group functions and nested types
-rather than values of their own.
+`Markdown` and `CSV` are type modules. `HTTP` uses an empty tag union
+to group its `Request`, `Response` and related types. `Parser.Utf8` groups
+text primitives within `Parser`.
 
 [#glossary-well-formed]
 == Well-formed (XML)

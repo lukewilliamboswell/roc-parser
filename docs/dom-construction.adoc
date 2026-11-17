@@ -81,5 +81,5 @@ Use xref:markup-context.adoc#markup-context[`Markup.Context`] for source-authori
 placement, canonical HTML identities and HTML/SVG/MathML content models.
 Use `Markup.Name` to validate computed names independently. Use `Html.parse_source`
 with browser recovery to inspect complete HTML tree construction, or the format
-parser and `validate_tree` for authoring validation. `Html.RepairContext` does not
+parser or `Markup.validate_tree` for authoring validation. `Html.RepairContext` does not
 replace those checks.

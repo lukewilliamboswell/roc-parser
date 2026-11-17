@@ -90,7 +90,7 @@ it to choose the compiler that evaluates `Blueprint.roc` itself.
 [cols="1,3",options="header"]
 |===
 |Path |Purpose
-|`package/` |The library: `Parser`, `Utf8`, and one module per format
+|`package/` |The library: `Parser`, and one module per format
 |`examples/` |Small apps that use the package source (`../package/main.roc`); releases attach them pinned to the bundle URL
 |`fuzz/` |Property-test targets, seed inputs and dictionaries (<<property-testing>>)
 |`scripts/` |Roc orchestration, independent Python oracle harnesses, and documentation and release-inventory helpers

@@ -57,6 +57,6 @@ these finite checks. Handle that result rather than treating it as acceptance.
 
 These are checks for one balanced element or text placement. They do not prove
 whole-parent arity, sibling counts, document completeness, attribute value
-grammars or source escaping. Use the format's parser or `validate_tree` for
+grammars or source escaping. Use the format's parser or `Markup.validate_tree` for
 complete markup validation. Contexts needing insertion or sibling history,
 such as templates and framesets, report `UnsupportedContext`.

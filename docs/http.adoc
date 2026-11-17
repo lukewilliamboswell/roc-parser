@@ -290,7 +290,7 @@ completion in detail.
 == Use the parsers inside a larger grammar
 
 `HTTP.Request.parser(props)` and `HTTP.Response.parser(props)` are the same parsers as a
-`Parser(Utf8.Bytes, _, HTTP.Problem)`, for when a message is one part of a larger format. They
+`Parser(Parser.Utf8.Bytes, _, HTTP.Problem)`, for when a message is one part of a larger format. They
 leave the bytes after the message for the next parser:
 
 [source,roc]

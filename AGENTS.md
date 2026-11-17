@@ -22,7 +22,8 @@ receiver-style operations on those values and qualified constructors with
 defaulted props records for configuration. Shared implementation alone does not
 justify a standalone public module; keep it private and expose its operations
 through the owning format or type. Choose export boundaries for discoverability
-and clear ownership.
+and clear ownership. Include receiver methods and nested type aliases when
+reviewing the public surface.
 Follow the [Roc style guide](https://gist.github.com/lukewilliamboswell/241a4e8adb7c89c7e0e02f1d303a8fa1)
 when shaping constructors, methods, props and public types.
 
@@ -35,6 +36,12 @@ payloads should hold source data or user-supplied context, rather than prose
 that identifies an error. Render text at presentation boundaries, including
 compiler quotation diagnostics, instead of carrying message strings through
 the parser. Apply this rule consistently when adding or revising errors.
+
+Preserve truthful locations and logical paths; explicitly represent unavailable
+coordinates instead of inventing offsets. Native diagnostic payloads must own
+source-derived names and values without retaining unrelated input buffers. Keep
+complete identifiers when identity matters and use bounded excerpts for source
+samples. Verify both diagnostic identity and its lifetime with generated inputs.
 
 ## Generated artifacts
 

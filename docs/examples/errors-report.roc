@@ -23,8 +23,13 @@ location_text = |location| match location {
 
 render_error : Str, Parser.Diagnostic(problem) -> Str
 render_error = |name, error| {
-	path = if (error.path.is_empty()) "" else " (path ${Str.inspect(error.path)})"
-	"${name}:${location_text(error.location)}: ${Str.inspect(error.problem)}${path}"
+	path = if (error.path.is_empty()) "" else {
+		shown_path = Str.inspect(error.path)
+		" (path ${shown_path})"
+	}
+	location = location_text(error.location)
+	problem = Str.inspect(error.problem)
+	"${name}:${location}: ${problem}${path}"
 }
 
 yaml_message : Str, Str -> Str

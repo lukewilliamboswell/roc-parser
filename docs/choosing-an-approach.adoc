@@ -129,7 +129,7 @@ Choose this when:
   input;
 * you want to reject invalid values while parsing, so that a port of
   `70000` or a date of `2026-02-30` fails at the right place with your own
-  message;
+  problem tag;
 * you want to read only the start of the input and keep the rest, such as one
   message from a buffer that holds several (`parser.run_str`).
 
@@ -139,6 +139,15 @@ embed, and you can mix `Parser.Utf8` parsers into any parser of your own. A
 combinator parser's diagnostic preserves the furthest failure; text runners
 retain byte offset, line and column. <<combinator-primer>> teaches the method and <<custom-format>>
 applies it to a real format.
+
+== Process incremental input
+
+When input is too large to retain or arrives over a connection, construct a
+format decoder and call `.read_iter(chunks)` or `.read_stream(source)`. CSV,
+QIF, OFX and JSON records produce values; XML and HTTP produce events. Consume
+the final `Finished` event to validate the end of input. Use `.collect` only
+when retaining all output is appropriate. See <<streaming>> for recovery and
+resource limits.
 
 == Use no parser at all
 
@@ -153,12 +162,6 @@ would be longer and no clearer:
 ----
 include::examples/choosing-approaches.roc[tag=split,indent=0]
 ----
-
-The input is very large or arrives as a stream:: Every parser in this
-package reads a complete input held in memory, and the result holds copies of
-the text it read. For a multi-gigabyte log or a network connection, read and
-process one record at a time with a hand-written loop over the bytes, or use a
-streaming library.
 
 The parser is on a hot path:: Each combinator adds a function call and an
 intermediate `Try`. That is cheap for configuration files and messages, but
@@ -220,15 +223,15 @@ read. <<background>> explains these limits.
 
 |Read one message and keep the rest
 |No
-|`HTTP.parse_request` returns the `rest`
+|Request prefix parser retains `rest`
 |Yes
 |By hand
 
-|Very large or streaming input, or a hot path
-|No
-|No
-|No
-|Best
+|Very large or streaming input
+|CSV typed decoder
+|Format event decoder
+|Custom decoder
+|For trivial delimiters
 
 |Ambiguous or left-recursive grammar
 |No
@@ -247,8 +250,8 @@ The same choice as a sequence of questions:
 flowchart TD
     Start([Text to read]) --> Simple{"One separator,<br/>no quoting or nesting?"}
     Simple -- yes --> Str["Use Str functions"]
-    Simple -- no --> Huge{"Too large to hold in memory,<br/>or a measured hot path?"}
-    Huge -- yes --> Scan["Hand-written byte scanner<br/>or streaming library"]
+    Simple -- no --> Huge{"Too large to hold in memory,<br/>or arriving incrementally?"}
+    Huge -- yes --> Scan["Use a format decoder<br/>and consume values or events"]
     Huge -- no --> Known{"Standard format with a<br/>parser_for, into a known type?"}
     Known -- yes --> Decode["Decode into your type"]
     Known -- no --> Module{"A roc-parser format module<br/>reads it?"}

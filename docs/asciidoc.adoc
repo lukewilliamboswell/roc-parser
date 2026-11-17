@@ -120,7 +120,7 @@ AsciiDoc file, it first removes trailing whitespace from each line, as
 Asciidoctor does, so a line of only spaces doesn't count toward `indent=`.
 
 In a document that sets `tabsize`, `indent=` first expands tabs. For such a
-document, call `select_include_with(source, attributes, { tabsize: 4 })`
+document, call `select_include(source, attributes, { tabsize: 4 })`
 with the document's tab size. Asciidoctor ignores a `tabsize=` in the
 directive's own attribute list, and so do both functions.
 

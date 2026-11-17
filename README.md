@@ -46,10 +46,10 @@ Reproduced reports include library versions and full measurement receipts.
 CSV, QIF, OFX and JSON record streams support
 [chunked reading and writing](docs/streaming.adoc) through Roc’s builtin `Iter`
 and `Stream`. JSON supports NDJSON records and top-level array items through
-`JsonStream`; complete JSON documents use `JsonValue`. XML, including namespaces,
+`JsonValue.record_decoder`; complete JSON documents use `JsonValue.parse_str`. XML, including namespaces,
 and HTTP/1.1 support chunked event reading. The other format parsers require
 complete input in memory. JSON and namespace-aware XML also support
-whole-document writing, with `JsonValue.to_str` and `XmlNs.render`.
+whole-document writing, with `value.encode(props)` and `Xml.Namespaced` values.
 
 ## Try it
 
@@ -86,15 +86,14 @@ input =
 	\\Earth,1
 	\\Mars,2
 
-planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-planets = |text| CSV.parse(text)
+planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error)])
+planets = |text| CSV.decode_str(text, {})
 
 describe : Str -> Str
 describe = |text| {
 	match planets(text) {
 		Ok(rows) => Str.join_with(rows.map(|p| "${p.name}: ${p.moons.to_str()} ${if p.moons == 1 "moon" else "moons"}"), "\n")
-		Err(InvalidCsv(error)) => "line ${error.line.to_str()}: ${Str.inspect(error.problem)}"
-		Err(MissingRequiredField(name)) => "no ${name} column"
+		Err(InvalidCsv(error)) => Str.inspect(error)
 	}
 }
 
