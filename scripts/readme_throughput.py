@@ -102,11 +102,14 @@ def main(argv=None) -> int:
     args.work = args.work.resolve()
     args.work.mkdir(parents=True, exist_ok=True)
     identity = source_identity()
+    corpus = documents()
+    for document in corpus:
+        path = args.work / "corpus" / document.format / f"{document.name}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(document.data)
     bench._install_wait_hook()
     builder = bench.Builder(args.work, args.roc, None, lambda message: print(message, file=sys.stderr, flush=True))
     drivers = build_drivers(builder)
-    corpus = documents()
-    bench.write_corpus(corpus, args.work / "corpus")
     affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, {args.cpu})
     report = {"metadata": {"machine": bench.machine(), "git": bench.git_state(), "compiler": builder.versions["roc"],
