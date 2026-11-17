@@ -4189,3 +4189,12 @@ placement_names = |placed| placed.parents.map(
 		Err(Missing) => ""
 	},
 )
+
+# Recovery can reconstruct a formatting element only when the next authored
+# characters arrive. Receipts follow those real stack transitions and leave
+# the recovered tree and its clone provenance unchanged.
+expect {
+	source = "<b><i>x</b>y</i>"
+	placed = HtmlTree.parse_general_placed(source, True, {}, { recovery: Browser }, ["<b><i>x".count_utf8_bytes(), "<b><i>x</b>".count_utf8_bytes(), "<b><i>x</b>y".count_utf8_bytes()])?
+	Ok(placed.parsed) == HtmlTree.parse_general(source, True, {}, { recovery: Browser }) and placement_names(placed) == ["i", "", "i"] and !placed.parsed.diagnostics.is_empty()
+}

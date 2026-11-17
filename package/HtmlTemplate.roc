@@ -191,3 +191,6 @@ expect {
 	metadata = plan.metadata()
 	metadata.parsed.source.bytes.is_empty() and metadata.parsed.tree.roots.len() == 2 and metadata.slots.len() == 2 and metadata.slots.all(|slot| slot.location == { start: 0, end: 0 })
 }
+
+expect HtmlTemplate.parse_segments(["<b><i>x</b>", "</i>"], {}, { syntax: HtmlSyntax, recovery: Browser }).is_err()
+expect HtmlTemplate.parse_segments(["<b><i>", "</b></i>"], {}, { syntax: HtmlSyntax }).is_err()
