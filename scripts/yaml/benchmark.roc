@@ -7,6 +7,7 @@ import cli.OsStr
 import cli.Stdin
 import cli.Stdout
 import parser.Yaml
+import parser.Parser
 
 main! : List(OsStr) => Try({}, _)
 main! = |args| {
@@ -20,13 +21,13 @@ main! = |args| {
 	var $checksum = 0.U64
 	var $successes = 0.U64
 	for _ in repetitions {
-		match Yaml.parse_str(input) {
+		match Yaml.parse_str(input, {}) {
 			Ok(value) => {
 				$checksum = $checksum + consume(value)
 				$successes = $successes + 1
 			}
 			Err(InvalidYaml(error)) => {
-				$checksum = $checksum + error.line + error.column
+				$checksum = $checksum + source_position(error.location).line + source_position(error.location).column
 			}
 		}
 	}
@@ -44,4 +45,10 @@ consume = |value| match value {
 	Text(text) => text.count_utf8_bytes().to_u64() + 5
 	Sequence(values) => values.fold(6, |total, child| total + consume(child))
 	Mapping(entries) => entries.fold(7, |total, entry| total + entry.key.count_utf8_bytes().to_u64() + consume(entry.value))
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(position) => { line: position.line, column: position.column }
+	_ => crash "expected retained YAML source text coordinates"
 }

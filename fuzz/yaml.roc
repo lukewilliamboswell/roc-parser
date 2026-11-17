@@ -8,7 +8,7 @@ import parser.Yaml
 
 test : Str -> Fuzz.Outcome
 test = |input| {
-	match Yaml.parse_str(input) {
+	match Yaml.parse_str(input, {}) {
 		Ok(_) => Fuzz.keep
 		Err(_) => Fuzz.keep
 	}

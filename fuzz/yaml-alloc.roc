@@ -10,7 +10,7 @@ import parser.Yaml
 test! : List(U8) => Fuzz.Outcome
 test! = |bytes| {
 	input = Str.from_utf8(bytes) ?? ""
-	_measured = Fuzz.measure!("parse", || Yaml.parse_str(input))
+	_measured = Fuzz.measure!("parse", || Yaml.parse_str(input, {}))
 	Fuzz.keep
 }
 

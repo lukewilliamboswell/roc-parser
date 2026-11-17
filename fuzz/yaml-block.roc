@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Yaml
+import parser.Parser
 
 ## Block scalar property: bytes choose a literal or folded block scalar, its
 ## chomping and indentation indicators, the node it sits in, how it ends, and
@@ -220,7 +221,7 @@ last_non_empty = |lines| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match Yaml.parse_str(input.yaml) {
+	match Yaml.parse_str(input.yaml, {}) {
 		Ok(actual) if actual == input.expected => Fuzz.keep
 		actual => crash "block scalar mismatch\n--- yaml ---\n${input.yaml}\n--- expected ---\n${Yaml.to_inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
 	}
@@ -230,7 +231,7 @@ show_result : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidYaml(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -244,3 +245,9 @@ target = Fuzz.target_with({
 		"${input.yaml}\n=> ${Yaml.to_inspect(input.expected)}"
 	},
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(position) => { line: position.line, column: position.column }
+	_ => crash "expected retained YAML source text coordinates"
+}

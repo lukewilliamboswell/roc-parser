@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Yaml
+import parser.Parser
 
 ## Round-trip property: fuzzer bytes choose a YAML value *and* how to write it
 ## (block or flow collections, compact sequence mappings, plain/single/double
@@ -570,7 +571,7 @@ generate = |bytes| {
 
 ## Typed decoding
 
-## A record type with every shape `Yaml.decode` maps: text, numbers,
+## A record type with every shape `Yaml.decode_str` maps: text, numbers,
 ## booleans, a list, a nested record and absent optional fields.
 Rec : {
 	name : Str,
@@ -663,13 +664,13 @@ gen_record = |start| {
 
 test : Input -> Fuzz.Outcome
 test = |input| {
-	match Yaml.parse_str(input.yaml) {
+	match Yaml.parse_str(input.yaml, {}) {
 		Ok(actual) if actual == input.expected => {}
 		actual => crash "round trip mismatch\n--- yaml ---\n${input.yaml}\n--- expected ---\n${Yaml.to_inspect(input.expected)}\n--- actual ---\n${show_result(actual)}"
 	}
 
-	decoded : Try(Rec, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	decoded = Yaml.decode(input.record_yaml)
+	decoded : Try(Rec, [InvalidYaml(Yaml.Error)])
+	decoded = Yaml.decode_str(input.record_yaml, {})
 
 	if decoded == Ok(input.record) {
 		Fuzz.keep
@@ -682,7 +683,7 @@ show_result : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
+		Err(InvalidYaml(error)) => "error ${source_position(error.location).line.to_str()}:${source_position(error.location).column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -696,3 +697,9 @@ target = Fuzz.target_with({
 		"${input.yaml}\n=> ${Yaml.to_inspect(input.expected)}"
 	},
 })
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(position) => { line: position.line, column: position.column }
+	_ => crash "expected retained YAML source text coordinates"
+}

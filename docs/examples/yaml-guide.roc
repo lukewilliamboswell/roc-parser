@@ -6,6 +6,7 @@ app [main!] {
 import cli.OsStr
 import cli.Stdout
 import parser.Yaml
+import parser.Parser
 
 # tag::config[]
 config_text =
@@ -32,11 +33,11 @@ Config : {
 	owners : List(Owner),
 }
 
-## The record type tells `Yaml.decode` what to expect.
-load_config : Str -> Try(Config, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-load_config = |text| Yaml.decode(text)
+## The record type tells `Yaml.decode_str` what to expect.
+load_config : Str -> Try(Config, [InvalidYaml(Yaml.Error)])
+load_config = |text| Yaml.decode_str(text, {})
 
-summarize : Str -> Try(Str, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
+summarize : Str -> Try(Str, [InvalidYaml(Yaml.Error)])
 summarize = |text| {
 	config = load_config(text)?
 	owner_names = config.owners.map(|owner| owner.name)
@@ -47,10 +48,8 @@ summarize = |text| {
 # end::navigate[]
 
 # tag::strict[]
-decode_strict = Yaml.decoder({ keys: KebabCase, unknown_keys: Reject })
-
-load : Str -> Try({ user_id : U64 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-load = |text| decode_strict(text)
+load : Str -> Try({ user_id : U64 }, [InvalidYaml(Yaml.Error)])
+load = |text| Yaml.decode_str(text, { keys: KebabCase, unknown_keys: Reject })
 
 # end::strict[]
 expect load("user-id: 7\n") == Ok({ user_id: 7 })
@@ -60,7 +59,7 @@ expect load("user-id: 7\nuser-name: ada\n").is_err()
 ## Explore a document without a record type.
 first_owner : Str -> Try(Str, [InvalidYaml(Yaml.Error), Missing, WrongType])
 first_owner = |text| {
-	config = Yaml.parse_str(text)?
+	config = Yaml.parse_str(text, {})?
 	name = config.get_path(["owners", "0", "name"])?
 	name.as_str()
 }
@@ -73,7 +72,7 @@ frontmatter : Str -> Try({ meta : Yaml, body : Str }, [NoFrontmatter, InvalidYam
 frontmatter = |markdown| {
 	match Str.split_on(markdown, "\n---\n") {
 		[header, .. as rest] if Str.starts_with(header, "---\n") =>
-			Ok({ meta: Yaml.parse_str(header)?, body: Str.join_with(rest, "\n---\n") })
+			Ok({ meta: Yaml.parse_str(header, {})?, body: Str.join_with(rest, "\n---\n") })
 
 		_ => Err(NoFrontmatter)
 	}
@@ -84,9 +83,9 @@ frontmatter = |markdown| {
 # tag::errors[]
 report : Str -> Str
 report = |text| {
-	match Yaml.parse_str(text) {
+	match Yaml.parse_str(text, {}) {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml({ line, column, problem })) => "line ${line.to_str()}, column ${column.to_str()}: ${Str.inspect(problem)}"
+		Err(InvalidYaml(error)) => "line ${source_position(error.location).line.to_str()}, column ${source_position(error.location).column.to_str()}: ${Str.inspect(error.problem)}"
 	}
 }
 
@@ -94,7 +93,7 @@ report = |text| {
 
 show! : Str => {}
 show! = |text| {
-	match Yaml.parse_str(text) {
+	match Yaml.parse_str(text, {}) {
 		Ok(value) => Stdout.line!(Yaml.to_inspect(value)) ?? {}
 		Err(_) => Stdout.line!("error") ?? {}
 	}
@@ -197,4 +196,10 @@ main! = |_args| {
 	# end::decode-errors-run[]
 
 	Ok({})
+}
+
+source_position : Parser.Location -> { line : U64, column : U64 }
+source_position = |location| match location {
+	Text(position) => { line: position.line, column: position.column }
+	_ => crash "expected retained YAML source text coordinates"
 }
