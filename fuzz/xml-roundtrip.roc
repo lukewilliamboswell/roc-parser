@@ -81,7 +81,7 @@ show_result : Try(Xml, [InvalidXml(Xml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(xml) => Str.inspect(xml)
-		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

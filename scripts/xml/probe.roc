@@ -22,7 +22,7 @@ main! = |_| {
 			match Xml.parse_str(input) {
 				Ok(xml) => Stdout.line!("{\"status\":\"ok\",\"declaration\":${encode_declaration(xml.declaration)},\"root\":${encode(xml.root)}}")?
 				Err(InvalidXml(error)) =>
-					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(error.message)}}")?
+					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(Str.inspect(error.problem))}}")?
 			}
 		}
 	}

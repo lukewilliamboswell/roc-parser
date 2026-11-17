@@ -63,7 +63,7 @@ Xml := {
 	## Input is already UTF-8, so a different declared encoding is suspicious.
 	validate : ValidationProps -> Try(Xml, [BadQuotedBytes(Str)])
 	validate = |props| {
-		xml = Xml.parse_str(props.source).map_err(|InvalidXml(error)| Quotation.error({ name: props.name, format: "XML", message: Xml.problem_text(error.problem), line: error.line, column: error.column }))?
+		xml = Xml.parse_str(props.source).map_err(|InvalidXml(error)| Quotation.error({ name: props.name, format: "XML", message: Str.inspect(error.problem), line: error.line, column: error.column }))?
 		if props.lints.non_utf8_declaration {
 			match xml.declaration {
 				Ok({ encoding: Ok(OtherEncoding(encoding)), .. }) => return Err(Quotation.error({ name: props.name, format: "XML", line: 1, message: "non_utf8_declaration: input is UTF-8 but declares ${encoding}" }))
@@ -119,10 +119,6 @@ Xml := {
 	Problem : [UnexpectedEventAfterRoot, MissingRootEvent, MissingRootElement, TrailingContent, ExpectedRoot, RootText, DoctypeUnsupported, UnclosedElement(Str), UnclosedCData, ExpectedMarkupDeclaration, ForbiddenCDataEnd, ExpectedEndTagName, EndTagMismatch({ actual : Str, expected : Str }), ExpectedEndTagClose, ExpectedVersion, ExpectedQuotedVersion, BadVersion, VersionOverflow, ExpectedVersionEndQuote, ExpectedEncodingSpace, ExpectedQuotedEncoding, BadEncodingStart, ExpectedEncodingEndQuote, ExpectedStandaloneSpace, ExpectedQuotedStandalone, BadStandalone, ExpectedStandaloneEndQuote, ExpectedDeclarationClose, ExpectedEquals, CommentDoubleHyphen, UnclosedComment, ExpectedInstructionTarget, DeclarationNotAtStart, ReservedInstructionTarget(Str), NamespacedInstructionTarget(Str), ExpectedInstructionSpace(Str), UnclosedInstruction, ExpectedStartTagName, ExpectedStartTagClose(Str), ExpectedStartTagSpace(Str), ExpectedAttributeName(Str), DuplicateAttribute(Str), ExpectedQuotedAttribute, AttributeContainsLt, UnclosedAttribute, ExpectedReference, ExpectedEntitySemicolon, UnknownEntity(Str), ExpectedCharacterDigits([Decimal, Hexadecimal]), ExpectedCharacterSemicolon, InvalidCharacterReference(U32), InvalidUtf8, InvalidCharacter(U32), ResourceLimit({ limit : Limit, max : U64 }), NonUtf8Encoding(Str), UnexpectedEndTag, IncompleteMarkup, BadTextFragmentSize({ minimum : U64, actual : U64 }), InvalidBom(List(U8)), CDataOutsideRoot, UnfinishedDocument({ construct : Construct, expected_end_tag : Try(Str, [Missing]) })]
 
 	Construct : [Document, ByteOrderMark, Text, Tag, Comment, Instruction, CData, Reference]
-
-	## Display a native problem at a human-facing output boundary.
-	problem_text : Parser.Problem(Problem) -> Str
-	problem_text = |problem| Str.inspect(problem)
 
 	Error : { line : U64, column : U64, problem : Parser.Problem(Xml.Problem) }
 
@@ -183,7 +179,7 @@ Xml := {
 	## trailing comments, processing instructions and whitespace, and leave
 	## the input after that for the next parser.
 	##
-	## A failure is `ParseError({ message, offset })` with the same message
+	## A failure is `ParseError({ problem, offset })` with the same native problem
 	## [Xml.parse_str] reports and the byte offset of the problem. Use this to
 	## embed an XML document in a larger parser; otherwise prefer
 	## [Xml.parse_str], which reports a line and column.
@@ -240,32 +236,27 @@ Xml := {
 	## Original byte offset and one-based physical line and byte column.
 	StreamError : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Xml.Problem) }
 
-	## Incremental decoder retaining bounded unfinished syntax and open names.
-	Decoder : ChunkState
+	## Configured byte decoder for the common Streaming readers.
+	Decoder : Streaming.Decoder(ChunkDecoder, Event, StreamError)
 
-	## Construct a lazy byte decoder. Text bounds must allow one UTF-8 scalar.
+	## Construct a decoder; feed it with Streaming.read_iter/read_stream or
+	## call its step method directly. Only source exhaustion supplies Final.
 	decoder : StreamProps -> Decoder
-	decoder = chunk_initial
-
-	## Decode at most one event. Final is supplied only at source exhaustion.
-	decode_step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, StreamError)
-	decode_step = chunk_step
-
-	## Read chunked XML without constructing a tree. Structural errors stop.
-	parse_iter : Iter(List(U8)), StreamProps -> Iter(Try(Streaming.ReadEvent(Event, StreamError), Streaming.ReadError(StreamError)))
-	parse_iter = |chunks, props| Streaming.iter(chunks, chunk_batch_initial(props), chunk_batch_step, {})
-
-	## Effectful counterpart of parse_iter, preserving source errors.
-	parse_stream : Stream(Try(List(U8), source_error)), StreamProps -> _
-	parse_stream = |chunks, props| Streaming.stream(chunks, chunk_batch_initial(props), chunk_batch_step, {})
+	decoder = |props| Streaming.decoder(if (props.namespaces) Single(chunk_initial(props)) else Batch(chunk_batch_initial(props)), chunk_decoder_step)
 
 	## Position of the most recently emitted event, in original input bytes.
 	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
-	decoder_location = |state| state.event_at
+	decoder_location = |current| match current.state() {
+		Single(state) => state.event_at
+		Batch(batch) => batch.event_at
+	}
 
 	## Declaration parsed so far; non-UTF-8 declarations are rejected.
 	decoder_declaration : Decoder -> Try(Declaration, [Missing])
-	decoder_declaration = |state| Box.unbox(state.declaration)
+	decoder_declaration = |current| match current.state() {
+		Single(state) => Box.unbox(state.declaration)
+		Batch(batch) => Box.unbox(Box.unbox(batch.decoder).declaration)
+	}
 
 	## An exact byte interval in XML source.
 	SourceSpan : { start : U64, end : U64 }
@@ -3125,7 +3116,7 @@ chunk_step = |initial, bytes, end| {
 }
 
 chunk_test_read : List(List(U8)), Xml.StreamProps -> _
-chunk_test_read = |chunks, props| Streaming.collect(Xml.parse_iter(chunks.iter(), props))
+chunk_test_read = |chunks, props| Streaming.collect(Streaming.read_iter(chunks.iter(), Xml.decoder(props)))
 
 chunk_test_splits : Str, Xml.StreamProps -> Bool
 chunk_test_splits = |source, props| {
@@ -3234,7 +3225,7 @@ expect {
 }
 
 expect {
-	first = Xml.decode_step(Xml.decoder({}), "<root/>unread".to_utf8(), More)
+	first = (Xml.decoder({})).step("<root/>unread".to_utf8(), More)
 	match first.outcome {
 		Item(Start({ name: "root", .. })) => first.consumed == 7
 		_ => False
@@ -3293,7 +3284,7 @@ expect {
 }
 
 expect {
-	first = Xml.decode_step(Xml.decoder({}), "<?xml version='1.0'?>\n<r/>".to_utf8(), More)
+	first = (Xml.decoder({})).step("<?xml version='1.0'?>\n<r/>".to_utf8(), More)
 	Xml.decoder_declaration(first.state) == Ok({ version: { major: 1, minor: 0 }, encoding: Err(Missing) })
 		and Xml.decoder_location(first.state) == { offset: 22, line: 2, column: 1 }
 }
@@ -3493,16 +3484,34 @@ chunk_owned_attributes = |attributes| {
 	} else attributes.map(|attribute| { name: chunk_owned_text(attribute.name), value: chunk_owned_text(attribute.value) })
 }
 
-ChunkBatch : { decoder : Box(ChunkState), events : List(Xml.Event), index : U64 }
+# Namespace resolution consumes raw events individually, allowing its names and
+# attributes to transfer into resolved events without a second retained queue.
+ChunkDecoder : [Single(ChunkState), Batch(ChunkBatch)]
+
+chunk_decoder_step : ChunkDecoder, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkDecoder, Xml.Event, Xml.StreamError)
+chunk_decoder_step = |current, bytes, end| match current {
+	Single(state) => {
+		next = chunk_step(state, bytes, end)
+		{ state: Single(next.state), consumed: next.consumed, outcome: next.outcome }
+	}
+	Batch(batch) => {
+		next = chunk_batch_step(batch, bytes, end)
+		{ state: Batch(next.state), consumed: next.consumed, outcome: next.outcome }
+	}
+}
+
+ChunkEvent : { event : Xml.Event, location : ChunkAt }
+
+ChunkBatch : { decoder : Box(ChunkState), events : List(ChunkEvent), index : U64, event_at : ChunkAt }
 
 chunk_batch_initial : Xml.StreamProps -> ChunkBatch
-chunk_batch_initial = |props| { decoder: Box.box(chunk_initial(props)), events: [], index: 0 }
+chunk_batch_initial = |props| { decoder: Box.box(chunk_initial(props)), events: [], index: 0, event_at: { offset: 0, line: 1, column: 1 } }
 
 chunk_batch_step : ChunkBatch, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkBatch, Xml.Event, Xml.StreamError)
 chunk_batch_step = |batch, bytes, end| {
 	if batch.index < batch.events.len() {
-		event = batch.events.get(batch.index) ?? Text("")
-		return { state: { ..batch, index: batch.index + 1 }, consumed: 0, outcome: Item(event) }
+		entry = batch.events.get(batch.index) ?? { event: Text(""), location: batch.event_at }
+		return { state: { ..batch, index: batch.index + 1, event_at: entry.location }, consumed: 0, outcome: Item(entry.event) }
 	}
 	decoded = Box.unbox(batch.decoder)
 	var $empty = batch.events
@@ -3511,17 +3520,17 @@ chunk_batch_step = |batch, bytes, end| {
 	}
 	filled = chunk_fill(decoded, bytes, $empty)
 	if !filled.events.is_empty() {
-		first = filled.events.first() ?? Text("")
-		return { state: { decoder: Box.box(filled.state), events: filled.events, index: 1 }, consumed: filled.consumed, outcome: Item(first) }
+		first = filled.events.first() ?? { event: Text(""), location: batch.event_at }
+		return { state: { decoder: Box.box(filled.state), events: filled.events, index: 1, event_at: first.location }, consumed: filled.consumed, outcome: Item(first.event) }
 	}
 	next = chunk_step(filled.state, bytes, end)
-	{ state: { decoder: Box.box(next.state), events: filled.events, index: 0 }, consumed: next.consumed, outcome: next.outcome }
+	{ state: { decoder: Box.box(next.state), events: filled.events, index: 0, event_at: next.state.event_at }, consumed: next.consumed, outcome: next.outcome }
 }
 
 # Parse a small bounded event batch using scalar cursor fields, so common
 # complete tokens do not move the full decoder through a Step per event.
 # Anything unfinished, normalized or malformed uses the incremental decoder.
-chunk_fill : ChunkState, List(U8), List(Xml.Event) -> { state : ChunkState, consumed : U64, events : List(Xml.Event) }
+chunk_fill : ChunkState, List(U8), List(ChunkEvent) -> { state : ChunkState, consumed : U64, events : List(ChunkEvent) }
 chunk_fill = |initial, bytes, empty| {
 	props = Box.unbox(initial.props)
 	if initial.done or initial.mode != Data or !initial.buffer.is_empty() or initial.reference or initial.utf8_left != 0 or initial.skip_text_lf or props.max_text_bytes < 4 {
@@ -3547,7 +3556,7 @@ chunk_fill = |initial, bytes, empty| {
 			$context_bytes = $context_bytes - opened.retained_bytes
 			$pending_end = False
 			$closed = $open.is_empty()
-			$events = $events.append(End(opened.name))
+			$events = $events.append({ event: End(opened.name), location: $event_at })
 		} else if $index >= bytes.len() {
 			break
 		} else if bytes.get($index) == Ok('<') {
@@ -3569,7 +3578,7 @@ chunk_fill = |initial, bytes, empty| {
 					$column = if (at.line == 1) $column + length else at.column
 					$previous_cr = False
 					$index = stop
-					$events = $events.append(Start({ name, attributes }))
+					$events = $events.append({ event: Start({ name, attributes }), location: $event_at })
 				}
 				End(tag) => {
 					match $open.last() {
@@ -3586,7 +3595,7 @@ chunk_fill = |initial, bytes, empty| {
 							$column = if (at.line == 1) $column + length else at.column
 							$previous_cr = False
 							$index = tag.pos
-							$events = $events.append(End(opened.name))
+							$events = $events.append({ event: End(opened.name), location: $event_at })
 						}
 						_ => break
 					}
@@ -3605,7 +3614,7 @@ chunk_fill = |initial, bytes, empty| {
 			$column = if (at.line == 1) $column + length else at.column
 			$previous_cr = part.last() == Ok('\r')
 			$index = text.pos
-			$events = $events.append(Text(text.value))
+			$events = $events.append({ event: Text(text.value), location: $event_at })
 		} else {
 			break
 		}
@@ -3668,4 +3677,36 @@ unfinished_problem = |state| {
 	}
 	expected_end_tag = state.open.last().map_ok(|entry| entry.name).map_err(|_| Missing)
 	UnfinishedDocument({ construct, expected_end_tag })
+}
+
+## A malformed suffix cannot suppress already validated batched events.
+expect {
+	bytes = "<r><a/><b/></bad>".to_utf8()
+	var $decoder = Xml.decoder({})
+	var $at = 0.U64
+	var $events = []
+	var $locations = []
+	var $failure = Err(Missing)
+	for _ in (0.U64).to(8) {
+		next = $decoder.step(bytes.drop_first($at), More)
+		$decoder = next.state
+		$at = $at + next.consumed
+		match next.outcome {
+			Item(event) => {
+				$events = $events.append(event)
+				$locations = $locations.append(Xml.decoder_location($decoder).offset)
+			}
+			Failed(problem) => {
+				$failure = Ok(problem)
+				break
+			}
+			_ => break
+		}
+	}
+	$events == [Start({ name: "r", attributes: [] }), Start({ name: "a", attributes: [] }), End("a"), Start({ name: "b", attributes: [] }), End("b")]
+		and $locations == [0, 3, 3, 7, 7]
+		and match $failure {
+			Ok({ problem: EndTagMismatch({ actual: "bad", expected: "r" }), offset: 11, .. }) => True
+			_ => False
+		}
 }

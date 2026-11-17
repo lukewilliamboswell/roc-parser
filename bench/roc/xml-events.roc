@@ -5,6 +5,7 @@ app [main!] {
 
 import cli.OsStr
 import parser.Xml
+import parser.Streaming
 import Bench
 
 ## Consume validated events without constructing a tree. Chunked mode uses
@@ -61,7 +62,7 @@ chunked = |input, width| {
 		},
 	)
 	var $state = { sum: 0.U64, text: False }
-	for result in Xml.parse_iter(chunks, {}) {
+	for result in Streaming.read_iter(chunks, Xml.decoder({})) {
 		match result {
 			Ok(Value(event)) => {
 				$state = consume($state, event)
@@ -74,7 +75,7 @@ chunked = |input, width| {
 }
 
 ## Diagnostic pure-step loop with the same chunk width and event checksum.
-## It keeps decoder ownership outside the source cursor used by parse_iter.
+## It keeps decoder ownership outside the source cursor used by Streaming.read_iter.
 direct : Str, U64 -> Try(U64, U64)
 direct = |input, width| {
 	if width == 0 {
@@ -88,7 +89,7 @@ direct = |input, width| {
 	var $final = False
 	var $emitted = 0.U64
 	while True {
-		next = Xml.decode_step($decoder, bytes.sublist({ start: $at, len: $stop - $at }), if ($final) Final else More)
+		next = ($decoder).step(bytes.sublist({ start: $at, len: $stop - $at }), if ($final) Final else More)
 		if next.consumed > $stop - $at {
 			return Err(0)
 		}

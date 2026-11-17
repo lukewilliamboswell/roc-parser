@@ -6,6 +6,7 @@ app [target] {
 import fuzz.Fuzz
 import parser.Xml
 import parser.XmlNs
+import parser.Streaming
 
 ## Build source chunks on demand inside the measured region and discard
 ## events immediately. Growth adds siblings or text, never an input list.
@@ -39,7 +40,7 @@ drain = |n, shape| {
 	var $count = 0.U64
 	var $finished = False
 	if shape == 1 {
-		for result in XmlNs.parse_iter(chunks(n, shape), { max_text_bytes: 1024 }) {
+		for result in Streaming.read_iter(chunks(n, shape), XmlNs.decoder({ max_text_bytes: 1024 })) {
 			match result {
 				Ok(Value(Start({ name: { namespace: Uri(_), local: "i", .. }, .. }))) => {
 					$count = $count + 1
@@ -55,7 +56,7 @@ drain = |n, shape| {
 			}
 		}
 	} else {
-		for result in Xml.parse_iter(chunks(n, shape), { max_text_bytes: 1024 }) {
+		for result in Streaming.read_iter(chunks(n, shape), Xml.decoder({ max_text_bytes: 1024 })) {
 			match result {
 				Ok(Value(End("i"))) if shape == 0 or shape == 5 => {
 					$count = $count + 1
@@ -96,7 +97,7 @@ retain_name = |n| {
 		},
 	)
 	var $retained = ""
-	for event in Xml.parse_iter(source_chunks, { max_text_bytes: 1024 }) {
+	for event in Streaming.read_iter(source_chunks, Xml.decoder({ max_text_bytes: 1024 })) {
 		match event {
 			Ok(Value(Start(tag))) => {
 				$retained = tag.name

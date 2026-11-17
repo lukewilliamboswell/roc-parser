@@ -192,8 +192,8 @@ test = |mutation| {
 			high = XmlGen.line_column(mutation.xml, mutation.high)
 			at = { line: error.line, column: error.column }
 			in_range = (at.line > low.line or (at.line == low.line and at.column >= low.column)) and (at.line < high.line or (at.line == high.line and at.column <= high.column))
-			if !in_range or error.message.is_empty() {
-				crash "${mutation.name}: error ${error.line.to_str()}:${error.column.to_str()} \"${error.message}\" not at ${low.line.to_str()}:${low.column.to_str()}..${high.line.to_str()}:${high.column.to_str()} in ${Str.inspect(mutation.xml)}"
+			if !in_range {
+				crash "${mutation.name}: error ${error.line.to_str()}:${error.column.to_str()} \"${Str.inspect(error.problem)}\" not at ${low.line.to_str()}:${low.column.to_str()}..${high.line.to_str()}:${high.column.to_str()} in ${Str.inspect(mutation.xml)}"
 			}
 		}
 	}

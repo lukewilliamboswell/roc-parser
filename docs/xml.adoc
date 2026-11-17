@@ -116,7 +116,7 @@ include::examples/xml-guide.expected[lines=3..4]
 == Report malformed input
 
 When a document is not well-formed, `Xml.parse_str` returns
-`InvalidXml({ line, column, message })`. Lines and columns are one-based, and
+`InvalidXml({ line, column, problem })`. Lines and columns are one-based, and
 columns count UTF-8 bytes, so a column after non-ASCII text is larger than the
 number of characters a user sees.
 
@@ -137,9 +137,11 @@ include::examples/xml-guide.expected[lines=5..9]
 ----
 
 If you are combining XML with other parsers, `Xml.parser` is the same
-parser as a `Parser(Utf8.Bytes, Xml)`. It leaves any input after the document
-for the next parser. Its failures are `ParseError({ message, offset })`, with
-the same message as `Xml.parse_str` and the byte offset of the problem.
+parser as a `Parser(Utf8.Bytes, Xml, Xml.Problem)`. It leaves any input after the
+document for the next parser. Its failures are `ParseError({ problem, offset })`,
+with the same native problem as `Xml.parse_str` and its byte offset. Match
+`problem` to handle a particular failure, or use `Str.inspect(problem)`
+when displaying it to a person.
 
 [#xml-untrusted]
 == Read untrusted documents
@@ -210,10 +212,10 @@ the most recent event.
 [#xml-streaming]
 == Read XML from byte chunks
 
-Use `Xml.parse_iter(chunks, props)` for pure byte chunks or
-`Xml.parse_stream(chunks, props)` for a file, stdin or another effectful source.
-`XmlNs.parse_iter` and `XmlNs.parse_stream` resolve namespace names with the same
-interface. Each reader emits `Value(Start(...))`, `Value(End(...))` and
+Pass `Xml.decoder(props)` to `Streaming.read_iter(chunks, decoder)` for pure
+byte chunks, or to `Streaming.read_stream(chunks, decoder)` for a file, stdin or
+another effectful source. Use `XmlNs.decoder(props)` to resolve namespace names
+with the same interface. Each reader emits `Value(Start(...))`, `Value(End(...))` and
 `Value(Text(...))`, followed by `Finished(report)` after successful source
 exhaustion. `<a/>` emits both a start and an end event. Comments and processing
 instructions are validated and omitted.
@@ -256,12 +258,15 @@ least four. The context budget charges each open element's complete start tag,
 including namespace declarations. A resource limit is terminal. Retaining output
 or earlier decoder states adds to the application's memory use.
 
-For a custom pull loop, start with `Xml.decoder(props)` and call
-`Xml.decode_step(state, bytes, More)` until the source ends, then use `Final`.
-The return value follows the shared xref:streaming.adoc#_implement_another_chunk_decoder[chunk decoder contract].
+For a custom pull loop, start with `decoder = Xml.decoder(props)` and call
+`decoder.step(bytes, More)` until the source ends, then use `Final`. Continue
+with the returned `state` descriptor and respect its `consumed` byte count.
+The return value follows the shared xref:streaming.adoc#streaming-decoder[chunk decoder contract].
 `Xml.decoder_location` gives the latest event's original byte offset, line and
 column, and `Xml.decoder_declaration` gives the declaration parsed so far.
-`XmlNs.decoder` and `XmlNs.decode_step` provide the namespace-aware version.
+`XmlNs.decoder` provides the namespace-aware version. XML failures carry a
+native `Xml.Problem` with the relevant name, character or limit; namespace
+failures carry an `XmlNs.Problem`. Neither requires parsing diagnostic text.
 
 [#xml-namespaces]
 == Resolve namespaces

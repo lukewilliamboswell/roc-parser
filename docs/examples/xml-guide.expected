@@ -2,11 +2,11 @@ entry 2: Fish & Chips
 entry 1: <Hello> \u(1F600)
 Element({ attributes: [{ name: "class", value: "a b" }], children: [Text("x < y AB
 <raw>z"), Element({ attributes: [], children: [], name: "br" })], name: "p" })
-3:1: end tag </a> does not match start tag <b>
-1:4: undeclared entity &nbsp;
-1:10: duplicate attribute x
-1:5: unexpected content after the root element
-1:1: document type declarations are not supported
+3:1: EndTagMismatch({ actual: "a", expected: "b" })
+1:4: UnknownEntity("nbsp")
+1:10: DuplicateAttribute("x")
+1:5: TrailingContent
+1:1: DoctypeUnsupported
 Ok(["One", "Two"])
 accepted
 2:9: more than 3 (Depth)

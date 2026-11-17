@@ -113,24 +113,20 @@ XmlNs := {
 	## Chunked namespace errors retain original byte positions.
 	StreamError : [InvalidXml(Xml.StreamError), InvalidNamespace({ problem : Problem, offset : U64, line : U64, column : U64 })]
 
-	## Incremental XML decoder with namespace bindings scoped to open elements.
-	Decoder : NamespaceChunkState
+	## Configured namespace-aware decoder for the common Streaming readers.
+	Decoder : Streaming.Decoder(NamespaceChunkState, Event, StreamError)
 
-	## Start a namespace-aware chunk decoder with Xml's finite resource bounds.
+	## Use with Streaming.read_iter/read_stream, or the descriptor's step method.
 	decoder : Xml.StreamProps -> Decoder
-	decoder = |props| { inner: Xml.decoder({ ..props, namespaces: True }), scope: empty_scope, done: False }
+	decoder = |props| Streaming.decoder({ inner: Xml.decoder({ ..props, namespaces: True }), scope: empty_scope, done: False }, namespace_chunk_step)
 
-	## Resolve one event. Malformed syntax and namespace errors are terminal.
-	decode_step : Decoder, List(U8), Streaming.InputEnd -> Streaming.Step(Decoder, Event, StreamError)
-	decode_step = namespace_chunk_step
+	## Original input position of the most recently emitted event.
+	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
+	decoder_location = |current| Xml.decoder_location(current.state().inner)
 
-	## Read pure chunks, resolving namespaces before emitting each start tag.
-	parse_iter : Iter(List(U8)), Xml.StreamProps -> Iter(Try(Streaming.ReadEvent(Event, StreamError), Streaming.ReadError(StreamError)))
-	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), decode_step, {})
-
-	## Read effectful byte chunks, retaining original source failures.
-	parse_stream : Stream(Try(List(U8), source_error)), Xml.StreamProps -> _
-	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), decode_step, {})
+	## XML declaration parsed so far, or Err(Missing).
+	decoder_declaration : Decoder -> Try(Xml.Declaration, [Missing])
+	decoder_declaration = |current| Xml.decoder_declaration(current.state().inner)
 
 	## A pull reader that resolves namespaces as it reads, as [Xml.Reader]
 	## does for names as written. Keep only the latest reader and `return`
@@ -1907,7 +1903,7 @@ namespace_chunk_step = |state, bytes, end| {
 	if state.done {
 		return { state, consumed: 0, outcome: Done }
 	}
-	next = Xml.decode_step(state.inner, bytes, end)
+	next = state.inner.step(bytes, end)
 	updated = { ..state, inner: next.state }
 	match next.outcome {
 		Item(Start(tag)) => match resolve_start(state.scope, tag.name, tag.attributes) {
@@ -1929,7 +1925,7 @@ namespace_chunk_step = |state, bytes, end| {
 }
 
 namespace_chunk_test_read : List(List(U8)), Xml.StreamProps -> _
-namespace_chunk_test_read = |chunks, props| Streaming.collect(XmlNs.parse_iter(chunks.iter(), props))
+namespace_chunk_test_read = |chunks, props| Streaming.collect(Streaming.read_iter(chunks.iter(), XmlNs.decoder(props)))
 
 expect {
 	bytes = "<r xmlns='urn:outer' xmlns:p='urn:p'><p:a p:x='1'><b xmlns='urn:inner'/></p:a><b/></r>".to_utf8()
@@ -1989,3 +1985,25 @@ expect {
 }
 
 expect XmlNs.parse_str("<r><p:a>text</wrong></r>") == Err(InvalidNamespace({ problem: UndeclaredPrefix("p"), line: 1, column: 4 }))
+
+## Decoding ahead in a batch must keep each namespace error at its own tag.
+expect {
+	bytes = "<r>\r\n<a/><p:x/><z/></r>".to_utf8()
+	expected = Err(ReadFailed(ParseErr(InvalidNamespace({ problem: UndeclaredPrefix("p"), offset: 9, line: 2, column: 5 }))))
+	var $same = True
+	for split in (0.U64).to(bytes.len() + 1) {
+		$same = $same and namespace_chunk_test_read([bytes.take_first(split), bytes.drop_first(split)], {}) == expected
+	}
+	$same
+}
+
+expect {
+	decoder = XmlNs.decoder({}).with_errors({})
+	next = decoder.step("<r xmlns='urn:r'/>".to_utf8(), More)
+	XmlNs.decoder_location(next.state) == { offset: 0, line: 1, column: 1 }
+		and XmlNs.decoder_declaration(next.state) == Err(Missing)
+		and match next.outcome {
+			Item(Start(tag)) => tag.name.namespace == Uri("urn:r")
+			_ => False
+		}
+}

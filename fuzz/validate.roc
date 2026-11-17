@@ -60,7 +60,7 @@ check_lints = |off, on, format| {
 check_xml : Str -> {}
 check_xml = |source| {
 	off = Xml.validate({ source, name, lints: { non_utf8_declaration: False } })
-	expected = Xml.parse_str(source).map_err(|InvalidXml(problem)| expected_error("XML", problem))
+	expected = Xml.parse_str(source).map_err(|InvalidXml(problem)| expected_error("XML", { line: problem.line, column: problem.column, message: Str.inspect(problem.problem) }))
 	if off != expected {
 		crash "XML: validate gives ${Str.inspect(off)}, parse_str ${Str.inspect(expected)}"
 	}

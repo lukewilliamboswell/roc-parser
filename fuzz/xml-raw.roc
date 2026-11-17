@@ -8,7 +8,7 @@ import parser.Utf8
 import parser.Xml
 
 ## Arbitrary UTF-8 must parse or fail cleanly, and:
-## - errors point at a real one-based line and byte column with a message;
+## - errors point at a real one-based line and byte column with a native problem;
 ## - Xml.parser agrees with Xml.parse_str;
 ## - LF, CRLF, and CR line endings give the same result (XML 1.0 2.11);
 ## - a leading comment line gives the same tree, with errors one line lower.
@@ -71,9 +71,6 @@ check_location = |bytes, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "XML error locations must be one-based: ${show(result)}"
 			}
-			if error.message.is_empty() {
-				crash "XML errors must explain the problem"
-			}
 			lengths = line_lengths(bytes)
 			match lengths.get(error.line - 1) {
 				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show(result)}"
@@ -92,13 +89,13 @@ check_combinator = |input, result| {
 	consistent =
 		match (result, combinator) {
 			(Ok(tree), Ok(other)) => tree == other
-			(Err(InvalidXml(error)), Err(ParseError({ message, offset }))) => {
+			(Err(InvalidXml(error)), Err(ParseError({ problem, offset }))) => {
 				location = line_column(input.to_utf8(), offset)
 				same_place = location.line == error.line and location.column == error.column
-				if message == "unexpected input" {
-					same_place and error.message == "unexpected content after the root element"
+				if problem == UnexpectedInput {
+					same_place and error.problem == TrailingContent
 				} else {
-					same_place and message == error.message
+					same_place and problem == error.problem
 				}
 			}
 			_ => False
@@ -147,7 +144,7 @@ check_leading_comment = |input, result| {
 		match (result, commented) {
 			(Ok(plain), Ok(with_comment)) => plain == with_comment
 			(Err(InvalidXml(plain)), Err(InvalidXml(with_comment))) =>
-				plain.line + 1 == with_comment.line and plain.column == with_comment.column and plain.message == with_comment.message
+				plain.line + 1 == with_comment.line and plain.column == with_comment.column and plain.problem == with_comment.problem
 			_ => False
 		}
 	if !consistent {
@@ -159,7 +156,7 @@ show : Parsed -> Str
 show = |result| {
 	match result {
 		Ok(xml) => Str.inspect(xml)
-		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidXml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

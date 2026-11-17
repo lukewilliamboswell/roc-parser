@@ -35,7 +35,7 @@ check : Str -> Str
 check = |text| {
 	match Xml.parse_str(text) {
 		Ok(_) => "well-formed"
-		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidXml({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
@@ -51,7 +51,7 @@ print_feed! = |text| {
 				Stdout.line!(describe_entry(entry).replace_each("\u(1F600)", "\\u(1F600)"))?
 			}
 
-		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${problem.message}")?
+		Err(InvalidXml(problem)) => Stdout.line!("invalid XML: ${Str.inspect(problem.problem)}")?
 	}
 	# end::parse[]
 	Ok({})
@@ -95,7 +95,7 @@ check_untrusted = |text| {
 	match Xml.parse(text, { max_depth: 3, max_elements: 100 }) {
 		Ok(_) => "accepted"
 		Err(LimitExceeded({ limit, max, line, column })) => "${line.to_str()}:${column.to_str()}: more than ${max.to_str()} (${Str.inspect(limit)})"
-		Err(InvalidXml({ line, column, message })) => "${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidXml({ line, column, problem })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
@@ -114,7 +114,7 @@ describe_atom = |text| {
 		}
 
 		Err(InvalidNamespace({ problem, line, column })) => "${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
-		Err(InvalidXml({ message, .. })) => message
+		Err(InvalidXml({ problem, .. })) => Str.inspect(problem)
 	}
 }
 
