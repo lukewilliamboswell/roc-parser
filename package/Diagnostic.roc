@@ -28,4 +28,12 @@ Diagnostic(problem) := {
 		LineColumn(position) => Ok(position)
 		_ => Err(NoTextPosition)
 	}
+
+	## Original byte offsets, distinct from generic parser input indexes.
+	byte_offset : Location -> Try(U64, [NoByteOffset])
+	byte_offset = |location| match location {
+		Text(position) => Ok(position.offset)
+		ByteOffset(offset) => Ok(offset)
+		_ => Err(NoByteOffset)
+	}
 }
