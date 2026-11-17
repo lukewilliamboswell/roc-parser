@@ -24,7 +24,7 @@ main! = |_| {
 			written = doc.to_str() ?? ""
 			Stdout.line!("{\"status\":\"ok\",\"rows\":[${Str.join_with(rows.map(row_json), ",")}],\"written\":${json(written)}}")?
 		}
-		Err(InvalidQif(error)) => Stdout.line!("{\"status\":\"error\",\"offset\":${error.offset.to_str()},\"message\":${json(error.message)}}")?
+		Err(InvalidQif(error)) => Stdout.line!("{\"status\":\"error\",\"offset\":${error.offset.to_str()},\"message\":${json(Str.inspect(error.problem))}}")?
 	}
 	Ok({})
 }

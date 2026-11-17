@@ -12,7 +12,8 @@ QIF := { events : List(QIF.Event) }.{
 	Location : { offset : U64, line : U64, column : U64 }
 
 	## A located syntax, encoding, limit or decoding failure.
-	Error : { offset : U64, line : U64, column : U64, message : Str }
+	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, RecoveryRequiresReport, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding(TextEncoding)]
+	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Supported byte encodings. ASCII is a subset of Utf8.
 	TextEncoding : Streaming.TextEncoding
@@ -49,7 +50,7 @@ QIF := { events : List(QIF.Event) }.{
 
 	## Validate a complete UTF-8 source for quotation or file import.
 	validate : ValidationProps -> Try(QIF, [BadQuotedBytes(Str)])
-	validate = |props| parse_with(props.source, props.options).map_err(|InvalidQif(error)| Literal.error({ name: props.name, format: "QIF", message: error.message, line: error.line, column: error.column }))
+	validate = |props| parse_with(props.source, props.options).map_err(|InvalidQif(error)| Literal.error({ name: props.name, format: "QIF", message: Str.inspect(error.problem), line: error.line, column: error.column }))
 
 	## Convert a checked source quotation.
 	from_quote : Str -> Try(QIF, [BadQuotedBytes(Str)])
@@ -79,17 +80,17 @@ QIF := { events : List(QIF.Event) }.{
 				}
 				Done => return Ok(QIF.{ events: $events })
 				Failed(error) | RecordError(error) => return Err(InvalidQif(error))
-				NeedInput => return Err(InvalidQif(problem($decoder, "incomplete final input")))
+				NeedInput => return Err(InvalidQif(located_problem($decoder, IncompleteInput)))
 			}
 		}
 	}
 
 	## Composable complete-document raw parser.
-	parser : Parser(Utf8.Bytes, QIF)
+	parser : Parser(Utf8.Bytes, QIF, Problem)
 	parser = Parser.custom(
 		|bytes| match parse_bytes(bytes, {}) {
 			Ok(value) => Ok({ value, rest: [] })
-			Err(InvalidQif(error)) => Err(ParseError({ offset: error.offset, message: error.message }))
+			Err(InvalidQif(error)) => Err(ParseError({ offset: error.offset, problem: error.problem }))
 		},
 	)
 
@@ -110,7 +111,7 @@ QIF := { events : List(QIF.Event) }.{
 				additional = if (($s.skip_lf and byte == '\n' and $s.record_bytes == 0) or ((byte == '\r' or byte == '\n') and $s.line_bytes == ['^'])) 0 else 1
 				$s = { ..$s, offset: $s.offset + 1, record_bytes: $s.record_bytes + additional }
 				if $s.record_bytes > $s.props.max_record_bytes {
-					return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF record byte limit exceeded")) }
+					return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, RecordTooLarge($s.props.max_record_bytes))) }
 				}
 				if $s.skip_lf and byte == '\n' {
 					$s = { ..$s, skip_lf: False, line_start: $s.offset }
@@ -127,7 +128,7 @@ QIF := { events : List(QIF.Event) }.{
 				} else {
 					$s = { ..$s, skip_lf: False, line_bytes: $s.line_bytes.append(byte), column: $s.column + 1 }
 					if $s.line_bytes.len() > $s.props.max_line_bytes {
-						return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "QIF byte limit exceeded")) }
+						return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, LineTooLarge($s.props.max_line_bytes))) }
 					}
 				}
 			}
@@ -146,7 +147,7 @@ QIF := { events : List(QIF.Event) }.{
 				}
 			}
 			if !$s.fields.is_empty() {
-				return { state: terminal($s), consumed: $pos, outcome: Failed(problem($s, "record must end with ^")) }
+				return { state: terminal($s), consumed: $pos, outcome: Failed(located_problem($s, MissingRecordTerminator)) }
 			}
 			{ state: terminal($s), consumed: $pos, outcome: Done }
 		}
@@ -179,7 +180,7 @@ QIF := { events : List(QIF.Event) }.{
 	transactions : QIF, Props -> Try(List(Transaction), [InvalidQif(Error)])
 	transactions = |doc, props| {
 		if props.errors.error_policy != FailFast {
-			return Err(InvalidQif({ offset: 0, line: 0, column: 0, message: "transactions is fail-fast; use transactions_report for recovery policies" }))
+			return Err(InvalidQif({ offset: 0, line: 0, column: 0, problem: RecoveryRequiresReport }))
 		}
 		var $rows = []
 		for event in doc.events {
@@ -237,18 +238,18 @@ QIF := { events : List(QIF.Event) }.{
 	## Decode one completely framed bank, cash, or credit-card record.
 	decode : Record, Props -> Try(Transaction, [InvalidQif(Error)])
 	decode = |record, props| {
-		bad = |message| InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, message })
+		bad = |problem| InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem })
 		if record.section != "Bank" and record.section != "Cash" and record.section != "CCard" {
-			return Err(bad("unsupported typed QIF section"))
+			return Err(bad(UnsupportedSection(record.section)))
 		}
 		if record.fields.keep_if(|f| f.code == 'D').len() > 1 or record.fields.keep_if(|f| f.code == 'T').len() > 1 {
-			return Err(bad("duplicate date or amount field"))
+			return Err(bad(DuplicateCoreField))
 		}
-		date_text = field(record, 'D').map_err(|_| bad("missing D date field"))?
-		date = parse_date(date_text, props.date_order).map_err(|_| bad("invalid or ambiguous date; configure date_order"))?
-		amount = field(record, 'T').map_err(|_| bad("missing T amount field"))?
+		date_text = field(record, 'D').map_err(|_| bad(MissingField('D')))?
+		date = parse_date(date_text, props.date_order).map_err(|_| bad(InvalidDate({ value: date_text, order: props.date_order })))?
+		amount = field(record, 'T').map_err(|_| bad(MissingField('T')))?
 		if !valid_amount(amount) {
-			return Err(bad("invalid decimal amount"))
+			return Err(bad(InvalidAmount(amount)))
 		}
 		var $splits = []
 		var $split = { category: "", memo: "", amount: "" }
@@ -257,7 +258,7 @@ QIF := { events : List(QIF.Event) }.{
 			if f.code == 'S' {
 				if $has_split {
 					if !valid_amount($split.amount) {
-						return Err(bad("split requires a decimal $ amount"))
+						return Err(bad(InvalidSplitAmount))
 					}
 					$splits = $splits.append($split)
 				}
@@ -265,14 +266,14 @@ QIF := { events : List(QIF.Event) }.{
 				$has_split = True
 			} else if f.code == 'E' or f.code == '$' {
 				if !$has_split {
-					return Err(bad("split field without S category"))
+					return Err(bad(MissingSplitCategory))
 				}
 				$split = if (f.code == 'E') { ..$split, memo: f.value } else { ..$split, amount: f.value }
 			}
 		}
 		if $has_split {
 			if !valid_amount($split.amount) {
-				return Err(bad("split requires a decimal $ amount"))
+				return Err(bad(InvalidSplitAmount))
 			}
 			$splits = $splits.append($split)
 		}
@@ -299,7 +300,7 @@ QIF := { events : List(QIF.Event) }.{
 	## Encode a header or complete raw record atomically.
 	write_event : Event, WriteProps -> Try(List(U8), [InvalidQif(Error)])
 	write_event = |event, props| {
-		bad = |message| InvalidQif({ offset: 0, line: 0, column: 0, message })
+		bad = |problem| InvalidQif({ offset: 0, line: 0, column: 0, problem })
 		ending = match props.line_ending {
 			Lf => "\n"
 			CrLf => "\r\n"
@@ -308,7 +309,7 @@ QIF := { events : List(QIF.Event) }.{
 		text = match event {
 			Header(header) => {
 				if !header.starts_with("!") or has_break(header) {
-					return Err(bad("invalid QIF header"))
+					return Err(bad(InvalidHeader(header)))
 				}
 				"${header}${ending}"
 			}
@@ -316,16 +317,16 @@ QIF := { events : List(QIF.Event) }.{
 				var $lines = []
 				for f in record.fields {
 					if f.code < 33 or f.code > 126 or f.code == '!' or f.code == '^' or has_break(f.value) {
-						return Err(bad("invalid QIF field"))
+						return Err(bad(InvalidField(f)))
 					}
 					$lines = $lines.append("${Str.from_utf8([f.code]) ?? ""}${f.value}${ending}")
 				}
 				"${Str.join_with($lines, "")}^${ending}"
 			}
 		}
-		bytes = encode_text(text, props.encoding).map_err(|_| bad("character is not representable in Windows-1252"))?
+		bytes = encode_text(text, props.encoding).map_err(|_| bad(UnrepresentableCharacter(Windows1252)))?
 		if bytes.len() > props.max_record_bytes {
-			return Err(bad("QIF output record limit exceeded"))
+			return Err(bad(RecordTooLarge(props.max_record_bytes)))
 		}
 		Ok(bytes)
 	}
@@ -348,7 +349,7 @@ QIF := { events : List(QIF.Event) }.{
 					$bytes = $bytes.concat(bytes)
 				}
 				Err(EncodeErr(error)) => return Err(error)
-				Err(InvalidChunkSize) => return Err(InvalidQif({ offset: 0, line: 0, column: 0, message: "chunk_bytes must be positive" }))
+				Err(InvalidChunkSize) => return Err(InvalidQif({ offset: 0, line: 0, column: 0, problem: InvalidChunkSize }))
 			}
 		}
 		Ok($bytes)
@@ -369,12 +370,12 @@ encode_event = |state, event, props| {
 		}
 		Record(record) => {
 			if state.section == "" or record.section != state.section or record.account != state.account {
-				return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, message: "record does not match preceding section/account context" }))
+				return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem: ContextMismatch({ section: record.section, account: record.account }) }))
 			}
 			if record.section == "Account" {
 				account = QIF.field(record, 'N') ?? ""
 				if account == "" {
-					return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, message: "account requires N name field" }))
+					return Err(InvalidQif({ offset: record.at.offset, line: record.at.line, column: record.at.column, problem: MissingField('N') }))
 				}
 				{ ..state, account }
 			} else state
@@ -405,8 +406,8 @@ typed_step = |state, bytes, end| {
 terminal : QIF.Decoder -> QIF.Decoder
 terminal = |s| { ..s, line_bytes: [], fields: [], section: "", account: "", done: True }
 
-problem : QIF.Decoder, Str -> QIF.Error
-problem = |s, message| { offset: s.offset, line: s.line_number, column: s.column, message }
+located_problem : QIF.Decoder, Parser.Problem(QIF.Problem) -> QIF.Error
+located_problem = |s, problem| { offset: s.offset, line: s.line_number, column: s.column, problem }
 
 process_line : QIF.Decoder, List(U8) -> { state : QIF.Decoder, result : [Continue, Emitted(QIF.Event), Error(QIF.Error)] }
 process_line = |s, bytes| {
@@ -414,50 +415,50 @@ process_line = |s, bytes| {
 	content = if (bom) bytes.drop_first(3) else bytes
 	prefix = if (bom) 3 else 0
 	at = { offset: s.line_start + prefix, line: if (s.column == 1) s.line_number - 1 else s.line_number, column: prefix + 1 }
-	bad = |message| { state: s, result: Error({ offset: at.offset, line: at.line, column: at.column, message }) }
+	bad = |problem| { state: s, result: Error({ offset: at.offset, line: at.line, column: at.column, problem }) }
 	text = match Streaming.decode_text(content, s.props.encoding) {
 		Ok(value) => value
-		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, message: error.message }) }
+		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, problem: InvalidEncoding(s.props.encoding) }) }
 	}
 	if bytes.contains(0) {
-		return bad("NUL is not allowed in QIF fields")
+		return bad(NulCharacter)
 	}
 	if content.is_empty() {
 		return { state: s, result: Continue }
 	}
 	if text.starts_with("!") {
 		if !s.fields.is_empty() {
-			return bad("header before record terminator ^")
+			return bad(HeaderBeforeTerminator)
 		}
 		if bytes.len() > s.props.max_context_bytes {
-			return bad("QIF context limit exceeded")
+			return bad(ContextTooLarge(s.props.max_context_bytes))
 		}
 		section = if (text == "!Account") "Account" else if (text.starts_with("!Type:")) Str.from_utf8_lossy(text.to_utf8().drop_first(6)) else s.section
 		return { state: { ..s, section, record_bytes: 0 }, result: Emitted(Header(text)) }
 	}
 	if text == "^" {
 		if s.section == "" {
-			return bad("record requires a section header")
+			return bad(MissingSection)
 		}
 		record = { section: s.section, account: s.account, fields: s.fields, at: if (s.fields.is_empty()) at else s.record_at }
 		account = if (s.section == "Account") QIF.field(record, 'N') ?? "" else s.account
 		if s.section == "Account" and account == "" {
-			return bad("account requires N name field")
+			return bad(MissingField('N'))
 		}
 		if account.count_utf8_bytes() > s.props.max_context_bytes {
-			return bad("QIF account context limit exceeded")
+			return bad(ContextTooLarge(s.props.max_context_bytes))
 		}
 		return { state: { ..s, fields: [], account, record_bytes: 0 }, result: Emitted(Record(record)) }
 	}
 	if s.section == "" {
-		return bad("field requires a section header")
+		return bad(MissingSection)
 	}
 	if s.fields.len() >= s.props.max_fields {
-		return bad("QIF field count limit exceeded")
+		return bad(TooManyFields(s.props.max_fields))
 	}
 	code = content.first() ?? 0
 	if code < 33 or code > 126 or code == '^' {
-		return bad("field indicator must be printable ASCII")
+		return bad(InvalidFieldCode(code))
 	}
 	value = decode_text(content.drop_first(1), s.props.encoding) ?? ""
 	{ state: { ..s, fields: s.fields.append({ code, value }), record_at: if (s.fields.is_empty()) at else s.record_at }, result: Continue }
