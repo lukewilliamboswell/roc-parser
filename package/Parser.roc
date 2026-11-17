@@ -525,7 +525,7 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 	## `value` with the `rest` it did not consume, or
 	## `Err(ParseError({ problem, offset }))`, where `offset` is how far into
 	## the given input the failure is (usually `0`).
-	custom : (input -> ParseResult(input, a, p)) -> Parser(input, a, p) where [input.len : input -> U64]
+	custom : (input -> Try({ value : a, rest : input }, [ParseError(Diagnostic([..p]))])) -> Parser(input, a, p) where [input.len : input -> U64]
 	custom = |fun| {
 		{
 			fun: |input| {
@@ -534,15 +534,21 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 				len = input.len()
 				match fun(input) {
 					Ok({ value, rest }) => Ok({ value, rest, furthest: no_failure({}) })
-					Err(ParseError(error)) => Err({
-						problem: error.problem,
-						remaining: minus(len, relative_offset(error.location)),
-						origin: match error.location {
-							InputOffset(_) => Infer
-							_ => Explicit(error.location)
-						},
-						path: error.path,
-					})
+					Err(ParseError(error)) => {
+						problem = match extend_problem(error.problem) {
+							Err(value) => value
+							Ok(_) => crash "Parser.custom: failure unexpectedly succeeded"
+						}
+						Err({
+							problem,
+							remaining: minus(len, relative_offset(error.location)),
+							origin: match error.location {
+								InputOffset(_) => Infer
+								_ => Explicit(error.location)
+							},
+							path: error.path,
+						})
+					}
 				}
 			},
 		}
@@ -1047,6 +1053,12 @@ Parser(input, a, p) :: { fun : input -> ParserStep(input, a, p) }.{
 			},
 		}
 	}
+}
+
+extend_problem : [..p] -> Try({}, Parser.Problem(p))
+extend_problem = |problem| {
+	value = Err(problem)?
+	Ok(value)
 }
 
 relative_offset : DiagnosticCore.Location -> U64
@@ -1862,6 +1874,23 @@ expect {
 	parser = Parser.custom(|_input| Err(ParseError(Parser.Diagnostic.{ problem: MissingValue, location: LineColumn({ line: 8, column: 4 }), path: [] })))
 	match parser.parse_str("") {
 		Err(ParseError(error)) => error.location == LineColumn({ line: 8, column: 4 })
+		Ok(_) => False
+	}
+}
+
+native_test_parser : (List(U8) -> Try(U8, [MissingValue, ..errors])) -> Parser(List(U8), U8, [MissingValue, ..errors])
+native_test_parser = |decode| Parser.custom(
+	|bytes| match decode(bytes) {
+		Ok(value) => Ok({ value, rest: [] })
+		Err(failure) => Err(ParseError(DiagnosticCore.{ problem: failure, location: Unavailable(NotRetained), path: [Key("value")] }))
+	},
+)
+
+## Custom callbacks accept native extensible error rows without caller coercion.
+expect {
+	parser = native_test_parser(|_bytes| Err(MissingValue))
+	match parser.parse([]) {
+		Err(ParseError(error)) => error.problem == MissingValue and error.location == Unavailable(NotRetained) and error.path == [Key("value")]
 		Ok(_) => False
 	}
 }
