@@ -374,7 +374,7 @@ class Impl:
 
     @property
     def workload(self) -> str:
-        if self.name == "qif_parser":
+        if self.name in {"qif_parser", "roxmltree"}:
             return "collect-borrowed"
         return "consume" if "consume" in self.name else "collect"
 
@@ -386,11 +386,11 @@ class Impl:
 #: Comparator libraries per language and format, with what each one measures.
 COMPARATORS = {
     "rust": {
-        "qif": [("qif_parser", "qif_parser typed transactions (borrowed strings)")],
+        "qif": [("qif_parser", "qif_parser typed transactions (borrowed strings; f64 amounts)")],
         "ofx": [("ofx-rs", "ofx-rs typed bank/card statements")],
         "csv": [("csv", "collect: csv 1.3 StringRecords copied into Vec<Vec<String>>"), ("csv-consume", "consume: reusable StringRecord, values discarded")],
         "yaml": [("yaml-rust2", "yaml-rust2 YamlLoader tree"), ("serde_yaml", "serde_yaml Value tree (unsafe-libyaml)")],
-        "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree read-only DOM")],
+        "xml": [("quick-xml", "quick-xml pull events built into an owned tree"), ("roxmltree", "roxmltree borrowed read-only DOM")],
         "json": [("serde_json", "serde_json Value with preserve_order and arbitrary_precision: ordered, lossless")],
         "markdown": [("pulldown-cmark", "pulldown-cmark events made 'static and collected"), ("comrak", "comrak arena AST")],
         "http": [("httparse", "httparse head plus Content-Length/chunked body framing, copied")],

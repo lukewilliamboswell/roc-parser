@@ -137,6 +137,13 @@ class Reports(unittest.TestCase):
         self.assertIsNone(rows[0]["speedup_vs_roc"])
         self.assertEqual(rows[0]["semantic_mismatches"], ["csv/a"])
 
+    def test_borrowed_qif_and_xml_models_do_not_enter_owned_ratios(self):
+        for name in ("qif_parser", "roxmltree"):
+            self.assertEqual(bench.Impl("rust", name, "xml", []).workload, "collect-borrowed")
+        rows = bench.comparison([self.result("roc/roc-parser", "xml/a", 100),
+                                 dict(self.result("rust/roxmltree", "xml/a", 10), workload="collect-borrowed")])
+        self.assertEqual(rows, [])
+
     def test_ratio_wording(self):
         self.assertEqual(bench.fmt_ratio(0.5), "2x slower")
         self.assertEqual(bench.fmt_ratio(3.0), "3x faster")

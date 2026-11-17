@@ -128,8 +128,11 @@ workloads separately. These drivers preload the source: their RSS includes the
 complete input and does not establish bounded file-source memory.
 
 QIF compares typed bank transactions with Quiffen and Rust `qif_parser`.
-Rust QIF retains borrowed strings and is reported as `collect-borrowed`; it
-is excluded from ratios against owned collection. The report lists each
+Rust QIF retains borrowed strings and uses `f64` amounts rather than Roc’s
+exact monetary values. It is reported as `collect-borrowed` and excluded from
+ratios against owned collection. Rust `roxmltree` also borrows from the input
+and is excluded from owned-collection ratios. Either can appear as the fastest
+measured collection reference when the table labels these differences explicitly. The report lists each
 implementation's representation and workload.
 OFX compares bank/card statements with ofxtools, ofxparse, ofxgo, and Rust
 `ofx-rs`. Financial checksums include transaction counts and weighted UTF-8
