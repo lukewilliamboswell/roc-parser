@@ -61,7 +61,20 @@ jobs:
           download-method: asset-api
           version: nightly
           nightly-tag: ${{ steps.nightly.outputs.tag }}
+      - id: oracle-cache
+        name: Restore deterministic oracle answers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/oracle-cache
+          key: oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-check-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-check-
       - run: blueprint run check
+      - name: Save deterministic oracle answers
+        if: ${{ !cancelled() && steps.oracle-cache.outputs.cache-primary-key != '' && hashFiles('.roc-parser-tmp/oracle-cache/**/*.json') != '' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/oracle-cache
+          key: ${{ steps.oracle-cache.outputs.cache-primary-key }}
       - name: Upload evidence and reproducers
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

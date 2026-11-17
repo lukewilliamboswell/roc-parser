@@ -43,8 +43,24 @@ jobs:
           download-method: asset-api
           version: nightly
           nightly-tag: ${{ steps.nightly.outputs.tag }}
+      - id: reference-machine
+        name: Identify the benchmark machine
+        run: python3 -c 'from scripts.bench import reference_digest, reference_machine; print("key=" + reference_digest(reference_machine()))' >> "$GITHUB_OUTPUT"
+      - id: reference-cache
+        name: Restore qualified reference measurements
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/bench/reference-cache
+          key: benchmark-references-v1-${{ steps.reference-machine.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: benchmark-references-v1-${{ steps.reference-machine.outputs.key }}-
       - name: Run the full comparison
         run: blueprint run bench -- --label ci
+      - name: Save qualified reference measurements
+        if: ${{ !cancelled() && steps.reference-cache.outputs.cache-primary-key != '' && hashFiles('.roc-parser-tmp/bench/reference-cache/*.json') != '' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/bench/reference-cache
+          key: ${{ steps.reference-cache.outputs.cache-primary-key }}
       - name: Publish the summary
         run: cat .roc-parser-tmp/bench/ci/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reports

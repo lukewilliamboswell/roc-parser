@@ -80,6 +80,11 @@ measurements are needed. This measurement cache is separate from the shared
 <<correctness-oracle-cache,correctness oracle cache>>: performance depends on runtime, hardware and
 measurement conditions as well as the input.
 
+The benchmark workflow persists reference receipts between runs on the same
+machine configuration. A different hosted runner may have no compatible
+measurements; it reports `ReferenceUnavailable` and requires an explicit
+reference refresh rather than reusing timings from another machine.
+
 == Reproduce the README throughput table
 
 On Linux, choose an available logical CPU and run:

@@ -81,6 +81,9 @@ transient execution failures are never stored. Cached answers remain usable
 without installed oracle packages when their version receipt matches the
 requested dependency pins.
 
+CI and the scheduled CSV, QIF and OFX conformance jobs restore and save these
+answers between runs. Each run still builds and executes the current Roc probe.
+
 == Implement another chunk decoder
 
 `Streaming.Step` returns the updated state, the number of bytes consumed from

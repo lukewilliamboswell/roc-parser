@@ -173,9 +173,25 @@ jobs:
           download-method: asset-api
           version: nightly
           nightly-tag: ${{ needs.nightly.outputs.tag }}
+      - id: oracle-cache
+        name: Restore deterministic oracle answers
+        if: ${{ contains(fromJSON('["csv","qif","qif-robustness","ofx","ofx-robustness"]'), matrix.review) }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/oracle-cache
+          key: oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-review-${{ matrix.review }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-review-${{ matrix.review }}-
+            oracle-answers-v1-${{ runner.os }}-${{ runner.arch }}-check-
       - env:
           REVIEW: ${{ matrix.review }}
         run: blueprint run conformance -- "$REVIEW"
+      - name: Save deterministic oracle answers
+        if: ${{ !cancelled() && steps.oracle-cache.outputs.cache-primary-key != '' && hashFiles('.roc-parser-tmp/oracle-cache/**/*.json') != '' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .roc-parser-tmp/oracle-cache
+          key: ${{ steps.oracle-cache.outputs.cache-primary-key }}
       - name: Upload review evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
