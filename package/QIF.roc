@@ -12,7 +12,7 @@ QIF := { events : List(QIF.Event) }.{
 	Location : { offset : U64, line : U64, column : U64 }
 
 	## A located syntax, encoding, limit or decoding failure.
-	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding(TextEncoding)]
+	Problem : [IncompleteInput, RecordTooLarge(U64), LineTooLarge(U64), MissingRecordTerminator, UnsupportedSection(Str), DuplicateCoreField, MissingField(U8), InvalidDate({ value : Str, order : DateOrder }), InvalidAmount(Str), InvalidSplitAmount, MissingSplitCategory, InvalidHeader(Str), InvalidField(Field), UnrepresentableCharacter(TextEncoding), InvalidChunkSize, ContextMismatch({ section : Str, account : Str }), NulCharacter, HeaderBeforeTerminator, ContextTooLarge(U64), MissingSection, TooManyFields(U64), InvalidFieldCode(U8), InvalidEncoding({ encoding : TextEncoding, error : Streaming.EncodingError })]
 	Error : { offset : U64, line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Supported byte encodings. ASCII is a subset of Utf8.
@@ -360,7 +360,7 @@ process_line = |s, bytes| {
 	bad = |problem| { state: s, result: Error({ offset: at.offset, line: at.line, column: at.column, problem }) }
 	text = match Streaming.decode_text(content, s.props.encoding) {
 		Ok(value) => value
-		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, problem: InvalidEncoding(s.props.encoding) }) }
+		Err(BadEncoding(error)) => return { state: s, result: Error({ offset: at.offset + error.index, line: at.line, column: at.column + error.index, problem: InvalidEncoding({ encoding: s.props.encoding, error }) }) }
 	}
 	if bytes.contains(0) {
 		return bad(NulCharacter)

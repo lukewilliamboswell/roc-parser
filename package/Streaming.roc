@@ -25,7 +25,10 @@ Streaming :: [].{
 	ReadEvent(item, problem) : [Value(item), Rejected(problem), Finished(Report)]
 
 	## Terminal decoding failure, including the rejection exceeding the budget.
-	ReadError(problem) : [ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(Str)]
+	ReadError(problem) : [ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(ProtocolProblem)]
+
+	## A decoder violated the shared progress or EOF contract.
+	ProtocolProblem : [ConsumedBeyondInput({ consumed : U64, available : U64 }), NeedInputAfterFinal, UnconsumedInput({ remaining : U64 }), PrematureDone({ final : Bool, remaining : U64 })]
 
 	## One pure step. `consumed` counts bytes of this call's input only.
 	Step(state, item, problem) : {
@@ -84,10 +87,13 @@ Streaming :: [].{
 	## Supported text encodings. Undefined Windows-1252 bytes are rejected.
 	TextEncoding : [Utf8, Windows1252]
 
+	## An invalid source encoding byte at its zero-based token index.
+	EncodingError : { index : U64, problem : [InvalidUtf8, UndefinedWindows1252Byte(U8)] }
+
 	## Decode a complete text token after its byte framing has been established.
-	decode_text : Bytes, TextEncoding -> Try(Str, [BadEncoding({ index : U64, message : Str })])
+	decode_text : Bytes, TextEncoding -> Try(Str, [BadEncoding(EncodingError)])
 	decode_text = |bytes, encoding| match encoding {
-		Utf8 => Str.from_utf8(bytes).map_err(|BadUtf8(problem)| BadEncoding({ index: problem.index, message: "invalid UTF-8" }))
+		Utf8 => Str.from_utf8(bytes).map_err(|BadUtf8(problem)| BadEncoding({ index: problem.index, problem: InvalidUtf8 }))
 		Windows1252 => {
 			var $out = []
 			for pair in bytes.iter().with_index() {
@@ -126,7 +132,7 @@ Streaming :: [].{
 							0x9C => 0x0153
 							0x9E => 0x017E
 							0x9F => 0x0178
-							_ => return Err(BadEncoding({ index, message: "undefined Windows-1252 byte" }))
+							_ => return Err(BadEncoding({ index, problem: UndefinedWindows1252Byte(byte) }))
 						}
 					}
 					if point < 0x800 {
@@ -165,7 +171,7 @@ Streaming :: [].{
 					} else {
 						next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
 						if next.consumed > $cursor.buffer.len() - $cursor.index {
-							return Ok((Err(DecoderProtocol("decoder consumed beyond its input")), Stopped))
+							return Ok((Err(DecoderProtocol(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 						}
 						$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 						match next.outcome {
@@ -187,16 +193,16 @@ Streaming :: [].{
 							}
 							NeedInput => {
 								if $cursor.final {
-									return Ok((Err(DecoderProtocol("decoder requested input after EOF")), Stopped))
+									return Ok((Err(DecoderProtocol(NeedInputAfterFinal)), Stopped))
 								}
 								if $cursor.index != $cursor.buffer.len() {
-									return Ok((Err(DecoderProtocol("decoder left input before requesting more")), Stopped))
+									return Ok((Err(DecoderProtocol(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 								}
 								$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
 							}
 							Done => {
 								if !$cursor.final or $cursor.index != $cursor.buffer.len() {
-									return Ok((Err(DecoderProtocol("decoder completed before consuming EOF")), Stopped))
+									return Ok((Err(DecoderProtocol(PrematureDone({ final: $cursor.final, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 								}
 								return Ok((Ok(Finished($cursor.report)), Stopped))
 							}
@@ -209,7 +215,7 @@ Streaming :: [].{
 	)
 
 	## Lazily decode an effectful source. Source errors stop without finalizing.
-	stream : Stream(Try(Bytes, source_error)), state, (state, Bytes, InputEnd -> Step(state, item, problem)), ReadProps -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(Str)]))
+	stream : Stream(Try(Bytes, source_error)), state, (state, Bytes, InputEnd -> Step(state, item, problem)), ReadProps -> Stream(Try(ReadEvent(item, problem), [SourceErr(source_error), ParseErr(problem), ErrorLimitExceeded({ max : U64, error : problem }), DecoderProtocol(ProtocolProblem)]))
 	stream = |chunks, initial, step, props| Stream.custom(
 		Reading({ chunks, buffer: [], index: 0, final: False, need_input: False, decoder: initial, report: { emitted_items: 0, rejected_records: 0 } }),
 		Err(Unknown),
@@ -234,7 +240,7 @@ Streaming :: [].{
 					} else {
 						next = step($cursor.decoder, $cursor.buffer.drop_first($cursor.index), if ($cursor.final) Final else More)
 						if next.consumed > $cursor.buffer.len() - $cursor.index {
-							return Ok((Err(DecoderProtocol("decoder consumed beyond its input")), Stopped))
+							return Ok((Err(DecoderProtocol(ConsumedBeyondInput({ consumed: next.consumed, available: $cursor.buffer.len() - $cursor.index }))), Stopped))
 						}
 						$cursor = { ..$cursor, index: $cursor.index + next.consumed, decoder: next.state }
 						match next.outcome {
@@ -256,16 +262,16 @@ Streaming :: [].{
 							}
 							NeedInput => {
 								if $cursor.final {
-									return Ok((Err(DecoderProtocol("decoder requested input after EOF")), Stopped))
+									return Ok((Err(DecoderProtocol(NeedInputAfterFinal)), Stopped))
 								}
 								if $cursor.index != $cursor.buffer.len() {
-									return Ok((Err(DecoderProtocol("decoder left input before requesting more")), Stopped))
+									return Ok((Err(DecoderProtocol(UnconsumedInput({ remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 								}
 								$cursor = { ..$cursor, buffer: [], index: 0, need_input: True }
 							}
 							Done => {
 								if !$cursor.final or $cursor.index != $cursor.buffer.len() {
-									return Ok((Err(DecoderProtocol("decoder completed before consuming EOF")), Stopped))
+									return Ok((Err(DecoderProtocol(PrematureDone({ final: $cursor.final, remaining: $cursor.buffer.len() - $cursor.index }))), Stopped))
 								}
 								return Ok((Ok(Finished($cursor.report)), Stopped))
 							}
@@ -543,7 +549,7 @@ expect {
 	}
 	List.from_iter(Streaming.iter([[1.U8]].iter(), 0, queued, {})) == [Ok(Value(1)), Ok(Value(9)), Ok(Finished({ emitted_items: 2, rejected_records: 0 }))]
 }
-expect List.from_iter(Streaming.iter([].iter(), 0.U64, |state, _, _| { state, consumed: 0, outcome: NeedInput }, {})) == [Err(DecoderProtocol("decoder requested input after EOF"))]
+expect List.from_iter(Streaming.iter([].iter(), 0.U64, |state, _, _| { state, consumed: 0, outcome: NeedInput }, {})) == [Err(DecoderProtocol(NeedInputAfterFinal))]
 
 expect List.from_iter(Streaming.encode_state_iter(["ab", "cd"].iter(), 0.U64, |state, item| Ok({ state: state + 1, bytes: item.to_utf8() }), |state| Ok(state.to_str().to_utf8()), 1)) == [Ok("a".to_utf8()), Ok("b".to_utf8()), Ok("c".to_utf8()), Ok("d".to_utf8()), Ok("2".to_utf8())]
 
