@@ -2899,7 +2899,7 @@ chunk_step = |initial, bytes, end| {
 							$state = { ..$state, piece_at: chunk_at($state) }
 						}
 						$state = chunk_append_text({ ..$state, skip_text_lf: False }, byte)
-						$state = { ..$state, reference: if ($state.reference) byte != ';' else byte == '&', reference_bytes: if ($state.reference or byte == '&') $state.reference_bytes + 1 else 0, brackets: if (byte == ']') U8.min($state.brackets + 1, 2) else 0 }
+						$state = { ..$state, reference: if ($state.reference) byte != ';' else byte == '&', reference_bytes: if ($state.reference) $state.reference_bytes + 1 else if (byte == '&') 1 else 0, brackets: if (byte == ']') U8.min($state.brackets + 1, 2) else 0 }
 						$state = chunk_advance($state, byte)
 						$index = $index + 1
 						if !$state.reference and $state.utf8_left == 0 and $state.buffer.len() >= props.max_text_bytes - 3 {
@@ -3297,3 +3297,53 @@ expect ["<''a>", "<\"\"a>", "<p:a>", "<a>tail"].all(|source| chunk_test_read([so
 
 expect chunk_test_read(["<r><a>text</a><b/></r>".to_utf8()], { max_token_bytes: U64.highest, max_text_bytes: U64.highest }).is_ok()
 	and chunk_test_splits("<r><a>text</a><b/></r>", { max_token_bytes: U64.highest, max_text_bytes: U64.highest })
+
+# Each entity has its own byte budget, including '&' and ';'. A completed
+# entity cannot spend the following entity's allowance across any boundary.
+expect [
+	{ source: "<a>&amp;&amp;</a>", budget: 5.U64, text: "&&" },
+	{ source: "<a>&#65;&#66;</a>", budget: 5, text: "AB" },
+	{ source: "<a>&amp;<b/>&amp;</a>", budget: 5, text: "&&" },
+	{ source: "<a>&amp;<b></b>&amp;</a>", budget: 5, text: "&&" },
+	{ source: "<a>&#065;&#066;</a>", budget: 6, text: "AB" },
+	{ source: "<a>&#x41;&#x42;</a>", budget: 6, text: "AB" },
+	{ source: "<a>&amp;&apos;&quot;</a>", budget: 6, text: "&'\"" },
+	{ source: "<a>&#065;<b/>&#066;</a>", budget: 6, text: "AB" },
+	{ source: "<a>&#000065;<![CDATA[]]>&#000066;</a>", budget: 9, text: "AB" },
+	{ source: "<a>&#000065;<![CDATA[x]]>&#000066;</a>", budget: 9, text: "AxB" },
+	{ source: "<a>&#000065;<![CDATA[\r\n]]>&#000066;</a>", budget: 9, text: "A\nB" },
+].all(
+	|case| {
+		props : Xml.StreamProps
+		props = { max_token_bytes: case.budget, max_text_bytes: 4 }
+		values = chunk_test_read([case.source.to_utf8()], props) ?? return False
+		text = Str.join_with(
+			values.map(
+				|event| match event {
+					Text(value) => value
+					_ => ""
+				},
+			),
+			"",
+		)
+		text == case.text and chunk_test_splits(case.source, props)
+	},
+)
+
+expect [
+	{ source: "<a>&amp;&#065;</a>", budget: 5.U64, offset: 13.U64 },
+	{ source: "<a>&apos;&#0065;</a>", budget: 6, offset: 15 },
+	{ source: "<a>&#000065;<![CDATA[]]>&#0000066;</a>", budget: 9, offset: 33 },
+].all(
+	|case| {
+		props : Xml.StreamProps
+		props = { max_token_bytes: case.budget, max_text_bytes: 4 }
+		match chunk_test_read([case.source.to_utf8()], props) {
+			Err(ReadFailed(ParseErr(problem))) =>
+				problem.message == "XML reference byte limit exceeded"
+					and problem.offset == case.offset
+					and chunk_test_splits(case.source, props)
+			_ => False
+		}
+	},
+)
