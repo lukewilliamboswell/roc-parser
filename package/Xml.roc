@@ -243,11 +243,11 @@ Xml := {
 
 	## Read chunked XML without constructing a tree. Structural errors stop.
 	parse_iter : Iter(List(U8)), StreamProps -> Iter(Try(Streaming.ReadEvent(Event, StreamError), Streaming.ReadError(StreamError)))
-	parse_iter = |chunks, props| Streaming.iter(chunks, decoder(props), decode_step, {})
+	parse_iter = |chunks, props| Streaming.iter(chunks, chunk_batch_initial(props), chunk_batch_step, {})
 
 	## Effectful counterpart of parse_iter, preserving source errors.
 	parse_stream : Stream(Try(List(U8), source_error)), StreamProps -> _
-	parse_stream = |chunks, props| Streaming.stream(chunks, decoder(props), decode_step, {})
+	parse_stream = |chunks, props| Streaming.stream(chunks, chunk_batch_initial(props), chunk_batch_step, {})
 
 	## Position of the most recently emitted event, in original input bytes.
 	decoder_location : Decoder -> { offset : U64, line : U64, column : U64 }
@@ -553,7 +553,7 @@ Limits : { depth : U64, elements : U64, attributes : U64, namespaces : Bool }
 ## the most recent start tag was an empty-element tag whose end is still to
 ## be reported, whether the root has ended, where the most recent `Start`
 ## (or `no_start`) and the most recent event began, and the element count.
-Cursor : { pos : U64, open : List({ start : U64, end : U64 }), pending_end : Bool, closed : Bool, start : U64, at : U64, elements : U64 }
+Cursor : { pos : U64, open : List(Str), pending_end : Bool, closed : Bool, start : U64, at : U64, elements : U64 }
 
 StartTag : {
 	name : Str,
@@ -677,7 +677,7 @@ step : Str, List(U8), Limits, Cursor -> Try(Step, ReadFailure)
 step = |src, bytes, limits, r| {
 	if r.pending_end {
 		# The end of an empty-element tag.
-		name = open_name(src, bytes, r.open)
+		name = reader_open_name(r.open)
 		open = r.open.drop_last(1)
 		closed = open.is_empty()
 		return Ok(Ev(End(name), { ..r, open, pending_end: False, closed, start: no_start }))
@@ -692,21 +692,25 @@ step = |src, bytes, limits, r| {
 			match scan(src, bytes, limits.namespaces, r.pos)? {
 				TagAt(tag) => tag
 				TextUntil(text, pos) => return Ok(Ev(Text(text), { ..r, pos, start: no_start, at: r.pos }))
-				EndOfInput(pos) => return fail(pos, "expected </${open_name(src, bytes, r.open)}> before the end of the document")
+				EndOfInput(pos) => return fail(pos, "expected </${reader_open_name(r.open)}> before the end of the document")
 			}
 		}
 	if bytes.get(at + 1) == Ok('/') {
-		end_tag = read_end_tag(src, bytes, at, r.open.last() ?? { start: 0, end: 0 })?
+		opened = r.open.last() ?? ""
+		end_tag = read_end_named(src, bytes, at, opened)?
 		open = r.open.drop_last(1)
 		closed = open.is_empty()
-		return Ok(Ev(End(slice_str(src, bytes, at + 2, end_tag.name_end)), { ..r, pos: end_tag.pos, open, closed, start: no_start, at }))
+		return Ok(Ev(End(opened), { ..r, pos: end_tag.pos, open, closed, start: no_start, at }))
 	}
 	check_start(limits, r.open.len(), r.elements, at)?
 	tag = parse_start_tag(src, bytes, at, limits.attributes)?
 	elements = r.elements + 1
-	open = r.open.append({ start: at + 1, end: at + 1 + tag.name.count_utf8_bytes() })
+	open = r.open.append(tag.name)
 	Ok(Ev(Start({ name: tag.name, attributes: tag.attributes }), { ..r, pos: tag.pos, open, pending_end: tag.empty, start: at, at, elements }))
 }
+
+reader_open_name : List(Str) -> Str
+reader_open_name = |open| open.last() ?? ""
 
 # The name of the innermost open element.
 open_name : Str, List(U8), List({ start : U64, end : U64 }) -> Str
@@ -720,6 +724,20 @@ open_name = |src, bytes, open| {
 scan : Str, List(U8), Bool, U64 -> Try(Scanned, ReadFailure)
 scan = |src, bytes, namespaces, start| {
 	byte = bytes.get(start) ?? 0
+	if byte == '\n' or byte == ' ' or byte == '\t' {
+		var $indent_end = start + 1
+		while $indent_end < bytes.len() and $indent_end - start < 8 {
+			part = bytes.get($indent_end) ?? 0
+			if part == ' ' or part == '\t' or part == '\n' {
+				$indent_end = $indent_end + 1
+			} else {
+				break
+			}
+		}
+		if bytes.get($indent_end) == Ok('<') and starts_tag(bytes, $indent_end) {
+			return Ok(TextUntil(slice_str(src, bytes, start, $indent_end), $indent_end))
+		}
+	}
 	if byte == '<' and starts_tag(bytes, start) {
 		Ok(TagAt(start))
 	} else {
@@ -874,6 +892,32 @@ read_end_tag = |src, bytes, at, expected| {
 	Ok({ name_end: end, pos: close + 1 })
 }
 
+read_end_named : Str, List(U8), U64, Str -> Try({ name_end : U64, pos : U64 }, ReadFailure)
+read_end_named = |src, bytes, at, expected| {
+	known_end = at + 2 + expected.count_utf8_bytes()
+	if !expected.is_empty() and bytes.get(known_end) == Ok('>') {
+		var $position = at + 2
+		var $same = True
+		for byte in expected.iter_utf8() {
+			$same = $same and bytes.get($position) == Ok(byte)
+			$position = $position + 1
+		}
+		if $same {
+			return Ok({ name_end: known_end, pos: known_end + 1 })
+		}
+	}
+	end = name_end(bytes, at + 2) ?? return fail(at + 2, "expected an element name in the end tag")
+	actual = slice_str(src, bytes, at + 2, end)
+	if actual != expected {
+		return fail(at, "end tag </${actual}> does not match start tag <${expected}>")
+	}
+	close = skip_space(bytes, end)
+	if bytes.get(close) != Ok('>') {
+		return fail(close, "expected '>' to close the end tag")
+	}
+	Ok({ name_end: end, pos: close + 1 })
+}
+
 # See https://www.w3.org/TR/xml/#NT-STag. Limits are checked before the tag
 # at `at` is parsed, so nothing is built for a tag that would exceed one.
 check_start : Limits, U64, U64, U64 -> Try({}, ReadFailure)
@@ -907,7 +951,7 @@ build_element = |src, bytes, limits, r, name, attributes| {
 	var $open = []
 	var $name = name
 	var $attributes = attributes
-	var $range = r.open.last() ?? { start: 0, end: 0 }
+	var $range = { start: r.start + 1, end: r.start + 1 + (r.open.last() ?? "").count_utf8_bytes() }
 	var $first_child = 0
 	var $nodes = []
 	var $elements = r.elements
@@ -1175,7 +1219,7 @@ text_str = |src, bytes, text, run_start, run_end| {
 materialize : List(U8), List(U8), U64, U64 -> List(U8)
 materialize = |bytes, text, start, end| {
 	if end > start {
-		text.concat(bytes.sublist({ start, len: end - start }))
+		text.append_sublist(bytes, { start, len: end - start })
 	} else {
 		text
 	}
@@ -1215,7 +1259,7 @@ build_with = |src, bytes, limits, r, context, first, on_start, on_text, on_end| 
 	var $context = context
 	var $frames = []
 	var $current = first
-	var $range = r.open.last() ?? { start: 0, end: 0 }
+	var $range = { start: r.start + 1, end: r.start + 1 + (r.open.last() ?? "").count_utf8_bytes() }
 	var $first_child = 0
 	var $nodes = []
 	var $elements = r.elements
@@ -1570,6 +1614,25 @@ parse_name = |src, bytes, start| {
 # The end of the name starting at `start`, without building it.
 name_end : List(U8), U64 -> Try(U64, [NotAName])
 name_end = |bytes, start| {
+	byte = bytes.get(start) ?? 0
+	if (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or byte == '_' or byte == ':' {
+		var $pos = start + 1
+		while $pos < bytes.len() and $pos - start < 16 {
+			part = bytes.get($pos) ?? 0
+			if (part >= 'a' and part <= 'z') or (part >= 'A' and part <= 'Z') or (part >= '0' and part <= '9') or part == '_' or part == ':' or part == '-' or part == '.' {
+				$pos = $pos + 1
+			} else if part < 0x80 {
+				return Ok($pos)
+			} else {
+				return name_end_general(bytes, start)
+			}
+		}
+		if ($pos < bytes.len()) name_end_general(bytes, start) else Ok($pos)
+	} else name_end_general(bytes, start)
+}
+
+name_end_general : List(U8), U64 -> Try(U64, [NotAName])
+name_end_general = |bytes, start| {
 	first = decode_scalar(bytes, start) ?? { code: 0, len: 0 }
 	if !is_name_start_char(first.code) {
 		return Err(NotAName)
@@ -2825,6 +2888,32 @@ chunk_step = |initial, bytes, end| {
 	}
 	while $index < bytes.len() {
 		byte = bytes.get($index) ?? 0
+		if $state.mode == Data and $state.buffer.is_empty() and !$state.reference and byte == '<' {
+			match chunk_direct_tag(bytes, $index, props.max_token_bytes, props.max_attributes) {
+				Start(tag) if !$state.closed and $state.open.len() < props.max_depth and $state.elements < props.max_elements and tag.pos - $index <= props.max_context_bytes - U64.min($state.context_bytes, props.max_context_bytes) => {
+					length = tag.pos - $index
+					at = chunk_at($state)
+					end_at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+					name = chunk_owned_text(tag.name)
+					empty = tag.empty
+					attributes = chunk_owned_attributes(tag.attributes)
+					return { state: { ..$state, open: $state.open.append({ name, retained_bytes: length }), context_bytes: $state.context_bytes + length, elements: $state.elements + 1, pending_end: empty, event_at: at, skip_text_lf: False, brackets: 0, offset: $state.offset + length, line: $state.line + end_at.line - 1, column: if (end_at.line == 1) $state.column + length else end_at.column, previous_cr: False }, consumed: $index + length, outcome: Item(Start({ name, attributes })) }
+				}
+				End(tag) => {
+					match $state.open.last() {
+						Ok(opened) if opened.name == tag.name => {
+							length = tag.pos - $index
+							at = chunk_at($state)
+							end_at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+							open = $state.open.drop_last(1)
+							return { state: { ..$state, open, context_bytes: $state.context_bytes - opened.retained_bytes, closed: open.is_empty(), event_at: at, skip_text_lf: False, brackets: 0, offset: $state.offset + length, line: $state.line + end_at.line - 1, column: if (end_at.line == 1) $state.column + length else end_at.column, previous_cr: False }, consumed: $index + length, outcome: Item(End(opened.name)) }
+						}
+						_ => {}
+					}
+				}
+				_ => {}
+			}
+		}
 		match chunk_bulk($state, bytes, $index) {
 			TextRun(len) | CDataRun(len) => {
 				cdata = $state.mode == CData
@@ -3347,3 +3436,205 @@ expect [
 		}
 	},
 )
+
+DirectTag : [Start(StartTag), End({ name : Str, pos : U64 }), Fallback]
+
+# Parse directly from the current bounded source. Only a complete successful
+# token takes this path; unfinished or malformed syntax keeps the incremental
+# framing path and its diagnostics.
+chunk_direct_tag : List(U8), U64, U64, U64 -> DirectTag
+chunk_direct_tag = |bytes, start, token_limit, attribute_limit| {
+	first = bytes.get(start + 1) ?? 0
+	if first == '!' or first == '?' or first == '\'' or first == '"' {
+		return Fallback
+	}
+	cap = start + U64.min(bytes.len() - start, token_limit)
+	bounded = bytes.take_first(cap)
+	if first == '/' {
+		name = parse_name("", bounded, start + 2) ?? return Fallback
+		close = skip_space(bounded, name.pos)
+		if bounded.get(close) != Ok('>') {
+			return Fallback
+		}
+		End({ name: name.val, pos: close + 1 })
+	} else {
+		match parse_start_tag("", bounded, start, attribute_limit) {
+			Ok(tag) => Start(tag)
+			Err(_) => Fallback
+		}
+	}
+}
+
+# Short names/values are already inline. A long emitted string must own its
+# bounded token bytes rather than retain the caller's entire source chunk.
+chunk_owned_text : Str -> Str
+chunk_owned_text = |text| if (text.count_utf8_bytes() > 11) text.release_excess_capacity() else text
+
+chunk_owned_attributes : List(Xml.Attribute) -> List(Xml.Attribute)
+chunk_owned_attributes = |attributes| {
+	if attributes.all(|attribute| attribute.name.count_utf8_bytes() <= 11 and attribute.value.count_utf8_bytes() <= 11) {
+		attributes
+	} else attributes.map(|attribute| { name: chunk_owned_text(attribute.name), value: chunk_owned_text(attribute.value) })
+}
+
+ChunkBatch : { decoder : Box(ChunkState), events : List(Xml.Event), index : U64 }
+
+chunk_batch_initial : Xml.StreamProps -> ChunkBatch
+chunk_batch_initial = |props| { decoder: Box.box(chunk_initial(props)), events: [], index: 0 }
+
+chunk_batch_step : ChunkBatch, List(U8), Streaming.InputEnd -> Streaming.Step(ChunkBatch, Xml.Event, Xml.StreamError)
+chunk_batch_step = |batch, bytes, end| {
+	if batch.index < batch.events.len() {
+		event = batch.events.get(batch.index) ?? Text("")
+		return { state: { ..batch, index: batch.index + 1 }, consumed: 0, outcome: Item(event) }
+	}
+	decoded = Box.unbox(batch.decoder)
+	var $empty = batch.events
+	while !$empty.is_empty() {
+		$empty = $empty.drop_last(1)
+	}
+	filled = chunk_fill(decoded, bytes, $empty)
+	if !filled.events.is_empty() {
+		first = filled.events.first() ?? Text("")
+		return { state: { decoder: Box.box(filled.state), events: filled.events, index: 1 }, consumed: filled.consumed, outcome: Item(first) }
+	}
+	next = chunk_step(filled.state, bytes, end)
+	{ state: { decoder: Box.box(next.state), events: filled.events, index: 0 }, consumed: next.consumed, outcome: next.outcome }
+}
+
+# Parse a small bounded event batch using scalar cursor fields, so common
+# complete tokens do not move the full decoder through a Step per event.
+# Anything unfinished, normalized or malformed uses the incremental decoder.
+chunk_fill : ChunkState, List(U8), List(Xml.Event) -> { state : ChunkState, consumed : U64, events : List(Xml.Event) }
+chunk_fill = |initial, bytes, empty| {
+	props = Box.unbox(initial.props)
+	if initial.done or initial.mode != Data or !initial.buffer.is_empty() or initial.reference or initial.utf8_left != 0 or initial.skip_text_lf or props.max_text_bytes < 4 {
+		return { state: initial, consumed: 0, events: empty }
+	}
+	var $open = initial.open
+	var $context_bytes = initial.context_bytes
+	var $elements = initial.elements
+	var $pending_end = initial.pending_end
+	var $closed = initial.closed
+	var $offset = initial.offset
+	var $line = initial.line
+	var $column = initial.column
+	var $previous_cr = initial.previous_cr
+	var $event_at = initial.event_at
+	var $piece_at = initial.piece_at
+	var $index = 0.U64
+	var $events = empty
+	while $events.len() < 8 {
+		if $pending_end {
+			opened = $open.last() ?? { name: "", retained_bytes: 0 }
+			$open = $open.drop_last(1)
+			$context_bytes = $context_bytes - opened.retained_bytes
+			$pending_end = False
+			$closed = $open.is_empty()
+			$events = $events.append(End(opened.name))
+		} else if $index >= bytes.len() {
+			break
+		} else if bytes.get($index) == Ok('<') {
+			match chunk_direct_tag(bytes, $index, props.max_token_bytes, props.max_attributes) {
+				Start(tag) if !$closed and $open.len() < props.max_depth and $elements < props.max_elements and tag.pos - $index <= props.max_context_bytes - U64.min($context_bytes, props.max_context_bytes) => {
+					length = tag.pos - $index
+					$event_at = { offset: $offset, line: $line, column: $column }
+					$piece_at = $event_at
+					at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+					name = chunk_owned_text(tag.name)
+					$pending_end = tag.empty
+					stop = tag.pos
+					attributes = chunk_owned_attributes(tag.attributes)
+					$open = $open.append({ name, retained_bytes: length })
+					$context_bytes = $context_bytes + length
+					$elements = $elements + 1
+					$offset = $offset + length
+					$line = $line + at.line - 1
+					$column = if (at.line == 1) $column + length else at.column
+					$previous_cr = False
+					$index = stop
+					$events = $events.append(Start({ name, attributes }))
+				}
+				End(tag) => {
+					match $open.last() {
+						Ok(opened) if opened.name == tag.name => {
+							length = tag.pos - $index
+							$event_at = { offset: $offset, line: $line, column: $column }
+							$piece_at = $event_at
+							at = locate(bytes.sublist({ start: $index, len: length }), length, "")
+							$open = $open.drop_last(1)
+							$context_bytes = $context_bytes - opened.retained_bytes
+							$closed = $open.is_empty()
+							$offset = $offset + length
+							$line = $line + at.line - 1
+							$column = if (at.line == 1) $column + length else at.column
+							$previous_cr = False
+							$index = tag.pos
+							$events = $events.append(End(opened.name))
+						}
+						_ => break
+					}
+				}
+				_ => break
+			}
+		} else if !$open.is_empty() and initial.brackets == 0 {
+			text = chunk_direct_text(bytes, $index, props.max_text_bytes, props.max_token_bytes) ?? break
+			length = text.pos - $index
+			part = bytes.sublist({ start: $index, len: length })
+			at = locate(part, length, "")
+			$event_at = { offset: $offset, line: $line, column: $column }
+			$piece_at = $event_at
+			$offset = $offset + length
+			$line = $line + at.line - 1 - (if ($previous_cr and part.first() == Ok('\n')) 1 else 0)
+			$column = if (at.line == 1) $column + length else at.column
+			$previous_cr = part.last() == Ok('\r')
+			$index = text.pos
+			$events = $events.append(Text(text.value))
+		} else {
+			break
+		}
+	}
+	{ state: { ..initial, open: $open, context_bytes: $context_bytes, elements: $elements, pending_end: $pending_end, closed: $closed, offset: $offset, line: $line, column: $column, previous_cr: $previous_cr, event_at: $event_at, piece_at: $piece_at }, consumed: $index, events: $events }
+}
+
+chunk_text_boundaries : Utf8.ByteClass
+chunk_text_boundaries = Utf8.ByteClass.from_bytes(['<', '&', '\r'])
+
+chunk_reference_boundary : Utf8.ByteClass
+chunk_reference_boundary = Utf8.ByteClass.from_bytes([';'])
+
+# Frame a complete text event before decoding it. Entity limits are checked
+# before semantic parsing can construct an error or normalized output.
+chunk_direct_text : List(U8), U64, U64, U64 -> Try({ value : Str, pos : U64 }, [Fallback])
+chunk_direct_text = |bytes, start, maximum, reference_limit| {
+	cap = start + U64.min(bytes.len() - start, maximum - 3)
+	bounded = bytes.take_first(cap)
+	var $index = start
+	var $rewritten = False
+	while $index < cap {
+		$index = Utf8.find_any(bounded, $index, chunk_text_boundaries)
+		if $index >= cap {
+			return Err(Fallback)
+		}
+		byte = bytes.get($index) ?? 0
+		if byte == '<' {
+			parsed = read_source_text("", bounded, start).map_err(|_| Fallback)?
+			if parsed.pos != $index {
+				return Err(Fallback)
+			}
+			return Ok({ value: if ($rewritten) parsed.val else chunk_owned_text(parsed.val), pos: parsed.pos })
+		} else if byte == '&' {
+			limit = $index + U64.min(cap - $index, reference_limit)
+			end = Utf8.find_any(bytes.take_first(limit), $index + 1, chunk_reference_boundary)
+			if end >= limit {
+				return Err(Fallback)
+			}
+			$index = end + 1
+			$rewritten = True
+		} else {
+			$index = $index + 1
+			$rewritten = True
+		}
+	}
+	Err(Fallback)
+}
