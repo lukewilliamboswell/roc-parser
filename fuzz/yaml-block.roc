@@ -230,7 +230,7 @@ show_result : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
 show_result = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

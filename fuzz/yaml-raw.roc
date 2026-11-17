@@ -64,9 +64,6 @@ check_location = |bytes, result| {
 			if error.line == 0 or error.column == 0 {
 				crash "YAML error locations must be one-based: ${show(result)}"
 			}
-			if error.message.is_empty() {
-				crash "YAML errors must explain the problem"
-			}
 			match lengths.get(error.line - 1) {
 				Err(_) => crash "error line ${error.line.to_str()} is past the last line (${lengths.len().to_str()}): ${show(result)}"
 				Ok(length) =>
@@ -98,7 +95,7 @@ check_document_start = |bytes, input, result| {
 		consistent =
 			match (result, marked) {
 				(Ok(plain), Ok(with_marker)) => Yaml.to_inspect(plain) == Yaml.to_inspect(with_marker)
-				(Err(InvalidYaml(plain)), Err(InvalidYaml(with_marker))) => plain.line + 1 == with_marker.line and plain.message == with_marker.message
+				(Err(InvalidYaml(plain)), Err(InvalidYaml(with_marker))) => plain.line + 1 == with_marker.line and plain.problem == with_marker.problem
 				_ => False
 			}
 		if !consistent {
@@ -111,7 +108,7 @@ show : Parsed -> Str
 show = |result| {
 	match result {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${error.message}"
+		Err(InvalidYaml(error)) => "error ${error.line.to_str()}:${error.column.to_str()} ${Str.inspect(error.problem)}"
 	}
 }
 

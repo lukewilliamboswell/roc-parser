@@ -49,9 +49,17 @@ Yaml := [
 	Mapping(List({ key : Str, value : Yaml })),
 ].{
 
-	## Location and explanation of invalid YAML input. Lines and columns are
-	## one-based; a column counts bytes from the start of its line.
-	Error : { line : U64, column : U64, message : Str }
+	## The value shape required by a type-directed decoder.
+	Expected : [StringValue, BooleanValue, TagName, SequenceValue, SequenceLength(U64), MappingKey, MappingValue, IntegerValue, NumberValue]
+	## The authored value shape, retaining scalar and key text.
+	Actual : [SequenceValue, MappingValue, MappingKey(Str), QuotedScalar(Str), PlainScalar(Str), NullValue]
+	## Numeric destination used when an authored value cannot fit.
+	NumericType : [U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, F32, F64, Dec]
+	## Syntax, supported-subset, limit, or decoding failure. Payloads retain
+	## authored values, offending bytes, and configured numeric limits.
+	Problem : [TypeMismatch({ expected : Expected, actual : Actual }), ExpectedNull, TagPayloadUnsupported, UnknownTag(Str), UnknownKey(Str), WrongSequenceLength({ expected : U64, actual : U64 }), UndecodableValue, LegacyBoolean(Str), ExpectedValue, TabIndentation, IndentedRoot, TrailingContent, UnexpectedEnd, InvalidCharacter(List(U8)), NestingTooDeep(U64), UnexpectedIndentation, DuplicateKey(Str), MultilinePlainScalarUnsupported, UnexpectedSequenceIndentation, InvalidBlockHeader, DuplicateChompingIndicator, DuplicateIndentIndicator, UnsupportedBlockHeader, OverindentedLeadingEmptyLines, BlockScalarPlacement, ReferencesUnsupported, DirectivesUnsupported, ComplexKeysUnsupported, InvalidScalarStart(U8), IndicatorBeforeWhitespace, UnexpectedMappingValue, IntegerOutOfRange({ value : Str, target : NumericType }), NumberOutOfRange({ value : Str, target : NumericType }), ExpectedFlowEntry, EmptyKey, InvalidKeyStart(U8), UnclosedQuote(U8), TrailingQuotedContent(U8), UndoubledQuote, InvalidEscape(Str), UnclosedEscape, InvalidHexEscape(U64), SurrogateEscape(U32), InvalidUnicodeEscape(U32), CollectionOnDocumentStart, MultipleDocumentsUnsupported, EmptyFlowItem, UnexpectedClosingBracket, UnexpectedClosingBrace, UnclosedFlowQuote, UnclosedNestedFlowCollection, UnclosedFlowCollection]
+	## One-based location; columns count UTF-8 bytes from the line start.
+	Error : { line : U64, column : U64, problem : Problem }
 
 	## Half-open byte interval in the original source. Offsets count UTF-8 bytes,
 	## not characters, and preserve CRLF without normalization.
@@ -202,7 +210,7 @@ Yaml := [
 
 			match parsed {
 				Ok(value) => Ok({ value, rest: [] })
-				Err(InvalidYaml(problem)) => Err(ParseError({ message: problem.message, offset: offset_of(bytes, problem.line, problem.column) }))
+				Err(InvalidYaml(problem)) => Err(ParseError({ message: Str.inspect(problem.problem), offset: offset_of(bytes, problem.line, problem.column) }))
 			}
 		},
 	)
@@ -434,9 +442,9 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	## Read a string: any quoted or block scalar, or a plain scalar other than null.
 	parse_str : Yaml.Format, Yaml.Cursor -> Try({ value : Str, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	parse_str = |_, cursor| {
-		scalar = take_scalar(cursor, "a string")?
+		scalar = take_scalar(cursor, StringValue)?
 		if scalar.plain and is_null_text(scalar.text) {
-			fail(scalar.line, scalar.column, "expected a string, found null")
+			fail(scalar.line, scalar.column, TypeMismatch({ expected: StringValue, actual: NullValue }))
 		} else {
 			Ok({ value: scalar.text, rest: advance_cursor(cursor, 1) })
 		}
@@ -445,71 +453,71 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	## Read a core-schema boolean such as `true` or `FALSE`.
 	parse_bool : Yaml.Format, Yaml.Cursor -> Try({ value : Bool, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	parse_bool = |_, cursor| {
-		scalar = take_scalar(cursor, "a boolean")?
+		scalar = take_scalar(cursor, BooleanValue)?
 		value =
 			if !scalar.plain {
-				return scalar_mismatch(scalar, "a boolean")
+				return scalar_mismatch(scalar, BooleanValue)
 			} else if is_true_text(scalar.text) {
 				True
 			} else if is_false_text(scalar.text) {
 				False
 			} else {
-				return scalar_mismatch(scalar, "a boolean")
+				return scalar_mismatch(scalar, BooleanValue)
 			}
 		Ok({ value, rest: advance_cursor(cursor, 1) })
 	}
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
+	parse_u8 = |_, cursor| decode_integer(cursor, U8, U8.from_str, U128.to_u8_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
+	parse_i8 = |_, cursor| decode_integer(cursor, I8, I8.from_str, U128.to_i8_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
+	parse_u16 = |_, cursor| decode_integer(cursor, U16, U16.from_str, U128.to_u16_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
+	parse_i16 = |_, cursor| decode_integer(cursor, I16, I16.from_str, U128.to_i16_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
+	parse_u32 = |_, cursor| decode_integer(cursor, U32, U32.from_str, U128.to_u32_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
+	parse_i32 = |_, cursor| decode_integer(cursor, I32, I32.from_str, U128.to_i32_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
+	parse_u64 = |_, cursor| decode_integer(cursor, U64, U64.from_str, U128.to_u64_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
+	parse_i64 = |_, cursor| decode_integer(cursor, I64, I64.from_str, U128.to_i64_try)
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_u128 : Yaml.Format, Yaml.Cursor -> Try({ value : U128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_u128 = |_, cursor| decode_integer(cursor, "U128", U128.from_str, |n| Ok(n))
+	parse_u128 = |_, cursor| decode_integer(cursor, U128, U128.from_str, |n| Ok(n))
 
 	## Read a core-schema integer (decimal, `0o` octal or `0x` hexadecimal) that fits the type.
 	parse_i128 : Yaml.Format, Yaml.Cursor -> Try({ value : I128, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_i128 = |_, cursor| decode_integer(cursor, "I128", I128.from_str, U128.to_i128_try)
+	parse_i128 = |_, cursor| decode_integer(cursor, I128, I128.from_str, U128.to_i128_try)
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
 	parse_dec : Yaml.Format, Yaml.Cursor -> Try({ value : Dec, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_dec = |_, cursor| decode_float(cursor, "Dec", Dec.from_str, |_| Err(NotFinite))
+	parse_dec = |_, cursor| decode_float(cursor, Dec, Dec.from_str, |_| Err(NotFinite))
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
 	parse_f32 : Yaml.Format, Yaml.Cursor -> Try({ value : F32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_f32 = |_, cursor| decode_float(cursor, "F32", F32.from_str, special_f32)
+	parse_f32 = |_, cursor| decode_float(cursor, F32, F32.from_str, special_f32)
 
 	## Read a core-schema integer or float; `.inf` and `.nan` only where the type has them.
 	parse_f64 : Yaml.Format, Yaml.Cursor -> Try({ value : F64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_f64 = |_, cursor| decode_float(cursor, "F64", F64.from_str, special_f64)
+	parse_f64 = |_, cursor| decode_float(cursor, F64, F64.from_str, special_f64)
 
 	## Succeeds only on a null, so a `Try(_, [Null])` field falls back to
 	## its value parser otherwise.
@@ -518,7 +526,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 		event = current_event(cursor)?
 		match event.kind {
 			Plain(text) if is_null_text(text) => Ok(advance_cursor(cursor, 1))
-			_ => fail(event.line, event.column, "expected null")
+			_ => fail(event.line, event.column, ExpectedNull)
 		}
 	}
 
@@ -529,7 +537,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	## Read a tag without payloads from a scalar holding its name.
 	parse_tag_union : Yaml.Format, Encoding.ParseTagUnionSpec(a, Yaml.Format, Yaml.Cursor, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]), Yaml.Cursor -> Try({ value : a, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	parse_tag_union = |format, spec, cursor| {
-		scalar = take_scalar(cursor, "a tag name")?
+		scalar = take_scalar(cursor, TagName)?
 		Encoding.ParseTagUnionSpec.parse(
 			spec,
 			{
@@ -540,11 +548,11 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 					if count == 0 {
 						Ok(state)
 					} else {
-						fail(scalar.line, scalar.column, "tags with payloads cannot be decoded from YAML")
+						fail(scalar.line, scalar.column, TagPayloadUnsupported)
 					},
 				next_payload: |state, _, _| Ok(state),
 				finish_payloads: |state, _| Ok(state),
-				missing: InvalidYaml({ line: scalar.line, column: scalar.column, message: "unexpected tag `${scalar.text}`" }),
+				missing: InvalidYaml({ line: scalar.line, column: scalar.column, problem: UnknownTag(scalar.text) }),
 			},
 		)
 	}
@@ -556,7 +564,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 		match event.kind {
 			SeqStart({ len, size: _ }) => Ok(Counted({ len, rest: advance_cursor(cursor, 1) }))
 			Plain(text) if is_null_text(text) => Ok(Counted({ len: 0, rest: advance_cursor(cursor, 1) }))
-			_ => mismatch(event, "a sequence")
+			_ => mismatch(event, SequenceValue)
 		}
 	}
 
@@ -574,8 +582,8 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 		event = current_event(cursor)?
 		match event.kind {
 			SeqStart({ len, size: _ }) if len == expected => Ok(advance_cursor(cursor, 1))
-			SeqStart({ len, size: _ }) => fail(event.line, event.column, "expected a sequence of ${expected.to_str()} items, found ${len.to_str()}")
-			_ => mismatch(event, "a sequence of ${expected.to_str()} items")
+			SeqStart({ len, size: _ }) => fail(event.line, event.column, WrongSequenceLength({ expected, actual: len }))
+			_ => mismatch(event, SequenceLength(expected))
 		}
 	}
 
@@ -608,7 +616,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 		event = current_event(cursor)?
 		match event.kind {
 			Key(name) => Ok(TryField({ name, rest: advance_cursor(cursor, 1) }))
-			_ => mismatch(event, "a mapping key")
+			_ => mismatch(event, MappingKey)
 		}
 	}
 
@@ -629,7 +637,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 						Key(text) => text
 						_ => ""
 					}
-				fail(key.line, key.column, "unknown key `${name}`")
+				fail(key.line, key.column, UnknownKey(name))
 			}
 		}
 	}
@@ -654,7 +662,7 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 	invalid_value : Yaml.Format, Yaml.Cursor -> [InvalidYaml(Yaml.Error), MissingRequiredField(Str)]
 	invalid_value = |_, cursor| {
 		event = cursor.events.get(cursor.pos) ?? { line: 1, column: 1, kind: Plain("") }
-		InvalidYaml({ line: event.line, column: event.column, message: "this value cannot be decoded into the requested type" })
+		InvalidYaml({ line: event.line, column: event.column, problem: UndecodableValue })
 	}
 
 	## Read a mapping key as a `Dict` key.
@@ -666,35 +674,35 @@ YamlFormat :: { keys : [SnakeCase, KebabCase, CamelCase], unknown_keys : [Skip, 
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_u8 : Yaml.Format, Yaml.Cursor -> Try({ value : U8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_u8 = |_, cursor| decode_integer(cursor, "U8", U8.from_str, U128.to_u8_try)
+	parse_key_u8 = |_, cursor| decode_integer(cursor, U8, U8.from_str, U128.to_u8_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_i8 : Yaml.Format, Yaml.Cursor -> Try({ value : I8, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_i8 = |_, cursor| decode_integer(cursor, "I8", I8.from_str, U128.to_i8_try)
+	parse_key_i8 = |_, cursor| decode_integer(cursor, I8, I8.from_str, U128.to_i8_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_u16 : Yaml.Format, Yaml.Cursor -> Try({ value : U16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_u16 = |_, cursor| decode_integer(cursor, "U16", U16.from_str, U128.to_u16_try)
+	parse_key_u16 = |_, cursor| decode_integer(cursor, U16, U16.from_str, U128.to_u16_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_i16 : Yaml.Format, Yaml.Cursor -> Try({ value : I16, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_i16 = |_, cursor| decode_integer(cursor, "I16", I16.from_str, U128.to_i16_try)
+	parse_key_i16 = |_, cursor| decode_integer(cursor, I16, I16.from_str, U128.to_i16_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_u32 : Yaml.Format, Yaml.Cursor -> Try({ value : U32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_u32 = |_, cursor| decode_integer(cursor, "U32", U32.from_str, U128.to_u32_try)
+	parse_key_u32 = |_, cursor| decode_integer(cursor, U32, U32.from_str, U128.to_u32_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_i32 : Yaml.Format, Yaml.Cursor -> Try({ value : I32, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_i32 = |_, cursor| decode_integer(cursor, "I32", I32.from_str, U128.to_i32_try)
+	parse_key_i32 = |_, cursor| decode_integer(cursor, I32, I32.from_str, U128.to_i32_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_u64 : Yaml.Format, Yaml.Cursor -> Try({ value : U64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_u64 = |_, cursor| decode_integer(cursor, "U64", U64.from_str, U128.to_u64_try)
+	parse_key_u64 = |_, cursor| decode_integer(cursor, U64, U64.from_str, U128.to_u64_try)
 
 	## Read a mapping key as a `Dict` key.
 	parse_key_i64 : Yaml.Format, Yaml.Cursor -> Try({ value : I64, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-	parse_key_i64 = |_, cursor| decode_integer(cursor, "I64", I64.from_str, U128.to_i64_try)
+	parse_key_i64 = |_, cursor| decode_integer(cursor, I64, I64.from_str, U128.to_i64_try)
 }
 
 YamlDecoded(a) := { value : a }.{
@@ -730,10 +738,10 @@ parse_tree = |input| {
 		Err(_) => Ok(null_node(1, 1))
 
 		Ok(first) if first.tab =>
-			fail(first.number, first.indent + 1, "tabs may not be used for YAML indentation")
+			fail(first.number, first.indent + 1, TabIndentation)
 
 		Ok(first) if first.indent != 0 =>
-			fail(first.number, 1, "the document root must not be indented")
+			fail(first.number, 1, IndentedRoot)
 
 		Ok(first) => {
 			parsed = parse_node(start, first.indent, 0, raw_lines)?
@@ -742,7 +750,7 @@ parse_tree = |input| {
 				Err(_) => Ok(parsed.node)
 
 				Ok(leftover) =>
-					fail(leftover.number, leftover.indent + 1, "unexpected content after the document root")
+					fail(leftover.number, leftover.indent + 1, TrailingContent)
 			}
 		}
 	}
@@ -816,7 +824,7 @@ decode_node = |parse_value, node| {
 }
 
 checked_error : Str, Yaml.Error -> [BadQuotedBytes(Str)]
-checked_error = |name, problem| Quotation.error({ name, format: "YAML", message: problem.message, line: problem.line, column: problem.column })
+checked_error = |name, problem| Quotation.error({ name, format: "YAML", message: Str.inspect(problem.problem), line: problem.line, column: problem.column })
 
 validation_tree : Str, Str, Yaml.Lints -> Try(Node, [BadQuotedBytes(Str)])
 validation_tree = |source, name, lints| {
@@ -833,7 +841,7 @@ check_legacy_booleans = |node, name| {
 		Plain(text) => {
 			lower = text.with_ascii_lowercased()
 			if lower == "yes" or lower == "no" or lower == "on" or lower == "off" {
-				return Err(checked_error(name, { line: node.line, column: node.column, message: "legacy_booleans: ${Str.inspect(text)} is text in YAML 1.2; use true/false for a boolean or quote the text" }))
+				return Err(checked_error(name, { line: node.line, column: node.column, problem: LegacyBoolean(text) }))
 			}
 		}
 		Quoted(_) => {}
@@ -858,7 +866,7 @@ current_event : Yaml.Cursor -> Try(Event, [InvalidYaml(Yaml.Error)])
 current_event = |cursor| {
 	match cursor.events.get(cursor.pos) {
 		Ok(event) => Ok(event)
-		Err(_) => fail(1, 1, "unexpected end of the YAML document")
+		Err(_) => fail(1, 1, UnexpectedEnd)
 	}
 }
 
@@ -877,13 +885,13 @@ mapping_start = |cursor| {
 	match event.kind {
 		MapStart({ len, size: _ }) => Ok(Counted({ len, rest: advance_cursor(cursor, 1) }))
 		Plain(text) if is_null_text(text) => Ok(Counted({ len: 0, rest: advance_cursor(cursor, 1) }))
-		_ => mismatch(event, "a mapping")
+		_ => mismatch(event, MappingValue)
 	}
 }
 
 Scalar : { text : Str, plain : Bool, line : U64, column : U64 }
 
-take_scalar : Yaml.Cursor, Str -> Try(Scalar, [InvalidYaml(Yaml.Error)])
+take_scalar : Yaml.Cursor, Yaml.Expected -> Try(Scalar, [InvalidYaml(Yaml.Error)])
 take_scalar = |cursor, expected| {
 	event = current_event(cursor)?
 	match event.kind {
@@ -899,25 +907,24 @@ take_key = |cursor| {
 	event = current_event(cursor)?
 	match event.kind {
 		Key(text) => Ok({ text, plain: True, line: event.line, column: event.column })
-		_ => mismatch(event, "a mapping key")
+		_ => mismatch(event, MappingKey)
 	}
 }
 
-mismatch : Event, Str -> Try(_, [InvalidYaml(Yaml.Error)])
+mismatch : Event, Yaml.Expected -> Try(_, [InvalidYaml(Yaml.Error)])
 mismatch = |event, expected| {
-	found =
-		match event.kind {
-			SeqStart(_) => "a sequence"
-			MapStart(_) => "a mapping"
-			Key(text) => "the key `${text}`"
-			Quoted(text) => "the string ${Str.inspect(text)}"
-			Plain(text) if is_null_text(text) => "null"
-			Plain(text) => "`${text}`"
-		}
-	fail(event.line, event.column, "expected ${expected}, found ${found}")
+	actual = match event.kind {
+		SeqStart(_) => SequenceValue
+		MapStart(_) => MappingValue
+		Key(text) => MappingKey(text)
+		Quoted(text) => QuotedScalar(text)
+		Plain(text) if is_null_text(text) => NullValue
+		Plain(text) => PlainScalar(text)
+	}
+	fail(event.line, event.column, TypeMismatch({ expected, actual }))
 }
 
-scalar_mismatch : Scalar, Str -> Try(_, [InvalidYaml(Yaml.Error)])
+scalar_mismatch : Scalar, Yaml.Expected -> Try(_, [InvalidYaml(Yaml.Error)])
 scalar_mismatch = |scalar, expected| {
 	kind = if (scalar.plain) Plain(scalar.text) else Quoted(scalar.text)
 	mismatch({ line: scalar.line, column: scalar.column, kind }, expected)
@@ -945,14 +952,14 @@ is_nan_text = YamlScalar.is_nan_text
 
 ## Read an integer scalar (or integer mapping key) with the core schema's
 ## decimal, `0o` octal and `0x` hexadecimal forms.
-decode_integer : Yaml.Cursor, Str, (Str -> Try(n, _from_str_err)), (U128 -> Try(n, _range_err)) -> Try({ value : n, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
+decode_integer : Yaml.Cursor, Yaml.NumericType, (Str -> Try(n, _from_str_err)), (U128 -> Try(n, _range_err)) -> Try({ value : n, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 decode_integer = |cursor, type_name, from_str, from_u128| {
 	event = current_event(cursor)?
 	scalar =
 		match event.kind {
 			Key(text) | Plain(text) => { text, plain: True, line: event.line, column: event.column }
 			Quoted(text) => { text, plain: False, line: event.line, column: event.column }
-			_ => return mismatch(event, "an integer")
+			_ => return mismatch(event, IntegerValue)
 		}
 	bytes = scalar.text.to_utf8()
 	parsed =
@@ -984,8 +991,8 @@ decode_integer = |cursor, type_name, from_str, from_u128| {
 
 	match parsed {
 		Ok(value) => Ok({ value, rest: advance_cursor(cursor, 1) })
-		Err(OutOfRange) => fail(scalar.line, scalar.column, "integer `${scalar.text}` is outside the range of ${type_name}")
-		Err(NotInteger) => scalar_mismatch(scalar, "an integer")
+		Err(OutOfRange) => fail(scalar.line, scalar.column, IntegerOutOfRange({ value: scalar.text, target: type_name }))
+		Err(NotInteger) => scalar_mismatch(scalar, IntegerValue)
 	}
 }
 
@@ -1011,9 +1018,9 @@ radix_u128 = |digits, radix| {
 
 ## Read a float scalar: any core-schema integer or float, plus `.inf` and
 ## `.nan` where the target type has them.
-decode_float : Yaml.Cursor, Str, (Str -> Try(n, _from_str_err)), ([Infinity, NegativeInfinity, NaN] -> Try(n, _special_err)) -> Try({ value : n, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
+decode_float : Yaml.Cursor, Yaml.NumericType, (Str -> Try(n, _from_str_err)), ([Infinity, NegativeInfinity, NaN] -> Try(n, _special_err)) -> Try({ value : n, rest : Yaml.Cursor }, [InvalidYaml(Yaml.Error)])
 decode_float = |cursor, type_name, from_str, special| {
-	scalar = take_scalar(cursor, "a number")?
+	scalar = take_scalar(cursor, NumberValue)?
 	bytes = scalar.text.to_utf8()
 	text = scalar.text
 	parsed =
@@ -1036,8 +1043,8 @@ decode_float = |cursor, type_name, from_str, special| {
 
 	match parsed {
 		Ok(value) => Ok({ value, rest: advance_cursor(cursor, 1) })
-		Err(OutOfRange) => fail(scalar.line, scalar.column, "number `${text}` cannot be represented as ${type_name}")
-		Err(NotNumber) => scalar_mismatch(scalar, "a number")
+		Err(OutOfRange) => fail(scalar.line, scalar.column, NumberOutOfRange({ value: text, target: type_name }))
+		Err(NotNumber) => scalar_mismatch(scalar, NumberValue)
 	}
 }
 
@@ -1156,7 +1163,7 @@ check_printable = |bytes| {
 		non_character = byte == 0xEF and next == 0xBF and (after == 0xBE or after == 0xBF)
 
 		if control or c1 or non_character {
-			$problem = Ok({ line: $line, column: $column })
+			$problem = Ok({ line: $line, column: $column, bytes: bytes.sublist({ start: $index, len: if (c1) 2 else if (non_character) 3 else 1 }) })
 		} else if byte == '\n' or (byte == '\r' and next != '\n') {
 			$line = $line + 1
 			$column = 1
@@ -1169,7 +1176,7 @@ check_printable = |bytes| {
 	}
 
 	match $problem {
-		Ok(location) => fail(location.line, location.column, "YAML does not allow this control or non-character code point")
+		Ok(location) => fail(location.line, location.column, InvalidCharacter(location.bytes))
 		Err(_) => Ok(bytes)
 	}
 }
@@ -1222,20 +1229,20 @@ ContentIndent : [PendingIndent, FixedIndent(U64)]
 
 BlockHeader : { style : BlockStyle, chomp : BlockChomp, indent : BlockIndent }
 
-nesting_message : Str
-nesting_message = "YAML nesting exceeds the supported limit of 100 levels"
+nesting_problem : Yaml.Problem
+nesting_problem = NestingTooDeep(100)
 
-tab_message : Str
-tab_message = "tabs may not be used for YAML indentation"
+tab_problem : Yaml.Problem
+tab_problem = TabIndentation
 
 parse_node : Input, U64, U64, List(Line) -> Try(NodeResult, [InvalidYaml(Yaml.Error)])
 parse_node = |input, indent, depth, raw_lines| {
 	match peek(input) {
-		Err(_) if depth >= 100 => fail(1, 1, nesting_message)
-		Ok(line) if depth >= 100 => fail(line.number, line.indent + 1, nesting_message)
-		Err(_) => fail(1, 1, "expected a YAML value")
-		Ok(first) if first.tab => fail(first.number, first.indent + 1, tab_message)
-		Ok(first) if first.indent != indent => fail(first.number, first.indent + 1, "unexpected indentation")
+		Err(_) if depth >= 100 => fail(1, 1, nesting_problem)
+		Ok(line) if depth >= 100 => fail(line.number, line.indent + 1, nesting_problem)
+		Err(_) => fail(1, 1, ExpectedValue)
+		Ok(first) if first.tab => fail(first.number, first.indent + 1, tab_problem)
+		Ok(first) if first.indent != indent => fail(first.number, first.indent + 1, UnexpectedIndentation)
 		Ok(first) if is_sequence_line(first.content) => parse_sequence(input, indent, depth, raw_lines)
 
 		Ok(first) => {
@@ -1281,7 +1288,7 @@ parse_mapping = |start, indent, depth, raw_lines| {
 						$seen.contains(key)
 					}
 				if duplicate {
-					return fail(line.number, key_column, "duplicate mapping key `${key}`")
+					return fail(line.number, key_column, DuplicateKey(key))
 				}
 
 				rest = advance($input)
@@ -1333,10 +1340,10 @@ mapping_line : Input, U64 -> Try([Stop, Entry({ line : Line, parts : MappingPart
 mapping_line = |input, indent| {
 	match peek(input) {
 		Err(_) => Ok(Stop)
-		Ok(line) if line.tab => fail(line.number, line.indent + 1, tab_message)
+		Ok(line) if line.tab => fail(line.number, line.indent + 1, tab_problem)
 		Ok(line) if line.indent < indent => Ok(Stop)
 		Ok(line) if line.indent > indent =>
-			fail(line.number, line.indent + 1, "unexpected indentation after a mapping value; multi-line plain scalars are not supported, so quote the value or use a block scalar (|)")
+			fail(line.number, line.indent + 1, MultilinePlainScalarUnsupported)
 
 		Ok(line) if is_sequence_line(line.content) => Ok(Stop)
 		Ok(line) =>
@@ -1377,7 +1384,7 @@ parse_sequence = |start, indent, depth, raw_lines| {
 
 				# A tab before a compact collection would be part of its indentation.
 				if compact and line.content.drop_first(1).take_first(payload_indent - line.indent).contains('\t') {
-					return fail(line.number, line.indent + 2, tab_message)
+					return fail(line.number, line.indent + 2, tab_problem)
 				}
 
 				parsed =
@@ -1410,9 +1417,9 @@ sequence_line : Input, U64 -> Try([Stop, Entry(Line)], [InvalidYaml(Yaml.Error)]
 sequence_line = |input, indent| {
 	match peek(input) {
 		Err(_) => Ok(Stop)
-		Ok(line) if line.tab => fail(line.number, line.indent + 1, tab_message)
+		Ok(line) if line.tab => fail(line.number, line.indent + 1, tab_problem)
 		Ok(line) if line.indent < indent => Ok(Stop)
-		Ok(line) if line.indent > indent => fail(line.number, line.indent + 1, "unexpected indentation after a sequence value")
+		Ok(line) if line.indent > indent => fail(line.number, line.indent + 1, UnexpectedSequenceIndentation)
 		Ok(line) if !is_sequence_line(line.content) => Ok(Stop)
 		Ok(line) => Ok(Entry(line))
 	}
@@ -1454,7 +1461,7 @@ parse_block_header = |raw, line, column| {
 		['>', .. as rest] =>
 			parse_block_header_options(rest, { style: FoldedBlock, chomp: ClipChomp, indent: AutoIndent }, line, column)
 
-		_ => fail(line, column, "invalid block scalar header")
+		_ => fail(line, column, InvalidBlockHeader)
 	}
 }
 
@@ -1473,7 +1480,7 @@ parse_block_header_options = |bytes, header, line, column| {
 						column,
 					)
 
-				_ => fail(line, column, "duplicate block scalar chomping indicator")
+				_ => fail(line, column, DuplicateChompingIndicator)
 			}
 		}
 
@@ -1487,7 +1494,7 @@ parse_block_header_options = |bytes, header, line, column| {
 						column,
 					)
 
-				_ => fail(line, column, "duplicate block scalar chomping indicator")
+				_ => fail(line, column, DuplicateChompingIndicator)
 			}
 		}
 
@@ -1498,11 +1505,11 @@ parse_block_header_options = |bytes, header, line, column| {
 					parse_block_header_options(rest, { style: header.style, chomp: header.chomp, indent: ExplicitIndent(indent) }, line, column)
 				}
 
-				ExplicitIndent(_) => fail(line, column, "duplicate block scalar indentation indicator")
+				ExplicitIndent(_) => fail(line, column, DuplicateIndentIndicator)
 			}
 		}
 
-		_ => fail(line, column, "unsupported block scalar header")
+		_ => fail(line, column, UnsupportedBlockHeader)
 	}
 }
 
@@ -1577,7 +1584,7 @@ collect_block_lines = |raw_lines, start, min_indent, block_indent, header_line| 
 				} else if spaces < min_indent or is_document_marker(line.content) {
 					if white_only {
 						# Only a tab can follow; it would be indentation.
-						return fail(line.number, spaces + 1, "tabs may not be used for YAML indentation")
+						return fail(line.number, spaces + 1, TabIndentation)
 					}
 
 					$done = True
@@ -1610,7 +1617,7 @@ collect_block_lines = |raw_lines, start, min_indent, block_indent, header_line| 
 
 	match $content_indent {
 		FixedIndent(width) if $leading_spaces > width and block_indent == AutoIndent =>
-			fail($leading_line, width + 1, "leading empty lines of a block scalar must not be indented more than its content")
+			fail($leading_line, width + 1, OverindentedLeadingEmptyLines)
 
 		_ => Ok({ lines: $lines, consumed_through: $consumed_through, terminated: $terminated })
 	}
@@ -1733,29 +1740,29 @@ parse_inline_value = |raw, line, column, depth| {
 	match bytes {
 		[] => Ok(null_node(line, column))
 
-		['[', ..] | ['{', ..] if depth >= 100 => fail(line, column, nesting_message)
+		['[', ..] | ['{', ..] if depth >= 100 => fail(line, column, nesting_problem)
 
 		['[', ..] => parse_flow_sequence(bytes, line, column, depth)
 
 		['{', ..] => parse_flow_mapping(bytes, line, column, depth)
 
 		['|', ..] | ['>', ..] =>
-			fail(line, column, "block scalars are only supported as standalone mapping or sequence values")
+			fail(line, column, BlockScalarPlacement)
 
 		['&', ..] | ['*', ..] | ['!', ..] =>
-			fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
+			fail(line, column, ReferencesUnsupported)
 
 		['%', ..] =>
-			fail(line, column, "YAML directives are not supported by this YAML subset")
+			fail(line, column, DirectivesUnsupported)
 
 		['?'] | ['?', ' ', ..] | ['?', '\t', ..] =>
-			fail(line, column, "complex mapping keys are not supported by this YAML subset")
+			fail(line, column, ComplexKeysUnsupported)
 
 		[first, ..] if first == ']' or first == '}' or first == ',' or first == '@' or first == '`' =>
-			fail(line, column, "a plain scalar cannot start with `${bytes_to_str([first])}`")
+			fail(line, column, InvalidScalarStart(first))
 
 		['-'] | ['-', ' ', ..] | ['-', '\t', ..] | [':'] | [':', ' ', ..] | [':', '\t', ..] =>
-			fail(line, column, "a plain scalar cannot start with an indicator followed by white space")
+			fail(line, column, IndicatorBeforeWhitespace)
 
 		['"', ..] =>
 			parse_double_quoted(bytes, line, column).map_ok(|text| Node.{ line, column, kind: Quoted(text) })
@@ -1764,7 +1771,7 @@ parse_inline_value = |raw, line, column, depth| {
 			parse_single_quoted(bytes, line, column).map_ok(|text| Node.{ line, column, kind: Quoted(text) })
 
 		_ if contains_mapping_indicator(bytes) =>
-			fail(line, column, "a mapping value is not allowed here; quote the scalar if it contains \": \"")
+			fail(line, column, UnexpectedMappingValue)
 
 		_ => Ok(Node.{ line, column, kind: Plain(bytes_to_str(bytes)) })
 	}
@@ -1808,7 +1815,7 @@ resolve_plain = |text, line, column| {
 	} else if is_decimal_integer(bytes) {
 		match I64.from_str(text) {
 			Ok(value) => Ok(Int(value))
-			Err(_) => fail(line, column, "integer `${text}` is outside the supported I64 range")
+			Err(_) => fail(line, column, IntegerOutOfRange({ value: text, target: I64 }))
 		}
 	} else {
 		match bytes {
@@ -1875,7 +1882,7 @@ radix_integer = |digits, radix, text, line, column| {
 
 	match value {
 		Ok(total) => Ok(Int(U64.to_i64_wrap(total)))
-		Err(_) => fail(line, column, "integer `${text}` is outside the supported I64 range")
+		Err(_) => fail(line, column, IntegerOutOfRange({ value: text, target: I64 }))
 	}
 }
 
@@ -1908,7 +1915,7 @@ parse_flow_mapping = |bytes, line, column, depth| {
 		split =
 			match split_mapping_entry(trim_spaces(part)) {
 				Ok(found) => found
-				Err(_) => return fail(line, column, "expected a key and value in flow mapping")
+				Err(_) => return fail(line, column, ExpectedFlowEntry)
 			}
 		key = parse_key(split.key, line, column)?
 
@@ -1919,7 +1926,7 @@ parse_flow_mapping = |bytes, line, column, depth| {
 				$seen.contains(key)
 			}
 		if duplicate {
-			return fail(line, column, "duplicate mapping key `${key}`")
+			return fail(line, column, DuplicateKey(key))
 		}
 
 		value = parse_inline_value(split.value, line, column, depth + 1)?
@@ -1942,15 +1949,15 @@ parse_key = |raw, line, column| {
 	bytes = trim_spaces(raw)
 
 	match bytes {
-		[] => fail(line, column, "mapping keys must not be empty")
+		[] => fail(line, column, EmptyKey)
 		['"', ..] => parse_double_quoted(bytes, line, column)
 		['\'', ..] => parse_single_quoted(bytes, line, column)
-		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, "complex mapping keys are not supported by this YAML subset")
-		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, "anchors, aliases, and tags are not supported by this YAML subset")
+		['[', ..] | ['{', ..] | ['?'] | ['?', ' ', ..] | ['?', '\t', ..] => fail(line, column, ComplexKeysUnsupported)
+		['&', ..] | ['*', ..] | ['!', ..] => fail(line, column, ReferencesUnsupported)
 		# Like a value, and like a first line before any `---`, `%` reads as a directive.
-		['%', ..] => fail(line, column, "YAML directives are not supported by this YAML subset")
+		['%', ..] => fail(line, column, DirectivesUnsupported)
 		[first, ..] if first == '|' or first == '>' or first == '@' or first == '`' or first == ']' or first == '}' or first == ',' =>
-			fail(line, column, "a plain mapping key cannot start with `${bytes_to_str([first])}`")
+			fail(line, column, InvalidKeyStart(first))
 		_ => Ok(bytes_to_str(bytes))
 	}
 }
@@ -1995,11 +2002,9 @@ quoted_inner = |bytes, quote, line, column| {
 		}
 	}
 
-	kind = if (quote == '"') "double" else "single"
-
 	match $close {
-		Err(_) => fail(line, column, "unterminated ${kind}-quoted string")
-		Ok(close) if close + 1 != bytes.len() => fail(line, column, "unexpected text after the closing quote of a ${kind}-quoted string")
+		Err(_) => fail(line, column, UnclosedQuote(quote))
+		Ok(close) if close + 1 != bytes.len() => fail(line, column, TrailingQuotedContent(quote))
 		Ok(close) => Ok(bytes.sublist({ start: 1, len: close - 1 }))
 	}
 }
@@ -2009,7 +2014,7 @@ unescape_single = |bytes, out, line, column| {
 	match bytes {
 		[] => Ok(out)
 		['\'', '\'', .. as rest] => unescape_single(rest, out.append('\''), line, column)
-		['\'', ..] => fail(line, column, "a single quote inside a quoted string must be doubled")
+		['\'', ..] => fail(line, column, UndoubledQuote)
 		[first, .. as rest] => unescape_single(rest, out.append(first), line, column)
 	}
 }
@@ -2042,7 +2047,7 @@ unescape_double = |bytes, out, line, column| {
 						}
 
 					if digits == 0 {
-						fail(line, column, "unsupported escape sequence `\\${escaped_character(bytes.drop_first(1))}`")
+						fail(line, column, InvalidEscape(escaped_character(bytes.drop_first(1))))
 					} else {
 						encoded = encode_code_point(rest.sublist({ start: 0, len: digits }), digits, line, column)?
 						unescape_double(rest.drop_first(digits), append_bytes(out, encoded), line, column)
@@ -2051,7 +2056,7 @@ unescape_double = |bytes, out, line, column| {
 			}
 		}
 
-		['\\'] => fail(line, column, "unterminated escape sequence")
+		['\\'] => fail(line, column, UnclosedEscape)
 		[first, .. as rest] => unescape_double(rest, out.append(first), line, column)
 	}
 }
@@ -2098,12 +2103,12 @@ escaped_character = |bytes| {
 encode_code_point : Utf8.Bytes, U64, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 encode_code_point = |hex, digits, line, column| {
 	if hex.len() != digits {
-		fail(line, column, "escape sequence needs ${digits.to_str()} hexadecimal digits")
+		fail(line, column, InvalidHexEscape(digits))
 	} else {
 		match parse_hex(hex, 0) {
-			Err(_) => fail(line, column, "escape sequence needs ${digits.to_str()} hexadecimal digits")
-			Ok(code) if code >= 0xD800 and code <= 0xDFFF => fail(line, column, "escape sequence is a UTF-16 surrogate, not a character")
-			Ok(code) if code > 0x10FFFF => fail(line, column, "escape sequence is beyond the last Unicode character")
+			Err(_) => fail(line, column, InvalidHexEscape(digits))
+			Ok(code) if code >= 0xD800 and code <= 0xDFFF => fail(line, column, SurrogateEscape(code))
+			Ok(code) if code > 0x10FFFF => fail(line, column, InvalidUnicodeEscape(code))
 			Ok(code) => Ok(utf8_encode(code))
 		}
 	}
@@ -2150,7 +2155,7 @@ prepare_lines = |raw_lines| {
 	without_start =
 		match clean {
 			[first, ..] if first.indent == 0 and first.content.first() == Ok('%') =>
-				return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
+				return fail(first.number, 1, DirectivesUnsupported)
 
 			[first, .. as rest] if first.indent == 0 and first.content == "---".to_utf8() => rest
 			[first, .. as rest] if first.indent == 0 and is_document_marker(first.content) and Str.starts_with(bytes_to_str(first.content), "---") => {
@@ -2158,7 +2163,7 @@ prepare_lines = |raw_lines| {
 				node = trim_spaces(first.content.drop_first(3))
 				column = first.content.len() - node.len() + 1
 				if is_sequence_line(node) or split_mapping_entry(node).is_ok() {
-					return fail(first.number, column, "a block collection cannot start on the document start line")
+					return fail(first.number, column, CollectionOnDocumentStart)
 				}
 				List.prepend(rest, { content: node, indent: 0, number: first.number, terminated: first.terminated, tab: False })
 			}
@@ -2170,7 +2175,7 @@ prepare_lines = |raw_lines| {
 	# same way, before any later document markers.
 	match without_start {
 		[first, ..] if first.indent == 0 and first.content.first() == Ok('%') =>
-			return fail(first.number, 1, "YAML directives are not supported by this YAML subset")
+			return fail(first.number, 1, DirectivesUnsupported)
 
 		_ => {}
 	}
@@ -2206,12 +2211,12 @@ remove_document_end = |lines, out| {
 		[line, .. as rest] if line.indent == 0 and line.content == "...".to_utf8() => {
 			match rest {
 				[] => Ok(out)
-				[next, ..] => fail(next.number, next.indent + 1, "multiple YAML documents are not supported")
+				[next, ..] => fail(next.number, next.indent + 1, MultipleDocumentsUnsupported)
 			}
 		}
 
 		[line, ..] if line.indent == 0 and line.content == "---".to_utf8() =>
-			fail(line.number, 1, "multiple YAML documents are not supported")
+			fail(line.number, 1, MultipleDocumentsUnsupported)
 
 		[line, .. as rest] => remove_document_end(rest, out.append(line))
 	}
@@ -2412,7 +2417,7 @@ split_flow_items = |bytes, line, column| {
 		if byte == ',' and $quote == NoQuote and $square_depth == 0 and $curly_depth == 0 {
 			item = trim_spaces(bytes.sublist({ start: $start, len: $index - $start }))
 			if item.is_empty() {
-				return fail(line, column, "flow collections may not contain an empty item")
+				return fail(line, column, EmptyFlowItem)
 			}
 			$items = $items.append(item)
 			$index = $index + 1
@@ -2438,7 +2443,7 @@ split_flow_items = |bytes, line, column| {
 			$square_depth = $square_depth + 1
 			$index = $index + 1
 		} else if byte == ']' and $quote == NoQuote and $square_depth == 0 {
-			return fail(line, column, "unexpected closing bracket in flow collection")
+			return fail(line, column, UnexpectedClosingBracket)
 		} else if byte == ']' and $quote == NoQuote {
 			$square_depth = $square_depth - 1
 			$index = $index + 1
@@ -2446,7 +2451,7 @@ split_flow_items = |bytes, line, column| {
 			$curly_depth = $curly_depth + 1
 			$index = $index + 1
 		} else if byte == '}' and $quote == NoQuote and $curly_depth == 0 {
-			return fail(line, column, "unexpected closing brace in flow collection")
+			return fail(line, column, UnexpectedClosingBrace)
 		} else if byte == '}' and $quote == NoQuote {
 			$curly_depth = $curly_depth - 1
 			$index = $index + 1
@@ -2456,11 +2461,11 @@ split_flow_items = |bytes, line, column| {
 	}
 	last = trim_spaces(bytes.sublist({ start: $start, len: bytes.len() - $start }))
 	if $quote != NoQuote {
-		fail(line, column, "unterminated quoted string in flow collection")
+		fail(line, column, UnclosedFlowQuote)
 	} else if $square_depth != 0 or $curly_depth != 0 {
-		fail(line, column, "unterminated nested flow collection")
+		fail(line, column, UnclosedNestedFlowCollection)
 	} else if last.is_empty() {
-		fail(line, column, "flow collections may not contain an empty item")
+		fail(line, column, EmptyFlowItem)
 	} else {
 		Ok($items.append(last))
 	}
@@ -2469,7 +2474,7 @@ split_flow_items = |bytes, line, column| {
 unwrap_flow : Utf8.Bytes, U8, U8, U64, U64 -> Try(Utf8.Bytes, [InvalidYaml(Yaml.Error)])
 unwrap_flow = |bytes, open, close, line, column| {
 	if bytes.len() < 2 or bytes.get(0) != Ok(open) or bytes.get(bytes.len() - 1) != Ok(close) {
-		fail(line, column, "unterminated flow collection")
+		fail(line, column, UnclosedFlowCollection)
 	} else {
 		Ok(bytes.sublist({ start: 1, len: bytes.len() - 2 }))
 	}
@@ -2535,14 +2540,14 @@ trim_end_spaces = |bytes| {
 append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 append_bytes = |left, right| left.concat(right)
 
-fail : U64, U64, Str -> Try(_, [InvalidYaml(Yaml.Error)])
-fail = |line, column, message| Err(InvalidYaml({ line, column, message }))
+fail : U64, U64, Yaml.Problem -> Try(_, [InvalidYaml(Yaml.Error)])
+fail = |line, column, problem| Err(InvalidYaml({ line, column, problem }))
 
-when_error : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Str
+when_error : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Try(Yaml.Problem, [NoError])
 when_error = |result| {
 	match result {
-		Ok(_) => ""
-		Err(InvalidYaml(error)) => error.message
+		Ok(_) => Err(NoError)
+		Err(InvalidYaml(error)) => Ok(error.problem)
 	}
 }
 
@@ -2797,14 +2802,14 @@ expect {
 	trailing = Yaml.parse_str("v: \"a\" x")
 	single = Yaml.parse_str("v: 'it''s'")?
 	message = |result| when_error(result)
-	stray.is_err() and message(trailing) == "unexpected text after the closing quote of a double-quoted string" and single == Mapping([{ key: "v", value: Text("it's") }])
+	stray.is_err() and message(trailing) == Ok(TrailingQuotedContent('"')) and single == Mapping([{ key: "v", value: Text("it's") }])
 }
 
 # Errors name the unsupported feature rather than a symptom.
 expect {
 	directive = when_error(Yaml.parse_str("%YAML 1.2\n---\na: 1\n"))
 	continued = when_error(Yaml.parse_str("a: one\n  two\n"))
-	directive == "YAML directives are not supported by this YAML subset" and Str.contains(continued, "multi-line plain scalars")
+	directive == Ok(DirectivesUnsupported) and continued == Ok(MultilinePlainScalarUnsupported)
 }
 
 # Syntax errors report their source location.
@@ -2848,7 +2853,7 @@ expect {
 # Unsupported escapes before a multi-byte character fail instead of crashing.
 expect {
 	match Yaml.parse_str("v: \"\\é\"") {
-		Err(InvalidYaml({ message, .. })) => message == "unsupported escape sequence `\\é`"
+		Err(InvalidYaml({ problem, .. })) => problem == InvalidEscape("é")
 		_ => False
 	}
 }
@@ -3117,32 +3122,32 @@ expect {
 expect {
 	result : Try({ e : I8 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	result = Yaml.decode("e: -0o0\n")
-	result == Err(InvalidYaml({ line: 1, column: 4, message: "expected an integer, found `-0o0`" }))
+	result == Err(InvalidYaml({ line: 1, column: 4, problem: TypeMismatch({ expected: IntegerValue, actual: PlainScalar("-0o0") }) }))
 }
 
 # Type mismatches report the value's location.
 expect {
 	result : Try({ port : U16 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	result = Yaml.decode("port: \"80\"\n")
-	result == Err(InvalidYaml({ line: 1, column: 7, message: "expected an integer, found the string \"80\"" }))
+	result == Err(InvalidYaml({ line: 1, column: 7, problem: TypeMismatch({ expected: IntegerValue, actual: QuotedScalar("80") }) }))
 }
 
 expect {
 	result : Try({ port : U8 }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	result = Yaml.decode("port: 300\n")
-	result == Err(InvalidYaml({ line: 1, column: 7, message: "integer `300` is outside the range of U8" }))
+	result == Err(InvalidYaml({ line: 1, column: 7, problem: IntegerOutOfRange({ value: "300", target: U8 }) }))
 }
 
 expect {
 	result : Try({ name : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	result = Yaml.decode("name:\n")
-	result == Err(InvalidYaml({ line: 1, column: 6, message: "expected a string, found null" }))
+	result == Err(InvalidYaml({ line: 1, column: 6, problem: TypeMismatch({ expected: StringValue, actual: NullValue }) }))
 }
 
 expect {
 	result : Try({ tags : List(Str) }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	result = Yaml.decode("tags:\n  a: b\n")
-	result == Err(InvalidYaml({ line: 2, column: 3, message: "expected a sequence, found a mapping" }))
+	result == Err(InvalidYaml({ line: 2, column: 3, problem: TypeMismatch({ expected: SequenceValue, actual: MappingValue }) }))
 }
 
 # A missing required field comes from the compiler-generated parser.
@@ -3167,7 +3172,7 @@ expect {
 	result = Yaml.decode("a:\n  x: [1, {y: 2}]\n  z:\n    - 3\nb: kept\n")
 	strict : Try({ b : Str }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	strict = Yaml.decoder({ keys: SnakeCase, unknown_keys: Reject })("b: kept\nc: 1\n")
-	result == Ok({ b: "kept" }) and strict == Err(InvalidYaml({ line: 2, column: 1, message: "unknown key `c`" }))
+	result == Ok({ b: "kept" }) and strict == Err(InvalidYaml({ line: 2, column: 1, problem: UnknownKey("c") }))
 }
 
 # Keys may be camelCase.
@@ -3188,9 +3193,9 @@ expect {
 	codes : Try(Dict(U16, Str), [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	codes = Yaml.decode("200: ok\n404: missing\n")
 	checks = [
-		short == Err(InvalidYaml({ line: 1, column: 4, message: "expected a sequence of 2 items, found 1" })),
+		short == Err(InvalidYaml({ line: 1, column: 4, problem: WrongSequenceLength({ expected: 2, actual: 1 }) })),
 		level == Ok({ level: Info }),
-		bad == Err(InvalidYaml({ line: 1, column: 8, message: "unexpected tag `Loud`" })),
+		bad == Err(InvalidYaml({ line: 1, column: 8, problem: UnknownTag("Loud") })),
 		codes == Ok(Dict.empty().insert(200, "ok").insert(404, "missing")),
 	]
 	checks.all(|ok| ok)
@@ -3216,7 +3221,7 @@ expect {
 	result = Yaml.decode("a: -.inf\nb: 1e3\n")
 	dec : Try({ a : Dec }, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
 	dec = Yaml.decode("a: .inf\n")
-	(result == Ok({ a: -F64.infinity, b: 1000.0 })) and (dec == Err(InvalidYaml({ line: 1, column: 4, message: "number `.inf` cannot be represented as Dec" })))
+	(result == Ok({ a: -F64.infinity, b: 1000.0 })) and (dec == Err(InvalidYaml({ line: 1, column: 4, problem: NumberOutOfRange({ value: ".inf", target: Dec }) })))
 }
 
 # A key starting with % is reported as a directive, with or without a leading --- (fuzz: yaml-raw).
@@ -3691,7 +3696,7 @@ expect {
 }
 
 expect {
-	Yaml.validate({ source: "mode: ON", name: "config.yaml" }) == Err(BadQuotedBytes("config.yaml:1:7: YAML: legacy_booleans: \"ON\" is text in YAML 1.2; use true/false for a boolean or quote the text"))
+	Yaml.validate({ source: "mode: ON", name: "config.yaml" }) == Err(BadQuotedBytes("config.yaml:1:7: YAML: LegacyBoolean(\"ON\")"))
 }
 
 expect Yaml.validate({ source: "" }) == Ok(Null)
@@ -3707,7 +3712,7 @@ expect {
 
 expect {
 	match Yaml.validate({ source: "mode: yes\nbroken: [", name: "bad.yaml" }) {
-		Err(BadQuotedBytes(message)) => message.starts_with("bad.yaml:2:") and !message.contains("legacy_booleans")
+		Err(BadQuotedBytes(message)) => message.starts_with("bad.yaml:2:") and !message.contains("LegacyBoolean")
 		Ok(_) => False
 	}
 }

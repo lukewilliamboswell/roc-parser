@@ -18,7 +18,7 @@ main! = |_| {
 			match Yaml.parse_str(input) {
 				Ok(value) => Stdout.line!("{\"status\":\"ok\",\"value\":${encode(value)}}")?
 				Err(InvalidYaml(error)) =>
-					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(error.message)}}")?
+					Stdout.line!("{\"status\":\"error\",\"line\":${error.line.to_str()},\"column\":${error.column.to_str()},\"message\":${json_string(Str.inspect(error.problem))}}")?
 			}
 		}
 	}

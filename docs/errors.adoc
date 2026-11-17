@@ -37,7 +37,7 @@ format has. Combinator runners report the furthest failure.
 preserve source failures and expose recoverable record diagnostics; see <<streaming>>.
 
 |`Yaml.parse_str`, `Yaml.decode`
-|`InvalidYaml({ line, column, message })`
+|`InvalidYaml({ line, column, problem })`
 |Where the problem is and what it is. Columns count bytes.
 
 |`Xml.parse_str`
@@ -97,7 +97,7 @@ For the inputs `"name: demo\nport: [8080\n"`,
 
 [source,text]
 ----
-config.yaml:2:7: unterminated flow collection
+config.yaml:2:7: UnclosedFlowCollection
 feed.xml:2:10: end tag </feed> does not match start tag <entry>
 package.json:2:15: trailing comma is not allowed
 ----

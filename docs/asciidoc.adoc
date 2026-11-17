@@ -73,8 +73,9 @@ with `AsciiDoc.attributes`; the original snapshot remains unchanged.
 
 Input is bounded to 256 KiB, expanded input to 1 MiB and structural nesting to
 64 levels. Virtual includes default to a maximum depth of 16. Invalid input or
-resource-limit failures return a message, one-based line and zero-based UTF-8
-byte offset. An initial UTF-8 byte order mark is ignored.
+resource-limit failures return an `AsciiDoc.Problem` tag, one-based line and
+zero-based UTF-8 byte offset. Include failures retain their source paths; limit
+failures retain the configured maximum. An initial UTF-8 byte order mark is ignored.
 
 [source,roc]
 ----

@@ -16,8 +16,8 @@ yaml_message : Str, Str -> Str
 yaml_message = |file_name, source| {
 	match Yaml.parse_str(source) {
 		Ok(_) => "${file_name}: ok"
-		Err(InvalidYaml({ line, column, message })) =>
-			"${file_name}:${line.to_str()}:${column.to_str()}: ${message}"
+		Err(InvalidYaml({ line, column, problem })) =>
+			"${file_name}:${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 

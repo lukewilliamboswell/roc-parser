@@ -7,14 +7,14 @@ Mapping([{ key: "literal", value: Text("line one\nline two\n") }, { key: "folded
 Mapping([{ key: "steps", value: Sequence([Mapping([{ key: "run", value: Text("build") }, { key: "name", value: Text("compile") }]), Sequence([Text("nested"), Text("compact")])]) }])
 Mapping([{ key: "single", value: Text("it's # not a comment") }, { key: "plain", value: Text("text") }])
 Mapping([{ key: "double", value: Text("tab\there, é, A") }])
-line 2, column 1: tabs may not be used for YAML indentation
-line 1, column 7: anchors, aliases, and tags are not supported by this YAML subset
-line 2, column 1: multiple YAML documents are not supported
-line 2, column 1: duplicate mapping key `name`
-line 1, column 7: unterminated flow collection
+line 2, column 1: TabIndentation
+line 1, column 7: ReferencesUnsupported
+line 2, column 1: MultipleDocumentsUnsupported
+line 2, column 1: DuplicateKey("name")
+line 1, column 7: UnclosedFlowCollection
 Mapping([{ key: "1", value: Text("one") }, { key: "01", value: Text("zero-one") }])
 Ok("Ada")
 Err(Missing)
-Err(InvalidYaml({ column: 11, line: 2, message: "integer `300` is outside the range of U8" }))
-Err(InvalidYaml({ column: 8, line: 3, message: "expected a boolean, found `no`" }))
+Err(InvalidYaml({ column: 11, line: 2, problem: IntegerOutOfRange({ target: U8, value: "300" }) }))
+Err(InvalidYaml({ column: 8, line: 3, problem: TypeMismatch({ actual: PlainScalar("no"), expected: BooleanValue }) }))
 Err(MissingRequiredField("owners"))

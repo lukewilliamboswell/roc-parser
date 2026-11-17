@@ -86,7 +86,7 @@ report : Str -> Str
 report = |text| {
 	match Yaml.parse_str(text) {
 		Ok(value) => Yaml.to_inspect(value)
-		Err(InvalidYaml({ line, column, message })) => "line ${line.to_str()}, column ${column.to_str()}: ${message}"
+		Err(InvalidYaml({ line, column, problem })) => "line ${line.to_str()}, column ${column.to_str()}: ${Str.inspect(problem)}"
 	}
 }
 
