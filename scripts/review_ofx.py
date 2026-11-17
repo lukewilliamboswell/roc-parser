@@ -7,7 +7,7 @@ only its represented banking fields and Decimal numeric equality.
 """
 from __future__ import annotations
 import argparse
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import html
 import io
@@ -20,9 +20,16 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
+try:
+    from _oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+except ModuleNotFoundError:
+    from scripts._oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / '.roc-parser-tmp' / 'ofx-review'
 DATA = ROOT / 'scripts' / 'ofx'
+
+ORACLE_CACHE = OracleCache(ROOT / ".roc-parser-tmp/oracle-cache")
 
 
 def normalize_tree(root: ET.Element, header=None, *, decode_entities=False) -> dict:
@@ -89,7 +96,7 @@ def normalize_ofxtools(data: bytes) -> dict:
     return normalize_tree(ET.fromstring(normalized), parser.header)
 
 
-def normalize_ofxparse(data: bytes) -> list[dict]:
+def _normalize_ofxparse_uncached(data: bytes) -> list[dict]:
     from ofxparse import OfxParser
     normalized = oracle_bytes(data)
     body = normalized[normalized.find(b'<OFX>'):]
@@ -109,11 +116,57 @@ def checksum(model: dict) -> int:
                for statement in model['statements'] for item in statement['transactions'])
 
 
-def oracle(data: bytes) -> dict:
+def _oracle_uncached(data: bytes) -> dict:
     try:
         return normalize_ofxtools(data)
-    except Exception as error:
+    except (ValueError, SyntaxError, InvalidOperation) as error:
         return {'status': 'error', 'message': str(error)}
+
+
+def oracle(data: bytes) -> dict:
+    return ORACLE_CACHE.answer("ofxtools.parse", data, {"codec": "strict-declared", "xml_entities": "standard-et", "sgml_entities": "once"},
+                              lambda: _oracle_uncached(data), adapters=(_oracle_uncached,),
+                              requirements=DATA / "requirements.txt", primary="ofxtools")
+
+
+def _secondary_uncached(data):
+    from ofxparse.ofxparse import OfxParserException
+    try:
+        return {"status": "ok", "value": _normalize_ofxparse_uncached(data)}
+    except (ValueError, SyntaxError, OfxParserException, InvalidOperation) as error:
+        return {"status": "error", "message": str(error)}
+
+
+def normalize_ofxparse(data: bytes) -> list[dict]:
+    answer = ORACLE_CACHE.answer("ofxparse.project", data, {"fail_fast": True, "transport": "utf8-sgml-header", "projection": "banking"},
+                                lambda: _secondary_uncached(data), adapters=(_secondary_uncached,),
+                                requirements=DATA / "requirements.txt", primary="ofxparse")
+    if answer["status"] != "ok":
+        raise ValueError("ofxparse rejected: " + answer["message"])
+    return answer["value"]
+
+
+def _writer_uncached(data):
+    from ofxtools.Parser import OFXTree
+    from ofxtools.header import make_header
+    try:
+        tree = OFXTree()
+        tree.parse(io.BytesIO(oracle_bytes(data)))
+        converted = tree.convert()
+        serialized = (str(make_header(203)) + ET.tostring(converted.to_etree(), encoding="unicode")).encode()
+        before = _oracle_uncached(data)
+        after = _oracle_uncached(serialized)
+        return {"status": "ok", "bytes": serialized, "expected": after,
+                "original_semantics": semantic_projection(before), "written_semantics": semantic_projection(after),
+                "known_loss": known_writer_loss(data, before, after)}
+    except (ValueError, SyntaxError, InvalidOperation) as error:
+        return {"status": "error", "message": str(error)}
+
+
+def external_writer(data):
+    return ORACLE_CACHE.answer("ofxtools.write-project", data, {"output_version": 203, "output_encoding": "UTF-8"},
+                              lambda: _writer_uncached(data), adapters=(_writer_uncached,),
+                              requirements=DATA / "requirements.txt", primary="ofxtools")
 
 
 def probe(binary: Path, data: bytes, mode: str = 'json'):
@@ -176,21 +229,17 @@ def check_one(binary: Path, data: bytes, *, cross_write=True) -> dict | None:
                 return {'mode': mode, 'expected': actual, 'external_after_roc_write': external}
             if probe(binary, written) != actual:
                 return {'mode': mode, 'problem': 'Roc writer roundtrip mismatch'}
-        # Independent writer: typed ofxtools model -> its XML output -> Roc.
-        from ofxtools.Parser import OFXTree
-        from ofxtools.header import make_header
-        tree = OFXTree()
-        tree.parse(io.BytesIO(oracle_bytes(data)))
-        converted = tree.convert()
-        serialized = (str(make_header(203)) + ET.tostring(converted.to_etree(), encoding='unicode')).encode()
-        external = oracle(serialized)
-        reparsed = probe(binary, serialized)
+        # Reference serialization and its projections depend only on source bytes.
+        writer_answer = external_writer(data)
+        if writer_answer["status"] != "ok":
+            return {"problem": "ofxtools writer rejected input", "reference": writer_answer}
+        external = writer_answer["expected"]
+        reparsed = probe(binary, writer_answer["bytes"])
         if not equivalent(external, reparsed):
-            return {'problem': 'ofxtools writer -> Roc mismatch', 'external': external, 'actual': reparsed}
-        if semantic_projection(actual) != semantic_projection(external):
-            return {'classification': 'external_writer_limitation' if known_writer_loss(data, actual, external) else 'external_writer_data_loss', 'library': 'ofxtools==1.1.1',
-                    'reason': 'typed writer changes original semantic data',
-                    'original': actual, 'written': external}
+            return {"problem": "ofxtools writer -> Roc mismatch", "external": external, "actual": reparsed}
+        if writer_answer["original_semantics"] != writer_answer["written_semantics"]:
+            return {"classification": "external_writer_limitation" if writer_answer["known_loss"] else "external_writer_data_loss", "library": "ofxtools==1.1.1",
+                    "reason": "typed writer changes original semantic data", "original": actual, "written": external}
 
     return None
 
@@ -256,7 +305,10 @@ def main() -> int:
     parser.add_argument('--seed', type=int, default=418102)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--smoke', action='store_true')
+    add_cache_arguments(parser)
     args = parser.parse_args()
+    global ORACLE_CACHE
+    ORACLE_CACHE = cache_from_arguments(args, ROOT)
     if not args.no_build:
         args.binary.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([os.environ.get('ROC', 'roc'), 'build', '--opt=speed', str(DATA/'probe.roc'), f'--output={args.binary}'], check=True, cwd=ROOT)

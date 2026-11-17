@@ -71,3 +71,21 @@ pinned Quiffen conformance and cross-writer checks with
 `python3 scripts/review_qif.py check`. Its campaign and replay commands retain
 reproducers in `.roc-parser-tmp/qif-review`. Intentional differences include
 strict terminators, empty documents, and preserving numeric reference strings.
+
+== Reuse correctness oracle answers
+
+The conformance review caches deterministic reference answers in
+`.roc-parser-tmp/oracle-cache`, including rejections and independent writer
+output. Every comparison still runs the current Roc probe. Exact input bytes,
+oracle dependency versions, options, adapter code and Python version identify
+the reference answer; changing Roc alone does not invalidate it.
+
+Pass `--refresh-oracles` to recompute reference answers, or `--no-oracle-cache`
+to bypass both cache reads and writes. Corrupt entries are recomputed, and
+transient execution failures are never stored. Cached answers remain usable
+without installed oracle packages when their version receipt matches the
+requested dependency pins.
+
+For complete numeric dates with four-digit years, the reference cache is
+independent of the clock. Partial and two-digit dates also include dateutil's
+implicit local-date and timezone defaults in the cache identity.

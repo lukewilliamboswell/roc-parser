@@ -8,7 +8,9 @@ hide malformed framing, alter identifiers, or discard unknown mismatches.
 from __future__ import annotations
 
 import argparse
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from datetime import datetime
+import re
 import json
 import os
 from pathlib import Path
@@ -17,9 +19,16 @@ import subprocess
 import sys
 import time
 
+try:
+    from _oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+except ModuleNotFoundError:
+    from scripts._oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts/qif"
 WORK = ROOT / ".roc-parser-tmp/qif-review"
+
+ORACLE_CACHE = OracleCache(ROOT / ".roc-parser-tmp/oracle-cache")
 
 
 def decimal(text):
@@ -37,8 +46,9 @@ def normalize(rows):
     return rows
 
 
-def oracle(text):
+def _oracle_uncached(text):
     from quiffen import Qif
+    from quiffen.core.qif import ParserException
     try:
         qif = Qif.parse_string(text.replace("\r\n", "\n").replace("\r", "\n"), day_first=True)
         rows = []
@@ -60,8 +70,25 @@ def oracle(text):
         if "!Account" not in text:
             written = written.replace("!Account\nNQuiffen Default Account\nDThe default account created by Quiffen when no other accounts were present\n^\n", "")
         return {"status": "ok", "rows": normalize(rows), "written": written}
-    except Exception as error:
+    except (ValueError, ParserException, InvalidOperation) as error:
         return {"status": "error", "message": str(error)}
+
+
+def oracle_date_defaults(text):
+    """Dateutil consults today's local date for partial/two-digit dates."""
+    dates = [line[1:].strip() for line in text.splitlines() if line.startswith("D")]
+    complete = re.compile(r"(?:[0-9]{1,2}[/\-][0-9]{1,2}[/\-][0-9]{4}|[0-9]{4}[/\-][0-9]{1,2}[/\-][0-9]{1,2})$")
+    if all(complete.fullmatch(value) for value in dates):
+        return {"date_defaults": "unused-complete-four-digit-dates"}
+    now = datetime.now().astimezone()
+    return {"local_date": now.date().isoformat(), "local_timezone": now.tzname(), "utc_offset_seconds": now.utcoffset().total_seconds()}
+
+
+def oracle(text):
+    return ORACLE_CACHE.answer("quiffen.read-write", text.encode("utf-8"),
+                              {"day_first": True, "output_date_format": "%d/%m/%Y", "newline_normalization": "CRLF/CR to LF", **oracle_date_defaults(text)},
+                              lambda: _oracle_uncached(text), adapters=(_oracle_uncached, oracle_date_defaults),
+                              requirements=DATA / "requirements.txt", primary="quiffen")
 
 
 def probe(binary, text):
@@ -122,7 +149,10 @@ def main():
     parser.add_argument("--seconds", type=float, default=60)
     parser.add_argument("--seed", type=int, default=20241117)
     parser.add_argument("--random", type=int, default=30)
+    add_cache_arguments(parser)
     args = parser.parse_args()
+    global ORACLE_CACHE
+    ORACLE_CACHE = cache_from_arguments(args, ROOT)
     WORK.mkdir(parents=True, exist_ok=True)
     if not args.no_build:
         subprocess.run([args.roc, "build", "--opt=speed", str(DATA / "probe.roc"), f"--output={args.binary}"], cwd=ROOT, check=True)

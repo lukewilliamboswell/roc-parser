@@ -110,3 +110,17 @@ while draining later records. Their first source chunk includes a 64-KiB record
 and 256 KiB of unrelated markup. Both the source chunk and captured record must
 be released: only the retained string remains live after the drain. This checks
 retention by returned values separately from the discard-all parser-state test.
+
+== Reuse correctness oracle answers
+
+The conformance review caches deterministic reference answers in
+`.roc-parser-tmp/oracle-cache`, including rejections and independent writer
+output. Every comparison still runs the current Roc probe. Exact input bytes,
+oracle dependency versions, options, adapter code and Python version identify
+the reference answer; changing Roc alone does not invalidate it.
+
+Pass `--refresh-oracles` to recompute reference answers, or `--no-oracle-cache`
+to bypass both cache reads and writes. Corrupt entries are recomputed, and
+transient execution failures are never stored. Cached answers remain usable
+without installed oracle packages when their version receipt matches the
+requested dependency pins.

@@ -33,18 +33,32 @@ import random
 import subprocess
 import sys
 
+try:
+    from _oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+except ModuleNotFoundError:
+    from scripts._oracle_cache import OracleCache, add_arguments as add_cache_arguments, from_arguments as cache_from_arguments
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "scripts" / "csv"
 WORK = ROOT / ".roc-parser-tmp" / "csv-review"
 ROC = Path(os.environ.get("ROC", "roc"))
 
+ORACLE_CACHE = OracleCache(ROOT / ".roc-parser-tmp/oracle-cache")
 
-def oracle(text: str) -> dict:
+
+def _oracle_uncached(text: str) -> dict:
     try:
         rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=",", quotechar='"', doublequote=True, strict=True, skipinitialspace=False))
     except csv.Error as error:
         return {"status": "error", "message": str(error)}
     return {"status": "ok", "records": [row if row else [""] for row in rows]}
+
+
+def oracle(text: str) -> dict:
+    return ORACLE_CACHE.answer("python.csv", text.encode("utf-8"),
+                              {"delimiter": ",", "quotechar": '"', "doublequote": True,
+                               "strict": True, "skipinitialspace": False, "newline": "", "blank_line": [""], "field_size_limit": csv.field_size_limit()},
+                              lambda: _oracle_uncached(text), adapters=(_oracle_uncached,))
 
 
 def probe(binary: Path, text: str) -> dict:
@@ -77,7 +91,10 @@ def main() -> int:
     parser.add_argument("--corpus", type=Path, help="also check every UTF-8 file in this directory")
     parser.add_argument("--binary", type=Path, default=WORK / "probe")
     parser.add_argument("--no-build", action="store_true")
+    add_cache_arguments(parser)
     args = parser.parse_args()
+    global ORACLE_CACHE
+    ORACLE_CACHE = cache_from_arguments(args, ROOT)
 
     if not args.no_build:
         args.binary.parent.mkdir(parents=True, exist_ok=True)
