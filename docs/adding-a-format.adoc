@@ -48,21 +48,21 @@ the existing formats are listed in <<property-testing>>.
   automatically. Roc has a builtin `Json`, so `import parser.Json` would
   leave the alias unbound; that is why the JSON module is `JsonValue`.
 . Make it a type module and follow the conventions of the existing ones:
-** `Toml.parse_str : Str -> Try(Toml, [InvalidToml(Toml.Error)])`, where
-   `Toml.Error` carries a `problem` tag and the most precise location the
-   format has (`line` and `column` for text). Define a `Toml.Problem` union
+** `Toml.parse_str : Str, Toml.Props -> Try(Toml, [InvalidToml(Toml.Error)])`, where
+   `Toml.Error` is `Parser.Diagnostic(Toml.Problem)`, carrying a typed
+   problem, the most precise location and a logical path. Define a `Toml.Problem` union
    with structured payloads for source values, limits, and expected tokens.
-   Use `Parser.Problem(Toml.Problem)` for the envelope when adapting native
-   errors into combinators, and format diagnostics at application boundaries;
-** `Toml.parser : Parser(Utf8.Bytes, Toml, Toml.Problem)` for callers who compose
-   parsers, failing with `ParseError({ problem, offset })`;
+   Keep native problems closed; `Parser.custom` widens them internally for
+   composition. Render diagnostics at application boundaries;
+** `Toml.parser : Toml.Props -> Parser(Parser.Utf8.Bytes, Toml, Toml.Problem)` for callers who compose
+   parsers, failing with `ParseError({ problem, location, path })`;
 ** `Try(a, [Missing])` for every optional value, and methods in the
    `.{ }` block, called in method-call style in examples;
 ** fallible parsing and validation functions return errors on every input;
-   explicit constant assertions such as `Literal.require` are documented separately.
+   explicit constant assertions such as `Parser.Quotation.require` are documented separately.
 . If records are a natural target, also implement a format for
-  type-directed decoding, as `CSV.Format` and `Yaml.Format` do, and expose
-  `Toml.decode` with a `Parseable` where-clause alias. The parsers chapter of
+  type-directed decoding behind `CSV.decode_str` and `Yaml.decode_str`, and expose
+  `Toml.decode_str` with a `Parseable` where-clause alias. The parsers chapter of
   the Roc language reference lists the methods a format provides.
 
 Prefer a scanner over the input bytes for document-level parsing, with an
@@ -71,29 +71,31 @@ grammars, but every rewritten module (CSV, XML, HTTP, Markdown) moved to
 scanners to stay linear in the input size and to avoid deep recursion, and
 `JsonValue` was written as one from the start.
 
-If the format has common variants, or callers need checks beyond the
-specification, give the module a `parse_with` that takes a nominal options
-record with defaulted fields, as `JsonValue.Options` does. Make the defaults
-the strict specification, and make each relaxation and each extra check a
-field that is off by default, so `parse_str(text)` is `parse_with(text, {})`
-and nobody gets a relaxation they did not ask for. Keep each option's code at
-one check site, test every field at and past its boundary, and pass the same
-record through the validation props, so that compile-time and run-time
-checks agree.
+Use one nominal `Props` record with defaulted fields for resource bounds,
+variants and validation policy. `parse_str(source, {})` should select the
+format's documented defaults. Add receiver transformations to the values they
+operate on; avoid a second `parse_with` entry point or a standalone public
+implementation module. Expose helper types through the format that owns them.
 
-Compile-time parsing is an enduring requirement for format modules. Make the
-document type nominal and implement `from_quote` by delegating to a checked
-`validate` function returning `Try(Toml, [BadQuotedBytes(Str)])`. Use a nominal
-props record with defaulted fields for the source name, format options, and
-configurable extra checks. Add `validate_as` when type-directed decoding is
-supported. Keep ordinary parsing acceptance unchanged. See
-<<compile-time-parsing>> for the quotation and imported-file contract.
+Runtime `validate` returns the same native typed diagnostics as parsing.
+Implement `from_quote` on the nominal document type by calling validation and
+rendering `BadQuotedBytes(Str)` only at the compiler boundary. Keep source
+names and format options in defaulted validation props. Add `validate_as` when
+type-directed decoding is supported. See <<compile-time-parsing>>.
+
+For chunked formats, construct the shared descriptor with `Parser.decoder` or
+`Parser.encoder`, and expose the constructor through the format. Reuse common
+`errors: { policy, max_errors }` and `chunk_bytes` props. Preserve native format
+failures and source I/O causes instead of adding adapter wrappers. See
+<<streaming>> for the decoder protocol and completion contract.
 
 == 3. Write the tests
 
-Put `expect` tests next to the code they cover. For every rule, test an input
-that is accepted, one that is rejected, and the boundary between them. Add a
-test for each limit you chose in step 1.
+Put focused `expect` witnesses next to the code they cover. Prefer properties
+with small deterministic seeds and reviewable generators for broad syntax
+coverage: round trips, independent models, metamorphic relations and resource
+bounds. Shrink failures before retaining a witness. Exercise each configured
+limit at and past its boundary without checking in expanded scaling inputs.
 
 Add compiler fixtures for valid and invalid quotations and imported text,
 including default checks and overrides, to `scripts/literals/cases.json`, and
@@ -118,10 +120,10 @@ on `scripts/csv/`, the smallest of the existing reviews:
 
 `probe.roc`:: A basic-cli app that reads one document on standard input and
 prints one JSON line: the parsed value or an error. Use the public API only.
-`cases.json`:: Hand-written cases with a `name` and an `input`, one for each
-rule and each known edge case. Add the specification's own examples or test
-suite if there is one, pinned by URL and SHA-256 as `scripts/review_xml.py`
-does for the W3C suite, or vendored as described below.
+`cases.json`:: Small explicit witnesses with a `name` and an `input` for
+contracts that generated checks would obscure. Generate broader cases from
+parameters. Recreate external conformance suites from pinned URLs and SHA-256
+hashes in ignored scratch storage.
 `known-failures.json`:: The baseline. It starts empty; every entry added later
 needs a reason (see <<property-testing>>).
 
@@ -133,16 +135,11 @@ pass as stale. If the oracle is a third-party package, pin it, and all of its
 dependencies, in `scripts/toml/requirements.txt` so that
 `pip install --no-deps -r` installs exactly the reviewed versions.
 
-To vendor a third-party test suite instead of downloading it, convert it to
-one file, such as `scripts/toml/suite.json`, that records the upstream
-repository and revision in a `source` object, and commit the suite's licence
-beside it. `scripts/yaml/suite.json` with `YAML-TEST-SUITE-LICENSE`, and
-`scripts/json/suite.json` with `JSONTESTSUITE-LICENSE`, are the models. Check
-that the licence allows redistribution, and give the script a command that
-regenerates the file from a checkout, like `review_json.py vendor-suite`.
-Where the suite says an input is valid but your module rejects it by design,
-label the case a policy deviation with its reason, as `review_json.py` does
-for repeated keys, rather than hiding it.
+Acquire external suites from pinned revisions and verified hashes into ignored
+scratch storage. Commit the acquisition recipe, pins and licence information,
+not expanded suites. Keep small explicit regression witnesses when they clarify
+a contract; use deterministic generators and independent properties for broad
+coverage. Label intentional policy deviations with their reason.
 
 Run it, fix the parser until it passes, and add a unit test under
 `scripts/tests/` for any logic in the script that is not a direct call to the
@@ -205,7 +202,7 @@ python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
 Follow "Add a benchmark" in <<benchmarks>>: add `bench/roc/toml.roc`, which
 calls the public entry point through `Bench.run!`, a branch in
 `bench/roc/alloc.roc`, a deterministic generator and `pathological` entries in
-`scripts/bench.py`, a frozen sample, and vetted independent comparators pinned exactly.
+`scripts/bench.py`, small deterministic scaling inputs, and vetted independent comparators pinned exactly.
 Register each language explicitly; leave a comparator list empty when no
 qualified implementation covers the workload, and document that gap.
 `scripts/tests/test_bench.py` requires a Roc driver and at least one comparator
@@ -253,7 +250,7 @@ blueprint run docs
 * [ ] Compile-time fixtures in `scripts/literals/cases.json`, and the import
   in `app_source` in `scripts/check_literals.py`
 * [ ] Probe, cases, review script and empty baseline under `scripts/`
-* [ ] Any vendored test suite recorded with its revision and licence
+* [ ] External suites recreated in scratch storage from verified pins and hashes
 * [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and in
   `fuzz.yml` in the same order
 * [ ] A robustness `campaign` in the review script, with its `--smoke` run

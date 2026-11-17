@@ -11,155 +11,63 @@ endif::[]
 :idprefix: _
 :idseparator: _
 
-This chapter is a map of the package for readers who know some Roc and want
-to find the right module and entry point for an input format. It says what each
-module is for, which types and functions you start from, and how the modules
-fit together. The {api}[API reference] has the full signature and
-documentation of every type and function, generated from the source.
+Find the public owner for a value or task in this table. The {api}[API
+reference] gives every signature; the format chapters describe supported syntax
+and resource limits.
 
 == The modules at a glance
 
-The package exposes parser building blocks, checked constant helpers, and
-parsers for data formats, web markup and Roc source.
+The package exposes fifteen roots. Shared parser primitives and quotation
+helpers live under `Parser`; format-specific constructors live with their values.
 
 [cols="1,3,3",options="header"]
 |===
 |Module |Use it to |Start from
-
-|{api}AsciiDoc/[`AsciiDoc`]
-|Parse and preprocess AsciiDoc, preserve source blocks and render embedded HTML
-|`AsciiDoc.parse_str`
-
-|{api}Parser/[`Parser`]
-|Combine small parsers into larger ones, for any input type
-|`Parser.const`, `keep`, `skip`, `map`, `one_of`, `many`, `sep_by`
-
-|{api}Utf8/[`Utf8`]
-|Parse text: match bytes, strings and digits, and run a parser on a `Str`
-|`Utf8.parse_str`, `string`, `codeunit`, `digits`
-
-|{api}Literal/[`Literal`]
-|Require a checked imported constant, or format a quotation error
-|`Literal.require`, `Literal.error`
-
-|{api}CSV/[`CSV`]
-|Read comma-separated values, raw or decoded into your own record type
-|`CSV.parse`, `CSV.parse_with`, `CSV.parse_records`
-
-|{api}Streaming/[`Streaming`]
-|Adapt pure chunk decoders to builtin Iter and Stream, with bounded writers
-|`Streaming.read_iter`, `Streaming.read_stream`, `Streaming.write_iter`, `Streaming.write_stream`
-
-|{api}QIF/[`QIF`]
-|Read and write raw Quicken records and decode bank/cash/card transactions
-|`QIF.parse_str`, `QIF.decoder`, `QIF.transaction_decoder`, `QIF.encoder`
-
-|{api}OFX/[`OFX`]
-|Read and write bank/card statements in SGML or XML, with incremental events
-|`OFX.parse_str`, `OFX.decoder`, `OFX.encoder`
-
-|{api}HTTP/[`HTTP`]
-|Read one HTTP/1.1 request or response message, including its body
-|`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.header`
-
-|{api}JsonValue/[`JsonValue`]
-|Read JSON of any shape as a lossless tree, and write it back out
-|`JsonValue.parse_str`, `JsonValue.parse_with`, `JsonValue.get_path`, `JsonValue.to_str`
-
-|{api}Markdown/[`Markdown`]
-|Turn CommonMark and GitHub Flavored Markdown into a syntax tree
-|`Markdown.parse_str`, `Markdown.parse_inlines`
-
-|{api}Xml/[`Xml`]
-|Check that an XML document is well-formed and read it as a tree, or an element at a time
-|`Xml.parse_str`, `Xml.parse`, `Xml.reader`, `Xml.Node.children_named`
-
-|{api}XmlNs/[`XmlNs`]
-|Read XML with namespaces resolved, and write it back out
-|`XmlNs.parse_str`, `XmlNs.reader`, `XmlNs.render`
-
-|{api}Html/[`Html`], {api}Svg/[`Svg`], {api}MathML/[`MathML`]
-|Parse checked web markup documents, fragments and typed literal templates
-|`parse_str`, `parse_with`, `parse_fragment`, `parse_segments`
-
-|{api}Markup/[`Markup`], {api}MarkupTemplate/[`MarkupTemplate`]
-|Walk shared namespace-aware trees, retain original bytes, and bind parsed plans
-|`Markup.Source`, `Markup.single_root`, `Markup.text`, `MarkupTemplate.bind`
-
-|{api}DomName/[`DomName`]
-|Validate computed DOM names while preserving explicit namespace, prefix and local identity
-|`DomName.validate_and_extract`, `DomName.html_element`, `DomName.qualified`
-
-|{api}DomConstruction/[`DomConstruction`]
-|Check bounded HTML repairs for explicitly named DOM children without walking ancestors
-|`DomConstruction.root`, `DomConstruction.enter`, `DomConstruction.text`
-
-|{api}MarkupContext/[`MarkupContext`]
-|Check canonical source-authoring placement and HTML/SVG/MathML content models
-|`MarkupContext.seed`, `MarkupContext.child`, `MarkupContext.text`
-
-|{api}MarkupFacts/[`MarkupFacts`]
-|Query vocabulary, expanded attribute kinds, HTML text behavior and handler facts for consumers
-|`MarkupFacts.is_boolean_attribute`, `MarkupFacts.enumerated_values`, `MarkupFacts.text_behavior`, `MarkupFacts.is_event_handler`
-
-|{api}SvgPath/[`SvgPath`]
-|Read SVG path commands with typed syntax errors
-|`SvgPath.parse_str`
-
-|{api}Yaml/[`Yaml`]
-|Read a YAML configuration file or Markdown frontmatter
-|`Yaml.decode`, `Yaml.parse_str`, `Yaml.get_path`
-
-|{api}RocSyntax/[`RocSyntax`]
-|Preserve Roc source tokens and build a syntax tree for highlighting and analysis
-|`RocSyntax.parse_str`, `RocSyntax.parse_bytes`
+|`AsciiDoc` |Parse and preprocess AsciiDoc |`AsciiDoc.parse_str(source, {})`
+|`CSV` |Read raw fields or decode records |`CSV.parse_str(source, {})`, `CSV.decode_str(source, {})`
+|`HTTP` |Read request and response messages |`HTTP.Request.parse_bytes(bytes, {})`, `HTTP.Response.parser({})`
+|`Html` |Check HTML documents, fragments and templates |`Html.parse_str`, `Html.parse_fragment`, `Html.RepairContext`
+|`JsonValue` |Read lossless JSON trees and record streams |`JsonValue.parse_str`, `JsonValue.record_decoder`, `value.encode({})`
+|`Markdown` |Parse CommonMark and GFM |`Markdown.parse_str(source, {})`
+|`Markup` |Use shared names, source trees, contexts and templates |`Markup.Name`, `Markup.Context`, `Markup.Template.Plan`
+|`MathML` |Check MathML documents and fragments |`MathML.parse_str`, `MathML.parse_fragment`
+|`OFX` |Read and write financial statements |`OFX.parse_str`, `OFX.decoder`, `OFX.encoder`
+|`Parser` |Build parsers and shared streaming descriptors |`Parser.const`, `Parser.Utf8`, `Parser.Quotation`
+|`QIF` |Read and write Quicken records |`QIF.parse_str`, `QIF.decoder`, `QIF.encoder`
+|`RocSyntax` |Retain Roc tokens, trees and diagnostics |`RocSyntax.parse_str`, `RocSyntax.parse_bytes`
+|`Svg` |Check SVG markup and path data |`Svg.parse_str`, `Svg.Path.parse_str`
+|`Xml` |Read raw or namespace-resolved XML |`Xml.parse_str`, `Xml.Namespaced.parse_str`, `Xml.reader`
+|`Yaml` |Read YAML trees or decode configuration records |`Yaml.parse_str`, `Yaml.decode_str`
 |===
 
 == How the modules fit together
 
-A `Parser(input, a, problem)` is a value that describes how to read an `a` from the
-start of an `input`. Running it returns the value and the input it did not
-consume, or a `ParseError` with a problem tag and an offset. `Parser` provides the combinators that
-build parsers from parsers; `Utf8` provides the parsers that read text, with
-`Utf8.Bytes` (a `List(U8)`) as the input type.
+Constructors take a source and a defaulted props record, such as
+`Xml.parse_str(source, {})`. Configure that same operation through its props;
+there is no separate `parse_with` variant. A parser constructor such as
+`Xml.parser({})` returns a reusable value: `parser.parse_str(source)` consumes
+all input, while `parser.run_str(source)` returns `{ value, rest }`.
 
-Each format type module follows the same conventions:
+Failures carry `Parser.Diagnostic(problem)`: `{ problem, location, path }`.
+Native formats wrap this in their own failure tag, such as `InvalidXml`.
+Generic parser runners use `ParseError`. See <<errors>> for locations, logical
+paths, bounded source excerpts and rendering.
 
-* `parse_str` (or, for CSV, `parse`) reads a whole document and returns
-  `Ok(value)` or an error tag named after the module: `InvalidCsv`,
-  `InvalidHttp`, `InvalidJsonValue`, `InvalidXml` or `InvalidYaml`. The tag
-  carries a record with a structured `problem` tag and the most precise
-  source location. Markdown has no syntax errors, so `Markdown.parse_str`
-  returns the tree directly.
-* The `parser` API exposes a `Parser(Utf8.Bytes, ...)` value for embedding
-  in a larger parser. Use `CSV.parser({})` for CSV, or `HTTP.request` and
-  `HTTP.response` for HTTP. Its
-  failures are `ParseError({ problem, offset })`. `JsonValue.parser_with`
-  takes the same options as `JsonValue.parse_with`. Use `map_problem` to
-  wrap a native problem in a domain tag when composing it with another grammar.
-* `CSV.parse` and `Yaml.decode` decode straight into your own record type
-  through the static dispatch method `parser_for`; the compiler infers the
-  type from how you use the result.
-* Optional values are `Try(a, [Missing])`.
+Streaming uses the same receiver methods for every format. Construct a decoder,
+then call `decoder.read_iter(chunks)`, `decoder.read_stream(source)` or
+`decoder.collect(chunks)`. Configure recovery in the constructor's `errors`
+props. Encoders provide `write_iter` and `write_stream`; see <<streaming>>.
 
-<<compile-time-parsing,Checked quotations>> use `from_quote`. Each format also
-offers configurable validation through defaulted props records; use
-`Literal.require` at top level to turn a checked imported file into a constant.
+Checked quotations use `from_quote`. Runtime `validate` returns native typed
+failures; `Parser.Quotation.require` asserts a checked constant, and quotation
+hooks render compiler text at that boundary. See <<compile-time-parsing>>.
 
-`RocSyntax` returns a tolerant parse result directly, with diagnostics and an
-explicit coverage status. It retains tokens even when source is incomplete.
-See <<roc-syntax>> for its source-location conventions and tooling use.
-
-The following program demonstrates format and combinator entry points. It is
-`docs/examples/reference-modules.roc` in the repository, and CI runs it.
+The following complete program demonstrates the entry points:
 
 [source,roc]
 ----
 include::examples/reference-modules.roc[tag=entry-points]
 ----
-
-Running it prints one line per call (the Markdown result prints two lines,
-one per block):
 
 [source,text]
 ----
@@ -168,193 +76,75 @@ include::examples/reference-modules.expected[]
 
 == Parser
 
-`Parser` is the combinator library. Use it when you are writing a parser for a
-format this package does not cover, or extending one of the format parsers.
+`Parser(input, value, problem)` describes a computation over input. Compose it
+with receiver operations such as `keep`, `skip`, `map`, `many` and `sep_by`.
+`Parser.one_of` chooses alternatives, and `Parser.custom` adapts a primitive
+with a structured diagnostic. See <<combinator-primer>> and <<combinators>>.
 
-* `Parser(input, a, problem)` is an opaque nominal type, and `ParseResult(input, a, problem)`,
-  `Try({ value, rest }, [ParseError({ problem, offset })])`, is what one step
-  of parsing returns.
-* Build values with `const` and feed it parsed arguments with `keep`; read and
-  discard syntax with `skip`.
-* Choose between alternatives with `alt` and `one_of`. Each alternative starts
-  from the same input, so a failed alternative never consumes anything.
-* Repeat with `many`, `one_or_more`, `sep_by` and `sep_by_one_or_more`. Repetition stops
-  when an element fails or consumes nothing.
-* Convert results with `map`, `map2`, `map3` and `flatten`, and choose the
-  next parser from a value with `and_then`. `maybe` makes a parser optional,
-  returning `Try(a, [Missing])`.
-* Run a parser with `parse` (whole input) or `run` (leaving the
-  rest). For text, prefer the `Utf8` functions below.
-* `custom` turns your own function into a parser when no
-  combinator fits; `lazy` defers building a parser for recursive grammars.
+[#_utf8]
+== Parser.Utf8
 
-== Utf8
-
-`Utf8` holds the text parsers and the functions that run a parser on text.
-
-* `Utf8.parse_str` runs a parser on a whole `Str` and reports leftover text
-  as a `ParseError`. `parse_str_partial`, `parse_bytes` and
-  `parse_bytes_partial` cover partial input and byte input.
-* `codeunit`, `codeunit_satisfies`, `any_codeunit`, `utf8` and `string` match
-  bytes and literal text. `digit` and `digits` read unsigned decimal numbers.
-* `rest` and `rest_str` consume the rest of the input.
-
-The parsers work on bytes, not characters: `codeunit('é')` is not possible,
-because `é` is two bytes in UTF-8. Use `string("é")` instead.
+`Parser.Utf8` owns byte, string and digit primitives. `Parser.Utf8.Bytes` is
+`List(U8)`. Text runners are methods of the parser value, so a parser built
+from these primitives uses `parser.parse_str(source)` or `parser.run_str(source)`.
 
 == CSV
 
-`CSV` reads RFC 4180 comma-separated values; the module documentation lists the
-exact dialect.
-
-* `CSV.parse` decodes a file with a header row into a list of records. Each
-  record field reads the column with the same name, a `Try(a, [Missing])`
-  field is optional, and a required field without a column fails with
-  `MissingRequiredField(name)`. `CSV.parse_normalized` matches headers such as
-  `First Name` to `first_name`, and `CSV.parse_headerless` decodes rows into
-  tuples.
-* `CSV.parse_with` matches columns by position instead, with a record parser
-  you build from `CSV.record`, `CSV.field` and `.keep(...)`. Field parsers
-  `CSV.string({})`, `CSV.u64({})` and `CSV.f64({})` are provided, and any
-  `Parser(Utf8.Bytes, a, _)` works.
-* `CSV.parse_records` returns the raw records, each a `CSV.Record` (a
-  `List(List(U8))`), when rows differ in shape or you want to inspect them
-  first. `CSV.split_header` separates the header row, and `CSV.decode` runs a
-  record parser over them later.
-
-Every failure is `InvalidCsv` with the record, field, line and column.
+`CSV.parse_str(source, {})` returns a nominal document with raw `.records`.
+`CSV.decode_str(source, {})` infers a record type from use. For positional
+conversion, build a `CSV.record` parser with `CSV.field` and pass it to
+`CSV.rows_parser({ row })`. Its generic runner returns `ParseError`, preserving
+`InvalidCsv` or `InvalidRow` inside the problem union. See <<csv>>.
 
 == HTTP
 
-`HTTP` reads one HTTP/1.1 (or HTTP/1.0) message: start line, header fields and
-body.
-
-* `HTTP.parse_request` and `HTTP.parse_response` take bytes and return the
-  message and the `rest`, which is the next pipelined message, if any.
-  `HTTP.parse_requests` reads a whole pipeline. Failures are
-  `InvalidHttp({ offset, problem })`.
-* `Request` and `Response` are records. `Header` is `{ name, value }`, and
-  `HTTP.header(headers, name)` looks a field up case-insensitively. `Method`
-  has a tag for each standard method and `Extension(name)` for any other
-  token; `Version` is `{ major, minor }`.
-* `HTTP.request` and `HTTP.response` are the same parsers for embedding.
-
-The parser decodes chunked bodies and rejects any message whose length is
-ambiguous, which is what protects a proxy from request smuggling. It does not
-open connections, send messages, or know which request a response answers; see
-<<conformance,Conformance>> for what that means for HEAD and CONNECT.
+`HTTP.Request` and `HTTP.Response` own complete `parse_bytes` constructors and
+prefix `parser` constructors. A parsed message offers `message.header(name)`.
+Their decoders emit message heads, body fragments, trailers and boundaries;
+response decoding also takes request methods. The parser operates on bytes and
+performs no network I/O. See <<http>>.
 
 == JsonValue
 
-`JsonValue` reads RFC 8259 JSON into a tree that keeps what a record type
-would lose: member order, the exact text of every number, and keys that are
-not Roc identifiers. Use Roc's builtin `Json` instead to decode JSON
-straight into a record.
-
-* `JsonValue.parse_str` reads one strict document and returns a `JsonValue`
-  (`Null`, `Bool`, `Number`, `String`, `Array` or `Object`), or
-  `InvalidJsonValue({ line, column, problem })`. Repeated keys are rejected.
-* `JsonValue.parse_with` takes a `JsonValue.Options` record with defaulted
-  fields: limits (`max_depth`, 128 by default, `max_items`,
-  `max_string_bytes`, `max_number_digits`), relaxations (`comments`,
-  `trailing_commas`, `bom`, `non_finite`, `control_characters`,
-  `lone_surrogates`) and checks (`duplicates`, `top_level`,
-  `interoperable_numbers`).
-* The methods `get`, `at`, `get_path`, `keys`, `as_str`, `as_bool`, `as_list`
-  and `as_object` walk the tree; `as_i64`, `as_u64` and `as_dec` convert a
-  number's text.
-* `JsonValue.to_str` and `JsonValue.to_str_with` (`indent`, `sort_keys`)
-  write a value back out, and refuse values JSON cannot express.
-* `JsonValue.parser` and `JsonValue.parser_with` are the same parser for
-  embedding.
-
-There is no streaming interface, no JSON5 beyond the listed relaxations, and
-no type-directed decoding. See <<json>>.
+`JsonValue.parse_str(source, props)` reads a tree while preserving member order
+and number spelling. Props select explicit relaxations and resource bounds.
+Use receiver methods such as `get`, `at`, `get_path` and `as_i64` to inspect a
+value. `value.encode(props)` returns validated UTF-8 bytes; `JsonValue.record_decoder`
+and `JsonValue.record_encoder` provide record streams. See <<json>>.
 
 == Markdown
 
-`Markdown` turns CommonMark 0.31.2 text, with the GitHub Flavored Markdown
-tables, task lists, strikethrough and extended autolinks, into a tree of
-`Markdown` blocks and `Markdown.Inline` nodes.
-
-* `Markdown.parse_str` parses a whole document into `List(Markdown)`.
-  Markdown has no syntax errors, so it accepts every input.
-* `Markdown.parse_inlines` parses inline content only, such as a single line
-  of text.
-* A leading block between `---` lines becomes a `Frontmatter(text)` block;
-  `Markdown.frontmatter(blocks)` returns its text, which you can pass to
-  `Yaml.decode` or `Yaml.parse_str`.
-* `Markdown.parser` and `Markdown.inline_parser` are the same parsers for
-  embedding.
-* `Str.inspect` prints a tree for tests and debugging, and every tree type
-  has `is_eq` and `to_hash`.
-
-The module does not render HTML; walk the tree to produce your own output.
-Raw HTML and link destinations pass through unfiltered, so sanitize them
-before you render untrusted input (see <<markdown>>).
+`Markdown.parse_str(source, {})` returns blocks directly: every input is valid
+Markdown. `Markdown.parse_inlines` reads inline content. Tree values retain
+links and raw HTML for the application to handle. See <<markdown>>.
 
 == Xml
 
-`Xml` checks XML 1.0 well-formedness and returns the document as a tree of
-`Xml.Node` values (`Element({ name, attributes, children })` and `Text`).
+`Xml.parse_str(source, {})` returns raw XML names, a declaration and a root.
+Use `Xml.Namespaced.parse_str(source, {})` when expanded namespace identities
+matter. Both support `limits: Bounded(readerProps)` for untrusted documents,
+pull readers and chunk decoders. Readers expose `{ location, declaration }`
+through `reader.metadata()`. Namespace-resolved documents provide
+`document.encode(writeProps)`. See <<xml>>.
 
-* `Xml.parse_str` returns an `Xml` record with the
-  `declaration : Try(Declaration, [Missing])` and the `root` element, or
-  `InvalidXml({ line, column, problem })`.
-* The node methods `name`, `attribute`, `children_named` and `text` read the
-  tree: `root.attribute("href")` is `Try(Str, [Missing])`.
-* `Xml.parser` is the same parser for use inside a larger parser.
-* `Xml.parse` sets limits on depth, element count and attributes per element
-  for untrusted input, and fails with `LimitExceeded` before building past one.
-* `Xml.reader` is a pull reader with the same limits: `next` returns `Start`,
-  `End` and `Text` events, and `element` builds one subtree (or
-  `element_with`, one subtree of your own type), so a large document can be
-  read an element at a time.
-
-Documents with a `<!DOCTYPE>` declaration are rejected, names are kept as
-written, and comments and processing instructions are checked and then
-dropped.
-
-`XmlNs` resolves namespaces following Namespaces in XML 1.0. Its tree,
-`XmlNs.Node`, holds `{ namespace, local, prefix }` names and each element's
-`bindings`; `XmlNs.parse_str`, `XmlNs.parse` and `XmlNs.reader` mirror `Xml`,
-and namespace problems are `InvalidNamespace({ problem, line, column })`.
-`XmlNs.render` writes a tree back as XML, with its own prefixes or a table.
+`Html`, `Svg` and `MathML` return shared `Markup.Source` and `Markup.Tree`
+values. Use `source.position(offset)`, `tree.single_root()` and `tree.text(root)`.
+`Markup.Name` carries explicit namespace, local and prefix identity and offers
+vocabulary queries as receiver methods. `Markup.Context` checks authored
+placement; `Html.RepairContext` checks HTML repair semantics. Template plans
+live under `Markup.Template`, expose read-only metadata and bind with
+`plan.bind(values.iter())`. See the markup chapters for those distinct tasks.
 
 == Yaml
 
-`Yaml` reads a practical subset of YAML 1.2 aimed at configuration files and
-Markdown frontmatter.
-
-* `Yaml.decode` reads a document straight into your own record, list, dict
-  or tuple type. `Try(a, [Missing])` fields are optional, and a missing
-  required key fails with `MissingRequiredField(name)`. `Yaml.decoder` takes
-  options for kebab-case or camelCase keys and for rejecting unknown keys.
-* `Yaml.parse_str` returns a `Yaml` tree (`Null`, `Bool`, `Int`, `Float`,
-  `Text`, `Sequence` or `Mapping`). The methods `get`, `at`, `get_path`,
-  `as_str`, `as_i64`, `as_bool` and `as_list` walk it.
-* Both fail with `InvalidYaml({ line, column, problem })`. `Yaml.parser` is
-  the tree parser for embedding.
-
-Anchors, aliases, tags, directives, complex keys, multi-line flow collections,
-multi-line plain or quoted scalars and multi-document streams are rejected
-rather than misread. Nesting is limited to 100 levels.
+`Yaml.parse_str(source, {})` returns a configuration tree. `Yaml.decode_str`
+decodes directly into records, lists, dictionaries or tuples; optional values
+use `Try(value, [Missing])`. `Yaml.value_parser(props)` offers the same typed
+decoding through generic parser receivers. Native failures, including missing
+required keys, use `InvalidYaml`. See <<yaml>>.
 
 == Choosing between modules
 
-[cols="2,3",options="header"]
-|===
-|If your input is |Use
-|A small text format of your own, such as a command or a log line |`Parser` with `Utf8`
-|A spreadsheet export or other comma-separated data |`CSV`
-|Raw bytes of an HTTP/1.1 message from a socket or a capture |`HTTP`
-|Documentation, notes or a README |`Markdown`
-|A configuration file, or the frontmatter of a Markdown file |`Yaml`
-|An XML document without a document type declaration, such as SVG or a feed |`Xml`, or `XmlNs` when its namespaces matter
-|JSON whose shape you know, decoded into a record |Roc's builtin `Json`
-|JSON of any shape, JSON with comments, or JSON that must be written back unchanged |`JsonValue`
-|TOML, or YAML that uses anchors or several documents |Another package: these modules do not support them
-|===
-
-<<conformance,Conformance>> lists, for each format, the specification it
-follows, how that is checked, and the known gaps.
+Use <<choosing-an-approach>> to choose type-directed decoding, a document tree,
+combinators or ordinary string operations. <<conformance>> records each format's
+supported specification and known gaps.

@@ -3,35 +3,36 @@ app [target] {
 	parser: "../package/main.roc",
 }
 import fuzz.Fuzz
-import parser.Streaming
+import parser.Parser
+ByteProblem : [ZeroByte(U64), ForbiddenByte(U64)]
 
 ## Independent byte-record model: zero rejects, 255 is terminal, others emit.
-step : U64, List(U8), Streaming.InputEnd -> Streaming.Step(U64, U8, U64)
+step : U64, List(U8), Parser.InputEnd -> Parser.Step(U64, U8, ByteProblem)
 step = |offset, bytes, end| match bytes.first() {
-	Ok(0) => { state: offset + 1, consumed: 1, outcome: RecordError(offset) }
-	Ok(255) => { state: offset + 1, consumed: 1, outcome: Failed(offset) }
+	Ok(0) => { state: offset + 1, consumed: 1, outcome: RecordError(ZeroByte(offset)) }
+	Ok(255) => { state: offset + 1, consumed: 1, outcome: Failed(ForbiddenByte(offset)) }
 	Ok(byte) => { state: offset + 1, consumed: 1, outcome: Item(byte) }
 	Err(_) => { state: offset, consumed: 0, outcome: if (end == Final) Done else NeedInput }
 }
 
-expected : List(U8), Streaming.ReadProps -> List(Try(Streaming.ReadEvent(U8, U64), Streaming.ReadError(U64)))
+expected : List(U8), Parser.RecoveryProps -> List(Try(Parser.ReadEvent(U8, ByteProblem), Parser.ReadError(ByteProblem)))
 expected = |bytes, props| {
 	var $out = []
 	var $emitted = 0.U64
 	var $rejected = 0.U64
 	for pair in bytes.iter().with_index() {
 		match pair.1 {
-			255 => return $out.append(Err(ParseErr(pair.0)))
+			255 => return $out.append(Err(ForbiddenByte(pair.0)))
 			0 => {
-				if props.error_policy == FailFast {
-					return $out.append(Err(ParseErr(pair.0)))
+				if props.policy == FailFast {
+					return $out.append(Err(ZeroByte(pair.0)))
 				}
 				if $rejected >= props.max_errors {
-					return $out.append(Err(ErrorLimitExceeded({ max: props.max_errors, error: pair.0 })))
+					return $out.append(Err(RecoveryLimitExceeded({ problem: RejectedRecords({ max: props.max_errors, observed: Exact($rejected + 1), cause: ZeroByte(pair.0) }), location: Unavailable(NotApplicable), path: [] })))
 				}
 				$rejected = $rejected + 1
-				if props.error_policy == ReportInvalidRecords {
-					$out = $out.append(Ok(Rejected(pair.0)))
+				if props.policy == ReportInvalidRecords {
+					$out = $out.append(Ok(Rejected(ZeroByte(pair.0))))
 				}
 			}
 			value => {
@@ -49,22 +50,22 @@ test = |input| {
 		1 => SkipInvalidRecords
 		_ => ReportInvalidRecords
 	}
-	props : Streaming.ReadProps
-	props = { error_policy: policy, max_errors: (input.get(1) ?? 0).to_u64() % 8 }
+	props : Parser.RecoveryProps
+	props = { policy: policy, max_errors: (input.get(1) ?? 0).to_u64() % 8 }
 	bytes = input.drop_first(2)
 	want = expected(bytes, props)
-	whole = List.from_iter(Streaming.read_iter([bytes].iter(), Streaming.decoder(0, step).with_errors(props)))
+	whole = List.from_iter((Parser.decoder({ initial_state: 0, step, errors: props })).read_iter([bytes].iter()))
 	if whole != want {
 		crash "whole chunk differs from independent protocol model"
 	}
 	pieces = bytes.map(|byte| [byte])
-	many = List.from_iter(Streaming.read_iter([[]].concat(pieces).append([]).iter(), Streaming.decoder(0, step).with_errors(props)))
+	many = List.from_iter((Parser.decoder({ initial_state: 0, step, errors: props })).read_iter([[]].concat(pieces).append([]).iter()))
 	if many != want {
 		crash "one-byte/empty chunks changed protocol outcomes"
 	}
 	for split in (0.U64).to(bytes.len() + 1) {
 		parts = [bytes.take_first(split), [], bytes.drop_first(split)]
-		if List.from_iter(Streaming.read_iter(parts.iter(), Streaming.decoder(0, step).with_errors(props))) != want {
+		if List.from_iter((Parser.decoder({ initial_state: 0, step, errors: props })).read_iter(parts.iter())) != want {
 			crash "split changed protocol outcomes"
 		}
 	}
@@ -76,7 +77,7 @@ test! = |bytes| {
 	source : Stream(Try(List(U8), [Injected]))
 	source = [Ok(bytes), Err(Injected), Ok([1.U8])].iter().stream()
 	var $actual = []
-	for! item in Streaming.read_stream(source, Streaming.decoder(0, step)) {
+	for! item in (Parser.decoder({ initial_state: 0, step })).read_stream(source) {
 		$actual = $actual.append(item)
 	}
 	prefix = expected(bytes, {})
@@ -88,25 +89,24 @@ test! = |bytes| {
 		crash "source failure finalized or lost its error"
 	}
 
-	unfinished : Stream(Try(Streaming.ReadEvent(U8, Str), Str))
-	unfinished = [Ok(Value(bytes.first() ?? 0))].iter().stream()
-	var $unfinished = []
-	for! item in Streaming.values_stream(unfinished) {
-		$unfinished = $unfinished.append(item)
+	# A faulty custom decoder cannot turn source exhaustion into a successful EOF.
+	broken = Parser.decoder({ initial_state: {}, step: broken_step })
+	broken_source : Stream(Try(List(U8), [Injected]))
+	broken_source = [Ok(bytes)].iter().stream()
+	var $broken = []
+	for! item in broken.values_stream(broken_source) {
+		$broken = $broken.append(item)
 	}
-	if $unfinished != [Ok(bytes.first() ?? 0), Err(MissingFinished)] {
-		crash "value extraction accepted a missing completion event"
+	if $broken != [Err(DecoderProtocol({ problem: NeedInputAfterFinal, location: Unavailable(NotApplicable), path: [] }))] {
+		crash "value extraction accepted an invalid completion protocol"
 	}
-	skipped : Stream(Try(Streaming.ReadEvent(U8, Str), Str))
-	skipped = [Ok(Finished({ emitted_items: 0, rejected_records: 1 }))].iter().stream()
-	var $skipped = []
-	for! item in Streaming.values_stream(skipped) {
-		$skipped = $skipped.append(item)
-	}
-	if $skipped != [Err(SkippedRecords({ emitted_items: 0, rejected_records: 1 }))] {
-		crash "value extraction silently discarded a rejected record"
-	}
+
 	Fuzz.keep
 }
 
 target = Fuzz.target_with!({ name: "stream-contract", examples: [], generator: Fuzz.raw_bytes, test!, show: Str.inspect })
+
+## This deliberately invalid state machine always asks for more source bytes.
+## Both synthetic machines retain the same closed failure family.
+broken_step : {}, List(U8), Parser.InputEnd -> Parser.Step({}, U8, ByteProblem)
+broken_step = |state, bytes, _end| { state, consumed: bytes.len(), outcome: NeedInput }

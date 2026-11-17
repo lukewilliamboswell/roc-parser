@@ -3,9 +3,8 @@ app [target] {
 	parser: "../package/main.roc",
 }
 import fuzz.Fuzz
-import parser.Streaming
-
-step : U64, List(U8), Streaming.InputEnd -> Streaming.Step(U64, U8, [])
+import parser.Parser
+step : U64, List(U8), Parser.InputEnd -> Parser.Step(U64, U8, [])
 step = |state, bytes, end| match bytes.first() {
 	Ok(byte) => { state: state + 1, consumed: 1, outcome: Item(byte) }
 	Err(_) => { state, consumed: 0, outcome: if (end == Final) Done else NeedInput }
@@ -23,7 +22,7 @@ drain = |count| {
 			Err(NoMore)
 		},
 	)
-	for item in Streaming.read_iter(chunks, Streaming.decoder(0, step)) {
+	for item in (Parser.decoder({ initial_state: 0, step })).read_iter(chunks) {
 		match item {
 			Ok(Value(_)) => {}
 			Ok(Finished(report)) => return report.emitted_items

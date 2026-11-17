@@ -20,61 +20,54 @@ The examples below come from
 checked against
 {src}/docs/examples/errors-report.expected[errors-report.expected].
 
-== Summary
+== Shared diagnostic metadata
 
-[cols="1,2,2",options="header"]
+A diagnostic is `Parser.Diagnostic(problem)`, a transparent nominal record with
+`problem`, `location` and `path`. The problem remains a descriptive tag union
+owned by the format. Source strings carry names, keys or authored values;
+callers never need to match prose to distinguish failures.
+
+[cols="1,3",options="header"]
 |===
-|Function |Failure |Location and details
+|Location |Meaning
+|`Text({ offset, line, column })` |Original byte offset and one-based physical line and byte column
+|`ByteOffset(offset)` |Original byte offset when text coordinates are not retained
+|`LineColumn({ line, column })` |Known text coordinates without an original byte offset
+|`InputOffset(index)` |Element index in the generic parser's input, which may not be bytes
+|`Unavailable(reason)` |`NotRetained`, `GeneratedValue` or `NotApplicable`; no fabricated zero position
+|===
 
-|`QIF.parse_str`, `OFX.parse_str`
-|`InvalidQif(error)`, `InvalidOfx(error)`
-|Original byte `offset`, one-based `line` and byte `column`, and a typed `problem`.
+The logical `path` is independent of the physical location. Its segments are
+`Record(number)`, `Field(number)`, `Index(index)`, `Key(key)` and `Source(name)`.
+Record and field numbers are one-based; indexes are zero-based. A decoded value
+can therefore retain a key or field identity even when source bytes are gone.
 
-|`Yaml.parse_str`, `Yaml.decode`, `Xml.parse_str`, `XmlNs.parse_str`, `JsonValue.parse_str`
-|`InvalidYaml(error)`, `InvalidXml(error)`, `InvalidNamespace(error)`, `InvalidJsonValue(error)`
-|One-based `line` and byte `column`, and a typed `problem` describing syntax,
-limits or selected validation checks.
-
-|`CSV.parse`, `CSV.parse_records`
-|`InvalidCsv(error)`
-|One-based `record`, `field`, `line` and byte `column`, and a typed `problem`.
-
-|`CSV.parse_with`, `CSV.decode`
-|`InvalidCsv(error)` or `InvalidRow(error)`
-|CSV syntax failures remain native errors. `InvalidRow` preserves a custom
-parser's problem under `ParserFailure`, with the row and field location.
-Coordinates unavailable to `CSV.decode` are zero.
-
-|`CSV.parse`, `Yaml.decode`
-|`MissingRequiredField(name)`
-|A required record field had no column or mapping key. `name` is source context.
-
-|`HTTP.parse_request`, `HTTP.parse_response`, `HTTP.parse_requests`
-|`InvalidHttp({ offset, problem })`
-|Byte offset and a typed HTTP syntax, framing or semantic problem.
-
-|`JsonValue.to_str`, `JsonValue.to_str_with`
-|`InvalidNumber(text)`, `DuplicateKey(key)`, `TooDeep`
-|Why a value constructed in code cannot be written as JSON.
-
+[cols="1,2",options="header"]
+|===
+|Operation |Failure
+|Format `parse_str`, `parse_bytes` and `validate` constructors
+|A native tag such as `InvalidYaml(error)`, `InvalidXml(error)`, `InvalidNamespace(error)`, `InvalidJsonValue(error)`, `InvalidCsv(error)` or `InvalidHttp(error)`
+|`parser.parse`, `parser.run`, `parser.parse_str`, `parser.run_str`
+|`ParseError(diagnostic)` with the grammar's problem union plus generic runner failures
+|CSV positional row parser
+|Its generic runner preserves `InvalidCsv(error)` or `InvalidRow(error)` inside `diagnostic.problem`
+|`value.encode(props)`
+|A typed format error describing why a programmatically constructed value cannot be written
 |`Markdown.parse_str`
-|None
-|Every input is a Markdown document.
-
-|`Utf8.parse_str`, `Parser.parse`
-|`ParseError({ offset, problem })`
-|The furthest failure, including a custom parser's own tags. Leftover input
-produces `UnexpectedInput` unless a more precise failure reached that position.
+|None: every input is a Markdown document
 |===
 
-Format problems belong to their module's `Problem` union. A `Str` payload holds
-source data or application context, such as a field name or invalid number;
-it does not identify the failure. Quotation conversions render these problems
-into `BadQuotedBytes(Str)` because compiler diagnostics require text.
+Resource failures retain `max` and `observed`. `Exact(count)` is a complete
+count; `AtLeast(count)` records the first proven violation without scanning the
+remaining input. Offending scalar values use owned bounded excerpts containing
+at most forty bytes and the original `total_bytes`; keeping a failure does not
+retain the complete input buffer. Complete identifiers remain available when
+identity is needed.
 
-Outer failure unions compose with `?`, including functions that also return I/O
-errors. `JsonValue` uses `InvalidJsonValue`, so it can coexist with builtin
-`Json`'s `InvalidJson` without a tag collision (see <<json-builtin>>).
+Quotation hooks render typed failures into `BadQuotedBytes(Str)` because
+compiler diagnostics require text. Runtime validation retains native tags.
+Failure unions compose with `?`, including application and I/O errors.
+`InvalidJsonValue` remains distinct from builtin `Json`'s `InvalidJson`.
 
 [#_yaml_xml_and_json_show_the_location]
 == Show the source location
@@ -99,10 +92,10 @@ own problem tags; applications can distinguish them from malformed syntax.
 
 == CSV: report the record and field
 
-Record and field numbers count every input record, including headers and blank
-lines. Physical positions identify the start of a failed field. A custom field
-parser's byte offset is retained inside `FieldProblem`; the outer offset is its
-column within the record.
+CSV paths identify the original record and field, including headers and blank
+records. Physical coordinates identify the failed field. Custom field parsers
+retain their typed problem and diagnostic metadata under `FieldProblem` and
+`ParserFailure`; the row adapter adds the record context.
 
 [source,roc]
 ----
@@ -115,8 +108,8 @@ include::examples/errors-report.expected[lines=4..6]
 ----
 
 Native scalar failures retain the expected type and at most 40 bytes of the
-failed cell. `CSV.parse` also reports `MissingRequiredField(name)` when a required
-column is absent. Custom parser payloads retain the information supplied by
+failed cell. `CSV.decode_str` also reports native `MissingRequiredField(name)` when a
+required column is absent. Custom parser payloads retain the information supplied by
 that parser.
 
 [#_http_reject_the_message]
@@ -136,27 +129,29 @@ include::examples/errors-report.roc[tag=http,indent=0]
 include::examples/errors-report.expected[lines=7]
 ----
 
-`HTTP.parse_request` returns bytes after the message as `rest`.
-`HTTP.parse_requests` validates a complete pipeline, including its final boundary.
+`HTTP.Request.parse_bytes(bytes, {})` validates one complete message.
+`HTTP.Request.parser({}).run(bytes)` returns a prefix and its remaining bytes;
+the request decoder validates a complete pipeline, including its final boundary.
 
 [#_your_own_parsers_say_where_and_what]
 == Streaming and custom parsers
 
-All chunk readers use the same failure contract. `SourceErr` preserves an I/O
-failure; `ParseErr` carries a terminal format failure. A safely framed rejected
-record can produce `Rejected(problem)` when recovery is configured. Resource
-limits, broken framing and invalid encoding remain terminal. See <<streaming>>
-for error policies and completion validation.
+Chunk readers forward native format failures directly. `SourceErr(cause)`
+preserves an I/O failure unchanged; it never finalizes truncated input as EOF.
+A safely framed invalid record can produce `Rejected(nativeError)` when recovery
+is configured. Resource limits, broken framing and invalid encoding remain
+terminal. Adapter failures are structured `DecoderProtocol` or
+`RecoveryLimitExceeded` diagnostics. See <<streaming>>.
 
-Define domain failures as tags with payloads, such as
-`InvalidTime({ hour, minute })`. Return them from a custom parser or validate a
-parsed value with `.map(...).flatten()`. `Parser(input, value, problem)` preserves
-the problem type through combinators and runners, together with the furthest
-byte offset. Convert that offset to an application location with
-`Literal.position(source, offset)` when the input is UTF-8 text.
+Define domain failures with payloads, such as `InvalidTime({ hour, minute })`.
+A custom primitive returns
+`Err(ParseError(Parser.Diagnostic.{ problem, location: InputOffset(offset), path: [] }))`.
+Alternatively validate a parsed value with `.map(...).flatten()`.
+The runner preserves the furthest failure and explicit logical context;
+`parse_str` and `run_str` turn inferred byte indexes into original text positions.
 
-When embedding a native format parser in another grammar, give its failures a
-domain tag with `.map_problem(|problem| JsonProblem(problem))`. The mapper
-preserves byte offsets and furthest failures while allowing the surrounding
-grammar to use its own problem tags. Primitive factories such as
-`Utf8.digits({})` and `CSV.string({})` infer the shared extensible problem type.
+When combining a native format parser with another grammar, use
+`.map_problem(|problem| JsonProblem(problem))` to give its problems a domain tag.
+This changes problem identity while preserving diagnostic locations and paths.
+Primitive factories such as `Parser.Utf8.digits({})` and `CSV.string({})` infer
+the surrounding extensible problem type.

@@ -6,7 +6,6 @@ app [main!] {
 import cli.Stdout
 import parser.CSV
 import parser.Parser
-import parser.Utf8
 import parser.Yaml
 
 # tag::decode[]
@@ -24,17 +23,17 @@ expect decode_service("{\"name\": \"web\"}") == Err(InvalidJson("Missing field: 
 # roc-parser's CSV and Yaml modules are formats for the same mechanism.
 Planet : { name : Str, moons : U64, rings : Try(Bool, [Missing]) }
 
-planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error), MissingRequiredField(Str)])
-planets = |text| CSV.parse(text)
+planets : Str -> Try(List(Planet), [InvalidCsv(CSV.Error)])
+planets = |text| CSV.decode_str(text, {})
 
 expect planets("name,moons\nMars,2\n") == Ok([{ name: "Mars", moons: 2, rings: Err(Missing) }])
-expect planets("name\nMars\n") == Err(MissingRequiredField("moons"))
+expect planets("name\nMars\n").map_err(|InvalidCsv(error)| error.problem) == Err(MissingRequiredField("moons"))
 
-service : Str -> Try(Service, [InvalidYaml(Yaml.Error), MissingRequiredField(Str)])
-service = |text| Yaml.decode(text)
+service : Str -> Try(Service, [InvalidYaml(Yaml.Error)])
+service = |text| Yaml.decode_str(text, {})
 
 expect service("name: web\nport: 8080\n") == Ok({ name: "web", port: 8080 })
-expect service("name: web\n") == Err(MissingRequiredField("port"))
+expect service("name: web\n").map_err(|InvalidYaml(error)| error.problem) == Err(MissingRequiredField("port"))
 # end::decode-formats[]
 
 # tag::tree[]
@@ -42,7 +41,7 @@ expect service("name: web\n") == Err(MissingRequiredField("port"))
 # do with each key, whatever keys the file happens to contain.
 top_level_keys : Str -> Try(List(Str), [NotAMapping, InvalidYaml(Yaml.Error)])
 top_level_keys = |text| {
-	match Yaml.parse_str(text)? {
+	match Yaml.parse_str(text, {})? {
 		Mapping(entries) => Ok(entries.map(|entry| entry.key))
 		_ => Err(NotAMapping)
 	}
@@ -52,7 +51,7 @@ expect top_level_keys("name: web\nport: 8080\nextra: [1, 2]") == Ok(["name", "po
 
 # The tree methods follow a path without a match per level.
 port_of : Str -> Try(I64, [Missing, WrongType, InvalidYaml(Yaml.Error)])
-port_of = |text| Yaml.parse_str(text)?.get_path(["server", "port"])?.as_i64()
+port_of = |text| Yaml.parse_str(text, {})?.get_path(["server", "port"])?.as_i64()
 
 expect port_of("server:\n  port: 8080\n") == Ok(8080)
 expect port_of("server: {}\n") == Err(Missing)
@@ -63,15 +62,15 @@ expect port_of("server: {}\n") == Err(Missing)
 # be digits and the grammar is yours to define.
 Endpoint : { host : Str, port : U64 }
 
-endpoint : Parser(Utf8.Bytes, Endpoint, _)
+endpoint : Parser(Parser.Utf8.Bytes, Endpoint, _)
 endpoint =
 	Parser.const(|host| |port| { host, port })
 		.keep(Parser.chomp_while(|b| b != ':').map(Str.from_utf8_lossy))
-		.skip(Utf8.codeunit(':'))
-		.keep(Utf8.digits({}))
+		.skip(Parser.Utf8.codeunit(':'))
+		.keep(Parser.Utf8.digits({}))
 
-expect Utf8.parse_str(endpoint, "example.com:443") == Ok({ host: "example.com", port: 443 })
-expect Utf8.parse_str(endpoint, "example.com:https").is_err()
+expect (endpoint).parse_str("example.com:443") == Ok({ host: "example.com", port: 443 })
+expect (endpoint).parse_str("example.com:https").is_err()
 # end::combinators[]
 
 # tag::split[]
@@ -87,6 +86,6 @@ main! = |_args| {
 	Stdout.line!(Str.inspect(planets("name,moons\nMars,2\n")))?
 	Stdout.line!(Str.inspect(service("name: web\n")))?
 	Stdout.line!(Str.inspect(top_level_keys("name: web\nport: 8080\nextra: [1, 2]")))?
-	Stdout.line!(Str.inspect(Utf8.parse_str(endpoint, "example.com:443")))?
+	Stdout.line!(Str.inspect((endpoint).parse_str("example.com:443")))?
 	Stdout.line!(Str.inspect(fields("a\tb\tc")))
 }

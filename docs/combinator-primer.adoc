@@ -43,16 +43,16 @@ include::examples/combinator-primer-step1.roc[tag=key,indent=0]
 
 Three ideas appear here:
 
-* A `Parser(Utf8.Bytes, Str, _)` reads from UTF-8 bytes (`Utf8.Bytes` is
+* A `Parser(Parser.Utf8.Bytes, Str, _)` reads from UTF-8 bytes (`Parser.Utf8.Bytes` is
   `List(U8)`) and produces a `Str`. Every parser has an input type and a
   result type.
-* `Utf8.codeunit_satisfies(is_key_byte)` reads one byte if `is_key_byte`
+* `Parser.Utf8.codeunit_satisfies(is_key_byte)` reads one byte if `is_key_byte`
   accepts it, and fails otherwise.
 * `.one_or_more()` repeats a parser until it fails and collects the results
   in a list. `.map(f)` transforms the result with an ordinary function; here
   `Str.from_utf8_lossy` turns the bytes into a `Str`.
 
-`Utf8.parse_str` runs a parser on a whole string. These tests pass:
+`parser.parse_str` runs a parser on a whole string. These tests pass:
 
 [source,roc]
 ----
@@ -116,7 +116,7 @@ success. If one fails part-way through, the next one starts again from the
 beginning, so `text` does not see input already examined by `number` or
 `flag`.
 
-`Utf8.digits({})` reads a whole number as a `U64`, and `Utf8.string("true")`
+`Parser.Utf8.digits({})` reads a whole number as a `U64`, and `Parser.Utf8.string("true")`
 reads exactly that text. `.between(open, close)` reads `open`, the parser,
 and `close`, and keeps only the middle result.
 
@@ -149,8 +149,8 @@ include::examples/combinator-primer-step4.roc[tag=config,indent=0]
 include::examples/combinator-primer-step4.roc[tag=expects,indent=0]
 ----
 
-`Utf8.parse_str` returns one of three results, and a real program should
-handle each:
+`parser.parse_str` returns a value or a diagnostic. The following program
+reports four representative outcomes:
 
 [source,roc]
 ----
@@ -183,12 +183,13 @@ kept, so a mistake in the middle of a file is reported where it is.
 
 == What you have learned
 
-* A parser has an input type and a result type, and `Utf8.parse_str` runs
+* A parser has an input type and a result type, and `parser.parse_str` runs
   one on a whole string.
 * `Parser.const(f).keep(a).skip(b).keep(c)` reads things in sequence.
 * `.map(f)` transforms a result; `Parser.one_of` chooses between
   alternatives; `one_or_more`, `many` and `sep_by` repeat.
-* A parse ends in `Ok` or a `ParseError` with a problem tag and a byte `offset`.
+* A parse ends in `Ok` or a `ParseError` with a problem tag, a location and a logical path.
+  Text runners retain byte offset, line and column together.
 
 <<combinators>> covers the remaining combinators and the rules for
 alternatives and repetition in more depth.

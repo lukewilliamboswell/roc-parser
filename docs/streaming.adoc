@@ -10,8 +10,8 @@ pure chunks; builtin `Stream` supplies effectful chunks from a file or stdin.
 The pinned basic-cli platform provides `File.Reader.chunks`, `Stdin.chunks` and
 `File.Writer.write_stream!` for these pipelines.
 
-Use `Streaming.read_iter(chunks, decoder)` for pure chunks or
-`Streaming.read_stream(chunks, decoder)` for an effectful source. Choose a
+Use `decoder.read_iter(chunks)` for pure chunks or
+`decoder.read_stream(source)` for an effectful source. Choose a
 format-specific decoder and output unit:
 
 [cols="1,2,2",options="header"]
@@ -20,15 +20,15 @@ format-specific decoder and output unit:
 |CSV |`CSV.decoder`, `CSV.typed_decoder`, `CSV.positional_decoder` |Rows; typed decoding adapters are also available
 |QIF |`QIF.decoder`, `QIF.transaction_decoder` |Section context and transaction records
 |OFX |`OFX.decoder` |Statement context and transaction records
-|JSON |`JsonStream.decoder` |NDJSON records or top-level array items
+|JSON |`JsonValue.record_decoder` |NDJSON records or top-level array items
 |XML |`Xml.decoder` |Start, end and bounded text events
-|XML with namespaces |`XmlNs.decoder` |Events with resolved names
-|HTTP/1.1 |`HTTP.request_decoder`, `HTTP.response_decoder` |Heads, body fragments, trailers and message boundaries
+|XML with namespaces |`Xml.Namespaced.decoder` |Events with resolved names
+|HTTP/1.1 |`HTTP.Request.decoder`, `HTTP.Response.decoder` |Heads, body fragments, trailers and message boundaries
 |===
 
-CSV, QIF, OFX and JSON also provide `encoder` constructors. Pass an encoder to
-`Streaming.write_iter(items, encoder)` or `Streaming.write_stream(items, encoder)`.
-Set output chunk limits with `encoder.with_chunk_bytes(bytes)` (64 KiB by default). See
+CSV, QIF, OFX and JSON also provide writer constructors (`record_encoder` for JSON). Pass an encoder to
+`encoder.write_iter(items)` or `encoder.write_stream(items)`.
+Set `chunk_bytes` in the encoder constructor props (64 KiB by default). See
 xref:json.adoc#json-streaming[JSON record streams],
 xref:xml.adoc#xml-streaming[chunked XML events] and
 xref:http.adoc#http-streaming[chunked HTTP messages] for format-specific setup.
@@ -41,7 +41,8 @@ not signal EOF. Only exhaustion of the source finalizes the decoder.
 
 Readers yield `Try` items. Successful events are `Value(value)`,
 `Rejected(problem)` when reporting recoverable errors, and one final
-`Finished(report)`. Terminal failures yield an error once and stop. Source
+`Finished(report)`. Terminal failures yield the native format error once and stop, without an
+additional parser or collector wrapper. Source
 failures retain their original value under `SourceErr`; they never finalize a
 truncated document as though it had reached EOF.
 
@@ -54,17 +55,17 @@ early releases the remaining pipeline when its values are dropped, but leaves
 the unread suffix unvalidated. Keep only the latest iterator/stream state to
 allow consumed chunks to be released.
 
-`Streaming.collect` requires successful completion and rejects any omitted or
-reported invalid records. `Streaming.values_stream` extracts values for a fail-fast writer pipeline and
+`decoder.collect(chunks)` requires successful completion and rejects any omitted or
+reported invalid records. `decoder.values_stream(source)` extracts values for a fail-fast writer pipeline and
 requires `Finished`; rejected or skipped records remain errors.
-Use `Streaming.collect_report` when the application
+Use `decoder.collect_report(chunks)` when the application
 intentionally wants both values and diagnostics. Both collectors retain the
 collected values; use an ordinary pull loop to process and discard records.
 
 == Choose an error policy
 
-Configure common recovery with `decoder.with_errors({ error_policy: ReportInvalidRecords,
-max_errors: 1000 })`. `FailFast` is the default. `SkipInvalidRecords` discards records that were
+Configure common recovery with the constructor props `errors: { policy: ReportInvalidRecords,
+max_errors: 1000 }`. `FailFast` is the default. `SkipInvalidRecords` discards records that were
 completely framed but failed semantic decoding. `ReportInvalidRecords` emits
 `Rejected` and continues. The completion report counts emitted items and
 rejected records; metadata/context events count as emitted items too.
@@ -81,6 +82,9 @@ because quoted fields can contain newlines.
 `max_errors` defaults to 1,000 and permits exactly that many recoverable
 rejections. The next rejection is terminal and retains its triggering error.
 An allowance of zero stops at the first invalid record.
+`RecoveryLimitExceeded` retains `{ max, observed: Exact(count), cause }`;
+`DecoderProtocol` identifies invalid consumption or completion from a custom
+decoder. Both use the common diagnostic envelope.
 
 == Bound retained memory
 
@@ -122,19 +126,23 @@ builds and executes the current Roc probe.
 [#_implement_another_chunk_decoder]
 == Implement another chunk decoder
 
-`Streaming.Step` returns the updated state, the number of bytes consumed from
+`Parser.Step` returns the updated state, the number of bytes consumed from
 this call, and `Item`, `RecordError`, `NeedInput`, `Done` or `Failed`.
 A decoder must retain unfinished syntax and its original byte positions.
 It must drain pending output before requesting more input. `NeedInput` consumes
 the supplied input, and is invalid after `Final`; `Done` requires `Final` and
 complete consumption. The shared adapters reject these protocol violations.
 
-Construct a descriptor with `Streaming.decoder(initial_state, step)` and pass it
-to `Streaming.read_iter` or `Streaming.read_stream`. For manual backpressure, call
-`decoder.step(bytes, More | Final)` and retain the returned descriptor.
+Construct a descriptor with
+`Parser.decoder({ initial_state, step, errors: {} })`, then call its `read_iter`
+or `read_stream` method. For manual backpressure, call
+`decoder.step({ bytes, end: More })` or use `Final` at EOF and retain the
+returned descriptor. `decoder.metadata()` exposes the state's declared read-only
+metadata capability without exposing parser bookkeeping.
 
-`Streaming.encoder(initial_state, encode, finish)` configures a stateful writer.
+`Parser.encoder({ initial_state, encode, finish, chunk_bytes: 65536 })`
+configures a stateful writer.
 The `encode` function returns updated state and validated record bytes; `finish`
-returns the final suffix. Use `Streaming.write_iter` or `Streaming.write_stream`
+returns the final suffix. Use `encoder.write_iter` or `encoder.write_stream`
 to bound output chunks. Source state belongs in the evolving iterator state so
 terminal states can release it.

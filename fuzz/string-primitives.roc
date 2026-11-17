@@ -5,7 +5,6 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Parser
-import parser.Utf8
 
 ## Utf8 primitive properties over arbitrary (often invalid) UTF-8:
 ## - digit/digits agree with a naive U128 decimal oracle and with the builtin
@@ -43,14 +42,18 @@ check_suffix = |name, input, consumed, rest| {
 ## a suffix of the input. Returns the consumed prefix length on success.
 run : Str, Parser(List(U8), a, _), List(U8) -> Try(U64, [Failed])
 run = |name, parser, input| {
-	match Parser.run(parser, input) {
+	match parser.run(input) {
 		Ok({ value: _, rest: rest }) => {
 			if rest.len() > input.len() or input.drop_first(input.len() - rest.len()) != rest {
 				crash "${name}: leftover is not a suffix of the input"
 			}
 			Ok(input.len() - rest.len())
 		}
-		Err(ParseError({ problem, offset })) => {
+		Err(ParseError({ problem, location, .. })) => {
+			offset = match location {
+				InputOffset(index) => index
+				_ => crash "raw primitive lost input location"
+			}
 			_ = Str.inspect(problem).count_utf8_bytes()
 			if (offset > input.len()) crash "${name}: failure offset is beyond the input"
 			Err(Failed)
@@ -67,7 +70,7 @@ check_numbers = |input| {
 	prefix = input.sublist({ start: 0, len: count })
 	oracle = prefix.fold(0.U128, |acc, b| if (acc > 18446744073709551615) acc else acc * 10 + U8.to_u128(b - '0'))
 	builtin = U64.from_str(Str.from_utf8_lossy(prefix))
-	actual = Parser.run(Utf8.digits({}), input)
+	actual = (Parser.Utf8.digits({})).run(input)
 	match actual {
 		Ok({ value: val, rest: rest }) => {
 			if count == 0 or oracle > 18446744073709551615 or U64.to_u128(val) != oracle or rest != input.drop_first(count) {
@@ -84,7 +87,7 @@ check_numbers = |input| {
 				crash "digits rejected a value U64.from_str accepts: ${Str.inspect(prefix)}"
 			}
 	}
-	match Parser.run(Utf8.digit({}), input) {
+	match (Parser.Utf8.digit({})).run(input) {
 		Ok({ value: val, rest: rest }) =>
 			if count == 0 or U64.to_u128(val) != U8.to_u128((input.get(0) ?? 0) - '0') or rest != input.drop_first(1) {
 				crash "digit wrong"
@@ -98,21 +101,21 @@ check_codeunits : Case -> {}
 check_codeunits = |case| {
 	input = case.input
 	first = input.get(0)
-	match Parser.run(Utf8.any_codeunit({}), input) {
+	match (Parser.Utf8.any_codeunit({})).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (first != Ok(val)) crash "any_codeunit value"
 			check_suffix("any_codeunit", input, [val], rest)
 		}
 		Err(_) => if (first.is_ok()) crash "any_codeunit failed on non-empty input"
 	}
-	match Parser.run(Utf8.codeunit(case.unit), input) {
+	match (Parser.Utf8.codeunit(case.unit)).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (first != Ok(case.unit) or val != case.unit) crash "codeunit accepted wrong byte"
 			check_suffix("codeunit", input, [val], rest)
 		}
 		Err(_) => if (first == Ok(case.unit)) crash "codeunit rejected matching byte"
 	}
-	match Parser.run(Utf8.codeunit_satisfies(|b| b < case.unit), input) {
+	match (Parser.Utf8.codeunit_satisfies(|b| b < case.unit)).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (first != Ok(val) or val >= case.unit) crash "codeunit_satisfies accepted wrong byte"
 			check_suffix("codeunit_satisfies", input, [val], rest)
@@ -123,7 +126,7 @@ check_codeunits = |case| {
 				_ => {}
 			}
 	}
-	match Parser.run(Utf8.utf8(case.literal), input) {
+	match (Parser.Utf8.utf8(case.literal)).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (val != case.literal or !input.starts_with(case.literal)) crash "utf8 accepted non-prefix"
 			check_suffix("utf8", input, val, rest)
@@ -132,7 +135,7 @@ check_codeunits = |case| {
 	}
 	match Str.from_utf8(case.literal) {
 		Ok(text) =>
-			match Parser.run(Utf8.string(text), input) {
+			match (Parser.Utf8.string(text)).run(input) {
 				Ok({ value: val, rest: rest }) => {
 					if (val != text or !input.starts_with(case.literal)) crash "string accepted non-prefix"
 					check_suffix("string", input, case.literal, rest)
@@ -141,25 +144,25 @@ check_codeunits = |case| {
 			}
 		Err(_) => {}
 	}
-	match Parser.run(Utf8.rest({}), input) {
+	match (Parser.Utf8.rest({})).run(input) {
 		Ok({ value: val, rest: rest }) => check_suffix("rest", input, val, rest)
 		Err(_) => crash "rest failed"
 	}
-	match Parser.run(Utf8.rest_str({}), input) {
+	match (Parser.Utf8.rest_str({})).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (Str.from_utf8(input) != Ok(val)) crash "rest_str value"
 			check_suffix("rest_str", input, val.to_utf8(), rest)
 		}
 		Err(_) => if (Str.from_utf8(input).is_ok()) crash "rest_str rejected valid UTF-8"
 	}
-	match Parser.run(Parser.chomp_until(case.unit), input) {
+	match (Parser.chomp_until(case.unit)).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (val.contains(case.unit) or rest.get(0) != Ok(case.unit)) crash "chomp_until stopped at wrong byte"
 			check_suffix("chomp_until", input, val, rest)
 		}
 		Err(_) => if (input.contains(case.unit)) crash "chomp_until missed the byte"
 	}
-	match Parser.run(Parser.chomp_while(|b| b < case.unit), input) {
+	match (Parser.chomp_while(|b| b < case.unit)).run(input) {
 		Ok({ value: val, rest: rest }) => {
 			if (val.any(|b| b >= case.unit)) crash "chomp_while consumed a failing byte"
 			match rest.get(0) {
@@ -170,7 +173,7 @@ check_codeunits = |case| {
 		}
 		Err(_) => crash "chomp_while failed"
 	}
-	_ = run("one_of", Parser.one_of([Utf8.utf8(case.literal), Utf8.digit({}).map(|_| [])]), input)
+	_ = run("one_of", Parser.one_of([Parser.Utf8.utf8(case.literal), Parser.Utf8.digit({}).map(|_| [])]), input)
 	_ = run("one_of empty", Parser.one_of([]), input)
 	{}
 }
@@ -181,27 +184,31 @@ check_str_front_ends = |case| {
 	text = Str.from_utf8_lossy(case.input)
 	bytes = text.to_utf8()
 	parsers = [
-		Utf8.any_codeunit({}).map(|b| [b]),
-		Utf8.codeunit(case.unit).map(|b| [b]),
-		Utf8.utf8(case.literal),
-		Parser.many(Utf8.any_codeunit({})),
+		Parser.Utf8.any_codeunit({}).map(|b| [b]),
+		Parser.Utf8.codeunit(case.unit).map(|b| [b]),
+		Parser.Utf8.utf8(case.literal),
+		Parser.many(Parser.Utf8.any_codeunit({})),
 		Parser.chomp_until(case.unit),
 	]
 	parsers.fold(
 		{},
 		|_, parser| {
-			match Utf8.parse_str_partial(parser, text) {
+			match (parser).run_str(text) {
 				Ok({ value: val, rest: rest }) =>
 					if !Str.from_utf8_lossy(val).is_empty() and rest.count_utf8_bytes() > bytes.len() * 3 {
 						crash "parse_str_partial leftover grew"
 					}
-				Err(ParseError({ problem, offset: _ })) => {
+				Err(ParseError({ problem, .. })) => {
 					_ = Str.inspect(problem).count_utf8_bytes()
 				}
 			}
-			match Utf8.parse_str(parser, text) {
+			match (parser).parse_str(text) {
 				Ok(_) => {}
-				Err(ParseError({ problem, offset })) => {
+				Err(ParseError({ problem, location, .. })) => {
+					offset = match location {
+						Text(position) => position.offset
+						_ => crash "text runner lost source location"
+					}
 					_ = Str.inspect(problem).count_utf8_bytes()
 					if (offset > bytes.len()) crash "parse_str failure offset is beyond the input"
 				}
@@ -224,12 +231,12 @@ check_scaling = |case| {
 		while $big.len() < 20000 + case.scale * 1000 {
 			$big = $big.concat($big)
 		}
-		element = Parser.alt(Utf8.codeunit(case.unit).map(|b| [b]), Parser.one_of([Utf8.utf8(case.literal), Utf8.any_codeunit({}).map(|_| [])]))
-		match Parser.run(Parser.many(element.map(|_| {})), $big) {
+		element = Parser.alt(Parser.Utf8.codeunit(case.unit).map(|b| [b]), Parser.one_of([Parser.Utf8.utf8(case.literal), Parser.Utf8.any_codeunit({}).map(|_| [])]))
+		match (Parser.many(element.map(|_| {}))).run($big) {
 			Ok({ value: val, rest: rest }) => if (val.len() == 0 and rest.len() != $big.len()) crash "many consumed without values"
 			Err(_) => crash "many failed"
 		}
-		_ = run("sep_by", Parser.sep_by(Utf8.digits({}), Utf8.codeunit(case.unit)), $big)
+		_ = run("sep_by", Parser.sep_by(Parser.Utf8.digits({}), Parser.Utf8.codeunit(case.unit)), $big)
 		_ = run("chomp_while", Parser.many(Parser.chomp_while(|b| b < case.unit)), $big)
 		{}
 	}

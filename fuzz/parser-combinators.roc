@@ -5,7 +5,6 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.Parser
-import parser.Utf8
 
 ## Combinator model property: bytes decode into a random combinator expression
 ## tree plus an input. The tree is turned into a real `Parser` built from the
@@ -193,15 +192,15 @@ build = |expr| build_step(expr, build)
 build_step : Expr, (Expr -> Parser(List(U8), List(U8), _)) -> Parser(List(U8), List(U8), _)
 build_step = |expr, again| {
 	match expr {
-		Lit(lit) => Utf8.utf8(lit)
-		Text(text) => Utf8.string(text).map(|s| s.to_utf8())
-		Cu(c) => Utf8.codeunit(c).map(|b| [b])
-		Sat(t) => Utf8.codeunit_satisfies(|b| b < t).map(|b| [b])
-		AnyCu => Utf8.any_codeunit({}).map(|b| [b])
-		AnyThing => Utf8.rest({})
-		AnyString => Utf8.rest_str({}).map(|s| s.to_utf8())
-		Digit => Utf8.digit({}).map(|n| n.to_str().to_utf8())
-		Digits => Utf8.digits({}).map(|n| n.to_str().to_utf8())
+		Lit(lit) => Parser.Utf8.utf8(lit)
+		Text(text) => Parser.Utf8.string(text).map(|s| s.to_utf8())
+		Cu(c) => Parser.Utf8.codeunit(c).map(|b| [b])
+		Sat(t) => Parser.Utf8.codeunit_satisfies(|b| b < t).map(|b| [b])
+		AnyCu => Parser.Utf8.any_codeunit({}).map(|b| [b])
+		AnyThing => Parser.Utf8.rest({})
+		AnyString => Parser.Utf8.rest_str({}).map(|s| s.to_utf8())
+		Digit => Parser.Utf8.digit({}).map(|n| n.to_str().to_utf8())
+		Digits => Parser.Utf8.digits({}).map(|n| n.to_str().to_utf8())
 		Const(lit) => Parser.const(lit)
 		Fail => Parser.fail(ModelFailure)
 		ChompWhile(t) => Parser.chomp_while(|b| b < t)
@@ -403,9 +402,13 @@ test = |case| {
 	expected = model(case.expr, case.input)
 	actual : Outcome
 	actual =
-		match Parser.run(parser, case.input) {
+		match parser.run(case.input) {
 			Ok({ value: val, rest: rest }) => Ok({ val, rest })
-			Err(ParseError({ problem, offset })) => {
+			Err(ParseError({ problem, location, .. })) => {
+				offset = match location {
+					InputOffset(index) => index
+					_ => crash "raw runner lost input location"
+				}
 				# Messages must be renderable without crashing.
 				_ = Str.inspect(problem).count_utf8_bytes()
 				if (offset > case.input.len()) crash "failure offset ${offset.to_str()} is beyond the input"
@@ -417,17 +420,17 @@ test = |case| {
 	}
 	# Full-input runs agree with the partial run. Leftover input fails at or
 	# beyond the point where the partial run stopped (the furthest failure).
-	match (Utf8.parse_bytes(parser, case.input), expected) {
+	match ((parser).parse(case.input), expected) {
 		(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_bytes Ok differs from model"
-		(Err(ParseError({ offset, problem: _ })), Ok(r)) =>
+		(Err(ParseError({ location: InputOffset(offset), .. })), Ok(r)) =>
 			if (r.rest.is_empty() or offset < case.input.len() - r.rest.len() or offset > case.input.len()) crash "parse_bytes leftover offset ${offset.to_str()} differs from model"
-		(Err(ParseError({ offset, problem: _ })), Err(_)) => if (offset > case.input.len()) crash "parse_bytes offset is beyond the input"
+		(Err(ParseError({ location: InputOffset(offset), .. })), Err(_)) => if (offset > case.input.len()) crash "parse_bytes offset is beyond the input"
 		_ => crash "parse_bytes outcome differs from model"
 	}
 	# Str front ends only when the input is valid UTF-8.
 	match Str.from_utf8(case.input) {
 		Ok(text) => {
-			partial = Utf8.parse_str_partial(parser, text)
+			partial = (parser).run_str(text)
 			match (partial, expected) {
 				(Ok(p), Ok(r)) =>
 					if p.value != r.val or p.rest != Str.from_utf8_lossy(r.rest) {
@@ -436,10 +439,10 @@ test = |case| {
 				(Err(_), Err(_)) => {}
 				_ => crash "parse_str_partial success differs from model"
 			}
-			full = Utf8.parse_str(parser, text)
+			full = (parser).parse_str(text)
 			match (full, expected) {
 				(Ok(v), Ok(r)) => if (!r.rest.is_empty() or v != r.val) crash "parse_str Ok differs from model"
-				(Err(ParseError({ offset, problem: _ })), Ok(r)) => if (r.rest.is_empty() or offset < case.input.len() - r.rest.len()) crash "parse_str leftover differs from model"
+				(Err(ParseError({ location: Text({ offset, .. }), .. })), Ok(r)) => if (r.rest.is_empty() or offset < case.input.len() - r.rest.len()) crash "parse_str leftover differs from model"
 				(Err(ParseError(_)), Err(_)) => {}
 				_ => crash "parse_str outcome differs from model"
 			}

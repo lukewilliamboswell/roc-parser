@@ -12,31 +12,37 @@ import parser.Xml
 import parser.Yaml
 
 # tag::located[]
+location_text : Parser.Location -> Str
+location_text = |location| match location {
+	Text({ line, column, .. }) => "${line.to_str()}:${column.to_str()}"
+	LineColumn({ line, column }) => "${line.to_str()}:${column.to_str()}"
+	ByteOffset(offset) => "byte ${offset.to_str()}"
+	InputOffset(offset) => "input ${offset.to_str()}"
+	Unavailable(reason) => "location unavailable (${Str.inspect(reason)})"
+}
+
+render_error : Str, Parser.Diagnostic(problem) -> Str
+render_error = |name, error| {
+	path = if (error.path.is_empty()) "" else " (path ${Str.inspect(error.path)})"
+	"${name}:${location_text(error.location)}: ${Str.inspect(error.problem)}${path}"
+}
+
 yaml_message : Str, Str -> Str
-yaml_message = |file_name, source| {
-	match Yaml.parse_str(source) {
-		Ok(_) => "${file_name}: ok"
-		Err(InvalidYaml({ line, column, problem })) =>
-			"${file_name}:${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
-	}
+yaml_message = |file_name, source| match Yaml.parse_str(source, {}) {
+	Ok(_) => "${file_name}: ok"
+	Err(InvalidYaml(error)) => render_error(file_name, error)
 }
 
 xml_message : Str, Str -> Str
-xml_message = |file_name, source| {
-	match Xml.parse_str(source) {
-		Ok(_) => "${file_name}: ok"
-		Err(InvalidXml({ line, column, problem })) =>
-			"${file_name}:${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
-	}
+xml_message = |file_name, source| match Xml.parse_str(source, {}) {
+	Ok(_) => "${file_name}: ok"
+	Err(InvalidXml(error)) => render_error(file_name, error)
 }
 
 json_message : Str, Str -> Str
-json_message = |file_name, source| {
-	match JsonValue.parse_str(source) {
-		Ok(_) => "${file_name}: ok"
-		Err(InvalidJsonValue({ line, column, problem })) =>
-			"${file_name}:${line.to_str()}:${column.to_str()}: ${Str.inspect(problem)}"
-	}
+json_message = |file_name, source| match JsonValue.parse_str(source, {}) {
+	Ok(_) => "${file_name}: ok"
+	Err(InvalidJsonValue(error)) => render_error(file_name, error)
 }
 
 # end::located[]
@@ -52,12 +58,11 @@ row =
 
 csv_message : Str -> Str
 csv_message = |source| {
-	match CSV.parse_with(row, source) {
+	match CSV.rows_parser({ row: row }).parse_str(source) {
 		Ok(rows) => "${rows.len().to_str()} rows"
-		Err(InvalidCsv({ line, column, record, field, problem })) =>
-			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}"
-		Err(InvalidRow({ line, column, record, field, problem })) =>
-			"line ${line.to_str()}, column ${column.to_str()} (record ${record.to_str()}, field ${field.to_str()}): ${Str.inspect(problem)}"
+		Err(ParseError({ problem: InvalidCsv(error), .. })) => render_error("CSV", error)
+		Err(ParseError({ problem: InvalidRow(error), .. })) => render_error("CSV row", error)
+		Err(ParseError(error)) => render_error("CSV parser", error)
 	}
 }
 
@@ -66,9 +71,9 @@ csv_message = |source| {
 # tag::http[]
 http_message : Str -> Str
 http_message = |source| {
-	match HTTP.parse_request(source.to_utf8()) {
-		Ok({ request, rest: _ }) => "request for ${request.target}"
-		Err(InvalidHttp({ problem, offset })) => "400 Bad Request (byte ${offset.to_str()}): ${Str.inspect(problem)}"
+	match HTTP.Request.parse_bytes(source.to_utf8(), {}) {
+		Ok(request) => "request for ${request.target}"
+		Err(InvalidHttp(error)) => render_error("400 Bad Request", error)
 	}
 }
 

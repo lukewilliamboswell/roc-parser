@@ -1,7 +1,7 @@
 config.yaml:2:7: UnclosedFlowCollection
 feed.xml:2:10: EndTagMismatch({ actual: "feed", expected: "entry" })
 package.json:2:15: TrailingComma
-line 2, column 7 (record 2, field 2): Syntax(UnterminatedQuotedField)
-line 2, column 7 (record 2, field 2): ParserFailure(FieldProblem({ offset: 0, problem: ExpectedValue({ bytes: [109, 97, 110, 121], expected: U64 }) }))
-line 1, column 10 (record 1, field 3): UnreadFields({ found: 3, read: 2 })
-400 Bad Request (byte 0): MissingHost
+CSV:2:7: Syntax(UnterminatedQuotedField) (path [Record(2), Field(2)])
+CSV row:2:7: ParserFailure(FieldProblem({ location: ByteOffset(0), path: [], problem: ExpectedValue({ expected: U64, source: { bytes: [109, 97, 110, 121], total_bytes: 4 } }) })) (path [Record(2), Field(2)])
+CSV row:1:10: UnreadFields({ found: 3, read: 2 }) (path [Record(1), Field(3)])
+400 Bad Request:byte 0: MissingHost
