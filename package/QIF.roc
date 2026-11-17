@@ -115,10 +115,14 @@ QIF := { events : List(QIF.Event) }.{
 				} else {
 					# Scan a contiguous line span before updating the persistent state.
 					# Only a line crossing a source chunk needs an accumulation buffer.
-					stop = Utf8.find_any(bytes, $pos, line_endings)
-					len = stop - $pos
 					record_room = $s.props.max_record_bytes - $s.record_bytes
 					line_room = $s.props.max_line_bytes - $s.line_bytes.len()
+					room = if (record_room < line_room) record_room else line_room
+					remaining = bytes.len() - $pos
+					# Inspect at most the budget plus its first violating byte.
+					scan_len = if (room < remaining) room + 1 else remaining
+					stop = Utf8.find_any(bytes.take_first($pos + scan_len), $pos, line_endings)
+					len = stop - $pos
 					if len > record_room or len > line_room {
 						record_first = record_room <= line_room
 						accepted = if (record_first) record_room else line_room
@@ -127,7 +131,7 @@ QIF := { events : List(QIF.Event) }.{
 						return { state: terminal($s), consumed: $pos + consumed, outcome: Failed(problem($s, if (record_first) "QIF record byte limit exceeded" else "QIF byte limit exceeded")) }
 					}
 					span = bytes.sublist({ start: $pos, len })
-					accumulated = if ($s.line_bytes.is_empty()) {
+					accumulated = if $s.line_bytes.is_empty() {
 						if stop == bytes.len() and end == More {
 							# Copy a partial slice before retaining it across calls: its
 							# backing source allocation may be much larger than the line.
@@ -272,12 +276,19 @@ QIF := { events : List(QIF.Event) }.{
 			return Err(bad("unsupported typed QIF section"))
 		}
 		# Project first values in one pass, while retaining the original ordered list.
+		var $date_text : Try(Str, [Missing])
 		var $date_text = Err(Missing)
+		var $amount_text : Try(Str, [Missing])
 		var $amount_text = Err(Missing)
+		var $payee : Try(Str, [Missing])
 		var $payee = Err(Missing)
+		var $memo : Try(Str, [Missing])
 		var $memo = Err(Missing)
+		var $number : Try(Str, [Missing])
 		var $number = Err(Missing)
+		var $category : Try(Str, [Missing])
 		var $category = Err(Missing)
+		var $cleared : Try(Str, [Missing])
 		var $cleared = Err(Missing)
 		var $duplicate = False
 		for f in record.fields {
@@ -290,11 +301,21 @@ QIF := { events : List(QIF.Event) }.{
 					$duplicate = $duplicate or $amount_text.is_ok()
 					$amount_text = Ok(f.value)
 				}
-				'P' if $payee.is_err() => { $payee = Ok(f.value) }
-				'M' if $memo.is_err() => { $memo = Ok(f.value) }
-				'N' if $number.is_err() => { $number = Ok(f.value) }
-				'L' if $category.is_err() => { $category = Ok(f.value) }
-				'C' if $cleared.is_err() => { $cleared = Ok(f.value) }
+				'P' if $payee.is_err() => {
+					$payee = Ok(f.value)
+				}
+				'M' if $memo.is_err() => {
+					$memo = Ok(f.value)
+				}
+				'N' if $number.is_err() => {
+					$number = Ok(f.value)
+				}
+				'L' if $category.is_err() => {
+					$category = Ok(f.value)
+				}
+				'C' if $cleared.is_err() => {
+					$cleared = Ok(f.value)
+				}
 				_ => {}
 			}
 		}
@@ -768,8 +789,14 @@ expect {
 	}
 	$same
 }
-expect QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) == Err(InvalidQif({ offset: 22, line: 2, column: 12, message: "QIF byte limit exceeded" }))
-expect QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_record_bytes: 11 }) == Err(InvalidQif({ offset: 23, line: 2, column: 12, message: "QIF record byte limit exceeded" }))
+expect match QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_line_bytes: 10 }) {
+	Err(InvalidQif(error)) => error == { offset: 22, line: 2, column: 12, message: "QIF byte limit exceeded" }
+	_ => False
+}
+expect match QIF.parse_with("!Type:Bank\nP1234567890\n^\n", { max_record_bytes: 11 }) {
+	Err(InvalidQif(error)) => error == { offset: 23, line: 2, column: 12, message: "QIF record byte limit exceeded" }
+	_ => False
+}
 
 expect {
 	doc = QIF.parse_str("!Type:Bank\nD27/08/2024\nT-12.3400000000000000000001\nPfirst\nPsecond\nM\nMsecond\nNfirst\nNsecond\nLfirst\nLsecond\nCfirst\nCsecond\nXone\nXtwo\n^\n")?
