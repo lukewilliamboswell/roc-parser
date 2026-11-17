@@ -5,6 +5,7 @@ app [target] {
 
 import fuzz.Fuzz
 import parser.CSV
+import parser.Parser
 import parser.Streaming
 import parser.Utf8
 
@@ -31,6 +32,15 @@ chunks = |bytes, width| Iter.custom(
 
 test : List(U8) -> Fuzz.Outcome
 test = |bytes| {
+	match Str.from_utf8(bytes) {
+		Ok(text) => {
+			expected_text = CSV.parse_records(text).map_ok(|rows| rows.map(|row| row.map(Str.from_utf8_lossy)))
+			if CSV.parse_string_records(text) != expected_text or CSV.parse_with(Parser.many(CSV.field(CSV.string)), text) != expected_text {
+				crash "direct, raw, and generic CSV text collection disagree"
+			}
+		}
+		Err(_) => {}
+	}
 	width = (bytes.first() ?? 0).to_u64() % 31 + 1
 	expected = Utf8.parse_bytes(CSV.parser, bytes)
 	actual = Streaming.collect(CSV.iter_records(chunks(bytes, width), {}, {}))
@@ -64,6 +74,10 @@ test = |bytes| {
 			if Streaming.collect(CSV.iter_records(chunks($encoded, 1), {}, {})) != Ok(rows) {
 				crash "streaming byte CSV round trip changed records"
 			}
+			match Str.from_utf8($encoded) {
+				Ok(text) if CSV.parse_string_records(text) != Ok(rows.map(|row| row.map(Str.from_utf8_lossy))) => crash "direct text CSV round trip changed records"
+				_ => {}
+			}
 		}
 		(Err(_), Err(ReadFailed(ParseErr(problem)))) => {
 			if problem.record == 0 or problem.field == 0 or problem.line == 0 or problem.column == 0 or problem.message.count_utf8_bytes() > 200 {
@@ -77,7 +91,7 @@ test = |bytes| {
 
 target = Fuzz.target_with({
 	name: "csv-stream-raw",
-	examples: ["a,\"b\"\"c\"\r\nx,y".to_utf8(), "x\n\"a\"b,c".to_utf8(), [0xFF.U8, ',', 0x80]].map(|bytes| Fuzz.example({ name: Str.inspect(bytes), revision: "1", make: || bytes })),
+	examples: ["a,\"b\"\"c\"\r\nx,y".to_utf8(), "é,\"😀\"\"q\",\r\n".to_utf8(), "x\n\"a\"b,c".to_utf8(), [0xFF.U8, ',', 0x80]].map(|bytes| Fuzz.example({ name: Str.inspect(bytes), revision: "1", make: || bytes })),
 	generator: Fuzz.raw_bytes,
 	test,
 	show: Str.inspect,

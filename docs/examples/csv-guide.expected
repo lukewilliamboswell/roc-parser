@@ -16,3 +16,5 @@ empty input: Ok([])
 1 movies
 record 2, field 2 (line 2, column 12): expected a U64, found `soon`
 record 1, field 4 (line 1, column 28): the record has 4 fields, but the parser read only 3
+name | note
+Ada | said "hello"

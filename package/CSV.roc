@@ -23,12 +23,13 @@ import CSVReader
 ## - Rows may have different numbers of fields. A byte order mark is not
 ##   removed; it is part of the first field.
 ##
-## There are three ways to read a file:
+## Read a file as typed rows, text fields, or raw bytes:
 ##
 ## - [CSV.parse] decodes rows into records whose field names match the header
 ##   row, with the row type chosen by type inference;
 ## - [CSV.parse_with] runs a hand-built record parser (`record`, `field` and
 ##   `Parser.keep`) over every row, matching columns by position;
+## - [CSV.parse_string_records] returns every field as a `Str`;
 ## - [CSV.parse_records] returns the raw fields.
 ##
 ## ```roc
@@ -113,6 +114,25 @@ CSV := { records : List(CSV.Record) }.{
 	parse_records = |text| {
 		bytes = text.to_utf8()
 		match scan_table(bytes) {
+			Ok(records) => Ok(records)
+			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
+		}
+	}
+
+	## Parse every field as text, including the header as an ordinary record.
+	##
+	## Fields are kept verbatim, with CSV quoting removed and doubled quotes
+	## decoded. Empty input has no records; a blank line has one empty field.
+	## Uses the same grammar and syntax diagnostics as [CSV.parse_records].
+	##
+	## ```roc
+	## expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+	## ```
+	parse_string_records : Str -> Try(List(List(Str)), [InvalidCsv(Error)])
+	parse_string_records = |text| {
+		bytes = text.to_utf8()
+		len = bytes.len()
+		match scan_table_as(bytes, |field, start, next, quoted| string_field(text, len, field, start, next, quoted)) {
 			Ok(records) => Ok(records)
 			Err(bad) => Err(InvalidCsv(syntax_error(bytes, bad)))
 		}
@@ -1103,13 +1123,16 @@ after_break = |bytes, at| {
 
 ## Scan records until the input ends.
 scan_table : List(U8) -> Try(List(CSV.Record), BadField)
-scan_table = |bytes| {
+scan_table = |bytes| scan_table_as(bytes, |field, _, _, _| field)
+
+scan_table_as : List(U8), (List(U8), U64, U64, Bool -> a) -> Try(List(List(a)), BadField)
+scan_table_as = |bytes, convert| {
 	len = bytes.len()
 	var $records = []
 	var $pos = 0
 	var $field_capacity = 0.U64
 	while $pos < len {
-		match scan_record_sized(bytes, $pos, $field_capacity) {
+		match scan_record_as(bytes, $pos, $field_capacity, convert) {
 			Err({ field, at, problem }) => {
 				return Err({ record: $records.len(), field, at, problem })
 			}
@@ -1133,13 +1156,19 @@ scan_record = |bytes, start| scan_record_sized(bytes, start, 0)
 # callers cap the hint so an unusually wide row does not force a large
 # allocation for the following row. Width remains unconstrained.
 scan_record_sized : List(U8), U64, U64 -> Try({ fields : CSV.Record, next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
-scan_record_sized = |bytes, start, field_capacity| {
+scan_record_sized = |bytes, start, field_capacity| scan_record_as(bytes, start, field_capacity, |field, _, _, _| field)
+
+# Convert fields as they are scanned, without materializing an intermediate
+# byte-field row when the caller needs another representation.
+scan_record_as : List(U8), U64, U64, (List(U8), U64, U64, Bool -> a) -> Try({ fields : List(a), next : U64 }, { field : U64, at : U64, problem : [Unterminated, TextAfterQuote] })
+scan_record_as = |bytes, start, field_capacity, convert| {
 	len = bytes.len()
 	var $fields = List.with_capacity(field_capacity)
 	var $pos = start
 	while True {
+		quoted = bytes.get($pos) == Ok('"')
 		scanned =
-			if bytes.get($pos) == Ok('"') {
+			if quoted {
 				scan_quoted(bytes, $pos)
 			} else {
 				end = scan_unquoted(bytes, $pos)
@@ -1150,7 +1179,7 @@ scan_record_sized = |bytes, start, field_capacity| {
 				return Err({ field: $fields.len(), at, problem })
 			}
 			Ok({ field, next }) => {
-				$fields = $fields.append(field)
+				$fields = $fields.append(convert(field, $pos, next, quoted))
 				if next < len and bytes.get(next) == Ok(',') {
 					$pos = next + 1
 				} else {
@@ -1158,6 +1187,22 @@ scan_record_sized = |bytes, start, field_capacity| {
 				}
 			}
 		}
+	}
+}
+
+# Delimiters and quotes are ASCII, so the scanner's field boundaries cannot
+# split a UTF-8 code point in a Str input. Unescaped fields can be sliced
+# directly; doubled quotes require the scanner's decoded bytes instead.
+string_field : Str, U64, List(U8), U64, U64, Bool -> Str
+string_field = |text, len, field, start, next, quoted| {
+	content_start = if (quoted) start + 1 else start
+	content_end = if (quoted) next - 1 else next
+	if quoted and field.len() != content_end - content_start {
+		return Str.from_utf8_lossy(field)
+	}
+	match text.drop_first_bytes(content_start) {
+		Ok(suffix) => suffix.drop_last_bytes(len - content_end) ?? Str.from_utf8_lossy(field)
+		Err(_) => Str.from_utf8_lossy(field)
 	}
 }
 
@@ -1348,6 +1393,28 @@ parses_f64 = |text, expected| {
 
 records : Str -> Try(List(List(Str)), [InvalidCsv(CSV.Error)])
 records = |text| CSV.parse_records(text).map_ok(|found| found.map(|fields| fields.map(Str.from_utf8_lossy)))
+
+# Text collection has the same rows and exact syntax diagnostics as raw and
+# generic string decoding, including the header, BOM, and relaxed quote rules.
+expect CSV.parse_string_records("name,note\nAda,\"said \"\"hello\"\"\"\n") == Ok([["name", "note"], ["Ada", "said \"hello\""]])
+expect ["", "\n", "\r\n", ",", "\"\"", "\"\",", "a,b\r\nc,d", "a\r\n\nb", "é,😀", "\u(feff)a", "a\"b, \"c\" ", "\"a\r\nb\",\"x\"\"y\"\n", "a,\"b", "x\n\"a\"b,c", "a,b,c,d\nx\n,,\n\"a,b\",c\n"].all(
+	|text| {
+		expected = records(text)
+		CSV.parse_string_records(text) == expected and CSV.parse_with(Parser.many(CSV.field(CSV.string)), text) == expected
+	},
+)
+
+# Quoted and doubled-quote UTF-8 fields at every vector lane keep complete
+# code points and the same decoded text, including adjacent empty fields.
+expect (0..=48).iter().fold(
+	True,
+	|good, width| {
+		prefix = Str.from_utf8_lossy(List.repeat('x', width))
+		plain = "${prefix},\"é,😀\",\r\n"
+		escaped = "${prefix},\"é,😀\"\"q\",\r\n"
+		good and CSV.parse_string_records(plain) == Ok([[prefix, "é,😀", ""]]) and CSV.parse_string_records(escaped) == Ok([[prefix, "é,😀\"q", ""]])
+	},
+)
 
 error_of : Try(a, [InvalidCsv(CSV.Error), ..others]) -> Try(CSV.Error, [NoError])
 error_of = |result| {
