@@ -716,6 +716,11 @@
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
     },
     {
+      "input": "tool:nix#ruby_3_4",
+      "component": "",
+      "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."
+    },
+    {
       "input": "tool:nix#rustc",
       "component": "",
       "reason": "Development, test or release tooling. Only the package source files ship in this subject; archive members and source SHA-256 comparisons verify that no tooling, executable or test platform is included."

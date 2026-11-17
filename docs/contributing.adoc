@@ -41,7 +41,8 @@ Install:
   `PATH` as `roc`;
 * Python 3.10–3.13, for the independent parser test and reference harnesses
   (the pinned Quiffen oracle requires Python below 3.14; CI uses 3.13);
-* Ruby 3.4 or newer and RubyGems for the AsciiDoc oracle (CI uses 3.4.11);
+* Ruby 3.4 or newer and RubyGems for the AsciiDoc oracle (CI uses the Ruby 3.4
+  package from the Nixpkgs revision in `Blueprint.lock`);
 * the `blueprint` binary of
   https://github.com/lukewilliamboswell/roc-blueprint/releases/tag/0.13.0[roc-blueprint 0.13.0],
   which runs the same named tasks as CI;
@@ -77,8 +78,9 @@ mv blueprint-aarch64-darwin ~/.local/bin/blueprint
 `Blueprint.roc` declares the tasks and what each needs. `blueprint` downloads
 the tools it pins in `Blueprint.lock`, such as Zig for the RocSyntax oracle, and
 expects the others, such as `roc`, `python3`, `ruby` and `docker`, on your
-`PATH`; `blueprint requirements` lists them. Only the benchmark environment
-needs Nix (<<benchmarks-blueprint>>).
+`PATH`; `blueprint requirements` lists them. Nix supplies the benchmark
+environment (<<benchmarks-blueprint>>) and the `oracle-ruby` activation used by
+CI. A local `blueprint run check` uses the compatible Ruby already on `PATH`.
 
 The scripts find the compiler through the `ROC` environment variable and fall
 back to `roc` on `PATH`. Leave `ROC` unset when you run `blueprint`, which reads

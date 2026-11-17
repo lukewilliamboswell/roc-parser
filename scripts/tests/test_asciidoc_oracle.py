@@ -22,7 +22,7 @@ class RubyRuntimeTests(unittest.TestCase):
                                  'puts JSON.generate(version: RUBY_VERSION, value: "1.e2".to_f)'],
                                 check=True, capture_output=True, text=True, timeout=10)
         data = json.loads(result.stdout)
-        message = 'Use Ruby 3.4 or newer for the AsciiDoc oracle; CI uses 3.4.11.'
+        message = 'Use Ruby 3.4 or newer for the AsciiDoc oracle; CI uses the locked Ruby 3.4 package.'
         self.assertGreaterEqual(tuple(map(int, data['version'].split('.')[:2])), (3, 4), message)
         self.assertEqual(data['value'], 100.0, message)
 

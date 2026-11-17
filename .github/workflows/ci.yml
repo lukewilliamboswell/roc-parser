@@ -28,16 +28,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.13'
-      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1
-        with:
-          ruby-version: '3.4.11'
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@cc6d4081762c6d70bf95bf18c9abf99b5e9ade25
         with:
           cache: 'true'
           cache-workload: check
+          install-nix: 'true'
+      - name: Activate the locked Ruby oracle runtime
+        run: blueprint env oracle-ruby --github-path >> "$GITHUB_PATH"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
       - id: nightly
         name: Resolve the latest Roc nightly
         env:

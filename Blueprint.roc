@@ -18,9 +18,9 @@
 # `roc-stable` compiler; Python remains for independent parser harnesses.
 #
 # Zig 0.17.0 builds the compiler's own parser as the RocSyntax oracle. It is
-# downloaded and checked against Blueprint.lock, so `check` needs no Nix. Only
-# the benchmark environment takes tools from Nix: Go, Rust and Python for the
-# comparison drivers, from the nixpkgs revision Blueprint.lock records. Their
+# downloaded and checked against Blueprint.lock, so local `check` needs no Nix.
+# Nix supplies CI's Ruby oracle and the benchmark Go, Rust and Python toolchains
+# from the nixpkgs revision Blueprint.lock records. Their
 # libraries are pinned separately, by bench/compare/rust/Cargo.lock,
 # bench/compare/go/go.sum and bench/compare/python/requirements.txt.
 app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/DBtzmMfrSgt6nCGVAcZYCVPxWbhpqw3MXpm6sdQzMn4v.tar.zst" }
@@ -57,11 +57,14 @@ config = [
 	# oracles and the Asciidoctor gem are pinned by scripts/ and installed
 	# under .roc-parser-tmp/.
 	Environment("oracles", [Extend("inventory"), Programs([Fetch("zig", zig)]), Expect(["ruby", "gem", "node", "npm", "java"])]),
+	# Activate the locked Ruby before resolving machine tools in CI.
+	Environment("oracle-ruby", [Tools(["nix#ruby_3_4"])]),
 	# Shared release utilities run without a local build compiler.
 	Environment("release", [Extend("inventory"), Expect(["gh"])]),
 	Environment("docs", [Extend("release"), Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.10.1/roc-docs-{system}"))])]),
 	Environment("bench", [Tools(["nix#go", "nix#cargo", "nix#rustc", "nix#python313", "nix#git"]), Expect(["roc"])]),
 	Shell("default", [Use("oracles")]),
+	Shell("oracle-ruby", [Use("oracle-ruby")]),
 	Shell("bench", [Use("bench")]),
 	# Everything a pull request must pass; `blueprint run check -- --list`.
 	Task("check", [Use("oracles"), Run(["scripts/check_all.roc", "--"])]),
