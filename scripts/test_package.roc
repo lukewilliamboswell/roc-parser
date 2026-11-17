@@ -33,7 +33,7 @@ test! = || {
 		["roc", "check", "package/main.roc"],
 		["roc", "fmt", "--check", "package"],
 		["roc", "test", "package/main.roc"],
-		["python3", "scripts/check_literals.py"],
+		["scripts/check_literals.roc"],
 	] {
 		run!(command, root)?
 	}

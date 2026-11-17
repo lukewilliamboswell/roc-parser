@@ -100,7 +100,7 @@ limit at and past its boundary without checking in expanded scaling inputs.
 Add compiler fixtures for valid and invalid quotations and imported text,
 including default checks and overrides, to `scripts/literals/cases.json`, and
 add `import parser.Toml` to the app header that `app_source` in
-`scripts/check_literals.py` writes. The script checks rejection by both
+`scripts/check_literals.roc` writes. The script checks rejection by both
 `roc check` and `roc build`, and verifies the intended error message rather
 than accepting any compiler failure.
 
@@ -172,29 +172,26 @@ iteration-bounded run in CI, `--seconds` and `--seed` for local runs, and a
 
 == 6. Register the targets
 
-. Add each target to `TARGETS` in `scripts/run_fuzz.py`, with its seed
+. Add each target to `FuzzPlan.entries` in `scripts/src/FuzzPlan.roc`, with its seed
   encoding (`raw` for raw bytes, none for a structured target), seeds,
   dictionary, input size and timeout.
 . Add reviewable seeds in `fuzz/seeds/toml.json` and syntax tokens in
   `fuzz/dictionaries/toml.dict` for the raw target.
 . Add each target to the `target` matrix of the `fuzz` job in
-  `.github/workflows/fuzz.yml`, in the same order as in `TARGETS`, which
-  `TARGET_ORDER` in `scripts/run_fuzz.py` follows. Register the review in
+  `.github/workflows/fuzz.yml`, in the same order as the scheduled entries in `FuzzPlan.entries`. Register the review in
   `reviews` in `scripts/src/HarnessPlan.roc`, with its command and
   `requirements` file, and the campaign's `--smoke` run as a second, scheduled
-  entry, as `json` and `json-robustness` do; then add both to the `review`
-  matrix of the `conformance` job in `fuzz.yml`, in the same order.
+  entry, as `json` and `json-robustness` do.
 
-`scripts/tests/test_run_fuzz.py` fails if a `fuzz/*.roc` file is not
+`scripts/test_automation.roc` fails if a `fuzz/*.roc` file is not
 registered, or if the workflow matrix lists the targets differently, or in a
-different order, from the registry; `scripts/tests/test_check.py` does the same
-for the reviews. Every pull request runs the new targets and the fast review
+different order, from the registry. Every pull request runs CI-enabled native targets
 through `blueprint run check`. Check the registries and run the new targets:
 
 [source,bash]
 ----
 python3 -m unittest discover -s scripts/tests -p "test_*.py"
-python3 scripts/run_fuzz.py smoke toml-raw toml-roundtrip
+scripts/fuzz.roc smoke toml-raw toml-roundtrip
 ----
 
 == 7. Add a benchmark
@@ -248,10 +245,10 @@ blueprint run docs
   options record
 * [ ] `expect` tests for accepted, rejected and boundary inputs
 * [ ] Compile-time fixtures in `scripts/literals/cases.json`, and the import
-  in `app_source` in `scripts/check_literals.py`
+  in `source` in `scripts/check_literals.roc`
 * [ ] Probe, cases, review script and empty baseline under `scripts/`
 * [ ] External suites recreated in scratch storage from verified pins and hashes
-* [ ] Raw and structured fuzz targets, registered in `run_fuzz.py` and in
+* [ ] Raw and structured fuzz targets, registered in `scripts/src/FuzzPlan.roc` and in
   `fuzz.yml` in the same order
 * [ ] A robustness `campaign` in the review script, with its `--smoke` run
   registered in `src/HarnessPlan.roc` and the `conformance` matrix

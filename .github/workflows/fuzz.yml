@@ -43,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Scheduled targets registered in scripts/run_fuzz.py; markup campaigns are local-only.
+        # Scheduled targets registered in scripts/src/FuzzPlan.roc; markup campaigns are local-only.
         target:
           - asciidoc-raw
           - asciidoc-structured

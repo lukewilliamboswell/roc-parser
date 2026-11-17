@@ -816,25 +816,17 @@ def parse_show(text: str) -> dict | None:
     return {"data": bytes.fromhex(document[1]), "options": options_from_flags(flags[1].strip() if flags else [])}
 
 
-def load_run_fuzz():
-    """scripts/run_fuzz.py, whose TARGETS and build conventions the fuzz runs share."""
-    if "run_fuzz" not in sys.modules:
-        spec = importlib.util.spec_from_file_location("run_fuzz", ROOT / "scripts" / "run_fuzz.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["run_fuzz"] = module  # dataclasses look their module up while it loads
-        spec.loader.exec_module(module)
-    return sys.modules["run_fuzz"]
+def fuzz_config(target):
+    rows = json.loads(subprocess.check_output([str(ROOT / "scripts/fuzz.roc"), "describe", target], cwd=ROOT))
+    return rows[0]
 
 
 def fuzz_binary(roc: str, target: str, no_build: bool = False) -> Path:
-    """Build a fuzz target the way scripts/run_fuzz.py does, into .roc-parser-tmp/fuzz/bin."""
-    run_fuzz = load_run_fuzz()
-    if target not in run_fuzz.TARGETS:
-        raise RuntimeError(f"fuzz target {target} is not registered in scripts/run_fuzz.py")
-    status, binary = run_fuzz.build_target(target, roc, no_build)
-    if status:
-        raise RuntimeError(f"building fuzz target {target} failed with status {status}")
-    return binary
+    command = [str(ROOT / "scripts/fuzz.roc"), "build", target, "--roc", roc]
+    if no_build:
+        command.append("--no-build")
+    subprocess.run(command, cwd=ROOT, check=True)
+    return ROOT / ".roc-parser-tmp/fuzz/bin" / target
 
 
 def corpus(args) -> int:
@@ -1001,9 +993,9 @@ def differential(executable: Path, seconds: float, seed: int, output: Path, limi
     return result
 
 
-def seed_corpus(run_fuzz, target: str, corpus_dir: Path) -> None:
-    """The reviewed run_fuzz.py seeds plus every short case and suite input."""
-    run_fuzz.prepare_corpus(target, corpus_dir)
+def seed_corpus(target: str, corpus_dir: Path) -> None:
+    """Native reviewed seeds plus every short case and suite input."""
+    subprocess.run([str(ROOT / "scripts/fuzz.roc"), "prepare", target, "--corpus-dir", str(corpus_dir)], cwd=ROOT, check=True)
     inputs = [case["data"] for case in hand_cases() + suite_cases() if len(case["data"]) < MAX_GENERATED_BYTES]
     if target == "json-raw":
         seeds = inputs
@@ -1027,21 +1019,20 @@ def fresh_evidence_dir(work: Path) -> Path:
 
 
 def fuzz_run(roc: str, target: str, seconds: float, seed: int, output: Path, smoke: bool) -> dict:
-    """One libFuzzer run of a registered target, with run_fuzz.py's limits and dictionary."""
+    """One libFuzzer run of a registered target, with the native runner's limits and dictionary."""
     work = output / target
     try:
         binary = fuzz_binary(roc, target)
     except RuntimeError as error:
         return {"target": target, "return_code": 2, "error": str(error)}
-    run_fuzz = load_run_fuzz()
-    config = run_fuzz.TARGETS[target]
+    config = fuzz_config(target)
     corpus_dir = work / "corpus"
     corpus_dir.mkdir(parents=True, exist_ok=True)
-    seed_corpus(run_fuzz, target, corpus_dir)
+    seed_corpus(target, corpus_dir)
     limit = "--runs=2000" if smoke else "--time=" + str(max(1, int(seconds)))
-    command = [str(binary), "explore", str(corpus_dir), f"--report-dir={fresh_evidence_dir(work)}", limit, "--seed=" + str(seed), f"--max-input-size={config.max_input_size}", f"--timeout={config.timeout}", "--memory-limit=2048", "--print-final-stats"]
-    if config.dictionary is not None:
-        command.append("--dictionary=" + str(config.dictionary))
+    command = [str(binary), "explore", str(corpus_dir), f"--report-dir={fresh_evidence_dir(work)}", limit, "--seed=" + str(seed), f"--max-input-size={config['size']}", f"--timeout={config['timeout']}", "--memory-limit=2048", "--print-final-stats"]
+    if config["dictionary"]:
+        command.append("--dictionary=" + str(ROOT / config["dictionary"]))
     start = time.monotonic()
     try:
         with (work / "runner.log").open("w") as log:

@@ -167,7 +167,7 @@ and their available locations in runtime APIs.
 
 The complete {src}/docs/examples/compile-time-parsing.roc[example] is checked,
 tested, and run in CI. Each format's quotation and imported-file rejection
-contracts are checked by {src}/scripts/check_literals.py[the compiler tests].
+contracts are checked by {src}/scripts/check_literals.roc[the compiler tests].
 
 == Checked web markup and typed templates
 

@@ -103,8 +103,8 @@ The `yaml-source` target checks the highlighting API separately from semantic
 parsing: token spans partition every original byte, diagnostics stay in range,
 key categories agree with roles, and repeated tokenization is deterministic.
 It reuses the YAML seed corpus and dictionary. Run a short check with
-`python3 scripts/run_fuzz.py smoke yaml-source`, or explore more locally with
-`python3 scripts/run_fuzz.py campaign yaml-source --seconds 600`.
+`scripts/fuzz.roc smoke yaml-source`, or explore more locally with
+`scripts/fuzz.roc campaign yaml-source --seconds 600`.
 
 Structured targets (`csv-roundtrip`, `csv-decode`, `xml-roundtrip`,
 `xml-malformed`, `xmlns-roundtrip`, `yaml-roundtrip`, `yaml-block`, `json-roundtrip`,
@@ -180,12 +180,11 @@ described in <<asciidoc>>. Inline source agreement alone does not establish
 agreement on Asciidoctor substitutions or rendered HTML.
 
 Run every target for a short, iteration-bounded smoke test. This is what the
-`fuzz` section of `blueprint run check` runs on a pull request; it builds up to
-four targets at once (`--jobs`) before running them in turn:
+`fuzz` section of `blueprint run check` runs on a pull request; it builds and runs targets serially:
 
 [source,bash]
 ----
-python3 scripts/run_fuzz.py smoke all
+scripts/fuzz.roc smoke all
 ----
 
 Run one or more targets by name, and lower the iteration count for a quick
@@ -193,7 +192,7 @@ check while you work:
 
 [source,bash]
 ----
-python3 scripts/run_fuzz.py smoke csv --runs 200
+scripts/fuzz.roc smoke csv --runs 200
 ----
 
 The last lines of the output are the target's summary and its report:
@@ -210,7 +209,7 @@ night, on the latest Roc nightly:
 
 [source,bash]
 ----
-python3 scripts/run_fuzz.py campaign markdown-inline-ast --seconds 600
+scripts/fuzz.roc campaign markdown-inline-ast --seconds 600
 ----
 
 `--max-input-size`, `--timeout` and `--memory-limit` override a target's
@@ -234,19 +233,19 @@ generated document and its expected value:
 +
 [source,bash]
 ----
-python3 scripts/run_fuzz.py show csv-roundtrip INPUT --no-build
+scripts/fuzz.roc show csv-roundtrip INPUT --no-build
 ----
 . Replay it to confirm that it still fails:
 +
 [source,bash]
 ----
-python3 scripts/run_fuzz.py replay csv-roundtrip INPUT --no-build
+scripts/fuzz.roc replay csv-roundtrip INPUT --no-build
 ----
 . Minimise it into a smaller input that fails the same way:
 +
 [source,bash]
 ----
-python3 scripts/run_fuzz.py minimize csv-roundtrip INPUT OUTPUT --no-build
+scripts/fuzz.roc minimize csv-roundtrip INPUT OUTPUT --no-build
 ----
 
 `INPUT` can be any file, including one from the corpus. Showing a corpus entry
@@ -254,7 +253,7 @@ of the seeded `csv` target prints the string it decodes to:
 
 [source,bash]
 ----
-python3 scripts/run_fuzz.py show csv .roc-parser-tmp/fuzz/corpus/csv/13d7ab0a19cc0856931196f0e8bac548e045234b --no-build
+scripts/fuzz.roc show csv .roc-parser-tmp/fuzz/corpus/csv/13d7ab0a19cc0856931196f0e8bac548e045234b --no-build
 ----
 
 Output (the last line):
@@ -421,7 +420,7 @@ encoding boundaries are independent fuzz choices.
 
 == Check diagnostic ownership
 
-Run `python3 scripts/run_fuzz.py smoke diagnostic-lifetimes` locally to check
+Run `scripts/fuzz.roc smoke diagnostic-lifetimes` locally to check
 that native JSON, YAML and CSV diagnostic payloads survive after their input
 is dropped without retaining unrelated source bytes. Two-byte seeds choose a
 failure kind and generated padding size; the property checks complete payload

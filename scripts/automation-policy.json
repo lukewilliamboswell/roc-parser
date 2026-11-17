@@ -18,9 +18,7 @@
         "scripts/tests/test_bench_markup.py",
         "scripts/tests/test_bench_roc_syntax.py",
         "scripts/tests/test_bench_yaml.py",
-        "scripts/tests/test_check.py",
         "scripts/tests/test_check_driver.py",
-        "scripts/tests/test_check_literals.py",
         "scripts/tests/test_check_roc_syntax.py",
         "scripts/tests/test_check_roc_syntax_corpus.py",
         "scripts/tests/test_compare_markup_performance.py",
@@ -30,7 +28,6 @@
         "scripts/tests/test_finance_bench.py",
         "scripts/tests/test_harness_drivers.py",
         "scripts/tests/test_import_roc_syntax_snapshots.py",
-        "scripts/tests/test_markup_vocabulary.py",
         "scripts/tests/test_mutate_roc_syntax.py",
         "scripts/tests/test_oracle_cache.py",
         "scripts/tests/test_package_driver.py",
@@ -50,7 +47,6 @@
         "scripts/tests/test_roc_syntax_model_cases.py",
         "scripts/tests/test_roc_syntax_pins.py",
         "scripts/tests/test_roc_syntax_recovery.py",
-        "scripts/tests/test_run_fuzz.py",
         "scripts/tests/test_source_inventory.py",
         "scripts/tests/test_streaming_bench.py"
       ]
@@ -84,7 +80,6 @@
         "scripts/bench_yaml.py",
         "scripts/check_asciidoc_performance.py",
         "scripts/check_asciidoc_performance_cached.py",
-        "scripts/check_literals.py",
         "scripts/check_roc_syntax.py",
         "scripts/check_roc_syntax_corpus.py",
         "scripts/check_roc_syntax_recovery.py",
@@ -113,8 +108,7 @@
         "scripts/review_roc_syntax.py",
         "scripts/review_xml.py",
         "scripts/review_yaml.py",
-        "scripts/roc_syntax/model_cases.py",
-        "scripts/run_fuzz.py"
+        "scripts/roc_syntax/model_cases.py"
       ]
     },
     {
@@ -146,13 +140,6 @@
       "paths": [
         "scripts/markup/consumer_fidelity.mjs",
         "scripts/markup/oracle.mjs"
-      ]
-    },
-    {
-      "runtime": "Python 3",
-      "contract": "Generate fast markup membership matches and enumerable names from one reviewed canonical inventory; deterministic offline regeneration and freshness checks do not add a runtime dependency to the Roc package.",
-      "paths": [
-        "scripts/markup/generate_vocabulary.py"
       ]
     }
   ],

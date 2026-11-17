@@ -37,7 +37,7 @@ with open(os.environ["CHECK_TEST_LOG"], "a") as log:
 sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
 ''')
         stub.chmod(0o755)
-        for program in ("roc", "python3", "scripts/check_doc_examples.roc"):
+        for program in ("roc", "python3", "scripts/check_doc_examples.roc", "scripts/fuzz.roc"):
             (self.directory / program).parent.mkdir(exist_ok=True)
             (self.directory / program).symlink_to(stub)
         self.env = {**os.environ, "PATH": str(self.directory), "CHECK_TEST_LOG": str(self.log)}
@@ -60,7 +60,7 @@ sys.exit(7 if sys.argv[0].endswith("check_doc_examples.roc") else 0)
         result = self.run_driver("--keep-going", "docs", "fuzz", "fuzz")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(self.log.read_text().splitlines(), [
-            "version", "", "scripts/run_fuzz.py smoke --ci all"])
+            "version", "", "smoke --ci all"])
 
     def test_list_requires_no_package_compiler(self) -> None:
         result = self.run_driver("--list")

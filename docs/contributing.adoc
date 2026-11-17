@@ -197,10 +197,9 @@ that breaks one fails CI:
   script under `scripts/`, give it a task in `Blueprint.roc`, and call
   `blueprint run <task>` on one line.
 
-`scripts/tests/test_run_fuzz.py` also requires every `fuzz/*.roc` target to be
-registered in `scripts/run_fuzz.py`, and the campaign matrix in `fuzz.yml` to
-match that registry. `scripts/tests/test_check.py` keeps the local conformance
-entry point available, and repository policy guards the default check and
+`scripts/test_automation.roc` also requires every `fuzz/*.roc` target to be
+registered in `scripts/src/FuzzPlan.roc`, and the campaign matrix in `fuzz.yml` to
+match that registry. Repository policy guards the default check and
 workflow entry points against cross-language execution.
 
 [#contributing-docs]

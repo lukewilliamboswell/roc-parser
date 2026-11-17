@@ -7,7 +7,7 @@ starting inputs and `dictionaries/` holds format-specific syntax tokens.
 Run every target briefly with the latest Roc nightly (`blueprint run fuzz-smoke`):
 
 ```sh
-python3 scripts/run_fuzz.py smoke all
+scripts/fuzz.roc smoke all
 ```
 
 How the targets work, how to reproduce and minimise a failure, and how to add a
@@ -24,5 +24,5 @@ construction. Like the other new markup targets, this target runs locally and
 is excluded from scheduled and CI smoke campaigns:
 
 ```sh
-python3 scripts/run_fuzz.py smoke dom-construction --runs 100000
+scripts/fuzz.roc smoke dom-construction --runs 100000
 ```
