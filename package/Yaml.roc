@@ -51,15 +51,19 @@ Yaml := [
 
 	## The value shape required by a type-directed decoder.
 	Expected : [StringValue, BooleanValue, TagName, SequenceValue, SequenceLength(U64), MappingKey, MappingValue, IntegerValue, NumberValue]
+
 	## The authored value shape, retaining scalar and key text.
 	Actual : [SequenceValue, MappingValue, MappingKey(Str), QuotedScalar(Str), PlainScalar(Str), NullValue]
+
 	## Numeric destination used when an authored value cannot fit.
 	NumericType : [U8, I8, U16, I16, U32, I32, U64, I64, U128, I128, F32, F64, Dec]
+
 	## Syntax, supported-subset, limit, or decoding failure. Payloads retain
 	## authored values, offending bytes, and configured numeric limits.
 	Problem : [TypeMismatch({ expected : Expected, actual : Actual }), ExpectedNull, TagPayloadUnsupported, UnknownTag(Str), UnknownKey(Str), WrongSequenceLength({ expected : U64, actual : U64 }), UndecodableValue, LegacyBoolean(Str), ExpectedValue, TabIndentation, IndentedRoot, TrailingContent, UnexpectedEnd, InvalidCharacter(List(U8)), NestingTooDeep(U64), UnexpectedIndentation, DuplicateKey(Str), MultilinePlainScalarUnsupported, UnexpectedSequenceIndentation, InvalidBlockHeader, DuplicateChompingIndicator, DuplicateIndentIndicator, UnsupportedBlockHeader, OverindentedLeadingEmptyLines, BlockScalarPlacement, ReferencesUnsupported, DirectivesUnsupported, ComplexKeysUnsupported, InvalidScalarStart(U8), IndicatorBeforeWhitespace, UnexpectedMappingValue, IntegerOutOfRange({ value : Str, target : NumericType }), NumberOutOfRange({ value : Str, target : NumericType }), ExpectedFlowEntry, EmptyKey, InvalidKeyStart(U8), UnclosedQuote(U8), TrailingQuotedContent(U8), UndoubledQuote, InvalidEscape(Str), UnclosedEscape, InvalidHexEscape(U64), SurrogateEscape(U32), InvalidUnicodeEscape(U32), CollectionOnDocumentStart, MultipleDocumentsUnsupported, EmptyFlowItem, UnexpectedClosingBracket, UnexpectedClosingBrace, UnclosedFlowQuote, UnclosedNestedFlowCollection, UnclosedFlowCollection]
+
 	## One-based location; columns count UTF-8 bytes from the line start.
-	Error : { line : U64, column : U64, problem : Problem }
+	Error : { line : U64, column : U64, problem : Parser.Problem(Problem) }
 
 	## Half-open byte interval in the original source. Offsets count UTF-8 bytes,
 	## not characters, and preserve CRLF without normalization.
@@ -200,7 +204,7 @@ Yaml := [
 	## ```roc
 	## expect Utf8.parse_str(Yaml.parser, "a: 1") == Ok(Mapping([{ key: "a", value: Int(1) }]))
 	## ```
-	parser : Parser(Utf8.Bytes, Yaml)
+	parser : Parser(Utf8.Bytes, Yaml, Problem)
 	parser = Parser.custom(
 		|bytes| {
 			parsed = match parse_tree(bytes) {
@@ -210,7 +214,7 @@ Yaml := [
 
 			match parsed {
 				Ok(value) => Ok({ value, rest: [] })
-				Err(InvalidYaml(problem)) => Err(ParseError({ message: Str.inspect(problem.problem), offset: offset_of(bytes, problem.line, problem.column) }))
+				Err(InvalidYaml(problem)) => Err(ParseError({ problem: problem.problem, offset: offset_of(bytes, problem.line, problem.column) }))
 			}
 		},
 	)
@@ -1229,10 +1233,10 @@ ContentIndent : [PendingIndent, FixedIndent(U64)]
 
 BlockHeader : { style : BlockStyle, chomp : BlockChomp, indent : BlockIndent }
 
-nesting_problem : Yaml.Problem
+nesting_problem : Parser.Problem(Yaml.Problem)
 nesting_problem = NestingTooDeep(100)
 
-tab_problem : Yaml.Problem
+tab_problem : Parser.Problem(Yaml.Problem)
 tab_problem = TabIndentation
 
 parse_node : Input, U64, U64, List(Line) -> Try(NodeResult, [InvalidYaml(Yaml.Error)])
@@ -2540,10 +2544,10 @@ trim_end_spaces = |bytes| {
 append_bytes : Utf8.Bytes, Utf8.Bytes -> Utf8.Bytes
 append_bytes = |left, right| left.concat(right)
 
-fail : U64, U64, Yaml.Problem -> Try(_, [InvalidYaml(Yaml.Error)])
+fail : U64, U64, Parser.Problem(Yaml.Problem) -> Try(_, [InvalidYaml(Yaml.Error)])
 fail = |line, column, problem| Err(InvalidYaml({ line, column, problem }))
 
-when_error : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Try(Yaml.Problem, [NoError])
+when_error : Try(Yaml, [InvalidYaml(Yaml.Error)]) -> Try(Parser.Problem(Yaml.Problem), [NoError])
 when_error = |result| {
 	match result {
 		Ok(_) => Err(NoError)

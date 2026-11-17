@@ -127,12 +127,12 @@ Markdown := [
 
 	## [Markdown.parse_str] as a [Parser] over bytes, for use with the
 	## combinators. It consumes all of its input and never fails.
-	parser : Parser(Utf8.Bytes, List(Markdown))
+	parser : Parser(Utf8.Bytes, List(Markdown), [])
 	parser = Parser.custom(|input| Ok({ value: parse_document(input), rest: [] }))
 
 	## [Markdown.parse_inlines] as a [Parser] over bytes. It consumes all of its
 	## input and never fails.
-	inline_parser : Parser(Utf8.Bytes, List(Inline))
+	inline_parser : Parser(Utf8.Bytes, List(Inline), [])
 	inline_parser = Parser.custom(|input| Ok({ value: parse_inline_bytes(input), rest: [] }))
 
 	## The raw text of the document's frontmatter, or `Err(Missing)` when the
